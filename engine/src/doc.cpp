@@ -659,6 +659,66 @@ QString Doc::nextUniqueName(const QString &name,
     return name + QStringLiteral(" (Copy)");
 }
 
+bool Doc::fixtureNameTaken(const QString &name, quint32 except) const
+{
+    foreach (Fixture *f, m_fixtures)
+        if (f != NULL && f->id() != except && f->name() == name)
+            return true;
+    return false;
+}
+
+QString Doc::uniqueFixtureName(const QString &name, quint32 except) const
+{
+    return nextUniqueModelName(name, [this, except](const QString &c) {
+        return fixtureNameTaken(c, except);
+    });
+}
+
+QMap<QString, QList<quint32> > Doc::duplicateFixtureNames() const
+{
+    QMap<QString, QList<quint32> > byName;
+    foreach (Fixture *f, m_fixtures)
+        if (f != NULL)
+            byName[f->name()] << f->id();
+    QMap<QString, QList<quint32> > out;
+    for (auto it = byName.constBegin(); it != byName.constEnd(); ++it)
+    {
+        if (it.value().size() < 2)
+            continue;
+        QList<quint32> ids = it.value();
+        std::sort(ids.begin(), ids.end());
+        out.insert(it.key(), ids);
+    }
+    return out;
+}
+
+int Doc::makeFixtureNamesUnique(const QStringList &only)
+{
+    int renamed = 0;
+    const QMap<QString, QList<quint32> > dups = duplicateFixtureNames();
+    for (auto it = dups.constBegin(); it != dups.constEnd(); ++it)
+    {
+        if (!only.isEmpty() && !only.contains(it.key()))
+            continue;
+        // The one in the show keeps the name: patched first, then lowest ID.
+        quint32 keeper = it.value().first();
+        foreach (quint32 fid, it.value())
+            if (Fixture *f = fixture(fid))
+                if (f->isPatched()) { keeper = fid; break; }
+        foreach (quint32 fid, it.value())
+        {
+            Fixture *f = fixture(fid);
+            if (f == NULL || fid == keeper)
+                continue;
+            f->setName(uniqueFixtureName(f->name(), fid));
+            ++renamed;
+        }
+    }
+    if (renamed > 0)
+        setModified();
+    return renamed;
+}
+
 QString Doc::nextDuplicateName(const Function *src) const
 {
     if (src == NULL)
@@ -1389,6 +1449,7 @@ bool Doc::replaceFixtures(QList<Fixture*> newFixturesList)
         newFixture->setPatched(fixture->isPatched());
         newFixture->setConnection(fixture->connection());
         newFixture->setIPAddress(fixture->ipAddress());
+        newFixture->setTransport(fixture->transport());
 
         if (fixture->fixtureDef() == NULL ||
             (fixture->fixtureDef()->manufacturer() == KXMLFixtureGeneric &&

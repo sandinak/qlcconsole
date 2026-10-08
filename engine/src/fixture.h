@@ -52,6 +52,7 @@ class Doc;
 #define KXMLFixturePatched          QStringLiteral("Patched")
 #define KXMLFixtureConnection       QStringLiteral("Connection")
 #define KXMLFixtureIPAddress        QStringLiteral("IPAddress")
+#define KXMLFixtureTransport        QStringLiteral("Transport")
 #define KXMLFixtureID               QStringLiteral("ID")
 #define KXMLFixtureGeneric          QStringLiteral("Generic")
 #define KXMLFixtureRGBPanel         QStringLiteral("RGBPanel")
@@ -201,6 +202,14 @@ public:
     /** Unicast target of a Network fixture; empty when unset or DMX. */
     QString ipAddress() const { return m_ipAddress; }
     void setIPAddress(const QString &ip) { m_ipAddress = ip; }
+
+    /** How a Network fixture is sent to: Art-Net (or sACN) DMX, or WLED's
+     *  own JSON API -- its look's state, sent only when it changes, for WLED
+     *  on Wi-Fi (the WLED output plugin). The patch planner gives each its
+     *  universe's output accordingly. Meaningless for a DMX fixture. */
+    enum Transport { ArtNetTransport = 0, WledTransport = 1 };
+    Transport transport() const { return Transport(m_transport); }
+    void setTransport(Transport t) { m_transport = int(t); }
 
     /**
      * Set the fixture instance's DMX universe
@@ -383,6 +392,7 @@ protected:
 
     int m_connection;
     QString m_ipAddress;
+    int m_transport = ArtNetTransport;
 
     /** Flag that indicates if this fixture crosses a DMX Universe */
     bool m_crossUniverse;
@@ -411,6 +421,14 @@ public:
     /** Store DMX values for this fixture. If values have changed,
      * it returns true, otherwise false */
     bool setChannelValues(const QByteArray &values);
+
+    /** What an UNPATCHED fixture would show: a value for channel @p channel,
+     *  for display only (the rig view, the plot) -- it has no address, so
+     *  nothing goes out. The engine hands these over in place of the DMX it
+     *  writes for a patched fixture ("is it possible to visualize w/o
+     *  patching?"). Ignored for a patched fixture, whose values come from its
+     *  universe. */
+    void setPreviewValue(quint32 channel, uchar value);
 
     /** Return the current DMX values of this fixture */
     QByteArray channelValues();

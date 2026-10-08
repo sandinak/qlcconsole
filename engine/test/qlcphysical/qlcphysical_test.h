@@ -55,6 +55,7 @@ private slots:
     void loadWrongRoot();
     void save();
     void beamsPerHeadRoundTrip();
+    void aLanternBodyRoundTrips();
 
 private:
     QLCPhysical p;

@@ -70,6 +70,17 @@ QString HeadLayout::keyFor(const Fixture *fx)
            + QLatin1Char('|') + fx->fixtureMode()->name();
 }
 
+QSize HeadLayout::declaredGrid(const QLCFixtureMode *mode)
+{
+    if (mode == nullptr)
+        return QSize();
+    const QSize sz = mode->physical().layoutSize();
+    const int n = mode->heads().size();
+    if (sz.width() <= 0 || sz.height() <= 0 || sz == QSize(1, 1) || sz.width() * sz.height() != n)
+        return QSize();
+    return sz;
+}
+
 HeadLayout HeadLayout::headOrder(const Fixture *fx)
 {
     HeadLayout l;
@@ -78,9 +89,9 @@ HeadLayout HeadLayout::headOrder(const Fixture *fx)
     const int n = mode != nullptr ? mode->heads().size() : 0;
     if (l.key.isEmpty() || n == 0)
         return HeadLayout();
-    QSize sz = mode->physical().layoutSize();
-    if (!sz.isValid() || sz.width() * sz.height() < n)
-        sz = QSize(n, 1);
+    QSize sz = declaredGrid(mode);
+    if (!sz.isValid())
+        sz = QSize(n, 1);              // a strip: one row, in head order
     l.size = sz;
     for (int h = 0; h < n; ++h)
         l.cells << QPoint(h % sz.width(), h / sz.width());

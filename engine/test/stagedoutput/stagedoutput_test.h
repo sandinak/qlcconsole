@@ -45,7 +45,7 @@ private slots:
     void aMarkedFixtureReturnedToInventoryStopsWriting();
     void highlightSkipsStagedFixtures();
     void flashSkipsStagedFixtures();
-    void effectIntentsSkipStagedFixtures();
+    void effectIntentsForStagedFixturesReachNoDmx();
     void programmerParkAndMarkSkipStagedFixtures();
     void programmerLiveWritesSkipStagedFixtures();
 

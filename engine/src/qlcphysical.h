@@ -52,6 +52,12 @@ class QXmlStreamWriter;
 
 #define KXMLQLCPhysicalLayout QStringLiteral("Layout")
 
+/* qlcconsole extension -- QLC+ skips an unknown Physical tag, so a file
+   carrying it still opens there. */
+#define KXMLQLCPhysicalBody         QStringLiteral("Body")
+#define KXMLQLCPhysicalBodyShape    QStringLiteral("Shape")
+#define KXMLQLCPhysicalBodyEmission QStringLiteral("Emission")
+
 #define KXMLQLCPhysicalFocus        QStringLiteral("Focus")
 #define KXMLQLCPhysicalFocusType    QStringLiteral("Type")
 #define KXMLQLCPhysicalFocusPanMax  QStringLiteral("PanMax")
@@ -140,8 +146,27 @@ public:
     void setPowerConsumption(int watt);
     int powerConsumption() const;
 
+    /** True when the definition says how much light it puts out: declared
+     *  lumens, or a power consumption (declared, or guessed from the bulb's
+     *  watts). The rig view draws a fixture that says neither at a guess. */
+    bool declaresOutput() const { return bulbLumens() > 0 || powerConsumption() > 0; }
+
     void setDmxConnector(const QString& type);
     QString dmxConnector() const;
+
+    /** What the fixture looks like, where a body is drawn: a box sized by
+     *  its dimensions (the default), or a lantern -- a cage around a glowing
+     *  core, hung by its top. */
+    enum BodyShape { BoxBody = 0, LanternBody };
+    void setBodyShape(BodyShape shape) { m_bodyShape = shape; }
+    BodyShape bodyShape() const { return m_bodyShape; }
+
+    /** How its light leaves it: a beam (a cone, the lens's angle) or all
+     *  round (a bare source -- a lantern, a bulb -- lighting what is near
+     *  it, falling off with distance). */
+    enum Emission { BeamEmission = 0, OmniEmission };
+    void setEmission(Emission emission) { m_emission = emission; }
+    Emission emission() const { return m_emission; }
 
 protected:
     QString m_bulbType;
@@ -165,6 +190,9 @@ protected:
 
     int m_powerConsumption;
     QString m_dmxConnector;
+
+    BodyShape m_bodyShape = BoxBody;
+    Emission m_emission = BeamEmission;
 
     /************************************************************************
      * Load & Save

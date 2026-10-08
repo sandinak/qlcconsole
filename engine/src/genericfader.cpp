@@ -22,6 +22,8 @@
 #include "genericfader.h"
 #include "fadechannel.h"
 #include "doc.h"
+#include "fixture.h"
+#include "mastertimer.h"
 
 GenericFader::GenericFader(QObject *parent)
     : QObject(parent)
@@ -41,6 +43,22 @@ GenericFader::GenericFader(QObject *parent)
 
 GenericFader::~GenericFader()
 {
+    // What it was showing on unpatched fixtures goes out with it.
+    foreach (const FadeChannel &fc, m_channels)
+        if (fc.isInert())
+            showOnFixture(fc, 0);
+}
+
+void GenericFader::showOnFixture(const FadeChannel &fc, quint32 value) const
+{
+    if (m_doc == nullptr)
+        return;
+    Fixture *fx = m_doc->fixture(fc.fixture());
+    if (fx == nullptr || fx->isPatched())
+        return;
+    const int n = qMax(1, fc.channelCount());
+    for (int i = 0; i < n; ++i)
+        fx->setPreviewValue(fc.channel() + quint32(i), ((const uchar *)&value)[n - 1 - i]);
 }
 
 QString GenericFader::name() const
@@ -128,7 +146,25 @@ void GenericFader::remove(FadeChannel *ch)
 void GenericFader::removeAll()
 {
     QWriteLocker l(&m_channelsLock);
+    foreach (const FadeChannel &fc, m_channels)
+        if (fc.isInert())
+            showOnFixture(fc, 0);
     m_channels.clear();
+}
+
+void GenericFader::replaceAll(const QList<FadeChannel> &channels)
+{
+    QHash<quint32, FadeChannel> next;
+    next.reserve(channels.size());
+    for (const FadeChannel &fc : channels)
+        next.insert(channelHash(fc.fixture(), fc.channel()), fc);
+
+    QWriteLocker l(&m_channelsLock);
+    // Unpatched channels dropped from the set go dark on the fixture.
+    for (auto it = m_channels.constBegin(); it != m_channels.constEnd(); ++it)
+        if (it.value().isInert() && !next.contains(it.key()))
+            showOnFixture(it.value(), 0);
+    m_channels.swap(next);
 }
 
 bool GenericFader::deleteRequested()
@@ -143,6 +179,8 @@ void GenericFader::requestDelete()
 
 FadeChannel *GenericFader::getChannelFader(const Doc *doc, Universe *universe, quint32 fixtureID, quint32 channel)
 {
+    if (doc != nullptr)
+        m_doc = doc;
     FadeChannel fc(doc, fixtureID, channel);
     quint32 primary = fc.primaryChannel();
     quint32 hash;
@@ -167,15 +205,17 @@ FadeChannel *GenericFader::getChannelFader(const Doc *doc, Universe *universe, q
         {
             //qDebug() << "Adding channel to primary" << channel;
             fcFound->addChannel(channel);
-            if (universe)
+            // An inert channel (unpatched fixture) has no address to read.
+            if (universe && fcFound->address() != QLCChannel::invalid())
                 fcFound->setCurrent(universe->preGMValue(fcFound->address() + 1), 1);
         }
         return fcFound;
     }
     m_channelsLock.unlock();
 
-    // set current universe value
-    if (universe)
+    // set current universe value -- none for an inert channel (a fixture in
+    // the inventory): it has no address, and sends nothing.
+    if (universe && fc.address() != QLCChannel::invalid())
         fc.setCurrent(universe->preGMValue(fc.address()));
 
     // new channel. Add to GenericFader
@@ -220,10 +260,36 @@ void GenericFader::write(Universe *universe)
     {
         FadeChannel& fc(it.next().value());
 
-        // An unpatched (inventory) fixture's channel has no real address; it
-        // must not fall through to the bare-channel-number address below.
+        /* An unpatched (inventory) fixture's channel has no real address: it
+           must not fall through to the bare-channel-number address below. It
+           still fades and follows intensity -- and what it would be goes to
+           the fixture, for the rig view, instead of to a universe. Removed
+           when done like any other channel: kept forever, they held a fading
+           fader open so it was never deleted. */
         if (fc.isInert())
+        {
+            if (m_paused == false)
+                fc.nextStep(MasterTimer::tick());
+            quint32 value = fc.current();
+            const int iflags = fc.flags();
+            if (fc.canFade() && (iflags & FadeChannel::Intensity))
+                value = fc.current(compIntensity);
+            showOnFixture(fc, value);
+            const bool zeroDone = fc.current() == 0 && fc.target() == 0 && fc.isReady();
+            if (((iflags & FadeChannel::Intensity) && (iflags & FadeChannel::HTP)
+                 && m_blendMode == Universe::NormalBlend) || m_fadeOut)
+            {
+                if (zeroDone)
+                {
+                    showOnFixture(fc, 0);
+                    it.remove();
+                    continue;
+                }
+            }
+            if ((iflags & FadeChannel::AutoRemove) && value == fc.target())
+                it.remove();
             continue;
+        }
 
         int flags = fc.flags();
         quint32 address = fc.addressInUniverse();

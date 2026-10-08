@@ -24,6 +24,7 @@ private slots:
 
     /** A palette attached to an imported Scene comes across with it. */
     void paletteFollowsScene();
+    void anImportedFixtureNameAlreadyInTheShowIsNumbered();
     /** A palette whose id is already taken in the target gets a new one, and
         the Scene that referenced it is rewritten to the new id. */
     void collidingPaletteIsRemapped();

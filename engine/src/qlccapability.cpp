@@ -513,11 +513,11 @@ bool QLCCapability::loadXML(QXmlStreamReader &doc)
         setName(doc.text().toString().simplified());
         setMin(min);
         setMax(max);
+        // An empty description is counted per file by
+        // QLCFixtureDefCache::loadQXF() -- one line per capability, with no
+        // file named, was hundreds of log lines.
         if (name().isEmpty())
-        {
-            qWarning() << "Empty description provided. This should be fixed in the definition!";
             return true;
-        }
     }
     else
     {

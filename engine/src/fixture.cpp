@@ -624,6 +624,19 @@ ChannelModifier *Fixture::channelModifier(quint32 idx)
  * Channel info
  *********************************************************************/
 
+void Fixture::setPreviewValue(quint32 channel, uchar value)
+{
+    if (isPatched())
+        return;
+    {
+        QMutexLocker locker(&m_channelsInfoMutex);
+        if (int(channel) >= m_values.size() || uchar(m_values.at(int(channel))) == value)
+            return;
+        m_values[int(channel)] = char(value);
+    }
+    emit valuesChanged();
+}
+
 bool Fixture::setChannelValues(const QByteArray &values)
 {
     const int addr = address();
@@ -1217,6 +1230,7 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
     bool patched = true;
     Connection connection = Dmx;
     QString ipAddress;
+    Transport transport = ArtNetTransport;
     quint32 channels = 0;
     quint32 width = 0, height = 0;
     QList<int> excludeList;
@@ -1276,6 +1290,10 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
         else if (xmlDoc.name() == KXMLFixtureIPAddress)
         {
             ipAddress = xmlDoc.readElementText();
+        }
+        else if (xmlDoc.name() == KXMLFixtureTransport)
+        {
+            transport = xmlDoc.readElementText() == QLatin1String("WLED") ? WledTransport : ArtNetTransport;
         }
         else if (xmlDoc.name() == KXMLFixtureCrossUniverse)
         {
@@ -1438,6 +1456,7 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
     setPatched(patched);
     setConnection(connection);
     setIPAddress(ipAddress);
+    setTransport(transport);
     setName(name);
     setExcludeFadeChannels(excludeList);
     setForcedHTPChannels(forcedHTP);
@@ -1502,6 +1521,8 @@ bool Fixture::saveXML(QXmlStreamWriter *doc) const
         doc->writeTextElement(KXMLFixtureConnection, QStringLiteral("Network"));
     if (!m_ipAddress.isEmpty())
         doc->writeTextElement(KXMLFixtureIPAddress, m_ipAddress);
+    if (m_transport == WledTransport)
+        doc->writeTextElement(KXMLFixtureTransport, QStringLiteral("WLED"));
     /* Channel count */
     doc->writeTextElement(KXMLFixtureChannels, QString::number(channels()));
 

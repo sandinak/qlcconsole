@@ -64,6 +64,8 @@ QLCFixtureDef& QLCFixtureDef::operator=(const QLCFixtureDef& fixture)
     {
         m_fileAbsolutePath = fixture.m_fileAbsolutePath;
         m_isUser = fixture.m_isUser;
+        m_downloadable = fixture.m_downloadable;
+        m_overridesIncluded = fixture.m_overridesIncluded;
         m_isLoaded = fixture.m_isLoaded;
         m_manufacturer = fixture.m_manufacturer;
         m_model = fixture.m_model;
@@ -236,6 +238,37 @@ bool QLCFixtureDef::isUser() const
 void QLCFixtureDef::setIsUser(bool flag)
 {
     m_isUser = flag;
+}
+
+QLCFixtureDef::Source QLCFixtureDef::source() const
+{
+    if (m_downloadable)
+        return Downloadable;
+    return m_isUser ? Local : Included;
+}
+
+void QLCFixtureDef::setSource(Source source)
+{
+    m_downloadable = (source == Downloadable);
+    m_isUser = (source == Local);
+}
+
+QString QLCFixtureDef::sourceToString(Source source)
+{
+    switch (source)
+    {
+    case Local:        return QObject::tr("Local");
+    case Downloadable: return QObject::tr("Downloadable");
+    case Included:
+    default:           return QObject::tr("Included");
+    }
+}
+
+QString QLCFixtureDef::sourceDescription() const
+{
+    if (source() == Local && m_overridesIncluded)
+        return QObject::tr("Local — replaces the included one");
+    return sourceToString(source());
 }
 
 /****************************************************************************
@@ -473,6 +506,17 @@ QFile::FileError QLCFixtureDef::loadXML(const QString& fileName)
     QLCFile::releaseXMLReader(doc);
 
     return error;
+}
+
+bool QLCFixtureDef::loadXMLData(const QByteArray &xml)
+{
+    QXmlStreamReader doc(xml);
+    while (!doc.atEnd())
+        if (doc.readNext() == QXmlStreamReader::DTD)
+            break;
+    if (doc.hasError() || doc.dtdName() != KXMLQLCFixtureDefDocument)
+        return false;
+    return loadXML(doc) && !doc.hasError();
 }
 
 bool QLCFixtureDef::loadXML(QXmlStreamReader& doc)

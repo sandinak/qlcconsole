@@ -352,4 +352,28 @@ void QxwImporter_Test::mapGroupParentChainFollows()
     QCOMPARE(tp->group(gotParent).name, QString("Stage Left"));
 }
 
+/* Merging a show that has its own "AT1-3z" does not make two of them. */
+void QxwImporter_Test::anImportedFixtureNameAlreadyInTheShowIsNumbered()
+{
+    Fixture *mine = new Fixture(m_target);
+    mine->setName("AT1-3z");
+    mine->setChannels(1);
+    QVERIFY(m_target->addFixture(mine));
+
+    Fixture *theirs = new Fixture(m_source);
+    theirs->setName("AT1-3z");
+    theirs->setChannels(1);
+    theirs->setAddress(100);
+    QVERIFY(m_source->addFixture(theirs));
+
+    QxwImportResult r = QxwImporter::import(m_source, m_target, { theirs->id() }, {}, {});
+    QCOMPARE(r.fixturesImported, 1);
+    QVERIFY(m_target->duplicateFixtureNames().isEmpty());
+    QCOMPARE(mine->name(), QString("AT1-3z"));
+    QStringList names;
+    foreach (Fixture *f, m_target->fixtures()) names << f->name();
+    QVERIFY(names.contains("AT1-3z #2"));
+    QVERIFY(r.warnings.join("\n").contains("imported as \"AT1-3z #2\""));
+}
+
 QTEST_APPLESS_MAIN(QxwImporter_Test)

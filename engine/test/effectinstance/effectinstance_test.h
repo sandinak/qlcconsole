@@ -36,6 +36,9 @@ private slots:
     /** A multi-head fixture yields one cell PER HEAD (pixel addressing), not one
      *  cell for the whole fixture. */
     void multiHeadYieldsPerHeadCells();
+    void groupsAreLaidAcrossTheStageWhereTheyStand();
+    void aBarsHeadsAreAlongItsLength();
+    void anEffectRunsOnUnpatchedFixturesToo();
     /** A follow-spot with Fade Near Limit takes a head's dimmer down when its
      *  target is out of that head's reach, and leaves the dimmer to the scene
      *  when it is comfortably within it. */

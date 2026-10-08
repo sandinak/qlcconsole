@@ -30,6 +30,8 @@
 #endif
 
 #include "qlcfixturedefcache.h"
+#include "qlcfixturemode.h"
+#include "qlccapability.h"
 #include "avolitesd4parser.h"
 #include "qlcfixturedef.h"
 #include "qlcconfig.h"
@@ -126,8 +128,41 @@ bool QLCFixtureDefCache::addFixtureDef(QLCFixtureDef* fixtureDef)
     }
     else
     {
-        qWarning() << Q_FUNC_INFO << "Cache already contains"
-                   << fixtureDef->name();
+        /* The user's folder is read first, so an included definition of the
+           same fixture arrives second and is set aside -- say so on the one
+           that is used. */
+        foreach (QLCFixtureDef *existing, m_defs)
+        {
+            if (existing->manufacturer() != fixtureDef->manufacturer()
+                || existing->model() != fixtureDef->model())
+                continue;
+            if (fixtureDef->source() == QLCFixtureDef::Included
+                && existing->source() == QLCFixtureDef::Local)
+                existing->setOverridesIncluded(true);
+
+            Duplicate d;
+            d.kept = existing->definitionSourceFile();
+            d.ignored = fixtureDef->definitionSourceFile();
+            d.keptIsLocal = existing->source() == QLCFixtureDef::Local;
+            d.ignoredIsLocal = fixtureDef->source() == QLCFixtureDef::Local;
+            if (d.keptIsLocal && d.ignoredIsLocal)
+            {
+                QFile a(d.kept), b(d.ignored);
+                d.identical = a.open(QIODevice::ReadOnly) && b.open(QIODevice::ReadOnly)
+                              && a.readAll() == b.readAll();
+            }
+            m_duplicates << d;
+
+            /* A local definition replacing an included one is how the library
+               is customised: not worth a warning. Two local files for one
+               fixture are, and the footer lists them. */
+            if (d.keptIsLocal && d.ignoredIsLocal)
+                qWarning() << Q_FUNC_INFO << "Two local definitions of" << fixtureDef->name()
+                           << "- using" << d.kept << "not" << d.ignored;
+            else
+                qDebug() << Q_FUNC_INFO << fixtureDef->name() << "- using" << d.kept;
+            break;
+        }
         return false;
     }
 }
@@ -173,6 +208,25 @@ bool QLCFixtureDefCache::reloadFixtureDef(QLCFixtureDef *fixtureDef)
     return true;
 }
 
+bool QLCFixtureDefCache::reloadPhysical(QLCFixtureDef *fixtureDef)
+{
+    if (fixtureDef == NULL || fixtureDef->definitionSourceFile().isEmpty())
+        return false;
+
+    QLCFixtureDef reloaded;
+    if (reloaded.loadXML(fixtureDef->definitionSourceFile()) != QFile::NoError)
+        return false;
+
+    fixtureDef->setPhysical(reloaded.physical());
+    foreach (QLCFixtureMode *mode, fixtureDef->modes())
+    {
+        QLCFixtureMode *fresh = reloaded.mode(mode->name());
+        if (fresh != NULL)
+            mode->setPhysical(fresh->physical());
+    }
+    return true;
+}
+
 bool QLCFixtureDefCache::reloadOrAddFixtureDef(QLCFixtureDef *fixtureDef)
 {
     // check upon bundled definitions
@@ -203,8 +257,11 @@ bool QLCFixtureDefCache::load(const QDir& dir)
     if (dir.exists() == false || dir.isReadable() == false)
         return false;
 
-    /* Attempt to read all specified files from the given directory */
-    QStringListIterator it(dir.entryList());
+    /* Attempt to read all specified files from the given directory --
+       newest first, so of two files for the same fixture the one edited
+       last is the one used (it was alphabetical: "X 2.qxf" beat "X.qxf"
+       whichever was current). */
+    QStringListIterator it(dir.entryList(QDir::Files | QDir::Readable, QDir::Time));
     while (it.hasNext() == true)
     {
         QString path(dir.absoluteFilePath(it.next()));
@@ -407,6 +464,14 @@ bool QLCFixtureDefCache::loadQXF(const QString& path, bool isUser)
     QFile::FileError error = fxi->loadXML(path);
     if (error == QFile::NoError)
     {
+        m_failedDefinitions.remove(path);
+        int unnamed = 0;
+        foreach (const QLCChannel *ch, fxi->channels())
+            foreach (const QLCCapability *cap, ch->capabilities())
+                if (cap->name().trimmed().isEmpty())
+                    ++unnamed;
+        if (unnamed > 0)
+            qWarning() << path << ":" << unnamed << "capabilities have no description";
         fxi->setIsUser(isUser);
         fxi->setDefinitionSourceFile(path);
         fxi->setLoaded(true);
@@ -420,6 +485,7 @@ bool QLCFixtureDefCache::loadQXF(const QString& path, bool isUser)
     {
         qWarning() << Q_FUNC_INFO << "Fixture definition loading from"
                    << path << "failed:" << QLCFile::errorString(error);
+        m_failedDefinitions.insert(path, QLCFile::errorString(error));
         delete fxi;
         fxi = NULL;
         return false;

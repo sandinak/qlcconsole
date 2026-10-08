@@ -174,6 +174,14 @@ private:
     QJSValue         m_state;
     QElapsedTimer    m_elapsed;
 
+    /** The stage-laid grid of a multi-group look (effectiveCells()): placing
+     *  every head on the stage is milliseconds a tick, so it is kept for up to
+     *  a second, or until the look's groups or fixtures change. */
+    mutable QList<EffectCell> m_stageCells;
+    mutable int               m_stageCols = 0, m_stageRows = 0;
+    mutable QList<quint32>    m_stageKey;
+    mutable QElapsedTimer     m_stageAge;
+
     QHash<QString, float>      m_inputValues;
     QHash<QString, double>     m_paramValues;
     QHash<QString, QString>    m_stringParamValues;

@@ -775,6 +775,15 @@ public:
      *  Returns QVector3D(0,0,0) if the fixture is unknown. */
     QVector3D fixtureRigPosition(quint32 fid) const;
 
+    /** Where fixture $fid is fastened to its structure -- the same as
+     *  fixtureRigPosition() unless it hangs on a hanger, when the fixture is
+     *  out along the arm and down the drop from here. */
+    QVector3D fixtureMountPoint(quint32 fid) const;
+private:
+    /** Where its mount puts it, before any hanger (the axis of a tower). */
+    QVector3D fixtureBasePosition(quint32 fid) const;
+public:
+
 private:
     QMap<quint32, FixtureRigProps> m_rigProps;
 

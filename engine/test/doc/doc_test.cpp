@@ -1212,4 +1212,47 @@ void Doc_Test::createBusNode(QXmlStreamWriter &doc, quint32 id, quint32 val)
     doc.writeEndElement();
 }
 
+/* "two AT1-3z lights .. one in upper left corner .. one on AT1": names are
+   unique. Taken is checked against OTHER fixtures; a free name is numbered
+   on without touching its own digits; a show that already has duplicates is
+   put right with the patched one keeping its name. */
+void Doc_Test::fixtureNamesAreUnique()
+{
+    auto add = [this](const QString &name, bool patched, quint32 addr) {
+        Fixture *f = new Fixture(m_doc);
+        f->setName(name);
+        f->setChannels(1);
+        f->setAddress(addr);
+        f->setPatched(patched);
+        m_doc->addFixture(f);
+        return f;
+    };
+    Fixture *stray = add("AT1-3z", false, 0);    // the inventory copy, lower ID
+    Fixture *rigged = add("AT1-3z", true, 447);
+    Fixture *other = add("SR Tower 1", true, 10);
+
+    QVERIFY(m_doc->fixtureNameTaken("AT1-3z"));
+    QVERIFY(m_doc->fixtureNameTaken("AT1-3z", rigged->id()));     // the stray has it
+    QVERIFY(!m_doc->fixtureNameTaken("SR Tower 1", other->id())); // only itself
+    QVERIFY(!m_doc->fixtureNameTaken("Nobody"));
+
+    // Numbered on, its own digits kept: not "AT1-4z", not "SR Tower 2".
+    QCOMPARE(m_doc->uniqueFixtureName("AT1-3z"), QString("AT1-3z #2"));
+    QCOMPARE(m_doc->uniqueFixtureName("SR Tower 1"), QString("SR Tower 1 #2"));
+    QCOMPARE(m_doc->uniqueFixtureName("SR Tower 1", other->id()), QString("SR Tower 1"));
+    QCOMPARE(m_doc->uniqueFixtureName("Free"), QString("Free"));
+
+    const QMap<QString, QList<quint32> > dups = m_doc->duplicateFixtureNames();
+    QCOMPARE(dups.keys(), QStringList({ "AT1-3z" }));
+    QCOMPARE(dups.value("AT1-3z"), QList<quint32>({ stray->id(), rigged->id() }));
+
+    // The patched one keeps the name though it was added second.
+    QCOMPARE(m_doc->makeFixtureNamesUnique(), 1);
+    QCOMPARE(rigged->name(), QString("AT1-3z"));
+    QCOMPARE(stray->name(), QString("AT1-3z #2"));
+    QVERIFY(m_doc->duplicateFixtureNames().isEmpty());
+    QCOMPARE(m_doc->makeFixtureNamesUnique(), 0);
+    m_doc->resetModified();        // the tests after this one expect a fresh doc
+}
+
 QTEST_APPLESS_MAIN(Doc_Test)

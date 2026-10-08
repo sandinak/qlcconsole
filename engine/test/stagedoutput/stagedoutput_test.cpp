@@ -25,6 +25,9 @@
 #include "programmerflasher.h"
 #include "highlighteffect.h"
 #include "effectinstance.h"
+#include "universe.h"
+#include "fadechannel.h"
+#include "genericfader.h"
 #include "parkeffect.h"
 #include "markeffect.h"
 #undef private
@@ -165,13 +168,19 @@ void StagedOutput_Test::flashSkipsStagedFixtures()
     QCOMPARE(flasher.m_entries.size(), 1);
 }
 
-void StagedOutput_Test::effectIntentsSkipStagedFixtures()
+/* A staged fixture sends NOTHING -- that holds. What changed is where: an
+   effect now works out what a staged fixture would do (so the rig view can
+   show a look on the inventory before it is patched), and its channels are
+   inert, so none of it reaches a universe. Checked through the very fader the
+   effect runner writes with. */
+void StagedOutput_Test::effectIntentsForStagedFixturesReachNoDmx()
 {
     Fixture *realMover = mover(m_doc, "Real Mover", false);   // patched below, clear of m_real
     Fixture *stagedMover = mover(m_doc, "Staged Mover", false);
     QVERIFY(realMover != nullptr && stagedMover != nullptr);
     QVERIFY(m_doc->patchFixture(realMover->id(), 0, 10));
     QVERIFY(realMover->masterIntensityChannel() != QLCChannel::invalid());
+    QVERIFY(!stagedMover->isPatched());
 
     EffectInstance inst(m_doc, Function::invalidId(), Function::invalidId());
 
@@ -184,9 +193,36 @@ void StagedOutput_Test::effectIntentsSkipStagedFixtures()
     };
 
     const QList<EffectInstance::DmxWrite> writes = inst.parseIntents(intents, cells);
-    QVERIFY(!writes.isEmpty());
+    bool staged = false, real = false;
     for (const EffectInstance::DmxWrite &w : writes)
-        QCOMPARE(w.fixtureId, realMover->id());
+    {
+        staged |= (w.fixtureId == stagedMover->id());
+        real |= (w.fixtureId == realMover->id());
+    }
+    QVERIFY(real);
+    QVERIFY2(staged, "the staged fixture's look is worked out, for the rig view");
+
+    // Through the effect runner's own fader: the staged writes reach no DMX.
+    QList<Universe *> ua = m_doc->inputOutputMap()->universes();
+    QSharedPointer<GenericFader> fader = ua[0]->requestFader(Universe::Override);
+    fader->setDoc(m_doc);
+    for (const EffectInstance::DmxWrite &w : writes)
+    {
+        if (w.fixtureId != stagedMover->id())
+            continue;
+        FadeChannel fc(m_doc, w.fixtureId, w.channel);
+        fc.setTarget(w.value);
+        fc.setCurrent(w.value);
+        fc.setFadeTime(0);
+        fader->replace(fc);
+    }
+    fader->write(ua[0]);
+    for (int a = 0; a < 10; ++a)                     // the placeholder 0/0 and on
+        QCOMPARE(uchar(ua[0]->preGMValues()[a]), uchar(0));
+    const quint32 dim = stagedMover->masterIntensityChannel();
+    QVERIFY(dim != QLCChannel::invalid());
+    QCOMPARE(uchar(stagedMover->channelValues().at(int(dim))), uchar(255));   // shown, not sent
+    ua[0]->dismissFader(fader);
 }
 
 void StagedOutput_Test::programmerParkAndMarkSkipStagedFixtures()

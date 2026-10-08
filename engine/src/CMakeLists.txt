@@ -49,6 +49,8 @@ add_library(${module_name} SHARED
     scenery.cpp scenery.h
     gobolibrary.cpp gobolibrary.h
     headlayout.cpp headlayout.h
+    righeads.cpp righeads.h
+    fixturedefcheck.cpp fixturedefcheck.h
     networkgearcatalog.cpp networkgearcatalog.h
     stand.cpp stand.h
     tower.cpp tower.h

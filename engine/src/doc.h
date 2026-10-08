@@ -439,6 +439,22 @@ public:
     static QString nextUniqueName(const QString &name,
                                   const std::function<bool(const QString &)> &isTaken);
 
+    /** Fixture names are unique: two fixtures called "AT1-3z" (one on the
+     *  tower, a stray inventory copy in a corner of the plot) cannot be told
+     *  apart anywhere a fixture is picked by name. */
+    /** True when a fixture other than @p except is called @p name. */
+    bool fixtureNameTaken(const QString &name, quint32 except = UINT_MAX) const;
+    /** @p name if no other fixture has it, else the next free "name #2",
+     *  "name #3"... -- its own digits are kept ("AT1-3z" is not "AT1-4z"). */
+    QString uniqueFixtureName(const QString &name, quint32 except = UINT_MAX) const;
+    /** Names more than one fixture has, each with those fixtures' IDs. */
+    QMap<QString, QList<quint32> > duplicateFixtureNames() const;
+    /** Give every fixture a name of its own: of each set sharing a name the
+     *  first patched one (else the lowest ID) keeps it, the rest are
+     *  numbered. Only the names in @p only, when given. Returns how many
+     *  were renamed. */
+    int makeFixtureNamesUnique(const QStringList &only = QStringList());
+
     /**
      * Step the most-recently-started running Chaser forward/backward.
      * Lets a single pair of surface buttons (SHIFT/BANK on the Mk2)

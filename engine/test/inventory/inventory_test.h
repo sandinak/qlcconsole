@@ -71,6 +71,8 @@ private slots:
     void applyRefusesADimmerResizeAScenePins();
     void applySkipsAFixtureDeletedSincePlanning();
     void applyPointsAnArtNetUniverseAtTheFixtureIp();
+    void aWledFixtureGetsTheWledOutputAimedAtIt();
+    void theTransportRoundTrips();
     void applyBorrowsTheOutputOfAnotherNetworkUniverse();
     void applyAsksForAnOutputWhenNoNetworkUniverseExists();
 

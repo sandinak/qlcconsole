@@ -744,6 +744,55 @@ void Inventory_Test::applyPointsAnArtNetUniverseAtTheFixtureIp()
     QCOMPARE(artnet->m_params.value(0).value("outputIP").toString(), QString("172.18.2.41"));
 }
 
+/* A lantern sent to by WLED's own API: its universe goes out through the
+   WLED output -- not Art-Net, even with an Art-Net universe there to borrow
+   -- aimed at its IP, reading its channels where they are. */
+void Inventory_Test::aWledFixtureGetsTheWledOutputAimedAtIt()
+{
+    FakeNetPlugin *artnet = new FakeNetPlugin("ArtNet");
+    artnet->registerIn(g_doc);
+    g_doc->inputOutputMap()->setOutputPatch(0, "ArtNet", "eth0", 0);
+    FakeNetPlugin *wled = new FakeNetPlugin("WLED");
+    wled->registerIn(g_doc);
+    makeDimmer(g_doc, 3, 0, 0)->setConnection(Fixture::Network);    // an Art-Net universe exists
+    Fixture *lantern = makeStaged(g_doc, 3, "Lantern SL", Fixture::Network, "192.168.20.185");
+    lantern->setTransport(Fixture::WledTransport);
+
+    PatchPlanner pp(g_doc);
+    const QList<PatchPlanner::Assignment> plan = pp.plan(QList<quint32>() << lantern->id());
+    const quint32 uni = plan.first().universe;
+    QStringList problems;
+    QCOMPARE(pp.apply(plan, &problems), 1);
+    QVERIFY2(problems.isEmpty(), qPrintable(problems.join("; ")));
+    OutputPatch *op = g_doc->inputOutputMap()->outputPatch(uni);
+    QVERIFY(op != nullptr);
+    QCOMPARE(op->pluginName(), QString("WLED"));
+    QCOMPARE(wled->m_params.value(uni).value("outputIP").toString(), QString("192.168.20.185"));
+    QCOMPARE(wled->m_params.value(uni).value("wledAddress").toInt(), int(lantern->address()) + 1);
+    QCOMPARE(wled->m_params.value(uni).value("wledChannels").toInt(), 3);
+    QVERIFY(!artnet->m_params.value(uni).contains("outputIP"));
+}
+
+void Inventory_Test::theTransportRoundTrips()
+{
+    Fixture *lantern = makeDimmer(g_doc, 4, 0, 0, false);
+    lantern->setConnection(Fixture::Network);
+    lantern->setIPAddress("192.168.20.185");
+    lantern->setTransport(Fixture::WledTransport);
+    const QByteArray xml = saveFixture(lantern);
+    QVERIFY(xml.contains("<Transport>WLED</Transport>"));
+    Doc doc2(this);
+    QXmlStreamReader r(xml);
+    r.readNextStartElement();
+    r.readNextStartElement();
+    QVERIFY(Fixture::loader(r, &doc2));
+    QCOMPARE(doc2.fixtures().first()->transport(), Fixture::WledTransport);
+
+    // Art-Net, the default, writes nothing.
+    lantern->setTransport(Fixture::ArtNetTransport);
+    QVERIFY(!saveFixture(lantern).contains("Transport"));
+}
+
 void Inventory_Test::applyBorrowsTheOutputOfAnotherNetworkUniverse()
 {
     FakeNetPlugin *sacn = new FakeNetPlugin("E1.31");

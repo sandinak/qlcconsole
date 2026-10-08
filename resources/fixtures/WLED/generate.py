@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Generate the QLC+ WLED fixture definition (ArtNet/E1.31 "Effect" DMX mode).
+"""Generate the QLC+ WLED fixture definitions (ArtNet/E1.31 "Effect" DMX mode):
+WLED-Effect-Mode.qxf (a bare controller) and WLED-Lantern.qxf (a hanging
+lantern: ~16 LEDs on a wire string clustered in the middle, drawn as a
+lantern that glows all round -- the qlcconsole <Body> tag, which QLC+ skips).
 
 Channel map: https://kno.wled.ge/interfaces/e1.31-dmx/#effect (15 channels).
 The Effect/Palette DMX value IS the WLED index, so lists are firmware-specific.
@@ -86,12 +89,32 @@ def main():
         print(f"fetched {len(eff)} effects, {len(pal)} palettes from {sys.argv[2]}")
     phys = ("  <Physical>\n"
             '   <Bulb Type="LED" Lumens="0" ColourTemperature="0"/>\n'
-            '   <Dimensions Weight="0" Width="100" Height="100" Depth="30"/>\n'
+            '   <Dimensions Weight="0.01" Width="100" Height="100" Depth="30"/>\n'
             '   <Lens Name="Other" DegreesMin="0" DegreesMax="0"/>\n'
             '   <Focus Type="Fixed" PanMax="0" TiltMax="0"/>\n'
             '   <Technical PowerConsumption="15" DmxConnector="Other"/>\n'
             "  </Physical>")
-    xml = f'''<?xml version="1.0" encoding="UTF-8"?>
+    write("WLED-Effect-Mode.qxf", definition("Effect Mode", phys, eff, pal), eff, pal)
+
+    # The lantern: ~16 LEDs (about 5 lm each at full white, ~0.3 W each) in
+    # a cage; set the real size here when it is measured.
+    lantern = ("  <Physical>\n"
+               '   <Bulb Type="LED" Lumens="100" ColourTemperature="0"/>\n'
+               '   <Dimensions Weight="0.4" Width="150" Height="250" Depth="150"/>\n'
+               '   <Lens Name="Other" DegreesMin="0" DegreesMax="0"/>\n'
+               '   <Focus Type="Fixed" PanMax="0" TiltMax="0"/>\n'
+               '   <Technical PowerConsumption="5" DmxConnector="Other"/>\n'
+               '   <Body Shape="Lantern" Emission="Omni"/>\n'
+               "  </Physical>")
+    write("WLED-Lantern.qxf", definition("Lantern", lantern, eff, pal), eff, pal)
+
+def write(name, xml, eff, pal):
+    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), name)
+    open(out, "w").write(xml)
+    print("wrote", out, "with", len(eff), "effects,", len(pal), "palettes")
+
+def definition(model, phys, eff, pal):
+    return f'''<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE FixtureDefinition>
 <!-- WLED "Effect" DMX mode. Effect/palette lists ({len(eff)} effects,
      {len(pal)} palettes); DMX value on the Effect/Palette channel = WLED index. -->
@@ -102,7 +125,7 @@ def main():
   <Author>Branson</Author>
  </Creator>
  <Manufacturer>WLED</Manufacturer>
- <Model>Effect Mode</Model>
+ <Model>{model}</Model>
  <Type>Color Changer</Type>
  <Channel Name="Master Dimmer" Preset="IntensityMasterDimmer"/>
  <Channel Name="Effect">
@@ -191,9 +214,6 @@ def main():
  </Mode>
 </FixtureDefinition>
 '''
-    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "WLED-Effect-Mode.qxf")
-    open(out, "w").write(xml)
-    print("wrote", out, "with", len(eff), "effects,", len(pal), "palettes")
 
 if __name__ == "__main__":
     main()

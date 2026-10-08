@@ -55,6 +55,7 @@ private slots:
     void flashUnflash();
 
     void writeHTPZeroTicks();
+    void aSceneWithAnUnpatchedFixturePlaysWithoutCrashing();
     void writeHTPTwoTicks();
     void writeHTPTwoTicksIntensity();
     void writeLTPReady();

@@ -84,6 +84,8 @@ QLCPhysical& QLCPhysical::operator=(const QLCPhysical& physical)
 
         m_powerConsumption = physical.powerConsumption();
         m_dmxConnector = physical.dmxConnector();
+        m_bodyShape = physical.bodyShape();
+        m_emission = physical.emission();
     }
 
     return *this;
@@ -353,6 +355,13 @@ bool QLCPhysical::loadXML(QXmlStreamReader &doc)
             m_powerConsumption = attrs.value(KXMLQLCPhysicalTechnicalPowerConsumption).toString().toInt();
             m_dmxConnector = attrs.value(KXMLQLCPhysicalTechnicalDmxConnector).toString();
         }
+        else if (doc.name() == KXMLQLCPhysicalBody)
+        {
+            m_bodyShape = (attrs.value(KXMLQLCPhysicalBodyShape).toString() == QLatin1String("Lantern"))
+                          ? LanternBody : BoxBody;
+            m_emission = (attrs.value(KXMLQLCPhysicalBodyEmission).toString() == QLatin1String("Omni"))
+                         ? OmniEmission : BeamEmission;
+        }
         else
         {
             qWarning() << Q_FUNC_INFO << "Unknown Physical tag:" << doc.name();
@@ -415,6 +424,17 @@ bool QLCPhysical::saveXML(QXmlStreamWriter *doc) const
     doc->writeAttribute(KXMLQLCPhysicalTechnicalPowerConsumption, QString::number(m_powerConsumption));
     doc->writeAttribute(KXMLQLCPhysicalTechnicalDmxConnector, m_dmxConnector);
     doc->writeEndElement();
+
+    /* Body (qlcconsole): only when it is not a plain box throwing a beam */
+    if (m_bodyShape != BoxBody || m_emission != BeamEmission)
+    {
+        doc->writeStartElement(KXMLQLCPhysicalBody);
+        doc->writeAttribute(KXMLQLCPhysicalBodyShape,
+                            m_bodyShape == LanternBody ? QStringLiteral("Lantern") : QStringLiteral("Box"));
+        doc->writeAttribute(KXMLQLCPhysicalBodyEmission,
+                            m_emission == OmniEmission ? QStringLiteral("Omni") : QStringLiteral("Beam"));
+        doc->writeEndElement();
+    }
 
     doc->writeEndElement();
 

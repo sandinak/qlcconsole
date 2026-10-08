@@ -467,7 +467,7 @@ QHash<int, uchar> Universe::intensityChannels()
 
 uchar Universe::postGMValue(int address) const
 {
-    if (address >= m_postGMValues->size())
+    if (address < 0 || address >= m_postGMValues->size())   // see preGMValue()
         return 0;
 
     return uchar(m_postGMValues->at(address));
@@ -519,7 +519,11 @@ const QByteArray Universe::preGMValues() const
 
 uchar Universe::preGMValue(int address) const
 {
-    if (address >= m_preGMValues->size())
+    /* Below zero too: an inert channel (a fixture in the inventory, not
+       patched) has the INVALID address, all ones, which arrives here as -1.
+       A scene with one unpatched fixture in it aborted the engine thread on
+       its first tick (QByteArray::at asserts). */
+    if (address < 0 || address >= m_preGMValues->size())
         return 0U;
 
     return static_cast<uchar>(m_preGMValues->at(address));

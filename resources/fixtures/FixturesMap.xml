@@ -2003,6 +2003,7 @@
   </M>
   <M n="WLED">
     <F n="WLED-Effect-Mode" m="Effect Mode"/>
+    <F n="WLED-Lantern" m="Lantern"/>
   </M>
   <M n="XStatic">
     <F n="XStatic-X-240Bar-RGB" m="X-240Bar RGB"/>

@@ -1252,6 +1252,70 @@ void MonitorProperties_Test::theGoboLibraryImportsAndResolves()
 
 QTEST_GUILESS_MAIN(MonitorProperties_Test)
 
+/* A lantern on a bracket off the side of a tower: fastened part way up,
+   out along the arm (stage left here), down the drop. The fixture is at the
+   end of all that; where it is fastened is still there to draw the arm from.
+   Saved and read back; a free-standing fixture has no hanger to hang on. */
+void MonitorProperties_Test::aLanternHangsOnItsHanger()
+{
+    MonitorProperties mp;
+    Truss *tower = mp.addTruss();
+    tower->setType(Truss::Vertical);
+    tower->setOrigin(QVector3D(2.0f, 1.0f, 0.0f));
+    tower->setLength(3.0f);
+    tower->setWidth(0.29f);
+
+    FixtureRigProps rp;
+    rp.trussId = tower->id();
+    rp.trussOffset = 2.5f;
+    mp.setFixtureRigProps(7, rp);
+    const QVector3D fastened = mp.fixtureRigPosition(7);
+    QCOMPARE(mp.fixtureMountPoint(7), fastened);              // no hanger: the same
+
+    rp.hangerArm = 0.4f;
+    rp.hangerAngle = 90.0f;                                    // stage left, +X
+    rp.hangerDrop = 0.6f;
+    mp.setFixtureRigProps(7, rp);
+    // Clamped to the tower's face, not its axis: the arm is measured from the steel.
+    QVERIFY(qAbs(mp.fixtureMountPoint(7).x() - (fastened.x() + 0.145f)) < 1e-4f);
+    const QVector3D hung = mp.fixtureRigPosition(7);
+    QVERIFY(qAbs(hung.x() - (fastened.x() + 0.145f + 0.4f)) < 1e-4f);
+    QVERIFY(qAbs(hung.y() - fastened.y()) < 1e-4f);
+    QVERIFY(qAbs(hung.z() - (fastened.z() - 0.6f)) < 1e-4f);
+
+    // Downstage is +Y.
+    rp.hangerAngle = 0.0f;
+    mp.setFixtureRigProps(7, rp);
+    QVERIFY(qAbs(mp.fixtureRigPosition(7).y() - (fastened.y() + 0.145f + 0.4f)) < 1e-4f);
+
+    // Saved and read back.
+    QBuffer buf;
+    buf.open(QIODevice::WriteOnly);
+    QXmlStreamWriter writer(&buf);
+    writer.writeStartDocument();
+    mp.saveXML(&writer, nullptr);
+    writer.writeEndDocument();
+    buf.close();
+    QVERIFY(buf.data().contains("HangArm=\"0.400\""));
+    MonitorProperties mp2;
+    buf.open(QIODevice::ReadOnly);
+    QXmlStreamReader reader(&buf);
+    while (reader.readNextStartElement())
+        if (reader.name() == QStringLiteral("Monitor"))
+            QVERIFY(mp2.loadXML(reader, nullptr));
+    const FixtureRigProps back = mp2.fixtureRigProps(7);
+    QCOMPARE(back.hangerArm, 0.4f);
+    QCOMPARE(back.hangerDrop, 0.6f);
+    QCOMPARE(back.hangerAngle, 0.0f);
+
+    // Not on a structure: nothing to hang from.
+    FixtureRigProps loose;
+    loose.hangerArm = 1.0f;
+    loose.hangerDrop = 1.0f;
+    mp.setFixtureRigProps(8, loose);
+    QCOMPARE(mp.fixtureRigPosition(8), mp.fixtureMountPoint(8));
+}
+
 void MonitorProperties_Test::aTowerOffsetIsTheHeight()
 {
     MonitorProperties mp;

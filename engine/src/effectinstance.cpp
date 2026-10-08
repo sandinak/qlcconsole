@@ -21,6 +21,7 @@
 #include "qlcfixturemode.h"
 #include "qlcphysical.h"
 #include "monitorproperties.h"
+#include "righeads.h"
 #include "stagetarget.h"
 #include "scenevalue.h"
 #include "universe.h"
@@ -36,6 +37,7 @@
 #include <QDebug>
 #include <QtMath>
 #include <cmath>
+#include <algorithm>
 
 EffectInstance::EffectInstance(Doc *doc, quint32 sceneId, quint32 effectPaletteId)
     : m_doc(doc)
@@ -590,28 +592,175 @@ EffectInstance::effectiveCells(int &gridCols, int &gridRows) const
     Scene *scene = qobject_cast<Scene*>(m_doc->function(m_sceneId));
     const QList<quint32> grpIds = scene ? scene->fixtureGroups() : QList<quint32>();
 
-    // Per-HEAD cells from the fixture-group head layouts, laid side by side
-    // (left→right) so two panels next to each other form ONE wide grid. Every
-    // head of a multi-head/pixel fixture is its own cell — this is what lets an
-    // effect address individual pixels instead of a whole fixture (RGB Matrix
+    // A multi-group look's stage grid, while it is fresh (see below).
+    QList<quint32> stageKey;
+    stageKey << grpIds << 0xFFFFFFFFu << fxIds;
+    if (grpIds.size() > 1 && stageKey == m_stageKey
+        && m_stageAge.isValid() && m_stageAge.elapsed() < 1000)
+    {
+        gridCols = m_stageCols;
+        gridRows = m_stageRows;
+        return m_stageCells;
+    }
+
+    // Per-HEAD cells from the fixture-group head layouts. Every head of a
+    // multi-head/pixel fixture is its own cell -- this is what lets an effect
+    // address individual pixels instead of a whole fixture (RGB Matrix
     // parity); a single-head fixture is just one cell.
-    int xOffset = 0, maxRows = 0;
+    struct GroupLayout
+    {
+        QMap<QLCPoint, GroupHead> heads;
+        int width = 0, height = 0;
+    };
+    QList<GroupLayout> layouts;
     for (quint32 gid : grpIds)
     {
         FixtureGroup *grp = m_doc->fixtureGroup(gid);
         if (grp == nullptr || grp->size().width() <= 0 || grp->size().height() <= 0
                            || grp->headsMap().isEmpty())
             continue;
+        GroupLayout gl;
+        gl.width = grp->size().width();
+        gl.height = grp->size().height();
         const QMap<QLCPoint, GroupHead> heads = grp->headsMap();
         for (auto it = heads.constBegin(); it != heads.constEnd(); ++it)
+            if (allowed.contains(it.value().fxi))
+                gl.heads.insert(it.key(), it.value());
+        if (!gl.heads.isEmpty())
+            layouts << gl;
+    }
+
+    int maxRows = 0;
+    for (const GroupLayout &gl : layouts)
+        maxRows = qMax(maxRows, gl.height);
+
+    /* Two or more groups: one grid laid out AS THE RIG STANDS, every head at
+       the place on stage the rig view paints it (RigHeads), to scale -- across
+       is across the stage (stage X, smaller on the left, as the group wizard
+       lays groups out), up is height, or upstage when they all stand at one
+       height. Laid side by side, each group in its own layout, a sine over
+       towers, the bars between them and the step tops ran down the towers,
+       then the bars, then the steps, with "up" meaning something different
+       in each. Heads closer together than a cell share it; heads not on the
+       stage go after the rest, in a strip of their own. */
+    if (layouts.size() > 1)
+    {
+        struct Spot
         {
-            const GroupHead &gh = it.value();
-            if (!allowed.contains(gh.fxi))
+            quint32 fid = 0;
+            int head = 0;
+            QVector3D at;
+            bool placed = false;
+        };
+        QList<Spot> spots;
+        QSet<quint64> seen;
+        QHash<quint32, QVector<QVector3D> > headsAt;
+        const MonitorProperties *mp = m_doc->monitorProperties();
+        for (const GroupLayout &gl : layouts)
+            for (auto it = gl.heads.constBegin(); it != gl.heads.constEnd(); ++it)
+            {
+                const GroupHead &gh = it.value();
+                const quint64 key = (quint64(gh.fxi) << 32) | quint32(gh.head);
+                if (seen.contains(key))
+                    continue;
+                seen.insert(key);
+                Spot sp;
+                sp.fid = gh.fxi;
+                sp.head = gh.head;
+                if (!headsAt.contains(gh.fxi))      // once per fixture; empty = not on the stage
+                    headsAt.insert(gh.fxi, (mp != nullptr && !mp->fixtureRigPosition(gh.fxi).isNull())
+                                           ? RigHeads::headPositions(m_doc, gh.fxi)
+                                           : QVector<QVector3D>());
+                const QVector<QVector3D> &hp = headsAt[gh.fxi];
+                if (gh.head >= 0 && gh.head < hp.size())
+                {
+                    sp.at = hp.at(gh.head);
+                    sp.placed = true;
+                }
+                spots << sp;
+            }
+
+        double x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9, z0 = 1e9, z1 = -1e9;
+        int placed = 0;
+        for (const Spot &sp : spots)
+        {
+            if (!sp.placed)
                 continue;
-            cells.append({gh.fxi, gh.head, xOffset + it.key().x(), it.key().y()});
+            ++placed;
+            x0 = qMin(x0, double(sp.at.x())); x1 = qMax(x1, double(sp.at.x()));
+            y0 = qMin(y0, double(sp.at.y())); y1 = qMax(y1, double(sp.at.y()));
+            z0 = qMin(z0, double(sp.at.z())); z1 = qMax(z1, double(sp.at.z()));
         }
-        xOffset += grp->size().width();
-        if (grp->size().height() > maxRows) maxRows = grp->size().height();
+        if (placed > 0)
+        {
+            const bool byHeight = (z1 - z0) >= (y1 - y0);
+            const double v0 = byHeight ? z0 : y0, v1 = byHeight ? z1 : y1;
+
+            /* The cell: the rig's own pixel pitch -- the median spacing of
+               neighbouring heads on one fixture -- so a pixel bar keeps its
+               pixels apart. Coarser only when that would be a huge grid: the
+               script draws every cell, every tick. */
+            QList<double> pitches;
+            for (auto it = headsAt.constBegin(); it != headsAt.constEnd(); ++it)
+                for (int i = 1; i < it.value().size(); ++i)
+                {
+                    const double dd = double((it.value().at(i) - it.value().at(i - 1)).length());
+                    if (dd > 0.005)
+                        pitches << dd;
+                }
+            double cellM = 0.1;
+            if (!pitches.isEmpty())
+            {
+                std::sort(pitches.begin(), pitches.end());
+                cellM = pitches.at(pitches.size() / 2);
+            }
+            const double W = x1 - x0, V = v1 - v0;
+            const double maxCells = 16384.0;
+            if ((W / cellM + 1.0) * (V / cellM + 1.0) > maxCells)
+            {
+                const double area = W * V;
+                cellM = (area > 1e-6) ? qSqrt(area / maxCells) : qMax(W, V) / (maxCells - 1.0);
+                // sqrt(area/n) is for a grid with no edge; round up past the +1s.
+                while ((W / cellM + 1.0) * (V / cellM + 1.0) > maxCells)
+                    cellM *= 1.05;
+            }
+            const int cols = qMax(1, int(qRound(W / cellM)) + 1);
+            const int rows = qMax(1, int(qRound(V / cellM)) + 1);
+            int strip = 0;
+            for (const Spot &sp : spots)
+            {
+                if (sp.placed)
+                {
+                    const double v = byHeight ? sp.at.z() : sp.at.y();
+                    const int col = qBound(0, int(qRound((sp.at.x() - x0) / cellM)), cols - 1);
+                    const int row = qBound(0, int(qRound((v1 - v) / cellM)), rows - 1);   // top first
+                    cells.append({sp.fid, sp.head, col, row});
+                }
+                else
+                {
+                    cells.append({sp.fid, sp.head, cols + strip, 0});
+                    ++strip;
+                }
+            }
+            gridCols = cols + strip;
+            gridRows = rows;
+            m_stageCells = cells;
+            m_stageCols = gridCols;
+            m_stageRows = gridRows;
+            m_stageKey = stageKey;
+            m_stageAge.start();
+            return cells;
+        }
+    }
+
+    // One group (or nothing on the stage): side by side, left to right, so
+    // two panels next to each other form ONE wide grid.
+    int xOffset = 0;
+    for (const GroupLayout &gl : layouts)
+    {
+        for (auto it = gl.heads.constBegin(); it != gl.heads.constEnd(); ++it)
+            cells.append({it.value().fxi, it.value().head, xOffset + it.key().x(), it.key().y()});
+        xOffset += gl.width;
     }
 
     if (!cells.isEmpty())
@@ -1103,7 +1252,10 @@ EffectInstance::parseIntents(const QJSValue &intents,
         quint32 fid  = cell.fixtureId;
         int     head = cell.head;
         Fixture *fxi = m_doc->fixture(fid);
-        if (!fxi || !fxi->fixtureMode() || !fxi->isPatched())
+        /* Unpatched fixtures too: their channels are inert (no address, no
+           DMX), and what the effect would do goes to the fixture for the rig
+           view -- a look on the inventory can be seen before it is patched. */
+        if (!fxi || !fxi->fixtureMode())
             continue;
         // The set of channels this CELL owns: just this head's channels for a
         // multi-head/pixel fixture, or the whole fixture for a single-head one.

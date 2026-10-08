@@ -26,6 +26,8 @@
 #include <algorithm>
 
 #include "patchplanner.h"
+#include "qlcioplugin.h"
+#include "ioplugincache.h"
 #include "monitorproperties.h"
 #include "networktopology.h"
 #include "inputoutputmap.h"
@@ -544,6 +546,34 @@ int PatchPlanner::apply(const QList<Assignment> &assignments, QStringList *probl
 
         if (fx->connection() != Fixture::Network)
             continue;
+
+        /* WLED by its own API: the universe goes out through the WLED plugin,
+           aimed at the lantern, reading its channels where they are. */
+        if (fx->transport() == Fixture::WledTransport)
+        {
+            OutputPatch *wop = io->outputPatch(a.universe);
+            QLCIOPlugin *wled = m_doc->ioPluginCache()->plugin(QStringLiteral("WLED"));
+            if ((wop == NULL || wop->pluginName() != QLatin1String("WLED"))
+                && wled != NULL && !wled->outputs().isEmpty())
+            {
+                io->setOutputPatch(a.universe, QStringLiteral("WLED"), wled->outputs().first(), 0);
+                wop = io->outputPatch(a.universe);
+            }
+            if (wop == NULL || wop->pluginName() != QLatin1String("WLED"))
+            {
+                if (problems != NULL)
+                    *problems << QStringLiteral("Universe %1 carries WLED fixture %2 but the WLED output "
+                                                "is not available here").arg(a.universe + 1).arg(name);
+                continue;
+            }
+            if (!fx->ipAddress().isEmpty())
+                wop->setPluginParameter(QStringLiteral("outputIP"), fx->ipAddress());
+            else if (problems != NULL)
+                *problems << QStringLiteral("WLED fixture %1 has no IP address").arg(name);
+            wop->setPluginParameter(QStringLiteral("wledAddress"), fx->address() + 1);
+            wop->setPluginParameter(QStringLiteral("wledChannels"), fx->channels());
+            continue;
+        }
 
         // Point the universe's output at this fixture's IP.
         OutputPatch *op = io->outputPatch(a.universe);

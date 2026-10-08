@@ -56,9 +56,17 @@ struct HeadLayout
      *  definition (a generic dimmer has nothing to map). */
     static QString keyFor(const Fixture *fx);
 
-    /** The grid in head order: the definition's layout size filled row by
-     *  row, or a single row when it declares none. What everything assumed
-     *  before there was a map. */
+    /** The LED grid @p mode's definition declares, when it holds EXACTLY
+     *  this mode's heads; else an invalid size. A definition declares one
+     *  grid for all its modes: the Oppsk wall washer's 8 x 4 is its 32-head
+     *  64ch mode, and poured into its 16-head 48ch RGB mode it folded a
+     *  one-metre bar into two rows ("fits" was the test, with room to spare).
+     *  1 x 1 is the unset default, not a grid. */
+    static QSize declaredGrid(const QLCFixtureMode *mode);
+
+    /** The grid in head order: the definition's grid for this mode
+     *  (declaredGrid()) filled row by row, or a single row when it has none.
+     *  What everything assumed before there was a map. */
     static HeadLayout headOrder(const Fixture *fx);
 
     /** The grid with each ROW holding one kind of head (@p rowKinds, top to

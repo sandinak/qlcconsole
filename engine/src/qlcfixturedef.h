@@ -155,9 +155,29 @@ public:
     bool isUser() const;
     void setIsUser(bool flag);
 
+    /** Where a definition comes from. Included: ships with the app (the
+     *  fixtures folder, read-only -- edits save as a local copy). Local: the
+     *  user's own fixtures folder. Downloadable: known from an online
+     *  library but not on this machine yet -- fetched when it is needed. */
+    enum Source { Included, Local, Downloadable };
+    Source source() const;
+    void setSource(Source source);
+    static QString sourceToString(Source source);
+
+    /** A local definition of the same manufacturer and model as an
+     *  included one: it is the one used, the included one is set aside. */
+    bool overridesIncluded() const { return m_overridesIncluded; }
+    void setOverridesIncluded(bool on) { m_overridesIncluded = on; }
+
+    /** "Included", "Local", "Local — replaces the included one",
+     *  "Downloadable" -- one phrase for anywhere a definition is shown. */
+    QString sourceDescription() const;
+
 protected:
     bool m_isLoaded;
     bool m_isUser;
+    bool m_downloadable = false;
+    bool m_overridesIncluded = false;
     QString m_fileAbsolutePath;
     QString m_manufacturer;
     QString m_model;
@@ -232,6 +252,11 @@ public:
 
     /** Load this fixture's contents from the given file */
     QFile::FileError loadXML(const QString& fileName);
+
+    /** Load this fixture's contents from @p xml in memory -- a file being
+     *  repaired, before it is saved (FixtureDefCheck). False when it is not
+     *  a readable definition. */
+    bool loadXMLData(const QByteArray &xml);
 
 protected:
     /** Load fixture contents from an XML document */

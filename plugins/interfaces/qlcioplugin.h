@@ -465,6 +465,14 @@ public:
     virtual void rescan() {}
 
     /**
+     * Targets this plugin is sending to that are in trouble, one line each
+     * ("192.168.1.40 — not answering"), for the footer's "Not ready" list.
+     * A plugin that can tell emits configurationChanged() when this changes.
+     * Default: none.
+     */
+    virtual QStringList targetProblems() const { return QStringList(); }
+
+    /**
      * Return a human-readable name for a specific input channel (axis/button)
      * on a given input line.  Plugins that load device profiles can override
      * this to return names like "Left Stick X".  The default returns an empty

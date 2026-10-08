@@ -407,4 +407,42 @@ void QLCPhysical_Test::beamsPerHeadRoundTrip()
     QCOMPARE(in.lensDegreesMax(), 8.0);
 }
 
+/* A lantern: drawn as a cage round a glowing core, its light leaving all
+   round. Written only when it is not a plain box with a beam, and read
+   back the same; a box writes no <Body> at all. */
+void QLCPhysical_Test::aLanternBodyRoundTrips()
+{
+    QLCPhysical lantern;
+    QCOMPARE(lantern.bodyShape(), QLCPhysical::BoxBody);
+    QCOMPARE(lantern.emission(), QLCPhysical::BeamEmission);
+    lantern.setBodyShape(QLCPhysical::LanternBody);
+    lantern.setEmission(QLCPhysical::OmniEmission);
+    QLCPhysical copy = lantern;
+    QCOMPARE(copy.bodyShape(), QLCPhysical::LanternBody);
+
+    auto roundTrip = [](const QLCPhysical &in, QByteArray *xml) {
+        QBuffer buffer;
+        buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+        QXmlStreamWriter writer(&buffer);
+        in.saveXML(&writer);
+        writer.writeEndDocument();
+        buffer.close();
+        *xml = buffer.data();
+        buffer.open(QIODevice::ReadOnly | QIODevice::Text);
+        QXmlStreamReader reader(&buffer);
+        reader.readNextStartElement();
+        QLCPhysical out;
+        out.loadXML(reader);
+        return out;
+    };
+    QByteArray xml;
+    const QLCPhysical back = roundTrip(lantern, &xml);
+    QVERIFY(xml.contains("<Body Shape=\"Lantern\" Emission=\"Omni\"/>"));
+    QCOMPARE(back.bodyShape(), QLCPhysical::LanternBody);
+    QCOMPARE(back.emission(), QLCPhysical::OmniEmission);
+
+    roundTrip(QLCPhysical(), &xml);
+    QVERIFY(!xml.contains("<Body"));
+}
+
 QTEST_MAIN(QLCPhysical_Test)

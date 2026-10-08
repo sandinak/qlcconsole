@@ -329,6 +329,7 @@ when changing this list -->
         <xs:element name="Focus" type="focusType"/>
         <xs:element name="Layout" type="layoutType" minOccurs="0"/>
         <xs:element name="Technical" type="technicalType" minOccurs="0"/>
+        <xs:element name="Body" type="bodyType" minOccurs="0"/>
     </xs:sequence>
 </xs:complexType>
 
@@ -367,6 +368,27 @@ when changing this list -->
     <xs:attribute name="Type" type="xs:string" use="required"/>
     <xs:attribute name="PanMax" type="xs:nonNegativeInteger" use="required"/>
     <xs:attribute name="TiltMax" type="xs:nonNegativeInteger" use="required"/>
+</xs:complexType>
+
+<!-- qlcconsole: what the fixture looks like and how its light leaves it
+     (a lantern glowing all round). QLC+ itself skips it. -->
+<xs:complexType name="bodyType">
+    <xs:attribute name="Shape" use="optional">
+        <xs:simpleType>
+            <xs:restriction base="xs:string">
+                <xs:enumeration value="Box"/>
+                <xs:enumeration value="Lantern"/>
+            </xs:restriction>
+        </xs:simpleType>
+    </xs:attribute>
+    <xs:attribute name="Emission" use="optional">
+        <xs:simpleType>
+            <xs:restriction base="xs:string">
+                <xs:enumeration value="Beam"/>
+                <xs:enumeration value="Omni"/>
+            </xs:restriction>
+        </xs:simpleType>
+    </xs:attribute>
 </xs:complexType>
 
 <xs:complexType name="technicalType">

@@ -457,17 +457,31 @@ void Scene::slotFixtureRemoved(quint32 fxi_id)
         emit changed(this->id());
 }
 
+/* What a scene targets and which looks it plays decide what it paints, as
+   much as its channel values do -- so changing them says so, the way
+   setValue() does. A look swapped on a scene ("changed to red .. no red on
+   the person") left the rig view drawing the old one: nothing told it. Only
+   on a real change, and outside the lock. */
 void Scene::addFixture(quint32 fixtureId)
 {
-    QMutexLocker locker(&m_bindingsMutex);
-    if (m_fixtures.contains(fixtureId) == false)
+    {
+        QMutexLocker locker(&m_bindingsMutex);
+        if (m_fixtures.contains(fixtureId))
+            return;
         m_fixtures.append(fixtureId);
+    }
+    emit changed(this->id());
 }
 
 bool Scene::removeFixture(quint32 fixtureId)
 {
-    QMutexLocker locker(&m_bindingsMutex);
-    return m_fixtures.removeOne(fixtureId);
+    {
+        QMutexLocker locker(&m_bindingsMutex);
+        if (!m_fixtures.removeOne(fixtureId))
+            return false;
+    }
+    emit changed(this->id());
+    return true;
 }
 
 QList<quint32> Scene::fixtures() const
@@ -482,15 +496,24 @@ QList<quint32> Scene::fixtures() const
 
 void Scene::addFixtureGroup(quint32 id)
 {
-    QMutexLocker locker(&m_bindingsMutex);
-    if (m_fixtureGroups.contains(id) == false)
+    {
+        QMutexLocker locker(&m_bindingsMutex);
+        if (m_fixtureGroups.contains(id))
+            return;
         m_fixtureGroups.append(id);
+    }
+    emit changed(this->id());
 }
 
 bool Scene::removeFixtureGroup(quint32 id)
 {
-    QMutexLocker locker(&m_bindingsMutex);
-    return m_fixtureGroups.removeOne(id);
+    {
+        QMutexLocker locker(&m_bindingsMutex);
+        if (!m_fixtureGroups.removeOne(id))
+            return false;
+    }
+    emit changed(this->id());
+    return true;
 }
 
 QList<quint32> Scene::fixtureGroups() const
@@ -528,16 +551,25 @@ quint32 Scene::lookScopeGroupId() const
 
 void Scene::addPalette(quint32 id)
 {
-    QMutexLocker locker(&m_bindingsMutex);
-    if (m_palettes.contains(id) == false)
+    {
+        QMutexLocker locker(&m_bindingsMutex);
+        if (m_palettes.contains(id))
+            return;
         m_palettes.append(id);
+    }
+    emit changed(this->id());
 }
 
 bool Scene::removePalette(quint32 id)
 {
-    QMutexLocker locker(&m_bindingsMutex);
-    m_paletteFade.remove(id);
-    return m_palettes.removeOne(id);
+    {
+        QMutexLocker locker(&m_bindingsMutex);
+        m_paletteFade.remove(id);
+        if (!m_palettes.removeOne(id))
+            return false;
+    }
+    emit changed(this->id());
+    return true;
 }
 
 QList<quint32> Scene::palettes() const
@@ -548,8 +580,13 @@ QList<quint32> Scene::palettes() const
 
 void Scene::setTrialPalette(quint32 id)
 {
-    QMutexLocker locker(&m_bindingsMutex);
-    m_trialPalette = id;
+    {
+        QMutexLocker locker(&m_bindingsMutex);
+        if (m_trialPalette == id)
+            return;
+        m_trialPalette = id;
+    }
+    emit changed(this->id());
 }
 
 quint32 Scene::trialPalette() const

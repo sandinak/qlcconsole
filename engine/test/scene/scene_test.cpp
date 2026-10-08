@@ -885,6 +885,70 @@ void Scene_Test::flashUnflash()
     QVERIFY(timer.m_dmxSourceList.size() == 0);
 }
 
+/* "just crashed": a scene with a fixture from the inventory (not patched,
+   so its channels are inert, at the INVALID address) aborted the engine
+   thread on its first tick -- the fader read the universe at that address,
+   -1 as an int (Universe::preGMValue -> QByteArray::at asserts). It plays:
+   the patched fixture's values go out, the unpatched one sends nothing. */
+void Scene_Test::aSceneWithAnUnpatchedFixturePlaysWithoutCrashing()
+{
+    Doc* doc = new Doc(this);
+    MasterTimer timer(doc);
+
+    Fixture* patched = new Fixture(doc);
+    patched->setAddress(0);
+    patched->setUniverse(0);
+    patched->setChannels(4);
+    QVERIFY(doc->addFixture(patched));
+
+    Fixture* staged = new Fixture(doc);
+    staged->setChannels(4);
+    staged->setPatched(false);          // in the inventory
+    QVERIFY(doc->addFixture(staged));
+
+    Scene* s1 = new Scene(doc);
+    s1->setFadeInSpeed(0);
+    s1->setFadeOutSpeed(0);
+    s1->setName("Mixed");
+    s1->setValue(patched->id(), 0, 200);
+    s1->setValue(staged->id(), 0, 255);
+    s1->setValue(staged->id(), 1, 255);
+    doc->addFunction(s1);
+
+    s1->start(&timer, FunctionParent::master());
+    timer.timerTick();
+    timer.timerTick();
+    QList<Universe*> ua = doc->inputOutputMap()->claimUniverses();
+    ua[0]->processFaders();
+    QCOMPARE(uchar(ua[0]->preGMValues()[0]), uchar(200));
+    // Nothing landed on the staged fixture's placeholder 0/0 channels.
+    QCOMPARE(uchar(ua[0]->preGMValues()[1]), uchar(0));
+    doc->inputOutputMap()->releaseUniverses(false);
+
+    // A negative address reads as nothing, not as a crash.
+    QCOMPARE(ua[0]->preGMValue(-1), uchar(0));
+    QCOMPARE(ua[0]->postGMValue(-1), uchar(0));
+
+    /* "is it possible to visualize w/o patching": the unpatched fixture holds
+       what it WOULD send, for the rig view -- and nothing reached a universe. */
+    QCOMPARE(uchar(staged->channelValues().at(0)), uchar(255));
+    QCOMPARE(uchar(staged->channelValues().at(1)), uchar(255));
+    QCOMPARE(uchar(staged->channelValues().at(2)), uchar(0));
+
+    s1->stop(FunctionParent::master());
+    for (int i = 0; i < 3; ++i)
+    {
+        timer.timerTick();
+        ua = doc->inputOutputMap()->claimUniverses();
+        ua[0]->processFaders();             // as each engine frame does
+        doc->inputOutputMap()->releaseUniverses(false);
+    }
+    // Stopped: what it showed goes too.
+    QCOMPARE(uchar(staged->channelValues().at(0)), uchar(0));
+    QCOMPARE(uchar(staged->channelValues().at(1)), uchar(0));
+    // The doc is this test's child: the stack timer must go first.
+}
+
 void Scene_Test::writeHTPZeroTicks()
 {
     Doc* doc = new Doc(this);

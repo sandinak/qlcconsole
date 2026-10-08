@@ -90,11 +90,23 @@ public:
     /** Replace an existing FaderChannel */
     void replace(const FadeChannel& ch);
 
+    /** The doc its channels' fixtures are in -- for an UNPATCHED fixture's
+     *  channels, whose values go to the fixture for display (no address).
+     *  Set by getChannelFader(); a writer that only add()s or replace()s
+     *  (the effect runner) sets it here. */
+    void setDoc(const Doc *doc) { m_doc = doc; }
+
     /** Remove a channel whose fixture & channel match with $fc's */
     void remove(FadeChannel *ch);
 
     /** Remove all channels */
     void removeAll();
+
+    /** Swap the whole channel set for $channels in one step. A source that
+     *  rebuilds its fader every tick must use this, not removeAll() + replace():
+     *  universes process their faders on their own threads, and one that got
+     *  in between saw an empty fader and sent a blank frame. */
+    void replaceAll(const QList<FadeChannel> &channels);
 
     /** Get/Set a request of deletion of this fader */
     bool deleteRequested();
@@ -186,6 +198,10 @@ private:
     qreal m_intensity;
     qreal m_parentIntensity;
     bool m_paused;
+    /** For an unpatched fixture's channels: its values go to the fixture, for
+     *  display, instead of to a universe (Fixture::setPreviewValue()). */
+    const Doc *m_doc = nullptr;
+    void showOnFixture(const FadeChannel &fc, quint32 value) const;
     bool m_enabled;
     bool m_fadeOut;
     bool m_deleteRequest;

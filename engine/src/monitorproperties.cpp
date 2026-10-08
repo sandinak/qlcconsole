@@ -1649,6 +1649,34 @@ void MonitorProperties::setFixtureRigProps(quint32 fid, const FixtureRigProps &p
 
 QVector3D MonitorProperties::fixtureRigPosition(quint32 fid) const
 {
+    /* A hanger only hangs off a structure: out along the arm, down the drop. */
+    const FixtureRigProps &rp = m_rigProps.value(fid, FixtureRigProps());
+    const bool structural = rp.trussId != Truss::invalidId() || rp.onPipe() || rp.onTower();
+    if (structural && rp.hasHanger())
+        return fixtureMountPoint(fid) + rp.hangerOffset();
+    return fixtureBasePosition(fid);
+}
+
+QVector3D MonitorProperties::fixtureMountPoint(quint32 fid) const
+{
+    QVector3D at = fixtureBasePosition(fid);
+    /* A hanger on a tower is clamped to its FACE, not its axis: out from the
+       middle to the side the arm points through, so the arm's length is
+       measured from the steel, as it is on the stage. */
+    const FixtureRigProps &rp = m_rigProps.value(fid, FixtureRigProps());
+    const Truss *t = (rp.trussId != Truss::invalidId()) ? m_trusses.value(rp.trussId, nullptr) : nullptr;
+    if (t != nullptr && t->type() == Truss::Vertical && rp.hasHanger())
+    {
+        const QVector3D dir = rp.hangerDirection();
+        const float reach = qMax(qAbs(dir.x()), qAbs(dir.y()));
+        if (reach > 1e-4f)
+            at += dir * (t->width() * 0.5f / reach);
+    }
+    return at;
+}
+
+QVector3D MonitorProperties::fixtureBasePosition(quint32 fid) const
+{
     /* NB: NO m_fixtureItems guard up here. A truss/pipe/tower/riser mount
        derives the world position ENTIRELY from the structure's geometry plus
        the mount offsets, so it is well defined whether or not the fixture also
@@ -2327,6 +2355,12 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
             }
             if (a.hasAttribute("MountZ"))
                 rp.mountZOffset = a.value("MountZ").toFloat();
+            if (a.hasAttribute("HangArm") || a.hasAttribute("HangDrop"))
+            {
+                rp.hangerArm   = a.value("HangArm").toFloat();
+                rp.hangerDrop  = a.value("HangDrop").toFloat();
+                rp.hangerAngle = a.value("HangAngle").toFloat();
+            }
             if (a.hasAttribute("Deck"))
             {
                 rp.deckPlatformId   = a.value("Deck").toUInt();
@@ -3057,6 +3091,12 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
             doc->writeAttribute(QStringLiteral("Placement"), QString::number(rp.placement));
         if (rp.mountZOffset != 0.0f)
             doc->writeAttribute(QStringLiteral("MountZ"), QString::number(double(rp.mountZOffset), 'f', 3));
+        if (rp.hasHanger())
+        {
+            doc->writeAttribute(QStringLiteral("HangArm"),   QString::number(double(rp.hangerArm), 'f', 3));
+            doc->writeAttribute(QStringLiteral("HangDrop"),  QString::number(double(rp.hangerDrop), 'f', 3));
+            doc->writeAttribute(QStringLiteral("HangAngle"), QString::number(double(rp.hangerAngle), 'f', 1));
+        }
         if (rp.onDeck())
         {
             doc->writeAttribute(QStringLiteral("Deck"),  QString::number(rp.deckPlatformId));
