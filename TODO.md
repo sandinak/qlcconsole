@@ -107,6 +107,76 @@ Sequenced: network topology first, then inventory.
 
 ---
 
+## ACTIVE (2026-10-08): WLED lanterns hung off towers and trusses
+
+Branson's choices: (1) a Lantern definition, (2) one unicast universe per
+lantern -- and a better WLED transport alongside Art-Net, chosen per
+lantern, (3) a real Hanger mount, (4) a lantern body glowing all round.
+The LEDs: ~16 on a wire string clustered in the middle; WLED effect mode
+and colour, not pixel mapping.
+
+- DONE: `WLED-Lantern.qxf` (generated with WLED-Effect-Mode by
+  resources/fixtures/WLED/generate.py, which now regenerates the original
+  byte for byte): 100 lm, 5 W, 150x250x150 mm placeholder size, and a
+  `<Body Shape="Lantern" Emission="Omni"/>` in Physical -- a qlcconsole
+  extension QLC+ skips (schema updated). `QLCPhysical::bodyShape()/
+  emission()`; the fixture editor's Physical tab sets them ("Look in the
+  rig view"); no "No beam angle" warning for an all-round source.
+- DONE: Hanger mount (`FixtureRigProps::hangerArm/hangerDrop/hangerAngle`,
+  saved HangArm/HangDrop/HangAngle): out along an arm toward a plan angle
+  (0 downstage, 90 stage left), then down a drop, off any truss, pipe or
+  tower mount; on a tower the arm is clamped to the face, not the axis
+  (`fixtureMountPoint()`). Fixture properties: Hanger arm / points / drop.
+  The rig view draws the arm and the cable.
+- DONE: lantern body (`FixtureSilhouette::Lantern`): angled view a cage --
+  caps, posts -- round a core lit in its live colour, a halo in the haze;
+  flat views and the plot a rounded cage with the core. Light all round
+  (`FrameBeam::omni`): no cone; it lights what is near it, by Lambert and
+  the inverse square of the distance, a metre away about half what a
+  40-degree spot puts on its subject.
+- DONE: WLED output plugin (plugins/wled): one universe per device aimed at
+  its IP ("outputIP"), its channels read at "wledAddress", "wledChannels"
+  (15/4/3) exactly as WLED reads its own DMX Effect mode (`WledState`);
+  sent as JSON to /json/state ONLY when the state changes, at most every
+  100 ms per device with a matching 100 ms WLED transition, one request in
+  flight (the latest wins), "live": false the first time to leave Art-Net
+  realtime mode. /json/info every 5 s: name, firmware, RSSI; a device not
+  answering or weaker than -75 dBm is `targetProblems()` (new
+  QLCIOPlugin virtual) -> footer "WLED devices not answering or on weak
+  Wi-Fi", by fixture name. Measured on a stand-in: a held look sends once;
+  fifty fade steps go as a handful of states ending on the last.
+- DONE: per-fixture transport (`Fixture::transport()`, saved
+  `<Transport>WLED</Transport>`): Add Fixture's Connection offers
+  "Network (WLED, JSON over Wi-Fi)"; the patch planner patches a WLED
+  fixture's universe to the WLED output (never borrows Art-Net) with its
+  IP, address and channel count.
+- NOT YET: tried against a real WLED on Branson's Wi-Fi; effect/palette
+  NAMES from the device (/json/eff, /json/pal) in the look editor.
+
+## BACKLOG (not started, 2026-10-08): from Branson -- no action yet
+
+- **Exportable patch list** for the techs who name and address the
+  instances: per fixture its name, make/model/mode, universe/address (or
+  IP and transport for network fixtures), location (structure, position),
+  and the channels it takes. A file to hand over (CSV/PDF), and later
+  label printing straight from it.
+- **Stage and inventory across show files**: store a stage layout
+  (structures, platforms, scenery) and the hardware inventory (fixtures,
+  network gear, their patch) outside any one show, and recover them into a
+  new show that uses the same layout and hardware -- instead of copying a
+  .qlcc and stripping it.
+- **Front-of-stage shape, proscenium and side drapes** in the rig view, as
+  visual options: a stage edge that is curved (an apron / thrust arc) or
+  squared off, a proscenium arch framing the stage, and side drapes (legs)
+  -- so the rig view shows the room the light lands in. (Related: the
+  scenery NEXT section -- back wall, cyc, drapes.)
+- **Stress-test the current version again** -- the last full run predates
+  most of this work (see memory: stress-test-results). Branson can make
+  Mac, Linux and Windows 11 machines available; plan the matrix (runtime
+  load at 70-80 universes, the soak, and the new paths: effect runner's
+  atomic fader swap, WLED/JSON transport, rig view at full rig) before
+  booking them.
+
 ## IDEA (not started): no-light zones -- warn when a look lights the audience
 
 Branson, 2026-09-17: "if we create a scene with lights that point an area that
@@ -368,6 +438,265 @@ rig edits, bulk repatching, cross-show consistency checks.
     group's ID + 1 (`FixtureGroup::subGroupTagFor()`) -- 0 means "none", so
     the first group made (ID 0) could never be a block. Old shows' tags
     still group, as tags are only compared.
+  - Programming tab: the look's "Scope" row is hidden -- only a label of
+    intent, it changes nothing that lights, and above Targets it read as a
+    second place to choose fixtures. The value is kept in shows.
+  - Scene: adding/removing a look (palette), a trial look, a fixture or a
+    fixture group now emits changed() -- only on a real change, outside the
+    lock -- as setValue() always did. A look SWAPPED on a scene (Blue out,
+    Red in) told nobody, so the rig view kept drawing blue ("changed to
+    red.. no red on the person").
+  - Rig view: a bar's light leaves its FACE (`emitDirection()` uses
+    fixtureFrame()'s normal, tilt and flip included, for any multi-head bar
+    or chosen face) -- "hung from a truss means pointing down" sent the FART
+    bars' light (hanging vertically, faced front) to the floor behind the
+    truss ("the effect .. appears to be going backwards"). A declared lens
+    of 170+ degrees is a 150-degree flood (180 was ignored -> 40). Wide
+    cones are dimmer by their spread (`spreadFactor()`: solid angle against
+    a 40-degree cone; spots unchanged) in the air, in their pools and on
+    people -- thirty-two 150-degree bars drawn as spots washed the view out.
+  - Unpatched (inventory) fixtures: VISIBLE without patching. The engine
+    still works out what they would do -- their fade channels are inert
+    (no address, no DMX) -- and GenericFader now hands those values to the
+    fixture for display (`Fixture::setPreviewValue()`; cleared when the
+    fader goes), so the rig view shows them. Effects too: EffectInstance no
+    longer skips unpatched fixtures, and the effect runner's fader is given
+    the doc (`GenericFader::setDoc()`). Inert channels are also removed when
+    done, like any other: kept forever, they held a fading fader open so it
+    was never deleted. ("not seeing output on farts .. is it possible to
+    visualize w/o patching?" -- all 32 FART bars were unpatched.)
+  - An effect over two or more groups is laid out AS THE RIG STANDS: one
+    grid with every head where the rig view paints it, to scale -- across
+    is stage X (smaller on the left, as the group wizard lays groups out),
+    up is height (or upstage, when all stand at one height); heads closer
+    than a cell share it; unplaced heads go last in a strip. Side by side,
+    each group in its own layout, a sine over FARTS + TrussInt + US ran
+    down the towers, then the bars, then the steps, "up" meaning height in
+    one group and depth in another. DanceHysteria's Stage-Sine: 246 x 62,
+    T1, FART-SR, T2, T3, FART-SL, T4 across, steps along the bottom. The
+    cell is the rig's own pixel pitch, coarser past 16k cells; the grid is
+    kept a second (0.6 ms a tick, not 11). One group: its own layout,
+    unchanged. The geometry (fixture frame, world centre, per-head
+    positions) moved from the rig view into the engine (`RigHeads`), which
+    the rig view now calls -- one copy, so they cannot disagree.
+  - Programming view: an effect look counts as a look for what it drives
+    -- its category (the Effect/<Category>/ folder, else the script's own):
+    Color, Dimmer, Position -> pan/tilt. "Effect/Color/sinewave" on FARTS
+    and TrussInt was flagged "no look for: color".
+  - Rig view: light follows what the DEVICE puts out ("are we gauging the
+    luminosity based on the actual devices .. the steps are WS2812 5v led
+    strips"). From the definition: declared lumens, else declared watts at
+    35 lm/W; linear, against a 100 W LED fixture (3500 lm) = the old full
+    beam; shared between a fixture's heads, so a section of a bar carries
+    its share. Applied to beams, pools, light on people, inside-step light
+    and the cyc wash (`fixtureOutput()`). A definition declaring neither is
+    drawn exactly as before. DanceHysteria: steps and FARTs declare 10 lm
+    (0.3% of a 100 W LED) -- check those definitions; WS2812 is nearer
+    5 lm a pixel at full white.
+  - Footer "Not ready": fixtures not patched ("N fixtures not patched: they
+    send no DMX", each listed) and fixture types whose definition declares
+    no light output ("N fixture types declare no light output", each type
+    with its count) -- the rig view draws those at a guess. Re-checked
+    200 ms after any fixture add/remove/change/patch and on load
+    (`AppUtil::updateFixtureReadiness()`, `QLCPhysical::declaresOutput()`).
+  - The "Not ready" detail dialog FIXES things (`ShowStatusDialog`): select
+    rows -- shift-click a range, Cmd-click to add, an entry's own row for
+    all of it -- and press its action, or double-click one row. Unpatched:
+    "Patch…" opens the Patch view on exactly those fixtures. No light
+    output: "Edit Definition…" opens the fixture editor on that file, and
+    the app watches it -- saved, its physical properties are re-read in
+    place (`QLCFixtureDefCache::reloadPhysical()`, same mode objects, so the
+    open show keeps working) and the warning clears, show still open. The
+    list follows as problems are fixed and closes when none are left. Any
+    ShowStatus source can offer a fix (`ShowStatus::setAction()`, per-item
+    `itemData`).
+  - Footer, more rig problems, each with its fix: address clashes
+    (loaded unpatched; "Re-patch…" -> the Patch view on them, and no longer
+    also listed as merely unpatched), names used more than once ("Number
+    Them" on the picked names -- `Doc::makeFixtureNamesUnique(only)`),
+    definition files that could not be read (`QLCFixtureDefCache::
+    failedDefinitions()`; "Show in Finder", and the file is watched: fixed
+    and saved, it loads -- four PHS Crew 8' Step files in the user library
+    are malformed XML right now), universes with fixtures but no output
+    ("Open Connections" on that universe; Connections re-checks on any
+    patch edit).
+  - Fixture editor: a definition that will not load opens in a REPAIR view
+    instead of "unable to load" -- where it breaks (line, column, why), the
+    file with that line marked, editable, re-checked as you type, and
+    repairs that are tried before they are offered and chain
+    (`FixtureDefCheck::diagnose()/repairs()`): "\>" for "/>", a bare "&",
+    a mismatched closing tag, unquoted attributes, a missing DOCTYPE,
+    elements left open at the end, no mode (one with every channel, a head
+    per Red/Green/Blue run). The PHS Crew 8' Step files: 192 "\>" typos, then
+    no mode -> 192 channels as 64 heads, two clicks. Opened repaired and
+    unsaved, to be looked over and saved. The footer's "could not be read"
+    fix is now "Repair in Fixture Editor…".
+  - Fixture editor: a Problems panel, checked as you edit
+    (`FixtureDefCheck::check()`): errors (no manufacturer/model, no
+    channels/modes, a mode with no channels, a head on a channel its mode
+    lacks, capabilities that overlap or run backwards, two channels or
+    modes with one name) and warnings (no size, no light output, no beam
+    angle, no pan/tilt range, a pixel layout that does not hold the heads,
+    colour sets with no heads, values no capability covers). Double-click
+    goes to the tab and the channel or mode. Saving with errors asks first.
+  - Fixture definitions say where they come from (`QLCFixtureDef::Source`):
+    Included (ships with the app; edits save as a local copy), Local (the
+    user's Fixtures folder; "Local — replaces the included one" when it
+    shadows one of the same make and model -- the cache reads the user's
+    folder first and sets the included one aside), and Downloadable
+    (reserved for an online library fetched on need; nothing produces it
+    yet, every display handles it). Shown in a Source column in Add
+    Fixture and the fixture editor's browser, the editor's window title,
+    the Fixture Manager's info, and the footer's definition entries.
+  - Footer, unreadable definitions: grouped under Local / Included headings
+    (a heading picks all under it -- `ShowStatus::Entry::itemGroups`);
+    terse: "X.qxf — read error, line 12: expected '>' or '/'", "…, no
+    modes", "…, empty: no channels or modes", and "(copy of X.qxf)" on a
+    numbered copy with the same bytes; and a second fix beside Repair:
+    "Move to Trash…" (confirmed; `ShowStatus::addAction()` -- an entry can
+    offer several fixes, one button each). The user library has 19: the four
+    step files, 2 no-mode, 13 empty stubs (Band-*, Chorus-Riser, 3Z),
+    half of them identical "… 2.qxf" copies.
+  - Repair view guesses more: curly quotes, Latin-1 text, junk before the
+    first tag or after the definition, FixtureDefinition spelled in the
+    wrong case, a bare "<", a quote left open (found looking back from
+    where the parser noticed), unnamed modes/channels named, duplicate
+    channel names numbered, an empty stub made a 1-channel placeholder, and
+    a mode naming a channel that is not there -> the nearest real name
+    (case, spacing, a typo or two), else the channel added. That last kind
+    LOADS but loses the channel -- now caught on open (amber, "Open
+    Anyway"). Fallback "Delete line N" ranks after every guess.
+  - Fixture editor opened by qlcconsole for a file (`--close-when-done`,
+    passed by `AppUtil::launchFixtureEditor()`) quits once nothing is open:
+    its window closed, or the repair cancelled -- no empty editor left
+    behind. An editor the user already had open (single-instance handoff)
+    is left alone.
+  - Duplicate definitions: of two LOCAL files for one fixture the most
+    recently changed is used (it was alphabetical -- "X 2.qxf" beat
+    "X.qxf"); every one set aside is recorded (`QLCFixtureDefCache::
+    duplicates()`, identical or not) and the footer lists the unused local
+    files under the fixture's name, "same as X" / "older than X, not used",
+    with Move to Trash. A local one replacing an included one is by design:
+    logged at debug, not listed. A broken file for a fixture that another
+    file does provide says so ("· the included one is used", "· X.qxf is
+    used"). User library: 27 local duplicates (24 identical, 3 different:
+    PHS-Chorus-8-Step-2-Rows, Branson-36LED-Moving-Head, Branson-LED-SPOT).
+  - Log noise: "Empty description provided" once per capability, no file
+    named (251 lines) -> one line per file with a count; the fixture
+    editor's Problems lists it per channel. Load log 316 -> 96 lines.
+  - Repair view: what cannot be wrong is fixed without asking, on open --
+    "\\>" (or "\\ >") for "/>", and a <Channel ...> line ending ">" whose
+    next line is the next channel or the mode (one with capabilities is
+    followed by them and left alone) -- with "Fixed automatically: ..." and
+    Undo. Hand edits are never rewritten as typed. (`Repair::certain`,
+    `FixtureDefCheck::autoRepair()`.) The step file half fixed by hand
+    (8 left open, 184 "\\>") comes up with both done and only "no modes"
+    to choose.
+  - Rig view: a Haze setting (None / Light / Medium / Heavy) -- how visible
+    beams are IN THE AIR; pools and lit surfaces do not change with it.
+    Medium is the old look.
+  - A running effect no longer flashes. Universes process their faders on
+    their own threads; the effect runner emptied its fader (removeAll) and
+    refilled it every tick, and a universe that got in between sent a blank
+    frame -- whole FART universes dropped to zero for a frame, and the rig
+    view, seeing all-zero live values, fell back to the look's palette
+    colour ("this effect is static .. yet .. the screen is flashing").
+    `GenericFader::replaceAll()` builds the next set and swaps it in under
+    the lock; the effect runner, the monitor's aim test and Fixture Locate
+    use it. Measured on DanceHysteria's fire-on-FARTS: 32 all-zero fixture
+    frames in 3 s before, 0 after.
+  - Programming view: a warning under Targets when any target fixture --
+    through a group too -- is not patched: they send no DMX, show in the
+    rig view only.
+  - DanceHysteria: the 32 FART bars patched on U77-U84 like CampEvo (4 per
+    universe, 120 ch each; SR -> 172.18.2.20, SL -> .21, Art-Net 0-3) --
+    CampEvo's U5-U12 are this show's tower universes.
+  - Rig view, pixel bars: the light comes from the lit pixels, not one cone
+    from the bar's centre in its mixed colour ("the source appears centred on
+    the matrix, not using the individual LEDs"): each lit section throws a
+    row of cones spread along it (up to six, sharing its level, in its own
+    colour), for beams and for the light on people (`barLights()`). Lit
+    pixels FILL their cell on the face (runs of one colour merged into one
+    shape) instead of 1.2 px dots -- a full-blue step row was hard to tell
+    from a dark one. Not on movers: their heads are arms that turn.
+    Seen on DanceHysteria: 164 fixtures carry the red OVERLAP edge -- the
+    step-front bars' definition is 228 mm deep, centred on the step face, so
+    each reaches 11 cm into the step where the top washers sit.
+  - CRASH fixed: a scene/look playing any UNPATCHED (inventory) fixture
+    aborted the engine thread on its first tick. Its fade channel's address
+    is QLCChannel::invalid() (all ones); GenericFader::getChannelFader read
+    the universe there, Universe::preGMValue(int) saw -1 and QByteArray::at
+    asserted. preGMValue/postGMValue now reject negatives, and the fader
+    reads nothing for an inert channel (one path also read channel 1 by
+    wrapping invalid + 1 to 0). DanceHysteria has 60 such fixtures (all the
+    FART bars, the AT towers) in groups like FARTS and AT-W-ALL.
+  - Rig view: light from inside a step lands on the SCENERY too
+    (`washOnScenery()`): rays across each lit section's cone, from both of
+    its ends, that leave through the top and meet a cyc or drape, edges
+    refined where hits stop (the cloth's top); the patch is drawn as light,
+    like a beam's pool, when beams are shown. Not where the AXIS lands: the
+    DanceHysteria US step bars, tipped 20 degrees in an assumed 40-degree
+    cone, clear a 6 m cyc on axis but wash its top 0.9 m (from 5.07 m) --
+    "would there be any overwash on the cyclorama .. the rig is modeling
+    reality". A bar on the floor of a 20 cm box is walled in for its
+    shallow rays (the opening is checked). Occlusion by other structures is
+    still not modelled.
+  - Head grids: a definition declares ONE pixel grid for all its modes; it
+    is used only for a mode with exactly that many heads
+    (`HeadLayout::declaredGrid()`, used by headOrder(), the rig view's
+    traits and the plot's pixel item). The Oppsk washer's 8 x 4 is its
+    32-head 64ch mode; poured into the 16-head 48ch RGB / 16ch White modes
+    it folded a 1 m bar into 8 x 2 (USt-RGB-ALL came out 32 x 6, not 64 x 3).
+  - Split by Head Type is offered when the SELECTION spans kinds, not only
+    when one fixture mixes them: a bar patched as its RGB part and its white
+    part ("the same problem we have for the other bars .. two head types").
+  - Edit Fixture from a Layers row edits THAT fixture when the plot's
+    selection does not hold it -- a washer inside a step cannot be selected
+    on the plot, so it edited nothing.
+  - Inside-a-step light: the top shows a footprint per lit SECTION of a bar
+    (contiguous lit columns, each its own colour), not one span from the
+    first lit pixel to the last.
+  - Rig view: light from fixtures rigged INSIDE a clear/open-topped
+    platform (`collectInsideLight()`). Every lit head is a light of its own:
+    where it sits along the bar, firing along the fixture's own facing
+    (`fixtureFrame()`, studioTilt included), in its cone (declared lens or
+    40 degrees), and it gets out ONLY through the top -- the line from it
+    to a point must rise through the opening (`beamCoverage()`, apertured
+    beams). The top shows each fixture's footprint (the lit stretch of the
+    bar carried to the top along its facing, widened by the cone); a person
+    is lit only where those cones reach (`beamLightAt()`, Lambert to the
+    source). The DanceHysteria step washers are Inside clear steps, tipped
+    20 degrees upstage: a blue look showed nothing (no beam for a fixture
+    in a box, pixels as 1.2 px dots), then a first cut painted the whole
+    top and lit anyone near it regardless of the bar's angle ("not relative
+    to the installed angle .. are we using the angle .. the Right Way").
+  - Programming tab: the colour picker no longer "drops out" on every
+    slider click -- each look edit reloads the canvas, which re-announced
+    the still-selected target group, which swapped the look editor for the
+    fixtures' faders. The same selection re-announced while a look is being
+    edited now keeps the editor (`slotFixturesSelected`); a real change of
+    selection still swaps. The rig view's design preview draws the scene's
+    own fader values (palettes over them, as Scene::write does) -- a look
+    pushed up on faders drew nothing without live DMX.
+  - Data: this morning's top-group re-layout read the BUNDLED Oppsk Wall
+    Washer definition (no "48ch RGB" mode, so t1 became a 48-channel
+    generic) because the probe loaded bundled before user definitions --
+    the app loads the user's first. The 13 top groups then held t1 heads
+    17..48 that do not exist; re-laid with the app's order: each 16 x 2
+    (RGB over White, the two modes of one bar), all-tops 64 x 6.
+  - Fixture names are unique ("two AT1-3z lights .. one in upper left
+    corner .. one on AT1": the corner one was an unpatched inventory copy).
+    `Doc::fixtureNameTaken()` / `uniqueFixtureName()` (" #2", never bumping
+    the name's own digits: AT1-3z is not AT1-4z) / `duplicateFixtureNames()`
+    / `makeFixtureNamesUnique()` (the patched one keeps the name). Renaming
+    to a taken name is refused with a note everywhere
+    (`AppUtil::refuseTakenFixtureName()`: Fixture Manager list and
+    Properties -- OK stays off --, studio edit dialog, Layers and plot via
+    `MonitorGraphicsView::renameItem()` now returning bool). A single add
+    with a taken name gets "name #2" (Add Fixture says so); import numbers
+    a name the show already has, with a warning. Shows that already have
+    duplicates: "Duplicate names (n)" at the top of the Fixture Manager,
+    right-click "Number the Duplicates".
   - Test audit of the stage-layout / group work (2026-10-06): added
     `stepFrontsAndTopsAreLaidOutAsOnStage` (riser faces: #1 on top, decks in
     stage order, tops from above by depth with every head, Generic sizes
