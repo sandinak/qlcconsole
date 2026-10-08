@@ -1252,10 +1252,12 @@ void MonitorProperties_Test::theGoboLibraryImportsAndResolves()
 
 QTEST_GUILESS_MAIN(MonitorProperties_Test)
 
-/* A lantern on a bracket off the side of a tower: fastened part way up,
-   out along the arm (stage left here), down the drop. The fixture is at the
-   end of all that; where it is fastened is still there to draw the arm from.
-   Saved and read back; a free-standing fixture has no hanger to hang on. */
+/* A hanger is rigging, like a bar: put on a tower truss part way up, its
+   bracket is clamped to the tower's face, its arm reaches out, its chain
+   drops to a hook -- and a lantern mounted on it hangs from that hook. It
+   follows its tower; it is saved; removing the tower takes its hangers with
+   it and leaves the lantern where it was, unmounted. On a Tower structure it
+   clamps to the tower's side. */
 void MonitorProperties_Test::aLanternHangsOnItsHanger()
 {
     MonitorProperties mp;
@@ -1265,30 +1267,35 @@ void MonitorProperties_Test::aLanternHangsOnItsHanger()
     tower->setLength(3.0f);
     tower->setWidth(0.29f);
 
-    FixtureRigProps rp;
-    rp.trussId = tower->id();
-    rp.trussOffset = 2.5f;
-    mp.setFixtureRigProps(7, rp);
-    const QVector3D fastened = mp.fixtureRigPosition(7);
-    QCOMPARE(mp.fixtureMountPoint(7), fastened);              // no hanger: the same
+    Hanger *h = mp.addHanger(Hanger::OnTruss, tower->id());
+    h->setAlong(2.5f);
+    h->setAngle(90.0f);                                        // stage left, +X
+    h->setArm(0.4f);
+    h->setDrop(0.6f);
+    mp.recomputeHangers();
+    QVERIFY(qAbs(h->fastened().x() - (2.0f + 0.145f)) < 1e-4f); // the face, not the axis
+    QVERIFY(qAbs(h->fastened().z() - 2.5f) < 1e-4f);
+    QVERIFY(qAbs(h->hook().x() - (2.0f + 0.145f + 0.4f)) < 1e-4f);
+    QVERIFY(qAbs(h->hook().z() - (2.5f - 0.6f)) < 1e-4f);
 
-    rp.hangerArm = 0.4f;
-    rp.hangerAngle = 90.0f;                                    // stage left, +X
-    rp.hangerDrop = 0.6f;
+    FixtureRigProps rp;
+    rp.hangerId = h->id();
     mp.setFixtureRigProps(7, rp);
-    // Clamped to the tower's face, not its axis: the arm is measured from the steel.
-    QVERIFY(qAbs(mp.fixtureMountPoint(7).x() - (fastened.x() + 0.145f)) < 1e-4f);
-    const QVector3D hung = mp.fixtureRigPosition(7);
-    QVERIFY(qAbs(hung.x() - (fastened.x() + 0.145f + 0.4f)) < 1e-4f);
-    QVERIFY(qAbs(hung.y() - fastened.y()) < 1e-4f);
-    QVERIFY(qAbs(hung.z() - (fastened.z() - 0.6f)) < 1e-4f);
+    QCOMPARE(mp.fixtureRigProps(7).primaryMount(), FixtureRigProps::HangerMount);
+    QCOMPARE(mp.fixtureRigPosition(7), h->hook());
+    QCOMPARE(mp.fixtureOnHanger(h->id()), quint32(7));
 
     // Downstage is +Y.
-    rp.hangerAngle = 0.0f;
-    mp.setFixtureRigProps(7, rp);
-    QVERIFY(qAbs(mp.fixtureRigPosition(7).y() - (fastened.y() + 0.145f + 0.4f)) < 1e-4f);
+    h->setAngle(0.0f);
+    mp.recomputeHangers();
+    QVERIFY(qAbs(mp.fixtureRigPosition(7).y() - (1.0f + 0.145f + 0.4f)) < 1e-4f);
 
-    // Saved and read back.
+    // It follows its tower.
+    tower->setOrigin(QVector3D(5.0f, 1.0f, 0.0f));
+    mp.recomputeChildTrusses();
+    QVERIFY(qAbs(mp.fixtureRigPosition(7).x() - 5.0f) < 1e-4f);
+
+    // Saved and read back, with what hangs on it.
     QBuffer buf;
     buf.open(QIODevice::WriteOnly);
     QXmlStreamWriter writer(&buf);
@@ -1296,24 +1303,37 @@ void MonitorProperties_Test::aLanternHangsOnItsHanger()
     mp.saveXML(&writer, nullptr);
     writer.writeEndDocument();
     buf.close();
-    QVERIFY(buf.data().contains("HangArm=\"0.400\""));
     MonitorProperties mp2;
     buf.open(QIODevice::ReadOnly);
     QXmlStreamReader reader(&buf);
     while (reader.readNextStartElement())
         if (reader.name() == QStringLiteral("Monitor"))
             QVERIFY(mp2.loadXML(reader, nullptr));
-    const FixtureRigProps back = mp2.fixtureRigProps(7);
-    QCOMPARE(back.hangerArm, 0.4f);
-    QCOMPARE(back.hangerDrop, 0.6f);
-    QCOMPARE(back.hangerAngle, 0.0f);
+    QCOMPARE(mp2.hangers().size(), 1);
+    const Hanger *back = mp2.hangers().first();
+    QCOMPARE(back->parentKind(), Hanger::OnTruss);
+    QCOMPARE(back->arm(), 0.4f);
+    QCOMPARE(back->drop(), 0.6f);
+    QCOMPARE(mp2.fixtureRigProps(7).hangerId, back->id());
+    QVERIFY((mp2.fixtureRigPosition(7) - mp.fixtureRigPosition(7)).length() < 1e-3f);
 
-    // Not on a structure: nothing to hang from.
-    FixtureRigProps loose;
-    loose.hangerArm = 1.0f;
-    loose.hangerDrop = 1.0f;
-    mp.setFixtureRigProps(8, loose);
-    QCOMPARE(mp.fixtureRigPosition(8), mp.fixtureMountPoint(8));
+    // The tower goes: so do its hangers; the lantern stays, unmounted.
+    mp.removeTruss(tower->id());
+    QVERIFY(mp.hangers().isEmpty());
+    QVERIFY(!mp.fixtureRigProps(7).onHanger());
+
+    // On a Tower structure: clamped to its side.
+    Tower *tw = mp.addTower();
+    tw->setOriginX(1.0f);
+    tw->setOriginY(1.0f);
+    tw->setWidth(0.4f);
+    tw->setDepth(0.4f);
+    Hanger *th = mp.addHanger(Hanger::OnTower, tw->id());
+    th->setAlong(2.0f);
+    th->setAngle(270.0f);                                      // stage right, -X
+    mp.recomputeHangers();
+    QVERIFY(qAbs(th->fastened().x() - 1.0f) < 1e-4f);          // the tower's stage-right side
+    QVERIFY(qAbs(th->fastened().y() - 1.2f) < 1e-4f);
 }
 
 void MonitorProperties_Test::aTowerOffsetIsTheHeight()

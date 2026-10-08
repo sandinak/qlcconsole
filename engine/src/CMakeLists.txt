@@ -50,6 +50,7 @@ add_library(${module_name} SHARED
     gobolibrary.cpp gobolibrary.h
     headlayout.cpp headlayout.h
     righeads.cpp righeads.h
+    hanger.cpp hanger.h
     fixturedefcheck.cpp fixturedefcheck.h
     networkgearcatalog.cpp networkgearcatalog.h
     stand.cpp stand.h

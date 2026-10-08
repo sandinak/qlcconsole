@@ -154,6 +154,8 @@ void MonitorProperties::reset()
     m_stands.clear();
     qDeleteAll(m_towers);
     m_towers.clear();
+    qDeleteAll(m_hangers);
+    m_hangers.clear();
     qDeleteAll(m_sceneries);
     m_sceneries.clear();
     qDeleteAll(m_stageTargets);
@@ -1055,6 +1057,7 @@ void MonitorProperties::recomputeChildTrusses()
     // above passes have already resolved).
     recomputeStandMounts();
     recomputePipeAnchors();
+    recomputeHangers();         // on trusses that the passes above just placed
 }
 
 void MonitorProperties::recomputePipeAnchors()
@@ -1117,6 +1120,9 @@ void MonitorProperties::removeTruss(quint32 id)
     for (auto it = m_rigProps.begin(); it != m_rigProps.end(); ++it)
         if (it->trussId == id)
             it->trussId = Truss::invalidId();
+    // Its hangers go with it (what hung on them stays, unmounted).
+    foreach (Hanger *h, hangersOn(Hanger::OnTruss, id))
+        removeHanger(h->id());
 
     // Detach any child bars hung on this truss — they become free trusses in
     // place (their last derived origin is kept).
@@ -1410,8 +1416,109 @@ Tower *MonitorProperties::addTower()
     return t;
 }
 
+quint32 MonitorProperties::nextHangerId() const
+{
+    quint32 id = 0;
+    while (m_hangers.contains(id))
+        ++id;
+    return id;
+}
+
+Hanger *MonitorProperties::addHanger(Hanger::ParentKind kind, quint32 parentId)
+{
+    const quint32 id = nextHangerId();
+    Hanger *h = new Hanger(id, this);
+    h->setName(QStringLiteral("Hanger %1").arg(id + 1));
+    h->setParent(kind, parentId);
+    if (kind == Hanger::OnTruss)
+    {
+        if (const Truss *t = m_trusses.value(parentId, nullptr))
+            h->setLayerId(t->layerId());
+    }
+    else if (const Tower *tw = m_towers.value(parentId, nullptr))
+        h->setLayerId(tw->layerId());
+    m_hangers.insert(id, h);
+    recomputeHangers();
+    return h;
+}
+
+void MonitorProperties::removeHanger(quint32 id)
+{
+    if (!m_hangers.contains(id))
+        return;
+    // What hung on it stays where it was, unmounted.
+    for (auto it = m_rigProps.begin(); it != m_rigProps.end(); ++it)
+        if (it->hangerId == id)
+        {
+            const QVector3D at = m_hangers.value(id)->hook();
+            it->hangerId = UINT_MAX;
+            if (m_fixtureItems.contains(it.key()))
+                m_fixtureItems[it.key()].m_baseItem.m_position =
+                    QVector3D(at.x() * 1000.0f, at.y() * 1000.0f, at.z() * 1000.0f);
+        }
+    delete m_hangers.take(id);
+}
+
+QList<Hanger*> MonitorProperties::hangersOn(Hanger::ParentKind kind, quint32 parentId) const
+{
+    QList<Hanger*> out;
+    foreach (Hanger *h, m_hangers)
+        if (h->parentKind() == kind && h->parentId() == parentId)
+            out << h;
+    return out;
+}
+
+quint32 MonitorProperties::fixtureOnHanger(quint32 id) const
+{
+    for (auto it = m_rigProps.constBegin(); it != m_rigProps.constEnd(); ++it)
+        if (it->hangerId == id)
+            return it.key();
+    return UINT_MAX;
+}
+
+void MonitorProperties::recomputeHangers()
+{
+    foreach (Hanger *h, m_hangers)
+    {
+        const QVector3D dir = h->direction();
+        if (h->parentKind() == Hanger::OnTruss)
+        {
+            const Truss *t = m_trusses.value(h->parentId(), nullptr);
+            if (t == nullptr)
+                continue;
+            /* Clamped to the truss's FACE in the arm's direction, so the arm is
+               measured from the steel: on a tower, out from the side it points
+               through; on a horizontal run, out from the side chord. */
+            QVector3D at = t->positionAt(h->along());
+            const float half = t->width() * 0.5f;
+            if (t->type() == Truss::Vertical)
+            {
+                const float reach = qMax(qAbs(dir.x()), qAbs(dir.y()));
+                if (reach > 1e-4f)
+                    at += dir * (half / reach);
+            }
+            else
+                at += dir * half;
+            h->setFastened(at);
+        }
+        else
+        {
+            const Tower *tw = m_towers.value(h->parentId(), nullptr);
+            if (tw == nullptr)
+                continue;
+            const QVector3D centre(tw->originX() + tw->width() * 0.5f,
+                                   tw->originY() + tw->depth() * 0.5f, h->along());
+            const float tx = qAbs(dir.x()) > 1e-4f ? (tw->width() * 0.5f) / qAbs(dir.x()) : 1e9f;
+            const float ty = qAbs(dir.y()) > 1e-4f ? (tw->depth() * 0.5f) / qAbs(dir.y()) : 1e9f;
+            h->setFastened(centre + dir * qMin(tx, ty));
+        }
+    }
+}
+
 void MonitorProperties::removeTower(quint32 id)
 {
+    foreach (Hanger *h, hangersOn(Hanger::OnTower, id))
+        removeHanger(h->id());
     for (auto it = m_rigProps.begin(); it != m_rigProps.end(); ++it)
         if (it->towerId == id)
             it->towerId = UINT_MAX;
@@ -1649,30 +1756,12 @@ void MonitorProperties::setFixtureRigProps(quint32 fid, const FixtureRigProps &p
 
 QVector3D MonitorProperties::fixtureRigPosition(quint32 fid) const
 {
-    /* A hanger only hangs off a structure: out along the arm, down the drop. */
+    /* On a hanger: at its hook, wherever the hanger's parent has gone. */
     const FixtureRigProps &rp = m_rigProps.value(fid, FixtureRigProps());
-    const bool structural = rp.trussId != Truss::invalidId() || rp.onPipe() || rp.onTower();
-    if (structural && rp.hasHanger())
-        return fixtureMountPoint(fid) + rp.hangerOffset();
+    if (rp.onHanger())
+        if (const Hanger *h = m_hangers.value(rp.hangerId, nullptr))
+            return h->hook();
     return fixtureBasePosition(fid);
-}
-
-QVector3D MonitorProperties::fixtureMountPoint(quint32 fid) const
-{
-    QVector3D at = fixtureBasePosition(fid);
-    /* A hanger on a tower is clamped to its FACE, not its axis: out from the
-       middle to the side the arm points through, so the arm's length is
-       measured from the steel, as it is on the stage. */
-    const FixtureRigProps &rp = m_rigProps.value(fid, FixtureRigProps());
-    const Truss *t = (rp.trussId != Truss::invalidId()) ? m_trusses.value(rp.trussId, nullptr) : nullptr;
-    if (t != nullptr && t->type() == Truss::Vertical && rp.hasHanger())
-    {
-        const QVector3D dir = rp.hangerDirection();
-        const float reach = qMax(qAbs(dir.x()), qAbs(dir.y()));
-        if (reach > 1e-4f)
-            at += dir * (t->width() * 0.5f / reach);
-    }
-    return at;
 }
 
 QVector3D MonitorProperties::fixtureBasePosition(quint32 fid) const
@@ -2262,6 +2351,18 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                 delete s;
             }
         }
+        else if (root.name() == QStringLiteral("Hanger"))
+        {
+            const quint32 hid = root.attributes().value(QStringLiteral("ID")).toUInt();
+            Hanger *h = new Hanger(hid, this);
+            if (h->loadXML(root) && !m_hangers.contains(hid))
+                m_hangers.insert(hid, h);
+            else
+            {
+                qWarning() << "Discarding hanger with duplicate id" << hid;
+                delete h;
+            }
+        }
         else if (root.name() == QStringLiteral("Tower"))
         {
             Tower *t = new Tower(nextTowerId(), this);
@@ -2355,12 +2456,8 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
             }
             if (a.hasAttribute("MountZ"))
                 rp.mountZOffset = a.value("MountZ").toFloat();
-            if (a.hasAttribute("HangArm") || a.hasAttribute("HangDrop"))
-            {
-                rp.hangerArm   = a.value("HangArm").toFloat();
-                rp.hangerDrop  = a.value("HangDrop").toFloat();
-                rp.hangerAngle = a.value("HangAngle").toFloat();
-            }
+            if (a.hasAttribute("Hanger"))
+                rp.hangerId = a.value("Hanger").toUInt();
             if (a.hasAttribute("Deck"))
             {
                 rp.deckPlatformId   = a.value("Deck").toUInt();
@@ -2470,15 +2567,18 @@ void MonitorProperties::repairOrphanedMounts()
         if (keep == FixtureRigProps::NoMount)
             continue;
         const int mounts = int(rp.trussId != Truss::invalidId()) + int(rp.onPipe())
-                         + int(rp.onTower()) + int(rp.onDeck()) + int(rp.onRiser());
+                         + int(rp.onTower()) + int(rp.onDeck()) + int(rp.onRiser())
+                         + int(rp.onHanger());
         if (mounts < 2)
             continue;
 
         const quint32 truss = rp.trussId, pipe = rp.pipeId, tower = rp.towerId;
         const quint32 deck = rp.deckPlatformId, riser = rp.riserPlatformId;
+        const quint32 hanger = rp.hangerId;
         rp.clearMounts();
         switch (keep)
         {
+        case FixtureRigProps::HangerMount: rp.hangerId = hanger;      break;
         case FixtureRigProps::TrussMount: rp.trussId = truss;         break;
         case FixtureRigProps::PipeMount:  rp.pipeId = pipe;           break;
         case FixtureRigProps::TowerMount: rp.towerId = tower;         break;
@@ -3010,6 +3110,10 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
     foreach (const Tower *t, m_towers)
         t->saveXML(doc);
 
+    // Hangers (after what they hang on)
+    foreach (const Hanger *h, m_hangers)
+        h->saveXML(doc);
+
     // Scenery
     foreach (const Scenery *s, m_sceneries)
         s->saveXML(doc);
@@ -3091,12 +3195,8 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
             doc->writeAttribute(QStringLiteral("Placement"), QString::number(rp.placement));
         if (rp.mountZOffset != 0.0f)
             doc->writeAttribute(QStringLiteral("MountZ"), QString::number(double(rp.mountZOffset), 'f', 3));
-        if (rp.hasHanger())
-        {
-            doc->writeAttribute(QStringLiteral("HangArm"),   QString::number(double(rp.hangerArm), 'f', 3));
-            doc->writeAttribute(QStringLiteral("HangDrop"),  QString::number(double(rp.hangerDrop), 'f', 3));
-            doc->writeAttribute(QStringLiteral("HangAngle"), QString::number(double(rp.hangerAngle), 'f', 1));
-        }
+        if (rp.onHanger())
+            doc->writeAttribute(QStringLiteral("Hanger"), QString::number(rp.hangerId));
         if (rp.onDeck())
         {
             doc->writeAttribute(QStringLiteral("Deck"),  QString::number(rp.deckPlatformId));

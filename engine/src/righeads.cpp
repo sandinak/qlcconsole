@@ -89,6 +89,16 @@ QVector3D RigHeads::fixtureCentre(Doc *doc, quint32 fid)
        icon on it to match. Only the two cases that read the stored plot XY
        straight back need the anchor undone -- free placement, and a deck mount
        (which keeps the free XY and derives only Z). */
+    /* On a hanger the position is the HOOK, and the fixture hangs below it:
+       its centre is half its height lower. */
+    if (rp.onHanger())
+    {
+        Fixture *hung = doc->fixture(fid);
+        const float h = (hung != nullptr && hung->fixtureMode() != nullptr
+                         && hung->fixtureMode()->physical().height() > 0)
+                        ? float(hung->fixtureMode()->physical().height()) / 1000.0f : 0.1f;
+        return w - QVector3D(0.0f, 0.0f, h * 0.5f);
+    }
     if (props->fixtureFrameGroup(fid) != 0)
         return w;
     const bool derived = rp.trussId != Truss::invalidId() || rp.onPipe()

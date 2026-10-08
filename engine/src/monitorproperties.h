@@ -32,6 +32,7 @@
 #include "headlayout.h"
 #include "stageplatform.h"
 #include "pipe.h"
+#include "hanger.h"
 #include "scenery.h"
 #include "stand.h"
 #include "tower.h"
@@ -654,6 +655,24 @@ public:
     quint32 nextTowerId() const;
 
     /********************************************************************
+     * Hangers (a bracket and chain on a truss or tower, one fixture each)
+     ********************************************************************/
+public:
+    QList<Hanger*> hangers() const { return m_hangers.values(); }
+    Hanger *hanger(quint32 id) const { return m_hangers.value(id, nullptr); }
+    /** A new hanger on @p kind @p parentId, named "Hanger N". */
+    Hanger *addHanger(Hanger::ParentKind kind, quint32 parentId);
+    /** Remove it; a fixture hung on it comes off (keeps its place). */
+    void removeHanger(quint32 id);
+    quint32 nextHangerId() const;
+    /** Hangers on @p kind @p parentId. */
+    QList<Hanger*> hangersOn(Hanger::ParentKind kind, quint32 parentId) const;
+    /** The fixture on hanger @p id, or UINT_MAX. */
+    quint32 fixtureOnHanger(quint32 id) const;
+    /** Re-derive every hanger's fastening point from its parent. */
+    void recomputeHangers();
+
+    /********************************************************************
      * Scenery (cyc, back wall, drapes -- surfaces light lands on)
      ********************************************************************/
 public:
@@ -669,6 +688,7 @@ private:
     QMap<quint32, Pipe*> m_pipes;
     QMap<quint32, Stand*> m_stands;
     QMap<quint32, Tower*> m_towers;
+    QMap<quint32, Hanger*> m_hangers;
 
     /********************************************************************
      * Background / scenic images (placeable objects)
@@ -774,13 +794,9 @@ public:
      *  used as a fallback for free-placed fixtures.
      *  Returns QVector3D(0,0,0) if the fixture is unknown. */
     QVector3D fixtureRigPosition(quint32 fid) const;
-
-    /** Where fixture $fid is fastened to its structure -- the same as
-     *  fixtureRigPosition() unless it hangs on a hanger, when the fixture is
-     *  out along the arm and down the drop from here. */
-    QVector3D fixtureMountPoint(quint32 fid) const;
 private:
-    /** Where its mount puts it, before any hanger (the axis of a tower). */
+    /** Where its structural mount puts it (fixtureRigPosition() without a
+     *  hanger). */
     QVector3D fixtureBasePosition(quint32 fid) const;
 public:
 

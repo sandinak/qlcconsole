@@ -265,27 +265,9 @@ struct FixtureRigProps
      *  sits on. 0 = flush with the mount. */
     float            mountZOffset = 0.0f;
 
-    /** Hanger: hung off its structural mount (truss, pipe or tower) on an arm
-     *  -- @c hangerArm metres out toward @c hangerAngle, then @c hangerDrop
-     *  metres straight down on a chain or cable -- a lantern on a bracket off
-     *  the side of a tower. The angle is in plan: 0 downstage, 90 stage left,
-     *  180 upstage, 270 stage right. No arm and no drop = fastened at the
-     *  mount itself, as before. */
-    float            hangerArm = 0.0f;
-    float            hangerDrop = 0.0f;
-    float            hangerAngle = 0.0f;
-    bool hasHanger() const { return hangerArm > 0.0f || hangerDrop > 0.0f; }
-    /** Unit vector the arm points along, in plan (+X stage left, +Y downstage). */
-    QVector3D hangerDirection() const
-    {
-        const double a = qDegreesToRadians(double(hangerAngle));
-        return QVector3D(float(qSin(a)), float(qCos(a)), 0.0f);
-    }
-    /** Where the hung fixture is, from where the hanger is fastened. */
-    QVector3D hangerOffset() const
-    {
-        return hangerDirection() * hangerArm + QVector3D(0.0f, 0.0f, -hangerDrop);
-    }
+    /** On a hanger (Hanger: a bracket and chain on a truss or tower): the
+     *  fixture hangs from its hook. UINT_MAX = not on one. */
+    quint32          hangerId = UINT_MAX;
 
     /** Deck mount: a fixture standing ON TOP of a stage platform ("floor
      *  mounted"). Unlike a riser FACE mount it keeps its free XY position; only
@@ -434,7 +416,9 @@ struct FixtureRigProps
      *  a truss, or riding a pipe, or on a tower shelf, or standing on a deck,
      *  or bolted to a riser face, never two at once. */
     enum MountKind { NoMount = 0, TrussMount, PipeMount, TowerMount,
-                     DeckMount, RiserMount };
+                     DeckMount, RiserMount, HangerMount };
+
+    bool onHanger() const { return hangerId != UINT_MAX; }
 
     /** Which structure this fixture is on, in the SAME precedence
      *  MonitorProperties::fixtureRigPosition() uses to derive its position.
@@ -444,6 +428,7 @@ struct FixtureRigProps
      *  drawn on its truss opened the editor for an unrelated platform. */
     MountKind primaryMount() const
     {
+        if (onHanger())                    return HangerMount;
         if (trussId != Truss::invalidId()) return TrussMount;
         if (onPipe())                      return PipeMount;
         if (onTower())                     return TowerMount;
@@ -494,6 +479,7 @@ struct FixtureRigProps
         towerId          = UINT_MAX;
         deckPlatformId   = UINT_MAX;
         riserPlatformId  = UINT_MAX;
+        hangerId         = UINT_MAX;
     }
 };
 
