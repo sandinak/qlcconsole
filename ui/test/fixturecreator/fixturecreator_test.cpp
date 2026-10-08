@@ -38,6 +38,7 @@
 #undef protected
 #undef private
 #include "fixturecreator.h"
+#include "apputil.h"
 #include "qlcfixturedefcache.h"
 #include "qlcfixturemode.h"
 #include "qlcfixturedef.h"
@@ -173,6 +174,36 @@ void FixtureCreator_Test::networkFixtureKeepsItsIp()
     QCOMPARE(fxi->connection(), Fixture::Network);
     QCOMPARE(fxi->ipAddress(), QString("172.18.2.41"));
     QVERIFY(!fxi->isPatched());
+}
+
+/* Each network fixture is its own device: four lanterns added at once from
+   172.18.2.60 get .60, .61, .62 and .63 -- not one IP between them -- and
+   the dialog says so before OK. */
+void FixtureCreator_Test::aBatchOfNetworkFixturesGetsOneIpEach()
+{
+    QString shown;
+    driveAddDialog([&shown](AddFixture *dlg) {
+        dlg->m_connectionCombo->setCurrentIndex(dlg->m_connectionCombo->findData(
+            AddFixture::connectionKey(Fixture::Network, Fixture::WledTransport)));
+        dlg->m_ipEdit->setText("172.18.2.60");
+        dlg->m_amountSpin->setValue(4);
+        shown = dlg->m_ipRangeLabel->isHidden() ? QString() : dlg->m_ipRangeLabel->text();
+    });
+    const QList<quint32> made = FixtureCreator::addFromDialog(nullptr, m_doc, true,
+                                                              InputOutputMap::invalidUniverse(), nullptr);
+    QCOMPARE(shown, QString("One each: 172.18.2.60 to 172.18.2.63"));
+    QCOMPARE(made.size(), 4);
+    QStringList ips;
+    foreach (quint32 id, made)
+    {
+        ips << m_doc->fixture(id)->ipAddress();
+        QCOMPARE(m_doc->fixture(id)->transport(), Fixture::WledTransport);
+    }
+    QCOMPARE(ips, QStringList() << "172.18.2.60" << "172.18.2.61" << "172.18.2.62" << "172.18.2.63");
+
+    // Past .255 it carries into the octet before; nonsense gets nothing.
+    QCOMPARE(AppUtil::nthAddress("10.0.1.254", 3), QString("10.0.2.1"));
+    QVERIFY(AppUtil::nthAddress("lantern.local", 1).isEmpty());
 }
 
 void FixtureCreator_Test::aMultiAddStagesEveryFixtureUnpatched()

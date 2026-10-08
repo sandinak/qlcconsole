@@ -137,6 +137,8 @@ protected:
     bool m_inventoryMode;
     class QComboBox *m_connectionCombo;
     class QLineEdit *m_ipEdit;
+    class QLabel *m_ipRangeLabel = nullptr;     ///< "One each: .60 to .63"
+    void updateIpRange();
 
     /*********************************************************************
      * Fillers

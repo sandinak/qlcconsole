@@ -89,9 +89,15 @@ AddFixture::AddFixture(QWidget* parent, const Doc* doc, const Fixture* fxi)
         pg->addWidget(m_connectionCombo, row, 2);
         pg->addWidget(new QLabel(tr("IP address:"), m_propertiesGroup), row + 1, 0);
         pg->addWidget(m_ipEdit, row + 1, 2);
+        // A batch of network fixtures: one IP each, counting up -- say which.
+        m_ipRangeLabel = new QLabel(m_propertiesGroup);
+        m_ipRangeLabel->setStyleSheet("QLabel { color: #909090; }");
+        m_ipRangeLabel->hide();
+        pg->addWidget(m_ipRangeLabel, row + 2, 2);
     }
     connect(m_connectionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
-            [this](int) { m_ipEdit->setEnabled(connection() == Fixture::Network); });
+            [this](int) { m_ipEdit->setEnabled(connection() == Fixture::Network); updateIpRange(); });
+    connect(m_ipEdit, &QLineEdit::textChanged, this, [this]() { updateIpRange(); });
 
     QAction* action = new QAction(this);
     action->setShortcut(QKeySequence(QKeySequence::Close));
@@ -671,9 +677,28 @@ void AddFixture::slotNameEdited(const QString &text)
     checkNameConflict();
 }
 
+void AddFixture::updateIpRange()
+{
+    if (m_ipRangeLabel == NULL)
+        return;
+    const int n = amount();
+    const QString first = ipAddress();
+    if (n <= 1 || first.isEmpty())
+    {
+        m_ipRangeLabel->hide();
+        return;
+    }
+    const QString last = AppUtil::nthAddress(first, n - 1);
+    m_ipRangeLabel->setText(last.isEmpty()
+        ? tr("Not enough addresses after %1 for %2 fixtures").arg(first).arg(n)
+        : tr("One each: %1 to %2").arg(first, last));
+    m_ipRangeLabel->show();
+}
+
 void AddFixture::slotAmountSpinChanged(int value)
 {
     m_amountValue = value;
+    updateIpRange();
 
     checkOverlapping();
     checkNameConflict();

@@ -129,7 +129,10 @@ QList<quint32> FixtureCreator::addFromDialog(QWidget *parent, Doc *doc, bool inv
             fxi->setUniverse(universe);
         }
         fxi->setConnection(af.connection());
-        fxi->setIPAddress(af.ipAddress());
+        /* Each network fixture is its own device: a batch gets one IP each,
+           counting up from the one given (.60, .61, ...). */
+        fxi->setIPAddress(af.amount() > 1 && !af.ipAddress().isEmpty()
+                          ? AppUtil::nthAddress(af.ipAddress(), i) : af.ipAddress());
         fxi->setTransport(af.transport());
         fxi->setName(modname);
         /* Set a fixture definition & mode if they were

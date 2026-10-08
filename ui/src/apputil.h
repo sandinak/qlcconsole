@@ -164,6 +164,12 @@ namespace AppUtil
      */
     void updateFixtureReadiness(Doc *doc);
 
+    /** The address @p n after IPv4 @p ip (n = 0: @p ip itself), the last
+     *  octet carrying into the one before it -- one each for a batch of
+     *  network fixtures. Empty when @p ip is not an IPv4 address or the run
+     *  would leave its /16. */
+    QString nthAddress(const QString &ip, int n);
+
     /*********************************************************************
      * Definition sources
      *********************************************************************/

@@ -709,3 +709,22 @@ void AppUtil::showDefinitionSource(QTreeWidgetItem *item, int column, const QLCF
     }
     item->setFont(column, f);
 }
+
+QString AppUtil::nthAddress(const QString &ip, int n)
+{
+    const QStringList parts = ip.trimmed().split(QLatin1Char('.'));
+    if (parts.size() != 4)
+        return QString();
+    int o[4];
+    for (int i = 0; i < 4; ++i)
+    {
+        bool ok = false;
+        o[i] = parts.at(i).toInt(&ok);
+        if (!ok || o[i] < 0 || o[i] > 255)
+            return QString();
+    }
+    const int low = o[2] * 256 + o[3] + n;
+    if (n < 0 || low > 255 * 256 + 254)
+        return QString();
+    return QString("%1.%2.%3.%4").arg(o[0]).arg(o[1]).arg(low / 256).arg(low % 256);
+}

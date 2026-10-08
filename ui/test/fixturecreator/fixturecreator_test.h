@@ -39,6 +39,7 @@ private slots:
     void aStagedFixtureNeverOccupiesAnAddress();
     void ordinaryAddStillPatches();
     void networkFixtureKeepsItsIp();
+    void aBatchOfNetworkFixturesGetsOneIpEach();
     void aMultiAddStagesEveryFixtureUnpatched();
 
     /** A run of a model whose name ends in digits numbers with a counter and
