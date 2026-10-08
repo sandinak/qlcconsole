@@ -17,6 +17,11 @@
   limitations under the License.
 */
 
+#include <QComboBox>
+#include <QFormLayout>
+#include <QGridLayout>
+#include <QGroupBox>
+
 #include "editphysical.h"
 #include "ui_editphysical.h"
 
@@ -52,6 +57,25 @@ EditPhysical::EditPhysical(QLCPhysical physical, QWidget *parent)
     m_powerConsumptionSpin->setValue(m_physical.powerConsumption());
     m_dmxConnectorCombo->setEditText(m_physical.dmxConnector());
 
+    /* What the rig view draws, and how its light leaves it: a lantern in a
+       cage glowing all round, not a box throwing a beam. */
+    QGroupBox *look = new QGroupBox(tr("Look in the rig view"), this);
+    QFormLayout *lookLay = new QFormLayout(look);
+    m_bodyCombo = new QComboBox(look);
+    m_bodyCombo->addItem(tr("Box"), int(QLCPhysical::BoxBody));
+    m_bodyCombo->addItem(tr("Lantern"), int(QLCPhysical::LanternBody));
+    m_bodyCombo->setCurrentIndex(qMax(0, m_bodyCombo->findData(int(m_physical.bodyShape()))));
+    lookLay->addRow(tr("Body"), m_bodyCombo);
+    m_emissionCombo = new QComboBox(look);
+    m_emissionCombo->addItem(tr("Beam"), int(QLCPhysical::BeamEmission));
+    m_emissionCombo->addItem(tr("All round"), int(QLCPhysical::OmniEmission));
+    m_emissionCombo->setCurrentIndex(qMax(0, m_emissionCombo->findData(int(m_physical.emission()))));
+    m_emissionCombo->setToolTip(tr("Beam: a cone at the lens's angle. All round: a bare "
+                                   "source -- a lantern, a bulb -- lighting what is near it."));
+    lookLay->addRow(tr("Light"), m_emissionCombo);
+    if (QGridLayout *grid = qobject_cast<QGridLayout *>(layout()))
+        grid->addWidget(look, grid->rowCount(), 0, 1, qMax(1, grid->columnCount()));
+
     connect(copyClipboardButton, SIGNAL(clicked()),
             this, SLOT(slotCopyToClipboard()));
     connect(pasteClipboardButton, SIGNAL(clicked()),
@@ -82,6 +106,8 @@ QLCPhysical EditPhysical::physical()
     m_physical.setLayoutSize(QSize(m_layoutColsSpin->value(), m_layoutRowsSpin->value()));
     m_physical.setPowerConsumption(m_powerConsumptionSpin->value());
     m_physical.setDmxConnector(m_dmxConnectorCombo->currentText());
+    m_physical.setBodyShape(QLCPhysical::BodyShape(m_bodyCombo->currentData().toInt()));
+    m_physical.setEmission(QLCPhysical::Emission(m_emissionCombo->currentData().toInt()));
 
     return m_physical;
 }
@@ -116,4 +142,6 @@ void EditPhysical::pasteFromClipboard(QLCPhysical clipboard)
     m_layoutRowsSpin->setValue(clipboard.layoutSize().height());
     m_powerConsumptionSpin->setValue(clipboard.powerConsumption());
     m_dmxConnectorCombo->setEditText(clipboard.dmxConnector());
+    m_bodyCombo->setCurrentIndex(qMax(0, m_bodyCombo->findData(int(clipboard.bodyShape()))));
+    m_emissionCombo->setCurrentIndex(qMax(0, m_emissionCombo->findData(int(clipboard.emission()))));
 }

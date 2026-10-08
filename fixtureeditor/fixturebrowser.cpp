@@ -24,6 +24,8 @@
 #include <QVariant>
 
 #include "fixturebrowser.h"
+#include "apputil.h"
+#include "qlcfixturedef.h"
 #include "qlcfixturedefcache.h"
 #include "qlcfixturedef.h"
 
@@ -56,8 +58,8 @@ FixtureBrowser::FixtureBrowser(QWidget* parent)
             this, SLOT(slotSearchChanged(QString)));
 
     m_tree = new QTreeWidget(this);
-    m_tree->setHeaderHidden(true);
-    m_tree->setColumnCount(1);
+    m_tree->setColumnCount(2);
+    m_tree->setHeaderLabels(QStringList() << tr("Fixture") << tr("Source"));
     layout->addWidget(m_tree);
     connect(m_tree, SIGNAL(itemActivated(QTreeWidgetItem*,int)),
             this, SLOT(slotItemActivated(QTreeWidgetItem*,int)));
@@ -80,6 +82,7 @@ void FixtureBrowser::fillTree()
     m_tree->clear();
 
     const QString filter = m_search->text().toLower();
+    const QHash<QString, QLCFixtureDef *> defs = AppUtil::definitionsByName(m_cache);
 
     foreach (const QString& manuf, m_cache->manufacturers())
     {
@@ -109,6 +112,7 @@ void FixtureBrowser::fillTree()
             child->setText(KColumnName, model);
             child->setData(KColumnName, PROP_MANUFACTURER, manuf);
             child->setData(KColumnName, PROP_MODEL, model);
+            AppUtil::showDefinitionSource(child, 1, defs.value(manuf + QLatin1Char('\n') + model));
         }
     }
 

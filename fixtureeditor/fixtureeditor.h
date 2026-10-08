@@ -22,6 +22,7 @@
 
 #include <QWidget>
 #include "ui_fixtureeditor.h"
+#include "fixturedefcheck.h"
 
 #include "qlcphysical.h"
 
@@ -62,6 +63,21 @@ public:
 
     bool modified() const;
     void setModified(bool modified = true);
+
+    /*********************************************************************
+     * Problems
+     *********************************************************************/
+public:
+    /** Check the definition as it stands now (FixtureDefCheck::check()). */
+    void refreshProblems();
+    class ProblemsPanel *problemsPanel() const { return m_problems; }
+
+protected:
+    /** Show where @p issue is fixed: its tab, and its channel or mode. */
+    void goToIssue(const FixtureDefCheck::Issue &issue);
+
+    class ProblemsPanel *m_problems = nullptr;
+    class QTimer *m_problemsTimer = nullptr;
 
 protected:
     /** True if $path lives under QLCFixtureDefCache::systemDefinitionDirectory()

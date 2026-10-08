@@ -51,6 +51,9 @@ namespace FXEDArgs
  */
 QString fixture;
 
+/** Opened by qlcconsole for that one file: quit when it is closed. */
+bool closeWhenDone = false;
+
 /**
  * Specifies a locale for forced translation
  */
@@ -88,6 +91,7 @@ void printUsage()
     cout << "  qlcconsole-fixtureeditor [options]" << endl;
     cout << "Options:" << endl;
     cout << "  -o or --open <file>\t\tOpen the specified fixture definition file" << endl;
+    cout << "  --close-when-done\t\tQuit once that file is closed (when opened by qlcconsole)" << endl;
     cout << "  -l or --locale <locale>\tForce a locale for translation" << endl;
     cout << "  -h or --help\t\t\tPrint this help" << endl;
     cout << "  -v or --version\t\tPrint version information" << endl;
@@ -125,6 +129,10 @@ bool parseArgs()
         {
             if (it.hasNext() == true)
                 FXEDArgs::fixture = it.next();
+        }
+        else if (arg == "--close-when-done")
+        {
+            FXEDArgs::closeWhenDone = true;
         }
         else if (arg == "-l" || arg == "--locale")
         {
@@ -231,7 +239,12 @@ int main(int argc, char** argv)
     });
 
     if (FXEDArgs::fixture.isEmpty() == false)
+    {
+        app.setCloseWhenDone(FXEDArgs::closeWhenDone);
         app.loadFixtureDefinition(FXEDArgs::fixture);
+        // Repair cancelled, or nothing loaded: there is nothing to stay open for.
+        app.quitIfDone();
+    }
 
     /* Show and execute the application */
     app.show();

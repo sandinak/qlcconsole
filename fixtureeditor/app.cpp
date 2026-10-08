@@ -37,6 +37,7 @@
 #include <QMenu>
 #include <QIcon>
 #include <QUrl>
+#include <QFile>
 
 #include "qlcfixturedefcache.h"
 #include "qlcfixturedef.h"
@@ -47,6 +48,8 @@
 
 #include "app.h"
 #include "fixtureeditor.h"
+#include "repairdialog.h"
+#include "fixturedefcheck.h"
 #include "fixturebrowser.h"
 
 #define SETTINGS_GEOMETRY "workspace/geometry"
@@ -141,8 +144,42 @@ void App::loadFixtureDefinition(const QString& path)
 
     /* Attempt to create a fixture definition from the selected file */
     QString error(tr("Unrecognized file extension: %1").arg(path));
+    bool repaired = false;
     if (path.endsWith(KExtFixture, Qt::CaseInsensitive) == true)
+    {
         fixtureDef = loadQXF(path, error);
+        /* Will not load -- or loads but loses part of itself on the way (a
+           mode naming a channel that is not there): say where and why, and
+           offer the repairs, rather than "unable to load" and nothing to go
+           on, or a definition quietly missing a channel. */
+        QFile file(path);
+        QByteArray xml;
+        FixtureDefCheck::ParseProblem problem;
+        if (file.open(QIODevice::ReadOnly))
+        {
+            xml = file.readAll();
+            file.close();
+        }
+        if (!xml.isEmpty() && FixtureDefCheck::diagnose(xml, &problem))
+        {
+            delete fixtureDef;
+            fixtureDef = NULL;
+            RepairDialog dlg(path, xml, this);
+            if (dlg.exec() != QDialog::Accepted)
+                return;
+            fixtureDef = new QLCFixtureDef;
+            if (fixtureDef->loadXMLData(dlg.xml()) == false)
+            {
+                delete fixtureDef;
+                fixtureDef = NULL;
+            }
+            else
+            {
+                fixtureDef->setDefinitionSourceFile(path);
+                repaired = (dlg.xml() != xml);     // opened as it was: nothing to save
+            }
+        }
+    }
     else if (path.endsWith(KExtAvolitesFixture, Qt::CaseInsensitive) == true)
         fixtureDef = loadD4(path, error);
     else
@@ -157,12 +194,17 @@ void App::loadFixtureDefinition(const QString& path)
 
         sub->setWidget(editor);
         sub->setAttribute(Qt::WA_DeleteOnClose);
+        // Its window closing may be the last thing the editor was opened for.
+        connect(sub, &QObject::destroyed, this, &App::quitIfDone, Qt::QueuedConnection);
         qobject_cast<QMdiArea*> (centralWidget())->addSubWindow(sub);
 
         // check if sub-window is outside main area
         if (sub->x() >= this->width() || sub->y() >= this->height())
             sub->setGeometry(0, 0, sub->width(), sub->height());
 
+        // Repaired in memory: unsaved until it is looked over and saved.
+        if (repaired)
+            editor->setModified(true);
         editor->show();
         sub->show();
     }
@@ -171,6 +213,20 @@ void App::loadFixtureDefinition(const QString& path)
         QMessageBox::warning(this, tr("Fixture loading failed"),
                              tr("Unable to load fixture definition: ") + error);
     }
+}
+
+void App::setCloseWhenDone(bool on)
+{
+    m_closeWhenDone = on;
+}
+
+void App::quitIfDone()
+{
+    if (m_closeWhenDone == false)
+        return;
+    QMdiArea *area = qobject_cast<QMdiArea*> (centralWidget());
+    if (area != NULL && area->subWindowList().isEmpty())
+        QMetaObject::invokeMethod(qApp, "quit", Qt::QueuedConnection);
 }
 
 QLCFixtureDef *App::loadQXF(const QString& path, QString& errorMsg) const

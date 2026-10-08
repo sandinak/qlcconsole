@@ -47,6 +47,8 @@ private slots:
 
 protected:
     QLCPhysical m_physical;
+    class QComboBox *m_bodyCombo = nullptr;      ///< Box / Lantern
+    class QComboBox *m_emissionCombo = nullptr;  ///< Beam / All round
 };
 
 #endif // EDITPHYSICAL_H
