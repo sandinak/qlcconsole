@@ -13,6 +13,7 @@
 #define LIGHTCONTROLS_H
 
 #include <QObject>
+#include <QList>
 
 class QComboBox;
 class QSpinBox;
@@ -55,9 +56,14 @@ public:
 
     /** Show what @p fx is now, without signalling. */
     void load(Doc *doc, const Fixture *fx);
+    /** Show what the relevant ones of @p fixtures are now: a row they differ
+     *  on reads "mixed" (shown for the first), and is only written once the
+     *  user sets it. */
+    void load(Doc *doc, const QList<const Fixture *> &fixtures);
 
     /** Write the rows' choice into @p rp, for @p fx: an override only where
-     *  it differs from the definition. */
+     *  it differs from the definition, and only the rows the user has set
+     *  since the last load(). */
     void store(const Fixture *fx, FixtureRigProps &rp) const;
 
     enum Kind { PointSource = 0, HangingCluster, LedTape };
@@ -72,6 +78,10 @@ private:
     QSpinBox *m_count = nullptr;
     QComboBox *m_glass = nullptr;
     bool m_loading = false;
+    bool m_kindSet = false;         ///< kind or count set since load()
+    bool m_glassSet = false;        ///< glass set since load()
+    /** Mark @p cb "mixed" (an extra item, data -1) or not. */
+    void showMixed(QComboBox *cb, bool mixed);
 };
 
 /** @} */

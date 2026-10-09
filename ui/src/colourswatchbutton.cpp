@@ -44,6 +44,14 @@ ColourSwatchButton::ColourSwatchButton(const QColor &colour, const QString &pick
 void ColourSwatchButton::setColour(const QColor &colour)
 {
     m_colour = colour;
+    m_mixed = false;
+    showColour();
+}
+
+void ColourSwatchButton::setMixed()
+{
+    m_colour = QColor();
+    m_mixed = true;
     showColour();
 }
 
@@ -66,16 +74,22 @@ void ColourSwatchButton::pick()
 
 void ColourSwatchButton::change(const QColor &colour)
 {
-    if (colour == m_colour)
+    if (colour == m_colour && !m_mixed)
         return;
     m_colour = colour;
+    m_mixed = false;
     showColour();
     emit colourChanged(m_colour);
 }
 
 void ColourSwatchButton::showColour()
 {
-    if (!m_colour.isValid())
+    if (m_mixed)
+    {
+        m_swatch->setText(tr("Mixed"));
+        m_swatch->setStyleSheet(QString());
+    }
+    else if (!m_colour.isValid())
     {
         m_swatch->setText(tr("None"));
         m_swatch->setStyleSheet(QString());
@@ -86,5 +100,5 @@ void ColourSwatchButton::showColour()
         m_swatch->setStyleSheet(QStringLiteral("background:%1; color:%2")
                                 .arg(m_colour.name(), m_colour.lightness() > 128 ? "#000" : "#fff"));
     }
-    m_reset->setEnabled(m_colour != m_resetColour);
+    m_reset->setEnabled(m_mixed || m_colour != m_resetColour);
 }

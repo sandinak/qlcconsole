@@ -55,17 +55,28 @@ LightControls::LightControls(QWidget *parent)
                            "glass shows every LED."));
 
     connect(m_kind, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
-        m_count->setVisible(m_kind->currentData().toInt() != PointSource);
-        if (!m_loading)
-            emit edited();
+        const int kind = m_kind->currentData().toInt();
+        m_count->setVisible(kind != PointSource && kind >= 0);
+        if (m_loading || kind < 0)
+            return;
+        showMixed(m_kind, false);
+        m_kindSet = true;
+        emit edited();
     });
-    connect(m_count, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int) {
-        if (!m_loading)
-            emit edited();
+    connect(m_count, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int v) {
+        if (m_loading || (!m_count->specialValueText().isEmpty() && v == m_count->minimum()))
+            return;
+        m_count->setSpecialValueText(QString());
+        m_count->setMinimum(1);
+        m_kindSet = true;
+        emit edited();
     });
     connect(m_glass, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
-        if (!m_loading)
-            emit edited();
+        if (m_loading || m_glass->currentData().toInt() < 0)
+            return;
+        showMixed(m_glass, false);
+        m_glassSet = true;
+        emit edited();
     });
 }
 
@@ -79,11 +90,64 @@ bool LightControls::relevant(const Fixture *fx)
            || ph.bodyShape() == QLCPhysical::LanternBody;
 }
 
+void LightControls::showMixed(QComboBox *cb, bool mixed)
+{
+    const int at = cb->findData(-1);
+    if (mixed && at < 0)
+        cb->addItem(tr("— mixed —"), -1);
+    else if (!mixed && at >= 0)
+        cb->removeItem(at);
+    if (mixed)
+        cb->setCurrentIndex(cb->findData(-1));
+}
+
+void LightControls::load(Doc *doc, const QList<const Fixture *> &fixtures)
+{
+    QList<const Fixture *> those;
+    foreach (const Fixture *fx, fixtures)
+        if (relevant(fx))
+            those << fx;
+    if (those.isEmpty())
+        return;
+    load(doc, those.first());
+    bool kindDiffers = false, countDiffers = false, glassDiffers = false;
+    int firstLayout = QLCPhysical::ClusterLeds;
+    const int firstLeds = RigHeads::lightLeds(doc, those.first()->id(), 0, &firstLayout);
+    const bool firstClear = RigHeads::clearGlass(doc, those.first()->id());
+    for (int i = 1; i < those.size(); ++i)
+    {
+        int layout = QLCPhysical::ClusterLeds;
+        const int leds = RigHeads::lightLeds(doc, those.at(i)->id(), 0, &layout);
+        if ((leds > 0) != (firstLeds > 0) || (leds > 0 && layout != firstLayout))
+            kindDiffers = true;
+        else if (leds != firstLeds)
+            countDiffers = true;
+        if (RigHeads::clearGlass(doc, those.at(i)->id()) != firstClear)
+            glassDiffers = true;
+    }
+    m_loading = true;
+    showMixed(m_kind, kindDiffers);
+    if (kindDiffers || countDiffers)
+    {
+        m_count->setMinimum(0);
+        m_count->setSpecialValueText(tr("mixed"));
+        m_count->setValue(0);
+        m_count->setVisible(!kindDiffers && firstLeds > 0);
+    }
+    showMixed(m_glass, glassDiffers);
+    m_loading = false;
+}
+
 void LightControls::load(Doc *doc, const Fixture *fx)
 {
     if (!relevant(fx))
         return;
     m_loading = true;
+    m_kindSet = m_glassSet = false;
+    showMixed(m_kind, false);
+    showMixed(m_glass, false);
+    m_count->setSpecialValueText(QString());
+    m_count->setMinimum(1);
     const QLCPhysical &ph = fx->fixtureMode()->physical();
     const int defKind = ph.leds() <= 0 ? PointSource
                       : ph.ledLayout() == QLCPhysical::TapeLeds ? LedTape : HangingCluster;
@@ -110,18 +174,24 @@ void LightControls::store(const Fixture *fx, FixtureRigProps &rp) const
         return;
     const QLCPhysical &ph = fx->fixtureMode()->physical();
     const int kind = m_kind->currentData().toInt();
-    if (kind == PointSource)
+    if (m_kindSet && kind == PointSource)
     {
         rp.lightLeds = (ph.leds() <= 0) ? -1 : 0;
         rp.lightLayout = -1;
     }
-    else
+    else if (m_kindSet && kind > 0)
     {
+        // A count still reading "mixed" keeps each one's own.
+        int count = m_count->value();
+        if (!m_count->specialValueText().isEmpty() && count == m_count->minimum())
+            count = rp.lightLeds > 0 ? rp.lightLeds : (ph.leds() > 0 ? ph.leds() : 16);
         // The definition's count is left to it: a WLED's own count can win.
-        rp.lightLeds = (ph.leds() > 0 && m_count->value() == ph.leds()) ? -1 : m_count->value();
+        rp.lightLeds = (ph.leds() > 0 && count == ph.leds()) ? -1 : count;
         const int layout = (kind == LedTape) ? int(QLCPhysical::TapeLeds) : int(QLCPhysical::ClusterLeds);
         rp.lightLayout = (ph.leds() > 0 && layout == int(ph.ledLayout())) ? -1 : layout;
     }
+    if (!m_glassSet || m_glass->currentData().toInt() < 0)
+        return;
     const bool clear = m_glass->currentData().toInt() == 1;
     rp.lightGlass = (clear == ph.clearGlass()) ? -1 : (clear ? 1 : 0);
 }

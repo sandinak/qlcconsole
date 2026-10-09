@@ -55,6 +55,7 @@ class Doc;
 class Monitor final : public QWidget
 {
     Q_OBJECT
+    friend class FixtureFields;     // the shared fixture rows use the rig helpers
     Q_DISABLE_COPY(Monitor)
 
     /*********************************************************************
@@ -68,6 +69,9 @@ public:
      *  a double-click on a fixture wherever it is (plot, studio, Layers,
      *  Fixture Manager). */
     void editFixtureProperties(quint32 fid);
+    /** Fixture Properties for several at once: the rows they share, "mixed"
+     *  where they differ. */
+    void editFixturesProperties(const QList<quint32> &fids);
 
     /** Constructed once as a permanent tab (see App::init()) — public like
      *  every other tab-hosted manager (FunctionManager, ShowManager, …);
@@ -272,6 +276,7 @@ protected:
      *  only forward-declares Fixture; 0 is a REAL fixture id (the first one in
      *  any workspace) and must never be used as the sentinel. */
     void showFixtureItemEditor(quint32 onlyFid = quint32(~0u));
+    void showFixtureItemEditor(const QList<quint32> &fids);
 
 public:
     /** A read-only angled look at the whole rig (StructureStudioView's

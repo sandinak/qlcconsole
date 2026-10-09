@@ -115,6 +115,7 @@ add_library(${module_name}
     monitor/lanternpixels.cpp monitor/lanternpixels.h
     monitor/lightcontrols.cpp monitor/lightcontrols.h
     monitor/rigeditsession.h
+    monitor/fixturefields.cpp monitor/fixturefields.h
     monitor/humanfigure.cpp monitor/humanfigure.h
     monitor/targetitem.cpp monitor/targetitem.h
     palettegenerator.cpp palettegenerator.h

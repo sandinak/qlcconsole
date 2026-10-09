@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include <QShortcut>
 #include <memory>
 #include <QGraphicsItem>
 #include <QElapsedTimer>
@@ -11598,7 +11599,7 @@ void Monitor_Test::aFixtureCanBeRaisedOntoATowersTopCap()
         QVERIFY2(!orient->isHidden(), "Orientation is hidden for a selected fixture");
         QPushButton *full = nullptr;
         foreach (QPushButton *b, dlg.findChildren<QPushButton *>())
-            if (b->text() == "Full properties…")
+            if (b->text() == "Fixture Properties…")
                 full = b;
         QVERIFY(full != nullptr && full->isEnabled());
         QStringList items;
@@ -13151,7 +13152,9 @@ void Monitor_Test::aStagedFixtureOnThePlotCannotBeTestedOrLocated()
 
     bool looked = false;
     inspectModal([&looked](QWidget *dlg) {
-        QVERIFY2(hasLabel(dlg, "Unpatched (inventory)"), "the address should say it is unpatched");
+        // The DMX row says so, and how to give it an address.
+        QVERIFY2(hasLabel(dlg, "Unpatched (inventory). Patch… gives it an address."),
+                 "the address should say it is unpatched");
         QPushButton *test = buttonWithText(dlg, "Test");
         QPushButton *locate = buttonWithText(dlg, "Locate");
         QVERIFY(test != nullptr && locate != nullptr);
@@ -13863,12 +13866,8 @@ void Monitor_Test::theInspectorMovesAFixturesDmxAddress()
         QVERIFY(mon.makeStudioPane(&dlg, 2 /* truss */, t->id(), nullptr, &view) != nullptr);
         emit view->fixtureSelected(spot->id());
 
-        QSpinBox *uni = nullptr, *addr = nullptr;
-        foreach (QSpinBox *sb, dlg.findChildren<QSpinBox *>())
-        {
-            if (sb->toolTip() == "Universe") uni = sb;
-            if (sb->toolTip() == "Start address") addr = sb;
-        }
+        QSpinBox *uni = dlg.findChild<QSpinBox *>("fixtureUniverse");
+        QSpinBox *addr = dlg.findChild<QSpinBox *>("fixtureAddress");
         QVERIFY(uni != nullptr && addr != nullptr);
         QVERIFY2(!addr->parentWidget()->isHidden(), "no DMX row for a selected fixture");
         QCOMPARE(addr->value(), 1);
@@ -13972,12 +13971,8 @@ void Monitor_Test::theInspectorEditsEveryFixtureSelected()
         }
         QCOMPARE(view->m_highlight.size(), 3);
 
-        QDoubleSpinBox *tilt = nullptr, *angle = nullptr;
-        foreach (QDoubleSpinBox *sb, dlg.findChildren<QDoubleSpinBox *>())
-        {
-            if (sb->toolTip().startsWith("Tip the fixture")) tilt = sb;
-            else if (sb->minimum() == -180.0 && sb->suffix() == QString::fromUtf8("°")) angle = sb;
-        }
+        QDoubleSpinBox *tilt = dlg.findChild<QDoubleSpinBox *>("fixtureTilt");
+        QDoubleSpinBox *angle = dlg.findChild<QDoubleSpinBox *>("fixtureAngle");
         QVERIFY(tilt != nullptr && angle != nullptr);
         QLabel *title = nullptr;
         foreach (QLabel *l, dlg.findChildren<QLabel *>())
@@ -17107,7 +17102,7 @@ void Monitor_Test::fixturePropertiesCancelAndUndoToo()
     rig.gv->setFixtureGelColor(fx->id(), QColor(Qt::red));
     QColor seenLive(Qt::green);
     driveDialog([&seenLive, props, fx](QWidget *modal) {
-        ColourSwatchButton *gel = modal->findChild<ColourSwatchButton *>("gelColour");
+        ColourSwatchButton *gel = modal->findChild<ColourSwatchButton *>("fixtureColour");
         QToolButton *reset = gel ? gel->findChild<QToolButton *>("colourReset") : nullptr;
         if (reset == nullptr || !reset->isEnabled())
             return false;
@@ -17118,4 +17113,161 @@ void Monitor_Test::fixturePropertiesCancelAndUndoToo()
     rig.mon->editFixtureProperties(fx->id());
     QVERIFY2(!seenLive.isValid(), "the gel came off only at OK, not as it was reset");
     QCOMPARE(props->fixtureGelColor(fx->id(), 0, 0), QColor(Qt::red));
+}
+
+namespace
+{
+/* A truss studio for @p rig with fixtures @p which selected in its list. */
+StructureStudioView *studioWithSelected(Monitor &mon, QDialog &dlg, MultiTrussRig &rig,
+                                        const QList<int> &which)
+{
+    StructureStudioView *view = nullptr;
+    if (mon.makeStudioPane(&dlg, 2, rig.truss->id(), nullptr, &view) == nullptr)
+        return nullptr;
+    QList<quint32> want;
+    foreach (int i, which)
+        want << rig.fx.at(i)->id();
+    foreach (QTreeWidget *t, dlg.findChildren<QTreeWidget *>())
+    {
+        for (QTreeWidgetItemIterator it(t); *it; ++it)
+        {
+            const QVariant v = (*it)->data(0, Qt::UserRole);
+            if (v.isValid() && want.contains(v.toUInt()) && (*it)->text(0).startsWith("F"))
+                (*it)->setSelected(true);
+        }
+    }
+    return view;
+}
+}
+
+void Monitor_Test::theInspectorShowsMixedAndSetsOnlyWhatIsSet()
+{
+    Doc *doc = new Doc(this);
+    MultiTrussRig rig;
+    rig.build(doc, { 0.5f, 1.5f, 2.5f });
+    MonitorProperties *props = doc->monitorProperties();
+    FixtureRigProps rp = props->fixtureRigProps(rig.fx[1]->id());
+    rp.studioTilt = 30.0f;                                  // F2 differs
+    props->setFixtureRigProps(rig.fx[1]->id(), rp);
+    props->setFixtureGelColor(rig.fx[0]->id(), 0, 0, QColor(Qt::red));
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        QDialog dlg;
+        QVERIFY(studioWithSelected(mon, dlg, rig, { 0, 1, 2 }) != nullptr);
+
+        QDoubleSpinBox *tilt = dlg.findChild<QDoubleSpinBox *>("fixtureTilt");
+        QComboBox *placement = dlg.findChild<QComboBox *>("fixturePlacement");
+        ColourSwatchButton *colour = dlg.findChild<ColourSwatchButton *>("fixtureColour");
+        QVERIFY(tilt != nullptr && placement != nullptr && colour != nullptr);
+        QCOMPARE(tilt->text(), QString("mixed"));
+        QVERIFY(colour->isMixed());
+        QVERIFY2(placement->currentText() != "— mixed —", "they all sit on the surface");
+
+        // Placement set: all three are inside; their tilts are left as they were.
+        placement->setCurrentIndex(placement->findData(int(FixtureRigProps::Inside)));
+        for (int i = 0; i < 3; ++i)
+            QCOMPARE(props->fixtureRigProps(rig.fx[i]->id()).placement, int(FixtureRigProps::Inside));
+        QCOMPARE(props->fixtureRigProps(rig.fx[1]->id()).studioTilt, 30.0f);
+        QCOMPARE(props->fixtureRigProps(rig.fx[0]->id()).studioTilt, 0.0f);
+        QCOMPARE(tilt->text(), QString("mixed"));          // still: nobody set it
+
+        // Tilt set: the same on all three, and no longer mixed.
+        tilt->setValue(12.0);
+        for (int i = 0; i < 3; ++i)
+            QCOMPARE(props->fixtureRigProps(rig.fx[i]->id()).studioTilt, 12.0f);
+        QVERIFY(tilt->specialValueText().isEmpty());
+
+        // Colour reset: none on all three.
+        colour->findChild<QToolButton *>("colourReset")->click();
+        for (int i = 0; i < 3; ++i)
+            QVERIFY(!props->fixtureGelColor(rig.fx[i]->id(), 0, 0).isValid());
+    }
+    delete doc;
+}
+
+void Monitor_Test::anInspectorEditIsOneUndoStep()
+{
+    Doc *doc = new Doc(this);
+    MultiTrussRig rig;
+    rig.build(doc, { 0.5f, 1.5f });
+    MonitorProperties *props = doc->monitorProperties();
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        QDialog dlg;
+        QVERIFY(studioWithSelected(mon, dlg, rig, { 0, 1 }) != nullptr);
+        QDoubleSpinBox *tilt = dlg.findChild<QDoubleSpinBox *>("fixtureTilt");
+        QVERIFY(tilt != nullptr);
+        QShortcut *undo = nullptr;
+        foreach (QShortcut *sc, dlg.findChildren<QShortcut *>())
+            if (sc->key() == QKeySequence(QKeySequence::Undo))
+                undo = sc;
+        QVERIFY(undo != nullptr);
+
+        // A run of steps on one field (a spin box held down) is one undo.
+        tilt->setValue(5.0);
+        tilt->setValue(10.0);
+        tilt->setValue(15.0);
+        QCOMPARE(props->fixtureRigProps(rig.fx[1]->id()).studioTilt, 15.0f);
+        emit undo->activated();
+        QCOMPARE(props->fixtureRigProps(rig.fx[0]->id()).studioTilt, 0.0f);
+        QCOMPARE(props->fixtureRigProps(rig.fx[1]->id()).studioTilt, 0.0f);
+        QCOMPARE(tilt->value(), 0.0);                       // the panel follows
+
+        // A colour is undone too.
+        ColourSwatchButton *colour = dlg.findChild<ColourSwatchButton *>("fixtureColour");
+        props->setFixtureGelColor(rig.fx[0]->id(), 0, 0, QColor(Qt::blue));
+        props->setFixtureGelColor(rig.fx[1]->id(), 0, 0, QColor(Qt::blue));
+        colour->setColour(QColor(Qt::blue));
+        colour->findChild<QToolButton *>("colourReset")->click();
+        QVERIFY(!props->fixtureGelColor(rig.fx[0]->id(), 0, 0).isValid());
+        emit undo->activated();
+        QCOMPARE(props->fixtureGelColor(rig.fx[0]->id(), 0, 0), QColor(Qt::blue));
+    }
+    delete doc;
+}
+
+void Monitor_Test::fixturePropertiesForSeveralIsMixedAndLive()
+{
+    FixtureCleanup cleanup(m_doc);
+    MonitorProperties *props = m_doc->monitorProperties();
+    QList<quint32> ids;
+    for (int i = 0; i < 2; ++i)
+    {
+        Fixture *fx = new Fixture(m_doc);
+        fx->setName(QString("Pair %1").arg(i + 1));
+        fx->setChannels(1);
+        fx->setAddress(440 + quint32(i) * 4);
+        QVERIFY(m_doc->addFixture(fx));
+        cleanup.ids << fx->id();
+        ids << fx->id();
+        props->setFixturePosition(fx->id(), 0, 0, QVector3D(1000 + i * 1000, 1000, 0));
+        FixtureRigProps rp;
+        rp.panZeroDir = (i == 0) ? 0.0f : 90.0f;          // their aims differ
+        props->setFixtureRigProps(fx->id(), rp);
+    }
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+    foreach (quint32 id, ids)
+        rig.gv->addFixture(id, props->fixtureItem(id, 0, 0).m_position.toPointF());
+
+    float liveTilt = -1.0f;
+    QString aimText;
+    driveDialog([&liveTilt, &aimText, props, ids](QWidget *modal) {
+        QDoubleSpinBox *aim = modal->findChild<QDoubleSpinBox *>("fixtureAim");
+        QDoubleSpinBox *tilt = modal->findChild<QDoubleSpinBox *>("fixtureTilt");
+        if (aim == nullptr || tilt == nullptr)
+            return false;
+        aimText = aim->text();
+        tilt->setValue(20.0);
+        liveTilt = props->fixtureRigProps(ids.last()).studioTilt;
+        return true;
+    }, false);
+    rig.mon->editFixturesProperties(ids);
+    QCOMPARE(aimText, QString("mixed"));
+    QCOMPARE(liveTilt, 20.0f);                              // live, on both
+    foreach (quint32 id, ids)                               // Cancel: back
+        QCOMPARE(props->fixtureRigProps(id).studioTilt, 0.0f);
+    QCOMPARE(props->fixtureRigProps(ids.last()).panZeroDir, 90.0f);
 }

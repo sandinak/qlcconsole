@@ -199,13 +199,28 @@ Click a fixture in that list (or in the preview) to see its own mount panel:
 - **Angle / Tilt** — fine orientation.
 - **Light / Glass** — for lanterns and other LED-source fixtures; see
   [Lanterns](#lanterns).
+- **DMX** — its universe and start address, moved at once if the channels
+  are free (and why not, if not); **Patch…** addresses several together, or
+  gives an unpatched one an address.
 
-**Working on several fixtures at once.** Colour, Placement, Face, Angle,
-Tilt, and Orientation apply to every selected fixture (select a folder row
-— a group or "Ungrouped" — to take everything in it; ⌘-click or ⇧-click
-on the canvas to add or remove). Dragging any selected fixture moves them
-all, as one undo. **Distribute** spaces a few selected fixtures between the
-outermost two and lines them up.
+These are the same rows, with the same names, as the **Fixture** box at the
+top of **Fixture Properties** (the **Fixture Properties…** button under
+them opens it): the panel is its quick subset, the dialog has everything —
+name, X / Y, aim and calibration, Test and Identify.
+
+**Working on several fixtures at once.** Every row applies to every
+selected fixture (select a folder row — a group or "Ungrouped" — to take
+everything in it; ⌘-click or ⇧-click on the canvas to add or remove). A row
+they differ on reads **mixed** and changes nothing until you set it — then
+it is set on all of them. **Fixture Properties…** with several selected
+opens the same rows (plus aim and icon rotation) for all of them. Dragging
+any selected fixture moves them all, as one undo. **Distribute** spaces a
+few selected fixtures between the outermost two and lines them up.
+
+**Undo in an editor.** Ctrl/⌘+Z in a structure's editor undoes its last
+change — a drag, a layout action, or a panel field (a run of steps on one
+field is one undo). The editor as a whole is then one step on the plot's
+undo once you press OK; Cancel puts back everything it did.
 
 **Rotation handles.** Select one bar or strip in an unlocked structure
 editor and it gets a ring with a knob: drag it round to turn the bar (Angle
@@ -265,9 +280,16 @@ of, and doesn't override, the real locks above.
 
 - **Select All** (Ctrl/⌘+A, or **More → Select All**) selects every
   visible, selectable object on the plot at once.
-- **Undo** puts back a whole drag at once: everything the drag moved
-  (structures, scenery, targets, nodes, fixtures) is one undo, and a deck
-  brings its fixtures back with it.
+- **Undo** (Ctrl/⌘+Z, or the toolbar's **Undo**) puts back the last move,
+  paste or edit: a whole drag at once (everything it moved — structures,
+  scenery, targets, nodes, fixtures — and a deck brings its fixtures back
+  with it), or everything one dialog did when you pressed OK.
+- **Every rig dialog works the same way** — truss, pipe, platform, tower,
+  stand, scenery, group, hanger, image, target and Fixture Properties: the
+  plot follows its fields as you change them, **Cancel** puts back
+  everything it did, and **OK** is one undo step. Lengths are entered in
+  the show's units (feet-and-inches, or metres); colours are one swatch
+  button showing the colour and its hex value, with **Reset**.
 - **Select All Similar** — on a fixture (plot or list), every fixture of the
   same model and mode; on a fixture group's Layers row, the groups of the
   same fixtures laid out the same way.

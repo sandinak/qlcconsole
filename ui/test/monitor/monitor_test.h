@@ -135,6 +135,12 @@ private slots:
      *  everything back, OK is one step on the plot's undo. */
     void aRigDialogPreviewsCancelsAndUndoes();
     void fixturePropertiesCancelAndUndoToo();
+    /** One fixture property model: the inspector and Fixture Properties
+     *  share their rows, show "mixed" where the selection differs and set
+     *  only what is set; the inspector's edits are Ctrl+Z steps. */
+    void theInspectorShowsMixedAndSetsOnlyWhatIsSet();
+    void anInspectorEditIsOneUndoStep();
+    void fixturePropertiesForSeveralIsMixedAndLive();
     void hangersAreRiggingCopiedToEveryTower();
     void theSplitWizardOffersAViewAndKeepsAnExistingGroup();
     /** "I can't click on any side arrow to open any of the groups": an

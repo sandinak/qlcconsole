@@ -66,13 +66,26 @@ the fixture's menu.
 structure is opened by double-clicking the structure (or "Edit <structure>"
 in the fixture's menu).
 
-### 4. One fixture, three property editors
+### 4. One fixture, three property editors -- DONE 2026-10-09 (step 2 of 4+6)
 | | Studio inspector | Fixture Properties | Fixture Manager |
 |---|---|---|---|
 | Colour (gel) | hex button, no reset, all selected | pixmap + Reset, one fixture | -- |
 | DMX address | editable + Patch | read-only | stock dialog |
 | Position | -- | "Horizontal/Vertical", 3 dp, "ft" | -- |
 | Applies | at once | on OK | on OK |
+
+**Done:** `FixtureFields` (ui/src/monitor/fixturefields.h) -- Mounted on,
+tower Position, Colour, Orientation, Face, Placement, Angle, Tilt, Light,
+Glass and DMX (editable address + Patch…) -- is the studio inspector and the
+"Fixture" box of Fixture Properties alike. It shows every fixture selected,
+"mixed" where they differ, setting only what is set; changes apply at once.
+The inspector's edits are steps on the editor's Ctrl+Z (a run on one field
+is one); Fixture Properties is live throughout (X / Y in the show's units,
+icon rotation, height offset; the name when its field is left), Cancel
+restores, OK is one plot undo; with several selected it is the same rows
+plus aim and icon rotation, all mixed-aware. The always-hidden truss/deck
+selectors and their OK-time writes are gone (placement is the studio's).
+"Full properties…" is "Fixture Properties…".
 
 **Converge:** one property model. The inspector is the dialog's quick subset,
 same widgets and labels ("Colour", "X / Y", editable address + Patch…),

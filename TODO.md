@@ -248,9 +248,12 @@ and colour, not pixel mapping.
   Decisions (Branson): inspector applies at once with undo; multi-select
   edits the whole selection with "mixed" fields; lengths follow the global
   units; one undo, as long as it reverses most mistakes.
-- NEXT (step 2): one fixture property model -- the studio inspector as the
-  dialog's quick subset (same widgets/labels, editable address + Patch…),
-  whole-selection editing with "mixed", Fixture Properties fully live.
+- #4 (step 2) built: FixtureFields -- one set of fixture rows for the
+  inspector and Fixture Properties; "mixed" across a selection; inspector
+  edits are editor Ctrl+Z steps; Fixture Properties fully live (several
+  fixtures too).
+- Left from #6: network-node dialogs (network topology, outside the rig
+  snapshot) still apply on OK.
 
 ## Transitions, haze glow, both Fires, back from a group's view -- 2026-10-08 (for Branson to try)
 

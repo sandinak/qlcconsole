@@ -42,6 +42,11 @@ public:
     /** Show @p colour (invalid = none), without signalling. */
     void setColour(const QColor &colour);
 
+    /** Show that the fixtures it stands for have different colours, until
+     *  one is chosen for all of them (setColour() clears it too). */
+    void setMixed();
+    bool isMixed() const { return m_mixed; }
+
     /** Offer a Reset back to @p colour; an invalid colour means "none" (a
      *  fixture with no gel). Not called: no Reset. */
     void setResetColour(const QColor &colour);
@@ -58,6 +63,7 @@ private:
 
     QColor m_colour;
     QColor m_resetColour;
+    bool m_mixed = false;
     QString m_title;
     QPushButton *m_swatch;
     QToolButton *m_reset;

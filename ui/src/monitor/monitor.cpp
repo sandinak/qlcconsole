@@ -18,6 +18,7 @@
   limitations under the License.
 */
 
+#include <QDateTime>
 #include <QApplication>
 #include <QActionGroup>
 #include <QTabWidget>
@@ -98,6 +99,7 @@
 #include "qlcphysical.h"
 #include "righeads.h"
 #include "lightcontrols.h"
+#include "fixturefields.h"
 #include "scenevalue.h"
 #include "scene.h"
 #include "mastertimer.h"
@@ -2838,7 +2840,7 @@ static quint32 studioRowBarId(const QTreeWidgetItem *it)
 
 void Monitor::editFixtureProperties(quint32 fid)
 {
-    // The studio's single-fixture path (inspector 'Full properties…', canvas
+    // The studio's single-fixture path (inspector 'Fixture Properties…', canvas
     // double-click, tree double-click): ALWAYS edit just this one fixture,
     // bypassing the map selection (and its group select-together).
     if (fid != Fixture::invalidId())
@@ -3074,6 +3076,9 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     cv->addWidget(hint);
 
     // ---- RIGHT: inline fixture inspector -----------------------------------
+    /* The quick subset of Fixture Properties: the same rows (FixtureFields),
+       for every fixture selected -- what they differ on reads "mixed" -- each
+       change applied at once, and one Ctrl+Z step. */
     QWidget *insp = new QWidget(body);
     insp->setObjectName("studioInspector");
     QVBoxLayout *iv = new QVBoxLayout(insp);
@@ -3082,133 +3087,68 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     inspTitle->setWordWrap(true);
     iv->addWidget(inspTitle);
     QFormLayout *inspForm = new QFormLayout;
-    QPushButton *gelBtn = new QPushButton(insp);
-    /* Which way it faces, not just which plane it lies in: the plane alone
-       could not say Back, Bottom or which Side ("no way to put this fixture on
-       the back? also when I say side .. which side?"). In
-       FixtureRigProps::Face order. On the outside of a truss it also moves to
-       that side of it -- see MonitorProperties::setFixtureFace(). */
-    QComboBox *faceCombo = new QComboBox(insp);
-    faceCombo->addItems({ tr("Top"), tr("Bottom"), tr("Front (downstage)"), tr("Back (upstage)"), tr("Stage left"), tr("Stage right") });
-    faceCombo->setToolTip(tr("The face it is on, and so which way it faces out. On the "
-                             "outside of a truss it also moves to that side of the truss."));
-    QDoubleSpinBox *angleSpin = new QDoubleSpinBox(insp);
-    angleSpin->setRange(-180, 180); angleSpin->setDecimals(0); angleSpin->setSuffix(QStringLiteral("°"));
-    QComboBox *mountCombo = new QComboBox(insp);   // logical orientation — any fixture
-    mountCombo->addItem(tr("Upright (base down)"),     QVariant(int(Truss::FloorMounted)));
-    mountCombo->addItem(tr("Sideways (base on side)"), QVariant(int(Truss::SideArm)));
-    mountCombo->addItem(tr("Hung (base on top)"),      QVariant(int(Truss::TopHung)));
-    mountCombo->setToolTip(tr("Base direction relative to the stage floor (gravity), "
-                              "not the mounting face."));
-    /* WHAT it is mounted on. The inspector described how a fixture sits --
-       "Top", "Inside" -- without ever saying what it sits on, so a fixture
-       decked on a riser gave no hint that a riser was involved at all. */
-    QLabel *mountOnLbl = new QLabel(insp);
-    mountOnLbl->setStyleSheet("color:#b0b4c0;");
-    mountOnLbl->setWordWrap(true);
-    inspForm->addRow(tr("Mounted on:"), mountOnLbl);
-    /* Where on a tower: its top cap, a shelf, or its base. Only dragging in an
-       elevation could say, and only between shelves -- so a tower whose
-       shelves stop short of its top had no way at all to put a followspot on
-       the cap. */
-    QComboBox *towerPosCombo = new QComboBox(insp);
-    towerPosCombo->setToolTip(tr("Where on the tower: on its top cap, on a shelf, or on its base"));
-    inspForm->addRow(tr("Position:"), towerPosCombo);
-    inspForm->addRow(tr("Colour:"), gelBtn);
-    inspForm->addRow(tr("Orientation:"), mountCombo);
-    inspForm->addRow(tr("Face:"), faceCombo);
+    FixtureFields *fields = new FixtureFields(this, inspForm, insp, view);
 
-    /* WHERE it sits relative to what carries it, as opposed to WHICH thing
-       that is. "Inside" is the case that could not be expressed before: a unit
-       between a truss's chords, or in a clear-topped step firing up through
-       it. It stops the fixture being seated out onto the surface. */
-    QComboBox *placeCombo = new QComboBox(insp);
-    placeCombo->addItem(tr("On the surface"), FixtureRigProps::OnSurface);
-    placeCombo->addItem(tr("Inside"),         FixtureRigProps::Inside);
-    placeCombo->setToolTip(tr("Bolted to the outside, or rigged WITHIN the "
-                              "structure — inside a step, or between a truss's "
-                              "chords. An inside fixture sits in the volume "
-                              "rather than on the face; drag it in Front or Side "
-                              "to set its height in there, and give the step a "
-                              "clear or open top to see it."));
-    inspForm->addRow(tr("Placement:"), placeCombo);
-    inspForm->addRow(tr("Angle:"), angleSpin);
-
-    /* ROLL about the fixture's own length, as distinct from Angle, which turns
-       it within its face. A bar lying in a step is built on a diagonal so it
-       fires up toward the cast rather than straight up; nothing here could say
-       that before. */
-    QDoubleSpinBox *tiltSpin = new QDoubleSpinBox(insp);
-    tiltSpin->setRange(-180, 180); tiltSpin->setDecimals(0);
-    tiltSpin->setSuffix(QStringLiteral("°"));
-    tiltSpin->setToolTip(tr("Tip the fixture about its own length — a bar lying "
-                            "in a step angled up toward the cast. Positive tips "
-                            "it upstage. Angle above turns it flat within its "
-                            "face instead."));
-    inspForm->addRow(tr("Tilt:"), tiltSpin);
-
-    /* What makes its light and what it is seen through, where that is a
-       question: a lantern round one bulb, a hanging LED cluster or LED tape,
-       behind diffusing or clear glass -- what THIS one is, so the rig view
-       draws it and runs its effects as it was built. */
-    LightControls *light = new LightControls(insp);
-    QWidget *lightBox = light->lightRow();
-    QComboBox *glassCombo = light->glassCombo();
-    inspForm->addRow(tr("Light:"), lightBox);
-    inspForm->addRow(tr("Glass:"), glassCombo);
-
-    /* A bar's own quick field: everything else it has (Face/Standoff/Run/
-     * Lock) is one click away via fullBtn below, same division of labour as
-     * a fixture's own mini-fields + Full-properties button. Range set once
-     * real bar data arrives (populateBar()) — a parent truss's length isn't
-     * known yet here. */
-    QDoubleSpinBox *barAlongSpin = new QDoubleSpinBox(insp);
+    /* A bar's own rows: what it hangs from, and the one field worth editing
+     * inline (its position along the parent); everything else it has is one
+     * click away (Fixture Properties… opens the bar's editor). Range set once
+     * real bar data arrives (populateBar()). */
+    QLabel *barOnLbl = new QLabel(insp);
+    barOnLbl->setStyleSheet("color:#b0b4c0;");
+    inspForm->addRow(tr("Mounted on:"), barOnLbl);
+    QDoubleSpinBox *barAlongSpin = new FeetInchesSpinBox(m_props->gridUnits() == MonitorProperties::Feet, insp);
     barAlongSpin->setDecimals(2);
     inspForm->addRow(tr("Along truss:"), barAlongSpin);
 
-    /* Its DMX home, editable where the fixture is being looked at ("clean ways
-       to assign fixtures into universes"). A change moves it at once if the
-       channels are free, and says why not if they are not; "…" opens the
-       Patch dialog on the whole selection, to move several as a block. */
-    QWidget *dmxBox = new QWidget(insp);
-    QHBoxLayout *dmxRow = new QHBoxLayout(dmxBox);
-    dmxRow->setContentsMargins(0, 0, 0, 0);
-    dmxRow->setSpacing(4);
-    QSpinBox *dmxUniSpin = new QSpinBox(dmxBox);
-    dmxUniSpin->setRange(1, 999);
-    dmxUniSpin->setPrefix(tr("U "));
-    dmxUniSpin->setKeyboardTracking(false);     // a typed number moves it once, on Enter
-    dmxUniSpin->setToolTip(tr("Universe"));
-    QSpinBox *dmxAddrSpin = new QSpinBox(dmxBox);
-    dmxAddrSpin->setRange(1, 512);
-    dmxAddrSpin->setKeyboardTracking(false);
-    dmxAddrSpin->setToolTip(tr("Start address"));
-    QToolButton *dmxMoreBtn = new QToolButton(dmxBox);
-    dmxMoreBtn->setText(QStringLiteral("…"));
-    dmxMoreBtn->setToolTip(tr("Patch / re-address the selected fixtures together"));
-    dmxRow->addWidget(dmxUniSpin);
-    dmxRow->addWidget(dmxAddrSpin, 1);
-    dmxRow->addWidget(dmxMoreBtn);
-    inspForm->addRow(tr("DMX:"), dmxBox);
-    QLabel *dmxNote = new QLabel(insp);
-    dmxNote->setWordWrap(true);
-    dmxNote->setStyleSheet("color:#e07070;");
-    dmxNote->hide();
-    inspForm->addRow(QString(), dmxNote);
-
     iv->addLayout(inspForm);
-    QPushButton *fullBtn = new QPushButton(tr("Full properties…"), insp);
+    QPushButton *fullBtn = new QPushButton(tr("Fixture Properties…"), insp);
+    fullBtn->setObjectName(QStringLiteral("inspectorFullProperties"));
     iv->addWidget(fullBtn);
     iv->addStretch();
     insp->setMinimumWidth(190);
+
+    /* Ctrl+Z here: the fixtures' rig and colours as they were before each
+       change -- a drag, an inspector field, a layout action. A run of steps
+       on one field (a spin box held down) is one undo. Restoring values, not
+       objects, so nothing the dialog around this holds is swapped out. */
+    struct StudioUndo
+    {
+        QMap<quint32, FixtureRigProps> rig;
+        QHash<quint32, QColor> gels;
+        QString field;
+        qint64 at = 0;
+    };
+    auto undoStack = QSharedPointer<QList<StudioUndo>>::create();
+    auto pushUndoFor = [this, undoStack](const QString &field) {
+        const qint64 now = QDateTime::currentMSecsSinceEpoch();
+        if (!field.isEmpty() && !undoStack->isEmpty() && undoStack->last().field == field
+            && now - undoStack->last().at < 1500)
+        {
+            undoStack->last().at = now;     // the same run of steps
+            return;
+        }
+        StudioUndo u;
+        u.rig = m_props->fixtureRigPropsMap();
+        foreach (quint32 fid, m_props->fixtureItemsID())
+            u.gels.insert(fid, m_props->fixtureGelColor(fid, 0, 0));
+        u.field = field;
+        u.at = now;
+        undoStack->append(u);
+        while (undoStack->size() > 50) undoStack->removeFirst();
+    };
+    auto pushUndo = [pushUndoFor]() { pushUndoFor(QString()); };
+    connect(fields, &FixtureFields::aboutToEdit, insp, [pushUndoFor](const QString &field) {
+        pushUndoFor(field);
+    });
 
     // Fixture::invalidId(), NOT 0: fixture 0 is the first fixture in any
     // workspace, so a 0 "nothing selected" sentinel silently dropped every
     // inspector edit made to it.
     auto curFid = QSharedPointer<quint32>::create(Fixture::invalidId());
     /* Every fixture selected, in the list or on the canvas; curFid is the one
-       the panel SHOWS. An edit goes to all of them ("if I select all the
-       fixtures .. apply tilt/angle changes to all of them at same time"). */
+       whose kind decides the rows. An edit goes to all of them ("if I select
+       all the fixtures .. apply tilt/angle changes to all of them at same
+       time"). */
     auto curFids = QSharedPointer<QList<quint32>>::create();
     auto targets = [curFid, curFids]() {
         if (*curFid == Fixture::invalidId())
@@ -3218,137 +3158,24 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     // Truss::invalidId() (UINT_MAX) — a bar is a Truss, not a Fixture, so it
     // needs its own "nothing selected" slot alongside curFid, not to share it.
     auto curBarId = QSharedPointer<quint32>::create(UINT_MAX);
-    // Shared by every field in this panel, fixture or bar: show/hide a row
-    // (and its label) as one unit, so the panel only ever displays what is
-    // actually relevant to whichever of curFid/curBarId is currently set.
     auto row = [inspForm](QWidget *w, bool vis) {
         w->setVisible(vis);
         if (QWidget *l = inspForm->labelForField(w)) l->setVisible(vis);
     };
-    auto populateDmx = [this, curFid, curBarId, targets, dmxBox, dmxUniSpin, dmxAddrSpin, dmxNote, row]() {
-        Fixture *fx = (*curBarId == UINT_MAX && *curFid != Fixture::invalidId())
-                          ? m_doc->fixture(*curFid) : nullptr;
-        row(dmxBox, fx != nullptr);
-        dmxNote->hide();
-        if (fx == nullptr)
-            return;
-        const bool patched = fx->isPatched();
-        dmxUniSpin->blockSignals(true);
-        dmxAddrSpin->blockSignals(true);
-        dmxUniSpin->setValue(int(fx->universe()) + 1);
-        dmxAddrSpin->setValue(int(fx->address()) + 1);
-        dmxUniSpin->blockSignals(false);
-        dmxAddrSpin->blockSignals(false);
-        // A staged fixture has no address to nudge: "…" patches it. Nor do
-        // several at once: one address is one fixture's, "…" places a block.
-        const bool one = targets().size() <= 1;
-        dmxUniSpin->setEnabled(patched && one);
-        dmxAddrSpin->setEnabled(patched && one);
-        dmxAddrSpin->setSuffix(fx->channels() > 1
-                                   ? tr("–%1").arg(int(fx->address() + fx->channels()))
-                                   : QString());
-        if (fx->addressClash())
-        {
-            dmxNote->setText(tr("Unpatched: the show file puts it on channels another "
-                                "fixture uses. Use … to give it a home."));
-            dmxNote->show();
-        }
-        else if (!patched)
-        {
-            dmxNote->setText(tr("Unpatched (inventory). Use … to patch it."));
-            dmxNote->show();
-        }
-    };
-    /* The Light and Glass rows: only for a fixture whose definition makes
-       light all round or out of LEDs -- a mover's lamp is not a question
-       anyone asks. */
-    auto populateLight = [this, curFid, curBarId, light, lightBox, glassCombo, row]() {
-        Fixture *fx = (*curBarId == UINT_MAX && *curFid != Fixture::invalidId())
-                          ? m_doc->fixture(*curFid) : nullptr;
-        const bool relevant = LightControls::relevant(fx);
-        row(lightBox, relevant);
-        row(glassCombo, relevant);
-        if (relevant)
-            light->load(m_doc, fx);
-    };
-    auto populate = [this, curFid, curBarId, targets, inspTitle, gelBtn, faceCombo, placeCombo, angleSpin, tiltSpin, mountCombo, fullBtn, mountOnLbl, barAlongSpin, towerPosCombo, row, populateDmx, populateLight]() {
-        populateDmx();
-        populateLight();
-        row(barAlongSpin, false);   // this panel is never showing a bar AND a fixture
-        row(towerPosCombo, false);  // shown below, for a tower-mounted fixture only
+    auto populate = [this, curFid, curBarId, targets, inspTitle, fields, fullBtn]() {
         const quint32 fid = *curFid;
         Fixture *fx = (fid != Fixture::invalidId()) ? m_doc->fixture(fid) : nullptr;
-        const bool have = (fx != nullptr);
-        const bool frame = have && (m_props->fixtureFrameGroup(fid) != 0);
-        const bool linear = have && isLinearFixture(fx);   // strip / bar / tape
         const int many = targets().size();
-        inspTitle->setText(have ? (many > 1 ? tr("%1 fixtures selected (showing %2)")
-                                                  .arg(many).arg(fx->name())
-                                            : fx->name())
+        inspTitle->setText(fx != nullptr ? (many > 1 ? tr("%1 fixtures selected").arg(many) : fx->name())
                            : (*curBarId != UINT_MAX) ? QString()   // populateBar() sets it
                            : tr("(no fixture selected)"));
-        if (*curBarId != UINT_MAX)
-            return;   // a bar is selected instead — populateBar() owns the panel
-        mountOnLbl->setText(have ? mountDescription(m_props->fixtureRigProps(fid), fid)
-                                 : QString("—"));
-        row(gelBtn, true); row(placeCombo, true); row(tiltSpin, true);
-        gelBtn->setEnabled(have); fullBtn->setEnabled(have);
-        // Show the RELEVANT controls per fixture type: Orientation for a body with
-        // a base (movers, pars); Face + Angle ("which way it runs") for a linear
-        // strip/bar, and for any frame-group member.
-        // A tower-shelf fixture is oriented ON the shelf (upright) or UNDER it
-        // (hung) — Orientation, not Face/Angle, regardless of head count.
-        const bool onTower = have && (m_props->fixtureRigProps(fid).towerId != Tower::invalidId());
-        row(mountCombo, have && (!linear || onTower));
-        row(faceCombo,  have && (linear || frame) && !onTower);
-        row(angleSpin,  have && (linear || frame) && !onTower);
-        mountCombo->setEnabled(have); faceCombo->setEnabled(have); angleSpin->setEnabled(have);
-        if (!have) { gelBtn->setStyleSheet(QString()); return; }
-        const FixtureRigProps rp = m_props->fixtureRigProps(fid);
-        const QColor gel = m_props->fixtureGelColor(fid, 0, 0);
-        gelBtn->setText(gel.isValid() ? gel.name() : tr("set…"));
-        gelBtn->setStyleSheet(gel.isValid()
-            ? QString("background:%1; color:%2").arg(gel.name())
-                .arg(gel.lightness() > 128 ? "#000" : "#fff") : QString());
-        faceCombo->blockSignals(true); faceCombo->setCurrentIndex(int(rp.face())); faceCombo->blockSignals(false);
-        placeCombo->blockSignals(true);
-        placeCombo->setCurrentIndex(qBound(0, rp.placement, 1));
-        placeCombo->blockSignals(false);
-        angleSpin->blockSignals(true); angleSpin->setValue(double(rp.studioAngle)); angleSpin->blockSignals(false);
-        tiltSpin->blockSignals(true);  tiltSpin->setValue(double(rp.studioTilt));   tiltSpin->blockSignals(false);
-        // Orientation options are constrained by the mount (shared helper).
-        fillOrientationCombo(mountCombo, rp);
-
-        if (Tower *tw = (rp.towerId != Tower::invalidId()) ? m_props->tower(rp.towerId) : nullptr)
+        fullBtn->setEnabled(fx != nullptr);
+        if (*curBarId != UINT_MAX || fx == nullptr)
         {
-            const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
-            const double toDisp = isFeet ? 3.28084 : 1.0;
-            const QString unit = isFeet ? tr("ft") : tr("m");
-            towerPosCombo->blockSignals(true);
-            towerPosCombo->clear();
-            auto addPos = [towerPosCombo](const QString &label, int side, int shelf) {
-                towerPosCombo->addItem(label);
-                towerPosCombo->setItemData(towerPosCombo->count() - 1, side, Qt::UserRole);
-                towerPosCombo->setItemData(towerPosCombo->count() - 1, shelf, Qt::UserRole + 1);
-            };
-            addPos(tr("Top (%1 %2)").arg(double(tw->height()) * toDisp, 0, 'f', 2).arg(unit),
-                   FixtureRigProps::TowerTop, -1);
-            for (int i = tw->shelfCount() - 1; i >= 0; --i)
-                addPos(tr("Shelf %1 (%2 %3)").arg(i + 1)
-                           .arg(double(tw->shelfHeight(i)) * toDisp, 0, 'f', 2).arg(unit),
-                       FixtureRigProps::TowerShelf, i);
-            addPos(tr("Bottom"), FixtureRigProps::TowerBottom, -1);
-            for (int i = 0; i < towerPosCombo->count(); ++i)
-            {
-                const int side = towerPosCombo->itemData(i, Qt::UserRole).toInt();
-                const int shelf = towerPosCombo->itemData(i, Qt::UserRole + 1).toInt();
-                if (side == rp.towerMountSide
-                    && (side != FixtureRigProps::TowerShelf || shelf == int(rp.towerShelf)))
-                    towerPosCombo->setCurrentIndex(i);
-            }
-            towerPosCombo->blockSignals(false);
-            row(towerPosCombo, true);
+            fields->hideAll();
+            return;
         }
+        fields->setFixtures(targets(), fid);
     };
     // The heading is the fixture's name: a rename elsewhere shows here too.
     connect(m_doc, &Doc::fixtureChanged, inspTitle, [curFid, populate](quint32 fid) {
@@ -3358,52 +3185,34 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     populate();
 
     /* The bar half of the same panel: "when I select it .. it doesn't
-       hilight nor does the right side change to the bar data." A bar is a
-       Truss, not a Fixture — none of the fixture-specific fields above mean
-       anything for one, so this hides all of them and shows just the one
-       field a bar actually has that's worth editing inline (its position
-       along the parent); everything else (Face/Standoff/Run/Lock/rename)
-       is one click away via fullBtn, same division of labour as a fixture's
-       own mini-fields + Full-properties button. */
-    auto populateBar = [this, curFid, curBarId, inspTitle, mountOnLbl, fullBtn, barAlongSpin, row,
-                        gelBtn, mountCombo, faceCombo, placeCombo, angleSpin, tiltSpin, towerPosCombo,
-                        lightBox, glassCombo]() {
+       hilight nor does the right side change to the bar data." */
+    auto populateBar = [this, curFid, curBarId, inspTitle, fullBtn, barOnLbl, barAlongSpin, row]() {
         const quint32 barId = *curBarId;
         Truss *bar = (barId != UINT_MAX) ? m_props->truss(barId) : nullptr;
         const bool have = (bar != nullptr);
         row(barAlongSpin, have);
+        row(barOnLbl, have);
         if (!have)
         {
-            /* A FIXTURE is showing (or nothing is): leave its fields alone.
-               This runs after populate() on every selection, and hiding the
-               fixture rows here unconditionally left a selected fixture with
-               nothing but "Mounted on" -- no Colour, Orientation, Face, Tilt
-               or tower Position to edit. */
+            // A FIXTURE is showing (or nothing is): its rows are FixtureFields'.
             if (*curFid == Fixture::invalidId())
             {
                 inspTitle->setText(tr("(no fixture selected)"));
-                mountOnLbl->setText(QString("—"));
                 fullBtn->setEnabled(false);
             }
             return;
         }
         fullBtn->setEnabled(true);
-        row(gelBtn, false); row(mountCombo, false); row(faceCombo, false);
-        row(placeCombo, false); row(angleSpin, false); row(tiltSpin, false);
-        row(towerPosCombo, false); row(lightBox, false); row(glassCombo, false);
         inspTitle->setText(bar->name());
         Truss *parent = m_props->truss(bar->parentTrussId());
         const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
         const double toDisp = isFeet ? 3.28084 : 1.0;
-        mountOnLbl->setText(parent ? tr("Truss %1").arg(parent->name()) : QString("—"));
+        barOnLbl->setText(parent ? tr("Truss %1").arg(parent->name()) : QString("—"));
         barAlongSpin->blockSignals(true);
-        barAlongSpin->setSuffix(isFeet ? tr(" ft") : tr(" m"));
         barAlongSpin->setRange(0.0, parent ? double(parent->length()) * toDisp : 100.0);
         barAlongSpin->setValue(double(bar->parentOffset()) * toDisp);
         // The bar's OWN lock only, same reasoning as dragBarTo() -- a bar is
-        // its own structural object, not a fixture attached to one; the main
-        // 2D plot already evaluates a bar's drag-lock this way, never off
-        // its parent's.
+        // its own structural object, not a fixture attached to one.
         barAlongSpin->setEnabled(!bar->locked());
         barAlongSpin->blockSignals(false);
     };
@@ -3425,14 +3234,10 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
             });
     connect(view, &StructureStudioView::barSelected, insp,
             [curFid, curBarId, populate, populateBar](quint32 barId){
-                // populate() FIRST: it unconditionally hides barAlongSpin's row
-                // as its very first line (the two panels must never show
-                // together), so populateBar() has to run LAST to be the one
-                // that actually leaves it showing.
                 *curBarId = barId; *curFid = Fixture::invalidId(); populate(); populateBar();
             });
     connect(barAlongSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), insp,
-            [this, curBarId, view](double v) {
+            [this, curBarId, view, pushUndoFor](double v) {
         if (*curBarId == UINT_MAX) return;
         Truss *bar = m_props->truss(*curBarId);
         if (bar == nullptr) return;
@@ -3446,134 +3251,14 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         if (view) view->reload();
         m_graphicsView->updateTrusses();
     });
-    connect(gelBtn, &QPushButton::clicked, insp, [this, curFid, targets, view, populate]() {
-        if (*curFid == Fixture::invalidId()) return;
-        const QColor c = QColorDialog::getColor(m_props->fixtureGelColor(*curFid, 0, 0),
-                                                this, tr("Fixture Colour"));
-        if (!c.isValid()) return;
-        foreach (quint32 f, targets())
-        {
-            m_props->setFixtureGelColor(f, 0, 0, c);
-            m_graphicsView->updateFixture(f);
-        }
-        if (view) view->reload();
-        populate();
-    });
-    connect(placeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), insp,
-            [this, targets, view, placeCombo](int) {
-        const QList<quint32> fids = targets();
-        if (fids.isEmpty()) return;
-        foreach (quint32 f, fids)
-        {
-            FixtureRigProps rp = m_props->fixtureRigProps(f);
-            rp.placement = placeCombo->currentData().toInt();
-            m_props->setFixtureRigProps(f, rp);
-            m_graphicsView->updateFixture(f);
-        }
-        m_doc->setModified();
-        if (view) view->reload();
-    });
-    connect(faceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), insp,
-            [this, targets, view, populate](int i) {
-        const QList<quint32> fids = targets();
-        if (fids.isEmpty()) return;
-        foreach (quint32 f, fids)
-        {
-            if (view) view->setFixtureFacing(f, FixtureRigProps::Face(i));
-            m_graphicsView->updateFixture(f);
-        }
-        populate();
-    });
-    connect(angleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), insp,
-            [this, targets, view](double v) {
-        const QList<quint32> fids = targets();
-        if (fids.isEmpty()) return;
-        // Written directly, then ONE reload: setFixtureAngle() reloads per call.
-        foreach (quint32 f, fids)
-        {
-            FixtureRigProps rp = m_props->fixtureRigProps(f);
-            rp.studioAngle = float(v);
-            m_props->setFixtureRigProps(f, rp);
-            m_graphicsView->updateFixture(f);
-        }
-        m_doc->setModified();
-        if (view) view->reload();
-    });
-    // The Light and Glass rows write together, to every selected fixture.
-    connect(light, &LightControls::edited, insp, [this, targets, view, light, populateLight]() {
-        const QList<quint32> fids = targets();
-        if (fids.isEmpty()) return;
-        foreach (quint32 f, fids)
-        {
-            const Fixture *fx = m_doc->fixture(f);
-            if (!LightControls::relevant(fx))
-                continue;
-            FixtureRigProps rp = m_props->fixtureRigProps(f);
-            light->store(fx, rp);
-            m_props->setFixtureRigProps(f, rp);
-        }
-        m_doc->setModified();
-        populateLight();
-        if (view) view->update();
-    });
-    connect(tiltSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), insp,
-            [this, targets, view](double v) {
-        const QList<quint32> fids = targets();
-        if (fids.isEmpty()) return;
-        foreach (quint32 f, fids)
-        {
-            FixtureRigProps rp = m_props->fixtureRigProps(f);
-            rp.studioTilt = float(v);
-            m_props->setFixtureRigProps(f, rp);
-            m_graphicsView->updateFixture(f);
-        }
-        m_doc->setModified();
-        if (view) view->reload();
-    });
-    connect(mountCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), insp,
-            [this, targets, view, mountCombo](int) {
-        const QList<quint32> fids = targets();
-        if (fids.isEmpty()) return;
-        foreach (quint32 f, fids)
-        {
-            FixtureRigProps rp = m_props->fixtureRigProps(f);
-            rp.mountingType = static_cast<Truss::MountingType>(mountCombo->currentData(Qt::UserRole).toInt());
-            const int side = mountCombo->currentData(Qt::UserRole + 1).toInt();
-            if (side >= 0) rp.trussMountSide = side;   // on-top / under / centred on a bar
-            // Same stray-default fix as the full properties dialog: a mover/PAR
-            // has no Face control here either, so nothing else ever moves
-            // studioMount off Front/face for it.
-            m_props->repairMountPlane(rp);
-            m_props->setFixtureRigProps(f, rp);
-            m_graphicsView->updateFixture(f);
-        }
-        if (view) view->reload();
-    });
-    connect(towerPosCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), insp,
-            [this, curFid, view, towerPosCombo, populate](int idx) {
-        if (*curFid == Fixture::invalidId() || idx < 0) return;
-        FixtureRigProps rp = m_props->fixtureRigProps(*curFid);
-        if (rp.towerId == Tower::invalidId()) return;
-        const int side = towerPosCombo->itemData(idx, Qt::UserRole).toInt();
-        const int shelf = towerPosCombo->itemData(idx, Qt::UserRole + 1).toInt();
-        // On the cap or the base it stands, as the plot's Mount on tower does.
-        if (side != FixtureRigProps::TowerShelf && side != rp.towerMountSide)
-            rp.mountingType = Truss::FloorMounted;
-        rp.towerMountSide = side;
-        if (shelf >= 0)
-            rp.towerShelf = shelf;
-        m_props->setFixtureRigProps(*curFid, rp);
-        m_graphicsView->updateFixture(*curFid);
-        if (view) view->reload();
-        populate();                 // "Mounted on" and the orientation choices follow
-    });
     connect(fullBtn, &QPushButton::clicked, insp,
-            [this, curFid, curBarId]() {
-        // *curFid alone was wrong for fixture id 0 (a real, valid id — see
-        // the Fixture::invalidId() note above) — it silently did nothing for
-        // the very first fixture in any workspace.
-        if (*curBarId != UINT_MAX) slotEditTruss(*curBarId);
-        else if (*curFid != Fixture::invalidId()) editFixtureProperties(*curFid);
+            [this, curFid, curBarId, targets]() {
+        if (*curBarId != UINT_MAX)
+            slotEditTruss(*curBarId);
+        else if (targets().size() > 1)
+            editFixturesProperties(targets());
+        else if (*curFid != Fixture::invalidId())
+            editFixtureProperties(*curFid);
     });
 
     body->addWidget(left);
@@ -3821,24 +3506,23 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         return ids;
     };
 
-    // Undo stack: snapshots of the fixture rig-props map. Ctrl+Z restores the
-    // last snapshot. pushUndo() is called before each layout-mutating action.
-    auto undoStack = QSharedPointer<QList<QMap<quint32, FixtureRigProps>>>::create();
-    auto pushUndo = [this, undoStack]() {
-        undoStack->append(m_props->fixtureRigPropsMap());
-        while (undoStack->size() > 50) undoStack->removeFirst();
-    };
-    auto doUndo = [this, undoStack, view, rebuildTree]() {
+    auto doUndo = [this, undoStack, view, rebuildTree, populate]() {
         if (undoStack->isEmpty()) return;
-        const QMap<quint32, FixtureRigProps> snap = undoStack->takeLast();
-        for (auto it = snap.constBegin(); it != snap.constEnd(); ++it)
+        const StudioUndo snap = undoStack->takeLast();
+        for (auto it = snap.rig.constBegin(); it != snap.rig.constEnd(); ++it)
             m_props->setFixtureRigProps(it.key(), it.value());
+        for (auto it = snap.gels.constBegin(); it != snap.gels.constEnd(); ++it)
+        {
+            m_props->setFixtureGelColor(it.key(), 0, 0, it.value());
+            m_graphicsView->setFixtureGelColor(it.key(), it.value());
+        }
         foreach (Fixture *fx, m_doc->fixtures())
             if (fx) m_graphicsView->updateFixture(fx->id());
         m_graphicsView->updatePlatforms();
         m_doc->setModified();
         if (view) view->reload();
         rebuildTree();
+        populate();
     };
     QShortcut *undoSc = new QShortcut(QKeySequence::Undo, dlg);
     connect(undoSc, &QShortcut::activated, dlg, [doUndo]() { doUndo(); });
@@ -3921,44 +3605,6 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
             if (fx) m_graphicsView->updateFixture(fx->id());
     };
 
-    // DMX row: move the one fixture, or open the Patch dialog on the selection.
-    auto moveDmx = [this, curFid, dmxUniSpin, dmxAddrSpin, dmxNote, populate, rebuildTree]() {
-        Fixture *fx = m_doc->fixture(*curFid);
-        if (fx == nullptr || !fx->isPatched())
-            return;
-        const quint32 uni = quint32(dmxUniSpin->value() - 1);
-        const quint32 addr = quint32(dmxAddrSpin->value() - 1);
-        if (uni == fx->universe() && addr == fx->address())
-            return;
-        QString why;
-        if (!m_doc->patchFixtures({ Doc::FixturePatch{ fx->id(), uni, addr } }, &why))
-        {
-            // Left showing what was asked for, so the reason reads against it.
-            dmxNote->setText(tr("Not moved: %1").arg(why));
-            dmxNote->show();
-            return;
-        }
-        m_graphicsView->updateFixture(fx->id());
-        rebuildTree();
-        populate();
-    };
-    connect(dmxUniSpin, QOverload<int>::of(&QSpinBox::valueChanged), insp, [moveDmx](int) { moveDmx(); });
-    connect(dmxAddrSpin, QOverload<int>::of(&QSpinBox::valueChanged), insp, [moveDmx](int) { moveDmx(); });
-    connect(dmxMoreBtn, &QToolButton::clicked, insp,
-            [this, dlg, curFid, selectedFids, populate, rebuildTree, refreshMap]() {
-        QList<quint32> ids = selectedFids();
-        if (ids.isEmpty() && *curFid != Fixture::invalidId())
-            ids << *curFid;
-        if (ids.isEmpty())
-            return;
-        PatchInventoryDialog pd(m_doc, ids, dlg);
-        if (pd.exec() == QDialog::Accepted)
-        {
-            refreshMap();
-            rebuildTree();
-            populate();
-        }
-    });
     connect(distBtn, &QPushButton::clicked, tree,
             [view, selectedFids, pushUndo, refreshMap]() {
         pushUndo(); view->distributeOnFace(selectedFids()); refreshMap();
@@ -8847,55 +8493,116 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     // A specific fixture (studio single-fixture path) bypasses the map selection
     // — the group "select-together" would otherwise re-select all members and
     // force the multi editor.
-    QList<MonitorFixtureItem *> items;
+    QList<quint32> fids;
     if (onlyFid != Fixture::invalidId())
-    {
-        if (MonitorFixtureItem *it = m_graphicsView->fixtureItemForId(onlyFid))
-            items << it;
-    }
+        fids << onlyFid;
     else
+        foreach (MonitorFixtureItem *it, m_graphicsView->selectedFixtureItems())
+            fids << it->fixtureID();
+    showFixtureItemEditor(fids);
+}
+
+void Monitor::editFixturesProperties(const QList<quint32> &fids)
+{
+    showFixtureItemEditor(fids);
+}
+
+void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
+{
+    QList<MonitorFixtureItem *> items;
+    QList<quint32> fids;
+    foreach (quint32 fid, fidList)
     {
-        items = m_graphicsView->selectedFixtureItems();
+        if (MonitorFixtureItem *it = m_graphicsView->fixtureItemForId(fid))
+        {
+            items << it;
+            fids << fid;
+        }
     }
     if (items.isEmpty())
         return;
-    // Cancel puts back whatever was tried; OK is one undo step.
+    // Live as it is edited; Cancel puts back whatever was tried; OK is one
+    // undo step.
     RigEditSession edit(this);
 
-    // ---- Multi-selection: shared controls ----
+    // ---- Several fixtures: the same rows, "mixed" where they differ ----
     if (items.count() > 1)
     {
         QDialog dlg(this);
-        dlg.setWindowTitle(tr("Fixture Properties"));
+        dlg.setWindowTitle(tr("Fixture Properties — %n fixtures", "", fids.count()));
         QVBoxLayout *vl = new QVBoxLayout(&dlg);
+        QLabel *head = new QLabel(tr("<b>%1 fixtures.</b> A row they differ on reads "
+                                     "“mixed”; set it, and it is set on all of them.")
+                                  .arg(fids.count()), &dlg);
+        head->setWordWrap(true);
+        vl->addWidget(head);
 
-        vl->addWidget(new QLabel(
-            tr("<b>%1 fixtures selected</b>").arg(items.count())));
+        QGroupBox *box = new QGroupBox(tr("Fixture"), &dlg);
+        QFormLayout *form = new QFormLayout(box);
+        FixtureFields *fields = new FixtureFields(this, form, box);
+        fields->setFixtures(fids, fids.first());
 
-        QGroupBox *rigBox = new QGroupBox(tr("Rig Assignment"), &dlg);
-        QFormLayout *rigForm = new QFormLayout(rigBox);
-
-        QComboBox *mountCb = new QComboBox;
-        // Logical orientation of the device (base direction), not a rig context.
-        mountCb->addItem(tr("Upright (base down)"),     QVariant(int(Truss::FloorMounted)));
-        mountCb->addItem(tr("Sideways (base on side)"), QVariant(int(Truss::SideArm)));
-        mountCb->addItem(tr("Hung (base on top)"),      QVariant(int(Truss::TopHung)));
-        rigForm->addRow(tr("Orientation:"), mountCb);
-
-        QDoubleSpinBox *panZeroSpin = new QDoubleSpinBox;
-        panZeroSpin->setRange(0, 359);
+        QDoubleSpinBox *panZeroSpin = new QDoubleSpinBox(box);
+        panZeroSpin->setObjectName(QStringLiteral("fixtureAim"));
+        panZeroSpin->setMaximum(359);
         panZeroSpin->setSuffix(QString::fromUtf8("°"));
         panZeroSpin->setDecimals(1);
-        rigForm->addRow(tr("Aim — front of device (° from DS):"), panZeroSpin);
-        vl->addWidget(rigBox);
-
-        QGroupBox *transformBox = new QGroupBox(tr("Transform"), &dlg);
-        QFormLayout *transformForm = new QFormLayout(transformBox);
-        QSpinBox *rotSpin = new QSpinBox;
-        rotSpin->setRange(0, 359);
+        form->addRow(tr("Aim — front of device (° from DS):"), panZeroSpin);
+        QDoubleSpinBox *rotSpin = new QDoubleSpinBox(box);
+        rotSpin->setObjectName(QStringLiteral("fixtureIconRotation"));
+        rotSpin->setMaximum(359);
+        rotSpin->setDecimals(0);
         rotSpin->setSuffix(QString::fromUtf8("°"));
-        transformForm->addRow(tr("Icon rotation (visual):"), rotSpin);
-        vl->addWidget(transformBox);
+        form->addRow(tr("Icon rotation (visual):"), rotSpin);
+        vl->addWidget(box);
+
+        auto loadExtras = [this, fids, panZeroSpin, rotSpin]() {
+            const float aim = m_props->fixtureRigProps(fids.first()).panZeroDir;
+            const float rot = m_props->fixtureItem(fids.first(), 0, 0).m_rotation.y();
+            bool aimDiffers = false, rotDiffers = false;
+            foreach (quint32 fid, fids)
+            {
+                aimDiffers = aimDiffers || !qFuzzyCompare(1.0f + m_props->fixtureRigProps(fid).panZeroDir, 1.0f + aim);
+                rotDiffers = rotDiffers || !qFuzzyCompare(1.0f + m_props->fixtureItem(fid, 0, 0).m_rotation.y(), 1.0f + rot);
+            }
+            for (QDoubleSpinBox *sp : { panZeroSpin, rotSpin })
+                sp->blockSignals(true);
+            FixtureFields::spinMixed(panZeroSpin, aimDiffers, 0.0);
+            if (!aimDiffers)
+                panZeroSpin->setValue(double(aim));
+            FixtureFields::spinMixed(rotSpin, rotDiffers, 0.0);
+            if (!rotDiffers)
+                rotSpin->setValue(double(rot));
+            for (QDoubleSpinBox *sp : { panZeroSpin, rotSpin })
+                sp->blockSignals(false);
+        };
+        loadExtras();
+        connect(panZeroSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg,
+                [this, fids, panZeroSpin, loadExtras](double v) {
+            if (FixtureFields::spinIsMixed(panZeroSpin))
+                return;
+            foreach (quint32 fid, fids)
+            {
+                FixtureRigProps rp = m_props->fixtureRigProps(fid);
+                rp.panZeroDir = float(v);
+                m_props->setFixtureRigProps(fid, rp);
+                if (MonitorFixtureItem *fi = m_graphicsView->fixtureItemForId(fid))
+                    fi->setFacing(rp.panZeroDir);
+            }
+            loadExtras();
+        });
+        connect(rotSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg,
+                [this, fids, rotSpin, loadExtras](double v) {
+            if (FixtureFields::spinIsMixed(rotSpin))
+                return;
+            foreach (quint32 fid, fids)
+            {
+                m_props->setFixtureRotation(fid, 0, 0, QVector3D(0, float(v), 0));
+                if (MonitorFixtureItem *fi = m_graphicsView->fixtureItemForId(fid))
+                    fi->setRotation(int(v));
+            }
+            loadExtras();
+        });
 
         QDialogButtonBox *btns = new QDialogButtonBox(
             QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
@@ -8908,18 +8615,8 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
             edit.cancel();
             return;
         }
-
-        for (MonitorFixtureItem *fi : items)
-        {
-            fi->setRotation(rotSpin->value());
-            m_props->setFixtureRotation(fi->fixtureID(), 0, 0,
-                                        QVector3D(0, rotSpin->value(), 0));
-            FixtureRigProps rp = m_props->fixtureRigProps(fi->fixtureID());
-            rp.mountingType = static_cast<Truss::MountingType>(mountCb->currentData().toInt());
-            rp.panZeroDir   = float(panZeroSpin->value());
-            m_props->setFixtureRigProps(fi->fixtureID(), rp);
-        }
         m_doc->setModified();
+        edit.accept();
         return;
     }
 
@@ -8966,18 +8663,6 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     {
         QFormLayout *infoForm = new QFormLayout;
         infoForm->setContentsMargins(0, 2, 0, 4);
-
-        // DMX address
-        QString addrStr = tr("Universe %1 • Ch %2")
-            .arg(fxi ? int(fxi->universe()) + 1 : 0)
-            .arg(fxi ? int(fxi->address()) + 1 : 0);
-        if (fxi && fxi->channels() > 1)
-            addrStr += tr("–%1").arg(int(fxi->address()) + int(fxi->channels()));
-        if (fxi && !fxi->isPatched())
-            addrStr = tr("Unpatched (inventory)");
-        QLabel *addrLabel = new QLabel(addrStr, &dlg);
-        addrLabel->setStyleSheet("color: #aaa; font-size: 10px;");
-        infoForm->addRow(tr("Address:"), addrLabel);
 
         // Live Pan/Tilt readout — only for fixtures that have P/T channels
         QLabel *panLabel  = nullptr;
@@ -9056,70 +8741,21 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     sep2->setFrameShadow(QFrame::Sunken);
     vl->addWidget(sep2);
 
-    // Rig Assignment (at top, per user request)
-    QGroupBox *rigBox = new QGroupBox(tr("Rig Assignment"), &dlg);
-    QFormLayout *rigForm = new QFormLayout(rigBox);
+    /* What it is and how it sits: the studio inspector's rows (FixtureFields),
+       live like the rest of this dialog. */
+    QGroupBox *fixtureBox = new QGroupBox(tr("Fixture"), &dlg);
+    QFormLayout *fixtureForm = new QFormLayout(fixtureBox);
+    FixtureFields *fields = new FixtureFields(this, fixtureForm, fixtureBox);
+    fields->setFixtures({ fxItem->fixtureID() }, fxItem->fixtureID());
+    vl->addWidget(fixtureBox);
 
-    QComboBox *trussCb = new QComboBox;
-    trussCb->addItem(tr("(none)"), QVariant(Truss::invalidId()));
-    for (Truss *t : m_props->trusses())
-        trussCb->addItem(t->name(), t->id());
-    QPushButton *detachTrussBtn = new QPushButton(tr("Remove from Truss"));
-    detachTrussBtn->setToolTip(tr("Detach this fixture from its truss"));
-    QWidget *trussRow = new QWidget;
-    {
-        QHBoxLayout *trussRowL = new QHBoxLayout(trussRow);
-        trussRowL->setContentsMargins(0, 0, 0, 0);
-        trussRowL->addWidget(trussCb, 1);
-        trussRowL->addWidget(detachTrussBtn);
-        rigForm->addRow(tr("Truss:"), trussRow);
-    }
+    // Its mount's fine-tuning, its aim and calibration, testing it.
+    QGroupBox *rigBox = new QGroupBox(tr("Aim & Mount"), &dlg);
+    QFormLayout *rigForm = new QFormLayout(rigBox);
 
     const bool isFeet_fx = (m_props->gridUnits() == MonitorProperties::Feet);
     const double toDisp_fx   = isFeet_fx ? 3.28084 : 1.0;
     const double fromDisp_fx = isFeet_fx ? (1.0 / 3.28084) : 1.0;
-
-    QDoubleSpinBox *offsetSpin = new FeetInchesSpinBox(isFeet_fx);
-    offsetSpin->setRange(-100 * toDisp_fx, 100 * toDisp_fx);
-    offsetSpin->setDecimals(2);
-    rigForm->addRow(tr("Offset along truss:"), offsetSpin);
-
-    // The "Remove from Truss" button (built above) just resets the combo/offset;
-    // the detach is committed on OK where the rig props are written.
-    connect(detachTrussBtn, &QPushButton::clicked, this, [trussCb, offsetSpin]() {
-        trussCb->setCurrentIndex(0);   // (none)
-        offsetSpin->setValue(0.0);
-    });
-
-    // Which side of the truss the fixture hangs on (affects Z in elevation).
-    QComboBox *trussSideCb = new QComboBox;
-    trussSideCb->addItem(tr("Under-hung (below)"), QVariant(int(FixtureRigProps::UnderHung)));
-    trussSideCb->addItem(tr("Top-mounted (above)"), QVariant(int(FixtureRigProps::TopMounted)));
-    trussSideCb->addItem(tr("Centered (on chord)"), QVariant(int(FixtureRigProps::Centered)));
-    trussSideCb->setToolTip(tr("Vertical side of the truss the fixture sits on "
-                               "(shown in Front/Side elevation views)"));
-    rigForm->addRow(tr("Truss side:"), trussSideCb);
-
-    // Horizontal position across the truss: Left / Centered / Right chord. Stays
-    // attached to the truss — only slides sideways across its width.
-    QComboBox *trussCrossCb = new QComboBox;
-    trussCrossCb->addItem(tr("Left"),     -1);
-    trussCrossCb->addItem(tr("Centered"),  0);
-    trussCrossCb->addItem(tr("Right"),    +1);
-    trussCrossCb->setToolTip(tr("Horizontal position across the truss width, "
-                                "perpendicular to its run — Left/Right chord or "
-                                "centred. The fixture stays attached to the truss."));
-    rigForm->addRow(tr("Across truss:"), trussCrossCb);
-
-    QComboBox *mountCb = new QComboBox;
-    // Logical orientation of the device (base direction), not a rig context.
-    mountCb->addItem(tr("Upright (base down)"),     QVariant(int(Truss::FloorMounted)));
-    mountCb->addItem(tr("Sideways (base on side)"), QVariant(int(Truss::SideArm)));
-    mountCb->addItem(tr("Hung (base on top)"),      QVariant(int(Truss::TopHung)));
-    mountCb->setToolTip(tr("Base direction relative to the STAGE floor (gravity), "
-                           "independent of which face it's mounted on. On a moving "
-                           "head, Hung vs Upright inverts pan/tilt."));
-    rigForm->addRow(tr("Orientation:"), mountCb);
 
     // Fine height nudge above/below a structural mount (truss/bar/tower).
     QDoubleSpinBox *heightOffSpin = new FeetInchesSpinBox(isFeet_fx);
@@ -9129,32 +8765,6 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
                                  "mount — e.g. lift a followspot above the truss."));
     rigForm->addRow(tr("Height offset:"), heightOffSpin);
 
-
-    // Deck mount: a fixture standing on top of a platform ("floor mounted").
-    QComboBox *deckCb = new QComboBox;
-    deckCb->addItem(tr("(none)"), QVariant(FixtureRigProps::invalidPlatformId()));
-    for (StagePlatform *p : m_props->platforms())
-        deckCb->addItem(p->name(), p->id());
-    deckCb->setToolTip(tr("Stand this fixture on top of a platform; its height "
-                          "follows the platform's deck."));
-    rigForm->addRow(tr("On platform (deck):"), deckCb);
-
-    QDoubleSpinBox *deckHeightSpin = new FeetInchesSpinBox(isFeet_fx);
-    deckHeightSpin->setRange(-20 * toDisp_fx, 20 * toDisp_fx);
-    deckHeightSpin->setDecimals(2);
-    deckHeightSpin->setToolTip(tr("Height relative to the deck top (0 = sits on the "
-                                  "deck; negative drops it below / under the deck)"));
-    rigForm->addRow(tr("Height above deck:"), deckHeightSpin);
-
-    // Truss and deck mounts are mutually exclusive — picking one clears the other.
-    connect(trussCb, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [trussCb, deckCb](int) {
-        if (trussCb->currentData().toUInt() != Truss::invalidId())
-            deckCb->setCurrentIndex(0);
-    });
-    connect(deckCb, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [trussCb, deckCb](int) {
-        if (deckCb->currentData().toUInt() != FixtureRigProps::invalidPlatformId())
-            trussCb->setCurrentIndex(0);
-    });
 
     QDoubleSpinBox *panZeroSpin = new QDoubleSpinBox;
     panZeroSpin->setRange(0, 359);
@@ -9245,49 +8855,11 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     locateRowLayout->addStretch();
     rigForm->addRow(tr("Identify:"), locateRowWidget);
 
-    /* What makes its light and what it is seen through -- for a fixture
-       whose definition makes light all round or out of LEDs (the studio
-       inspector's rows, here too). */
-    LightControls *lightCtl = nullptr;
-    if (Fixture *lfx = m_doc->fixture(fxItem->fixtureID()))
-    {
-        if (LightControls::relevant(lfx))
-        {
-            lightCtl = new LightControls(rigBox);
-            lightCtl->load(m_doc, lfx);
-            rigForm->addRow(tr("Light:"), lightCtl->lightRow());
-            rigForm->addRow(tr("Glass:"), lightCtl->glassCombo());
-        }
-    }
-
     connect(testModeCb, QOverload<int>::of(&QComboBox::currentIndexChanged), [&](int) {
         testTargetCb->setVisible(testModeCb->currentData().toInt() == 2);
     });
 
-    FixtureRigProps rp = m_props->fixtureRigProps(fxItem->fixtureID());
-    for (int i = 0; i < trussCb->count(); ++i)
-    {
-        if (trussCb->itemData(i).toUInt() == rp.trussId)
-        { trussCb->setCurrentIndex(i); break; }
-    }
-    offsetSpin->setValue(double(rp.trussOffset) * toDisp_fx);
-    mountCb->setCurrentIndex(static_cast<int>(rp.mountingType));
-    trussSideCb->setCurrentIndex(trussSideCb->findData(int(rp.trussMountSide)));
-    trussCrossCb->setCurrentIndex(trussCrossCb->findData(
-        rp.trussCross < 0.0f ? -1 : (rp.trussCross > 0.0f ? +1 : 0)));
-    // Remember the bucketed index this dialog loaded with. Left/Centered/Right
-    // is only a coarse 3-state PROXY for what's actually a continuous value —
-    // a fixture can sit anywhere across a truss via canvas drag (see the
-    // drag-to-any-position truss work) — so Save must only re-encode this
-    // combo into rp.trussCross when the user actually changed it; otherwise a
-    // precisely-dragged fixture gets silently snapped onto one of only 3
-    // discrete positions every time this dialog is opened and accepted, even
-    // for an edit that has nothing to do with truss placement.
-    const int initialTrussCrossIndex = trussCrossCb->currentIndex();
-    for (int i = 0; i < deckCb->count(); ++i)
-        if (deckCb->itemData(i).toUInt() == rp.deckPlatformId)
-        { deckCb->setCurrentIndex(i); break; }
-    deckHeightSpin->setValue(double(rp.deckHeightOffset) * toDisp_fx);
+    const FixtureRigProps rp = m_props->fixtureRigProps(fxItem->fixtureID());
     heightOffSpin->setValue(double(rp.mountZOffset) * toDisp_fx);
     panZeroSpin->setValue(double(rp.panZeroDir));
     panOffsetSpin->setValue(double(rp.panOffsetDeg));
@@ -9297,9 +8869,7 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
 
     // ---- Per-type: show only fields that make sense for THIS fixture ----------
     // Placement is done in the Lighting Studio (drag/drop onto a truss/platform/
-    // bar), so the manual mount selectors here are redundant → show the mount
-    // read-only. Orientation is base-vs-STAGE (gravity), only for a body with a
-    // base (movers/PARs). Pan/tilt cal + test only for movers.
+    // bar); "Mounted on" says where. Pan/tilt cal + test only for movers.
     const bool hasPanCh  = fxi && fxi->channelNumber(QLCChannel::Pan,  QLCChannel::MSB, 0) != QLCChannel::invalid();
     const bool hasTiltCh = fxi && fxi->channelNumber(QLCChannel::Tilt, QLCChannel::MSB, 0) != QLCChannel::invalid();
     const bool isMover = (hasPanCh || hasTiltCh);
@@ -9311,14 +8881,6 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
         if (QWidget *l = rigForm->labelForField(w)) l->setVisible(false);
     };
 
-    QLabel *mountLbl = new QLabel(mountDescription(rp, fxItem->fixtureID()));
-    mountLbl->setStyleSheet("color:#b0b4c0;");
-    rigForm->insertRow(0, tr("Mounted on:"), mountLbl);
-
-    hideRow(trussRow); hideRow(offsetSpin); hideRow(trussSideCb); hideRow(trussCrossCb);
-    hideRow(deckCb); hideRow(deckHeightSpin);
-    fillOrientationCombo(mountCb, rp);             // constrain options to the mount
-    if (isStrip) hideRow(mountCb);                 // a strip has no base orientation
     // Height offset only makes sense on a truss / bar / tower mount.
     const bool structMount = rp.trussId != Truss::invalidId()
         || rp.pipeId != Pipe::invalidId() || rp.towerId != Tower::invalidId();
@@ -9508,17 +9070,20 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     posRow->addLayout(posForm, 1);
     const QString unit = isFeet_fx ? tr("ft") : tr("m");
 
-    QDoubleSpinBox *xSpin = new QDoubleSpinBox;
+    // X / Y on the plot, as every length is entered (the show's units).
+    QDoubleSpinBox *xSpin = new FeetInchesSpinBox(isFeet_fx);
+    xSpin->setObjectName(QStringLiteral("fixtureX"));
     xSpin->setMaximum(m_graphicsView->gridSize().width());
-    xSpin->setSingleStep(0.1); xSpin->setDecimals(3); xSpin->setSuffix(unit);
+    xSpin->setSingleStep(0.1); xSpin->setDecimals(2);
     xSpin->setValue(fxItem->realPosition().x() * toDisp_fx / 1000.0);
-    posForm->addRow(tr("Horizontal:"), xSpin);
+    posForm->addRow(tr("X:"), xSpin);
 
-    QDoubleSpinBox *ySpin = new QDoubleSpinBox;
+    QDoubleSpinBox *ySpin = new FeetInchesSpinBox(isFeet_fx);
+    ySpin->setObjectName(QStringLiteral("fixtureY"));
     ySpin->setMaximum(m_graphicsView->gridSize().height());
-    ySpin->setSingleStep(0.1); ySpin->setDecimals(3); ySpin->setSuffix(unit);
+    ySpin->setSingleStep(0.1); ySpin->setDecimals(2);
     ySpin->setValue(fxItem->realPosition().y() * toDisp_fx / 1000.0);
-    posForm->addRow(tr("Vertical:"), ySpin);
+    posForm->addRow(tr("Y:"), ySpin);
 
     QSpinBox *rotSpin = new QSpinBox;
     rotSpin->setRange(0, 359);
@@ -9528,7 +9093,7 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
 
     /* Where the fixture actually ENDS UP, in stage coordinates.
      *
-       Horizontal/Vertical above are the fixture's own plot XY, which for a
+       X / Y above are the fixture's own plot XY, which for a
        MOUNTED fixture is not where it is: the position is derived from the
        structure, and the only hint of the height was "10.0 ft along" buried in
        the Rig Assignment text -- an offset along a tower, not a height you
@@ -9549,38 +9114,12 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     refreshStagePos();
     posForm->addRow(tr("Stage position:"), stagePosLbl);
 
-    // A linear fixture (strip / bar / tape) is oriented by its FACE (which surface
-    // it lies on) and run ANGLE — not an icon rotation. Show those instead.
-    QComboBox *faceCbDetail = nullptr;
-    QSpinBox  *angleSpinDetail = nullptr;
-    QSpinBox  *tiltSpinDetail = nullptr;
+    // A linear fixture (strip / bar / tape) is oriented by its Face and Angle
+    // (the Fixture rows above) — not an icon rotation.
     if (isStrip)
     {
         rotSpin->setVisible(false);
         if (QWidget *l = posForm->labelForField(rotSpin)) l->setVisible(false);
-        faceCbDetail = new QComboBox;
-        faceCbDetail->addItems({ tr("Top"), tr("Bottom"), tr("Front (downstage)"), tr("Back (upstage)"), tr("Stage left"), tr("Stage right") });
-        faceCbDetail->setCurrentIndex(int(rp.face()));
-        posForm->addRow(tr("Face:"), faceCbDetail);
-        angleSpinDetail = new QSpinBox;
-        angleSpinDetail->setRange(-180, 180); angleSpinDetail->setSuffix(QString::fromUtf8("°"));
-        angleSpinDetail->setValue(int(rp.studioAngle));
-        angleSpinDetail->setToolTip(tr("Run direction ON that face: 0° = along the "
-                                       "face's horizontal axis (flat/level); 90° = vertical."));
-        posForm->addRow(tr("Angle (run):"), angleSpinDetail);
-
-        /* Roll about the bar's own length -- the same field the Lighting Studio
-           inspector sets. Without it here, a bar tipped toward the cast showed
-           no sign of it in the one dialog that claims to describe the fixture. */
-        tiltSpinDetail = new QSpinBox;
-        tiltSpinDetail->setRange(-180, 180);
-        tiltSpinDetail->setSuffix(QString::fromUtf8("°"));
-        tiltSpinDetail->setValue(qRound(rp.studioTilt));
-        tiltSpinDetail->setToolTip(tr("Tip the bar about its own length — e.g. a bar "
-                                      "lying in a step angled up toward the cast. "
-                                      "Positive tips it upstage. Angle (run) turns it "
-                                      "flat within its face instead."));
-        posForm->addRow(tr("Tilt:"), tiltSpinDetail);
     }
 
     // Live facing preview: how this fixture's orientation reads on the 2D stage
@@ -9599,12 +9138,10 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
         preview->setFace(rp.studioMount);   // fixed fixtures face by their mount face
         preview->setFacing(panZeroSpin->value());
         preview->setIconRotation(rotSpin->value());
-        if (angleSpinDetail)
-            connect(angleSpinDetail, QOverload<int>::of(&QSpinBox::valueChanged),
-                    [preview](int) { preview->update(); });
-        if (faceCbDetail)
-            connect(faceCbDetail, QOverload<int>::of(&QComboBox::currentIndexChanged),
-                    [preview](int f) { preview->setFace(f / 2); });   // its plane
+        connect(fields, &FixtureFields::edited, preview, [this, preview, fxId_dlg]() {
+            preview->setFace(m_props->fixtureRigProps(fxId_dlg).studioMount);
+            preview->update();
+        });
         posRow->addWidget(preview, 0, Qt::AlignTop);
 
         // The pan-zero control lives in the Rig Assignment block below; keep the
@@ -9619,31 +9156,50 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     const int rigIdx = vl->indexOf(rigBox);
     vl->insertWidget(rigIdx >= 0 ? rigIdx : vl->count(), posBox);
 
-    // Gel color
-    // For an RGB fixture, "gel" is meaningless (it makes its own colour); this
-    // swatch is only its UNLIT map colour — label it so.
-    const bool hasRGB = fxi && fxi->channelNumber(QLCChannel::Red, QLCChannel::MSB, 0) != QLCChannel::invalid();
-    QGroupBox *gelBox = new QGroupBox(hasRGB ? tr("Map colour (2D display)") : tr("Gel Colour"), &dlg);
-    if (hasRGB)
-        gelBox->setToolTip(tr("Only how this RGB fixture is drawn on the 2D map when "
-                              "unlit — it makes its own colour from DMX."));
-    QHBoxLayout *gelHl = new QHBoxLayout(gelBox);
-    QColor gelColor = fxItem->getColor();
-    ColourSwatchButton *gelBtn = new ColourSwatchButton(gelColor, tr("Gel colour"));
-    gelBtn->setResetColour(QColor());           // Reset: no gel
-    gelBtn->setObjectName(QStringLiteral("gelColour"));
-    gelHl->addWidget(new QLabel(tr("Colour:")));
-    gelHl->addWidget(gelBtn);
-    gelHl->addStretch();
-    vl->addWidget(gelBox);
-
-    // Live, like every rig dialog: the plot shows the gel; Cancel puts it back.
-    connect(gelBtn, &ColourSwatchButton::colourChanged, &dlg, [&](const QColor &c) {
-        gelColor = c;
-        fxItem->setGelColor(gelColor);
-        m_props->setFixtureGelColor(fxItem->fixtureID(), 0, 0, gelColor);
-        fxItem->slotUpdateValues();
+    // A Fixture-row edit: running scenes recompute, the stage position and a
+    // running test follow.
+    connect(fields, &FixtureFields::edited, &dlg, [&]() {
+        flushSceneCaches();
+        refreshTest();
+        refreshStagePos();
     });
+
+    // Live, like every rig dialog: position, icon rotation, height offset.
+    auto applyPosition = [&]() {
+        const QPointF newPos(xSpin->value() * fromDisp_fx * 1000.0, ySpin->value() * fromDisp_fx * 1000.0);
+        fxItem->setPos(m_graphicsView->realPositionToPixels(newPos.x(), newPos.y()));
+        fxItem->setRealPosition(newPos);
+        m_props->setFixturePosition(fxId_dlg, 0, 0, QVector3D(newPos.x(), newPos.y(), 0));
+        refreshStagePos();
+    };
+    for (QDoubleSpinBox *sp : { xSpin, ySpin })
+        connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg, [&](double) { applyPosition(); });
+    connect(rotSpin, QOverload<int>::of(&QSpinBox::valueChanged), &dlg, [&](int v) {
+        fxItem->setRotation(v);
+        m_props->setFixtureRotation(fxId_dlg, 0, 0, QVector3D(0, v, 0));
+    });
+    connect(heightOffSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg, [&](double v) {
+        FixtureRigProps live = m_props->fixtureRigProps(fxId_dlg);
+        live.mountZOffset = float(v * fromDisp_fx);
+        m_props->setFixtureRigProps(fxId_dlg, live);
+        m_graphicsView->updateFixture(fxId_dlg);
+        flushSceneCaches();
+        refreshStagePos();
+    });
+    /* The name when it is left, not at every key: another fixture's name is
+       refused, said once. */
+    auto applyName = [&]() {
+        if (fxi == nullptr || nameEdit == nullptr)
+            return;
+        const QString newName = nameEdit->text().trimmed();
+        if (!newName.isEmpty() && newName != fxi->name()
+            && !AppUtil::refuseTakenFixtureName(this, m_doc, fxi->id(), newName))
+        {
+            fxi->setName(newName);
+            m_doc->setModified();
+        }
+    };
+    connect(nameEdit, &QLineEdit::editingFinished, &dlg, [&]() { applyName(); });
 
     // DMX Controls: Reset button (sends the fixture's Reset capability value)
     if (fxi && fxi->fixtureMode())
@@ -9769,153 +9325,10 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
         return;
     }
 
-    // Commit position
-    QPointF newPos(xSpin->value() * fromDisp_fx * 1000.0, ySpin->value() * fromDisp_fx * 1000.0);
-    fxItem->setPos(m_graphicsView->realPositionToPixels(newPos.x(), newPos.y()));
-    fxItem->setRealPosition(newPos);
-    m_props->setFixturePosition(fxItem->fixtureID(), 0, 0,
-                                QVector3D(newPos.x(), newPos.y(), 0));
-
-    // Commit rotation
-    fxItem->setRotation(rotSpin->value());
-    m_props->setFixtureRotation(fxItem->fixtureID(), 0, 0,
-                                QVector3D(0, rotSpin->value(), 0));
-
-    // Commit gel color
-    fxItem->setGelColor(gelColor);
-    m_props->setFixtureGelColor(fxItem->fixtureID(), 0, 0, gelColor);
-    fxItem->slotUpdateValues();
-
-    // Stop the test source before committing (ensure clean DMX handoff)
+    // Everything is applied already; the name may still be in its field.
     testSrc.reset();
-
-    // The name first: renaming a Fixture tells every view (plot, Layers, the
-    // Fixture Manager, the Programming tab, the structure editors).
-    if (fxi != nullptr && nameEdit != nullptr)
-    {
-        const QString newName = nameEdit->text().trimmed();
-        // Another fixture's name is refused (said so); the rest still applies.
-        if (!newName.isEmpty() && newName != fxi->name()
-            && !AppUtil::refuseTakenFixtureName(this, m_doc, fxi->id(), newName))
-        {
-            fxi->setName(newName);
-            m_doc->setModified();
-        }
-    }
-
-    // Commit rig props — START from the EXISTING rig so studio-managed mounts
-    // (pipe / tower / riser / studio-frame + studioMount/Angle/groupLocal) are
-    // PRESERVED; this editor only overwrites the truss/deck + calibration fields.
-    FixtureRigProps newRp = m_props->fixtureRigProps(fxItem->fixtureID());
-    newRp.trussId       = trussCb->currentData().toUInt();
-    newRp.trussOffset   = float(offsetSpin->value() * fromDisp_fx);
-    newRp.mountingType  = static_cast<Truss::MountingType>(mountCb->currentData(Qt::UserRole).toInt());
-    newRp.trussMountSide = trussSideCb->currentData().toInt();
-    // The mount-constrained Orientation also sets the bar side (on-top/under/side).
-    { const int side = mountCb->currentData(Qt::UserRole + 1).toInt();
-      if (side >= 0) newRp.trussMountSide = side; }
-    // Across-truss position: Left/Right map to ± half the selected truss width
-    // (onto a chord); Centered = 0. Only touched when the user actually
-    // changed the selection (see initialTrussCrossIndex above) — otherwise
-    // newRp.trussCross keeps whatever continuous value canvas dragging last
-    // set, instead of being re-snapped to one of these 3 discrete positions
-    // on every unrelated save.
-    if (trussCrossCb->currentIndex() != initialTrussCrossIndex)
-    {
-        const int crossSel = trussCrossCb->currentData().toInt();
-        float halfW = 0.15f;   // fallback ≈ half a 12" truss
-        if (Truss *ct = m_props->truss(newRp.trussId))
-            halfW = ct->width() * 0.5f;
-        newRp.trussCross = float(crossSel) * halfW;
-    }
-    newRp.deckPlatformId = deckCb->currentData().toUInt();
-    newRp.deckHeightOffset = float(deckHeightSpin->value() * fromDisp_fx);
-    newRp.mountZOffset = float(heightOffSpin->value() * fromDisp_fx);
-    if (lightCtl != nullptr)
-        lightCtl->store(m_doc->fixture(fxItem->fixtureID()), newRp);
-    newRp.panZeroDir    = float(panZeroSpin->value());
-    newRp.panOffsetDeg  = float(panOffsetSpin->value());
-    newRp.tiltOffsetDeg = float(tiltOffsetSpin->value());
-    newRp.panInvert     = panInvertCb->isChecked();
-    newRp.tiltInvert    = tiltInvertCb->isChecked();
-    // A mover/PAR has no Face control (only a linear fixture does, below) to
-    // ever move studioMount off its stray Front/face default, so a fixture
-    // just mounted here onto a horizontal truss/pipe/deck renders standing
-    // upright no matter what Orientation says ("fixture set as underhung ..
-    // visually upright"). Apply the same correction the load path applies,
-    // right now, so the canvas reflects THIS mount immediately; an explicit
-    // Face choice below (linear fixtures only) still overrides it.
-    m_props->repairMountPlane(newRp);
-    // Only a CHANGED face is applied: setting it also marks it chosen and, on
-    // the outside of a truss, moves the fixture to that side.
-    if (faceCbDetail && faceCbDetail->currentIndex() != int(rp.face()))
-        m_props->setFixtureFace(newRp, FixtureRigProps::Face(faceCbDetail->currentIndex()));
-    if (angleSpinDetail) newRp.studioAngle = float(angleSpinDetail->value());
-    if (tiltSpinDetail)  newRp.studioTilt  = float(tiltSpinDetail->value());
-    // Deck-mounting: default the fixture's Z to the platform top on first
-    // assignment so it "sits on" the deck (the editor height is an offset above).
-    m_props->setFixtureRigProps(fxItem->fixtureID(), newRp);
-    if (newRp.onDeck())
-        m_graphicsView->updateFixture(fxItem->fixtureID());
-
-    // Flush fader cache in any running scene that contains this fixture
-    // (either as a fixed target or inside a fixture group) so target-geometry
-    // recomputes with the new rig props on the next tick.
-    const quint32 fxId = fxItem->fixtureID();
-    foreach (Function *fn, m_doc->functions())
-    {
-        Scene *sc = qobject_cast<Scene *>(fn);
-        if (!sc || !sc->isRunning()) continue;
-
-        // Fixed channel values
-        for (const SceneValue &sv : sc->values())
-        {
-            if (sv.fxi == fxId) { sc->resetRuntime(); goto nextScene; }
-        }
-        // Fixed fixture targets (no baked values but fixture-level membership)
-        if (sc->fixtures().contains(fxId)) { sc->resetRuntime(); goto nextScene; }
-        // Dynamic group targets
-        {
-        foreach (quint32 gid, sc->fixtureGroups())
-        {
-            FixtureGroup *grp = m_doc->fixtureGroup(gid);
-            if (grp && grp->fixtureList().contains(fxId))
-            { sc->resetRuntime(); goto nextScene; }
-        }
-        }
-        nextScene:;
-    }
-
-    // Update bound state and snap to truss if binding changed
-    bool nowBound = newRp.trussId != Truss::invalidId();
-    fxItem->setBoundToTruss(nowBound);
-    if (nowBound && (rp.trussId != newRp.trussId || rp.trussOffset != newRp.trussOffset))
-    {
-        Truss *t = m_props->truss(newRp.trussId);
-        if (t)
-        {
-            // fixtureRigPosition(), not a raw t->positionAt() -- the latter is
-            // the truss CENTERLINE only, ignoring trussCross entirely, which
-            // would silently recentre an off-centre fixture back onto the
-            // centerline on every offset edit. setFixtureRigProps(newRp) just
-            // ran above, so this reads the JUST-STORED rig (cross included)
-            // via the same authoritative derivation aimsolver/effectinstance
-            // already use, rather than duplicating a narrower version of it.
-            QVector3D wp = m_props->fixtureRigPosition(fxItem->fixtureID());
-            QPointF tp(wp.x() * 1000.0, wp.y() * 1000.0);
-            // Centre the icon on the truss line (see MonitorGraphicsView::halfIcon).
-            const QPointF tpPx = m_graphicsView->realPositionToPixels(tp.x(), tp.y());
-            fxItem->setPos(tpPx.x() - fxItem->cellSize().width() / 2.0,
-                           tpPx.y() - fxItem->cellSize().height() / 2.0);
-            fxItem->setRealPosition(tp);
-            m_props->setFixturePosition(fxItem->fixtureID(), 0, 0,
-                                        QVector3D(tp.x(), tp.y(), 0));
-        }
-    }
-    else if (!nowBound)
-    {
-        fxItem->setEscapeMode(false);
-    }
-
+    applyName();
+    flushSceneCaches();
     m_doc->setModified();
+    edit.accept();
 }
