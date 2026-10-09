@@ -142,6 +142,9 @@ private slots:
     void anInspectorEditIsOneUndoStep();
     void fixturePropertiesForSeveralIsMixedAndLive();
     void aPersonsHeightIsSetInTheTargetDialog();
+    /** "can we have the crosshairs hover give H, V, and Z" -- the point under
+     *  the pointer, exact in every view, from the depth buffer. */
+    void theCrosshairsSayWhereThePointerIs();
     void hangersAreRiggingCopiedToEveryTower();
     void theSplitWizardOffersAViewAndKeepsAnExistingGroup();
     /** "I can't click on any side arrow to open any of the groups": an

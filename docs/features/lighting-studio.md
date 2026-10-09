@@ -60,6 +60,14 @@ structure's mounted fixtures cover more than 40% of its on-screen footprint
 computed per structure, per view: the same rig can show individual fixtures
 from the Top but a badge from the Front.
 
+**The crosshair reads H / V / Z.** Hover anywhere in a structure editor or
+the Rig Overview: the readout gives **H** (across the stage, stage left
+positive), **V** (up/downstage, downstage positive) and **Z** (height above
+the floor) of whatever is under the pointer — a person's head, a riser's top,
+a truss — exactly, in every view including the angled one. Over empty floor
+at an angle it reads the floor there "(floor)"; in a flat view over nothing,
+the two coordinates that view has, the third shown as "—".
+
 ### Angled — the free 3D view
 
 ![Rig Overview: the whole rig in a free 45° 3D view](../images/lighting-studio-rig-overview-3d.png)

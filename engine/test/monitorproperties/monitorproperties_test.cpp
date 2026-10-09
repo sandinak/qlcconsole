@@ -1535,12 +1535,17 @@ void MonitorProperties_Test::targetKindsAndAimPoint()
              "a Person should be aimed at chest height above what it stands on "
              "without the caller having to ask");
 
-    /* ...and that chest height is the follow-spot subject height: change it
-       and the person moves with it, figure and all. */
+    /* ...and that chest is 80% of the person's own height: the follow-spot
+       aim height does not size them ("the target is 5'4 .. I STILL see Z for
+       the top of that head at 8.7 feet"). */
     mp.setAimSubjectHeight(1.6f);
-    QVERIFY2(qAbs(double(mp.targetAimPoint(t).z()) - 2.1) < 0.01,
-             "a Person ignored a change to the follow-spot subject height");
-    QVERIFY(qAbs(double(mp.targetFigureHeight(t)) - 2.0) < 0.01);
+    QVERIFY2(qAbs(double(mp.targetAimPoint(t).z()) - 1.9) < 0.01,
+             "the follow-spot aim height moved a Person");
+    QVERIFY(qAbs(double(mp.targetFigureHeight(t)) - 1.75) < 0.01);
+    t->setPersonHeight(1.626f);                                    // 5'4"
+    QVERIFY(qAbs(double(mp.targetFigureHeight(t)) - 1.626) < 0.001);
+    QVERIFY(qAbs(double(mp.targetAimPoint(t).z()) - (0.5 + 1.626 * 0.8)) < 0.01);
+    t->setPersonHeight(-1.0f);
     mp.setAimSubjectHeight(1.4f);
 
     /* A drum kit is lower than a vocalist -- the whole point of having kinds
@@ -2090,9 +2095,10 @@ void MonitorProperties_Test::aPersonIsAsTallAsTheirHeight()
     t->setKind(StageTarget::Kind::Person);
     t->setX(1.0f); t->setY(0.5f); t->setZ(0.610f);
 
-    // No height given: as before -- aimed at the subject height, drawn round it.
-    QCOMPARE(mp.targetAimHeight(t, true), 1.524f);
-    QVERIFY(qAbs(mp.targetFigureHeight(t) - 1.905f) < 0.001f);
+    // No height given: a usual one (5'9"), aimed at its chest -- the follow-
+    // spot aim height (5'0" here) never sizes a person.
+    QCOMPARE(mp.targetFigureHeight(t), 1.75f);
+    QVERIFY(qAbs(mp.targetAimHeight(t, true) - 1.4f) < 0.001f);
 
     // 5'4": drawn 5'4", aimed at the chest, the deck under them.
     t->setPersonHeight(1.626f);

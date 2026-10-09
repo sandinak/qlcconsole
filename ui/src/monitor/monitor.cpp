@@ -5216,7 +5216,7 @@ void Monitor::slotAddPerson()
 {
     StageTarget *t = m_props->addStageTarget();
     t->setKind(StageTarget::Kind::Person);
-    t->setPersonHeight(1.75f);          // drawn this tall, aimed at its chest
+    t->setPersonHeight(StageTarget::defaultPersonHeight());   // drawn this tall, aimed at its chest
 
     /* Numbered among the people, not among the targets: "Person 1" next to
        "Target 4" is how a choir ends up impossible to read. */
@@ -5282,10 +5282,12 @@ void Monitor::slotEditTarget(quint32 tid)
     QDoubleSpinBox *subjSpin = new FeetInchesSpinBox(isFeet_t, &dlg);
     subjSpin->setRange(0, isFeet_t ? 32.8 : 10.0); subjSpin->setDecimals(2);
     subjSpin->setValue(double(m_props->aimSubjectHeight()) * toDisp_t);
-    subjSpin->setToolTip(tr("Follow-spot subject height above the platform/deck "
-                            "(overrides the target Z when a follow spot drives the "
-                            "fixture). ~1.4 m hits the chest."));
-    form->addRow(tr("Follow-spot subject height:"), subjSpin);
+    subjSpin->setToolTip(tr("Where a follow spot aims above the platform/deck -- a "
+                            "chest, not how tall anyone is (overrides the target Z "
+                            "when a follow spot drives the fixture). ~1.4 m hits the "
+                            "chest. A Person is aimed at 80% of its own Height "
+                            "instead."));
+    form->addRow(tr("Follow-spot aim height (chest):"), subjSpin);
 
     /* WHAT this target is. A kind changes where light is aimed and what is
        drawn at the point -- a drum kit is not a vocalist, and neither is a
@@ -5304,15 +5306,12 @@ void Monitor::slotEditTarget(quint32 tid)
     form->addRow(tr("Subject:"), kindCombo);
 
     /* How tall a Person is: drawn this tall, and aimed at the chest (80% of
-       it). Left at its lowest, the follow-spot subject height is the aim
-       point and the figure is drawn round it -- what a person was before it
-       had a height. */
+       it). */
     QDoubleSpinBox *personSpin = new FeetInchesSpinBox(isFeet_t, &dlg);
     personSpin->setObjectName(QStringLiteral("personHeight"));
-    personSpin->setRange(0, isFeet_t ? 9.8 : 3.0);
+    personSpin->setRange(0.5 * toDisp_t, 3.0 * toDisp_t);
     personSpin->setDecimals(2);
-    personSpin->setSpecialValueText(tr("from the subject height"));
-    personSpin->setValue(t->hasPersonHeight() ? double(t->personHeight()) * toDisp_t : 0.0);
+    personSpin->setValue(double(t->effectivePersonHeight()) * toDisp_t);
     personSpin->setToolTip(tr("How tall this person is. They are drawn this tall, and "
                               "light is aimed at their chest -- 80% of it."));
     form->addRow(tr("Height:"), personSpin);
@@ -5391,16 +5390,10 @@ void Monitor::slotEditTarget(quint32 tid)
         if (ovrChk->isChecked() == false)
             ovrSpin->setValue(k != StageTarget::Kind::Person
                               ? double(StageTarget::defaultAimHeight(k)) * toDisp_t
-                              : personSpin->value() > 0.0
-                              ? personSpin->value() * double(StageTarget::chestShare())
-                              : subjSpin->value());
+                              : personSpin->value() * double(StageTarget::chestShare()));
     };
     connect(kindCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             &dlg, [&](int) {
-        // Made a person: one of a usual height, to be told otherwise.
-        if (StageTarget::Kind(kindCombo->currentData().toInt()) == StageTarget::Kind::Person
-            && personSpin->value() <= 0.0)
-            personSpin->setValue(1.75 * toDisp_t);
         syncRows();
     });
     connect(personSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
@@ -5435,7 +5428,8 @@ void Monitor::slotEditTarget(quint32 tid)
         m_props->notifyStageTargetsChanged();
 
         t->setKind(StageTarget::Kind(kindCombo->currentData().toInt()));
-        t->setPersonHeight(personSpin->value() > 0.0 ? float(personSpin->value() * fromDisp_t) : -1.0f);
+        if (t->kind() == StageTarget::Kind::Person)
+            t->setPersonHeight(float(personSpin->value() * fromDisp_t));
         const QString bound = boundCombo->currentData().toString();
         if (t->kind() == StageTarget::Kind::Structure && bound.isEmpty() == false)
         {

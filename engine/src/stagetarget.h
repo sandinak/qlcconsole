@@ -130,12 +130,17 @@ public:
     bool  hasAimHeightOverride() const { return m_aimHeightOverride >= 0.0f; }
 
     /** How tall a Person is, in metres, standing on whatever is under it:
-     *  the figure is drawn this tall, and is aimed at its chest (aimPoint()
-     *  of it). Negative = not given: the show's follow-spot subject height is
-     *  the aim point and the figure is drawn round it, as before. */
+     *  the figure is drawn this tall, and is aimed at its chest
+     *  (chestShare() of it). Negative = not given: defaultPersonHeight(). The
+     *  follow-spot aim height never sizes a person -- read as "how tall", it
+     *  drew a 5'4" entry as a 6'8" figure. */
     float personHeight() const { return m_personHeight; }
     void  setPersonHeight(float m) { m_personHeight = m; }
     bool  hasPersonHeight() const { return m_personHeight > 0.0f; }
+    /** personHeight(), or a usual height (1.75 m) when none is given. */
+    float effectivePersonHeight() const
+    { return hasPersonHeight() ? m_personHeight : defaultPersonHeight(); }
+    static constexpr float defaultPersonHeight() { return 1.75f; }
 
     /** Where on a person light is aimed, as a share of their height: the
      *  chest. */

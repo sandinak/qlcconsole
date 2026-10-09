@@ -17304,3 +17304,60 @@ void Monitor_Test::aPersonsHeightIsSetInTheTargetDialog()
     QVERIFY(qAbs(props->stageTarget(id)->personHeight() - 1.63f) < 0.001f);
     props->removeStageTarget(id);
 }
+
+void Monitor_Test::theCrosshairsSayWhereThePointerIs()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Feet);
+    StagePlatform *riser = props->addPlatform();
+    riser->setOriginX(0.0f); riser->setOriginY(0.0f);
+    riser->setWidth(2.438f); riser->setDepth(1.219f); riser->setHeight(0.610f);
+    StageTarget *person = props->addStageTarget();
+    person->setKind(StageTarget::Kind::Person);
+    person->setPersonHeight(1.626f);                    // 5'4"
+    person->setX(1.6f); person->setY(0.6f); person->setZ(0.610f);
+    {
+        StructureStudioView view(doc, StructureStudioView::StageKind, 0);
+        view.resize(900, 640);
+        view.reload();
+        auto near = [](const QVector3D &a, const QVector3D &b, float tol) {
+            return (a - b).length() < tol;
+        };
+
+        // At an angle, on the riser's top: that point, all three.
+        view.setAngledView(20.0, 25.0);
+        view.setPlane(StructureStudioView::Angled);
+        view.grab();                                    // paint: fills the depth buffer
+        int known = 0;
+        bool onSurface = false;
+        const QVector3D top(0.4f, 0.3f, 0.610f);
+        QVector3D w = view.worldAt(view.w2s(top), &known, &onSurface);
+        QVERIFY(onSurface);
+        QCOMPARE(known, 7);
+        QVERIFY2(near(w, top, 0.06f), qPrintable(QString("read %1,%2,%3")
+                 .arg(double(w.x())).arg(double(w.y())).arg(double(w.z()))));
+
+        // Over nothing at an angle: the floor under the pointer.
+        const QVector3D floor(6.0f, 4.0f, 0.0f);
+        w = view.worldAt(view.w2s(floor), &known, &onSurface);
+        QVERIFY(!onSurface);
+        QVERIFY(near(w, floor, 0.06f));
+
+        // From the front, on the person's chest: 2' of riser and 80% of 5'4".
+        view.setPlane(StructureStudioView::Front);
+        view.grab();
+        const QVector3D chest(1.6f, 0.6f, 0.610f + 1.626f * 0.72f);
+        w = view.worldAt(view.w2s(chest), &known, &onSurface);
+        QVERIFY2(onSurface, "the person is not under the pointer");
+        QVERIFY2(qAbs(w.z() - chest.z()) < 0.05f && qAbs(w.x() - chest.x()) < 0.05f,
+                 qPrintable(QString("read %1,%2,%3").arg(double(w.x())).arg(double(w.y()))
+                            .arg(double(w.z()))));
+        // Just over the head: not the person -- a flat view says H and Z only.
+        w = view.worldAt(view.w2s(QVector3D(1.6f, 0.6f, 0.610f + 1.626f + 0.15f)), &known, &onSurface);
+        QVERIFY(!onSurface);
+        QCOMPARE(known, 1 | 4);
+        QVERIFY(qAbs(w.z() - (0.610f + 1.626f + 0.15f)) < 0.03f);
+    }
+    delete doc;
+}

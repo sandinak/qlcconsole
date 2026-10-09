@@ -342,7 +342,12 @@ private:
         double    radius = 2.0;  ///< Dot
         QString   text;          ///< Label
         bool      light = false; ///< Poly of LIGHT: added, not layered (see ZRaster::light)
+        /** A see-through surface that is still a thing -- a deck top, a sock:
+         *  what the pointer reads when it is over it (worldAt()). */
+        bool      pickable = false;
     };
+    /** Set while drawing structures: their see-through faces are pickable. */
+    mutable bool m_emitPickable = false;
     mutable class ZRaster *m_z = nullptr;   ///< the depth-buffered target
     int      m_supersample = 2;   ///< a flat rasteriser has no AA of its own
     int      m_renderThreads = 0; ///< 0 = one per core
@@ -514,6 +519,14 @@ private:
     double shelfLabelsWidth() const;   ///< feature width/height labels (ft/m)
     void drawRulers(QPainter &p) const;        ///< height (0=floor) + width (0=centre) rulers
     void drawCursorReadout(QPainter &p) const; ///< crosshair + live height/offset at the pointer
+public:
+    /** Where in the world the pointer at @p px is, in metres. Over something
+     *  drawn, the point on its visible surface (from the depth buffer -- exact
+     *  in every view, the angled one too): @p known is all three. Over nothing,
+     *  what the view can say: the floor under it at an angle, the two axes a
+     *  flat view keeps (the third left out of @p known: bit 0 X, 1 Y, 2 Z). */
+    QVector3D worldAt(const QPointF &px, int *known, bool *onSurface) const;
+private:
     double structureCentreA() const;           ///< plane-horizontal centre of the structure (metres)
     double structureTopZ() const;              ///< highest point of the structure (metres, for the max marker)
     quint32 hitTestFixture(const QPointF &px) const;

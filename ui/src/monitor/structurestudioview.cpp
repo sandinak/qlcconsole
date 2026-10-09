@@ -55,6 +55,8 @@
 #include "fixturegroup.h"
 #include "function.h"
 #include "zraster.h"
+#include <QScopedValueRollback>
+#include <array>
 #include <QVarLengthArray>
 
 /* The flat grey a fixture HOUSING is drawn in, before room light. Matches the
@@ -1426,6 +1428,7 @@ void StructureStudioView::emitPoly(const QPolygonF &poly, double depth, const QC
     {
         DrawOp o; o.kind = DrawOp::Poly; o.depth = depth; o.poly = poly;
         o.fill = fill; o.pen = pen; o.penWidth = penW;
+        o.pickable = m_emitPickable;
         if (vertexDepths.size() == poly.size())
             o.zs = vertexDepths;
         if (vertexAlphas.size() == poly.size())
@@ -1544,7 +1547,7 @@ void StructureStudioView::rasterOp(const DrawOp &o, bool depthWrite,
         if (o.fill.isValid())
             m_z->poly(o.poly.constData(), zs.constData(), n, o.fill, depthWrite,
                       (o.alphas.size() == n) ? o.alphas.constData() : nullptr,
-                      rowFrom, rowTo);
+                      rowFrom, rowTo, o.pickable);
         if (o.pen.isValid() && n >= 2)
         {
             /* The outline, edge by edge, each carrying its own two depths. A
@@ -1911,6 +1914,8 @@ void StructureStudioView::drawSolidBox(QPainter &p, const QVector3D corner[8],
                                        int topAlpha, bool ambientLit,
                                        double depthBias) const
 {
+    // A deck top or a fabric is see-through and still where the pointer is.
+    QScopedValueRollback<bool> pickable(m_emitPickable, true);
     const int (*faces)[4] = BOX_FACES;
     static const int shade[6] = { 118, 62, 92, 78, 100, 85 };   // % brightness
 
@@ -4084,6 +4089,8 @@ void StructureStudioView::emitPatternedFace(QPainter &p, const QVector3D q[4], c
 
 void StructureStudioView::drawTowerFaces(QPainter &p) const
 {
+    // A deck top or a fabric is see-through and still where the pointer is.
+    QScopedValueRollback<bool> pickable(m_emitPickable, true);
     if (m_plane != Angled)
         return;
     MonitorProperties *props = m_doc->monitorProperties();
@@ -4198,6 +4205,8 @@ QVector<QVector3D> StructureStudioView::sockGlow(Truss *t, int segments) const
 
 void StructureStudioView::drawSocks(QPainter &p) const
 {
+    // A deck top or a fabric is see-through and still where the pointer is.
+    QScopedValueRollback<bool> pickable(m_emitPickable, true);
     if (m_plane != Angled)
         return;
     MonitorProperties *props = m_doc->monitorProperties();
@@ -6525,6 +6534,81 @@ void StructureStudioView::drawRulers(QPainter &p) const
     }
 }
 
+QVector3D StructureStudioView::worldAt(const QPointF &px, int *known, bool *onSurface) const
+{
+    /* Screen position and depth are both affine in the world point -- the
+       projection is orthographic, there is no perspective divide -- so three
+       samples give the whole map, and a pixel with its depth inverts it
+       exactly. */
+    auto S = [this](double x, double y, double z) {
+        const QVector3D w{ float(x), float(y), float(z) };
+        const QPointF sp = w2s(w);
+        return std::array<double, 3>{ sp.x(), sp.y(), viewDepth(w) };
+    };
+    const std::array<double, 3> s0 = S(0, 0, 0);
+    const std::array<double, 3> e[3] = { S(1, 0, 0), S(0, 1, 0), S(0, 0, 1) };
+    double m[3][3];                 // column j: how screen x, y, depth move with axis j
+    for (int j = 0; j < 3; ++j)
+        for (int i = 0; i < 3; ++i)
+            m[i][j] = e[j][i] - s0[i];
+
+    *known = 0;
+    *onSurface = false;
+    const double depth = (m_useZBuffer && m_z != nullptr && m_z->isValid())
+                             ? m_z->depthAt(px.toPoint()) : -1e30;
+    if (depth > -1e29)
+    {
+        const double r[3] = { px.x() - s0[0], px.y() - s0[1], depth - s0[2] };
+        auto det3 = [](const double a[3][3]) {
+            return a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1])
+                 - a[0][1] * (a[1][0] * a[2][2] - a[1][2] * a[2][0])
+                 + a[0][2] * (a[1][0] * a[2][1] - a[1][1] * a[2][0]);
+        };
+        const double d = det3(m);
+        if (qAbs(d) > 1e-12)
+        {
+            double w[3];
+            for (int j = 0; j < 3; ++j)         // Cramer: column j replaced by r
+            {
+                double mj[3][3];
+                for (int i = 0; i < 3; ++i)
+                    for (int k = 0; k < 3; ++k)
+                        mj[i][k] = (k == j) ? r[i] : m[i][k];
+                w[j] = det3(mj) / d;
+            }
+            *known = 7;
+            *onSurface = true;
+            return QVector3D(float(w[0]), float(w[1]), float(w[2]));
+        }
+    }
+
+    // Nothing drawn under it.
+    const QPointF ab = screenToPlane(px);
+    switch (m_plane)
+    {
+    case Top:
+        *known = 1 | 2;
+        return QVector3D(float(ab.x()), float(ab.y()), 0.0f);
+    case Front:
+        *known = 1 | 4;
+        return QVector3D(float(ab.x()), 0.0f, float(ab.y()));
+    case Side:
+        *known = 2 | 4;
+        return QVector3D(0.0f, float(ab.x()), float(ab.y()));
+    default:
+    {
+        // At an angle: the floor (Z = 0) under the pointer.
+        const double a = m[0][0], b = m[0][1], c = m[1][0], dd = m[1][1];
+        const double det = a * dd - b * c;
+        if (qAbs(det) < 1e-12)
+            return QVector3D();
+        const double rx = px.x() - s0[0], ry = px.y() - s0[1];
+        *known = 7;
+        return QVector3D(float((rx * dd - b * ry) / det), float((a * ry - rx * c) / det), 0.0f);
+    }
+    }
+}
+
 void StructureStudioView::drawCursorReadout(QPainter &p) const
 {
     if (!m_hasCursor) return;
@@ -6532,20 +6616,29 @@ void StructureStudioView::drawCursorReadout(QPainter &p) const
     const bool feet = props->gridUnits() == MonitorProperties::Feet;
     const double conv = feet ? 3.28084 : 1.0;
     const QString sfx = feet ? QStringLiteral("ft") : QStringLiteral("m");
-    const QPointF ab = screenToPlane(m_cursorPx);
-    const double hM = ab.y();                          // height above floor (elevations)
-    const double offM = ab.x() - structureCentreA();   // horizontal offset from centre
 
     p.setPen(QPen(QColor(0, 190, 255, 110), 0.8, Qt::DashLine));
     p.drawLine(QPointF(0, m_cursorPx.y()), QPointF(width(), m_cursorPx.y()));
     p.drawLine(QPointF(m_cursorPx.x(), 0), QPointF(m_cursorPx.x(), height()));
 
-    const QString t = (m_plane == Top)
-        ? QString("X %1  Y %2 %3").arg(offM * conv, 0, 'f', 2).arg(hM * conv, 0, 'f', 2).arg(sfx)
-        : QString("H %1  ↔ %2 %3").arg(hM * conv, 0, 'f', 2).arg(offM * conv, 0, 'f', 2).arg(sfx);
-    p.setFont(QFont("Arial", 8));
-    QRectF r(m_cursorPx.x() + 12, m_cursorPx.y() + 10, 140, 18);
-    if (r.right() > width()) r.moveLeft(m_cursorPx.x() - 152);
+    /* H across the stage (stage left +), V up/downstage (downstage +), Z the
+       height above the floor -- the plot's own X / Y and a real height, of
+       whatever is under the pointer ("can we have the crosshairs hover give
+       H, V, and Z"). Over nothing at an angle it is the floor there. */
+    int known = 0;
+    bool onSurface = false;
+    const QVector3D w = worldAt(m_cursorPx, &known, &onSurface);
+    auto num = [&](int bit, float v) {
+        return (known & bit) ? QString::number(double(v) * conv, 'f', 2) : QStringLiteral("—");
+    };
+    QString t = QString("H %1  V %2  Z %3 %4").arg(num(1, w.x()), num(2, w.y()), num(4, w.z()), sfx);
+    if (!onSurface && m_plane == Angled && known)
+        t += tr("  (floor)");
+    QFont f("Arial", 8);
+    p.setFont(f);
+    const double tw = QFontMetricsF(f).horizontalAdvance(t) + 14.0;
+    QRectF r(m_cursorPx.x() + 12, m_cursorPx.y() + 10, tw, 18);
+    if (r.right() > width()) r.moveLeft(m_cursorPx.x() - 12 - tw);
     p.fillRect(r, QColor(20, 22, 28, 225));
     p.setPen(QColor(200, 220, 240));
     p.drawText(r, Qt::AlignVCenter | Qt::AlignHCenter, t);

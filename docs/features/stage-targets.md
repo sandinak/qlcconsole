@@ -17,7 +17,7 @@ look that aims at it re-solves automatically.
 | Kind | Represents | Drawn as |
 |---|---|---|
 | **None** (a plain mark) | A bare point | Amber crosshair |
-| **Person** | A standing subject of a given **Height** (5'9" for a new one), drawn that tall and aimed at the chest — 80% of it | Crosshair over a lofted human silhouette |
+| **Person** | A standing subject of a given **Height** (5'9" unless set), drawn that tall and aimed at the chest — 80% of it | Crosshair over a lofted human silhouette |
 | **Drum Kit** | A low, wide subject | Crosshair over a footprint rectangle, aimed lower by default |
 | **Area** | A region of deck, not a point | A dashed-outline footprint rectangle |
 | **Structure** | Bound to a truss/platform/steps/tower — its position *follows* whatever it's bound to | Crosshair, position always live |
@@ -135,8 +135,8 @@ doesn't stop just because that's where you pointed it.
 | **Stage Target** | A named 3D point with a kind, optional structure binding, optional footprint, and color. |
 | **Kind** | What a target represents — None, Person, Drum Kit, Structure, or Area — governing its default aim height and how it's drawn. |
 | **Aim palette** | A palette that names a target instead of carrying fixed DMX values; resolved per-fixture through the Aim Solver. |
-| **Height** (Person) | How tall a person is, standing on whatever is under them: the figure is drawn that tall and light is aimed at 80% of it. Left at "from the subject height", a person is aimed at the subject height and drawn round it (the figure is then subject ÷ 0.8 tall — a 5'0" subject height draws a 6'3" person). |
-| **Subject height** | The follow-spot notion of a person's chest height above the deck, overriding a target's stored Z in follow-spot mode. A Person with a Height of its own uses that instead. |
+| **Height** (Person) | How tall a person is, standing on whatever is under them: the figure is drawn that tall and light is aimed at 80% of it. A person without one is 5'9". |
+| **Follow-spot aim height (chest)** | Where a follow spot aims above the deck — a chest, not how tall anyone is — overriding a target's stored Z in follow-spot mode. It never sizes a person: a Person is aimed at 80% of its own Height. (Called "subject height" before.) |
 | **Reachable / margin** | Whether a fixture's calibrated pan/tilt range can actually get to a target, and how much spare travel it has if so. |
 | **Light footprint** | Everywhere a fixture's full pan/tilt sweep could land — as opposed to where it's currently pointed. |
 | **Bound target** | A Structure-kind target whose position is recomputed live from whatever it's bound to. |

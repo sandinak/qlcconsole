@@ -1703,19 +1703,14 @@ float MonitorProperties::targetAimHeight(const StageTarget *t, bool subjectMode)
     if (t->hasAimHeightOverride())
         return t->aimHeightOverride();
 
-    /* A Person IS a follow-spot subject: its height is the subject height the
-       target dialog shows right above the Subject field. It used to take a
-       fixed 1.4 m of its own, so changing the subject height moved plain
-       marks and left every person where it was. A plain mark falls back to
-       the same height, but only when the caller says this is a follow-spot
-       aim -- which is what every show built before target kinds relies on. */
+    /* A Person is aimed at the chest of its own height (a usual one when it
+       has none). A plain mark takes the show's follow-spot aim height, but
+       only when the caller says this is a follow-spot aim -- which is what
+       every show built before target kinds relies on. */
     switch (t->kind())
     {
     case StageTarget::Kind::Person:
-        // A person whose height is given is aimed at their chest; one whose
-        // height is not, at the subject height (and drawn round it).
-        return t->hasPersonHeight() ? t->personHeight() * StageTarget::chestShare()
-                                    : m_aimSubjectHeight;
+        return t->effectivePersonHeight() * StageTarget::chestShare();
     case StageTarget::Kind::None:
         return subjectMode ? m_aimSubjectHeight : 0.0f;
     default:
@@ -1727,9 +1722,7 @@ float MonitorProperties::targetFigureHeight(const StageTarget *t) const
 {
     if (t == nullptr || t->kind() != StageTarget::Kind::Person)
         return 0.0f;
-    if (t->hasPersonHeight())
-        return t->personHeight();
-    return targetAimHeight(t, true) / StageTarget::chestShare();
+    return t->effectivePersonHeight();
 }
 
 float MonitorProperties::platformBaseZ(quint32 id) const

@@ -65,17 +65,22 @@ void ZRaster::begin(const QSize &size, int supersample, const QColor &background
     m_anyLight = false;
     m_lit = QRect();
 
+    if (m_pick.size() != lightPx)
+        m_pick.resize(int(lightPx));
+    m_pick.fill(Z_FAR);
+
     m_bits = m_colour.bits();
     m_bpl = m_colour.bytesPerLine();
     m_depthPtr = m_depth.data();
+    m_pickPtr = m_pick.data();
     m_lightPtr = m_light.data();
 }
 
 void ZRaster::poly(const QPointF *pts, const double *zs, int n,
                    const QColor &fill, bool depthWrite, const double *alphaScale,
-                   int rowFrom, int rowTo)
+                   int rowFrom, int rowTo, bool pickable)
 {
-    scan(pts, zs, n, fill, depthWrite, alphaScale, false, rowFrom, rowTo, nullptr);
+    scan(pts, zs, n, fill, depthWrite, alphaScale, false, rowFrom, rowTo, nullptr, pickable);
 }
 
 void ZRaster::light(const QPointF *pts, const double *zs, int n, const QColor &colour,
@@ -94,7 +99,7 @@ void ZRaster::addLit(const QRect &lit)
 
 void ZRaster::scan(const QPointF *pts, const double *zs, int n, const QColor &fill,
                    bool depthWrite, const double *alphaScale, bool additive,
-                   int rowFrom, int rowTo, QRect *lit)
+                   int rowFrom, int rowTo, QRect *lit, bool pickable)
 {
     if (m_colour.isNull() || pts == nullptr || zs == nullptr || n < 3)
         return;
@@ -203,6 +208,9 @@ void ZRaster::scan(const QPointF *pts, const double *zs, int n, const QColor &fi
         QRgb *line = additive ? nullptr : reinterpret_cast<QRgb *>(m_bits + qsizetype(y) * m_bpl);
         float *zline = m_depthPtr + (additive ? qsizetype(y * m_ss + half) * ssW
                                               : qsizetype(y) * W);
+        // A pickable see-through surface: recorded at the final pixel's centre.
+        float *pline = (pickable && !additive && y % m_ss == half)
+                           ? m_pickPtr + qsizetype(y / m_ss) * m_size.width() : nullptr;
 
         for (int k = 0; k + 1 < xs.size(); k += 2)
         {
@@ -272,6 +280,8 @@ void ZRaster::scan(const QPointF *pts, const double *zs, int n, const QColor &fi
                                     a2 + qAlpha(d) * i2 / 255);
                     if (depthWrite)
                         zline[x] = z;
+                    if (pline != nullptr && x % m_ss == half && z > pline[x / m_ss])
+                        pline[x / m_ss] = z;
                 }
             }
             else if (alpha >= 255 && depthWrite)
@@ -284,7 +294,13 @@ void ZRaster::scan(const QPointF *pts, const double *zs, int n, const QColor &fi
             {
                 float z = zStart;
                 for (int x = xa; x <= xb; ++x, z += dz)
-                    if (z > zline[x]) line[x] = src;
+                {
+                    if (z <= zline[x])
+                        continue;
+                    line[x] = src;
+                    if (pline != nullptr && x % m_ss == half && z > pline[x / m_ss])
+                        pline[x / m_ss] = z;
+                }
             }
             else
             {
@@ -300,6 +316,8 @@ void ZRaster::scan(const QPointF *pts, const double *zs, int n, const QColor &fi
                                     alpha + qAlpha(d) * ia / 255);
                     if (depthWrite)
                         zline[x] = z;
+                    if (pline != nullptr && x % m_ss == half && z > pline[x / m_ss])
+                        pline[x / m_ss] = z;
                 }
             }
         }
@@ -384,8 +402,10 @@ double ZRaster::depthAt(const QPoint &p) const
 {
     if (m_colour.isNull())
         return double(Z_FAR);
-    const int x = p.x() * m_ss, y = p.y() * m_ss;
+    const int x = p.x() * m_ss + m_ss / 2, y = p.y() * m_ss + m_ss / 2;
     if (x < 0 || y < 0 || x >= m_colour.width() || y >= m_colour.height())
         return double(Z_FAR);
-    return double(m_depth.at(int(qsizetype(y) * m_colour.width() + x)));
+    const float solid = m_depth.at(int(qsizetype(y) * m_colour.width() + x));
+    const float seeThrough = m_pick.value(int(qsizetype(p.y()) * m_size.width() + p.x()), Z_FAR);
+    return double(qMax(solid, seeThrough));
 }

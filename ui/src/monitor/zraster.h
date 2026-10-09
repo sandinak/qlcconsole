@@ -102,10 +102,13 @@ public:
      *                   themselves. A depth buffer is order-independent only
      *                   for opaque geometry.
      */
+    /** @p pickable: a see-through surface that is still SOMETHING -- a deck
+     *  top, a sock -- recorded for depthAt() without writing depth, so what
+     *  is behind it still shows. Opaque surfaces are always there. */
     void poly(const QPointF *pts, const double *zs, int n,
               const QColor &fill, bool depthWrite = true,
               const double *alphaScale = nullptr,
-              int rowFrom = 0, int rowTo = INT_MAX);
+              int rowFrom = 0, int rowTo = INT_MAX, bool pickable = false);
 
     /**
      * Light -- a beam in the air, a pool where it lands -- ADDED, not layered.
@@ -153,6 +156,8 @@ public:
      *  drawn. Larger is nearer, matching the view's convention. This is what
      *  makes pixel-accurate hit-testing possible, and what volumetrics would
      *  integrate against. */
+    /** The depth of the nearest surface at final-resolution pixel @p p:
+     *  anything opaque, or a see-through surface drawn pickable. */
     double depthAt(const QPoint &p) const;
 
     bool isValid() const { return m_colour.isNull() == false; }
@@ -160,11 +165,12 @@ public:
 private:
     void scan(const QPointF *pts, const double *zs, int n, const QColor &fill,
               bool depthWrite, const double *alphaScale, bool additive,
-              int rowFrom, int rowTo, QRect *lit);
+              int rowFrom, int rowTo, QRect *lit, bool pickable = false);
 
     QImage         m_colour;
     QVector<float> m_depth;
     QVector<float> m_light;          ///< RGB per pixel, parallel to m_depth
+    QVector<float> m_pick;           ///< final resolution: pickable see-through depth
     bool           m_anyLight = false;
     QRect          m_lit;            ///< buffer pixels light touched this frame
     /* Raw pointers taken once per frame in begin(). Asking the containers for
@@ -173,6 +179,7 @@ private:
     qsizetype      m_bpl = 0;
     float         *m_depthPtr = nullptr;
     float         *m_lightPtr = nullptr;
+    float         *m_pickPtr = nullptr;
     int            m_ss;
     QSize          m_size;
 };
