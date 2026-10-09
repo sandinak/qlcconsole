@@ -15886,6 +15886,87 @@ void Monitor_Test::aTowerWearsItsFacesPlainOrPrinted()
     QCOMPARE(count(render("sock-faded"), magenta), 0);
 }
 
+/* "with haze up and lights down for the leds I am not seeing much haze..
+   should that be the case?" A strip with few lumens throws no shaft of light,
+   but in heavy haze the air round its lit pixels glows -- off a bar on a
+   truss, and rising off a strip inside a clear-topped step. */
+void Monitor_Test::ledsGlowInTheHaze()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    // A step with a clear top and a strip inside it, firing up.
+    StagePlatform *pl = props->addPlatform();
+    pl->setName("Step"); pl->setOriginX(-1.2f); pl->setOriginY(0.0f);
+    pl->setWidth(2.438f); pl->setDepth(0.6f); pl->setHeight(0.4f);
+    pl->setTopMaterial(StagePlatform::ClearTop);
+    pl->setColor(QColor(40, 40, 44));
+    Fixture *tape = makeStepTape(doc, pl, 32, 0, "Step tape", 0.2f);
+    QVERIFY(tape != nullptr);
+    FixtureRigProps rp = props->fixtureRigProps(tape->id());
+    rp.riserFace = FixtureRigProps::RiserTop;
+    rp.riserU = pl->width() * 0.5f;
+    rp.riserV = pl->depth() * 0.5f;
+    rp.placement = FixtureRigProps::Inside;
+    rp.studioMount = 0;                         // lying flat, its face up
+    rp.studioFaceChosen = true;
+    props->setFixtureRigProps(tape->id(), rp);
+
+    // A bar on a truss above, facing the audience.
+    Truss *t = props->addTruss();
+    t->setType(Truss::Horizontal);
+    t->setOrigin(QVector3D(-1.5f, -1.0f, 2.5f));
+    t->setDirection(QPointF(1.0, 0.0));
+    t->setLength(3.0f);
+    t->setWidth(0.29f);
+    Fixture *bar = makeChunkyBar(doc, 200, "Truss bar");
+    QVERIFY(bar != nullptr);
+    FixtureRigProps brp;
+    brp.trussId = t->id();
+    brp.trussOffset = 1.5f;
+    props->setFixtureRigProps(bar->id(), brp);
+
+    QByteArray u(512, char(0));
+    for (int h = 0; h < 32; ++h) u[h * 3] = char(255);      // the tape red
+    tape->setChannelValues(u);
+    QByteArray b(512, char(0));
+    b[200] = char(255);                                      // the bar red (by universe address)
+    bar->setChannelValues(b);
+
+    auto reddish = [&](double haze) {
+        StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+        v.resize(900, 700);
+        v.reload();
+        v.setPlane(StructureStudioView::Angled);
+        v.setLiveValues(true);
+        v.setBeams(true);
+        v.setAmbient(0.0);                                   // blackout
+        v.setHaze(haze);
+        QImage img(v.size(), QImage::Format_ARGB32);
+        img.fill(Qt::black);
+        v.render(&img);
+        if (!qEnvironmentVariableIsEmpty("HAZE_PNG"))
+            img.save(qEnvironmentVariable("HAZE_PNG").replace(".png", QString("-%1.png").arg(haze)));
+        int n = 0;
+        for (int y = 0; y < img.height(); ++y)
+            for (int x = 0; x < img.width(); ++x)
+            {
+                const QColor c = img.pixelColor(x, y);
+                if (c.red() > 40 && c.red() > c.green() * 2 && c.red() > c.blue() * 2)
+                    ++n;
+            }
+        return n;
+    };
+    const int clearAir = reddish(0.0);
+    const int heavy = reddish(1.8);
+    QVERIFY2(heavy > clearAir * 1.5 && heavy - clearAir > 2000,
+             qPrintable(QString("heavy haze %1 red px vs clear air %2").arg(heavy).arg(clearAir)));
+    // Light haze: some, less than heavy.
+    const int light = reddish(0.6);
+    QVERIFY2(light > clearAir && light < heavy,
+             qPrintable(QString("light %1 between clear %2 and heavy %3").arg(light).arg(clearAir).arg(heavy)));
+}
+
 void Monitor_Test::aLanternHangsOffATowerAndGlowsAllRound()
 {
     QLCFixtureDef *def = new QLCFixtureDef();

@@ -657,7 +657,15 @@ private:
     /** Where a bar of pixels' light comes from: along each lit section, up
      *  to six points spread evenly, each with the section's colour and its
      *  share of its level. Empty when nothing is lit. */
-    struct BarLight { QVector3D at; QColor colour; double level; };
+    /** A lit stretch of a source: where, its colour, its share of the
+     *  fixture's OUTPUT (@c level, what reaches surfaces), and how bright its
+     *  pixels are (@c brightness 0..1, colour times dimmer -- what haze shows
+     *  right round it, however few lumens the fixture has). */
+    struct BarLight { QVector3D at; QColor colour; double level; double brightness = 1.0; };
+    /** In haze, the air right round each lit source glows: a soft halo by
+     *  how bright its pixels are, not by its lumens -- faint LED strip glows
+     *  without throwing beams it should not. */
+    void drawHazeGlow(QPainter &p, const QVector<BarLight> &sources) const;
     QVector<BarLight> barLights(class Fixture *fx, const struct FixtureRigProps &rp,
                                 const struct FixtureVisualTraits &traits,
                                 const QByteArray &vals, const QVector3D &centre) const;

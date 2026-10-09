@@ -125,6 +125,7 @@ private slots:
     void aWledLanternShowsItsEffectLedByLed();
     void aSockedTrussGlowsWithTheBarsInsideIt();
     void aTowerWearsItsFacesPlainOrPrinted();
+    void ledsGlowInTheHaze();
     void hangersAreRiggingCopiedToEveryTower();
     void theSplitWizardOffersAViewAndKeepsAnExistingGroup();
     /** "I can't click on any side arrow to open any of the groups": an

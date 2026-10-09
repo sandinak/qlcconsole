@@ -3958,6 +3958,33 @@ void StructureStudioView::collectInsideLight(QPainter &p) const
             }
             emitPoly(poly, depth, glow, QColor(), 0.0, p, vz);
 
+            /* In haze, the air over the opening glows: a sheet of lit air
+               rising off the stretch, bright at the top and fading upward --
+               by how bright the pixels are, not their lumens. */
+            if (m_haze > 0.0)
+            {
+                const double haze = qMin(1.5, m_haze);
+                const double room = 1.25 - 0.65 * m_ambient;
+                const float rise = float(0.25 + 0.30 * haze);
+                const QVector3D s0 = centre + L * uA + N * t, s1 = centre + L * uB + N * t;
+                const QVector3D lift(0.0f, 0.0f, rise);
+                const QVector3D sheet[4] = { QVector3D(s0.x(), s0.y(), topZ), QVector3D(s1.x(), s1.y(), topZ),
+                                             QVector3D(s1.x(), s1.y(), topZ) + lift,
+                                             QVector3D(s0.x(), s0.y(), topZ) + lift };
+                QColor air = QColor::fromRgbF(float(sr / peak), float(sg / peak), float(sb / peak));
+                air.setAlpha(qBound(0, int(120.0 * level * haze * room), 200));
+                QPolygonF sp;
+                QVector<double> sz;
+                double sd = 0.0;
+                for (const QVector3D &v : sheet)
+                {
+                    sp << w2s(v);
+                    sz << viewDepth(v);
+                    sd += viewDepth(v) / 4.0;
+                }
+                emitLight(sp, sd, air, p, sz, QVector<double>{ 1.0, 1.0, 0.0, 0.0 });
+            }
+
             /* And where it lands beyond the top: a cyc upstage of the steps
                catches the upstage edge of their cones. Drawn as light, like
                a beam's pool, when beams are shown. */
@@ -4140,7 +4167,7 @@ QVector<QVector3D> StructureStudioView::sockGlow(Truss *t, int segments) const
             QColor c;
             uchar dim = 0;
             if (fixtureLiveState(fx, vals, c, dim, complete) && dim > 2)
-                lights << BarLight{ centre, c, dim / 255.0 * fixtureOutput(fx) };
+                lights << BarLight{ centre, c, dim / 255.0 * fixtureOutput(fx), dim / 255.0 };
         }
     }
     if (lights.isEmpty())
@@ -4292,6 +4319,42 @@ void StructureStudioView::drawSocks(QPainter &p) const
     }
 }
 
+void StructureStudioView::drawHazeGlow(QPainter &p, const QVector<BarLight> &sources) const
+{
+    if (sources.isEmpty() || m_haze <= 0.0)
+        return;
+    const double haze = qMin(1.5, m_haze);
+    const double room = 1.25 - 0.65 * m_ambient;
+    // Overlapping halos add up: a bar's samples share its glow.
+    const double share = 1.0 / qSqrt(double(sources.size()));
+    const double radius = 0.25 + 0.25 * haze;               // metres of lit air
+    const int n = 20;
+    for (const BarLight &src : sources)
+    {
+        const double peak = qMax(src.colour.redF(), qMax(src.colour.greenF(), src.colour.blueF()));
+        if (peak <= 0.004 || src.brightness <= 0.01)
+            continue;
+        QColor glow = QColor::fromRgbF(float(src.colour.redF() / peak), float(src.colour.greenF() / peak),
+                                       float(src.colour.blueF() / peak));
+        glow.setAlpha(qBound(0, int(150.0 * src.brightness * haze * room * share), 220));
+        const QPointF c = w2s(src.at);
+        // Its size on screen, the same however the view turns.
+        const double rPx = qMax(3.0, 0.5 * (QLineF(c, w2s(src.at + QVector3D(float(radius), 0, 0))).length()
+                                            + QLineF(c, w2s(src.at + QVector3D(0, 0, float(radius)))).length()));
+        // The lit air between us and it: in front of its body, not inside it.
+        const double z = viewDepth(src.at) + radius;   // larger is nearer
+        // A fan, bright at the source and nothing at its rim.
+        for (int i = 0; i < n; ++i)
+        {
+            const double a0 = 2.0 * M_PI * i / n, a1 = 2.0 * M_PI * (i + 1) / n;
+            QPolygonF tri;
+            tri << c << QPointF(c.x() + rPx * qCos(a0), c.y() + rPx * qSin(a0))
+                << QPointF(c.x() + rPx * qCos(a1), c.y() + rPx * qSin(a1));
+            emitLight(tri, z, glow, p, QVector<double>{ z, z, z }, QVector<double>{ 1.0, 0.0, 0.0 });
+        }
+    }
+}
+
 QVector<StructureStudioView::BarLight> StructureStudioView::barLights(Fixture *fx,
         const FixtureRigProps &rp, const FixtureVisualTraits &traits,
         const QByteArray &vals, const QVector3D &centre) const
@@ -4348,7 +4411,7 @@ QVector<StructureStudioView::BarLight> StructureStudioView::barLights(Fixture *f
         {
             const double colPos = c0 + (span * (k + 0.5)) / samples;          // in columns
             const float u = float((colPos / cols - 0.5) * len);
-            out << BarLight{ centre + L * u, colour, level };
+            out << BarLight{ centre + L * u, colour, level, qMin(1.0, lv / n) };
         }
         c0 = c1;
     }
@@ -4913,6 +4976,28 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
            emitDirection()'s answer -- down off a truss, out from the riser it
            is buried in -- which is the same vector the view already uses to
            decide how much of the lens you can see. */
+        /* In haze, the air round a lit bar or par glows -- by how bright its
+           pixels are, so LED strip with few lumens still shows in heavy haze
+           ("with haze up and lights down for the leds I am not seeing much
+           haze"). A lantern has its own halo; a mover its beam; a bar inside
+           something glows where its light gets out (collectInsideLight()). */
+        if (m_haze > 0.0 && showingOutput && m_plane == Angled
+            && rp.placement != FixtureRigProps::Inside
+            && traits.kind != FixtureSilhouette::Mover && !traits.omni)
+        {
+            QVector<BarLight> glows;
+            if (traits.headCount > 1)
+                glows = barLights(fx, rp, traits, vals, fixtureCentre(fid));
+            else
+            {
+                QColor c;
+                uchar dim = 0;
+                if (fixtureLiveState(fx, vals, c, dim, valsComplete) && dim > 2)
+                    glows << BarLight{ fixtureCentre(fid), c, 0.0, dim / 255.0 };
+            }
+            drawHazeGlow(p, glows);
+        }
+
         /* All round (a lantern): no cone to draw -- its glow is drawn with its
            body -- but what it lights near it, it lights. */
         if (traits.omni && showingOutput)
