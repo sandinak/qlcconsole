@@ -43,6 +43,10 @@ private slots:
      *  local .. that's burned me before." */
     void filesInCloudStorageNotHereAreAWarning();
     void fixturesWithoutTheirDefinitionsAreAnError();
+    /** Consolidation 1-2: the scene's timing in one place, one time
+     *  control, one rule for which fades a look has. */
+    void aScenesTimingIsAllOnItsCanvas();
+    void theCanvasAndTheLookEditorAgreeOnFades();
 
     /** "Didn't change colour when colour was changed in program from white
      *  to blue." A palette isn't a Function, so editing one through the real

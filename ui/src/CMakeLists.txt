@@ -132,6 +132,7 @@ add_library(${module_name}
     bundleeditor.cpp bundleeditor.h
     bundlebrowser.cpp bundlebrowser.h
     effectbrowser.cpp effectbrowser.h
+    fadetimespin.cpp fadetimespin.h
     lookeditor.cpp lookeditor.h
     effectscripteditor.cpp effectscripteditor.h
     pathdrawwidget.cpp pathdrawwidget.h

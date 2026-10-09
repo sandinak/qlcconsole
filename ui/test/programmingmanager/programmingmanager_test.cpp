@@ -35,6 +35,7 @@
 
 #define protected public
 #define private public
+#include "fadetimespin.h"
 #include "programmingmanager.h"
 #include "scenegrouplooks.h"
 #include "functionstreewidget.h"
@@ -390,6 +391,88 @@ void ProgrammingManager_Test::fixturesWithoutTheirDefinitionsAreAnError()
     m_doc->deleteFixture(7);
     AppUtil::updateFixtureReadiness(m_doc);
     QVERIFY(entry("fixtures.nodefinition").key.isEmpty());
+}
+
+void ProgrammingManager_Test::aScenesTimingIsAllOnItsCanvas()
+{
+    Scene *scene = new Scene(m_doc);
+    scene->setName("01-01.02-Verse");
+    QVERIFY(m_doc->addFunction(scene));
+    ProgrammingManager mgr(nullptr, m_doc);
+    mgr.loadCanvas(scene->id());
+    FadeTimeSpin *fadeIn = mgr.m_canvas->findChild<FadeTimeSpin *>("sceneFadeIn");
+    FadeTimeSpin *fadeOut = mgr.m_canvas->findChild<FadeTimeSpin *>("sceneFadeOut");
+    QComboBox *transIn = mgr.m_canvas->findChild<QComboBox *>("transitionInShape");
+    QVERIFY(fadeIn && fadeOut && transIn);
+
+    // The scene's own fade, set here.
+    fadeIn->setValue(2.5);
+    fadeOut->setValue(1.25);
+    QCOMPARE(scene->fadeInSpeed(), 2500u);
+    QCOMPARE(scene->fadeOutSpeed(), 1250u);
+
+    // A transition in stands in for the fade in.
+    QVERIFY(fadeIn->isEnabled());
+    transIn->setCurrentIndex(int(SceneTransition::WipeUp));
+    QVERIFY(!fadeIn->isEnabled());
+    QVERIFY(fadeOut->isEnabled());
+    transIn->setCurrentIndex(int(SceneTransition::None));
+    QVERIFY(fadeIn->isEnabled());
+
+    // Shown as it is when the scene opens again.
+    mgr.loadCanvas(Function::invalidId());
+    mgr.loadCanvas(scene->id());
+    QCOMPARE(mgr.m_canvas->findChild<FadeTimeSpin *>("sceneFadeIn")->ms(), 2500);
+}
+
+void ProgrammingManager_Test::theCanvasAndTheLookEditorAgreeOnFades()
+{
+    QLCPalette *effect = new QLCPalette(QLCPalette::Effect, m_doc);
+    effect->setName("Chase");
+    QVERIFY(m_doc->addPalette(effect));
+    QLCPalette *feeds = new QLCPalette(QLCPalette::Color, m_doc);
+    feeds->setName("Blue");
+    feeds->setValue(QColor(0, 0, 255));
+    QVERIFY(m_doc->addPalette(feeds));
+    QLCPalette *dim = new QLCPalette(QLCPalette::Dimmer, m_doc);
+    dim->setName("Half");
+    dim->setValue(128);
+    QVERIFY(m_doc->addPalette(dim));
+    Scene *scene = new Scene(m_doc);
+    QVERIFY(m_doc->addFunction(scene));
+    scene->addPalette(dim->id());           // a base look
+    scene->addPalette(effect->id());
+    scene->addPalette(feeds->id());          // after the effect: its colour
+
+    // The rule.
+    QVERIFY(LookFades::hasFadeIn(m_doc, scene, dim->id()) && LookFades::hasFadeOut(m_doc, scene, dim->id()));
+    QVERIFY(!LookFades::hasFadeIn(m_doc, scene, effect->id()) && LookFades::hasFadeOut(m_doc, scene, effect->id()));
+    QVERIFY(!LookFades::hasFadeIn(m_doc, scene, feeds->id()) && !LookFades::hasFadeOut(m_doc, scene, feeds->id()));
+
+    ProgrammingManager mgr(nullptr, m_doc);
+    mgr.loadCanvas(scene->id());
+    LookEditor *ed = mgr.m_lookEditor;
+
+    // A base look: both fades, defaulting to the scene's.
+    ed->setPalette(dim->id());
+    QVERIFY(!ed->m_fadeRow->isHidden());
+    QVERIFY(!ed->m_fadeInSpin->isHidden() && !ed->m_fadeOutSpin->isHidden());
+    QCOMPARE(ed->m_fadeInSpin->specialValueText(), QString("scene"));
+
+    // An effect: only its release, and left alone it snaps -- as on the canvas,
+    // where the effect's Fade Out cell is the one that edits.
+    ed->setPalette(effect->id());
+    QVERIFY(!ed->m_fadeRow->isHidden());
+    QVERIFY(ed->m_fadeInSpin->isHidden());
+    QVERIFY(!ed->m_fadeOutSpin->isHidden());
+    QCOMPARE(ed->m_fadeOutLabel->text(), QString("Release"));
+    QCOMPARE(ed->m_fadeOutSpin->specialValueText(), QString("snap"));
+    ed->m_fadeOutSpin->setValue(1.5);
+    QCOMPARE(scene->paletteFadeOut(effect->id()), 1500);
+
+    // A colour feeding the effect: no fades at all.
+    ed->setPalette(feeds->id());
+    QVERIFY(ed->m_fadeRow->isHidden());
 }
 
 void ProgrammingManager_Test::editingALookColourNotifiesItsScene()

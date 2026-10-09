@@ -34,6 +34,7 @@
 
 #include "programmingmanager.h"
 #include "scenegrouplooks.h"
+#include "fadetimespin.h"
 #include "scenetransition.h"
 #include <QSpinBox>
 #include "functionstreewidget.h"   // palette MIME type
@@ -68,16 +69,23 @@ enum { LookColName = 0, LookColIn = 1, LookColOut = 2, LookColCount = 3 };
 // gradient — a value, not a painted look — so it has no fade of its own).
 static const int LookFadeInertRole = Qt::UserRole + 3;
 
-/** Human "1.5 s" / "step" text for a fade override in ms (-1 = step). */
-static QString fadeCellText(int ms)
+/* What a fade's default (-1) means for this look: "scene" -- follow the
+   scene's fade (or a chaser step's) -- or, for an effect's release, "snap".
+   Kept on the cell so the editor and the text agree (LookFades). */
+static const int LookFadeDefaultRole = Qt::UserRole + 4;
+
+/** A fade cell's text: "1.5 s", its default's name, or "—" where the look has
+ *  no such fade. */
+static QString fadeCellText(const QTreeWidgetItem *it, int column)
 {
-    if (ms < 0)
-        return QObject::tr("step");
-    return QString::number(ms / 1000.0, 'g', 3) + QObject::tr(" s");
+    if (it->data(column, LookFadeInertRole).toBool())
+        return QStringLiteral("—");
+    return FadeTimeSpin::text(it->data(column, Qt::UserRole).toInt(),
+                              it->data(column, LookFadeDefaultRole).toString());
 }
 
-/** Editable fade-time cell: a QDoubleSpinBox in seconds whose minimum reads
- *  "step" (fall back to the step/scene fade). Only the In/Out columns edit. */
+/** Editable fade-time cell: the one fade-time control (FadeTimeSpin), its
+ *  lowest value the look's default. Only the In/Out columns edit. */
 class FadeSpinDelegate final : public QStyledItemDelegate
 {
 public:
@@ -92,31 +100,23 @@ public:
         // effect) are read-only.
         if (index.data(LookFadeInertRole).toBool())
             return nullptr;
-        QDoubleSpinBox *sp = new QDoubleSpinBox(parent);
-        sp->setDecimals(2);
-        sp->setSingleStep(0.1);
-        sp->setRange(-0.1, 600.0);              // -0.1 == the "step" value
-        sp->setSpecialValueText(QObject::tr("step"));
-        sp->setSuffix(QObject::tr(" s"));
-        return sp;
+        return new FadeTimeSpin(parent, index.data(LookFadeDefaultRole).toString());
     }
 
     void setEditorData(QWidget *editor, const QModelIndex &index) const override
     {
-        QDoubleSpinBox *sp = qobject_cast<QDoubleSpinBox*>(editor);
-        if (sp == nullptr) return;
-        const int ms = index.data(Qt::UserRole).toInt();
-        sp->setValue(ms >= 0 ? ms / 1000.0 : sp->minimum());
+        if (FadeTimeSpin *sp = qobject_cast<FadeTimeSpin *>(editor))
+            sp->setMs(index.data(Qt::UserRole).toInt());
     }
 
     void setModelData(QWidget *editor, QAbstractItemModel *model,
                       const QModelIndex &index) const override
     {
-        QDoubleSpinBox *sp = qobject_cast<QDoubleSpinBox*>(editor);
+        FadeTimeSpin *sp = qobject_cast<FadeTimeSpin *>(editor);
         if (sp == nullptr) return;
-        const int ms = sp->value() < 0 ? -1 : int(sp->value() * 1000.0 + 0.5);
-        model->setData(index, ms, Qt::UserRole);
-        model->setData(index, fadeCellText(ms), Qt::DisplayRole);
+        model->setData(index, sp->ms(), Qt::UserRole);
+        model->setData(index, FadeTimeSpin::text(sp->ms(), index.data(LookFadeDefaultRole).toString()),
+                       Qt::DisplayRole);
     }
 };
 
@@ -165,20 +165,15 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
             return cb;
         };
         auto makeTime = [this](const SceneTransition &t) {
-            QDoubleSpinBox *sp = new QDoubleSpinBox(this);
-            sp->setRange(0.1, 120.0);
-            sp->setDecimals(1);
-            sp->setSingleStep(0.5);
-            sp->setSuffix(tr(" s"));
-            sp->setValue(t.time / 1000.0);
-            sp->setKeyboardTracking(false);
+            FadeTimeSpin *sp = new FadeTimeSpin(this);
+            sp->setMs(int(t.time));
             return sp;
         };
         const SceneTransition tin = m_scene->transitionIn(), tout = m_scene->transitionOut();
         QComboBox *inShape = makeShape(tin);
-        QDoubleSpinBox *inTime = makeTime(tin);
+        FadeTimeSpin *inTime = makeTime(tin);
         QComboBox *outShape = makeShape(tout);
-        QDoubleSpinBox *outTime = makeTime(tout);
+        FadeTimeSpin *outTime = makeTime(tout);
         QSpinBox *edge = new QSpinBox(this);
         edge->setRange(5, 100);
         edge->setSuffix(QStringLiteral("%"));
@@ -192,19 +187,54 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
         outTime->setToolTip(tr("How long the transition out takes"));
         edge->setToolTip(tr("How soft its edge is: each fixture's own fade, as a share of "
                             "the time -- 100% all together, low a sharp line"));
-        auto apply = [this, inShape, inTime, outShape, outTime, edge]() {
+        /* The scene's own fade, here where looks fall back to it ("step" /
+           "scene") -- it lived only in the Scene Editor's speed dial. A
+           transition, when set, stands in for it. */
+        auto speedMs = [](uint speed) {
+            return (speed == Function::defaultSpeed() || speed == Function::infiniteSpeed())
+                ? 0 : int(speed);
+        };
+        FadeTimeSpin *fadeIn = new FadeTimeSpin(this);
+        FadeTimeSpin *fadeOut = new FadeTimeSpin(this);
+        fadeIn->setMs(speedMs(m_scene->fadeInSpeed()));
+        fadeOut->setMs(speedMs(m_scene->fadeOutSpeed()));
+        fadeIn->setObjectName(QStringLiteral("sceneFadeIn"));
+        fadeOut->setObjectName(QStringLiteral("sceneFadeOut"));
+        fadeIn->setToolTip(tr("The scene's fade in: every look's \"scene\" fade follows it"));
+        fadeOut->setToolTip(tr("The scene's fade out"));
+        connect(fadeIn, &FadeTimeSpin::msChanged, this, [this](int ms) {
+            if (m_scene == nullptr || m_scene->fadeInSpeed() == uint(ms))
+                return;
+            m_scene->setFadeInSpeed(uint(ms));
+            if (m_doc != nullptr)
+                m_doc->setModified();
+            emit sceneModified();
+        });
+        connect(fadeOut, &FadeTimeSpin::msChanged, this, [this](int ms) {
+            if (m_scene == nullptr || m_scene->fadeOutSpeed() == uint(ms))
+                return;
+            m_scene->setFadeOutSpeed(uint(ms));
+            if (m_doc != nullptr)
+                m_doc->setModified();
+            emit sceneModified();
+        });
+
+        auto apply = [this, inShape, inTime, outShape, outTime, edge, fadeIn, fadeOut]() {
             if (m_scene == nullptr)
                 return;
             SceneTransition tin, tout;
             tin.shape = SceneTransition::Shape(inShape->currentIndex());
-            tin.time = uint(qRound(inTime->value() * 1000.0));
+            tin.time = uint(inTime->ms());
             tin.softness = edge->value() / 100.0;
             tout.shape = SceneTransition::Shape(outShape->currentIndex());
-            tout.time = uint(qRound(outTime->value() * 1000.0));
+            tout.time = uint(outTime->ms());
             tout.softness = edge->value() / 100.0;
             inTime->setEnabled(tin.shape != SceneTransition::None);
             outTime->setEnabled(tout.shape != SceneTransition::None);
             edge->setEnabled(tin.isActive() || tout.isActive());
+            // A transition's time takes the place of the fade.
+            fadeIn->setEnabled(!tin.isActive());
+            fadeOut->setEnabled(!tout.isActive());
             if (tin == m_scene->transitionIn() && tout == m_scene->transitionOut())
                 return;
             m_scene->setTransitionIn(tin);
@@ -216,20 +246,27 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
         inTime->setEnabled(tin.shape != SceneTransition::None);
         outTime->setEnabled(tout.shape != SceneTransition::None);
         edge->setEnabled(tin.isActive() || tout.isActive());
+        fadeIn->setEnabled(!tin.isActive());
+        fadeOut->setEnabled(!tout.isActive());
         connect(inShape, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [apply](int) { apply(); });
         connect(outShape, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [apply](int) { apply(); });
-        connect(inTime, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [apply](double) { apply(); });
-        connect(outTime, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [apply](double) { apply(); });
+        connect(inTime, &FadeTimeSpin::msChanged, this, [apply](int) { apply(); });
+        connect(outTime, &FadeTimeSpin::msChanged, this, [apply](int) { apply(); });
         connect(edge, QOverload<int>::of(&QSpinBox::valueChanged), this, [apply](int) { apply(); });
         inShape->setObjectName(QStringLiteral("transitionInShape"));
         outShape->setObjectName(QStringLiteral("transitionOutShape"));
         inTime->setObjectName(QStringLiteral("transitionInTime"));
         edge->setObjectName(QStringLiteral("transitionEdge"));
-        helpRow->addWidget(new QLabel(tr("In:"), this));
+        helpRow->addWidget(new QLabel(tr("Fade in"), this));
+        helpRow->addWidget(fadeIn);
+        helpRow->addWidget(new QLabel(tr("out"), this));
+        helpRow->addWidget(fadeOut);
+        helpRow->addSpacing(12);
+        helpRow->addWidget(new QLabel(tr("Transition in:"), this));
         helpRow->addWidget(inShape);
         helpRow->addWidget(inTime);
         helpRow->addSpacing(8);
-        helpRow->addWidget(new QLabel(tr("Out:"), this));
+        helpRow->addWidget(new QLabel(tr("out:"), this));
         helpRow->addWidget(outShape);
         helpRow->addWidget(outTime);
         helpRow->addSpacing(8);
@@ -818,22 +855,26 @@ void SceneGroupLooks::reload()
         //  • Colour/Dimmer feeding an effect: BOTH inert — it's a value the effect
         //    reads, not a painted look, so it has no fade of its own.
         //  • Top-level base look: both live.
-        const bool inInert  = isEffect || feedsEffect;
-        const bool outInert = feedsEffect;
-        const int inMs  = isEffect ? -1 : m_scene->paletteFadeIn(pid);
+        // The one rule, shared with the look editor (LookFades).
+        const bool inInert  = !LookFades::hasFadeIn(m_doc, m_scene, pid);
+        const bool outInert = !LookFades::hasFadeOut(m_doc, m_scene, pid);
+        const int inMs  = inInert ? -1 : m_scene->paletteFadeIn(pid);
         const int outMs = m_scene->paletteFadeOut(pid);
+        const QString dflt = LookFades::defaultLabel(m_doc, pid);
         it->setData(LookColIn,  Qt::UserRole, inMs);
         it->setData(LookColOut, Qt::UserRole, outMs);
         it->setData(LookColIn,  LookFadeInertRole, inInert);
         it->setData(LookColOut, LookFadeInertRole, outInert);
-        it->setText(LookColIn,  inInert  ? QStringLiteral("—") : fadeCellText(inMs));
-        it->setText(LookColOut, outInert ? QStringLiteral("—") : fadeCellText(outMs));
+        it->setData(LookColIn,  LookFadeDefaultRole, tr("scene"));
+        it->setData(LookColOut, LookFadeDefaultRole, dflt);
+        it->setText(LookColIn,  fadeCellText(it, LookColIn));
+        it->setText(LookColOut, fadeCellText(it, LookColOut));
         it->setTextAlignment(LookColIn,  Qt::AlignRight | Qt::AlignVCenter);
         it->setTextAlignment(LookColOut, Qt::AlignRight | Qt::AlignVCenter);
         if (isEffect)
             it->setToolTip(LookColOut,
                 tr("Release fade: when this look stops, the effect fades out over "
-                   "this time instead of snapping off. \"step\" = snap.\n"
+                   "this time instead of snapping off. \"snap\" = stop at once.\n"
                    "Per-key attack/decay comes from the effect's own parameters "
                    "(e.g. Glow / Release), not this column."));
         else if (feedsEffect)
@@ -1428,8 +1469,8 @@ void SceneGroupLooks::slotLookContextMenu(const QPoint &pos)
         if (resetOut) outMs = -1;
         it->setData(LookColIn,  Qt::UserRole, inMs);
         it->setData(LookColOut, Qt::UserRole, outMs);
-        it->setText(LookColIn,  fadeCellText(inMs));
-        it->setText(LookColOut, fadeCellText(outMs));
+        it->setText(LookColIn,  fadeCellText(it, LookColIn));
+        it->setText(LookColOut, fadeCellText(it, LookColOut));
         m_scene->setPaletteFade(pid, inMs, outMs);
     }
     m_lookList->blockSignals(false);

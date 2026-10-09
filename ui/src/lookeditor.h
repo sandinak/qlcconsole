@@ -191,8 +191,10 @@ private:
     // Each spin's minimum is a special "step" value meaning "fall back to the
     // chaser step / scene fade" (independent in vs out — a pulse = 0 in, slow out).
     QWidget        *m_fadeRow = nullptr;
-    QDoubleSpinBox *m_fadeInSpin = nullptr;
-    QDoubleSpinBox *m_fadeOutSpin = nullptr;
+    class FadeTimeSpin *m_fadeInSpin = nullptr;
+    class FadeTimeSpin *m_fadeOutSpin = nullptr;
+    QLabel *m_fadeInLabel = nullptr;
+    QLabel *m_fadeOutLabel = nullptr;
     QStackedWidget *m_stack;
     int m_pageEmpty, m_pageColor, m_pageDimmer, m_pagePanTilt, m_pageAim, m_pageBeam, m_pageSingle, m_pageStrobe;
 

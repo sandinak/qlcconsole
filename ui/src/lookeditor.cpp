@@ -34,6 +34,7 @@
 #include <QDialogButtonBox>
 #include <QDialog>
 #include "lookeditor.h"
+#include "fadetimespin.h"
 #include "effectbrowser.h"
 #include "qlcfixturedefcache.h"
 #include "wledfixture.h"
@@ -273,29 +274,22 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     // scene fade for that direction. Any value >= 0 overrides it for this look's
     // channels only, so colour can snap while movers glide (in) and a look can
     // release slower than it punches in (a "pulse": 0 in, slow out).
-    auto makeFadeSpin = [this]() -> QDoubleSpinBox* {
-        QDoubleSpinBox *sp = new QDoubleSpinBox(m_fadeRow);
-        sp->setDecimals(2);
-        sp->setSingleStep(0.1);
-        sp->setRange(-0.1, 600.0);         // -0.1 = the special "step" value
-        sp->setSpecialValueText(tr("step")); // shown when value == minimum
-        sp->setSuffix(tr(" s"));
-        connect(sp, SIGNAL(valueChanged(double)), this, SLOT(slotFadeTimeChanged()));
-        return sp;
-    };
     m_fadeRow = new QWidget(this);
     QHBoxLayout *fadeLay = new QHBoxLayout(m_fadeRow);
     fadeLay->setContentsMargins(0, 0, 0, 0);
-    QLabel *fadeLbl = new QLabel(tr("Fade in"), m_fadeRow);
-    fadeLbl->setToolTip(tr("Per-look fade time for this look's channels only.\n"
-                           "0 = snap instantly; \"step\" (spin below 0) = follow "
-                           "the chaser step / scene fade."));
-    fadeLay->addWidget(fadeLbl);
-    m_fadeInSpin = makeFadeSpin();
+    m_fadeInLabel = new QLabel(tr("Fade in"), m_fadeRow);
+    m_fadeInLabel->setToolTip(tr("This look's own fade, for its channels only. 0 snaps; "
+                                 "\"scene\" (the lowest value) follows the scene's fade."));
+    fadeLay->addWidget(m_fadeInLabel);
+    // The one fade-time control (FadeTimeSpin); labels set per look.
+    m_fadeInSpin = new FadeTimeSpin(m_fadeRow, tr("scene"));
+    connect(m_fadeInSpin, &FadeTimeSpin::msChanged, this, &LookEditor::slotFadeTimeChanged);
     fadeLay->addWidget(m_fadeInSpin);
     fadeLay->addSpacing(8);
-    fadeLay->addWidget(new QLabel(tr("out"), m_fadeRow));
-    m_fadeOutSpin = makeFadeSpin();
+    m_fadeOutLabel = new QLabel(tr("out"), m_fadeRow);
+    fadeLay->addWidget(m_fadeOutLabel);
+    m_fadeOutSpin = new FadeTimeSpin(m_fadeRow, tr("scene"));
+    connect(m_fadeOutSpin, &FadeTimeSpin::msChanged, this, &LookEditor::slotFadeTimeChanged);
     fadeLay->addWidget(m_fadeOutSpin);
     fadeLay->addStretch(1);
     root->addWidget(m_fadeRow);
@@ -921,20 +915,21 @@ void LookEditor::setPalette(quint32 paletteId)
     }
     }
 
-    // Per-look fade override: only meaningful with a context scene, and not
-    // for Effect palettes (the EffectScriptRunner owns their timing, not the
-    // scene's palette-fade path).
-    if (m_contextScene != NULL && p->type() != QLCPalette::Effect)
+    /* This look's own fades, with a context scene -- by the same rule as
+       the canvas (LookFades): an effect has only its release (out), a
+       colour feeding an effect has none, anything else both. */
+    const bool fadeIn = LookFades::hasFadeIn(m_doc, m_contextScene, m_paletteId);
+    const bool fadeOut = LookFades::hasFadeOut(m_doc, m_contextScene, m_paletteId);
+    if (m_contextScene != NULL && (fadeIn || fadeOut))
     {
-        const int inMs  = m_contextScene->paletteFadeIn(m_paletteId);
-        const int outMs = m_contextScene->paletteFadeOut(m_paletteId);
-        m_fadeInSpin->blockSignals(true);
-        m_fadeOutSpin->blockSignals(true);
-        // < 0 override -> the spin's special "step" minimum.
-        m_fadeInSpin->setValue(inMs   >= 0 ? inMs  / 1000.0 : m_fadeInSpin->minimum());
-        m_fadeOutSpin->setValue(outMs >= 0 ? outMs / 1000.0 : m_fadeOutSpin->minimum());
-        m_fadeInSpin->blockSignals(false);
-        m_fadeOutSpin->blockSignals(false);
+        m_fadeInLabel->setVisible(fadeIn);
+        m_fadeInSpin->setVisible(fadeIn);
+        m_fadeOutLabel->setVisible(fadeOut);
+        m_fadeOutSpin->setVisible(fadeOut);
+        m_fadeOutLabel->setText(fadeIn ? tr("out") : tr("Release"));
+        m_fadeOutSpin->setSpecialValueText(LookFades::defaultLabel(m_doc, m_paletteId));
+        m_fadeInSpin->setMs(m_contextScene->paletteFadeIn(m_paletteId));
+        m_fadeOutSpin->setMs(m_contextScene->paletteFadeOut(m_paletteId));
         m_fadeRow->show();
     }
     else
@@ -1146,9 +1141,9 @@ void LookEditor::slotFadeTimeChanged()
     if (m_loading || m_contextScene == NULL || m_paletteId == QLCPalette::invalidId())
         return;
 
-    // A value below 0 is the special "step" (fall-back) state.
-    const int inMs  = m_fadeInSpin->value()  < 0 ? -1 : int(m_fadeInSpin->value()  * 1000.0 + 0.5);
-    const int outMs = m_fadeOutSpin->value() < 0 ? -1 : int(m_fadeOutSpin->value() * 1000.0 + 0.5);
+    // -1 is the default (the scene's fade; for an effect's release, snap).
+    const int inMs  = !m_fadeInSpin->isHidden() ? m_fadeInSpin->ms() : -1;   // an effect has none
+    const int outMs = m_fadeOutSpin->ms();
     m_contextScene->setPaletteFade(m_paletteId, inMs, outMs);
     m_doc->setModified();
     // Re-run the preview so the new transition time takes effect, and refresh
