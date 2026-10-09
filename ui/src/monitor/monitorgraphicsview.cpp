@@ -6786,11 +6786,8 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
         }
         if (!ids.contains(fid))
             ids << fid;
-        const bool staged = fxi != nullptr && !fxi->isPatched();
-        QAction *pa = menu->addAction(ids.size() > 1 ? tr("Patch / Re-address %1 Fixtures…").arg(ids.size())
-                                      : staged       ? tr("Patch…")
-                                                     : tr("Re-address…"),
-                                      this, [this, ids]() {
+        // One name and one rule for Patch everywhere (AppUtil).
+        QAction *pa = menu->addAction(AppUtil::patchActionText(ids.size()), this, [this, ids]() {
             PatchInventoryDialog dlg(m_doc, ids, this);
             if (dlg.exec() != QDialog::Accepted)
                 return;
@@ -6798,7 +6795,7 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
                 updateFixture(f);
             emit mapStructureChanged();
         });
-        pa->setEnabled(staged || m_doc->mode() == Doc::Design || ids.size() > 1);
+        pa->setEnabled(AppUtil::patchAllowed(m_doc, ids));
 
         /* More than one kind of head (RGB and white rows): its LED map, and
            a fixture group per kind. */

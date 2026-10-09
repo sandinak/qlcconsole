@@ -103,6 +103,7 @@ private:
     QSpinBox *m_dmxUni;
     QSpinBox *m_dmxAddr;
     QLabel *m_dmxNote;
+    class QToolButton *m_patch;
 };
 
 /** @} */

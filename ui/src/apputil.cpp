@@ -855,3 +855,24 @@ void AppUtil::updateLoadProblems(const QString &errorLog)
             QCoreApplication::translate("AppUtil", "What the show file asked for that could not be done as it was."),
             items);
 }
+
+QString AppUtil::patchActionText(int count)
+{
+    return count > 1 ? QCoreApplication::translate("AppUtil", "Patch %1 Fixtures…").arg(count)
+                     : QCoreApplication::translate("AppUtil", "Patch…");
+}
+
+bool AppUtil::patchAllowed(Doc *doc, const QList<quint32> &fixtureIds)
+{
+    if (doc == nullptr || fixtureIds.isEmpty())
+        return false;
+    if (doc->mode() == Doc::Design)
+        return true;
+    foreach (quint32 fid, fixtureIds)
+    {
+        Fixture *fx = doc->fixture(fid);
+        if (fx != nullptr && fx->isPatched())
+            return false;
+    }
+    return true;
+}

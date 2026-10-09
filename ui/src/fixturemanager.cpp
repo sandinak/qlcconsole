@@ -1407,7 +1407,7 @@ void FixtureManager::initActions()
         m_addInventoryAction->setEnabled(m_addAction->isEnabled());
         m_patchInventoryAction->setEnabled(m_addAction->isEnabled());
     });
-    m_patchInventoryAction = new QAction(tr("Patch inventory..."), this);
+    m_patchInventoryAction = new QAction(tr("Patch Inventory…"), this);
     m_patchInventoryAction->setToolTip(tr("Give the staged fixtures a real universe and address"));
     connect(m_patchInventoryAction, &QAction::triggered, this, [this]() { patchInventory(); });
 
@@ -1424,17 +1424,17 @@ void FixtureManager::initActions()
     connect(m_addChannelsGroupAction, &QAction::triggered, this, &FixtureManager::addChannelsGroup);
 
     m_removeAction = new QAction(QIcon(":/edit_remove.png"),
-                                 tr("Delete items"), this);
+                                 tr("Delete…"), this);
     connect(m_removeAction, SIGNAL(triggered(bool)),
             this, SLOT(slotRemove()));
 
     m_propertiesAction = new QAction(QIcon(":/configure.png"),
-                                     tr("Properties..."), this);
+                                     tr("Fixture Properties…"), this);
     connect(m_propertiesAction, SIGNAL(triggered(bool)),
             this, SLOT(slotProperties()));
 
     m_testAction = new QAction(QIcon(":/fixture.png"),
-                               tr("Test Fixture..."), this);
+                               tr("Test Fixture…"), this);
     m_testAction->setEnabled(false);
     connect(m_testAction, SIGNAL(triggered(bool)),
             this, SLOT(slotTestFixture()));
@@ -1456,7 +1456,7 @@ void FixtureManager::initActions()
        out, e.g. an LM70 whose 0-127 is intensity and 128-255 is strobe -- was
        effectively unfindable. Same dialog, honest name. */
     m_fadeConfigAction = new QAction(QIcon(":/fade.png"),
-                                     tr("Channel Behaviour && Modifiers..."), this);
+                                     tr("Channel Behaviour && Modifiers…"), this);
     m_fadeConfigAction->setToolTip(
         tr("Per-channel fade behaviour (HTP/LTP, can-fade) and value modifier "
            "curves, which remap a channel's DMX values as they are sent."));
@@ -1472,7 +1472,7 @@ void FixtureManager::initActions()
         "bottom of the list."));
 
     m_unGroupAction = new QAction(QIcon(":/ungroup.png"),
-                                tr("Remove fixture from group"), this);
+                                tr("Remove from Group"), this);
     connect(m_unGroupAction, SIGNAL(triggered(bool)),
             this, SLOT(slotUnGroup()));
 
@@ -1510,11 +1510,11 @@ void FixtureManager::initActions()
     // "Collapse/Expand everything below" -- expand/collapse-all is a tree-
     // state toggle, not an add/remove of anything, so it shouldn't borrow
     // edit_add/edit_remove's create/delete iconography.
-    m_expandAllAction = new QAction(tr("Expand all groups"), this);
+    m_expandAllAction = new QAction(tr("Expand All"), this);
     connect(m_expandAllAction, &QAction::triggered, this,
             [this]() { if (m_fixtures_tree) m_fixtures_tree->expandAll(); });
 
-    m_collapseAllAction = new QAction(tr("Collapse all groups"), this);
+    m_collapseAllAction = new QAction(tr("Collapse All"), this);
     connect(m_collapseAllAction, &QAction::triggered, this,
             [this]() { if (m_fixtures_tree) m_fixtures_tree->collapseAll(); });
 }
@@ -2657,149 +2657,16 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
         }
     }
 
-    // "Move to folder…" — applies to every selected group.
-    QAction *moveToFolder = NULL;
-    QAction *ungroupOnly = NULL;
-    if (selGroups.isEmpty() == false)
-    {
-        menu.addSeparator();
-        moveToFolder = menu.addAction(selGroups.size() > 1
-            ? tr("Move %1 groups to folder…").arg(selGroups.size())
-            : tr("Move to folder…"));
-
-        /* Delete the GROUPING, keep the fixtures.
-         *
-         * Doc::deleteFixtureGroup() has always done exactly this -- groups and
-         * fixtures live in separate maps -- but the only way to reach it was
-         * the shared Delete action, whose prompt says "delete the selected
-         * items" and which also deletes any fixture rows caught in the same
-         * selection. There was no way to say "I want the group gone, not the
-         * lights", so the safe move was to leave stale groups lying about. */
-        ungroupOnly = menu.addAction(selGroups.size() > 1
-            ? tr("Remove %1 groups (keep fixtures)").arg(selGroups.size())
-            : tr("Remove group (keep fixtures)"));
-        ungroupOnly->setToolTip(tr("Deletes the grouping only — every fixture in "
-                                   "it stays in the workspace, patched as it is."));
-    }
-
-    QAction *copyToNew = NULL;
-    QMenu *copyIntoMenu = NULL;
-    if (selFixtures.isEmpty() == false || selGroups.isEmpty() == false)
-    {
-        menu.addSeparator();
-        copyToNew = menu.addAction(tr("Create group from selection…"));
-
-        const QList<FixtureGroup*> groups = m_doc->fixtureGroups();
-        if (groups.isEmpty() == false)
-        {
-            copyIntoMenu = menu.addMenu(tr("Copy into group"));
-            foreach (FixtureGroup *g, groups)
-            {
-                if (g == NULL)
-                    continue;
-                QAction *a = copyIntoMenu->addAction(g->name());
-                a->setData(g->id());
-            }
-        }
-    }
-
-    // Assign the selected fixtures to a power circuit (or remove them). Circuits
-    // live in the power-distribution model shown in the pane on the right.
-    QMenu *circuitMenu = NULL;
-    QAction *removeFromCircuit = NULL;
-    if (selFixtures.isEmpty() == false)
-    {
-        menu.addSeparator();
-        PowerDistribution *pd = m_doc->powerDistribution();
-        circuitMenu = menu.addMenu(selFixtures.size() > 1
-            ? tr("Add %1 fixtures to power circuit").arg(selFixtures.size())
-            : tr("Add to power circuit"));
-        bool haveCircuit = false;
-        for (int s = 0; s < pd->sources().size(); s++)
-        {
-            const PowerSource &src = pd->sources().at(s);
-            if (src.circuits.size() <= 1)
-            {
-                // A wall socket, single-outlet UPS, or fresh source takes fixtures
-                // directly (its single/implicit circuit, created on demand).
-                haveCircuit = true;
-                QAction *a = circuitMenu->addAction(tr("%1 (direct)").arg(src.name));
-                a->setData(QPoint(s, 0));
-                continue;
-            }
-            for (int c = 0; c < src.circuits.size(); c++)
-            {
-                haveCircuit = true;
-                QAction *a = circuitMenu->addAction(tr("%1 / %2")
-                        .arg(src.name).arg(src.circuits.at(c).name));
-                a->setData(QPoint(s, c));   // (source, circuit) indices
-            }
-        }
-        if (haveCircuit == false)
-        {
-            QAction *none = circuitMenu->addAction(
-                tr("(no circuits yet — add one in the Power pane)"));
-            none->setEnabled(false);
-        }
-        removeFromCircuit = menu.addAction(tr("Remove from power circuit"));
-    }
-
-    // A universe row itself (not a fixture living in it): the only action
-    // this tree offers on it directly is deleting it outright. Renaming is
-    // already inline (Enter/F2/double-click, see FixtureTreeWidget), and
-    // patching/retargeting stays exclusively the Connections tab's job — this
-    // tree only shows where a universe's fixtures live, not how it reaches
-    // hardware.
-    QAction *deleteUni = NULL;
-    if (ctxIsUniverseRow)
-    {
-        menu.addSeparator();
-        deleteUni = menu.addAction(tr("Delete universe…"));
-    }
-
-    // Build out the Power section itself: a new source from the "Power" folder
-    // (or from any power node — you don't have to hit the root exactly), a new
-    // circuit on whichever source was clicked.
-    QAction *addPowerSource = NULL;
-    QAction *addCircuit = NULL;
-    if (ctxPowerSource != -2)
-    {
-        menu.addSeparator();
-        addPowerSource = menu.addAction(tr("Add power source…"));
-        if (ctxPowerSource >= 0)
-            addCircuit = menu.addAction(tr("Add circuit…"));
-    }
-
-    // Fixture Studio: rebuild a composite group from the source groups recorded
-    // in its per-head provenance tags (re-pulls their current layout, ordered by
-    // studio geometry). Offered when exactly one group with provenance is picked.
-    QAction *rebuildComposite = NULL;
-    if (selGroups.size() == 1)
-    {
-        FixtureGroup *g = m_doc->fixtureGroup(selGroups.first());
-        if (g != NULL && g->headSubGroupMap().isEmpty() == false)
-        {
-            menu.addSeparator();
-            rebuildComposite = menu.addAction(tr("Rebuild composite from members"));
-        }
-    }
-
-    // Base fixture/group actions, appended LAST (after every row/selection-
-    // specific block above), matching ConnectionsTree's "specific-to-this-row
-    // first, generic last" convention (appendUniversalMenuActions()).
-    //
-    // Add fixture/Add RGB panel create something wholly new, unrelated to
-    // whatever row was actually clicked -- Branson: right-clicking a fixture
-    // shouldn't offer to create an unrelated one, only a root-ish context
-    // (empty space, Power root, Universes root, a universe row, the Fixture
-    // Groups root/a group folder -- anywhere with no fixture-or-group
-    // selection) should. Properties/Test/Edit Definition/Add-to-group/
-    // Remove/Ungroup all act ON an existing fixture-or-group selection, so
-    // they're the exact opposite: only listed when one exists.
+    /* Laid out by what it is about, the same order whatever is selected:
+       the fixture itself, its address, finding it on the rig, organising it,
+       deleting it -- then what the clicked row offers (a root, a folder, the
+       inventory), then the view. Grouping and power are submenus: each is a
+       handful of related moves, and flat they were half the menu. */
     const bool haveFixtureOrGroupSelection = selFixtures.isEmpty() == false
                                            || selGroups.isEmpty() == false;
-    if (menu.isEmpty() == false)
-        menu.addSeparator();
+
+    // ---- The fixture itself ----
+    QAction *editDefinition = NULL;
     if (haveFixtureOrGroupSelection)
     {
         menu.addAction(m_propertiesAction);
@@ -2808,60 +2675,18 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
         if (selFixtures.size() == 1 && m_doc->mode() != Doc::Operate)
         {
             const quint32 fid = selFixtures.first();
-            menu.addAction(tr("Definition && Mode..."), this, [this, fid]() {
+            menu.addAction(tr("Definition && Mode…"), this, [this, fid]() {
                 editDefinitionAndMode(this, m_doc, fid);
             });
         }
-        menu.addAction(m_testAction);
-        menu.addAction(m_locateAction);
-        menu.addAction(m_fadeConfigAction);
-        menu.addAction(m_resetAction);
-        menu.addAction(m_groupAction);
-        menu.addAction(m_removeAction);
-        menu.addAction(m_unGroupAction);
-    }
-    else if (!ctxIsInventoryRoot)
-    {
-        menu.addAction(m_addAction);
-        menu.addAction(m_addRGBAction);
-    }
-
-    // "New Group..." -- offered when the click landed on the Fixture Groups
-    // root or one of its sub-folders (both carry PROP_FOLDER; see
-    // FixtureTreeWidget::groupFolderItem()), filing the new group at that
-    // folder's path. Moved here from "Add fixture to group..."'s dropdown --
-    // Branson wanted group creation to live on the tree's own root/folder
-    // nodes instead, matching how "Add power source..." lives on the Power
-    // root rather than a menu-bar/toolbar action.
-    QString newGroupPath;
-    bool offerNewGroup = false;
-    if (QTreeWidgetItem *clickedItem = m_fixtures_tree->itemAt(pos))
-    {
-        const QVariant folderVar = clickedItem->data(KColumnName, PROP_FOLDER);
-        if (folderVar.isValid())
+        /* The definition file itself, in the Fixture Editor -- one real
+           fixture with a .qxf; a generic dimmer has none. */
+        if (selFixtures.size() == 1 && selGroups.isEmpty())
         {
-            offerNewGroup = true;
-            newGroupPath = folderVar.toString();
-        }
-    }
-    if (offerNewGroup)
-        menu.addAction(m_newGroupAction);
-
-    // "Edit Fixture Definition..." -- opens the standalone Fixture Editor on
-    // exactly this fixture's .qxf, not Fixture Manager's own Properties
-    // dialog (patch/address/mode) which is a different thing entirely.
-    // Only offered for a single real fixture with an actual definition file
-    // -- a generic dimmer (fixtureDef() == NULL) has no .qxf to edit, and
-    // editing "the definition" of a multi-fixture or group selection isn't
-    // a coherent single action.
-    QAction *editDefinition = NULL;
-    if (selFixtures.size() == 1 && selGroups.isEmpty())
-    {
-        Fixture *fxi = m_doc->fixture(selFixtures.first());
-        if (fxi != NULL && fxi->fixtureDef() != NULL &&
-            fxi->fixtureDef()->definitionSourceFile().isEmpty() == false)
-        {
-            editDefinition = menu.addAction(tr("Edit Fixture Definition..."));
+            Fixture *fxi = m_doc->fixture(selFixtures.first());
+            if (fxi != NULL && fxi->fixtureDef() != NULL &&
+                fxi->fixtureDef()->definitionSourceFile().isEmpty() == false)
+                editDefinition = menu.addAction(tr("Edit Fixture Definition…"));
         }
     }
 
@@ -2870,7 +2695,6 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
     // patching just those.
     QAction *addToInv = NULL;
     QAction *patchAll = NULL;
-    QAction *patchSel = NULL;
     QList<quint32> stagedSel;
     foreach (quint32 fid, selFixtures)
     {
@@ -2907,33 +2731,184 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
         if (pf != NULL && pf->isPatched())
             patchedSel << fid;
     }
-    /* Patch / re-address: the whole selection, patched and staged together,
-       so a mixed set can be placed as one block. */
+
+    // ---- Its address ----
+    /* Patch: one action, one name, one rule (AppUtil::patchActionText(),
+       patchAllowed()) -- giving staged fixtures an address and moving
+       patched ones are the same dialog, on the whole selection, so a mixed
+       set is placed as one block. */
     QAction *readdress = NULL;
     QList<quint32> readdressIds = patchedSel;
     foreach (quint32 fid, stagedSel)
         if (!readdressIds.contains(fid))
             readdressIds << fid;
-    if (!patchedSel.isEmpty())
+    if (!readdressIds.isEmpty())
     {
         menu.addSeparator();
-        readdress = menu.addAction(!stagedSel.isEmpty()
-                                       ? tr("Patch / re-address %1 fixtures...").arg(readdressIds.size())
-                                   : readdressIds.size() > 1
-                                       ? tr("Re-address %1 fixtures...").arg(readdressIds.size())
-                                       : tr("Re-address..."));
-        readdress->setEnabled(m_doc->mode() == Doc::Design);
-        readdress->setToolTip(tr("Move to another universe or address -- as a block keeping "
-                                 "their spacing, or packed -- reviewed before it is applied"));
+        readdress = menu.addAction(AppUtil::patchActionText(readdressIds.size()));
+        readdress->setEnabled(AppUtil::patchAllowed(m_doc, readdressIds));
+        readdress->setToolTip(tr("Give a universe and address, or move to another -- as a block "
+                                 "keeping their spacing, or packed -- reviewed before it is applied"));
     }
     if (!patchedSel.isEmpty())
     {
         returnToInv = menu.addAction(patchedSel.size() > 1
-                                         ? tr("Return %1 fixtures to inventory...").arg(patchedSel.size())
-                                         : tr("Return to inventory..."));
+                                         ? tr("Return %1 Fixtures to Inventory…").arg(patchedSel.size())
+                                         : tr("Return to Inventory…"));
         returnToInv->setEnabled(m_doc->mode() == Doc::Design);
         returnToInv->setToolTip(tr("Release its universe and address but keep the fixture, its "
                                    "placement and its groups"));
+    }
+
+    // ---- Finding it on the rig ----
+    if (haveFixtureOrGroupSelection)
+    {
+        menu.addSeparator();
+        menu.addAction(m_testAction);
+        menu.addAction(m_locateAction);
+        menu.addAction(m_resetAction);
+    }
+
+    // ---- Organising it ----
+    QAction *moveToFolder = NULL;
+    QAction *ungroupOnly = NULL;
+    QAction *copyToNew = NULL;
+    QMenu *copyIntoMenu = NULL;
+    QAction *rebuildComposite = NULL;
+    QMenu *circuitMenu = NULL;
+    QAction *removeFromCircuit = NULL;
+    if (haveFixtureOrGroupSelection)
+    {
+        menu.addSeparator();
+        QMenu *groupMenu = menu.addMenu(QIcon(":/group.png"), tr("Group"));
+        copyToNew = groupMenu->addAction(tr("Create Group from Selection…"));
+        const QList<FixtureGroup*> groups = m_doc->fixtureGroups();
+        if (groups.isEmpty() == false)
+        {
+            // Fixtures join it; a group selected comes in as a block.
+            copyIntoMenu = groupMenu->addMenu(tr("Add to Group"));
+            foreach (FixtureGroup *g, groups)
+            {
+                if (g == NULL)
+                    continue;
+                QAction *a = copyIntoMenu->addAction(g->name());
+                a->setData(g->id());
+            }
+        }
+        if (selFixtures.isEmpty() == false)
+            groupMenu->addAction(m_unGroupAction);
+        if (selGroups.isEmpty() == false)
+        {
+            groupMenu->addSeparator();
+            moveToFolder = groupMenu->addAction(selGroups.size() > 1
+                ? tr("Move %1 Groups to Folder…").arg(selGroups.size())
+                : tr("Move to Folder…"));
+            /* Delete the GROUPING, keep the fixtures -- the shared Delete
+               also deletes any fixture rows caught in the selection. */
+            ungroupOnly = groupMenu->addAction(selGroups.size() > 1
+                ? tr("Remove %1 Groups (Keep Fixtures)").arg(selGroups.size())
+                : tr("Remove Group (Keep Fixtures)"));
+            ungroupOnly->setToolTip(tr("Deletes the grouping only — every fixture in "
+                                       "it stays in the workspace, patched as it is."));
+            // A composite group rebuilt from the source groups its heads recorded.
+            if (selGroups.size() == 1)
+            {
+                FixtureGroup *g = m_doc->fixtureGroup(selGroups.first());
+                if (g != NULL && g->headSubGroupMap().isEmpty() == false)
+                    rebuildComposite = groupMenu->addAction(tr("Rebuild Composite from Members"));
+            }
+        }
+
+        // Power circuits live in the power-distribution pane on the right.
+        if (selFixtures.isEmpty() == false)
+        {
+            QMenu *powerMenu = menu.addMenu(tr("Power"));
+            PowerDistribution *pd = m_doc->powerDistribution();
+            circuitMenu = powerMenu->addMenu(selFixtures.size() > 1
+                ? tr("Add %1 Fixtures to Circuit").arg(selFixtures.size())
+                : tr("Add to Circuit"));
+            bool haveCircuit = false;
+            for (int s = 0; s < pd->sources().size(); s++)
+            {
+                const PowerSource &src = pd->sources().at(s);
+                if (src.circuits.size() <= 1)
+                {
+                    // A wall socket, single-outlet UPS, or fresh source takes
+                    // fixtures directly (its single/implicit circuit).
+                    haveCircuit = true;
+                    QAction *a = circuitMenu->addAction(tr("%1 (direct)").arg(src.name));
+                    a->setData(QPoint(s, 0));
+                    continue;
+                }
+                for (int c = 0; c < src.circuits.size(); c++)
+                {
+                    haveCircuit = true;
+                    QAction *a = circuitMenu->addAction(tr("%1 / %2")
+                            .arg(src.name).arg(src.circuits.at(c).name));
+                    a->setData(QPoint(s, c));   // (source, circuit) indices
+                }
+            }
+            if (haveCircuit == false)
+            {
+                QAction *none = circuitMenu->addAction(
+                    tr("(no circuits yet — add one in the Power pane)"));
+                none->setEnabled(false);
+            }
+            removeFromCircuit = powerMenu->addAction(tr("Remove from Circuit"));
+        }
+        menu.addAction(m_fadeConfigAction);
+
+        // ---- Deleting it ----
+        menu.addSeparator();
+        menu.addAction(m_removeAction);
+    }
+
+    // ---- What the clicked row offers ----
+    /* Creating something new is a root-ish click's (empty space, a universe,
+       the Power or Fixture Groups roots, a folder), never a fixture's. */
+    if (!haveFixtureOrGroupSelection && !ctxIsInventoryRoot)
+    {
+        menu.addSeparator();
+        menu.addAction(m_addAction);
+        menu.addAction(m_addRGBAction);
+    }
+
+    // A universe row itself: delete it (renaming is inline; how it reaches
+    // hardware is the Connections tab's job).
+    QAction *deleteUni = NULL;
+    if (ctxIsUniverseRow)
+    {
+        menu.addSeparator();
+        deleteUni = menu.addAction(tr("Delete Universe…"));
+    }
+
+    // The Power section: a new source from its root, a circuit on a source.
+    QAction *addPowerSource = NULL;
+    QAction *addCircuit = NULL;
+    if (ctxPowerSource != -2)
+    {
+        menu.addSeparator();
+        addPowerSource = menu.addAction(tr("Add Power Source…"));
+        if (ctxPowerSource >= 0)
+            addCircuit = menu.addAction(tr("Add Circuit…"));
+    }
+
+    // "New Group..." on the Fixture Groups root or one of its folders.
+    QString newGroupPath;
+    bool offerNewGroup = false;
+    if (QTreeWidgetItem *clickedItem = m_fixtures_tree->itemAt(pos))
+    {
+        const QVariant folderVar = clickedItem->data(KColumnName, PROP_FOLDER);
+        if (folderVar.isValid())
+        {
+            offerNewGroup = true;
+            newGroupPath = folderVar.toString();
+        }
+    }
+    if (offerNewGroup)
+    {
+        menu.addSeparator();
+        menu.addAction(m_newGroupAction);
     }
 
     // The Duplicate names root: number them apart.
@@ -2957,7 +2932,7 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
         if (clicked->data(KColumnName, PROP_CLASHES).isValid() && !m_doc->addressClashes().isEmpty())
         {
             menu.addSeparator();
-            fixClashes = menu.addAction(tr("Patch the clashing fixtures..."));
+            fixClashes = menu.addAction(tr("Patch the Clashing Fixtures…"));
             fixClashes->setToolTip(tr("Propose free channels for each one, to review and apply"));
         }
     }
@@ -2999,27 +2974,21 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
         likeFixture = stagedSel.first();   // a staged fixture: more like it
     }
     Fixture *likeFx = m_doc->fixture(likeFixture);
-    QString addLabel = tr("Add to inventory...");
+    QString addLabel = tr("Add to Inventory…");
     if (likeFx != NULL)
-        addLabel = tr("Add more %1 to inventory...").arg(likeFx->groupingModel());   // as its folder reads
+        addLabel = tr("Add More %1 to Inventory…").arg(likeFx->groupingModel());   // as its folder reads
     else if (!likeManufacturer.isEmpty())
-        addLabel = tr("Add %1 fixtures to inventory...").arg(likeManufacturer);
+        addLabel = tr("Add %1 Fixtures to Inventory…").arg(likeManufacturer);
 
-    if (ctxIsInventoryRoot || !stagedSel.isEmpty())
+    if (ctxIsInventoryRoot || likeFx != NULL)
     {
         menu.addSeparator();
-        if (ctxIsInventoryRoot || likeFx != NULL)
-            addToInv = menu.addAction(addLabel);
-        if (!stagedSel.isEmpty())
-            patchSel = menu.addAction(stagedSel.size() > 1
-                                          ? tr("Patch %1 selected fixtures...").arg(stagedSel.size())
-                                          : tr("Patch this fixture..."));
+        addToInv = menu.addAction(addLabel);
         if (ctxIsInventoryRoot)
-            patchAll = menu.addAction(tr("Patch inventory..."));
+            patchAll = menu.addAction(tr("Patch Inventory…"));
     }
 
-    // Tree-wide view toggles, always available regardless of selection —
-    // same "generic, appended last" convention, moved here from the toolbar.
+    // ---- The view ----
     menu.addSeparator();
     menu.addAction(m_expandAllAction);
     menu.addAction(m_collapseAllAction);
@@ -3060,9 +3029,9 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
         addFixtureImpl(true, likeFixture, likeManufacturer);
         return;
     }
-    if ((patchAll != NULL && chosen == patchAll) || (patchSel != NULL && chosen == patchSel))
+    if (patchAll != NULL && chosen == patchAll)
     {
-        patchInventory(chosen == patchSel ? stagedSel : QList<quint32>());
+        patchInventory(QList<quint32>());
         return;
     }
 

@@ -168,10 +168,18 @@ existing one. Studio: a plain unfiltered list, "Add Fixtures to Structure".
 **Converge:** create = "Add Fixture…" (Fixture Manager, inventory); place =
 "Place Fixture…" with one filterable picker in the plot and the studio.
 
-### 9. Same action, different names
+### 9. Same action, different names -- DONE 2026-10-09 (Patch; the Fixture Manager menu)
 "Properties…" / "Edit Fixture…" / "Edit fixture…" / "Full properties…";
 "Re-address…" vs "Patch…" -- with different mode rules (Fixture Manager needs
 Design mode; the plot allows unpatched or multi-select in any mode).
+
+**Done:** Patch is one name ("Patch…", "Patch N Fixtures…") and one rule
+(AppUtil::patchActionText()/patchAllowed()) in the Fixture Manager, the plot
+and the studio. The Fixture Manager's menu is laid out by what it is about
+-- the fixture, its address, finding it, organising it (Group and Power
+submenus), deleting it -- with "Fixture Properties…" and the duplicate
+"Add fixture to group" gone (Group ▸ Add to Group). The plot's fixture menu
+is not yet the same factory.
 
 **Converge:** one fixture context-menu factory: "Fixture Properties…",
 "Patch…", one rule for when Patch is offered.

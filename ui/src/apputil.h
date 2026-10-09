@@ -164,6 +164,16 @@ namespace AppUtil
      */
     void updateFixtureReadiness(Doc *doc);
 
+    /** The one name for giving fixtures a universe and address, or moving
+     *  them to another: "Patch…" for one, "Patch 4 Fixtures…" for several --
+     *  in the Fixture Manager, on the plot and in the studio alike. */
+    QString patchActionText(int count);
+
+    /** Whether Patch is offered for @p fixtureIds: always when none of them
+     *  has an address yet (giving one is harmless); moving patched fixtures
+     *  is Design mode's, as moving them in a running show is not. */
+    bool patchAllowed(Doc *doc, const QList<quint32> &fixtureIds);
+
     /** The footer's "show.load" entry from a load's @p errorLog (Doc's
      *  "<br>"-separated HTML): one item per problem, missing definitions left
      *  out (the footer lists those fixtures already). Cleared when there are

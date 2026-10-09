@@ -83,10 +83,9 @@ any of its targets are unpatched.
 
 ### Patching: the Patch dialog
 
-**"Patch inventory..."** (Inventory root), **"Patch N selected
-fixtures..."** (staged fixtures, or a manufacturer/model folder, which stands
-for everything under it) or **"Re-address..."** / **"Patch / re-address N
-fixtures..."** (patched fixtures, or a mix) opens the **Patch** dialog. It
+**"Patch Inventory…"** (on the Inventory root) or **"Patch…"** —
+**"Patch N Fixtures…"** for several (staged fixtures, patched ones, or a mix;
+a manufacturer/model folder stands for everything under it) — opens the **Patch** dialog. It
 opens on a proposal, which you review and edit before anything changes:
 
 - One row per fixture: model, **Mode** (the mode decides the DMX
@@ -245,7 +244,7 @@ keeping its name, and **Apply** re-lays it from where its fixtures stand.
 ## Sub-groups: pasted blocks with provenance
 
 When you paste one group's layout into another as a block (via "Add group as
-block…" or "Copy into group"), every head that came along is tagged with the
+block…" or **Group → Add to Group**), every head that came along is tagged with the
 source group's id. This is what lets the editor:
 
 - **Color-code** the pasted block distinctly from the rest of the grid, so
@@ -259,17 +258,29 @@ source group's id. This is what lets the editor:
 
 ## Context menu
 
-Right-click behavior follows one rule: **specific-to-this-row items first,
-generic items last, and only ever appended when they actually apply** — no
-Properties/Remove/Ungroup items sitting around disabled when they don't make
-sense for what you clicked. In order: folder/group actions (move to folder,
-create/copy into group), power-circuit actions, universe actions, then the
-base Properties/Test/Locate/Remove block (or Add Fixture/Add RGB Panel on
-empty space), then folder-only "New Group...", then "Edit Fixture
-Definition..." for a real fixture, then the patch items (Re-address /
-Return to inventory for patched fixtures; Number the Duplicates and Patch
-the clashing fixtures on their roots; Add more … to inventory / Patch …
-for the inventory), with Expand/Collapse-all always last.
+Right-click is laid out by what it is about, in the same order whatever is
+selected, and only offers what applies:
+
+1. **The fixture itself** — Fixture Properties…, Definition & Mode… and
+   Edit Fixture Definition… (one fixture).
+2. **Its address** — **Patch…** (the one name for giving an address and
+   moving one, here, on the plot and in the studio; "Patch N Fixtures…" for
+   several) and Return to Inventory….
+3. **Finding it on the rig** — Test Fixture…, Locate, Reset.
+4. **Organising it** — a **Group** submenu (Create Group from Selection…,
+   Add to Group ▸, Remove from Group; for a group: Move to Folder…, Remove
+   Group (Keep Fixtures), Rebuild Composite), a **Power** submenu (Add to
+   Circuit ▸, Remove from Circuit), and Channel Behaviour & Modifiers….
+5. **Deleting it** — Delete….
+
+Then what the clicked row offers — Add Fixture / Add RGB Panel on empty
+space, Delete Universe… on a universe, Add Power Source… / Add Circuit…,
+New Group… on a group folder, Number the Duplicates and Patch the Clashing
+Fixtures… on their roots, Add … to Inventory / Patch Inventory… on the
+inventory — and Expand All / Collapse All last.
+
+Patch is offered whenever none of the fixtures has an address yet; moving
+patched ones is Design mode's — the same rule everywhere.
 
 ## Fixture definitions
 

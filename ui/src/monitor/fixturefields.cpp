@@ -24,6 +24,7 @@
 #include "colourswatchbutton.h"
 #include "monitorproperties.h"
 #include "fixturefields.h"
+#include "apputil.h"
 #include "lightcontrols.h"
 #include "monitor.h"
 #include "fixture.h"
@@ -191,10 +192,11 @@ FixtureFields::FixtureFields(Monitor *monitor, QFormLayout *form, QWidget *paren
     m_dmxAddr->setRange(1, 512);
     m_dmxAddr->setKeyboardTracking(false);
     m_dmxAddr->setToolTip(tr("Start address"));
-    QToolButton *patchBtn = new QToolButton(m_dmxBox);
+    QToolButton *patchBtn = m_patch = new QToolButton(m_dmxBox);
     patchBtn->setObjectName(QStringLiteral("fixturePatch"));
     patchBtn->setText(tr("Patch…"));
-    patchBtn->setToolTip(tr("Patch / re-address these fixtures together"));
+    patchBtn->setToolTip(tr("Give a universe and address, or move to another -- these "
+                            "fixtures together, reviewed before it is applied"));
     dmxRow->addWidget(m_dmxUni);
     dmxRow->addWidget(m_dmxAddr, 1);
     dmxRow->addWidget(patchBtn);
@@ -539,6 +541,7 @@ void FixtureFields::setFixtures(const QList<quint32> &fids, quint32 shown)
                              ? tr("–%1").arg(int(fx->address() + fx->channels()))
                              : QString());
     row(m_dmxBox, true);
+    m_patch->setEnabled(AppUtil::patchAllowed(doc, m_fids));     // one rule (AppUtil)
     QString note;
     if (many)
         note = tr("%1 fixtures: Patch… addresses them together.").arg(m_fids.size());

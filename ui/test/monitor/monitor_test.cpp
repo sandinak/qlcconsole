@@ -16850,7 +16850,7 @@ void Monitor_Test::patchingFromLayersTakesEveryFixtureSelectedThere()
         QStringList texts;
         foreach (QAction *a, menu.actions())
             texts << a->text();
-        QVERIFY2(texts.contains("Patch / Re-address 4 Fixtures…"), qPrintable(texts.join(" | ")));
+        QVERIFY2(texts.contains("Patch 4 Fixtures…"), qPrintable(texts.join(" | ")));
     }
     delete doc;
 }

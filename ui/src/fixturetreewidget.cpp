@@ -746,7 +746,7 @@ void FixtureTreeWidget::updateFixtureItem(QTreeWidgetItem* item, Fixture* fixtur
         item->setToolTip(m_addressColumn,
             tr("The show file patches it at universe %1, address %2, which %3 already uses. "
                "It is loaded unpatched so it cannot write over it -- give it a home with "
-               "Patch / Re-address, or drag it onto a universe.")
+               "Patch…, or drag it onto a universe.")
                 .arg(fixture->universe() + 1).arg(fixture->address() + 1)
                 .arg(owner != NULL ? owner->name() : tr("another fixture")));
     }

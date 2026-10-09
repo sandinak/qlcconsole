@@ -786,8 +786,8 @@ void FixtureManager_Test::rightClickOnInventoryOffersInventoryActionsNotAGeneric
 
     const QStringList texts = contextMenuTexts(mgr, inv);
     QVERIFY2(!texts.isEmpty(), "the context menu never appeared");
-    QVERIFY2(texts.contains("Add to inventory..."), qPrintable(texts.join(" | ")));
-    QVERIFY2(texts.contains("Patch inventory..."), qPrintable(texts.join(" | ")));
+    QVERIFY2(texts.contains("Add to Inventory…"), qPrintable(texts.join(" | ")));
+    QVERIFY2(texts.contains("Patch Inventory…"), qPrintable(texts.join(" | ")));
     QVERIFY2(!texts.contains("Add fixture..."),
              qPrintable("the generic Add fixture offer is still there: " + texts.join(" | ")));
     QVERIFY2(!texts.contains("Add RGB panel..."), qPrintable(texts.join(" | ")));
@@ -805,7 +805,7 @@ void FixtureManager_Test::rightClickOnUniversesStillOffersAFixtureAdd()
 
     const QStringList texts = contextMenuTexts(mgr, uni);
     QVERIFY2(texts.contains("Add fixture..."), qPrintable(texts.join(" | ")));
-    QVERIFY2(!texts.contains("Add to inventory..."), qPrintable(texts.join(" | ")));
+    QVERIFY2(!texts.contains("Add to Inventory…"), qPrintable(texts.join(" | ")));
 }
 
 void FixtureManager_Test::addFixtureWithInventorySelectedStagesIt()
@@ -864,10 +864,28 @@ void FixtureManager_Test::returnToInventoryIsOfferedForPatchedFixturesOnly()
     QTreeWidgetItem *stagedRow = fixtureRow(mgr, staged->id());
     QVERIFY(realRow != nullptr && stagedRow != nullptr);
 
-    QVERIFY(contextMenuTexts(mgr, realRow).contains("Return to inventory..."));
+    QVERIFY(contextMenuTexts(mgr, realRow).contains("Return to Inventory…"));
     const QStringList st = contextMenuTexts(mgr, stagedRow);
-    QVERIFY2(!st.contains("Return to inventory..."), qPrintable(st.join(" | ")));
-    QVERIFY2(st.contains("Patch this fixture..."), qPrintable(st.join(" | ")));
+    QVERIFY2(!st.contains("Return to Inventory…"), qPrintable(st.join(" | ")));
+    QVERIFY2(st.contains("Patch…"), qPrintable(st.join(" | ")));
+
+    /* "we should clean up that menu to organize it": the fixture, its
+       address, finding it, organising it (Group and Power are submenus),
+       deleting it -- in that order -- and Patch one name. */
+    const QStringList rt = contextMenuTexts(mgr, realRow);
+    const QStringList order = { "Fixture Properties…", "Patch…", "Return to Inventory…",
+                                "Test Fixture…", "Group", "Power", "Delete…" };
+    int last = -1;
+    foreach (const QString &t, order)
+    {
+        const int at = rt.indexOf(t);
+        QVERIFY2(at > last, qPrintable(QString("%1 out of place: %2").arg(t, rt.join(" | "))));
+        last = at;
+    }
+    const QStringList gone = { "Copy into group", "Add fixture to group...", "Re-address...",
+                               "Remove fixture from group", "Create group from selection…" };
+    for (const QString &g : gone)
+        QVERIFY2(!rt.contains(g), qPrintable(QString("%1 still at the top: %2").arg(g, rt.join(" | "))));
 }
 
 void FixtureManager_Test::returningToInventoryReleasesTheAddress()
@@ -909,18 +927,18 @@ void FixtureManager_Test::rightClickOnAnInventoryFolderOffersToPatchWhatIsInIt()
     QCOMPARE(manuf->data(KColumnName, PROP_INVENTORY).toInt(), 2);
 
     const QStringList texts = contextMenuTexts(mgr, manuf);
-    QVERIFY2(texts.contains("Patch 3 selected fixtures..."), qPrintable(texts.join(" | ")));
+    QVERIFY2(texts.contains("Patch 3 Fixtures…"), qPrintable(texts.join(" | ")));
     // A manufacturer's folder adds that manufacturer's fixtures.
-    QVERIFY2(texts.contains("Add Generic fixtures to inventory..."), qPrintable(texts.join(" | ")));
+    QVERIFY2(texts.contains("Add Generic Fixtures to Inventory…"), qPrintable(texts.join(" | ")));
     QVERIFY2(!texts.contains("Add fixture..."), qPrintable(texts.join(" | ")));
 
     // A model's folder adds more of that model; the root, anything.
     QTreeWidgetItem *model = manuf->child(0);                    // "Dimmer, 4 ch (3)"
     QCOMPARE(model->data(KColumnName, PROP_INVENTORY).toInt(), 2);
     const QStringList modelTexts = contextMenuTexts(mgr, model);
-    QVERIFY2(modelTexts.contains("Add more Dimmer, 4 ch to inventory..."), qPrintable(modelTexts.join(" | ")));
+    QVERIFY2(modelTexts.contains("Add More Dimmer, 4 ch to Inventory…"), qPrintable(modelTexts.join(" | ")));
     const QStringList rootTexts = contextMenuTexts(mgr, inv);
-    QVERIFY2(rootTexts.contains("Add to inventory..."), qPrintable(rootTexts.join(" | ")));
+    QVERIFY2(rootTexts.contains("Add to Inventory…"), qPrintable(rootTexts.join(" | ")));
 }
 
 namespace
@@ -995,7 +1013,7 @@ void FixtureManager_Test::choosingReturnToInventoryFromTheMenuReleasesIt()
 
     FixtureManager mgr(nullptr, m_doc);
     whenModal<QMessageBox>([](QMessageBox *mb) { mb->button(QMessageBox::Yes)->click(); });
-    QVERIFY(chooseFromContextMenu(mgr, fixtureRow(mgr, real->id()), "Return to inventory..."));
+    QVERIFY(chooseFromContextMenu(mgr, fixtureRow(mgr, real->id()), "Return to Inventory…"));
     QVERIFY(!real->isPatched());
     // ...and the tree now files it under the Inventory.
     QTreeWidgetItem *row = fixtureRow(mgr, real->id());
@@ -1015,7 +1033,7 @@ void FixtureManager_Test::choosingAddToInventoryFromTheMenuStagesAFixture()
         QVERIFY(dlg->inventoryMode());
         dlg->m_buttonBox->button(QDialogButtonBox::Ok)->click();
     });
-    QVERIFY(chooseFromContextMenu(mgr, inv, "Add to inventory..."));
+    QVERIFY(chooseFromContextMenu(mgr, inv, "Add to Inventory…"));
     QCOMPARE(m_doc->fixturesCount(), 1);
     QVERIFY(!m_doc->fixtures().first()->isPatched());
 }
@@ -1026,7 +1044,7 @@ void FixtureManager_Test::choosingPatchFromTheMenuPatchesThoseFixtures()
     Fixture *b = stagedDimmer(m_doc, "B");
     QVERIFY(a && b);
 
-    // "Patch this fixture...": just that one.
+    // "Patch…": just that one.
     {
         FixtureManager mgr(nullptr, m_doc);
         int rows = -1;
@@ -1034,12 +1052,12 @@ void FixtureManager_Test::choosingPatchFromTheMenuPatchesThoseFixtures()
             rows = dlg->m_table->rowCount();
             dlg->accept();
         });
-        QVERIFY(chooseFromContextMenu(mgr, fixtureRow(mgr, a->id()), "Patch this fixture..."));
+        QVERIFY(chooseFromContextMenu(mgr, fixtureRow(mgr, a->id()), "Patch…"));
         QCOMPARE(rows, 1);
         QVERIFY(a->isPatched());
         QVERIFY(!b->isPatched());
     }
-    // "Patch inventory...": everything still staged.
+    // "Patch Inventory…": everything still staged.
     {
         Fixture *c = stagedDimmer(m_doc, "C");
         FixtureManager mgr(nullptr, m_doc);
@@ -1048,7 +1066,7 @@ void FixtureManager_Test::choosingPatchFromTheMenuPatchesThoseFixtures()
             rows = dlg->m_table->rowCount();
             dlg->reject();
         });
-        QVERIFY(chooseFromContextMenu(mgr, rowWithRole(mgr, PROP_INVENTORY), "Patch inventory..."));
+        QVERIFY(chooseFromContextMenu(mgr, rowWithRole(mgr, PROP_INVENTORY), "Patch Inventory…"));
         QCOMPARE(rows, 2);                               // B and C
         QVERIFY(!b->isPatched() && !c->isPatched());     // cancelled
     }
