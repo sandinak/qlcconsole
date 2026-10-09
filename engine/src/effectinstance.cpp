@@ -1286,6 +1286,19 @@ QList<EffectInstance::DmxWrite> EffectInstance::wledDeviceWrites() const
     return out;
 }
 
+QString EffectInstance::error() const
+{
+    if (m_script.isValid())
+        return QString();
+    QLCPalette *pal = m_doc->palette(m_effectPaletteId);
+    if (pal == nullptr)
+        return QStringLiteral("the look is gone");
+    if (pal->scriptPath().isEmpty())
+        return QStringLiteral("no effect is chosen");
+    return m_script.lastError().isEmpty() ? QStringLiteral("its script did not load")
+                                          : m_script.lastError();
+}
+
 float EffectInstance::envelopeFor(quint32 fid, int head) const
 {
     // Leaving by a transition: each cell goes when it reaches it.

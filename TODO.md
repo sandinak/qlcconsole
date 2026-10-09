@@ -231,6 +231,20 @@ and colour, not pixel mapping.
   the ports were written from FX.cpp as I know it -- check them against
   the source when the import is done.
 
+## Consolidation 1-3, 5: one way to do each thing -- 2026-10-09 (CONSOLIDATION_REVIEW.md)
+
+- Scene timing in one place: the canvas header carries Fade in/out,
+  Transition in/out + time, Edge.
+- One time control: FadeTimeSpin everywhere a fade/transition time is typed;
+  one LookFades rule for the canvas and the look editor.
+- Double-click a fixture = Fixture Properties in plot, studio and Fixture
+  Manager ("Definition & Mode…" inside it); click a group member again to
+  pick it out.
+- Problems in one place: the load dialog is the footer's "show.load";
+  "effects.failed" lists effect looks that cannot run, and why.
+- NEXT: talk through #4 + #6 (one fixture property model, one dialog helper)
+  before building.
+
 ## Transitions, haze glow, both Fires, back from a group's view -- 2026-10-08 (for Branson to try)
 
 - CLOUD STORAGE that is not on this computer ("starting the tool is

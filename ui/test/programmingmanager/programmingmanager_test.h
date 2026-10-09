@@ -43,6 +43,8 @@ private slots:
      *  local .. that's burned me before." */
     void filesInCloudStorageNotHereAreAWarning();
     void fixturesWithoutTheirDefinitionsAreAnError();
+    void effectLooksThatCannotRunAreInTheFooter();
+    void loadProblemsAreInTheFooter();
     /** Consolidation 1-2: the scene's timing in one place, one time
      *  control, one rule for which fades a look has. */
     void aScenesTimingIsAllOnItsCanvas();

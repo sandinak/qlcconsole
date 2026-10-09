@@ -2432,3 +2432,10 @@ void Doc::postLoad()
         function->postLoad();
     }
 }
+
+QHash<quint32, QString> Doc::effectFailures() const
+{
+    if (m_effectScriptRunner == nullptr)
+        return QHash<quint32, QString>();
+    return m_effectScriptRunner->failures();
+}

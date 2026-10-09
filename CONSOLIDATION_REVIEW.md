@@ -12,7 +12,7 @@ and VISUAL_CONSISTENCY_REVIEW.md items still open are folded in below.
 
 ## Tier 1 -- you will hit these writing every scene
 
-### 1. Scene timing is split across tabs
+### 1. Scene timing is split across tabs -- DONE 2026-10-09
 - The scene's own fade in/out is only in the stock Scene Editor's speed dial
   window (Function Manager), not in the Programming tab
   (sceneeditor.cpp:1139; programmingmanager.cpp:867-890 hosts every other
@@ -21,11 +21,14 @@ and VISUAL_CONSISTENCY_REVIEW.md items still open are folded in below.
   set where looks are built (scenegrouplooks.cpp:62, lookeditor.cpp:271).
 - Transitions (new) sit on the canvas; their time replaces the scene fade.
 
+**Done:** the canvas header row: Fade in / out, Transition in / out + time,
+Edge; a scene fade is greyed while a transition stands in for it.
+
 **Converge:** the scene canvas header carries the scene's whole timing:
 `Fade in [ ] Fade out [ ]  In: [shape][time]  Out: [shape][time]  Edge [ ]`,
 the transition time standing in for the fade when a shape is set.
 
-### 2. Four different time controls
+### 2. Four different time controls -- DONE 2026-10-09
 | Where | Range | Shown as | "Use default" |
 |---|---|---|---|
 | Look fade (canvas + look editor) | 0-600 s, 2 dp | "1.5 s" | "step" |
@@ -37,17 +40,27 @@ And for an Effect look the canvas edits its Fade Out (the release) while the
 look editor hides the fade row (scenegrouplooks.cpp:816-835 vs
 lookeditor.cpp:924).
 
+**Done:** `FadeTimeSpin` (ui/src/fadetimespin.h) on the canvas, the header
+and the look editor; `LookFades` is the one rule (an Effect: release only,
+default "snap"; a colour feeding an effect: none; else both, default "scene").
+Chaser steps keep the speed dial for now.
+
 **Converge:** one `FadeTimeSpin` (seconds, 2 dp, a "default" value where one
 applies) everywhere; same Effect rule in both editors. Beats stays an engine
 option until a widget offers it.
 
-### 3. Double-click on a fixture opens different things
+### 3. Double-click on a fixture opens different things -- DONE 2026-10-09
 - Plot: a fixture on a pipe/tower/riser/deck opens the *structure*; on a
   truss, drills in, then the fixture (monitorgraphicsview.cpp:5895-5918).
 - Studio tree/canvas: Fixture Properties (monitor.cpp:3742;
   structurestudioview.cpp:7593).
 - Fixture Manager: the stock QLC+ edit dialog -- a different dialog
   (fixturemanager.cpp:494, 2026).
+
+**Done:** plot, studio and Fixture Manager all open Fixture Properties
+(its "Definition & Mode…" button reaches the stock dialog's part). A plot
+group / truss member: click it again to pick it out; "Edit <structure>…" in
+the fixture's menu.
 
 **Converge:** double-click a fixture = Fixture Properties, everywhere. A
 structure is opened by double-clicking the structure (or "Edit <structure>"
@@ -67,7 +80,7 @@ applying at once with undo; the dialog is "everything", applying live with
 Cancel restoring. The Light/Glass rows already work this way (LightControls,
 shared) -- the pattern to copy.
 
-### 5. Problems turn up in different places
+### 5. Problems turn up in different places -- DONE 2026-10-09
 - The readiness footer (persistent, with fixes) covers fixtures, patch,
   outputs, definitions, cloud storage.
 - The load-time "Some errors occurred" dialog (once, then gone) covers
@@ -75,6 +88,12 @@ shared) -- the pattern to copy.
   repeats missing definitions the footer already shows.
 - Effect scripts that fail to load, and effect looks whose palette is gone,
   only reach the log: the look silently does nothing.
+
+**Done:** the load dialog is gone -- its lines are the footer's "show.load"
+(missing definitions left to fixtures.nodefinition); "effects.failed" lists
+effect looks in scenes with no effect chosen, a script not on this computer,
+or one that would not start (EffectScriptRunner::failures(), with the
+script's reason).
 
 **Converge:** everything goes to the footer, with a fix where there is one;
 the load dialog becomes "N problems -- see the footer". Add `effects.failed`.

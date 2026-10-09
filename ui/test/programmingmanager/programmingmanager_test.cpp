@@ -393,6 +393,72 @@ void ProgrammingManager_Test::fixturesWithoutTheirDefinitionsAreAnError()
     QVERIFY(entry("fixtures.nodefinition").key.isEmpty());
 }
 
+void ProgrammingManager_Test::effectLooksThatCannotRunAreInTheFooter()
+{
+    auto entry = [](const QString &key) {
+        foreach (const ShowStatus::Entry &e, ShowStatus::instance()->allEntries())
+            if (e.key == key)
+                return e;
+        return ShowStatus::Entry();
+    };
+    QLCPalette *none = new QLCPalette(QLCPalette::Effect, m_doc);
+    none->setName("Nothing chosen");
+    QVERIFY(m_doc->addPalette(none));
+    QLCPalette *gone = new QLCPalette(QLCPalette::Effect, m_doc);
+    gone->setName("Lost script");
+    gone->setScriptPath("/nowhere/at/all/sparkle.js");
+    QVERIFY(m_doc->addPalette(gone));
+    QLCPalette *unused = new QLCPalette(QLCPalette::Effect, m_doc);
+    unused->setName("In no scene");
+    QVERIFY(m_doc->addPalette(unused));
+
+    // Only effect looks a scene uses count.
+    AppUtil::updateFixtureReadiness(m_doc);
+    QVERIFY(entry("effects.failed").key.isEmpty());
+
+    Scene *scene = new Scene(m_doc);
+    QVERIFY(m_doc->addFunction(scene));
+    scene->addPalette(none->id());
+    scene->addPalette(gone->id());
+    AppUtil::updateFixtureReadiness(m_doc);
+    ShowStatus::Entry e = entry("effects.failed");
+    QCOMPARE(e.severity, ShowStatus::Warning);
+    QVERIFY2(e.summary.contains("2 effect look"), qPrintable(e.summary));
+    QStringList items = e.items;
+    items.sort();
+    QCOMPARE(items.count(), 2);
+    QCOMPARE(items.at(0), QString("Lost script — its script is not on this computer (sparkle.js)"));
+    QCOMPARE(items.at(1), QString("Nothing chosen — no effect is chosen"));
+
+    scene->removePalette(none->id());
+    scene->removePalette(gone->id());
+    AppUtil::updateFixtureReadiness(m_doc);
+    QVERIFY(entry("effects.failed").key.isEmpty());
+}
+
+void ProgrammingManager_Test::loadProblemsAreInTheFooter()
+{
+    auto entry = [](const QString &key) {
+        foreach (const ShowStatus::Entry &e, ShowStatus::instance()->allEntries())
+            if (e.key == key)
+                return e;
+        return ShowStatus::Entry();
+    };
+    AppUtil::updateLoadProblems(QString(
+        "Unable to add fixture <b>Wash 3</b>: address out of range<br>"
+        "No fixture definition found for <b>Warmdance XL-450</b><br>"
+        "Video file <i>intro.mp4</i> not found<br>"));
+    const ShowStatus::Entry e = entry("show.load");
+    QCOMPARE(e.severity, ShowStatus::Warning);
+    QCOMPARE(e.items, QStringList() << "Unable to add fixture Wash 3: address out of range"
+                                    << "Video file intro.mp4 not found");
+    QVERIFY2(e.summary.contains("2 problem"), qPrintable(e.summary));
+
+    // The next load starts clean.
+    AppUtil::updateLoadProblems(QString("No fixture definition found for <b>X</b><br>"));
+    QVERIFY(entry("show.load").key.isEmpty());
+}
+
 void ProgrammingManager_Test::aScenesTimingIsAllOnItsCanvas()
 {
     Scene *scene = new Scene(m_doc);

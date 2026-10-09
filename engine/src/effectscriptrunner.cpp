@@ -196,9 +196,17 @@ void EffectScriptRunner::createInstancesForScene(quint32 sceneId)
         if (!inst->isValid())
         {
             qWarning() << "[EffectScriptRunner] instance invalid for palette" << pid;
+            const QString why = inst->error();
             delete inst;
+            if (m_failures.value(pid) != why)
+            {
+                m_failures.insert(pid, why);
+                emit failuresChanged();
+            }
             continue;
         }
+        if (m_failures.remove(pid) > 0)
+            emit failuresChanged();
 
         {
             QMutexLocker locker(&m_instanceMutex);
@@ -750,4 +758,9 @@ void EffectScriptRunner::writeDMX(MasterTimer *timer, QList<Universe*> universes
         if (!fader.isNull())
             fader->replaceAll(it.value());
     }
+}
+
+QHash<quint32, QString> EffectScriptRunner::failures() const
+{
+    return m_failures;
 }

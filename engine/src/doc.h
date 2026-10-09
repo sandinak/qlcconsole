@@ -629,6 +629,9 @@ public:
     /** Drives all active EffectScript instances (tick, DMX, input routing).
         QObject child of Doc (auto-deleted). */
     EffectScriptRunner *effectScriptRunner() const { return m_effectScriptRunner; }
+    /** Effect looks that would not start, and why (palette id -> reason);
+     *  the runner's failures(), for code that does not include it. */
+    QHash<quint32, QString> effectFailures() const;
 
     /** Fork-owned "last-look persistence" holder: keeps a stopped show's final
         look on the rig (Operate) instead of blacking out. QObject child of Doc

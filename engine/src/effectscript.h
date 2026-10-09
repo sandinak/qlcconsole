@@ -114,6 +114,8 @@ public:
     bool load(const QString &path);
 
     bool isValid() const { return m_valid; }
+    /** Why load() failed, in a few words ("its script has an error: ..."). */
+    QString lastError() const { return m_error; }
     QString filePath() const { return m_filePath; }
 
     // --- Metadata (available after a successful load()) ---
@@ -222,6 +224,7 @@ private:
     QStringList       m_dataChannelKeys;
 
     bool m_valid = false;
+    QString m_error;
 };
 
 #endif // EFFECTSCRIPT_H

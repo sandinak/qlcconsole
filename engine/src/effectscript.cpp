@@ -116,11 +116,13 @@ bool EffectScript::load(const QString &path)
     m_dataChannelKeys.clear();
     m_script = QJSValue();
     m_tickFn  = QJSValue();
+    m_error.clear();
 
     QFile f(path);
     if (!f.open(QIODevice::ReadOnly | QIODevice::Text))
     {
         qWarning() << "[EffectScript] Cannot open" << path;
+        m_error = QStringLiteral("its script cannot be opened");
         return false;
     }
     const QString contents = QString::fromUtf8(f.readAll());
@@ -143,12 +145,14 @@ bool EffectScript::load(const QString &path)
             if (!lf.open(QIODevice::ReadOnly | QIODevice::Text))
             {
                 qWarning() << "[EffectScript]" << path << "needs" << lib << "-- not found";
+                m_error = QStringLiteral("it needs %1, which is not installed").arg(lib);
                 return false;
             }
             const QJSValue done = m_engine.evaluate(QString::fromUtf8(lf.readAll()), libPath);
             if (done.isError())
             {
                 qWarning() << "[EffectScript]" << libPath << "evaluate error:" << done.toString();
+                m_error = QStringLiteral("%1 has an error: %2").arg(lib, done.toString());
                 return false;
             }
         }
@@ -163,12 +167,14 @@ bool EffectScript::load(const QString &path)
     {
         qWarning() << "[EffectScript]" << path << "evaluate error:"
                    << m_script.toString();
+        m_error = QStringLiteral("its script has an error: %1").arg(m_script.toString());
         return false;
     }
     if (!m_script.isObject())
     {
         qWarning() << "[EffectScript]" << path
                    << "script must return an object (use an IIFE)";
+        m_error = QStringLiteral("its script does not return an effect");
         return false;
     }
 
@@ -184,12 +190,15 @@ bool EffectScript::load(const QString &path)
     if (!m_tickFn.isCallable())
     {
         qWarning() << "[EffectScript]" << path << "missing tick() function";
+        m_error = QStringLiteral("its script has no tick()");
         return false;
     }
 
     if (!parseMeta())
     {
         qWarning() << "[EffectScript]" << path << "parseMeta() failed";
+        if (m_error.isEmpty())
+            m_error = QStringLiteral("its script does not say what it is");
         return false;
     }
 

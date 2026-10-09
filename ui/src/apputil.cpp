@@ -47,6 +47,7 @@
 #endif
 
 #include "apputil.h"
+#include <QSet>
 #include "qlcfile.h"
 #include "qlcconfig.h"
 #include "qlcpalette.h"
@@ -670,6 +671,50 @@ void AppUtil::updateFixtureReadiness(Doc *doc)
                 items, universes);
     }
 
+    /* Effect looks that cannot run: no effect chosen, a script that is not
+       on this computer (checked here, before anything plays), or one that
+       would not start when its scene ran (the runner's failures) -- an effect
+       look like that otherwise just does nothing. */
+    {
+        QStringList items;
+        QVariantList ids;
+        QHash<quint32, QString> why = doc->effectFailures();
+        QSet<quint32> inScenes;
+        foreach (Function *f, doc->functionsByType(Function::SceneType))
+        {
+            if (Scene *sc = qobject_cast<Scene *>(f))
+            {
+                foreach (quint32 pid, sc->palettes())
+                    inScenes.insert(pid);
+            }
+        }
+        foreach (QLCPalette *p, doc->palettes())
+        {
+            if (p == nullptr || p->type() != QLCPalette::Effect || !inScenes.contains(p->id()))
+                continue;
+            if (p->scriptPath().isEmpty())
+                why.insert(p->id(), QCoreApplication::translate("AppUtil", "no effect is chosen"));
+            else if (!QFile::exists(p->scriptPath()) && !why.contains(p->id()))
+                why.insert(p->id(), QCoreApplication::translate("AppUtil", "its script is not on this computer (%1)")
+                                        .arg(QFileInfo(p->scriptPath()).fileName()));
+        }
+        for (auto it = why.constBegin(); it != why.constEnd(); ++it)
+        {
+            QLCPalette *p = doc->palette(it.key());
+            items << QStringLiteral("%1 — %2").arg(p != nullptr ? p->name() : QString::number(it.key()),
+                                                  it.value());
+            ids << it.key();
+        }
+        if (items.isEmpty())
+            status->clearStatus("effects.failed");
+        else
+            status->setStatus("effects.failed", ShowStatus::Warning,
+                QCoreApplication::translate("AppUtil", "%n effect look(s) cannot run", "", items.count()),
+                QCoreApplication::translate("AppUtil", "They do nothing until fixed: choose an effect "
+                                            "in the look, or put its script back."),
+                items, ids);
+    }
+
     /* Fixtures standing in as dimmers for a definition that was not here
        when the show loaded: they keep their real make and model, but cannot
        be programmed as what they are until it is back. */
@@ -788,4 +833,25 @@ QString AppUtil::nthAddress(const QString &ip, int n)
     if (n < 0 || low > 255 * 256 + 254)
         return QString();
     return QString("%1.%2.%3.%4").arg(o[0]).arg(o[1]).arg(low / 256).arg(low % 256);
+}
+
+void AppUtil::updateLoadProblems(const QString &errorLog)
+{
+    ShowStatus *status = ShowStatus::instance();
+    QStringList items;
+    static const QRegularExpression tags(QStringLiteral("<[^>]*>"));
+    foreach (QString line, errorLog.split(QStringLiteral("<br>"), Qt::SkipEmptyParts))
+    {
+        line.remove(tags);
+        line = line.trimmed();
+        if (!line.isEmpty() && !line.startsWith(QLatin1String("No fixture definition found")))
+            items << line;
+    }
+    if (items.isEmpty())
+        status->clearStatus("show.load");
+    else
+        status->setStatus("show.load", ShowStatus::Warning,
+            QCoreApplication::translate("AppUtil", "%n problem(s) loading the show", "", items.count()),
+            QCoreApplication::translate("AppUtil", "What the show file asked for that could not be done as it was."),
+            items);
 }

@@ -164,6 +164,13 @@ namespace AppUtil
      */
     void updateFixtureReadiness(Doc *doc);
 
+    /** The footer's "show.load" entry from a load's @p errorLog (Doc's
+     *  "<br>"-separated HTML): one item per problem, missing definitions left
+     *  out (the footer lists those fixtures already). Cleared when there are
+     *  none. Effect looks that cannot run are "effects.failed", kept by
+     *  updateFixtureReadiness(). */
+    void updateLoadProblems(const QString &errorLog);
+
     /** The address @p n after IPv4 @p ip (n = 0: @p ip itself), the last
      *  octet carrying into the one before it -- one each for a batch of
      *  network fixtures. Empty when @p ip is not an IPv4 address or the run

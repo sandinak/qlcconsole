@@ -46,6 +46,9 @@ public:
     EffectInstance(Doc *doc, quint32 sceneId, quint32 effectPaletteId);
 
     bool isValid() const { return m_script.isValid(); }
+    /** Why it is not valid, in a few words: the look is gone, no effect is
+     *  chosen, or the script's own lastError(). */
+    QString error() const;
 
     quint32 sceneId()         const { return m_sceneId; }
     quint32 effectPaletteId() const { return m_effectPaletteId; }

@@ -848,6 +848,10 @@ void App::initDoc()
     connect(m_doc, &Doc::fixtureRemoved, fixtureReadiness, recheckFixtures);
     connect(m_doc, &Doc::fixtureChanged, fixtureReadiness, recheckFixtures);
     connect(m_doc, &Doc::loaded, fixtureReadiness, recheckFixtures);
+    // An effect look that would not start: the footer, a moment later.
+    if (m_doc->effectScriptRunner() != nullptr)
+        connect(m_doc->effectScriptRunner(), &EffectScriptRunner::failuresChanged,
+                fixtureReadiness, recheckFixtures);
     // Once at startup too: files skipped while the libraries loaded (in cloud
     // storage, not on this computer) are worth saying with no show open.
     fixtureReadiness->start();
@@ -3273,18 +3277,12 @@ bool App::loadXML(QXmlStreamReader& doc, bool goToConsole, bool fromMemory)
     // Perform post-load operations
     VirtualConsole::instance()->postLoad();
 
-    if (m_doc->errorLog().isEmpty() == false &&
-        fromMemory == false)
-    {
-        QMessageBox msg(QMessageBox::Warning, tr("Warning"),
-                        tr("Some errors occurred while loading the project:") + "<br><br>" + m_doc->errorLog(),
-                        QMessageBox::Ok);
-        msg.setTextFormat(Qt::RichText);
-        QSpacerItem* horizontalSpacer = new QSpacerItem(800, 0, QSizePolicy::Minimum, QSizePolicy::Expanding);
-        QGridLayout* layout = (QGridLayout*)msg.layout();
-        layout->addItem(horizontalSpacer, layout->rowCount(), 0, 1, layout->columnCount());
-        msg.exec();
-    }
+    /* What went wrong loading it: in the footer with every other problem,
+       where it stays until it is fixed -- not a dialog seen once and gone
+       (CONSOLIDATION_REVIEW #5). Missing definitions are left out here: the
+       footer lists those fixtures already, with a fix. */
+    if (fromMemory == false)
+        AppUtil::updateLoadProblems(m_doc->errorLog());
 
     m_doc->inputOutputMap()->startUniverses();
 
