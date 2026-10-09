@@ -100,7 +100,7 @@ void EditMode::init()
     refreshHeadList();
 
     /* Physical page */
-    m_phyEdit = new EditPhysical(m_mode->physical(), this);
+    m_phyEdit = new EditPhysical(m_mode->ownPhysical(), this);   // as written, not filled in
     m_phyEdit->show();
     physicalLayout->addWidget(m_phyEdit);
 

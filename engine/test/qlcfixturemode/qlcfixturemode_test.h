@@ -50,6 +50,9 @@ private slots:
     void loadNoName();
     void save();
     void savePhysicalOverride();
+    /** "36 LED moving head reporting lumens not set when it is": a mode's
+     *  own physical fills its blanks from the definition's. */
+    void aModesBlankPhysicalFieldsAreTheDefinitions();
 
     void cleanupTestCase();
 
