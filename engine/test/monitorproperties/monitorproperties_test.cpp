@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include <QSignalSpy>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QTemporaryDir>
@@ -2015,4 +2016,65 @@ void MonitorProperties_Test::anLedMapLivesInTheLibraryAndTheShow()
     HeadLayoutLibrary::setUserDirectoryOverride(QString());
     fx.setFixtureDefinition(nullptr, nullptr);
     delete def;
+}
+
+void MonitorProperties_Test::aSnapshotPutsTheRigBack()
+{
+    MonitorProperties mp;
+    mp.setGridUnits(MonitorProperties::Feet);
+    Truss *pipe = mp.addTruss();
+    pipe->setLength(6.0f);
+    pipe->setOrigin(QVector3D(1.0f, 2.0f, 4.0f));
+    StageTarget *target = mp.addStageTarget();
+    target->setName("DSC");
+    const quint32 targetId = target->id();
+    mp.setFixturePosition(1, 0, 0, QVector3D(1000, 2000, 3));
+    FixtureRigProps rp;
+    rp.trussId = pipe->id();
+    mp.setFixtureRigProps(1, rp);
+
+    const QByteArray before = mp.snapshot(nullptr);
+    QVERIFY(!before.isEmpty());
+
+    // A run of edits: the pipe moved, the target deleted, a tower added,
+    // the fixture moved and taken off the pipe.
+    pipe->setOrigin(QVector3D(5.0f, 5.0f, 5.0f));
+    mp.removeStageTarget(targetId);
+    mp.addTower();
+    mp.setFixturePosition(1, 0, 0, QVector3D(0, 0, 0));
+    mp.setFixtureRigProps(1, FixtureRigProps());
+    QVERIFY(mp.snapshot(nullptr) != before);
+
+    QSignalSpy targets(&mp, &MonitorProperties::stageTargetsChanged);
+    QSignalSpy rig(&mp, &MonitorProperties::rigPropsChanged);
+    QVERIFY(mp.restoreSnapshot(before, nullptr));
+    // As it was -- as loading a saved show has it (a load writes a
+    // default mount out in full), and a second restore changes nothing.
+    const QByteArray restored = mp.snapshot(nullptr);
+    QVERIFY(mp.restoreSnapshot(restored, nullptr));
+    QCOMPARE(mp.snapshot(nullptr), restored);
+    QCOMPARE(mp.truss(rp.trussId)->origin(), QVector3D(1.0f, 2.0f, 4.0f));
+    QCOMPARE(mp.fixtureItem(1, 0, 0).m_position, QVector3D(1000, 2000, 3));
+    QCOMPARE(mp.towers().count(), 0);
+    QVERIFY(mp.stageTarget(targetId) != nullptr);
+    QCOMPARE(mp.stageTarget(targetId)->name(), QString("DSC"));
+    QCOMPARE(mp.fixtureRigProps(1).trussId, rp.trussId);
+    QCOMPARE(mp.gridUnits(), MonitorProperties::Feet);
+    QVERIFY(targets.count() >= 1);
+    QVERIFY(rig.count() >= 1);
+
+    // The pipe object the edits held is retired, not freed: still readable.
+    QCOMPARE(pipe->length(), 6.0f);
+    QVERIFY(mp.truss(rp.trussId) != pipe);               // a fresh one stands in
+
+    // What the snapshot has just as it is stays the same object -- an
+    // editor still open around a cancelled one keeps editing the real thing.
+    Truss *kept = mp.truss(rp.trussId);
+    StageTarget *changed = mp.stageTarget(targetId);
+    const QByteArray now = mp.snapshot(nullptr);
+    changed->setName("Moved");
+    QVERIFY(mp.restoreSnapshot(now, nullptr));
+    QCOMPARE(mp.truss(rp.trussId), kept);
+    QVERIFY(mp.stageTarget(targetId) != changed);
+    QCOMPARE(mp.stageTarget(targetId)->name(), QString("DSC"));
 }

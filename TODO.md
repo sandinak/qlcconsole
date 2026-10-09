@@ -242,8 +242,15 @@ and colour, not pixel mapping.
   pick it out.
 - Problems in one place: the load dialog is the footer's "show.load";
   "effects.failed" lists effect looks that cannot run, and why.
-- NEXT: talk through #4 + #6 (one fixture property model, one dialog helper)
-  before building.
+- #6 (step 1 of 4+6) built: RigEditSession -- every rig dialog live, Cancel
+  restores the rig, OK = one plot undo (toolbar Undo too); FeetInchesSpinBox
+  for every length (the show's units); ColourSwatchButton; "Colour".
+  Decisions (Branson): inspector applies at once with undo; multi-select
+  edits the whole selection with "mixed" fields; lengths follow the global
+  units; one undo, as long as it reverses most mistakes.
+- NEXT (step 2): one fixture property model -- the studio inspector as the
+  dialog's quick subset (same widgets/labels, editable address + Patch…),
+  whole-selection editing with "mixed", Fixture Properties fully live.
 
 ## Transitions, haze glow, both Fires, back from a group's view -- 2026-10-08 (for Branson to try)
 

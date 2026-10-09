@@ -130,6 +130,11 @@ private slots:
      *  again picks one out of a group. */
     void doubleClickingAFixtureOpensItWhereverItIs();
     void clickingAGroupMemberAgainPicksItOut();
+    /** "Undo: as long as it works across most things so that users can
+     *  reverse mistakes" -- a rig dialog previews live, Cancel puts
+     *  everything back, OK is one step on the plot's undo. */
+    void aRigDialogPreviewsCancelsAndUndoes();
+    void fixturePropertiesCancelAndUndoToo();
     void hangersAreRiggingCopiedToEveryTower();
     void theSplitWizardOffersAViewAndKeepsAnExistingGroup();
     /** "I can't click on any side arrow to open any of the groups": an

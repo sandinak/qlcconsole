@@ -24,6 +24,7 @@
 #include <QVBoxLayout>
 
 #include "networktopologydialog.h"
+#include "feetinchesspinbox.h"
 #include "monitorproperties.h"
 #include "inputoutputmap.h"
 #include "doc.h"
@@ -176,7 +177,6 @@ void NetworkTopologyDialog::loadNode(int row)
 
     const bool isFeet = (m_doc->monitorProperties()->gridUnits() == MonitorProperties::Feet);
     const double toDisp = isFeet ? 3.28084 : 1.0;
-    const QString sfx = isFeet ? tr(" ft") : tr(" m");
 
     m_ports->setRowCount(node.ports.size());
     for (int p = 0; p < node.ports.size(); p++)
@@ -196,10 +196,9 @@ void NetworkTopologyDialog::loadNode(int row)
 
         for (int col = COL_RX_X; col <= COL_RX_Y; col++)
         {
-            QDoubleSpinBox *s = new QDoubleSpinBox(m_ports);
+            QDoubleSpinBox *s = new FeetInchesSpinBox(isFeet, m_ports);
             s->setRange(-500, 500);
             s->setDecimals(2);
-            s->setSuffix(sfx);
             s->setValue((col == COL_RX_X ? port.receiver.posX : port.receiver.posY) * toDisp);
             connect(s, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
                     this, &NetworkTopologyDialog::slotPortCellEdited);

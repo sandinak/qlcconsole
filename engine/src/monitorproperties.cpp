@@ -17,7 +17,10 @@
   limitations under the License.
 */
 
+#include <QDateTime>
+#include <QSet>
 #include <QXmlStreamReader>
+#include <type_traits>
 #include <QXmlStreamWriter>
 #include <QDebug>
 #include <QFont>
@@ -127,6 +130,115 @@ MonitorProperties::MonitorProperties()
     , m_showLabels(true)
 {
     ensureDefaultLayer();
+}
+
+MonitorProperties::~MonitorProperties()
+{
+    freeRetired(true);
+}
+
+QByteArray MonitorProperties::snapshot(const Doc *mainDocument) const
+{
+    QByteArray out;
+    QXmlStreamWriter w(&out);
+    saveXML(&w, mainDocument);
+    return out;
+}
+
+void MonitorProperties::freeRetired(bool all)
+{
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    for (int i = m_retired.count() - 1; i >= 0; --i)
+    {
+        // Long enough for any DMX frame that found one to be done with it.
+        if (all || now - m_retired.at(i).first > 10000)
+        {
+            m_retired.at(i).second();
+            m_retired.removeAt(i);
+        }
+    }
+}
+
+namespace
+{
+template <class T> QByteArray xmlOf(const T *obj)
+{
+    QByteArray out;
+    QXmlStreamWriter w(&out);
+    obj->saveXML(&w);
+    return out;
+}
+}
+
+bool MonitorProperties::restoreSnapshot(const QByteArray &snap, const Doc *mainDocument)
+{
+    QXmlStreamReader r(snap);
+    if (!r.readNextStartElement())
+        return false;
+
+    freeRetired(false);
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    auto retireList = [this, now](const auto &objs) {
+        if (!objs.isEmpty())
+            m_retired.append(qMakePair(now, std::function<void()>([objs]() { qDeleteAll(objs); })));
+    };
+
+    // Set the structures aside (so reset() does not delete them) ...
+    auto oldTrusses = m_trusses;         m_trusses.clear();
+    auto oldPlatforms = m_platforms;     m_platforms.clear();
+    auto oldPipes = m_pipes;             m_pipes.clear();
+    auto oldStands = m_stands;           m_stands.clear();
+    auto oldTowers = m_towers;           m_towers.clear();
+    auto oldHangers = m_hangers;         m_hangers.clear();
+    auto oldSceneries = m_sceneries;     m_sceneries.clear();
+    auto oldTargets = m_stageTargets;    m_stageTargets.clear();
+
+    const QList<quint32> before = m_rigProps.keys();
+    reset();
+    const bool ok = loadXML(r, mainDocument);
+
+    /* ... then keep every one the snapshot has just as it is: the same
+       object, so whatever holds it -- an editor still open around the one
+       that was cancelled, the DMX thread -- holds the real thing. Only what
+       changed is replaced, and what is replaced is retired, not freed. */
+    auto keep = [&retireList](auto &now, auto &old) {
+        using Ptr = typename std::remove_reference<decltype(now)>::type::mapped_type;
+        QList<Ptr> retired;
+        for (auto it = now.begin(); it != now.end(); ++it)
+        {
+            Ptr was = old.value(it.key(), nullptr);
+            if (was != nullptr && xmlOf(was) == xmlOf(it.value()))
+            {
+                retired << it.value();
+                it.value() = was;
+                old.remove(it.key());
+            }
+        }
+        retired << old.values();
+        retireList(retired);
+    };
+    keep(m_trusses, oldTrusses);
+    keep(m_platforms, oldPlatforms);
+    keep(m_pipes, oldPipes);
+    keep(m_stands, oldStands);
+    keep(m_towers, oldTowers);
+    keep(m_hangers, oldHangers);
+    keep(m_sceneries, oldSceneries);
+    keep(m_stageTargets, oldTargets);
+    // What follows something else is worked out again: a kept bar whose
+    // parent truss was replaced follows the parent as it is now.
+    recomputeStandMounts();
+    recomputeChildTrusses();
+    recomputeHangers();
+    recomputeAnchoredFrames();
+
+    QSet<quint32> fids(before.begin(), before.end());
+    foreach (quint32 fid, m_rigProps.keys())
+        fids.insert(fid);
+    foreach (quint32 fid, fids)
+        emit rigPropsChanged(fid);
+    emit stageTargetsChanged();
+    return ok;
 }
 
 void MonitorProperties::reset()

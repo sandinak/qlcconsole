@@ -40,6 +40,7 @@ add_library(${module_name}
     channelmodifiergraphicsview.cpp channelmodifiergraphicsview.h
     channelsselection.cpp channelsselection.h channelsselection.ui
     chasereditor.cpp chasereditor.h chasereditor.ui
+    colourswatchbutton.cpp colourswatchbutton.h
     clickandgoslider.cpp clickandgoslider.h
     clickandgowidget.cpp clickandgowidget.h
     collectioneditor.cpp collectioneditor.h collectioneditor.ui
@@ -113,6 +114,7 @@ add_library(${module_name}
     monitor/fixturevisualtraits.cpp monitor/fixturevisualtraits.h
     monitor/lanternpixels.cpp monitor/lanternpixels.h
     monitor/lightcontrols.cpp monitor/lightcontrols.h
+    monitor/rigeditsession.h
     monitor/humanfigure.cpp monitor/humanfigure.h
     monitor/targetitem.cpp monitor/targetitem.h
     palettegenerator.cpp palettegenerator.h

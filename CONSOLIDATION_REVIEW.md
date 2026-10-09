@@ -102,7 +102,7 @@ the load dialog becomes "N problems -- see the footer". Add `effects.failed`.
 
 ## Tier 2 -- you will hit these setting up and changing the rig
 
-### 6. Structure dialogs behave three ways
+### 6. Structure dialogs behave three ways -- DONE 2026-10-09 (step 1 of 4+6)
 - Live preview + Cancel restores: stand, scenery, tower, pipe, platform, truss.
 - Apply on OK only: hanger, image, stage target.
 - Fixture Properties: only orientation previews.
@@ -112,6 +112,20 @@ the load dialog becomes "N problems -- see the footer". Add `effects.failed`.
   dialog; labels "Color:" and "Colour:".
 - Undo: plot Ctrl+Z (moves, paste); the studio's own stack (rig props
   only -- not gel, address, bar position); dialogs none.
+
+**Done:** `RigEditSession` (ui/src/monitor/rigeditsession.h). Every rig
+dialog -- truss, pipe, platform, tower, stand, scenery, group, hanger, image,
+target, Fixture Properties -- previews live; Cancel restores the whole rig
+from a snapshot (MonitorProperties::snapshot()/restoreSnapshot(), which keeps
+every unchanged structure the same object and retires, not frees, the rest
+while the DMX thread may hold them); OK is one step on the plot's Undo (now
+also a toolbar button). Hanger, image and target went from apply-on-OK to
+live. `FeetInchesSpinBox` for every length (follows the show's grid units:
+feet-and-inches, or metres); `ColourSwatchButton` (swatch, hex, Reset) for
+target, cloth, faces, platform, sock and gel; "Colour" throughout the rig.
+Left: the network-node dialogs edit the network topology, outside the rig
+snapshot (they still apply on OK); a dialog's studio pane keeps its own
+Ctrl+Z while it is open; the studio inspector's widgets are step 2.
 
 **Converge:** one `editInDialog(snapshot, applyLive, revert)` helper (every
 dialog previews live, Cancel restores, OK pushes one undo step onto the plot's

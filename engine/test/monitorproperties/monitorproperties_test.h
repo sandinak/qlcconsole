@@ -120,6 +120,10 @@ private slots:
     void headKindsAreReadFromTheChannels();
     void aRowPatternMapsEachKindToItsRows();
     void anLedMapLivesInTheLibraryAndTheShow();
+
+    /** Undo and Cancel put the whole rig back from a snapshot; what they
+     *  replace is retired, not freed, while the DMX thread may hold it. */
+    void aSnapshotPutsTheRigBack();
 };
 
 #endif

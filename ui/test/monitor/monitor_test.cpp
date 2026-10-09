@@ -45,6 +45,7 @@
 #define protected public
 #define private public
 #include "monitor.h"
+#include "colourswatchbutton.h"
 #include "headtypesdialog.h"
 #include "stagegroupdialog.h"
 #include "monitorgraphicsview.h"
@@ -11171,8 +11172,9 @@ void Monitor_Test::addNetworkNodeCancelledAddsNothing()
     const MonitorProperties::GridUnits units = m_doc->monitorProperties()->gridUnits();
     m_doc->monitorProperties()->setGridUnits(MonitorProperties::Feet);
     driveDialog([](QWidget *dlg) {
+        // Feet, as every length is entered: feet and inches.
         QDoubleSpinBox *x = dlg->findChild<QDoubleSpinBox *>();
-        return x != nullptr && x->suffix() == " ft";
+        return x != nullptr && x->text().contains('\'');
     }, false);
     rig.mon->slotAddNetworkNode();
     m_doc->monitorProperties()->setGridUnits(units);
@@ -11746,7 +11748,12 @@ void Monitor_Test::theCycloramaEditorPreviewsAndCancelReverts()
             bow->setValue(1.5);
             return qAbs(cyc->bow() - 1.5f) < 0.01f;        // previewed live
         }, false);
-        mon.slotEditScenery(cyc->id());
+        const quint32 cycId = cyc->id();
+        mon.slotEditScenery(cycId);
+        // Cancel puts the rig back as it was: what was edited is a fresh
+        // object now, found by its id.
+        cyc = props->scenery(cycId);
+        QVERIFY(cyc != nullptr);
         QCOMPARE(cyc->bow(), 0.0f);
 
         // Raised and accepted: kept.
@@ -16974,4 +16981,141 @@ void Monitor_Test::aFixtureGroupRowMovesToAnotherLayer()
             QCOMPARE(props->fixtureLayer(fid), steps);
     }
     delete doc;
+}
+
+void Monitor_Test::aRigDialogPreviewsCancelsAndUndoes()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Meters);
+    Tower *tower = props->addTower();
+    tower->setHeight(4.0f);
+    Hanger *h = props->addHanger(Hanger::OnTower, tower->id());
+    const quint32 hid = h->id();
+    h->setArm(0.5f);
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+    QAction *undo = rig.mon->findChild<QAction *>("plotUndo");
+    QVERIFY(undo != nullptr);
+    QVERIFY(!undo->isEnabled());
+
+    // Live: the hanger's arm is out before OK. Cancel: back in.
+    float seenLive = -1.0f;
+    driveDialog([&seenLive, props, hid](QWidget *modal) {
+        const QList<QDoubleSpinBox *> spins = modal->findChildren<QDoubleSpinBox *>();
+        if (spins.count() != 3)               // along, arm, drop
+            return false;
+        spins[1]->setValue(1.5);
+        seenLive = props->hanger(hid)->arm();
+        return true;
+    }, false);
+    rig.mon->slotEditHanger(hid);
+    QCOMPARE(seenLive, 1.5f);
+    QVERIFY(props->hanger(hid) != nullptr);
+    QCOMPARE(props->hanger(hid)->arm(), 0.5f);
+    QVERIFY2(!undo->isEnabled(), "a cancelled dialog is not something to undo");
+
+    // OK: kept, and one undo puts it back.
+    driveDialog([](QWidget *modal) {
+        const QList<QDoubleSpinBox *> spins = modal->findChildren<QDoubleSpinBox *>();
+        if (spins.count() != 3)
+            return false;
+        spins[1]->setValue(1.5);
+        spins[2]->setValue(0.8);
+        return true;
+    });
+    rig.mon->slotEditHanger(hid);
+    QCOMPARE(props->hanger(hid)->arm(), 1.5f);
+    QVERIFY(undo->isEnabled());
+    undo->trigger();
+    QVERIFY(props->hanger(hid) != nullptr);
+    QCOMPARE(props->hanger(hid)->arm(), 0.5f);
+    QVERIFY(!undo->isEnabled());
+
+    // A move after it undoes first, then the dialog: one stack, in order.
+    driveDialog([](QWidget *modal) {
+        const QList<QDoubleSpinBox *> spins = modal->findChildren<QDoubleSpinBox *>();
+        if (spins.count() != 3)
+            return false;
+        spins[1]->setValue(2.0);
+        return true;
+    });
+    rig.mon->slotEditHanger(hid);
+    const quint32 tid = props->hanger(hid)->parentId();
+    QVERIFY(props->tower(tid) != nullptr);
+    MonitorGraphicsView::UndoEntry move;
+    move.type = MonitorGraphicsView::UndoEntry::ItemMove;
+    move.itemKeys << qMakePair(QString("tower"), tid);
+    move.itemOrigins << QPointF(props->tower(tid)->originX(), props->tower(tid)->originY());
+    rig.gv->pushUndo(move);
+    props->tower(tid)->setOriginX(props->tower(tid)->originX() + 3.0f);
+    const float movedFrom = float(move.itemOrigins.first().x());
+    undo->trigger();
+    QCOMPARE(props->tower(tid)->originX(), movedFrom);
+    QCOMPARE(props->hanger(hid)->arm(), 2.0f);
+    undo->trigger();
+    QCOMPARE(props->hanger(hid)->arm(), 0.5f);
+
+    props->removeHanger(hid);
+    props->removeTower(tid);
+}
+
+void Monitor_Test::fixturePropertiesCancelAndUndoToo()
+{
+    FixtureCleanup cleanup(m_doc);
+    MonitorProperties *props = m_doc->monitorProperties();
+    Fixture *fx = new Fixture(m_doc);
+    fx->setName("Undo me");
+    fx->setChannels(1);
+    fx->setAddress(480);
+    QVERIFY(m_doc->addFixture(fx));
+    cleanup.ids << fx->id();
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+    rig.gv->addFixture(fx->id(), QPointF(2000, 2000));
+    props->setFixturePosition(fx->id(), 0, 0, QVector3D(2000, 2000, 0));
+    QAction *undo = rig.mon->findChild<QAction *>("plotUndo");
+    QVERIFY(undo != nullptr);
+
+    auto rename = [](const QString &to) {
+        return [to](QWidget *modal) {
+            foreach (QLineEdit *e, modal->findChildren<QLineEdit *>())
+            {
+                if (e->text() == QLatin1String("Undo me") || e->text() == QLatin1String("Renamed"))
+                {
+                    e->setText(to);
+                    return true;
+                }
+            }
+            return false;
+        };
+    };
+    driveDialog(rename("Renamed"), false);
+    rig.mon->editFixtureProperties(fx->id());
+    QCOMPARE(fx->name(), QString("Undo me"));
+
+    driveDialog(rename("Renamed"));
+    rig.mon->editFixtureProperties(fx->id());
+    QCOMPARE(fx->name(), QString("Renamed"));
+    QVERIFY(undo->isEnabled());
+    undo->trigger();
+    QCOMPARE(fx->name(), QString("Undo me"));
+    QVERIFY2(rig.gv->m_fixtures.contains(fx->id()), "the fixture is still on the plot after the undo");
+
+    // The gel: one colour button, live, its Reset taking the gel off -- and
+    // Cancel putting it back on.
+    props->setFixtureGelColor(fx->id(), 0, 0, QColor(Qt::red));
+    rig.gv->setFixtureGelColor(fx->id(), QColor(Qt::red));
+    QColor seenLive(Qt::green);
+    driveDialog([&seenLive, props, fx](QWidget *modal) {
+        ColourSwatchButton *gel = modal->findChild<ColourSwatchButton *>("gelColour");
+        QToolButton *reset = gel ? gel->findChild<QToolButton *>("colourReset") : nullptr;
+        if (reset == nullptr || !reset->isEnabled())
+            return false;
+        reset->click();
+        seenLive = props->fixtureGelColor(fx->id(), 0, 0);
+        return !gel->colour().isValid();
+    }, false);
+    rig.mon->editFixtureProperties(fx->id());
+    QVERIFY2(!seenLive.isValid(), "the gel came off only at OK, not as it was reset");
+    QCOMPARE(props->fixtureGelColor(fx->id(), 0, 0), QColor(Qt::red));
 }

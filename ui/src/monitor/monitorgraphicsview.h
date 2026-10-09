@@ -823,6 +823,14 @@ public:
                             const QList<quint32> &targetIds,
                             const QList<quint32> &paletteIds);
 
+    /** Record the rig as it was before an edit (a dialog's, a studio's) so
+     *  one Ctrl+Z puts it back. @p before is a Monitor::rigSnapshot(). */
+    void pushRigUndo(const QByteArray &before);
+    /** Who puts a rig snapshot back: the Monitor, which owns the rebuild. */
+    void setRigRestorer(std::function<void(const QByteArray &)> fn) { m_rigRestorer = fn; }
+    /** Is there anything for Ctrl+Z to undo? */
+    bool canUndo() const { return !m_moveUndo.isEmpty(); }
+
     /** Update a fixture item's real position (mm) and reposition it on the canvas.
      *  Call this after programmatically changing a fixture's truss offset. */
     void moveFixtureTo(quint32 fid, QPointF mmPos);
@@ -917,6 +925,8 @@ private:
     void captureMoveUndo();
 
 signals:
+    /** Something was pushed onto, or undone from, the undo stack. */
+    void undoChanged();
     /** How many fixtures are sitting outside the stage grid (0 = none). */
     void offGridFixturesChanged(int count);
 
@@ -1150,7 +1160,10 @@ private:
                     FeaturePaste,
                     /** Towers, stands, booms, scenery, power sources and
                      *  network nodes: (kind, id) -> old origin, metres. */
-                    ItemMove } type;
+                    ItemMove,
+                    /** Anything else -- a dialog, a studio edit: the whole
+                     *  rig as it was (rigBefore), put back by the Monitor. */
+                    RigEdit } type;
         /** Entries recorded by ONE drag share a batch (0 = on its own), and
          *  one Ctrl+Z undoes the whole batch -- a Select All drag records one
          *  entry per kind it moved. */
@@ -1166,7 +1179,9 @@ private:
         QList<quint32> pastedPlatformIds;
         QList<quint32> pastedTargetIds;
         QList<quint32> pastedPaletteIds;
+        QByteArray rigBefore;                       ///< type == RigEdit
     };
+    std::function<void(const QByteArray &)> m_rigRestorer;
     QList<UndoEntry> m_moveUndo;
     int m_undoBatch = 0;          ///< last batch number handed out
     int m_openUndoBatch = 0;      ///< the drag in progress's batch, 0 = none
@@ -1184,14 +1199,6 @@ private:
      *  handler clears the selection. Used by mouseDoubleClickEvent to restore
      *  a multi-selection that was active when the user double-clicked. */
     QList<QGraphicsItem *> m_savedSelection;
-
-    /** Set right after a double-click ISOLATES (drills into) a grouped/truss-
-     *  bound fixture instead of opening its editor. Qt has no native
-     *  triple-click event -- a real third rapid press just arrives at
-     *  mousePressEvent as an ordinary press -- so a press on the SAME fixture
-     *  within QApplication::doubleClickInterval() of this timestamp is treated
-     *  as a triple-click and opens the fixture's own editor directly, instead
-     *  of requiring a whole separate second double-click. */
 
     /** Positions snapshot taken at move-start, committed to m_moveUndo on
      *  drop if anything actually moved. */

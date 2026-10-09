@@ -117,6 +117,8 @@
 #include "toweritem.h"
 #include "monitorimageitem.h"
 #include "feetinchesspinbox.h"
+#include "rigeditsession.h"
+#include "colourswatchbutton.h"
 #include "targetitem.h"
 #include "truss.h"
 #include "pipe.h"
@@ -386,6 +388,13 @@ void Monitor::initGraphicsView()
     viewGrid->setSpacing(0);
 
     m_graphicsView = new MonitorGraphicsView(m_doc, this);
+    m_graphicsView->setRigRestorer([this](const QByteArray &snap) { restoreRig(snap); });
+    if (m_undoAction != nullptr)
+    {
+        connect(m_undoAction, &QAction::triggered, m_graphicsView, &MonitorGraphicsView::undoLastMove);
+        connect(m_graphicsView, &MonitorGraphicsView::undoChanged, m_undoAction,
+                [this]() { m_undoAction->setEnabled(m_graphicsView->canUndo()); });
+    }
     m_graphicsView->setRenderHint(QPainter::Antialiasing);
     m_graphicsView->setAcceptDrops(true);
     // No frame border so the rulers (aligned to the widget edge) line up
@@ -1091,7 +1100,7 @@ void Monitor::setRulersVisible(bool on)
     settings.setValue(SETTINGS_RULERS, on);
 }
 
-void Monitor::fillGraphicsView()
+void Monitor::fillGraphicsView(bool keepView)
 {
     m_graphicsView->clearFixtures();
 
@@ -1129,7 +1138,8 @@ void Monitor::fillGraphicsView()
     /* This runs when a workspace's monitor settings are applied, which is
        exactly the point a leftover zoom from the previous document stops
        making sense. */
-    m_graphicsView->resetViewZoom();
+    if (!keepView)
+        m_graphicsView->resetViewZoom();
     m_graphicsView->setBackgroundImage(m_props->commonBackgroundImage());
     m_graphicsView->setBackgroundColor(m_props->commonBackgroundColor());
 
@@ -1159,6 +1169,50 @@ void Monitor::fillGraphicsView()
     m_graphicsView->ensureGroupRegistry();
     if (m_layersPanel != NULL)
         m_layersPanel->reload();
+}
+
+QByteArray Monitor::rigSnapshot() const
+{
+    QHash<quint32, QString> names;
+    foreach (Fixture *fx, m_doc->fixtures())
+        names.insert(fx->id(), fx->name());
+    QByteArray out;
+    QDataStream ds(&out, QIODevice::WriteOnly);
+    ds << m_props->snapshot(m_doc) << names;
+    return out;
+}
+
+void Monitor::restoreRig(const QByteArray &snap)
+{
+    QByteArray props;
+    QHash<quint32, QString> names;
+    QDataStream ds(snap);
+    ds >> props >> names;
+    if (props.isEmpty())
+        return;
+
+    m_props->restoreSnapshot(props, m_doc);
+    for (auto it = names.constBegin(); it != names.constEnd(); ++it)
+    {
+        Fixture *fx = m_doc->fixture(it.key());
+        if (fx != nullptr && fx->name() != it.value())
+            fx->setName(it.value());
+    }
+
+    if (m_graphicsView != nullptr)
+    {
+        fillGraphicsView(true);
+        m_graphicsView->refreshAllItems();
+        m_graphicsView->refreshFixtureBindings();
+        m_graphicsView->refreshFixtureCountBadges();
+    }
+    m_doc->setModified();
+}
+
+void Monitor::pushRigUndo(const QByteArray &before)
+{
+    if (m_graphicsView != nullptr && !before.isEmpty() && rigSnapshot() != before)
+        m_graphicsView->pushRigUndo(before);
 }
 
 void Monitor::showGraphicsView()
@@ -1488,6 +1542,14 @@ void Monitor::initGraphicsToolbar()
         QSettings().setValue(QStringLiteral("monitor/showInventory"), on);
     });
 
+    // One undo for the rig: moves, pastes, and every edit dialog's OK.
+    // (Connected to the view in initGraphicsView(), which comes after.)
+    m_undoAction = m_graphicsToolBar->addAction(QIcon(":/undo.png"), tr("Undo"));
+    m_undoAction->setToolTip(tr("Undo the last move, paste or edit on the rig (%1)")
+                             .arg(QKeySequence(QKeySequence::Undo).toString(QKeySequence::NativeText)));
+    m_undoAction->setObjectName(QStringLiteral("plotUndo"));
+    m_undoAction->setEnabled(false);
+
     m_graphicsToolBar->addSeparator();
     // Group/Ungroup, the Overlay selector, Copy/Paste, labels and background
     // live in the "More" popup (built after Add/Remove below), to keep this
@@ -1587,7 +1649,7 @@ void Monitor::initGraphicsToolbar()
 
     // Background image is now a placeable object (Add ▸ Add Image) that lives in
     // a layer; flat background colour stays here.
-    moreMenu->addAction(QIcon(":/color.png"), tr("Set background color"),
+    moreMenu->addAction(QIcon(":/color.png"), tr("Set background colour"),
                         this, SLOT(slotSetBackgroundColor()));
     moreMenu->addAction(tr("Network Topology…"), this, [this]() { slotEditNetworkNode(0); });
     moreMenu->addAction(tr("Network Report…"), this, &Monitor::slotNetworkReport);
@@ -2432,7 +2494,7 @@ void Monitor::slotSetBackgroundColor()
     if (!initial.isValid())
         initial = Qt::darkGray;
 
-    QColor c = QColorDialog::getColor(initial, this, tr("Set background color"),
+    QColor c = QColorDialog::getColor(initial, this, tr("Set background colour"),
                                       QColorDialog::ShowAlphaChannel);
     if (!c.isValid())
         return;
@@ -4190,13 +4252,10 @@ void Monitor::studioDistribute(int kind, quint32 id, StructureStudioView *view,
 void Monitor::openGroupStudio(quint32 gid)
 {
     if (!m_props->hasGroup(gid)) return;
+    RigEditSession edit(this);
     MonitorProperties::MonitorGroup g = m_props->group(gid);
-    const QVector3D snapOrigin = g.origin;
-    const float snapRot = g.rotation;
-    const QString snapName = g.name;
 
     const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
-    const QString sfx = isFeet ? tr(" ft") : tr(" m");
     const double toDisp = isFeet ? 3.28084 : 1.0;
     const double fromDisp = isFeet ? (1.0 / 3.28084) : 1.0;
 
@@ -4208,8 +4267,8 @@ void Monitor::openGroupStudio(quint32 gid)
     QFormLayout *form = new QFormLayout;
     QLineEdit *nameEdit = new QLineEdit(g.name, geomW);
     form->addRow(tr("Name:"), nameEdit);
-    auto mk = [&](double v) { QDoubleSpinBox *s = new QDoubleSpinBox(geomW);
-        s->setRange(-200, 200); s->setDecimals(2); s->setSuffix(sfx); s->setValue(v * toDisp); return s; };
+    auto mk = [&](double v) { QDoubleSpinBox *s = new FeetInchesSpinBox(isFeet, geomW);
+        s->setRange(-200, 200); s->setDecimals(2); s->setValue(v * toDisp); return s; };
     QDoubleSpinBox *ox = mk(g.origin.x()), *oy = mk(g.origin.y()), *oz = mk(g.origin.z());
     QDoubleSpinBox *rot = new QDoubleSpinBox(geomW);
     rot->setRange(-180, 180); rot->setDecimals(0); rot->setSuffix(QStringLiteral("°")); rot->setValue(double(g.rotation));
@@ -4288,14 +4347,13 @@ void Monitor::openGroupStudio(quint32 gid)
     dlg.resize(940, 560);
     if (dlg.exec() != QDialog::Accepted)
     {
-        m_props->setGroupName(gid, snapName);
-        m_props->setGroupOrigin(gid, snapOrigin);
-        m_props->setGroupRotation(gid, snapRot);
-        m_props->recomputeAnchoredFrames();
+        edit.cancel();
+        return;
     }
     m_graphicsView->updatePlatforms();
     refreshMembers();
     m_doc->setModified();
+    edit.accept();
 }
 
 void Monitor::openGroupLayout(quint32 groupId)
@@ -4898,8 +4956,8 @@ void Monitor::slotEditHanger(quint32 hid)
     Hanger *h = m_props->hanger(hid);
     if (h == nullptr)
         return;
+    RigEditSession edit(this);
     const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
-    const QString sfx = isFeet ? tr(" ft") : tr(" m");
     const double toDisp   = isFeet ? 3.28084 : 1.0;
     const double fromDisp = isFeet ? (1.0 / 3.28084) : 1.0;
 
@@ -4928,8 +4986,8 @@ void Monitor::slotEditHanger(quint32 hid)
     form->addRow(tr("Name:"), nameEdit);
     form->addRow(tr("On:"), new QLabel(on.isEmpty() ? tr("(nothing -- its structure is gone)") : on, &dlg));
     auto mkSpin = [&](double val, double hi) {
-        QDoubleSpinBox *sp = new QDoubleSpinBox(&dlg);
-        sp->setRange(0.0, hi * toDisp); sp->setDecimals(2); sp->setSuffix(sfx);
+        QDoubleSpinBox *sp = new FeetInchesSpinBox(isFeet, &dlg);
+        sp->setRange(0.0, hi * toDisp); sp->setDecimals(2);
         sp->setValue(val * toDisp);
         return sp;
     };
@@ -4984,7 +5042,25 @@ void Monitor::slotEditHanger(quint32 hid)
         h->setArm(float(armSpin->value() * fromDisp));
         h->setDrop(float(dropSpin->value() * fromDisp));
         m_props->recomputeHangers();
+        const quint32 hang = hangCb->currentData().toUInt();
+        const quint32 hung = m_props->fixtureOnHanger(hid);
+        if (hang != hung)
+        {
+            if (hang == UINT_MAX)
+                m_graphicsView->unmountFixture(hung);
+            else
+                m_graphicsView->attachFixtureToHanger(hang, hid);
+        }
+        m_graphicsView->updateTrusses();
+        m_graphicsView->updatePlatforms();
+        m_graphicsView->refreshFixtureBindings();
     };
+    // Live: the hanger moves as its fields change; Cancel puts it back.
+    connect(nameEdit, &QLineEdit::textChanged, &dlg, [&](const QString &) { apply(); });
+    for (QDoubleSpinBox *sp : { alongSpin, armSpin, dropSpin })
+        connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg, [&](double) { apply(); });
+    for (QComboBox *cb : { dirCb, hangCb })
+        connect(cb, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg, [&](int) { apply(); });
     connect(copyAll, &QPushButton::clicked, &dlg, [&]() {
         apply();
         const int n = copyHangerToEveryTower(hid);
@@ -4994,19 +5070,14 @@ void Monitor::slotEditHanger(quint32 hid)
     });
 
     if (dlg.exec() != QDialog::Accepted)
-        return;
-    apply();
-    const quint32 hang = hangCb->currentData().toUInt();
-    if (hang != hungNow)
     {
-        if (hang == UINT_MAX)
-            m_graphicsView->unmountFixture(hungNow);
-        else
-            m_graphicsView->attachFixtureToHanger(hang, hid);
+        edit.cancel();
+        return;
     }
-    m_graphicsView->refreshFixtureBindings();
+    apply();
     if (m_layersPanel) m_layersPanel->reload();
     m_doc->setModified();
+    edit.accept();
 }
 
 void Monitor::slotStandRemoveRequested(quint32 sid)
@@ -5145,10 +5216,10 @@ void Monitor::slotEditImage(quint32 id)
 {
     if (!m_props->hasImage(id))
         return;
+    RigEditSession edit(this);
     MonitorProperties::MonitorImage img = m_props->image(id);
 
     const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
-    const QString us  = isFeet ? tr(" ft") : tr(" m");
     const double toD  = isFeet ? 3.28084 : 1.0;
     const double frD  = isFeet ? (1.0 / 3.28084) : 1.0;
 
@@ -5163,10 +5234,16 @@ void Monitor::slotEditImage(quint32 id)
     srcLabel->setToolTip(img.source);
     QPushButton *srcBtn = new QPushButton(tr("Change…"));
     QString chosenSource = img.source;
+    std::function<void()> applyImage;      // set below, once its fields exist
     connect(srcBtn, &QPushButton::clicked, this, [&]() {
         const QString f = QFileDialog::getOpenFileName(&dlg, tr("Choose Image"),
             QString(), tr("Images (*.png *.jpg *.jpeg *.bmp *.gif *.svg)"));
-        if (!f.isEmpty()) { chosenSource = f; srcLabel->setText(QFileInfo(f).fileName()); }
+        if (!f.isEmpty())
+        {
+            chosenSource = f;
+            srcLabel->setText(QFileInfo(f).fileName());
+            if (applyImage) applyImage();
+        }
     });
     {
         QWidget *row = new QWidget; QHBoxLayout *rl = new QHBoxLayout(row);
@@ -5185,8 +5262,8 @@ void Monitor::slotEditImage(quint32 id)
     form->addRow(tr("Plane:"), planeCb);
 
     auto mkSpin = [&](double val, double lo, double hi) {
-        QDoubleSpinBox *s = new QDoubleSpinBox;
-        s->setRange(lo, hi); s->setDecimals(2); s->setSuffix(us);
+        QDoubleSpinBox *s = new FeetInchesSpinBox(isFeet);
+        s->setRange(lo, hi); s->setDecimals(2);
         s->setValue(val * toD); return s;
     };
     QDoubleSpinBox *wSpin = mkSpin(img.width,  0.05, 200);
@@ -5211,23 +5288,35 @@ void Monitor::slotEditImage(quint32 id)
     connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
     form->addRow(bb);
 
+    // Live: the image follows its fields; Cancel puts it back.
+    applyImage = [&]() {
+        MonitorProperties::MonitorImage now = img;
+        now.name    = nameEdit->text().trimmed().isEmpty() ? img.name : nameEdit->text().trimmed();
+        now.source  = chosenSource;
+        now.plane   = planeCb->currentData().toInt();
+        now.width   = float(wSpin->value() * frD);
+        now.height  = float(hSpin->value() * frD);
+        now.rotation = float(rotSpin->value());
+        now.originX = float(xSpin->value() * frD);
+        now.originY = float(ySpin->value() * frD);
+        now.originZ = float(zSpin->value() * frD);
+        m_props->setImage(now);
+        m_graphicsView->updateImages();
+    };
+    connect(nameEdit, &QLineEdit::textChanged, &dlg, [&](const QString &) { applyImage(); });
+    connect(planeCb, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg, [&](int) { applyImage(); });
+    for (QDoubleSpinBox *sp : { wSpin, hSpin, xSpin, ySpin, zSpin, rotSpin })
+        connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg, [&](double) { applyImage(); });
+
     if (dlg.exec() != QDialog::Accepted)
+    {
+        edit.cancel();
         return;
-
-    img.name    = nameEdit->text().trimmed().isEmpty() ? img.name : nameEdit->text().trimmed();
-    img.source  = chosenSource;
-    img.plane   = planeCb->currentData().toInt();
-    img.width   = float(wSpin->value() * frD);
-    img.height  = float(hSpin->value() * frD);
-    img.rotation = float(rotSpin->value());
-    img.originX = float(xSpin->value() * frD);
-    img.originY = float(ySpin->value() * frD);
-    img.originZ = float(zSpin->value() * frD);
-    m_props->setImage(img);
-
-    m_graphicsView->updateImages();
+    }
+    applyImage();
     if (m_layersPanel) m_layersPanel->reload();
     m_doc->setModified();
+    edit.accept();
 }
 
 void Monitor::slotAddNetworkNode()
@@ -5294,18 +5383,17 @@ void Monitor::slotAddNetworkNode()
     m_pendingAddScenePos = QPointF();
 
     const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
-    const QString unitSfx = isFeet ? tr(" ft") : tr(" m");
     const double toDisp   = isFeet ? 3.28084 : 1.0;
     const double fromDisp = isFeet ? (1.0 / 3.28084) : 1.0;
     const double posRange = isFeet ? 164.0 : 50.0;
 
-    QDoubleSpinBox *xSpin = new QDoubleSpinBox(&dlg);
-    xSpin->setRange(-posRange, posRange); xSpin->setSuffix(unitSfx); xSpin->setDecimals(2);
+    QDoubleSpinBox *xSpin = new FeetInchesSpinBox(isFeet, &dlg);
+    xSpin->setRange(-posRange, posRange); xSpin->setDecimals(2);
     xSpin->setValue(pendMm.x() / 1000.0 * toDisp);
     form->addRow(tr("X (stage left):"), xSpin);
 
-    QDoubleSpinBox *ySpin = new QDoubleSpinBox(&dlg);
-    ySpin->setRange(-posRange, posRange); ySpin->setSuffix(unitSfx); ySpin->setDecimals(2);
+    QDoubleSpinBox *ySpin = new FeetInchesSpinBox(isFeet, &dlg);
+    ySpin->setRange(-posRange, posRange); ySpin->setDecimals(2);
     ySpin->setValue(pendMm.y() / 1000.0 * toDisp);
     form->addRow(tr("Y (downstage):"), ySpin);
 
@@ -5507,6 +5595,7 @@ void Monitor::slotEditTarget(quint32 tid)
 {
     StageTarget *t = m_props->stageTarget(tid);
     if (!t) return;
+    RigEditSession edit(this);
 
     QDialog dlg(this);
     dlg.setWindowTitle(tr("Edit Target — %1").arg(t->name()));
@@ -5519,23 +5608,22 @@ void Monitor::slotEditTarget(quint32 tid)
     form->addRow(tr("Name:"), nameEdit);
 
     const bool isFeet_t = (m_props->gridUnits() == MonitorProperties::Feet);
-    const QString unitSfx_t = isFeet_t ? tr(" ft") : tr(" m");
     const double toDisp_t   = isFeet_t ? 3.28084 : 1.0;
     const double fromDisp_t = isFeet_t ? (1.0 / 3.28084) : 1.0;
     const double posRange_t = isFeet_t ? 164.0 : 50.0;   // ~50m in feet
 
-    QDoubleSpinBox *xSpin = new QDoubleSpinBox(&dlg);
-    xSpin->setRange(-posRange_t, posRange_t); xSpin->setSuffix(unitSfx_t); xSpin->setDecimals(2);
+    QDoubleSpinBox *xSpin = new FeetInchesSpinBox(isFeet_t, &dlg);
+    xSpin->setRange(-posRange_t, posRange_t); xSpin->setDecimals(2);
     xSpin->setValue(double(t->x()) * toDisp_t);
     form->addRow(tr("X (stage left):"), xSpin);
 
-    QDoubleSpinBox *ySpin = new QDoubleSpinBox(&dlg);
-    ySpin->setRange(-posRange_t, posRange_t); ySpin->setSuffix(unitSfx_t); ySpin->setDecimals(2);
+    QDoubleSpinBox *ySpin = new FeetInchesSpinBox(isFeet_t, &dlg);
+    ySpin->setRange(-posRange_t, posRange_t); ySpin->setDecimals(2);
     ySpin->setValue(double(t->y()) * toDisp_t);
     form->addRow(tr("Y (downstage):"), ySpin);
 
-    QDoubleSpinBox *zSpin = new QDoubleSpinBox(&dlg);
-    zSpin->setRange(0, isFeet_t ? 65.6 : 20.0); zSpin->setSuffix(unitSfx_t); zSpin->setDecimals(2);
+    QDoubleSpinBox *zSpin = new FeetInchesSpinBox(isFeet_t, &dlg);
+    zSpin->setRange(0, isFeet_t ? 65.6 : 20.0); zSpin->setDecimals(2);
     zSpin->setValue(double(t->z()) * toDisp_t);
     zSpin->setToolTip(tr("ABSOLUTE aim height above the stage floor for this "
                          "target (used by Pan/Tilt aim palettes). 0 = floor."));
@@ -5544,8 +5632,8 @@ void Monitor::slotEditTarget(quint32 tid)
     // Follow-spot subject/user height — when a follow spot drives a fixture it
     // aims at this height above the platform the subject stands on, OVERRIDING
     // the target Z so the beam tracks the body across risers. Per-workspace.
-    QDoubleSpinBox *subjSpin = new QDoubleSpinBox(&dlg);
-    subjSpin->setRange(0, isFeet_t ? 32.8 : 10.0); subjSpin->setSuffix(unitSfx_t); subjSpin->setDecimals(2);
+    QDoubleSpinBox *subjSpin = new FeetInchesSpinBox(isFeet_t, &dlg);
+    subjSpin->setRange(0, isFeet_t ? 32.8 : 10.0); subjSpin->setDecimals(2);
     subjSpin->setValue(double(m_props->aimSubjectHeight()) * toDisp_t);
     subjSpin->setToolTip(tr("Follow-spot subject height above the platform/deck "
                             "(overrides the target Z when a follow spot drives the "
@@ -5598,9 +5686,9 @@ void Monitor::slotEditTarget(quint32 tid)
        needing a new entry for every one-off. */
     QCheckBox *ovrChk = new QCheckBox(tr("Override aim height"), &dlg);
     ovrChk->setChecked(t->hasAimHeightOverride());
-    QDoubleSpinBox *ovrSpin = new QDoubleSpinBox(&dlg);
+    QDoubleSpinBox *ovrSpin = new FeetInchesSpinBox(isFeet_t, &dlg);
     ovrSpin->setRange(0, isFeet_t ? 32.8 : 10.0);
-    ovrSpin->setSuffix(unitSfx_t); ovrSpin->setDecimals(2);
+    ovrSpin->setDecimals(2);
     ovrSpin->setValue(double(m_props->targetAimHeight(t, true)) * toDisp_t);
     ovrSpin->setEnabled(ovrChk->isChecked());
     connect(ovrChk, &QCheckBox::toggled, ovrSpin, &QWidget::setEnabled);
@@ -5613,13 +5701,13 @@ void Monitor::slotEditTarget(quint32 tid)
 
     /* Footprint. A drum kit is not a point, and neither is an area: this is
        what lets the view show whether a beam actually COVERS the thing. */
-    QDoubleSpinBox *wSpin = new QDoubleSpinBox(&dlg);
+    QDoubleSpinBox *wSpin = new FeetInchesSpinBox(isFeet_t, &dlg);
     wSpin->setRange(0, isFeet_t ? 98.0 : 30.0);
-    wSpin->setSuffix(unitSfx_t); wSpin->setDecimals(2);
+    wSpin->setDecimals(2);
     wSpin->setValue(t->footprint().width() * toDisp_t);
-    QDoubleSpinBox *dSpin = new QDoubleSpinBox(&dlg);
+    QDoubleSpinBox *dSpin = new FeetInchesSpinBox(isFeet_t, &dlg);
     dSpin->setRange(0, isFeet_t ? 98.0 : 30.0);
-    dSpin->setSuffix(unitSfx_t); dSpin->setDecimals(2);
+    dSpin->setDecimals(2);
     dSpin->setValue(t->footprint().height() * toDisp_t);
     QHBoxLayout *sizeRow = new QHBoxLayout;
     sizeRow->addWidget(wSpin);
@@ -5650,17 +5738,11 @@ void Monitor::slotEditTarget(quint32 tid)
     syncRows();
 
     QColor curColor = t->color().isValid() ? t->color() : QColor(255, 180, 0);
-    QPushButton *colorBtn = new QPushButton(&dlg);
-    colorBtn->setStyleSheet(QString("background-color: %1").arg(curColor.name()));
+    ColourSwatchButton *colorBtn = new ColourSwatchButton(curColor, tr("Target colour"), &dlg);
+    colorBtn->setResetColour(QColor(255, 180, 0));
     QColor chosenColor = curColor;
-    connect(colorBtn, &QPushButton::clicked, [&](){
-        QColor c = QColorDialog::getColor(chosenColor, &dlg, tr("Target color"));
-        if (c.isValid()) {
-            chosenColor = c;
-            colorBtn->setStyleSheet(QString("background-color: %1").arg(c.name()));
-        }
-    });
-    form->addRow(tr("Color:"), colorBtn);
+    connect(colorBtn, &ColourSwatchButton::colourChanged, &dlg, [&](const QColor &c) { chosenColor = c; });
+    form->addRow(tr("Colour:"), colorBtn);
 
     vl->addLayout(form);
     QDialogButtonBox *bb = new QDialogButtonBox(
@@ -5669,38 +5751,52 @@ void Monitor::slotEditTarget(quint32 tid)
     connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
     connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
+    auto apply = [&]() {
+        QString newName = nameEdit->text().trimmed();
+        if (!newName.isEmpty()) t->setName(newName);
+        t->setX(float(xSpin->value() * fromDisp_t));
+        t->setY(float(ySpin->value() * fromDisp_t));
+        t->setZ(float(zSpin->value() * fromDisp_t));
+        t->setColor(chosenColor);
+        m_props->setAimSubjectHeight(float(subjSpin->value() * fromDisp_t));
+        // Position and subject height both change what a head can reach.
+        m_props->notifyStageTargetsChanged();
+
+        t->setKind(StageTarget::Kind(kindCombo->currentData().toInt()));
+        const QString bound = boundCombo->currentData().toString();
+        if (t->kind() == StageTarget::Kind::Structure && bound.isEmpty() == false)
+        {
+            const QStringList parts = bound.split(QLatin1Char(':'));
+            if (parts.size() == 2)
+                t->setBinding(parts.at(0), parts.at(1).toUInt());
+        }
+        else
+        {
+            t->clearBinding();
+        }
+        t->setAimHeightOverride(ovrChk->isChecked()
+                                ? float(ovrSpin->value() * fromDisp_t) : -1.0f);
+        t->setFootprint(QSizeF(wSpin->value() * fromDisp_t,
+                               dSpin->value() * fromDisp_t));
+        m_graphicsView->updateTargets();
+    };
+    // Live: the target follows its fields; Cancel puts it back.
+    connect(nameEdit, &QLineEdit::textChanged, &dlg, [&](const QString &) { apply(); });
+    for (QDoubleSpinBox *sp : { xSpin, ySpin, zSpin, subjSpin, ovrSpin, wSpin, dSpin })
+        connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg, [&](double) { apply(); });
+    for (QComboBox *cb : { kindCombo, boundCombo })
+        connect(cb, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg, [&](int) { apply(); });
+    connect(ovrChk, &QCheckBox::toggled, &dlg, [&](bool) { apply(); });
+    connect(colorBtn, &ColourSwatchButton::colourChanged, &dlg, [&](const QColor &) { apply(); });
+
     if (dlg.exec() != QDialog::Accepted)
+    {
+        edit.cancel();
         return;
-
-    QString newName = nameEdit->text().trimmed();
-    if (!newName.isEmpty()) t->setName(newName);
-    t->setX(float(xSpin->value() * fromDisp_t));
-    t->setY(float(ySpin->value() * fromDisp_t));
-    t->setZ(float(zSpin->value() * fromDisp_t));
-    t->setColor(chosenColor);
-    m_props->setAimSubjectHeight(float(subjSpin->value() * fromDisp_t));
-    // Position and subject height both change what a head can reach.
-    m_props->notifyStageTargetsChanged();
-
-    t->setKind(StageTarget::Kind(kindCombo->currentData().toInt()));
-    const QString bound = boundCombo->currentData().toString();
-    if (t->kind() == StageTarget::Kind::Structure && bound.isEmpty() == false)
-    {
-        const QStringList parts = bound.split(QLatin1Char(':'));
-        if (parts.size() == 2)
-            t->setBinding(parts.at(0), parts.at(1).toUInt());
     }
-    else
-    {
-        t->clearBinding();
-    }
-    t->setAimHeightOverride(ovrChk->isChecked()
-                            ? float(ovrSpin->value() * fromDisp_t) : -1.0f);
-    t->setFootprint(QSizeF(wSpin->value() * fromDisp_t,
-                           dSpin->value() * fromDisp_t));
-
-    m_graphicsView->updateTargets();
+    apply();
     m_doc->setModified();
+    edit.accept();
 }
 
 void Monitor::slotAddPipe()
@@ -5740,18 +5836,14 @@ void Monitor::slotEditStand(quint32 sid)
 {
     Stand *s = m_props->stand(sid);
     if (!s) return;
+    RigEditSession edit(this);
 
     const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
-    const QString sfx = isFeet ? tr(" ft") : tr(" m");
     const double toDisp   = isFeet ? 3.28084 : 1.0;
     const double fromDisp = isFeet ? (1.0 / 3.28084) : 1.0;
     const double posR = isFeet ? 164.0 : 50.0;
     const double hMax = isFeet ? 33.0 : 10.0;
 
-    // Snapshot for live-preview revert on Cancel.
-    const float snapOX = s->originX(), snapOY = s->originY(), snapH = s->height();
-    const float snapBR = s->baseRadius(), snapRot = s->rotation();
-    const QString snapName = s->name();
 
     QDialog dlg(this);
     dlg.setWindowTitle(tr("Lighting Studio Editor — Stand %1").arg(s->name()));
@@ -5762,8 +5854,8 @@ void Monitor::slotEditStand(quint32 sid)
     QLineEdit *nameEdit = new QLineEdit(s->name(), &dlg);
     form->addRow(tr("Name:"), nameEdit);
     auto mkSpin = [&](double val, double lo, double hi) {
-        QDoubleSpinBox *sp = new QDoubleSpinBox(&dlg);
-        sp->setRange(lo, hi); sp->setDecimals(2); sp->setSuffix(sfx);
+        QDoubleSpinBox *sp = new FeetInchesSpinBox(isFeet, &dlg);
+        sp->setRange(lo, hi); sp->setDecimals(2);
         sp->setValue(val * toDisp); return sp;
     };
     QDoubleSpinBox *oxSpin = mkSpin(s->originX(), -posR, posR);
@@ -5811,12 +5903,7 @@ void Monitor::slotEditStand(quint32 sid)
     dlg.resize(940, 560);
     if (dlg.exec() != QDialog::Accepted)
     {
-        // Revert the live preview.
-        s->setName(snapName); s->setOriginX(snapOX); s->setOriginY(snapOY);
-        s->setHeight(snapH); s->setBaseRadius(snapBR); s->setRotation(snapRot);
-        m_props->recomputeStandMounts();
-        m_graphicsView->updatePlatforms();
-        m_graphicsView->updateTrusses();
+        edit.cancel();
         return;
     }
 
@@ -5835,6 +5922,7 @@ void Monitor::slotEditStand(quint32 sid)
             m_graphicsView->updateFixture(fx->id());
     if (m_layersPanel) m_layersPanel->reload();
     m_doc->setModified();
+    edit.accept();
 }
 
 void Monitor::slotAddCyclorama()
@@ -5873,18 +5961,15 @@ void Monitor::slotEditScenery(quint32 sid)
     Scenery *s = m_props->scenery(sid);
     if (s == NULL)
         return;
+    RigEditSession edit(this);
+    const QString oldName = s->name();
 
     const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
-    const QString sfx = isFeet ? tr(" ft") : tr(" m");
     const double toDisp   = isFeet ? 3.28084 : 1.0;
     const double fromDisp = isFeet ? (1.0 / 3.28084) : 1.0;
     const double posR = isFeet ? 164.0 : 50.0;
 
     // Snapshot for reverting the live preview on Cancel.
-    const QString snapName = s->name();
-    const float snapX = s->originX(), snapY = s->originY(), snapW = s->width(), snapH = s->height();
-    const float snapB = s->bottom(), snapR = s->rotation(), snapBow = s->bow();
-    const QColor snapC = s->color();
 
     QDialog dlg(this);
     dlg.setWindowTitle(tr("%1 -- %2").arg(Scenery::kindName(s->kind()), s->name()));
@@ -5892,8 +5977,8 @@ void Monitor::slotEditScenery(quint32 sid)
     QLineEdit *nameEdit = new QLineEdit(s->name(), &dlg);
     form->addRow(tr("Name:"), nameEdit);
     auto mkSpin = [&](double val, double lo, double hi) {
-        QDoubleSpinBox *sp = new QDoubleSpinBox(&dlg);
-        sp->setRange(lo, hi); sp->setDecimals(2); sp->setSuffix(sfx);
+        QDoubleSpinBox *sp = new FeetInchesSpinBox(isFeet, &dlg);
+        sp->setRange(lo, hi); sp->setDecimals(2);
         sp->setValue(val * toDisp);
         return sp;
     };
@@ -5918,18 +6003,13 @@ void Monitor::slotEditScenery(quint32 sid)
     form->addRow(tr("Bottom trim:"), bSpin);
     form->addRow(tr("Bow:"), bowSpin);
     form->addRow(tr("Facing:"), rotSpin);
-    QPushButton *colorBtn = new QPushButton(&dlg);
-    auto showColor = [colorBtn](const QColor &c) {
-        colorBtn->setText(c.name());
-        colorBtn->setStyleSheet(QString("background:%1; color:%2").arg(c.name())
-                                    .arg(c.lightness() > 128 ? "#000" : "#fff"));
-    };
     QColor chosen = s->color();
-    showColor(chosen);
+    ColourSwatchButton *colorBtn = new ColourSwatchButton(chosen, tr("Cloth colour"), &dlg);
+    colorBtn->setResetColour(QColor(226, 228, 236));
     form->addRow(tr("Colour:"), colorBtn);
 
     auto apply = [&]() {
-        s->setName(nameEdit->text().trimmed().isEmpty() ? snapName : nameEdit->text().trimmed());
+        s->setName(nameEdit->text().trimmed().isEmpty() ? oldName : nameEdit->text().trimmed());
         s->setOriginX(float(xSpin->value() * fromDisp));
         s->setOriginY(float(ySpin->value() * fromDisp));
         s->setWidth(float(wSpin->value() * fromDisp));
@@ -5943,14 +6023,9 @@ void Monitor::slotEditScenery(quint32 sid)
     for (QDoubleSpinBox *sp : { xSpin, ySpin, wSpin, hSpin, bSpin, bowSpin, rotSpin })
         connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg, [&apply](double) { apply(); });
     connect(nameEdit, &QLineEdit::textChanged, &dlg, [&apply](const QString &) { apply(); });
-    connect(colorBtn, &QPushButton::clicked, &dlg, [&]() {
-        const QColor c = QColorDialog::getColor(chosen, &dlg, tr("Cloth colour"));
-        if (c.isValid())
-        {
-            chosen = c;
-            showColor(c);
-            apply();
-        }
+    connect(colorBtn, &ColourSwatchButton::colourChanged, &dlg, [&](const QColor &c) {
+        chosen = c;
+        apply();
     });
 
     QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
@@ -5962,15 +6037,13 @@ void Monitor::slotEditScenery(quint32 sid)
 
     if (dlg.exec() != QDialog::Accepted)
     {
-        s->setName(snapName); s->setOriginX(snapX); s->setOriginY(snapY);
-        s->setWidth(snapW); s->setHeight(snapH); s->setBottom(snapB);
-        s->setRotation(snapR); s->setBow(snapBow); s->setColor(snapC);
-        m_graphicsView->updatePlatforms();
+        edit.cancel();
         return;
     }
     apply();
     if (m_layersPanel) m_layersPanel->reload();
     m_doc->setModified();
+    edit.accept();
 }
 
 void Monitor::slotAddTower()
@@ -6050,6 +6123,7 @@ void Monitor::slotEditTower(quint32 tid)
 {
     Tower *t = m_props->tower(tid);
     if (!t) return;
+    RigEditSession edit(this);
 
     const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
     const QString sfx = isFeet ? tr(" ft") : tr(" m");
@@ -6058,12 +6132,6 @@ void Monitor::slotEditTower(quint32 tid)
     const double posR = isFeet ? 164.0 : 50.0;
     const double hMax = isFeet ? 40.0 : 12.0;
 
-    // Snapshot for revert on Cancel (geometry + shelves).
-    const QString snapName = t->name();
-    const float snapOX = t->originX(), snapOY = t->originY();
-    const float snapW = t->width(), snapD = t->depth(), snapH = t->height();
-    QList<float> snapShelves;
-    for (int i = 0; i < t->shelfCount(); ++i) snapShelves << t->shelfHeight(i);
 
     QDialog dlg(this);
     dlg.setWindowTitle(tr("Lighting Studio Editor — Tower %1").arg(t->name()));
@@ -6074,8 +6142,8 @@ void Monitor::slotEditTower(quint32 tid)
     QLineEdit *nameEdit = new QLineEdit(t->name(), &dlg);
     form->addRow(tr("Name:"), nameEdit);
     auto mkSpin = [&](double val, double lo, double hi) {
-        QDoubleSpinBox *sp = new QDoubleSpinBox(&dlg);
-        sp->setRange(lo, hi); sp->setDecimals(2); sp->setSuffix(sfx);
+        QDoubleSpinBox *sp = new FeetInchesSpinBox(isFeet, &dlg);
+        sp->setRange(lo, hi); sp->setDecimals(2);
         sp->setValue(val * toDisp); return sp;
     };
     QDoubleSpinBox *oxSpin = mkSpin(t->originX(), -posR, posR);
@@ -6091,27 +6159,16 @@ void Monitor::slotEditTower(quint32 tid)
 
     /* Faces: opaque panels on its sides -- a black facade, or a printed one --
        on the sides ticked, over the stretch of its height given. */
-    const bool snapFaces = t->hasFaces();
-    const int snapSides = t->facesSides();
-    const QColor snapFacesColour = t->facesColour();
-    const float snapFacesFrom = t->facesFrom();
-    const float snapFacesTo = (t->facesTo() < t->height() - 1e-3f) ? t->facesTo() : -1.0f;
-    const QString snapPattern = t->facesPattern();
     QWidget *facesRow = new QWidget(&dlg);
     QHBoxLayout *facesLay = new QHBoxLayout(facesRow);
     facesLay->setContentsMargins(0, 0, 0, 0);
     QCheckBox *facesCb = new QCheckBox(tr("Faces"), facesRow);
     facesCb->setChecked(t->hasFaces());
     facesCb->setToolTip(tr("Opaque panels over the tower's sides"));
-    QPushButton *facesColourBtn = new QPushButton(facesRow);
-    facesColourBtn->setToolTip(tr("The panels' colour"));
     QColor *facesColour = new QColor(t->facesColour());
-    auto showFacesColour = [facesColourBtn](const QColor &c) {
-        facesColourBtn->setText(c.name());
-        facesColourBtn->setStyleSheet(QString("background:%1; color:%2").arg(c.name())
-                                          .arg(c.lightness() > 128 ? "#000" : "#fff"));
-    };
-    showFacesColour(*facesColour);
+    ColourSwatchButton *facesColourBtn = new ColourSwatchButton(*facesColour, tr("Faces colour"), facesRow);
+    facesColourBtn->setResetColour(QColor(24, 24, 26));
+    facesColourBtn->setToolTip(tr("The panels' colour"));
     QDoubleSpinBox *facesFromSpin = mkSpin(t->facesFrom(), 0.0, hMax);
     QDoubleSpinBox *facesToSpin = mkSpin(t->facesTo(), 0.0, hMax);
     facesFromSpin->setToolTip(tr("How high the panels start"));
@@ -6141,7 +6198,6 @@ void Monitor::slotEditTower(quint32 tid)
     form->addRow(tr("On sides:"), sidesRow);
     QString *facesPattern = new QString(t->facesPattern());
     float *facesOpacity = new float(t->facesPatternOpacity());
-    const float snapOpacity = t->facesPatternOpacity();
     std::function<void()> applyFaces;               // set below, once the canvas exists
     QWidget *facesPatternRow = makePatternPicker(&dlg, facesPattern, facesOpacity, [&applyFaces]() {
         if (applyFaces) applyFaces();
@@ -6163,8 +6219,8 @@ void Monitor::slotEditTower(quint32 tid)
     vl->addWidget(shelfList);
 
     QHBoxLayout *shelfBtns = new QHBoxLayout;
-    QDoubleSpinBox *newShelf = new QDoubleSpinBox(&dlg);
-    newShelf->setRange(0.0, hMax); newShelf->setDecimals(2); newShelf->setSuffix(sfx);
+    QDoubleSpinBox *newShelf = new FeetInchesSpinBox(isFeet, &dlg);
+    newShelf->setRange(0.0, hMax); newShelf->setDecimals(2);
     newShelf->setValue(1.0 * toDisp);
     QPushButton *addShelfBtn = new QPushButton(tr("Add shelf"), &dlg);
     QPushButton *delShelfBtn = new QPushButton(tr("Remove selected"), &dlg);
@@ -6247,13 +6303,9 @@ void Monitor::slotEditTower(quint32 tid)
                 [&applyFaces](double) { applyFaces(); });
     for (const auto &sc : sideCbs)
         connect(sc.first, &QCheckBox::toggled, &dlg, [&applyFaces](bool) { applyFaces(); });
-    connect(facesColourBtn, &QPushButton::clicked, &dlg,
-            [&dlg, facesColour, showFacesColour, &applyFaces]() {
-        const QColor c = QColorDialog::getColor(*facesColour, &dlg, tr("Faces colour"));
-        if (!c.isValid())
-            return;
+    connect(facesColourBtn, &ColourSwatchButton::colourChanged, &dlg,
+            [facesColour, &applyFaces](const QColor &c) {
         *facesColour = c;
-        showFacesColour(c);
         applyFaces();
     });
 
@@ -6266,25 +6318,10 @@ void Monitor::slotEditTower(quint32 tid)
     dlg.resize(940, 560);
     if (dlg.exec() != QDialog::Accepted)
     {
-        // Revert geometry AND shelves (Cancel now truly cancels).
-        t->setName(snapName); t->setOriginX(snapOX); t->setOriginY(snapOY);
-        t->setWidth(snapW); t->setDepth(snapD); t->setHeight(snapH);
-        // setShelves(), not addShelf() in a loop -- the latter's new
-        // duplicate guard (see Tower::addShelf()) could reject restoring a
-        // snapshot that already had a duplicate in it (e.g. one saved before
-        // that guard existed), silently losing a shelf on Cancel instead of
-        // actually cancelling.
-        t->setShelves(snapShelves);
-        t->setFaces(snapFaces);
-        t->setFacesSides(snapSides);
-        t->setFacesColour(snapFacesColour);
-        t->setFacesRange(snapFacesFrom, snapFacesTo);
-        t->setFacesPattern(snapPattern);
-        t->setFacesPatternOpacity(snapOpacity);
+        edit.cancel();
         delete facesColour;
         delete facesPattern;
         delete facesOpacity;
-        m_graphicsView->updatePlatforms();
         return;
     }
     delete facesColour;
@@ -6304,6 +6341,7 @@ void Monitor::slotEditTower(quint32 tid)
             m_graphicsView->updateFixture(fx->id());
     if (m_layersPanel) m_layersPanel->reload();
     m_doc->setModified();
+    edit.accept();
 }
 
 void Monitor::slotAddElectric()
@@ -6376,17 +6414,14 @@ void Monitor::slotEditPipe(quint32 bid)
 {
     Pipe *b = m_props->pipe(bid);
     if (!b) return;
+    RigEditSession edit(this);
 
     const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
-    const QString sfx = isFeet ? tr(" ft") : tr(" m");
     const double toDisp   = isFeet ? 3.28084 : 1.0;
     const double fromDisp = isFeet ? (1.0 / 3.28084) : 1.0;
     const double posR = isFeet ? 164.0 : 50.0;
     const double hMax = isFeet ? 66.0 : 20.0;
 
-    // Snapshot core geometry for live-preview revert on Cancel.
-    const float snapOX = b->originX(), snapOY = b->originY();
-    const float snapLen = b->length(), snapBZ = b->baseZ(), snapRun = b->runAngle();
 
     QDialog dlg(this);
     const bool horiz = (b->orientation() == Pipe::Horizontal);
@@ -6399,8 +6434,8 @@ void Monitor::slotEditPipe(quint32 bid)
     form->addRow(tr("Name:"), nameEdit);
 
     auto mkSpin = [&](double val, double lo, double hi) {
-        QDoubleSpinBox *s = new QDoubleSpinBox(&dlg);
-        s->setRange(lo, hi); s->setDecimals(2); s->setSuffix(sfx);
+        QDoubleSpinBox *s = new FeetInchesSpinBox(isFeet, &dlg);
+        s->setRange(lo, hi); s->setDecimals(2);
         s->setValue(val * toDisp); return s;
     };
     QDoubleSpinBox *oxSpin = mkSpin(b->originX(), -posR, posR);
@@ -6510,8 +6545,8 @@ void Monitor::slotEditPipe(quint32 bid)
             QTableWidgetItem *ni = new QTableWidgetItem(fx ? fx->name() : QString::number(mounted[i]));
             ni->setFlags(ni->flags() & ~Qt::ItemIsEditable);
             tbl->setItem(i, 0, ni);
-            QDoubleSpinBox *os = new QDoubleSpinBox(tbl);
-            os->setRange(0.0, hMax); os->setDecimals(2); os->setSuffix(sfx);
+            QDoubleSpinBox *os = new FeetInchesSpinBox(isFeet, tbl);
+            os->setRange(0.0, hMax); os->setDecimals(2);
             os->setValue(double(rp.pipeOffset) * toDisp);
             tbl->setCellWidget(i, 1, os); offSpins << os;
             QDoubleSpinBox *as = new QDoubleSpinBox(tbl);
@@ -6552,10 +6587,7 @@ void Monitor::slotEditPipe(quint32 bid)
 
     if (dlg.exec() != QDialog::Accepted)
     {
-        b->setOriginX(snapOX); b->setOriginY(snapOY); b->setHeight(snapLen);
-        b->setBaseZ(snapBZ); b->setRunAngle(snapRun);
-        m_props->recomputeChildTrusses();
-        m_graphicsView->updatePlatforms();
+        edit.cancel();
         return;
     }
 
@@ -6601,22 +6633,15 @@ void Monitor::slotEditPipe(quint32 bid)
         m_graphicsView->updateFixture(fid);
     if (m_layersPanel) m_layersPanel->reload();
     m_doc->setModified();
+    edit.accept();
 }
 
 void Monitor::slotEditPlatform(quint32 pid)
 {
     StagePlatform *p = m_props->platform(pid);
     if (!p) return;
+    RigEditSession edit(this);
 
-    // Snapshot for live-preview revert on Cancel.
-    const QString snapName = p->name();
-    const float snapOX = p->originX(), snapOY = p->originY();
-    const float snapW = p->width(), snapD = p->depth(), snapH = p->height();
-    const QColor snapColor = p->color();
-    const bool snapSteps = p->isSteps();
-    const int snapCount = p->stepCount();
-    const float snapRise = p->stepRise(), snapRun = p->stepRun();
-    const StagePlatform::Climb snapClimb = p->stepsClimb();
 
     QDialog dlg(this);
     dlg.setWindowTitle(p->isSteps() ? tr("Lighting Studio Editor — Steps %1").arg(p->name())
@@ -6630,20 +6655,19 @@ void Monitor::slotEditPlatform(quint32 pid)
     form->addRow(tr("Name:"), nameEdit);
 
     const bool isFeet_p = (m_props->gridUnits() == MonitorProperties::Feet);
-    const QString unitSfx_p = isFeet_p ? tr(" ft") : tr(" m");
     const double toDisp_p   = isFeet_p ? 3.28084 : 1.0;
     const double fromDisp_p = isFeet_p ? (1.0 / 3.28084) : 1.0;
     const double posRange_p = isFeet_p ? 164.0 : 50.0;
     const double sizeMax_p  = isFeet_p ? 328.0 : 100.0;
     const double hMax_p     = isFeet_p ? 32.8  : 10.0;
 
-    QDoubleSpinBox *oxSpin = new QDoubleSpinBox(&dlg);
-    oxSpin->setRange(-posRange_p, posRange_p); oxSpin->setSuffix(unitSfx_p); oxSpin->setDecimals(2);
+    QDoubleSpinBox *oxSpin = new FeetInchesSpinBox(isFeet_p, &dlg);
+    oxSpin->setRange(-posRange_p, posRange_p); oxSpin->setDecimals(2);
     oxSpin->setValue(double(p->originX()) * toDisp_p);
     form->addRow(tr("Origin X:"), oxSpin);
 
-    QDoubleSpinBox *oySpin = new QDoubleSpinBox(&dlg);
-    oySpin->setRange(-posRange_p, posRange_p); oySpin->setSuffix(unitSfx_p); oySpin->setDecimals(2);
+    QDoubleSpinBox *oySpin = new FeetInchesSpinBox(isFeet_p, &dlg);
+    oySpin->setRange(-posRange_p, posRange_p); oySpin->setDecimals(2);
     oySpin->setValue(double(p->originY()) * toDisp_p);
     form->addRow(tr("Origin Y:"), oySpin);
 
@@ -6713,26 +6737,20 @@ void Monitor::slotEditPlatform(quint32 pid)
 
     // Color picker row
     QColor curColor = p->color().isValid() ? p->color() : QColor(80, 120, 200);
-    QPushButton *colorBtn = new QPushButton(&dlg);
-    colorBtn->setStyleSheet(QString("background-color: %1").arg(curColor.name()));
+    ColourSwatchButton *colorBtn = new ColourSwatchButton(curColor, tr("Platform colour"), &dlg);
+    colorBtn->setResetColour(QColor(80, 120, 200));
     QColor chosenColor = curColor;
-    connect(colorBtn, &QPushButton::clicked, [&](){
-        QColor c = QColorDialog::getColor(chosenColor, &dlg, tr("Platform color"));
-        if (c.isValid()) {
-            chosenColor = c;
-            colorBtn->setStyleSheet(QString("background-color: %1").arg(c.name()));
-            /* Apply straight away, like the size spin boxes and the two
-               checkboxes in this same dialog. It used to update only the
-               button swatch, so the platform on the canvas kept its old colour
-               until OK -- which is exactly the moment you can no longer
-               compare it against the stage. Cancel already restores snapColor
-               along with the other snapshotted fields. */
-            p->setColor(c);
-            m_graphicsView->updatePlatforms();
-            m_doc->setModified();
-        }
+    connect(colorBtn, &ColourSwatchButton::colourChanged, &dlg, [&](const QColor &c) {
+        chosenColor = c;
+        /* Applied straight away, like the size spin boxes and the two
+           checkboxes in this same dialog: the platform on the canvas shows it
+           while it can still be compared against the stage. Cancel puts it
+           back with the rest (RigEditSession). */
+        p->setColor(c);
+        m_graphicsView->updatePlatforms();
+        m_doc->setModified();
     });
-    form->addRow(tr("Color:"), colorBtn);
+    form->addRow(tr("Colour:"), colorBtn);
 
     /* What the deck is made of. A clear top is why you would rig fixtures
        INSIDE a step at all: they show through it and their light goes up. */
@@ -6769,7 +6787,6 @@ void Monitor::slotEditPlatform(quint32 pid)
     stackChk->setToolTip(tr("A stackable platform is exempt from the no-overlap rule, "
                             "so it can be placed on top of a solid deck."));
     form->addRow(QString(), stackChk);
-    const bool snapSolid = p->solid(), snapStack = p->stackable();
     connect(solidChk, &QCheckBox::toggled, &dlg, [p, this](bool on) {
         p->setSolid(on); m_doc->setModified();
     });
@@ -6844,18 +6861,7 @@ void Monitor::slotEditPlatform(quint32 pid)
 
     if (dlg.exec() != QDialog::Accepted)
     {
-        p->setName(snapName); p->setOriginX(snapOX); p->setOriginY(snapOY);
-        if (snapSteps)
-            p->setSteps(snapCount, snapRise, snapRun,
-                        (snapClimb == StagePlatform::ClimbStageLeft
-                         || snapClimb == StagePlatform::ClimbStageRight) ? snapD : snapW, snapClimb);
-        else
-            p->setBoxShape();
-        p->setWidth(snapW); p->setDepth(snapD); p->setHeight(snapH); p->setColor(snapColor);
-        p->setSolid(snapSolid); p->setStackable(snapStack);
-        m_props->recomputeAnchoredFrames();
-        m_graphicsView->updatePlatforms();
-        m_graphicsView->refreshRiserFixtures();
+        edit.cancel();
         return;
     }
 
@@ -6867,6 +6873,7 @@ void Monitor::slotEditPlatform(quint32 pid)
     m_graphicsView->refreshRiserFixtures();       // mounted + frame fixtures follow size/height
     if (m_layersPanel) m_layersPanel->reload();   // reflect the new name/colour in the tree
     m_doc->setModified();
+    edit.accept();
 }
 
 void Monitor::slotCanvasContextMenu(QPointF scenePos)
@@ -7965,19 +7972,8 @@ void Monitor::slotEditTruss(quint32 tid)
 {
     Truss *t = m_props->truss(tid);
     if (!t) return;
+    RigEditSession edit(this);
 
-    // Snapshot for live-preview revert on Cancel (only meaningful for a bar).
-    const float  origAlong    = t->parentOffset();
-    const int    origFace     = t->barFace();
-    const float  origStandoff = t->barStandoff();
-    const int    origRun      = t->barRun();
-    const float  origLen      = t->length();
-    const bool   origIsBar    = t->isChildBar();
-    // Geometry snapshot for the live canvas preview of a FREE truss.
-    const QVector3D origOrigin = t->origin();
-    const QPointF   origDir    = t->direction();
-    const Truss::TrussType origType = t->type();
-    const float     origWidth  = t->width();
 
     QDialog editDlg(this);
     // Named by KIND: a truss and its auto-group share a name, and both used to
@@ -8003,7 +7999,6 @@ void Monitor::slotEditTruss(quint32 tid)
     form->addRow(tr("Type:"), typeCb);
 
     const bool isFeet_e = (m_props->gridUnits() == MonitorProperties::Feet);
-    const QString unitSfx_e = isFeet_e ? tr(" ft") : tr(" m");
     const double toDisp_e   = isFeet_e ? 3.28084 : 1.0;
     const double fromDisp_e = isFeet_e ? (1.0 / 3.28084) : 1.0;
     const double posRange_e = isFeet_e ? 164.0 : 50.0;
@@ -8011,18 +8006,18 @@ void Monitor::slotEditTruss(quint32 tid)
     const double zMax_e     = isFeet_e ? 98.4  : 30.0;
     const double wMax_e     = isFeet_e ? 16.4  : 5.0;
 
-    QDoubleSpinBox *originX = new QDoubleSpinBox(&editDlg);
-    originX->setRange(-posRange_e, posRange_e); originX->setSuffix(unitSfx_e); originX->setDecimals(2);
+    QDoubleSpinBox *originX = new FeetInchesSpinBox(isFeet_e, &editDlg);
+    originX->setRange(-posRange_e, posRange_e); originX->setDecimals(2);
     originX->setValue(t->origin().x() * toDisp_e);
     form->addRow(tr("Origin X:"), originX);
 
-    QDoubleSpinBox *originY = new QDoubleSpinBox(&editDlg);
-    originY->setRange(-posRange_e, posRange_e); originY->setSuffix(unitSfx_e); originY->setDecimals(2);
+    QDoubleSpinBox *originY = new FeetInchesSpinBox(isFeet_e, &editDlg);
+    originY->setRange(-posRange_e, posRange_e); originY->setDecimals(2);
     originY->setValue(t->origin().y() * toDisp_e);
     form->addRow(tr("Origin Y:"), originY);
 
-    QDoubleSpinBox *originZ = new QDoubleSpinBox(&editDlg);
-    originZ->setRange(0, zMax_e); originZ->setSuffix(unitSfx_e); originZ->setDecimals(2);
+    QDoubleSpinBox *originZ = new FeetInchesSpinBox(isFeet_e, &editDlg);
+    originZ->setRange(0, zMax_e); originZ->setDecimals(2);
     originZ->setValue(t->origin().z() * toDisp_e);
     form->addRow(tr("Height Z:"), originZ);
 
@@ -8037,13 +8032,13 @@ void Monitor::slotEditTruss(quint32 tid)
                             "horizontal or vertical on the 2D map."));
     form->addRow(tr("Direction (°):"), dirAngle);
 
-    QDoubleSpinBox *lenSpin = new QDoubleSpinBox(&editDlg);
-    lenSpin->setRange(0.1, lenMax_e); lenSpin->setSuffix(unitSfx_e); lenSpin->setDecimals(2);
+    QDoubleSpinBox *lenSpin = new FeetInchesSpinBox(isFeet_e, &editDlg);
+    lenSpin->setRange(0.1, lenMax_e); lenSpin->setDecimals(2);
     lenSpin->setValue(t->length() * toDisp_e);
     form->addRow(tr("Length:"), lenSpin);
 
-    QDoubleSpinBox *widthSpin = new QDoubleSpinBox(&editDlg);
-    widthSpin->setRange(0.05, wMax_e); widthSpin->setSuffix(unitSfx_e); widthSpin->setDecimals(2);
+    QDoubleSpinBox *widthSpin = new FeetInchesSpinBox(isFeet_e, &editDlg);
+    widthSpin->setRange(0.05, wMax_e); widthSpin->setDecimals(2);
     widthSpin->setValue(t->width() * toDisp_e);
     form->addRow(tr("Width:"), widthSpin);
 
@@ -8053,7 +8048,6 @@ void Monitor::slotEditTruss(quint32 tid)
     profileCb->setCurrentIndex(profileCb->findData(int(t->profile())));
     profileCb->setToolTip(tr("Cross-section shape — drawn distinctly on the map."));
     form->addRow(tr("Profile:"), profileCb);
-    const Truss::Profile origProfile = t->profile();
 
     // --- Stand on a Stand: origin rides the stand top (Origin X/Y/Z ignored) ---
     QComboBox *standCb = new QComboBox(&editDlg);
@@ -8078,22 +8072,16 @@ void Monitor::slotEditTruss(quint32 tid)
     sockCb->setChecked(t->hasSock());
     sockCb->setToolTip(tr("A diffusing fabric sleeve over the truss: LED bars rigged "
                           "Inside it glow through it instead of throwing beams"));
-    QPushButton *sockColourBtn = new QPushButton(sockRow);
-    sockColourBtn->setToolTip(tr("The sock's colour"));
-    auto showSockColour = [sockColourBtn](const QColor &c) {
-        sockColourBtn->setText(c.name());
-        sockColourBtn->setStyleSheet(QString("background:%1; color:%2").arg(c.name())
-                                         .arg(c.lightness() > 128 ? "#000" : "#fff"));
-    };
     QColor *sockColour = new QColor(t->sockColour());
-    showSockColour(*sockColour);
-    QDoubleSpinBox *sockFromSpin = new QDoubleSpinBox(sockRow);
-    QDoubleSpinBox *sockToSpin = new QDoubleSpinBox(sockRow);
+    ColourSwatchButton *sockColourBtn = new ColourSwatchButton(*sockColour, tr("Sock colour"), sockRow);
+    sockColourBtn->setResetColour(Qt::white);
+    sockColourBtn->setToolTip(tr("The sock's colour"));
+    QDoubleSpinBox *sockFromSpin = new FeetInchesSpinBox(isFeet_e, sockRow);
+    QDoubleSpinBox *sockToSpin = new FeetInchesSpinBox(isFeet_e, sockRow);
     for (QDoubleSpinBox *sp : { sockFromSpin, sockToSpin })
     {
         sp->setRange(0.0, lenMax_e);
         sp->setDecimals(2);
-        sp->setSuffix(unitSfx_e);
     }
     sockFromSpin->setValue(t->sockFrom() * toDisp_e);
     sockToSpin->setValue(t->sockTo() * toDisp_e);
@@ -8108,18 +8096,12 @@ void Monitor::slotEditTruss(quint32 tid)
     form->addRow(tr("Sock:"), sockRow);
     QString *sockPattern = new QString(t->sockPattern());
     float *sockOpacity = new float(t->sockPatternOpacity());
-    const float origSockOpacity = t->sockPatternOpacity();
     std::function<void()> applySockFn;               // set below, once the canvas exists
     QWidget *sockPatternRow = makePatternPicker(&editDlg, sockPattern, sockOpacity, [&applySockFn]() {
         if (applySockFn) applySockFn();
     });
     sockPatternRow->setEnabled(t->hasSock());
     form->addRow(tr("Sock printed:"), sockPatternRow);
-    const QString origSockPattern = t->sockPattern();
-    const bool origSock = t->hasSock();
-    const QColor origSockColour = t->sockColour();
-    const float origSockFrom = t->sockFrom();
-    const float origSockTo = t->hasSock() && t->sockTo() < t->length() - 1e-3f ? t->sockTo() : -1.0f;
 
     // --- Bar attachment: make this truss a "bar" hung on a parent truss ---
     QComboBox *parentCb = new QComboBox(&editDlg);
@@ -8134,8 +8116,8 @@ void Monitor::slotEditTruss(quint32 tid)
     form->addRow(tr("Bar on truss:"), parentCb);
 
     // Along the parent truss (slides top↔bottom on a tower, left↔right overhead).
-    QDoubleSpinBox *alongSpin = new QDoubleSpinBox(&editDlg);
-    alongSpin->setRange(-lenMax_e, lenMax_e); alongSpin->setSuffix(unitSfx_e); alongSpin->setDecimals(2);
+    QDoubleSpinBox *alongSpin = new FeetInchesSpinBox(isFeet_e, &editDlg);
+    alongSpin->setRange(-lenMax_e, lenMax_e); alongSpin->setDecimals(2);
     alongSpin->setValue(t->parentOffset() * toDisp_e);
     alongSpin->setToolTip(tr("Position ALONG the parent truss"));
     QLabel *alongLbl = new QLabel(tr("Along truss:")); form->addRow(alongLbl, alongSpin);
@@ -8154,8 +8136,8 @@ void Monitor::slotEditTruss(quint32 tid)
     QLabel *faceLbl = new QLabel(tr("Face:")); form->addRow(faceLbl, faceCb);
 
     // Stand-off off that face (the drop / reach).
-    QDoubleSpinBox *standoffSpin = new QDoubleSpinBox(&editDlg);
-    standoffSpin->setRange(0, zMax_e); standoffSpin->setSuffix(unitSfx_e); standoffSpin->setDecimals(2);
+    QDoubleSpinBox *standoffSpin = new FeetInchesSpinBox(isFeet_e, &editDlg);
+    standoffSpin->setRange(0, zMax_e); standoffSpin->setDecimals(2);
     standoffSpin->setValue(t->barStandoff() * toDisp_e);
     standoffSpin->setToolTip(tr("Distance off that face (0 = on the truss)"));
     QLabel *standoffLbl = new QLabel(tr("Stand-off:")); form->addRow(standoffLbl, standoffSpin);
@@ -8345,13 +8327,9 @@ void Monitor::slotEditTruss(quint32 tid)
             [applySock](double) { applySock(); });
     connect(sockToSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &editDlg,
             [applySock](double) { applySock(); });
-    connect(sockColourBtn, &QPushButton::clicked, &editDlg,
-            [&editDlg, sockColour, showSockColour, applySock]() {
-        const QColor c = QColorDialog::getColor(*sockColour, &editDlg, tr("Sock colour"));
-        if (!c.isValid())
-            return;
+    connect(sockColourBtn, &ColourSwatchButton::colourChanged, &editDlg,
+            [sockColour, applySock](const QColor &c) {
         *sockColour = c;
-        showSockColour(c);
         applySock();
     });
     QObject::connect(&editDlg, &QObject::destroyed, [sockColour, sockPattern, sockOpacity]() {
@@ -8378,47 +8356,7 @@ void Monitor::slotEditTruss(quint32 tid)
 
     if (editDlg.exec() != QDialog::Accepted)
     {
-        // Cancel: undo the live preview (restore the bar's original mount) and
-        // remove any bars created via the strip's "Add bar here".
-        if (origIsBar)
-        {
-            t->setParentOffset(origAlong);
-            t->setBarFace(origFace);
-            t->setBarStandoff(origStandoff);
-            t->setBarRun(origRun);
-            t->setLength(origLen);
-            m_props->recomputeChildTrusses();
-        }
-        else
-        {
-            // Undo the live free-truss geometry preview.
-            t->setType(origType);
-            t->setOrigin(origOrigin);
-            t->setDirection(origDir);
-            t->setLength(origLen);
-            t->setWidth(origWidth);
-        }
-        t->setProfile(origProfile);
-        t->setSock(origSock);
-        t->setSockColour(origSockColour);
-        t->setSockRange(origSockFrom, origSockTo);
-        t->setSockPattern(origSockPattern);
-        t->setSockPatternOpacity(origSockOpacity);
-        // Remove any bars created during this session BEFORE rebuilding the
-        // canvas, not after -- updateTrusses() rebuilds MonitorGraphicsView's
-        // own m_trussItems from props->trusses() (which still includes these
-        // temp bars at this point), so removing them from the engine model
-        // AFTER that call would leave freshly-built TrussItems pointing at
-        // now-deleted Truss objects until the next full rebuild -- a
-        // dangling-pointer window with no obvious trigger for exactly when
-        // it'd actually crash, which is exactly the shape of bug (correct
-        // most of the time, then a SIGSEGV mid-session) reported after "Add
-        // Bar" + Cancel here.
-        for (quint32 barId : barsCreatedHere)
-            m_props->removeTruss(barId);
-        m_graphicsView->updateTrusses();
-        m_graphicsView->followParentTrusses();
-        if (m_layersPanel) m_layersPanel->reload();
+        edit.cancel();
         return;
     }
 
@@ -8476,6 +8414,7 @@ void Monitor::slotEditTruss(quint32 tid)
     m_graphicsView->followParentTrusses();
     if (m_layersPanel) m_layersPanel->reload();   // reflect the new truss name in the tree
     m_doc->setModified();
+    edit.accept();
 }
 
 void Monitor::slotAddTruss()
@@ -8502,7 +8441,6 @@ void Monitor::slotAddTruss()
     m_pendingAddScenePos = QPointF();
 
     const bool isFeet_a = (m_props->gridUnits() == MonitorProperties::Feet);
-    const QString unitSfx_a = isFeet_a ? tr(" ft") : tr(" m");
     const double toDisp_a   = isFeet_a ? 3.28084 : 1.0;
     const double fromDisp_a = isFeet_a ? (1.0 / 3.28084) : 1.0;
     const double posRange_a = isFeet_a ? 164.0 : 50.0;
@@ -8510,18 +8448,18 @@ void Monitor::slotAddTruss()
     const double zMax_a     = isFeet_a ? 98.4  : 30.0;
     const double wMax_a     = isFeet_a ? 16.4  : 5.0;
 
-    QDoubleSpinBox *originX = new QDoubleSpinBox(&dlg);
-    originX->setRange(-posRange_a, posRange_a); originX->setSuffix(unitSfx_a); originX->setDecimals(2);
+    QDoubleSpinBox *originX = new FeetInchesSpinBox(isFeet_a, &dlg);
+    originX->setRange(-posRange_a, posRange_a); originX->setDecimals(2);
     originX->setValue(pendMm.x() / 1000.0 * toDisp_a);
     form->addRow(tr("Origin X (stage left):"), originX);
 
-    QDoubleSpinBox *originY = new QDoubleSpinBox(&dlg);
-    originY->setRange(-posRange_a, posRange_a); originY->setSuffix(unitSfx_a); originY->setDecimals(2);
+    QDoubleSpinBox *originY = new FeetInchesSpinBox(isFeet_a, &dlg);
+    originY->setRange(-posRange_a, posRange_a); originY->setDecimals(2);
     originY->setValue(pendMm.y() / 1000.0 * toDisp_a);
     form->addRow(tr("Origin Y (downstage):"), originY);
 
-    QDoubleSpinBox *originZ = new QDoubleSpinBox(&dlg);
-    originZ->setRange(0, zMax_a); originZ->setSuffix(unitSfx_a); originZ->setDecimals(2);
+    QDoubleSpinBox *originZ = new FeetInchesSpinBox(isFeet_a, &dlg);
+    originZ->setRange(0, zMax_a); originZ->setDecimals(2);
     originZ->setValue(6.0 * toDisp_a);
     form->addRow(tr("Height Z:"), originZ);
 
@@ -8529,13 +8467,13 @@ void Monitor::slotAddTruss()
     dirAngle->setRange(0, 359); dirAngle->setSuffix(QString::fromUtf8("°")); dirAngle->setDecimals(1);
     form->addRow(tr("Direction (° from stage-right):"), dirAngle);
 
-    QDoubleSpinBox *length = new QDoubleSpinBox(&dlg);
-    length->setRange(0.1, lenMax_a); length->setSuffix(unitSfx_a); length->setDecimals(2);
+    QDoubleSpinBox *length = new FeetInchesSpinBox(isFeet_a, &dlg);
+    length->setRange(0.1, lenMax_a); length->setDecimals(2);
     length->setValue(6.0 * toDisp_a);
     form->addRow(tr("Length:"), length);
 
-    QDoubleSpinBox *width = new QDoubleSpinBox(&dlg);
-    width->setRange(0.05, wMax_a); width->setSuffix(unitSfx_a); width->setDecimals(2);
+    QDoubleSpinBox *width = new FeetInchesSpinBox(isFeet_a, &dlg);
+    width->setRange(0.05, wMax_a); width->setDecimals(2);
     width->setValue(0.29 * toDisp_a);
     form->addRow(tr("Width:"), width);
 
@@ -8921,6 +8859,8 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     }
     if (items.isEmpty())
         return;
+    // Cancel puts back whatever was tried; OK is one undo step.
+    RigEditSession edit(this);
 
     // ---- Multi-selection: shared controls ----
     if (items.count() > 1)
@@ -8964,7 +8904,10 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
         vl->addWidget(btns);
 
         if (dlg.exec() != QDialog::Accepted)
+        {
+            edit.cancel();
             return;
+        }
 
         for (MonitorFixtureItem *fi : items)
         {
@@ -9133,13 +9076,11 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     }
 
     const bool isFeet_fx = (m_props->gridUnits() == MonitorProperties::Feet);
-    const QString unitSfx_fx = isFeet_fx ? tr(" ft") : tr(" m");
     const double toDisp_fx   = isFeet_fx ? 3.28084 : 1.0;
     const double fromDisp_fx = isFeet_fx ? (1.0 / 3.28084) : 1.0;
 
-    QDoubleSpinBox *offsetSpin = new QDoubleSpinBox;
+    QDoubleSpinBox *offsetSpin = new FeetInchesSpinBox(isFeet_fx);
     offsetSpin->setRange(-100 * toDisp_fx, 100 * toDisp_fx);
-    offsetSpin->setSuffix(unitSfx_fx);
     offsetSpin->setDecimals(2);
     rigForm->addRow(tr("Offset along truss:"), offsetSpin);
 
@@ -9181,9 +9122,9 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     rigForm->addRow(tr("Orientation:"), mountCb);
 
     // Fine height nudge above/below a structural mount (truss/bar/tower).
-    QDoubleSpinBox *heightOffSpin = new QDoubleSpinBox;
+    QDoubleSpinBox *heightOffSpin = new FeetInchesSpinBox(isFeet_fx);
     heightOffSpin->setRange(-10 * toDisp_fx, 10 * toDisp_fx);
-    heightOffSpin->setSuffix(unitSfx_fx); heightOffSpin->setDecimals(2);
+    heightOffSpin->setDecimals(2);
     heightOffSpin->setToolTip(tr("Raise (+) or lower (−) the fixture relative to its "
                                  "mount — e.g. lift a followspot above the truss."));
     rigForm->addRow(tr("Height offset:"), heightOffSpin);
@@ -9198,9 +9139,8 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
                           "follows the platform's deck."));
     rigForm->addRow(tr("On platform (deck):"), deckCb);
 
-    QDoubleSpinBox *deckHeightSpin = new QDoubleSpinBox;
+    QDoubleSpinBox *deckHeightSpin = new FeetInchesSpinBox(isFeet_fx);
     deckHeightSpin->setRange(-20 * toDisp_fx, 20 * toDisp_fx);
-    deckHeightSpin->setSuffix(unitSfx_fx);
     deckHeightSpin->setDecimals(2);
     deckHeightSpin->setToolTip(tr("Height relative to the deck top (0 = sits on the "
                                   "deck; negative drops it below / under the deck)"));
@@ -9683,42 +9623,26 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     // For an RGB fixture, "gel" is meaningless (it makes its own colour); this
     // swatch is only its UNLIT map colour — label it so.
     const bool hasRGB = fxi && fxi->channelNumber(QLCChannel::Red, QLCChannel::MSB, 0) != QLCChannel::invalid();
-    QGroupBox *gelBox = new QGroupBox(hasRGB ? tr("Map colour (2D display)") : tr("Gel Color"), &dlg);
+    QGroupBox *gelBox = new QGroupBox(hasRGB ? tr("Map colour (2D display)") : tr("Gel Colour"), &dlg);
     if (hasRGB)
         gelBox->setToolTip(tr("Only how this RGB fixture is drawn on the 2D map when "
                               "unlit — it makes its own colour from DMX."));
     QHBoxLayout *gelHl = new QHBoxLayout(gelBox);
-    QToolButton *gelBtn = new QToolButton;
-    gelBtn->setIconSize(QSize(28, 28));
-    gelBtn->setToolTip(tr("Pick gel color"));
-    QToolButton *gelResetBtn = new QToolButton;
-    gelResetBtn->setIcon(QIcon(QStringLiteral(":/fileclose.png")));
-    gelResetBtn->setIconSize(QSize(28, 28));
-    gelResetBtn->setToolTip(tr("Reset gel color"));
     QColor gelColor = fxItem->getColor();
-    if (gelColor.isValid())
-    {
-        QPixmap pm(28, 28); pm.fill(gelColor);
-        gelBtn->setIcon(QIcon(pm));
-    }
-    gelHl->addWidget(new QLabel(tr("Color:")));
+    ColourSwatchButton *gelBtn = new ColourSwatchButton(gelColor, tr("Gel colour"));
+    gelBtn->setResetColour(QColor());           // Reset: no gel
+    gelBtn->setObjectName(QStringLiteral("gelColour"));
+    gelHl->addWidget(new QLabel(tr("Colour:")));
     gelHl->addWidget(gelBtn);
-    gelHl->addWidget(gelResetBtn);
     gelHl->addStretch();
     vl->addWidget(gelBox);
 
-    connect(gelBtn, &QToolButton::clicked, [&]() {
-        QColor c = QColorDialog::getColor(gelColor, &dlg);
-        if (c.isValid())
-        {
-            gelColor = c;
-            QPixmap pm(28, 28); pm.fill(c);
-            gelBtn->setIcon(QIcon(pm));
-        }
-    });
-    connect(gelResetBtn, &QToolButton::clicked, [&]() {
-        gelColor = QColor();
-        gelBtn->setIcon(QIcon());
+    // Live, like every rig dialog: the plot shows the gel; Cancel puts it back.
+    connect(gelBtn, &ColourSwatchButton::colourChanged, &dlg, [&](const QColor &c) {
+        gelColor = c;
+        fxItem->setGelColor(gelColor);
+        m_props->setFixtureGelColor(fxItem->fixtureID(), 0, 0, gelColor);
+        fxItem->slotUpdateValues();
     });
 
     // DMX Controls: Reset button (sends the fixture's Reset capability value)
@@ -9838,8 +9762,9 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     if (dlg.exec() != QDialog::Accepted)
     {
         testSrc.reset(); // ensure DMX source is stopped on cancel
-        // Restore original rig props (live edits may have written new values)
-        m_props->setFixtureRigProps(fxId_dlg, rp);
+        // Put back what live edits wrote (the plot items are rebuilt: fxItem
+        // is not to be touched after this).
+        edit.cancel();
         flushSceneCaches();
         return;
     }

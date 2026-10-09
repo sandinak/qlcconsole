@@ -21,6 +21,7 @@
 #define MONITORPROPERTIES_H
 
 #include <QObject>
+#include <functional>
 #include <QVector3D>
 #include <QPointF>
 #include <QColor>
@@ -75,7 +76,7 @@ class MonitorProperties final : public QObject
 
 public:
     MonitorProperties();
-    ~MonitorProperties() {}
+    ~MonitorProperties();
 
     enum DisplayMode { DMX, Graphics };
     enum ChannelStyle { DMXChannels, RelativeChannels };
@@ -99,6 +100,23 @@ public:
 
     /** Reset all the Monitor properties */
     void reset();
+
+    /** The whole rig as XML (what saveXML() writes), for undo and Cancel. */
+    QByteArray snapshot(const Doc *mainDocument) const;
+
+    /** Put the rig back as a snapshot() had it. The structures it replaces
+     *  are not deleted at once but retired for a while: the DMX thread looks
+     *  stage targets and rig props up while a show runs, and an object it
+     *  just found must not vanish under it. Emits rigPropsChanged() for every
+     *  fixture and stageTargetsChanged(). */
+    bool restoreSnapshot(const QByteArray &snap, const Doc *mainDocument);
+
+private:
+    /** Retired by restoreSnapshot(): deleters, and when each was retired. */
+    QList<QPair<qint64, std::function<void()> > > m_retired;
+    void freeRetired(bool all);
+
+public:
 
 private:
     QFont m_font;

@@ -131,8 +131,9 @@ protected:
     /** Track the cursor over the canvas viewport to drive the ruler markers. */
     bool eventFilter(QObject *watched, QEvent *event) override;
 
-    /** Initialize settings & fill fixtures */
-    void fillGraphicsView();
+    /** Initialize settings & fill fixtures. @p keepView leaves the zoom as
+     *  it is (an undo, not a new document). */
+    void fillGraphicsView(bool keepView = false);
 
     /** show */
     void showGraphicsView();
@@ -182,6 +183,14 @@ protected slots:
 public:
     /** Update monitor fixture labels */
     void updateFixtureLabelStyles();
+
+    /** The rig as it stands -- every structure, placement and rig prop, and
+     *  the fixtures' names -- for undo and Cancel (RigEditSession). */
+    QByteArray rigSnapshot() const;
+    /** Put the rig back as @p snap had it, and redraw. */
+    void restoreRig(const QByteArray &snap);
+    /** One undo step back to @p before, if the rig is not as it was. */
+    void pushRigUndo(const QByteArray &before);
 
 protected:
     /** Create a new MonitorFixture* and append it to the layout */
@@ -554,6 +563,7 @@ protected:
     void applyMapView(int view);
     QAction *m_labelsAction;
     QAction *m_lockAction;
+    QAction *m_undoAction = nullptr;
     QAction *m_layersAction;
     QAction *m_inventoryAction;
     QAction *m_groupAction;

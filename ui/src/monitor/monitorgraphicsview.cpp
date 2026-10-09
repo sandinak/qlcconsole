@@ -138,7 +138,7 @@ MonitorGraphicsView::MonitorGraphicsView(Doc *doc, QWidget *parent)
     connect(verticalScrollBar(), &QScrollBar::valueChanged,
             this, [this]() { emit rulersChanged(); });
 
-    // Cmd/Ctrl+Z undoes the last fixture move.
+    // Cmd/Ctrl+Z undoes the last move, paste or edit.
     QShortcut *undoSc = new QShortcut(QKeySequence::Undo, this);
     undoSc->setContext(Qt::WidgetWithChildrenShortcut);
     connect(undoSc, &QShortcut::activated, this, &MonitorGraphicsView::undoLastMove);
@@ -8513,6 +8513,7 @@ void MonitorGraphicsView::pushUndo(UndoEntry e)
     m_moveUndo.append(e);
     while (m_moveUndo.count() > 50)
         m_moveUndo.removeFirst();
+    emit undoChanged();
 }
 
 void MonitorGraphicsView::undoLastMove()
@@ -8520,7 +8521,7 @@ void MonitorGraphicsView::undoLastMove()
     if (m_moveUndo.isEmpty())
         return;
     // Whatever moved back, its count bubble goes with it.
-    auto refreshBadges = qScopeGuard([this]() { refreshFixtureCountBadges(); });
+    auto refreshBadges = qScopeGuard([this]() { refreshFixtureCountBadges(); emit undoChanged(); });
     // The whole drag: every entry it recorded, newest first.
     const UndoEntry last = m_moveUndo.takeLast();
     undoOne(last);
@@ -8528,8 +8529,22 @@ void MonitorGraphicsView::undoLastMove()
         undoOne(m_moveUndo.takeLast());
 }
 
+void MonitorGraphicsView::pushRigUndo(const QByteArray &before)
+{
+    UndoEntry e;
+    e.type = UndoEntry::RigEdit;
+    e.rigBefore = before;
+    pushUndo(e);
+}
+
 void MonitorGraphicsView::undoOne(const UndoEntry &entry)
 {
+    if (entry.type == UndoEntry::RigEdit)
+    {
+        if (m_rigRestorer)
+            m_rigRestorer(entry.rigBefore);
+        return;
+    }
     if (entry.type == UndoEntry::ItemMove)
     {
         MonitorProperties *props = m_doc->monitorProperties();
