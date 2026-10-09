@@ -1241,3 +1241,44 @@ void Inventory_Test::applyMovesPatchedFixturesTogether()
     QVERIFY(problems.last().startsWith("Nothing was patched"));
     QCOMPARE(a->address(), quint32(2));
 }
+
+void Inventory_Test::patchingNamesTheUniverseTheShowsWay()
+{
+    InputOutputMap *io = g_doc->inputOutputMap();
+    while (io->universesCount() < 6)
+        io->addUniverse();
+    io->setUniverseName(0, "U01-T1-Ext");
+    io->setUniverseName(1, "U02-T1-Int");
+    io->setUniverseName(3, "Front");                    // somebody's own name
+    // Universes 3 and 5 (indexes 2, 4) are still "Universe N".
+
+    auto patch = [](Fixture *f, quint32 uni, quint32 addr) {
+        PatchPlanner::Assignment a;
+        a.fixtureId = f->id();
+        a.universe = uni;
+        a.address = addr;
+        return a;
+    };
+
+    // One lantern on its own: the scheme, and what is on it.
+    Fixture *lantern = makeStaged(g_doc, 15, "Lantern #1");
+    QCOMPARE(PatchPlanner(g_doc).apply({ patch(lantern, 2, 0) }), 1);
+    QCOMPARE(io->getUniverseNameByID(2), QString("U03-Lantern-1"));
+
+    // Several: what their names share.
+    Fixture *p1 = makeStaged(g_doc, 3, "Par 1");
+    Fixture *p2 = makeStaged(g_doc, 3, "Par 2");
+    QCOMPARE(PatchPlanner(g_doc).apply({ patch(p1, 4, 0), patch(p2, 4, 3) }), 2);
+    QCOMPARE(io->getUniverseNameByID(4), QString("U05-Par"));
+
+    // A name somebody gave is never changed.
+    Fixture *wash = makeStaged(g_doc, 3, "Wash 1");
+    QCOMPARE(PatchPlanner(g_doc).apply({ patch(wash, 3, 0) }), 1);
+    QCOMPARE(io->getUniverseNameByID(3), QString("Front"));
+
+    // A show with no scheme of its own: just what is on it.
+    io->setUniverseName(0, QString());
+    io->setUniverseName(1, QString());
+    io->setUniverseName(4, QString());
+    QCOMPARE(PatchPlanner::universeNameFor(g_doc, 2), QString("Lantern-1"));
+}

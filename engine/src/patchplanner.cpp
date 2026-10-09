@@ -23,6 +23,7 @@
 #include <QCollator>
 #include <QHash>
 #include <QSet>
+#include <QRegularExpression>
 #include <algorithm>
 
 #include "patchplanner.h"
@@ -605,5 +606,125 @@ int PatchPlanner::apply(const QList<Assignment> &assignments, QStringList *probl
             op->setPluginParameter(QStringLiteral("outputIP"), fx->ipAddress());
         }
     }
+
+    /* A universe patched onto that is still "Universe N" is named the way
+       the show names its universes ("when we patch we should also name the
+       universes in ways that .. follow the scheme of the rest"). */
+    QSet<quint32> named;
+    foreach (const Assignment &a, todo)
+    {
+        if (named.contains(a.universe))
+            continue;
+        named.insert(a.universe);
+        const QString now = io->getUniverseNameByID(a.universe);
+        if (!now.isEmpty() && now != QStringLiteral("Universe %1").arg(a.universe + 1))
+            continue;                               // somebody named it
+        const QString want = universeNameFor(m_doc, a.universe);
+        if (!want.isEmpty())
+            io->setUniverseName(int(a.universe), want);
+    }
     return todo.size();
+}
+
+namespace
+{
+/* "Lantern #1" -> "Lantern-1": the parts of a name, joined the way the
+   scheme joins its parts. */
+QString compactName(const QString &name)
+{
+    QString n = name;
+    n.replace(QLatin1Char('#'), QLatin1Char(' '));
+    const QStringList parts = n.split(QRegularExpression(QStringLiteral("[\\s_/]+")),
+                                      Qt::SkipEmptyParts);
+    return parts.join(QLatin1Char('-'));
+}
+}
+
+QString PatchPlanner::universeNameFor(Doc *doc, quint32 universe)
+{
+    if (doc == NULL)
+        return QString();
+
+    // What is on it: one fixture's name, or what several names share.
+    QStringList names;
+    QString model;
+    foreach (Fixture *fx, doc->fixtures())
+    {
+        if (fx == NULL || !fx->isPatched() || fx->universe() != universe)
+            continue;
+        names << compactName(fx->name());
+        if (model.isEmpty() && fx->fixtureDef() != NULL)
+            model = compactName(fx->fixtureDef()->model());
+    }
+    if (names.isEmpty())
+        return QString();
+    names.sort();
+    QString label = names.first();
+    if (names.size() > 1)
+    {
+        QString common = names.first();
+        foreach (const QString &n, names)
+        {
+            int k = 0;
+            while (k < common.size() && k < n.size() && common.at(k) == n.at(k))
+                ++k;
+            common.truncate(k);
+        }
+        // "Par-1", "Par-2" share "Par-": a whole word, not a stray digit.
+        while (!common.isEmpty() && (common.endsWith(QLatin1Char('-')) || common.back().isDigit()))
+            common.chop(1);
+        label = common.isEmpty() ? model : common;
+    }
+    if (label.isEmpty())
+        return QString();
+
+    /* The show's scheme: names that start with a few letters, then the
+       universe's own number, then a separator -- "U17-US1-1". Most of the
+       named ones have to agree before it counts. */
+    InputOutputMap *io = doc->inputOutputMap();
+    static const QRegularExpression re(QStringLiteral("^([A-Za-z]{1,4})(\\d+)([-_ .])\\S"));
+    QHash<QString, int> prefixes, separators;
+    QHash<int, int> widths;
+    int named = 0, matched = 0;
+    for (quint32 u = 0; u < io->universesCount(); ++u)
+    {
+        if (u == universe)
+            continue;
+        const QString n = io->getUniverseNameByID(u);
+        if (n.isEmpty() || n == QStringLiteral("Universe %1").arg(u + 1))
+            continue;
+        ++named;
+        const QRegularExpressionMatch m = re.match(n);
+        if (!m.hasMatch() || m.captured(2).toUInt() != u + 1)
+            continue;
+        ++matched;
+        prefixes[m.captured(1)]++;
+        separators[m.captured(3)]++;
+        widths[m.captured(2).size()]++;
+    }
+    auto mostOf = [](const auto &counts) {
+        auto best = counts.constBegin();
+        for (auto it = counts.constBegin(); it != counts.constEnd(); ++it)
+            if (it.value() > best.value())
+                best = it;
+        return best.key();
+    };
+    QString name = label;
+    if (matched >= 2 && matched * 2 >= named)
+    {
+        const int width = mostOf(widths);
+        name = QStringLiteral("%1%2%3%4").arg(mostOf(prefixes))
+                   .arg(universe + 1, width, 10, QLatin1Char('0'))
+                   .arg(mostOf(separators), label);
+    }
+
+    // Not one another universe already has.
+    QSet<QString> taken;
+    for (quint32 u = 0; u < io->universesCount(); ++u)
+        if (u != universe)
+            taken.insert(io->getUniverseNameByID(u));
+    QString unique = name;
+    for (int i = 2; taken.contains(unique); ++i)
+        unique = QStringLiteral("%1-%2").arg(name).arg(i);
+    return unique;
 }

@@ -132,6 +132,16 @@ public:
      *  not be done is described in @p problems. */
     int apply(const QList<Assignment> &assignments, QStringList *problems = NULL);
 
+    /** The name the show's own universe naming gives @p universe for what is
+     *  on it now. The scheme is learned from the names it has -- "U17-US1-1",
+     *  "U65-US1-Tops": a prefix, the universe's number padded as they pad
+     *  it, then what is on it -- and what is on it is its fixtures' names
+     *  ("Lantern #1" reads "Lantern-1"; several, what their names share).
+     *  A show with no such scheme gets just that. Empty when nothing is on
+     *  it. apply() names a universe this way when it patches onto one still
+     *  called "Universe N"; a name somebody gave is never changed. */
+    static QString universeNameFor(Doc *doc, quint32 universe);
+
 private:
     Doc *m_doc;
     bool m_useProximity;

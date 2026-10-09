@@ -53,6 +53,9 @@ private slots:
     void plannerGivesEachIpItsOwnUniverse();
     void plannerKeepsDmxOutOfNetworkUniverses();
     void plannerIsPureAndApplyCommitsIt();
+    /** "when we patch we should also name the universes in ways that help
+     *  match and follow the scheme of the rest". */
+    void patchingNamesTheUniverseTheShowsWay();
     void plannerSkipsPatchedAndUnknown();
     void plannerKeepsIdenticalFixturesTogether();
     void plannerNumbersCompareAsNumbers();

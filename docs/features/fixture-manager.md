@@ -124,6 +124,15 @@ inventory..."** releases their universe and address but keeps everything
 else — placement, groups, looks. They stop sending DMX until patched again.
 Design mode only.
 
+**Universes are named the show's way.** A universe a patch puts fixtures on
+that is still called "Universe N" is named as the show names its universes:
+the scheme is learned from the names it already has — "U17-US1-1",
+"U65-US1-Tops" is a prefix, the universe's number padded the same way, then
+what is on it — and what is on it is its fixtures' names ("Lantern #1" on
+universe 81 becomes **U81-Lantern-1**; several fixtures, what their names
+share). A show with no scheme gets just the label. A name somebody gave is
+never changed.
+
 ### Network fixtures: one IP each
 
 Add Fixture's **Connection** is chosen per fixture:
