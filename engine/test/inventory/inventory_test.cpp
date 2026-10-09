@@ -409,7 +409,7 @@ void Inventory_Test::plannerGivesEachIpItsOwnUniverse()
     QVERIFY(plan[2].universe != plan[0].universe);     // a different IP does not
     QVERIFY(plan[3].universe != plan[0].universe);
     QVERIFY(plan[3].universe != plan[2].universe);
-    QVERIFY(plan[0].newUniverse && plan[2].newUniverse);
+    // Each its own -- a free universe or a new one (networkFixturesTakeAFreeBlockFirst).
     QVERIFY2(!plan[3].note.isEmpty(), "a network fixture with no IP should say so");
     QVERIFY(plan[0].note.isEmpty());
 }
@@ -803,8 +803,8 @@ void Inventory_Test::applyBorrowsTheOutputOfAnotherNetworkUniverse()
 
     PatchPlanner pp(g_doc);
     const QList<PatchPlanner::Assignment> plan = pp.plan(QList<quint32>() << step->id());
-    QVERIFY(plan.first().newUniverse);                 // a different IP gets its own universe
     const quint32 uni = plan.first().universe;
+    QVERIFY(uni != 0);                                 // a different IP gets its own universe
 
     QStringList problems;
     QCOMPARE(pp.apply(plan, &problems), 1);
@@ -959,16 +959,19 @@ void Inventory_Test::aFullPortOverflowsToAFreePortThatApplyClaims()
     const QList<PatchPlanner::Assignment> plan = pp.plan({ a1->id(), a2->id() });
     const PatchPlanner::Assignment p1 = forFixture(plan, a1->id());
     const PatchPlanner::Assignment p2 = forFixture(plan, a2->id());
-    QCOMPARE(p1.universe, existing);                     // a new universe, on the free port
-    QVERIFY(p1.newUniverse && p1.claimsPort);
+    // A universe of its own, on the free port: the first FREE one (nothing
+    // on it, nothing patched to it) before a new one past the last.
+    QCOMPARE(p1.universe, quint32(1));
+    QVERIFY(!p1.newUniverse && p1.claimsPort);
+    QVERIFY(existing > 1);
     QCOMPARE(p1.portIndex, 1);
-    QCOMPARE(p2.universe, existing);                     // the next one joins it
+    QCOMPARE(p2.universe, quint32(1));                   // the next one joins it
     QCOMPARE(p2.address, quint32(4));
     QVERIFY(!p2.claimsPort);
 
     QStringList problems;
     QCOMPARE(pp.apply(plan, &problems), 2);
-    QCOMPARE(g_doc->networkTopology()->nodes().first().ports.at(1).universe, existing);
+    QCOMPARE(g_doc->networkTopology()->nodes().first().ports.at(1).universe, quint32(1));
     QVERIFY(a1->isPatched() && a2->isPatched());
 }
 
@@ -1014,7 +1017,8 @@ void Inventory_Test::unplacedNetworkAndOptedOutFixturesKeepTheOldRules()
     QList<PatchPlanner::Assignment> plan = pp.plan({ loose->id(), fence->id(), near->id() });
     QCOMPARE(forFixture(plan, loose->id()).universe, quint32(0));            // first-fit
     QCOMPARE(forFixture(plan, loose->id()).nodeIndex, -1);
-    QVERIFY(forFixture(plan, fence->id()).newUniverse);                      // its own, by IP
+    // Its own, by IP -- a free one, not loose's nor the SL node's.
+    QVERIFY(forFixture(plan, fence->id()).universe > 1);
     QCOMPARE(forFixture(plan, fence->id()).nodeIndex, -1);
     QCOMPARE(forFixture(plan, near->id()).universe, quint32(1));             // the SL node's
 
@@ -1281,4 +1285,39 @@ void Inventory_Test::patchingNamesTheUniverseTheShowsWay()
     io->setUniverseName(1, QString());
     io->setUniverseName(4, QString());
     QCOMPARE(PatchPlanner::universeNameFor(g_doc, 2), QString("Lantern-1"));
+}
+
+void Inventory_Test::networkFixturesTakeAFreeBlockFirst()
+{
+    InputOutputMap *io = g_doc->inputOutputMap();
+    while (io->universesCount() < 12)
+        io->addUniverse();
+    // In use: 1 and 5-8 (fixtures). Free: 2, 3, 4 (a gap of three) and
+    // 9-12 (a block of four).
+    makeDimmer(g_doc, 10, 0, 0);
+    for (quint32 u = 4; u < 8; ++u)
+        makeDimmer(g_doc, 10, u, 0);
+
+    QList<quint32> ids;
+    for (int i = 1; i <= 4; ++i)
+        ids << makeStaged(g_doc, 15, QString("Lantern #%1").arg(i), Fixture::Network,
+                          QString("172.18.2.%1").arg(210 + i))->id();
+    const QList<PatchPlanner::Assignment> plan = PatchPlanner(g_doc).plan(ids);
+    QList<quint32> got;
+    foreach (const PatchPlanner::Assignment &a, plan)
+        got << a.universe;
+    foreach (const PatchPlanner::Assignment &a, plan)
+        QVERIFY(!a.newUniverse);
+    // The block they all fit in, together -- not the gap of three first.
+    QCOMPARE(got, QList<quint32>({ 8, 9, 10, 11 }));
+
+    // Two more than any block holds: the free ones in order, then new.
+    QList<quint32> more;
+    for (int i = 5; i <= 10; ++i)
+        more << makeStaged(g_doc, 15, QString("Lantern #%1").arg(i), Fixture::Network,
+                           QString("172.18.2.%1").arg(210 + i))->id();
+    QList<quint32> six;
+    foreach (const PatchPlanner::Assignment &a, PatchPlanner(g_doc).plan(more))
+        six << a.universe;
+    QCOMPARE(six, QList<quint32>({ 1, 2, 3, 8, 9, 10 }));
 }

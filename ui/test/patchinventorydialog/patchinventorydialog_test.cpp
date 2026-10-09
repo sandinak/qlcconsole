@@ -343,6 +343,14 @@ void PatchInventoryDialog_Test::newUniversesAndNotesAreSpelledOut()
     f1->setIPAddress("172.18.2.41");
     Fixture *f2 = staged(m_doc, 3, "Fence 2");
     f2->setConnection(Fixture::Network);                          // no IP: the planner notes it
+    // Every universe the show has is in use: a universe of its own is a new one.
+    for (quint32 u = 0; u < m_doc->inputOutputMap()->universesCount(); ++u)
+    {
+        Fixture *busy = new Fixture(m_doc);
+        busy->setChannels(1);
+        busy->setUniverse(u);
+        QVERIFY(m_doc->addFixture(busy));
+    }
 
     PatchInventoryDialog dlg(m_doc);
     QCOMPARE(dlg.m_table->rowCount(), 2);
@@ -460,6 +468,11 @@ void PatchInventoryDialog_Test::aHandEditedUniverseDropsTheProposedPort()
     full->setChannels(512);
     full->setUniverse(1);
     QVERIFY(m_doc->addFixture(full));                    // universe 2 is full
+    Fixture *first = new Fixture(m_doc);
+    first->setChannels(1);
+    first->setUniverse(0);
+    first->setAddress(511);
+    QVERIFY(m_doc->addFixture(first));                   // universe 1 is in use (not free), at its end
     Fixture *t4 = placed(m_doc, "T4", 9, 0);
 
     PatchInventoryDialog dlg(m_doc);

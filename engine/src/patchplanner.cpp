@@ -128,6 +128,59 @@ QList<PatchPlanner::Assignment> PatchPlanner::plan(const QList<quint32> &fixture
             c = collator.compare(x->name(), y->name());
         return c != 0 ? c < 0 : x->id() < y->id();
     });
+    /* A universe of its own -- for a lantern's IP, a free node port, a DMX
+       overflow -- is taken from the free ones first ("we can use a block
+       that's free when it's free"): no fixture patched on it, nothing patched
+       to its output, no node port carrying it. A run of free universes long
+       enough for all of this plan's new IPs is preferred, so they land
+       together; otherwise the free ones in order; then new ones after the
+       last. */
+    QList<quint32> freeUnis;
+    {
+        InputOutputMap *io = m_doc->inputOutputMap();
+        QSet<quint32> portUnis;
+        foreach (const NetworkNode &node, m_doc->networkTopology()->nodes())
+            foreach (const NetworkPort &port, node.ports)
+                if (port.universe != InputOutputMap::invalidUniverse())
+                    portUnis.insert(port.universe);
+        QList<quint32> all;
+        for (quint32 u = 0; u < existing; ++u)
+            if (!used.contains(u) && io->outputPatch(u) == NULL && !portUnis.contains(u))
+                all << u;
+        QSet<QString> newIps;
+        int needed = 0;
+        foreach (Fixture *f, ordered)
+        {
+            if (f->connection() != Fixture::Network)
+                continue;
+            if (f->ipAddress().isEmpty())
+                ++needed;
+            else if (!uniForIp.contains(f->ipAddress()) && !newIps.contains(f->ipAddress()))
+            {
+                newIps.insert(f->ipAddress());
+                ++needed;
+            }
+        }
+        // The first run of consecutive free universes long enough, if any.
+        int runStart = -1;
+        for (int i = 0; i < all.size() && runStart < 0 && needed > 0; ++i)
+        {
+            int j = i;
+            while (j + 1 < all.size() && all.at(j + 1) == all.at(j) + 1)
+                ++j;
+            if (j - i + 1 >= needed)
+                runStart = i;
+            i = j;
+        }
+        if (runStart >= 0)
+            freeUnis = all.mid(runStart) + all.mid(0, runStart);
+        else
+            freeUnis = all;
+    }
+    auto takeUniverse = [&freeUnis, &nextNew]() {
+        return freeUnis.isEmpty() ? nextNew++ : freeUnis.takeFirst();
+    };
+
     /* Proximity: where each placed fixture is, and where each node port's
        universe lands. A port claimed during this plan (a free port given a
        new universe) is remembered, so the next fixture near that node joins it
@@ -169,12 +222,17 @@ QList<PatchPlanner::Assignment> PatchPlanner::plan(const QList<quint32> &fixture
     };
 
     // Placed fixtures first (see the class comment), output in inventory order.
+    // Network fixtures last: each takes a universe of its own, and a free one
+    // a DMX fixture would pack into is the DMX fixture's.
     QList<Fixture *> passOrder;
     foreach (Fixture *fx, ordered)
         if (placedAt.contains(fx->id()))
             passOrder << fx;
     foreach (Fixture *fx, ordered)
-        if (!placedAt.contains(fx->id()))
+        if (!placedAt.contains(fx->id()) && fx->connection() != Fixture::Network)
+            passOrder << fx;
+    foreach (Fixture *fx, ordered)
+        if (!placedAt.contains(fx->id()) && fx->connection() == Fixture::Network)
             passOrder << fx;
 
     QHash<quint32, Assignment> planned;
@@ -215,7 +273,7 @@ QList<PatchPlanner::Assignment> PatchPlanner::plan(const QList<quint32> &fixture
             }
             if (!placed)
             {
-                const quint32 uni = nextNew++;
+                const quint32 uni = takeUniverse();
                 used[uni] = QBitArray(UNI_SIZE);
                 mark(used[uni], 0, n);
                 networkUnis.insert(uni);
@@ -223,7 +281,7 @@ QList<PatchPlanner::Assignment> PatchPlanner::plan(const QList<quint32> &fixture
                     uniForIp.insert(ip, uni);
                 a.universe = uni;
                 a.address = 0;
-                a.newUniverse = true;
+                a.newUniverse = (a.universe >= existing);
                 placed = true;
             }
             if (ip.isEmpty())
@@ -269,7 +327,7 @@ QList<PatchPlanner::Assignment> PatchPlanner::plan(const QList<quint32> &fixture
                 else
                 {
                     // A free port: it takes a universe of its own.
-                    uni = nextNew++;
+                    uni = takeUniverse();
                     used[uni] = QBitArray(UNI_SIZE);
                     portUni.insert(key, uni);
                     a.claimsPort = true;
@@ -302,16 +360,17 @@ QList<PatchPlanner::Assignment> PatchPlanner::plan(const QList<quint32> &fixture
                 a.address = quint32(addr);
                 a.newUniverse = (uni >= existing);
                 mark(used[uni], a.address, n);
+                freeUnis.removeAll(uni);    // not free any more
                 placed = true;
             }
             if (!placed)
             {
-                const quint32 uni = nextNew++;
+                const quint32 uni = takeUniverse();
                 used[uni] = QBitArray(UNI_SIZE);
                 mark(used[uni], 0, n);
                 a.universe = uni;
                 a.address = 0;
-                a.newUniverse = true;
+                a.newUniverse = (a.universe >= existing);
             }
         }
         planned.insert(fid, a);

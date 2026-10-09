@@ -56,6 +56,9 @@ private slots:
     /** "when we patch we should also name the universes in ways that help
      *  match and follow the scheme of the rest". */
     void patchingNamesTheUniverseTheShowsWay();
+    /** "we can use a block that's free when it's free": a lantern's
+     *  universe of its own comes from a free run before a new one. */
+    void networkFixturesTakeAFreeBlockFirst();
     void plannerSkipsPatchedAndUnknown();
     void plannerKeepsIdenticalFixturesTogether();
     void plannerNumbersCompareAsNumbers();

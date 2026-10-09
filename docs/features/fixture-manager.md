@@ -124,6 +124,14 @@ inventory..."** releases their universe and address but keeps everything
 else — placement, groups, looks. They stop sending DMX until patched again.
 Design mode only.
 
+**Free universes first.** A fixture that needs a universe of its own — a
+network fixture's IP (a WLED lantern), a free node port, a DMX overflow —
+takes a **free** one before a new one: nothing patched on it, nothing patched
+to its output, no node port carrying it. A run of free universes long enough
+for all of them is preferred, so they land together; otherwise the free ones
+in order, then new ones past the last. DMX fixtures are placed first, so a
+lantern never takes the universe they pack into.
+
 **Universes are named the show's way.** A universe a patch puts fixtures on
 that is still called "Universe N" is named as the show names its universes:
 the scheme is learned from the names it already has — "U17-US1-1",
