@@ -113,6 +113,8 @@ bool Scene::copyFrom(const Function* function)
     const QList<quint32> srcPalettes = scene->palettes();
     const QHash<quint32, PaletteFade> srcPaletteFades = scene->paletteFades();
     const LookScope srcScope = scene->lookScope();
+    m_transitionIn = scene->m_transitionIn;
+    m_transitionOut = scene->m_transitionOut;
     const quint32 srcScopeGroupId = scene->lookScopeGroupId();
 
     {
@@ -714,6 +716,10 @@ bool Scene::saveXML(QXmlStreamWriter *doc) const
     /* Speed */
     saveXMLSpeed(doc);
 
+    /* Transitions in and out (only when set) */
+    m_transitionIn.saveXML(doc, QStringLiteral("In"));
+    m_transitionOut.saveXML(doc, QStringLiteral("Out"));
+
     /* Channel groups */
     if (m_channelGroups.count() > 0)
     {
@@ -928,6 +934,16 @@ bool Scene::loadXML(QXmlStreamReader &root)
                 setPaletteFade(id, fadeIn, fadeOut);
             root.skipCurrentElement();
         }
+        else if (root.name() == QLatin1String("Transition"))
+        {
+            SceneTransition t;
+            QString kind;
+            t.loadXML(root, kind);
+            if (kind == QLatin1String("Out"))
+                m_transitionOut = t;
+            else
+                m_transitionIn = t;
+        }
         else
         {
             qWarning() << Q_FUNC_INFO << "Unknown scene tag:" << root.name();
@@ -1120,6 +1136,36 @@ void Scene::processValue(MasterTimer *timer, QList<Universe*> ua, uint fadeIn, S
             fc->setFadeTime(fadeIn);
         }
     }
+
+    /* Arriving by a transition: this head when the transition reaches it,
+       over its share of the time -- in place of the fade. */
+    if (m_applyTransitionIn)
+    {
+        uint delay = 0, fade = 0;
+        m_transitionIn.timing(m_transitionMapIn.placeForChannel(fixture, scv.channel), delay, fade);
+        fc->setFadeTime(fc->canFade() ? fade : 0);
+        fc->setDelay(delay);
+    }
+}
+
+QList<quint32> Scene::transitionFixtures() const
+{
+    QList<quint32> ids;
+    foreach (quint32 gid, fixtureGroups())
+    {
+        if (FixtureGroup *grp = doc()->fixtureGroup(gid))
+        {
+            foreach (quint32 fid, grp->fixtureList())
+            {
+                if (!ids.contains(fid))
+                    ids << fid;
+            }
+        }
+    }
+    foreach (quint32 fid, fixtures())
+        if (!ids.contains(fid))
+            ids << fid;
+    return ids;
 }
 
 void Scene::handleFadersEnd(MasterTimer *timer)
@@ -1166,7 +1212,25 @@ void Scene::handleFadersEnd(MasterTimer *timer)
     // thread. Lock scope ends before setBlendFunctionID() below, which re-locks.
     {
         QMutexLocker locker(&m_valueListMutex);
-        if (fadeout == 0 && anyPositiveOverride == false)
+        if (m_transitionOut.isActive() && tempoType() != Beats)
+        {
+            /* Leaving by a transition: every channel fades out, each head
+               when the transition reaches it, over its share of the time. */
+            const TransitionMap map(doc(), transitionFixtures(), m_transitionOut.shape);
+            const SceneTransition out = m_transitionOut;
+            Doc *d = doc();
+            foreach (QSharedPointer<GenericFader> fader, m_fadersMap)
+            {
+                if (fader.isNull())
+                    continue;
+                fader->setFadeOut(true, out.time);
+                fader->setChannelTimings([&map, &out, d](const FadeChannel &fc, uint &fade, uint &delay) {
+                    out.timing(map.placeForChannel(d->fixture(fc.fixture()), fc.channel()), delay, fade);
+                    return true;
+                });
+            }
+        }
+        else if (fadeout == 0 && anyPositiveOverride == false)
         {
             dismissAllFaders();
         }
@@ -1230,6 +1294,10 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
             m_reaimRequested = false;
             m_repaletteRequested = false;
             uint fadeIn = overrideFadeInSpeed() == defaultSpeed() ? fadeInSpeed() : overrideFadeInSpeed();
+            // Arriving by a transition: where each head falls in it.
+            m_applyTransitionIn = m_transitionIn.isActive() && tempoType() != Beats;
+            m_transitionMapIn = m_applyTransitionIn
+                ? TransitionMap(doc(), transitionFixtures(), m_transitionIn.shape) : TransitionMap();
 
             // Baked values first, then palettes — so an applied look (palette)
             // is PARAMOUNT and overrides any leftover baked value on the same
@@ -1273,6 +1341,7 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
                 foreach (SceneValue scv, palette->valuesFromFixtures(doc(), fixtures(), this, cOff))
                     processValue(timer, ua, pFade, scv);
             }
+            m_applyTransitionIn = false;   // the start only, not a later re-aim
         }
         else if (m_reaimRequested || m_repaletteRequested)
         {

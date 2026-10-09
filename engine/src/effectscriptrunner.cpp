@@ -264,7 +264,13 @@ void EffectScriptRunner::destroyInstancesForScene(quint32 sceneId)
             // fade completes. Persistence takes precedence (parked mid-flight).
             int fadeOutMs = -1;
             if (Scene *sc = qobject_cast<Scene*>(m_doc->function(sceneId)))
+            {
                 fadeOutMs = sc->paletteFadeOut(inst->effectPaletteId());
+                // Leaving by a transition: the effect leaves by it too, cell
+                // by cell (EffectInstance::envelopeFor()), so it runs on for it.
+                if (sc->transitionOut().isActive() && sc->tempoType() != Function::Beats)
+                    fadeOutMs = qMax(fadeOutMs, int(sc->transitionOut().time));
+            }
             const bool persistent = (pal != nullptr && pal->persistent());
             if (!persistent && fadeOutMs > 0 && !inst->isFadingOut())
             {

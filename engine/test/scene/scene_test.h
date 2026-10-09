@@ -57,6 +57,12 @@ private slots:
     void writeHTPZeroTicks();
     void aSceneWithAnUnpatchedFixturePlaysWithoutCrashing();
     void writeHTPTwoTicks();
+
+    /** "an effect on top of the existing effects that allow transitions ..
+     *  fade in .. wipe .. from center": a look arriving and leaving by a
+     *  transition, each fixture at its own moment. */
+    void transitionTimingAndPlaces();
+    void aLookWipesInAndOutAcrossTheStage();
     void writeHTPTwoTicksIntensity();
     void writeLTPReady();
 

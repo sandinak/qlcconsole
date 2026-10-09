@@ -58,6 +58,7 @@ FadeChannel::FadeChannel(const FadeChannel& ch)
     , m_inert(ch.m_inert)
     , m_fadeTime(ch.m_fadeTime)
     , m_elapsed(ch.m_elapsed)
+    , m_delay(ch.m_delay)
 {
     //qDebug() << Q_FUNC_INFO;
 }
@@ -100,6 +101,7 @@ FadeChannel &FadeChannel::operator=(const FadeChannel &fc)
         m_inert = fc.m_inert;
         m_fadeTime = fc.m_fadeTime;
         m_elapsed = fc.m_elapsed;
+        m_delay = fc.m_delay;
     }
 
     return *this;
@@ -361,6 +363,7 @@ bool FadeChannel::canFade() const
 void FadeChannel::setFadeTime(uint ms)
 {
     m_fadeTime = ms;
+    m_delay = 0;
 }
 
 uint FadeChannel::fadeTime() const
@@ -388,6 +391,19 @@ uchar FadeChannel::nextStep(uint ms)
 
 uchar FadeChannel::calculateCurrent(uint fadeTime, uint elapsedTime)
 {
+    /* Not reached yet: hold where it started. Before the "time consumed"
+       test, or a channel that cannot fade (time 0) would snap at once rather
+       than when the transition gets to it. */
+    if (m_delay > 0 && m_ready == false)
+    {
+        if (elapsedTime < m_delay)
+        {
+            m_current = m_start;
+            return uchar(m_current);
+        }
+        elapsedTime -= m_delay;
+    }
+
     if (elapsedTime >= fadeTime || m_ready == true)
     {
         // Return the target value if all time has been consumed

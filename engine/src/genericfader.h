@@ -21,6 +21,7 @@
 #define GENERICFADER
 
 #include <QObject>
+#include <functional>
 #include <QList>
 #include <QHash>
 #include <QReadWriteLock>
@@ -162,6 +163,11 @@ public:
      *  own fade-out is 0 but some looks carry a non-zero fade-out override
      *  (a "pulse": fast in, slow out). */
     void setFadeOut(bool enable, uint fadeTime, const QHash<quint32, uint> &channelFadeTimes);
+
+    /** Re-time channels already fading, each by @p timing (given the channel,
+     *  set its fade and its delay; return false to leave it as it is) -- a
+     *  transition reaching each fixture at its own moment. */
+    void setChannelTimings(const std::function<bool(const FadeChannel &, uint &fade, uint &delay)> &timing);
 
     /**
      * Set the blend mode to be applied in the write method

@@ -478,6 +478,21 @@ void GenericFader::setFadeOut(bool enable, uint fadeTime, const QHash<quint32, u
     }
 }
 
+void GenericFader::setChannelTimings(const std::function<bool(const FadeChannel &, uint &, uint &)> &timing)
+{
+    QWriteLocker l(&m_channelsLock);
+    QMutableHashIterator <quint32,FadeChannel> it(m_channels);
+    while (it.hasNext() == true)
+    {
+        FadeChannel& fc(it.next().value());
+        uint fade = fc.fadeTime(), delay = 0;
+        if (!timing(fc, fade, delay))
+            continue;
+        fc.setFadeTime(fc.canFade() ? fade : 0);
+        fc.setDelay(delay);
+    }
+}
+
 void GenericFader::setBlendMode(Universe::BlendMode mode)
 {
     m_blendMode = mode;

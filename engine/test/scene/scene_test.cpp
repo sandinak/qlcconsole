@@ -27,6 +27,9 @@
 #include "mastertimer_stub.h"
 #include <QBuffer>
 #include "qlcpalette.h"
+#include "scenetransition.h"
+#include "monitorproperties.h"
+#include "fadechannel.h"
 #include "qlcfixturemode.h"
 #include "qlcfixturedef.h"
 #include "scene_test.h"
@@ -1271,6 +1274,182 @@ void Scene_Test::writeLTPReady()
 
     QVERIFY(s1->stopped() == false);
     QVERIFY(s1->isRunning() == true);
+}
+
+void Scene_Test::transitionTimingAndPlaces()
+{
+    // A held start: nothing until the delay, then the fade from there.
+    FadeChannel fc;
+    fc.setStart(0);
+    fc.setTarget(200);
+    fc.setFadeTime(1000);
+    fc.setDelay(500);
+    QCOMPARE(int(fc.nextStep(250)), 0);
+    QCOMPARE(int(fc.nextStep(250)), 0);                    // 500: just reached
+    QCOMPARE(int(fc.nextStep(500)), 100);                  // half way through its fade
+    QCOMPARE(int(fc.nextStep(600)), 200);
+    QVERIFY(fc.isReady());
+    // One that cannot fade snaps -- but when it is reached, not at once.
+    FadeChannel snap;
+    snap.setStart(0);
+    snap.setTarget(255);
+    snap.setFadeTime(0);
+    snap.setDelay(300);
+    QCOMPARE(int(snap.nextStep(200)), 0);
+    QCOMPARE(int(snap.nextStep(200)), 255);
+    // setFadeTime() starts clean.
+    fc.setDelay(400);
+    fc.setFadeTime(100);
+    QCOMPARE(fc.delay(), 0u);
+
+    // Timing: a fade is everything together; a wipe spreads the starts.
+    SceneTransition t;
+    t.shape = SceneTransition::Fade;
+    t.time = 2000;
+    uint delay = 0, fade = 0;
+    t.timing(0.9, delay, fade);
+    QCOMPARE(delay, 0u);
+    QCOMPARE(fade, 2000u);
+    t.shape = SceneTransition::WipeUp;
+    t.softness = 0.25;
+    t.timing(0.0, delay, fade);
+    QCOMPARE(delay, 0u);
+    QCOMPARE(fade, 500u);
+    t.timing(1.0, delay, fade);
+    QCOMPARE(delay, 1500u);                                  // the last ends with the time
+    QCOMPARE(t.progress(1.0, 1500), 0.0);
+    QCOMPARE(t.progress(1.0, 1750), 0.5);
+    QCOMPARE(t.progress(0.0, 2000), 1.0);
+
+    // Places from where the fixtures are.
+    Doc *doc = new Doc(this);
+    QList<quint32> ids;
+    for (int i = 0; i < 3; ++i)
+    {
+        Fixture *fx = new Fixture(doc);
+        fx->setChannels(1);
+        fx->setAddress(quint32(i));
+        QVERIFY(doc->addFixture(fx));
+        // Stage right to stage left, and the middle one highest.
+        doc->monitorProperties()->setFixturePosition(fx->id(), 0, 0,
+            QVector3D(1000.0f * i * 2, 0.0f, i == 1 ? 4.0f : 1.0f));   // x, y in mm; z in metres
+        ids << fx->id();
+    }
+    const TransitionMap toLeft(doc, ids, SceneTransition::WipeToStageLeft);
+    QVERIFY(toLeft.place(ids[0], 0) < toLeft.place(ids[1], 0));
+    QVERIFY(toLeft.place(ids[1], 0) < toLeft.place(ids[2], 0));
+    QCOMPARE(toLeft.place(ids[0], 0), 0.0);
+    QCOMPARE(toLeft.place(ids[2], 0), 1.0);
+    const TransitionMap toRight(doc, ids, SceneTransition::WipeToStageRight);
+    QCOMPARE(toRight.place(ids[2], 0), 0.0);
+    const TransitionMap up(doc, ids, SceneTransition::WipeUp);
+    QVERIFY(up.place(ids[1], 0) > up.place(ids[0], 0));      // the high one last
+    const TransitionMap out(doc, ids, SceneTransition::FromCentre);
+    QVERIFY(out.place(ids[1], 0) < out.place(ids[0], 0));     // nearest the middle first
+    const TransitionMap dissolve(doc, ids, SceneTransition::Dissolve);
+    const TransitionMap again(doc, ids, SceneTransition::Dissolve);
+    for (quint32 id : ids)
+    {
+        QVERIFY(dissolve.place(id, 0) >= 0.0 && dissolve.place(id, 0) < 1.0);
+        QCOMPARE(dissolve.place(id, 0), again.place(id, 0));   // the same order every time
+    }
+
+    // Saved with the scene, and copied with it.
+    Scene *sc = new Scene(doc);
+    SceneTransition in;
+    in.shape = SceneTransition::FromCentre;
+    in.time = 3000;
+    in.softness = 0.5;
+    sc->setTransitionIn(in);
+    SceneTransition outT;
+    outT.shape = SceneTransition::Dissolve;
+    outT.time = 1200;
+    sc->setTransitionOut(outT);
+    QBuffer buf;
+    buf.open(QIODevice::WriteOnly);
+    QXmlStreamWriter w(&buf);
+    QVERIFY(sc->saveXML(&w));
+    w.writeEndDocument();
+    buf.close();
+    QVERIFY(buf.data().contains("Shape=\"FromCentre\""));
+    buf.open(QIODevice::ReadOnly);
+    QXmlStreamReader r(&buf);
+    r.readNextStartElement();
+    // Heap, not stack: the Doc owns them and deletes them with it.
+    Scene *back = new Scene(doc);
+    QVERIFY(back->loadXML(r));
+    QVERIFY(back->transitionIn() == in);
+    QVERIFY(back->transitionOut() == outT);
+    Scene *copy = new Scene(doc);
+    QVERIFY(copy->copyFrom(sc));
+    QVERIFY(copy->transitionIn() == in);
+    delete doc;
+}
+
+void Scene_Test::aLookWipesInAndOutAcrossTheStage()
+{
+    Doc *doc = new Doc(this);
+    MasterTimer timer(doc);
+    QList<Fixture *> fx;
+    for (int i = 0; i < 3; ++i)
+    {
+        Fixture *f = new Fixture(doc);
+        f->setChannels(1);                      // a dimmer
+        f->setAddress(quint32(i));
+        f->setUniverse(0);
+        QVERIFY(doc->addFixture(f));
+        doc->monitorProperties()->setFixturePosition(f->id(), 0, 0, QVector3D(3000.0f * i, 0.0f, 1.0f));
+        fx << f;
+    }
+    Scene *s1 = new Scene(doc);
+    for (Fixture *f : fx)
+        s1->setValue(f->id(), 0, 200);
+    SceneTransition wipe;
+    wipe.shape = SceneTransition::WipeToStageLeft;
+    wipe.time = MasterTimer::tick() * 20;
+    wipe.softness = 0.2;
+    s1->setTransitionIn(wipe);
+    s1->setTransitionOut(wipe);
+    doc->addFunction(s1);
+
+    auto level = [&](int i) {
+        QList<Universe *> ua = doc->inputOutputMap()->claimUniverses();
+        ua[0]->processFaders();
+        const int v = uchar(ua[0]->preGMValues()[i]);
+        doc->inputOutputMap()->releaseUniverses(false);
+        return v;
+    };
+    auto tick = [&]() {
+        timer.timerTick();
+        QList<Universe *> ua = doc->inputOutputMap()->claimUniverses();
+        ua[0]->processFaders();
+        doc->inputOutputMap()->releaseUniverses(false);
+    };
+
+    s1->start(&timer, FunctionParent::master());
+    for (int k = 0; k < 6; ++k)
+        tick();
+    // Stage right first: the first up, the last not yet reached.
+    QVERIFY2(level(0) > level(1) && level(1) >= level(2) && level(2) == 0,
+             qPrintable(QString("%1 %2 %3").arg(level(0)).arg(level(1)).arg(level(2))));
+    for (int k = 0; k < 20; ++k)
+        tick();
+    QCOMPARE(level(0), 200);
+    QCOMPARE(level(1), 200);
+    QCOMPARE(level(2), 200);
+
+    // And away the same way: stage right goes first.
+    s1->stop(FunctionParent::master());
+    for (int k = 0; k < 7; ++k)
+        tick();
+    QVERIFY2(level(0) < level(1) && level(2) == 200,
+             qPrintable(QString("%1 %2 %3").arg(level(0)).arg(level(1)).arg(level(2))));
+    for (int k = 0; k < 25; ++k)
+        tick();
+    QCOMPARE(level(0), 0);
+    QCOMPARE(level(2), 0);
+    // The Doc goes with the test object (as in the other tests here): the
+    // MasterTimer on the stack still holds it until this returns.
 }
 
 QTEST_APPLESS_MAIN(Scene_Test)

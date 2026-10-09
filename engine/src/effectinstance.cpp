@@ -184,6 +184,29 @@ void EffectInstance::runTick()
     else
         m_envelope = sceneEnvelope();
 
+    /* The scene's transitions: each cell's own envelope (envelopeFor()). The
+       places are worked out once, the first time they are needed. */
+    m_transitionIn = SceneTransition();
+    m_transitionOut = SceneTransition();
+    m_sceneRunning = false;
+    if (Scene *sc = qobject_cast<Scene *>(m_doc->function(m_sceneId)))
+    {
+        m_transitionIn = sc->transitionIn();
+        m_transitionOut = sc->transitionOut();
+        m_sceneRunning = sc->isRunning();
+        m_sceneElapsed = sc->elapsed();
+        if (m_transitionIn.isActive() && !m_transitionMapInBuilt)
+        {
+            m_transitionMapIn = TransitionMap(m_doc, sc->transitionFixtures(), m_transitionIn.shape);
+            m_transitionMapInBuilt = true;
+        }
+        if (m_fadingOut && m_transitionOut.isActive() && !m_transitionMapOutBuilt)
+        {
+            m_transitionMapOut = TransitionMap(m_doc, sc->transitionFixtures(), m_transitionOut.shape);
+            m_transitionMapOutBuilt = true;
+        }
+    }
+
     // WLED fixtures in a WLED look run the effect themselves: theirs is a
     // handful of settings, not a frame.
     const QList<DmxWrite> device = wledDeviceWrites();
@@ -1258,9 +1281,23 @@ QList<EffectInstance::DmxWrite> EffectInstance::wledDeviceWrites() const
         }
         // Its brightness is a level: the look's dimmer through the scene's
         // fade, merged with the scene's own (HTP).
-        put(QStringLiteral("Master Dimmer"), qRound(255.0 * dimmer * double(m_envelope)), false);
+        put(QStringLiteral("Master Dimmer"), qRound(255.0 * dimmer * double(envelopeFor(fid, -1))), false);
     }
     return out;
+}
+
+float EffectInstance::envelopeFor(quint32 fid, int head) const
+{
+    // Leaving by a transition: each cell goes when it reaches it.
+    if (m_fadingOut && m_transitionOut.isActive())
+    {
+        const qint64 el = qMax<qint64>(0, m_elapsed.elapsed() - m_fadeOutStartMs);
+        return float(1.0 - m_transitionOut.progress(m_transitionMapOut.place(fid, head), uint(el)));
+    }
+    // Arriving by one: each cell comes when it reaches it.
+    if (!m_fadingOut && m_sceneRunning && m_transitionIn.isActive())
+        return float(m_transitionIn.progress(m_transitionMapIn.place(fid, head), m_sceneElapsed));
+    return m_envelope;
 }
 
 QJSValue EffectInstance::buildParamsObject() const
@@ -1343,6 +1380,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
         const EffectCell &cell = cells.at(i);
         quint32 fid  = cell.fixtureId;
         int     head = cell.head;
+        const float envelope = envelopeFor(fid, head);   // this cell's, by the transition
         Fixture *fxi = m_doc->fixture(fid);
         /* Unpatched fixtures too: their channels are inert (no address, no
            DMX), and what the effect would do goes to the fixture for the rig
@@ -1433,7 +1471,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
         QJSValue dimVal = intent.property("dimmer");
         if (!dimVal.isUndefined())
         {
-            const float mul = qBound(0.0f, (float)dimVal.toNumber(), 1.0f) * m_envelope;
+            const float mul = qBound(0.0f, (float)dimVal.toNumber(), 1.0f) * envelope;
             quint32 miCh = fxi->masterIntensityChannel();
             if (miCh != QLCChannel::invalid())
             {
@@ -1483,7 +1521,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
         auto writeEmitter = [&](QLCChannel::PrimaryColour colour, uchar dmxValRaw) -> bool {
             // Scale colour output by the scene's actuation envelope (so the effect
             // ramps in/holds with the scene) and by the look's master Dimmer.
-            uchar dmxVal = (uchar)qBound(0, (int)qRound(dmxValRaw * m_envelope * lookColorMul), 255);
+            uchar dmxVal = (uchar)qBound(0, (int)qRound(dmxValRaw * envelope * lookColorMul), 255);
             bool matched = false;
             // Only THIS head's channels — so a pixel effect colours one pixel, not
             // the whole (multi-head) fixture.
@@ -1552,7 +1590,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
             quint32 miCh = fxi->masterIntensityChannel();
             if (!av.isUndefined() && miCh != QLCChannel::invalid())
             {
-                uchar amt = (uchar)qBound(0, (int)qRound(av.toInt() * m_envelope), 255);
+                uchar amt = (uchar)qBound(0, (int)qRound(av.toInt() * envelope), 255);
                 writes.append({uniIdx, (int)fxi->address() + (int)miCh,
                                amt, fxi->id(), miCh, /*replace=*/true});
             }

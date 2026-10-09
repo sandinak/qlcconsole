@@ -178,6 +178,12 @@ public:
     /** Get the fade time in milliseconds. */
     uint fadeTime() const;
 
+    /** Hold the start value this long (ms) before the fade begins: a
+     *  transition reaching this channel later than others (a wipe across the
+     *  stage). setFadeTime() clears it -- set it after. */
+    void setDelay(uint ms) { m_delay = ms; }
+    uint delay() const { return m_delay; }
+
     /** Set the elapsed time for this channel. */
     void setElapsed(uint time);
 
@@ -218,6 +224,7 @@ private:
 
     uint m_fadeTime;
     uint m_elapsed;
+    uint m_delay = 0;
 };
 
 /** @} */

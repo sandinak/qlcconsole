@@ -28,6 +28,7 @@
 #include "genericfader.h"
 #include "fadechannel.h"
 #include "scenevalue.h"
+#include "scenetransition.h"
 #include "dmxsource.h"
 #include "function.h"
 #include "fixture.h"
@@ -289,6 +290,29 @@ public:
 private:
     LookScope m_lookScope = ScopeUnset;
     quint32 m_lookScopeGroupId = FixtureGroup::invalidId();
+
+    /*********************************************************************
+     * Transitions
+     *********************************************************************/
+public:
+    /** How the whole look arrives when the scene starts, and leaves when it
+     *  stops: each fixture head at its own moment (a wipe across the stage,
+     *  from the centre, a dissolve, along each bar) -- or None, the scene's
+     *  own fade as always. An active transition takes the place of the fade
+     *  time; effects in the look follow it too. Not in Beats tempo. */
+    SceneTransition transitionIn() const { return m_transitionIn; }
+    void setTransitionIn(const SceneTransition &t) { m_transitionIn = t; }
+    SceneTransition transitionOut() const { return m_transitionOut; }
+    void setTransitionOut(const SceneTransition &t) { m_transitionOut = t; }
+
+    /** The fixtures a transition places: the look's groups' and its own. */
+    QList<quint32> transitionFixtures() const;
+
+private:
+    SceneTransition m_transitionIn;
+    SceneTransition m_transitionOut;
+    TransitionMap m_transitionMapIn;        ///< built as the scene starts
+    bool m_applyTransitionIn = false;       ///< processValue(): this is the start
 
     /*********************************************************************
      * Palettes

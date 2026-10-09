@@ -26,6 +26,7 @@
 #include <QVariantMap>
 
 #include "effectscript.h"
+#include "scenetransition.h"
 
 class Doc;
 
@@ -221,6 +222,15 @@ private:
 
     float m_envelope = 1.0f; //!< host-scene actuation level, applied per tick
     QString m_wledEffect;    //!< QLCPalette::wledEffect(), at construction
+
+    /* The scene's transitions, for each cell: a look arriving by a wipe brings
+       its effect in by the same wipe (envelopeFor()). */
+    float envelopeFor(quint32 fid, int head) const;
+    SceneTransition m_transitionIn, m_transitionOut;   //!< the scene's, this tick
+    TransitionMap m_transitionMapIn, m_transitionMapOut;
+    bool m_transitionMapInBuilt = false, m_transitionMapOutBuilt = false;
+    uint m_sceneElapsed = 0;                           //!< ms since the scene started
+    bool m_sceneRunning = false;
 
     //!< look's master Dimmer (0..1, 1.0 if none), rebuilt each runTick(). Applied
     //!< host-side to effect colour output on fixtures WITHOUT a master intensity
