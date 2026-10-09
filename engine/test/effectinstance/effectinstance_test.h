@@ -41,6 +41,8 @@ private slots:
     void aLanternIsBuiltOfItsLeds();
     void wledPortsRunAsWledDoes();
     void aWledLookRunsOnTheDeviceAndThePortElsewhere();
+    void bothFiresAreOfferedAndEachComesBackAsItself();
+    void anEffectArrivesByItsScenesTransition();
     void anEffectRunsOnUnpatchedFixturesToo();
     /** A follow-spot with Fade Near Limit takes a head's dimmer down when its
      *  target is out of that head's reach, and leaves the dimmer to the scene

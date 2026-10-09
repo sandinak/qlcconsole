@@ -11,21 +11,24 @@
 */
 
 #include <QtTest>
+#include <QTemporaryDir>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QBuffer>
 
 #include "effectinstance_test.h"
+#define private public                  // MasterTimer::timerTick(), and the instance's insides
 #include "doc.h"
 #include "fixture.h"
 #include "fixturegroup.h"
 #include "scene.h"
+#include "scenetransition.h"
+#include "mastertimer.h"
 #include "qlcpalette.h"
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
 #include "qlcchannel.h"
 #include "qlcfixturehead.h"
-#define private public
 #include "effectinstance.h"
 #include "effectscript.h"
 #include "effectscriptcache.h"
@@ -38,6 +41,7 @@
 #include "truss.h"
 #include "aimsolver.h"
 #include <QtMath>
+#include <cmath>
 #include <QVector2D>
 
 void EffectInstance_Test::init()
@@ -575,6 +579,155 @@ void EffectInstance_Test::aWledLookRunsOnTheDeviceAndThePortElsewhere()
     QLCPalette back(QLCPalette::Effect, m_doc);
     QVERIFY(back.loadXML(reader));
     QCOMPARE(back.wledEffect(), QString("Chase"));
+}
+
+/* "Do we have a fire effect that goes from the bottom up?" We did -- the RGB
+   Matrix Fire -- but an effect script called Fire hid it, and both are
+   fire.js, so a look saved with one could come back as the other. */
+void EffectInstance_Test::bothFiresAreOfferedAndEachComesBackAsItself()
+{
+    // Only the shipped libraries: not whatever is in this machine's home.
+    QTemporaryDir home;
+    const QByteArray realHome = qgetenv("HOME");
+    qputenv("HOME", home.path().toUtf8());
+    EffectScriptCache cache;
+    cache.addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    cache.addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "rgbscripts"), true);
+    qputenv("HOME", realHome);
+
+    // Both listed: the flicker by its new name, the rising flame as Fire.
+    const QStringList names = cache.scriptNames();
+    QVERIFY(names.contains("Firelight"));
+    QVERIFY(names.contains("Fire"));
+    const QString flicker = cache.scriptPath("Firelight");
+    const QString rising = cache.scriptPath("Fire");
+    QVERIFY2(flicker.contains("effectscripts", Qt::CaseInsensitive), qPrintable(flicker));
+    QVERIFY(EffectScriptCache::isRgbScriptPath(rising));
+    QVERIFY(!EffectScriptCache::isRgbScriptPath(flicker));
+
+    // The others both libraries have are listed twice, the RGB Matrix one so named.
+    QVERIFY(names.contains("Plasma") && names.contains("Plasma (RGB Matrix)"));
+    QVERIFY(names.contains("Meteor (RGB Matrix)"));
+
+    // A look saves each under a name that brings back that one.
+    QCOMPARE(EffectScriptCache::portableName(flicker), QString("fire"));
+    QCOMPARE(EffectScriptCache::portableName(rising), QString("rgb:fire"));
+    QCOMPARE(cache.scriptPath("fire"), flicker);         // older looks: the flicker, as before
+    QCOMPARE(cache.scriptPath("rgb:fire"), rising);
+    QCOMPARE(cache.scriptPath("rgb:plasma"), cache.scriptPath("Plasma (RGB Matrix)"));
+
+    // And the rising one rises: on a column of lights, the bottom is lit
+    // before the top ever is.
+    // On a wall of lights eight wide, and on one bar standing up a tower (one
+    // column: it was black, all of it feathered away as "edge").
+    for (const int cols : { 8, 1 })
+    {
+    EffectScript fire;
+    QVERIFY(fire.load(rising));
+    QJSEngine *eng = fire.engine();
+    const int rows = 16;
+    QJSValue fixtures = eng->newArray(rows * cols);
+    for (int i = 0; i < rows * cols; ++i)
+    {
+        QJSValue o = eng->newObject();
+        o.setProperty("id", i);
+        o.setProperty("head", 0);
+        o.setProperty("hasRGB", true);
+        QJSValue grid = eng->newObject();
+        grid.setProperty("col", i % cols);
+        grid.setProperty("row", i / cols);      // 0 is the top
+        grid.setProperty("cols", cols);
+        grid.setProperty("rows", rows);
+        o.setProperty("grid", grid);
+        fixtures.setProperty(quint32(i), o);
+    }
+    QJSValue state = fire.newState();
+    double top = 0.0, bottom = 0.0;
+    for (int tick = 0; tick < 120; ++tick)
+    {
+        QJSValue inputs = eng->newObject();
+        inputs.setProperty("_time", tick * 0.05);
+        QJSValue params = eng->newObject();
+        for (const EffectScript::ParamDef &d : fire.paramDefs())
+            params.setProperty(d.name, double(d.defaultValue));
+        const QJSValue out = fire.callTick(fixtures, inputs, eng->newObject(), params, state, eng->newObject());
+        QVERIFY(out.isArray());
+        for (int i = 0; i < rows * cols; ++i)
+        {
+            const QJSValue o = out.property(quint32(i));
+            const double lum = o.property("r").toNumber() + o.property("g").toNumber() + o.property("b").toNumber();
+            (i / cols < rows / 2 ? top : bottom) += std::isfinite(lum) ? lum : 0.0;
+        }
+    }
+    QVERIFY2(bottom > 0.0 && bottom > top * 1.5,
+             qPrintable(QString("%1 wide: bottom %2 top %3").arg(cols).arg(bottom).arg(top)));
+    }
+}
+
+/* A look arriving by a wipe brings its effect in by the same wipe: the
+   cell the wipe has reached is lit, one it has not is dark. */
+void EffectInstance_Test::anEffectArrivesByItsScenesTransition()
+{
+    MasterTimer timer(m_doc);
+    QList<Fixture *> pars;
+    for (int i = 0; i < 3; ++i)
+    {
+        QLCFixtureDef *def = new QLCFixtureDef();
+        def->setManufacturer("Test"); def->setModel(QString("RGB %1").arg(i));
+        QLCFixtureMode *mode = new QLCFixtureMode(def);
+        const QLCChannel::Preset rgb[3] = { QLCChannel::IntensityRed, QLCChannel::IntensityGreen,
+                                            QLCChannel::IntensityBlue };
+        QLCFixtureHead head;
+        for (int c = 0; c < 3; ++c)
+        {
+            QLCChannel *ch = new QLCChannel();
+            ch->setName(QString("c%1").arg(c));
+            ch->setPreset(rgb[c]);
+            def->addChannel(ch);
+            mode->insertChannel(ch, quint32(c));
+            head.addChannel(quint32(c));
+        }
+        mode->insertHead(-1, head);
+        mode->cacheHeads();
+        def->addMode(mode);
+        Fixture *fx = new Fixture(m_doc);
+        fx->setFixtureDefinition(def, mode);
+        fx->setUniverse(0); fx->setAddress(quint32(400 + i * 3));
+        QVERIFY(m_doc->addFixture(fx));
+        m_doc->monitorProperties()->setFixturePosition(fx->id(), 0, 0, QVector3D(3000.0f * i, 0.0f, 1.0f));
+        pars << fx;
+    }
+    QLCPalette *rainbow = new QLCPalette(QLCPalette::Effect, m_doc);
+    rainbow->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/rainbow.js");
+    QVERIFY(m_doc->addPalette(rainbow));
+    Scene *scene = new Scene(m_doc);
+    for (Fixture *fx : pars)
+        scene->addFixture(fx->id());
+    scene->addPalette(rainbow->id());
+    SceneTransition wipe;
+    wipe.shape = SceneTransition::WipeToStageLeft;
+    wipe.time = 2000;
+    wipe.softness = 0.2;
+    scene->setTransitionIn(wipe);
+    m_doc->addFunction(scene);
+
+    scene->start(&timer, FunctionParent::master());
+    for (int k = 0; k < 20; ++k)            // 400 ms of the 2 s
+        timer.timerTick();
+    QVERIFY(scene->isRunning());
+
+    EffectInstance inst(m_doc, scene->id(), rainbow->id());
+    QVERIFY(inst.isValid());
+    inst.runTick();
+    QHash<quint32, int> lit;                 // fixture -> its brightest channel
+    foreach (const EffectInstance::DmxWrite &w, inst.dmxWrites())
+        lit[w.fixtureId] = qMax(lit.value(w.fixtureId), int(w.value));
+    // 400 ms in, a 0.4 s edge: the stage-right par well up, the stage-left one not reached.
+    QVERIFY2(lit.value(pars[0]->id()) > 100,
+             qPrintable(QString("first %1").arg(lit.value(pars[0]->id()))));
+    QCOMPARE(lit.value(pars[2]->id()), 0);
+    scene->stop(FunctionParent::master());
+    timer.timerTick();
 }
 
 void EffectInstance_Test::followSpotFadesAHeadThatCannotReach()

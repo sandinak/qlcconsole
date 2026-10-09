@@ -41,12 +41,15 @@ void EffectScriptCache::rescan()
     scanRgbDir(systemRgbScriptsDirectory());
     for (const QDir &d : m_extraDirs)
         scanDir(d);
+    for (const QDir &d : m_extraRgbDirs)
+        scanRgbDir(d);
 }
 
-void EffectScriptCache::addDirectory(const QDir &dir)
+void EffectScriptCache::addDirectory(const QDir &dir, bool rgb)
 {
-    if (!m_extraDirs.contains(dir))
-        m_extraDirs.append(dir);
+    QList<QDir> &dirs = rgb ? m_extraRgbDirs : m_extraDirs;
+    if (!dirs.contains(dir))
+        dirs.append(dir);
     rescan();
 }
 
@@ -112,15 +115,15 @@ void EffectScriptCache::scanRgbDir(const QDir &dir)
 {
     if (!dir.exists())
         return;
-    scanDir(dir);   // .js directly in the dir (packaged layout)
+    scanDir(dir, true);   // .js directly in the dir (packaged layout)
     // Dev build symlinks the source dir one level down (Resources/RGBScripts/
     // rgbscripts -> resources/rgbscripts); follow immediate subdirs too.
     const QStringList subs = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::Readable);
     for (const QString &s : subs)
-        scanDir(QDir(dir.absoluteFilePath(s)));
+        scanDir(QDir(dir.absoluteFilePath(s)), true);
 }
 
-void EffectScriptCache::scanDir(const QDir &dir)
+void EffectScriptCache::scanDir(const QDir &dir, bool rgb)
 {
     if (!dir.exists() || !dir.isReadable())
         return;
@@ -130,9 +133,27 @@ void EffectScriptCache::scanDir(const QDir &dir)
     for (const QString &file : files)
     {
         const QString absPath = dir.absoluteFilePath(file);
+        if (QLCFile::isOnlineOnly(absPath))   // in cloud storage, not on this machine: do not wait for it
+        {
+            QLCFile::noteSkippedOnlineOnly(absPath);
+            continue;
+        }
         ScriptMeta meta = parseMeta(absPath);
+        meta.rgb = rgb;
         if (meta.displayName.isEmpty())
             meta.displayName = nameFromPath(absPath);  // fallback to filename
+        /* An RGB Matrix script whose name an effect script already has is
+           listed as itself, not dropped: both libraries have a Fire, a
+           Plasma, a Meteor... and the RGB Matrix one (a flame rising up a
+           grid) was simply never offered. */
+        if (rgb && m_scripts.contains(meta.displayName)
+            && m_scripts.value(meta.displayName).path != absPath
+            && !m_scripts.value(meta.displayName).rgb)
+            meta.displayName += QObject::tr(" (RGB Matrix)");
+        // An RGB Matrix script is also found as "rgb:<file name>" -- what a
+        // look saves it as -- whether or not its plain names are taken.
+        if (rgb && !m_scripts.contains(QStringLiteral("rgb:") + nameFromPath(absPath)))
+            m_scripts.insert(QStringLiteral("rgb:") + nameFromPath(absPath), meta);
         if (!meta.displayName.isEmpty() && !m_scripts.contains(meta.displayName))
         {
             m_scripts.insert(meta.displayName, meta);
@@ -152,6 +173,22 @@ void EffectScriptCache::scanDir(const QDir &dir)
 }
 
 /** Extract a single-quoted or double-quoted string value for `effect.<field> = "..."` */
+bool EffectScriptCache::isRgbScriptPath(const QString &path)
+{
+    // Its folder, or (a dev build's symlinked source dir) its folder's parent.
+    const QDir dir = QFileInfo(path).dir();
+    if (dir.dirName().compare(QLatin1String("rgbscripts"), Qt::CaseInsensitive) == 0)
+        return true;
+    QDir up = dir;
+    return up.cdUp() && up.dirName().compare(QLatin1String("rgbscripts"), Qt::CaseInsensitive) == 0;
+}
+
+QString EffectScriptCache::portableName(const QString &path)
+{
+    const QString base = QFileInfo(path).completeBaseName();
+    return isRgbScriptPath(path) ? QStringLiteral("rgb:") + base : base;
+}
+
 QString EffectScriptCache::scriptPathForWled(const QString &wledName) const
 {
     if (wledName.isEmpty())
@@ -203,6 +240,8 @@ EffectScriptCache::ScriptMeta EffectScriptCache::parseMeta(const QString &path)
         if (nm.hasMatch())
             meta.displayName = nm.captured(1);
         meta.fixtureTypes = QStringList() << QStringLiteral("rgb") << QStringLiteral("dimmer");
+        if (meta.description.isEmpty())
+            meta.description = QObject::tr("From the RGB Matrix library");
         return meta;   // fixtureTypes set explicitly; skip the effect.* parsing below
     }
 

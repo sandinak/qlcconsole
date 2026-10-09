@@ -27,6 +27,7 @@
 #include "effectscriptrunner.h"
 #include "aimsolver.h"
 #include "qlcpalette.h"
+#include "effectscriptcache.h"
 #include "qlcchannel.h"
 #include "qlccapability.h"
 #include "qlcfixturehead.h"
@@ -1568,7 +1569,7 @@ bool QLCPalette::saveXML(QXmlStreamWriter *doc)
             // Store the portable script name (no directory, no extension) so
             // workspaces stay valid when moved between machines.
             doc->writeStartElement("EffectScript");
-            doc->writeCharacters(QFileInfo(m_scriptPath).completeBaseName());
+            doc->writeCharacters(EffectScriptCache::portableName(m_scriptPath));
             doc->writeEndElement();
         }
         if (!m_effectPreset.isEmpty())

@@ -6,7 +6,7 @@
 (function() {
     var effect = new Object;
     effect.apiVersion  = 1;
-    effect.name        = "Fire";
+    effect.name        = "Firelight";
     effect.description = "Warm flickering fire colors — independent per fixture";
     effect.author      = "QLC+";
     effect.fixtureTypes = ["rgb"];
