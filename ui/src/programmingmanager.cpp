@@ -3011,11 +3011,22 @@ void ProgrammingManager::showGuide(QWidget *parent)
         "membership, or individual <b>fixtures</b> to fix them in place.</li>"
         "<li>No palettes yet? Right-click the <b>Palettes</b> tab on the right "
         "to create your first one.</li>"
+        "<li>Long list? <b>Search fixtures &amp; groups</b> above it narrows to "
+        "what matches.</li>"
         "</ul>"
         "<p><b>Looks and Targets.</b> Every look in a scene applies to every "
         "target. Drop <b>palettes</b> into Looks; drop <b>fixture groups</b> "
         "into Targets to follow their membership as it changes, or individual "
         "<b>fixtures</b> to pin them.</p>"
+        "<p><b>Effects.</b> In an effect look, pick from the <b>browser</b>: "
+        "search, or a category tab, each effect running on a strip of lights "
+        "beside its name. The <b>WLED</b> tab is WLED's own effects: WLED "
+        "fixtures run them themselves; other fixtures run the console's version "
+        "where there is one.</p>"
+        "<p><b>Transitions.</b> <i>In</i> and <i>Out</i> at the top of the scene "
+        "set how the whole look arrives and leaves — a wipe across the stage, "
+        "from the centre, a dissolve, along each bar — instead of the scene's "
+        "fade. <i>Edge</i> is how soft the line is.</p>"
         "<p>Reopen this any time from <i>How this works</i>.</p>"));
     box.exec();
 }
