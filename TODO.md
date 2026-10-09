@@ -231,6 +231,92 @@ and colour, not pixel mapping.
   the ports were written from FX.cpp as I know it -- check them against
   the source when the import is done.
 
+## Transitions, haze glow, both Fires, back from a group's view -- 2026-10-08 (for Branson to try)
+
+- CLOUD STORAGE that is not on this computer ("starting the tool is
+  hanging" -- "should throw a warning if we detect cloud based storage
+  that's not local .. that's burned me before"). ~/Library/Application
+  Support/QLC+ links into Synology Drive, and its files had become online-
+  only placeholders (macOS "dataless": listed, 0 blocks on disk): reading
+  each at startup waited on the NAS, and with it out of reach the app (and
+  every test that starts it -- autosave_test sat 81 min) hung. Now
+  `QLCFile::isOnlineOnly()` reads a file's flags (macOS SF_DATALESS;
+  Windows recall-on-access/offline) without fetching it, and every folder
+  loader skips such files (fixtures, RGB and effect scripts, presets,
+  bundles, modifiers, input and device profiles, network gear, studio
+  templates), noting them (`QLCFile::skippedOnlineOnly()`). The footer:
+  "N file(s) in cloud storage are not on this computer", by folder, naming
+  the provider, with "Download Now" -- a thread of its own reads them (so
+  the cloud sends them); fixtures and effects then load at once, anything
+  else next start. autosave_test against the same 45 placeholders: 4 s.
+  Plugins too (MIDI templates -- the last startup hang -- and HID
+  profiles); the skip list lives on the application object so a plugin's
+  own copy of QLCFile adds to the same list.
+- SHOW CACHE ("fetch and CACHE .. we cannot have remote stuff for a
+  showfile on a production run"): `QLCFixtureDefCache::showCacheDirectory()`
+  (~/Library/Application Support/qlcconsole/ShowCache/Fixtures; the system
+  cache if that is in cloud storage) holds a copy of every non-shipped
+  definition a show uses, refreshed when a show loads and when it saves.
+  Before a show loads (`App::prepareShowDefinitions()`): each definition
+  it names comes from the library, else the show cache, else is fetched
+  from its online-only file under a "Waiting for the cloud to send ..."
+  window with Skip (`App::fetchFromCloud()`), then cached.
+- NOTHING LOST ON SAVE: a fixture whose definition is not here stands in as
+  a generic dimmer as before, but REMEMBERS its manufacturer, model and
+  mode (`Fixture::definitionUnavailable()`) and saves those -- QLC+ wrote
+  "Generic" and the real fixture was gone for good. Save warns first
+  (`App::confirmSaveWithoutDefinitions()`); the footer lists them as an
+  Error, "Fetch Definitions" fetches and gives each its definition back
+  where its mode and channel count match.
+
+- TRANSITIONS ("an effect on top of the existing effects that allow
+  transitions .. fade in .. wipe .. from center"; Branson chose: the whole
+  look; fade and wipes, centre in/out, dissolve, along each bar). A scene
+  has a Transition in and a Transition out (`SceneTransition`: shape, time,
+  edge/softness; saved as <Transition Kind="In|Out" .../>, copied with the
+  scene). Every fixture head gets a place 0..1 for the shape from where it
+  is on the stage (`TransitionMap`, RigHeads::headPositions()): wipes to
+  stage left/right, up/down, front-to-back/back-to-front; from/to the
+  centre; dissolve (a fixed random order); along each bar (pixel by pixel).
+  Its place sets when it starts and its share of the time how long it takes
+  (the last ends with the time). In: each channel's FadeChannel gets a
+  delay (new `FadeChannel::setDelay()`; a channel that cannot fade snaps
+  when reached, not at once). Out: the faders' channels are re-timed
+  (`GenericFader::setChannelTimings()`). Effects in the look follow it cell
+  by cell (`EffectInstance::envelopeFor()`); the runner keeps an effect
+  running through a transition out. An active transition takes the place of
+  the scene's fade; not in Beats tempo. Programming tab: In / Out / Edge on
+  the scene's canvas.
+
+- HAZE GLOW ("with haze up and lights down for the leds I am not seeing
+  much haze"): a beam's haze follows the fixture's OUTPUT (lumens), so low-
+  output LED strip threw almost nothing -- right for shafts, wrong for the
+  air right round lit pixels. Now, in haze: a soft halo round each lit
+  section of a bar or par (`drawHazeGlow()`), and a sheet of lit air rising
+  off each lit stretch of a strip inside a clear- or open-topped step
+  (`collectInsideLight()`), both by how bright the pixels are (colour x
+  dimmer, `BarLight::brightness`), scaled by the haze. Lanterns keep their
+  own halo; movers their beams.
+- BOTH FIRES ("a fire effect that goes from the bottom up"): the RGB Matrix
+  Fire (a flame rising from the lowest heads on stage, Orientation to flip
+  it) was hidden by an effect script also called Fire; that one is now
+  "Firelight" (looks using it keep it). RGB Matrix scripts whose names an
+  effect script has are listed as "<name> (RGB Matrix)" instead of
+  dropped (Confetti, Lightning, Meteor, Plasma). A look saves an RGB Matrix
+  effect as "rgb:<file>" (`EffectScriptCache::portableName()`), so it comes
+  back as itself; older looks' bare names resolve as before. The Fire was
+  black on a strip one or two pixels wide (its edge feathering ate all of
+  it): fixed. Branson's own RGBScripts/fire.js has the same bug and loads
+  first -- his to fix or remove.
+- RIG OVERVIEW leaves the tab alone ("every time I open the rig view ..
+  the studio tab comes up"): View -> Rig Overview… (Ctrl+Shift+R) brought
+  the Lighting Studio tab forward before opening its window; it is a window
+  of its own, so it now just opens.
+- BACK FROM A GROUP'S VIEW ("clicked on a fg .. it opened the fg view ..
+  clicked back on an effect .. and I can't get back"): "← Back to <scene>"
+  in a fixture group's layout view; an effect opened from there goes back
+  to that scene first, the effect showing.
+
 ## Truss socks, tower faces, printed patterns, and searching fixtures & groups -- SHIPPED 2026-10-08
 
 - Tower FACES ("faces on the tower .. similar to sock .. for the towers
