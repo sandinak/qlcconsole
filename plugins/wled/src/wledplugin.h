@@ -20,6 +20,7 @@
 
 #include <QJsonObject>
 #include <QMutex>
+#include <QAtomicInt>
 #include <QHash>
 
 #include "qlcioplugin.h"
@@ -132,6 +133,7 @@ private:
     void send(quint32 universe);
     void setAnswered(Target &t, bool answered);
     void problemsMaybeChanged();
+    QAtomicInt m_problemsCheckPending;     ///< 1 = a check is queued already
 
     QNetworkAccessManager *m_nam = nullptr;
     QTimer *m_sendTimer = nullptr;

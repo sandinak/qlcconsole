@@ -468,7 +468,8 @@ public:
     /**
      * Targets this plugin is sending to that are in trouble, one line each
      * ("192.168.1.40 — not answering"), for the footer's "Not ready" list.
-     * A plugin that can tell emits configurationChanged() when this changes.
+     * A plugin that can tell emits targetProblemsChanged() when this changes
+     * -- never configurationChanged(), which reconnects every output.
      * Default: none.
      */
     virtual QStringList targetProblems() const { return QStringList(); }
@@ -596,6 +597,10 @@ signals:
      * re-read the plugin's current configuration.
      */
     void configurationChanged();
+
+    /** targetProblems() has changed: the footer reads it again. Nothing is
+     *  reconnected -- a device going quiet is not a new configuration. */
+    void targetProblemsChanged();
 
     /** A device on @p universe has said what its LEDs are showing
      *  (targetPixels()). */

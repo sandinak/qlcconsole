@@ -15,6 +15,9 @@
 #include <QTcpSocket>
 #include <QPointer>
 #include <QtTest>
+#include <QNetworkRequest>
+#include <QNetworkReply>
+#include <QNetworkAccessManager>
 
 #include "wled_test.h"
 #include "wledplugin.h"
@@ -187,16 +190,28 @@ void Wled_Test::aWeakOrSilentLanternIsAProblem()
     QVERIFY(plugin.openOutput(0, 3));
     const QString ip = QString("127.0.0.1:%1").arg(wled.serverPort());
     plugin.setParameter(3, 0, QLCIOPlugin::Output, WLED_OUTPUTIP, ip);
-    QSignalSpy changed(&plugin, &QLCIOPlugin::configurationChanged);
+    QSignalSpy changed(&plugin, &QLCIOPlugin::targetProblemsChanged);
+    QSignalSpy reconfigured(&plugin, &QLCIOPlugin::configurationChanged);
 
     QTRY_VERIFY(plugin.targetProblems().join(";").contains("weak Wi-Fi (-82 dBm)"));
-    QVERIFY(changed.count() >= 1);
+    QTRY_VERIFY(changed.count() >= 1);
     QVERIFY(plugin.outputInfo(0).contains("Lantern SL"));
 
     // Gone: not answering.
     wled.powerOff();
     plugin.writeUniverse(3, 0, universe({ 255, 1 }), true);
     QTRY_VERIFY_WITH_TIMEOUT(plugin.targetProblems().join(";").contains(ip + " — not answering"), 8000);
+
+    /* "patched the lanterns and the app appears hung": a problem is never a
+       configurationChanged() -- that reconnects every output under
+       InputOutputMap's lock, and closing an output came straight back here.
+       Closing one says nothing there and then, either. */
+    QCOMPARE(reconfigured.count(), 0);
+    const int before = changed.count();
+    plugin.closeOutput(0, 3);
+    QCOMPARE(changed.count(), before);                  // not from inside the close
+    QTRY_VERIFY(changed.count() == before + 1);         // afterwards
+    QCOMPARE(reconfigured.count(), 0);
 }
 
 /* The rig view asks what a lantern is SHOWING -- its effect worked out on
@@ -257,3 +272,69 @@ void Wled_Test::aWatchedLanternSaysWhatItsLedsShow()
 }
 
 QTEST_MAIN(Wled_Test)
+
+namespace
+{
+QJsonObject httpJson(QNetworkAccessManager &nam, const QString &url,
+                     const QByteArray &post = QByteArray())
+{
+    QNetworkRequest req{ QUrl(url) };
+    req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    req.setTransferTimeout(4000);
+    QNetworkReply *r = post.isEmpty() ? nam.get(req) : nam.post(req, post);
+    QSignalSpy done(r, &QNetworkReply::finished);
+    done.wait(5000);
+    const QJsonObject o = QJsonDocument::fromJson(r->readAll()).object();
+    r->deleteLater();
+    return o;
+}
+}
+
+void Wled_Test::aRealLanternShowsTheLook()
+{
+    const QString ip = qEnvironmentVariable("WLED_REAL_IP");
+    if (ip.isEmpty())
+        QSKIP("set WLED_REAL_IP to run against a real WLED");
+
+    QNetworkAccessManager nam;
+    const QJsonObject before = httpJson(nam, QString("http://%1/json/state").arg(ip));
+    QVERIFY2(!before.isEmpty(), "the device did not answer /json/state");
+
+    WledPlugin plugin;
+    plugin.init();
+    plugin.setSendInterval(40);
+    plugin.setInfoInterval(200);
+    QVERIFY(plugin.openOutput(0, 5));
+    plugin.setParameter(5, 0, QLCIOPlugin::Output, WLED_OUTPUTIP, ip);
+    plugin.setParameter(5, 0, QLCIOPlugin::Output, WLED_ADDRESS, 1);
+    plugin.setParameter(5, 0, QLCIOPlugin::Output, WLED_CHANNELS, 15);
+
+    // Dim red, solid: brightness 64, effect 0, colour 1 = 255,0,0.
+    plugin.writeUniverse(5, 0, universe({ 64, 0, 128, 128, 0, 0, 255, 0, 0, 0, 0, 0, 0, 0, 0 }), true);
+    QJsonObject now;
+    QTRY_VERIFY_WITH_TIMEOUT((now = httpJson(nam, QString("http://%1/json/state").arg(ip)),
+                              now.value("bri").toInt() == 64), 6000);
+    const QJsonObject seg = now.value("seg").toArray().at(0).toObject();
+    QCOMPARE(now.value("on").toBool(), true);
+    QCOMPARE(seg.value("fx").toInt(), 0);
+    const QJsonArray col = seg.value("col").toArray().at(0).toArray();
+    QCOMPARE(col.at(0).toInt(), 255);
+    QCOMPARE(col.at(1).toInt(), 0);
+    QCOMPARE(col.at(2).toInt(), 0);
+
+    // It answers, on usable Wi-Fi: not a problem.
+    QTRY_VERIFY_WITH_TIMEOUT(plugin.outputInfo(0).contains("WLED "), 6000);
+    QVERIFY2(plugin.targetProblems().isEmpty(), qPrintable(plugin.targetProblems().join("; ")));
+
+    // Closing the output (as a reconnect does) says nothing from inside it.
+    QSignalSpy reconfigured(&plugin, &QLCIOPlugin::configurationChanged);
+    plugin.closeOutput(0, 5);
+    QCOMPARE(reconfigured.count(), 0);
+
+    // As it was.
+    QJsonObject restore;
+    restore["on"] = before.value("on");
+    restore["bri"] = before.value("bri");
+    restore["seg"] = before.value("seg");
+    httpJson(nam, QString("http://%1/json/state").arg(ip), QJsonDocument(restore).toJson());
+}

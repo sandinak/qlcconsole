@@ -1058,7 +1058,7 @@ void App::initDoc()
     // WLED devices that stop answering, or fade to a weak signal: the footer.
     if (QLCIOPlugin *wled = m_doc->ioPluginCache()->plugin(QStringLiteral("WLED")))
         if (QTimer *t = findChild<QTimer *>(QStringLiteral("fixtureReadinessTimer")))
-            connect(wled, &QLCIOPlugin::configurationChanged, t, QOverload<>::of(&QTimer::start));
+            connect(wled, &QLCIOPlugin::targetProblemsChanged, t, QOverload<>::of(&QTimer::start));
 
     /* Load audio decoder plugins
      * This doesn't use a AudioPluginCache::systemPluginDirectory() cause

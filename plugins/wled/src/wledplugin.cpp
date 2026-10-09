@@ -420,10 +420,22 @@ QStringList WledPlugin::targetProblems() const
 
 void WledPlugin::problemsMaybeChanged()
 {
-    const QStringList now = targetProblems();
-    if (now != m_lastProblems)
-    {
-        m_lastProblems = now;
-        emit configurationChanged();
-    }
+    /* Said afterwards, once, and as targetProblemsChanged() only. It was
+       configurationChanged(), straight from inside closeOutput(): that
+       reconnects every output, under InputOutputMap's lock -- and closing a
+       WLED output called back in here, so the second reconnect waited on the
+       lock the first was holding, and the app hung ("patched the lanterns
+       and the app appears hung"). A lantern going quiet is not a new
+       configuration, and nothing needs reconnecting for it. */
+    if (!m_problemsCheckPending.testAndSetOrdered(0, 1))
+        return;
+    QMetaObject::invokeMethod(this, [this]() {
+        m_problemsCheckPending.storeRelease(0);
+        const QStringList now = targetProblems();
+        if (now != m_lastProblems)
+        {
+            m_lastProblems = now;
+            emit targetProblemsChanged();
+        }
+    }, Qt::QueuedConnection);
 }
