@@ -401,9 +401,12 @@ What makes the light and what it's seen through are set per fixture, in
 the structure editor's inspector and in **Fixture Properties**:
 
 - **Light** — **Point source** (one glow), **Hanging LED cluster** (a wire
-  string let fall through the cage — more spread out), or **LED tape**
-  (wound tight round a core — less spread out), with an **LEDs** count for
-  the LED kinds.
+  string let fall through the cage — more spread out), **LED tape**
+  (wound tight round a core — less spread out), or **LEDs on the lens face**
+  (a wash's array behind its lenses — a 36 × 18 W mover shows its 36 there,
+  lit in the beam's colour, dark when it is out), with an **LEDs** count for
+  the LED kinds. The fixture definition sets it (Fixture Editor → Look in
+  the rig view → Source); a fixture can say otherwise for its own build.
 - **Glass** — **Diffuse** (the default: each pane glows from the LEDs
   nearest it, the LEDs a blur behind, frosted when dark) or **Clear** (each
   LED shows as a bead in its own colour).

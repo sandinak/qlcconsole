@@ -66,7 +66,7 @@ public:
      *  since the last load(). */
     void store(const Fixture *fx, FixtureRigProps &rp) const;
 
-    enum Kind { PointSource = 0, HangingCluster, LedTape };
+    enum Kind { PointSource = 0, HangingCluster, LedTape, FaceArray };
 
 signals:
     /** The user changed something. */

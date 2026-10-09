@@ -149,6 +149,9 @@ private slots:
      *  center should move down so that it covers more of the target w/o too
      *  much top overwash". */
     void aWiderFollowSpotAimsLowerOnThePerson();
+    /** "moving head washes .. 36x18w .. I need to be able to set that":
+     *  LEDs on the lens face, drawn there in the beam's colour. */
+    void aWashShowsItsLedsOnItsFace();
     void hangersAreRiggingCopiedToEveryTower();
     void theSplitWizardOffersAViewAndKeepsAnExistingGroup();
     /** "I can't click on any side arrow to open any of the groups": an

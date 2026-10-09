@@ -308,12 +308,14 @@ QString QLCPhysical::dmxConnector() const
 
 QString QLCPhysical::ledLayoutToString(LedLayout layout)
 {
-    return layout == TapeLeds ? QStringLiteral("Tape") : QStringLiteral("Cluster");
+    return layout == TapeLeds ? QStringLiteral("Tape")
+         : layout == FaceLeds ? QStringLiteral("Face") : QStringLiteral("Cluster");
 }
 
 QLCPhysical::LedLayout QLCPhysical::stringToLedLayout(const QString &str)
 {
-    return str == QLatin1String("Tape") ? TapeLeds : ClusterLeds;
+    return str == QLatin1String("Tape") ? TapeLeds
+         : str == QLatin1String("Face") ? FaceLeds : ClusterLeds;
 }
 
 bool QLCPhysical::loadXML(QXmlStreamReader &doc)

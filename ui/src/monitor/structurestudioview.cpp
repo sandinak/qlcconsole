@@ -3628,6 +3628,41 @@ void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
             headMid += beam * float(h * 0.12);
             box(headMid, slice * 0.26, h * 0.26, d * 0.26, side, beam, up);
 
+            /* A wash's LEDs on its face ("36x18w .. I need to be able to set
+               that"): the array behind its lenses, each a point of the beam's
+               colour while it is lit, dark glass when it is not. Packed in a
+               sunflower spiral -- even for any count, the same every frame --
+               and shared out between the heads of a multi-head fixture. */
+            int layout = QLCPhysical::ClusterLeds;
+            const int faceLeds = RigHeads::lightLeds(m_doc, fid, 0, &layout);
+            if (faceLeds > 0 && layout == QLCPhysical::FaceLeds)
+            {
+                const int perHead = qMax(1, faceLeds / units);
+                const QVector3D face = headMid + beam * float(h * 0.26);
+                const double radius = qMin(slice, d) * 0.26 * 0.9;
+                const double pitch = radius * qSqrt(M_PI / perHead);
+                QColor led(46, 46, 50);
+                if (look.beamLevel > 0.01)
+                {
+                    const QColor lc = look.beamColour.isValid() ? look.beamColour : col;
+                    const double k = qBound(0.0, look.beamLevel, 1.0);
+                    led = QColor::fromRgbF(float(0.18 + (lc.redF() - 0.18) * k),
+                                           float(0.18 + (lc.greenF() - 0.18) * k),
+                                           float(0.20 + (lc.blueF() - 0.20) * k));
+                }
+                QVector<QPointF> dots;
+                dots.reserve(perHead);
+                for (int i = 0; i < perHead; ++i)
+                {
+                    const double rr = radius * qSqrt((i + 0.5) / perHead);
+                    const double a = i * 2.399963;
+                    dots << w2s(face + side * float(rr * qCos(a)) + up * float(rr * qSin(a)));
+                }
+                // Just in front of the face it sits on; behind the head when
+                // the face is turned away.
+                emitDots(dots, viewDepth(face) + 0.003, qMax(0.8, pitch * 0.36 * m_scale), led, p);
+            }
+
             // A stub of beam, so the direction reads at overview scale where the
             // head itself is only a few pixels across. Kept even when the full
             // cone is drawn: it is what makes an UNLIT head's aim readable.
@@ -4908,7 +4943,8 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                is the opposite question. A head pointed away from you is
                precisely when its beam is most worth drawing. */
             double beamLevel = 0.0;
-            if (showingOutput && m_beams)
+            // Read with beams off too: the LEDs on a wash's face still light.
+            if (showingOutput)
             {
                 for (int u = 0; u < units; ++u)
                 {

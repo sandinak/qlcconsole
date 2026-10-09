@@ -34,6 +34,7 @@ LightControls::LightControls(QWidget *parent)
     m_kind->addItem(QString(), int(PointSource));
     m_kind->addItem(QString(), int(HangingCluster));
     m_kind->addItem(QString(), int(LedTape));
+    m_kind->addItem(QString(), int(FaceArray));
     m_kind->setToolTip(tr("What makes its light. A point source is one glow; a hanging "
                           "LED cluster is a wire string let fall through the cage; LED "
                           "tape is wound tight round a core in the middle. With LEDs, "
@@ -149,19 +150,23 @@ void LightControls::load(Doc *doc, const Fixture *fx)
     m_count->setSpecialValueText(QString());
     m_count->setMinimum(1);
     const QLCPhysical &ph = fx->fixtureMode()->physical();
-    const int defKind = ph.leds() <= 0 ? PointSource
-                      : ph.ledLayout() == QLCPhysical::TapeLeds ? LedTape : HangingCluster;
+    auto kindOf = [](int leds, int layout) {
+        return leds <= 0 ? PointSource
+             : layout == QLCPhysical::TapeLeds ? LedTape
+             : layout == QLCPhysical::FaceLeds ? FaceArray : HangingCluster;
+    };
+    const int defKind = kindOf(ph.leds(), ph.ledLayout());
     const QString defined = tr(" (as defined)");
     m_kind->setItemText(PointSource,    tr("Point source") + (defKind == PointSource ? defined : QString()));
     m_kind->setItemText(HangingCluster, tr("Hanging LED cluster") + (defKind == HangingCluster ? defined : QString()));
     m_kind->setItemText(LedTape,        tr("LED tape") + (defKind == LedTape ? defined : QString()));
+    m_kind->setItemText(FaceArray,      tr("LEDs on the lens face") + (defKind == FaceArray ? defined : QString()));
     m_glass->setItemText(0, tr("Diffuse") + (!ph.clearGlass() ? defined : QString()));
     m_glass->setItemText(1, tr("Clear") + (ph.clearGlass() ? defined : QString()));
 
     int layout = QLCPhysical::ClusterLeds;
     const int leds = RigHeads::lightLeds(doc, fx->id(), 0, &layout);
-    m_kind->setCurrentIndex(leds <= 0 ? PointSource
-                            : layout == QLCPhysical::TapeLeds ? LedTape : HangingCluster);
+    m_kind->setCurrentIndex(kindOf(leds, layout));
     m_count->setValue(leds > 0 ? leds : (ph.leds() > 0 ? ph.leds() : 16));
     m_count->setVisible(leds > 0);
     m_glass->setCurrentIndex(RigHeads::clearGlass(doc, fx->id()) ? 1 : 0);
@@ -187,7 +192,9 @@ void LightControls::store(const Fixture *fx, FixtureRigProps &rp) const
             count = rp.lightLeds > 0 ? rp.lightLeds : (ph.leds() > 0 ? ph.leds() : 16);
         // The definition's count is left to it: a WLED's own count can win.
         rp.lightLeds = (ph.leds() > 0 && count == ph.leds()) ? -1 : count;
-        const int layout = (kind == LedTape) ? int(QLCPhysical::TapeLeds) : int(QLCPhysical::ClusterLeds);
+        const int layout = (kind == LedTape) ? int(QLCPhysical::TapeLeds)
+                         : (kind == FaceArray) ? int(QLCPhysical::FaceLeds)
+                                               : int(QLCPhysical::ClusterLeds);
         rp.lightLayout = (ph.leds() > 0 && layout == int(ph.ledLayout())) ? -1 : layout;
     }
     if (!m_glassSet || m_glass->currentData().toInt() < 0)

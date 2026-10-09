@@ -179,7 +179,10 @@ public:
     /** How the LEDs sit in the body, the first at the top: a hanging cluster
      *  (a wire string spread through the cage) or LED tape (wound tight
      *  round a core in the middle). */
-    enum LedLayout { ClusterLeds = 0, TapeLeds };
+    /** How a fixture's LEDs sit: a wire string let fall through a lantern's
+     *  cage, tape wound round a core, or an array on the lens face (a wash's
+     *  36 x 18 W behind its lenses). */
+    enum LedLayout { ClusterLeds = 0, TapeLeds, FaceLeds };
     void setLedLayout(LedLayout layout) { m_ledLayout = layout; }
     LedLayout ledLayout() const { return m_ledLayout; }
     static QString ledLayoutToString(LedLayout layout);

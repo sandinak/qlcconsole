@@ -17454,3 +17454,78 @@ void Monitor_Test::aWiderFollowSpotAimsLowerOnThePerson()
              props->targetAimPoint(person, false));
     delete doc;
 }
+
+void Monitor_Test::aWashShowsItsLedsOnItsFace()
+{
+    QCOMPARE(QLCPhysical::stringToLedLayout(QLCPhysical::ledLayoutToString(QLCPhysical::FaceLeds)),
+             QLCPhysical::FaceLeds);
+
+    Doc *doc = new Doc(this);
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Wash 36x18");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("6ch");
+    const QList<QPair<QString, QLCChannel::Preset> > chans = {
+        { "Pan", QLCChannel::PositionPan }, { "Tilt", QLCChannel::PositionTilt },
+        { "Dimmer", QLCChannel::IntensityDimmer }, { "Red", QLCChannel::IntensityRed },
+        { "Green", QLCChannel::IntensityGreen }, { "Blue", QLCChannel::IntensityBlue } };
+    QLCFixtureHead hd;
+    for (int i = 0; i < chans.size(); ++i)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(chans.at(i).first);
+        ch->setPreset(chans.at(i).second);
+        def->addChannel(ch);
+        mode->insertChannel(ch, i);
+        hd.addChannel(quint32(i));
+    }
+    mode->insertHead(-1, hd);
+    auto setLeds = [&](QLCPhysical::LedLayout layout) {
+        QLCPhysical ph;
+        ph.setWidth(400); ph.setHeight(500); ph.setDepth(400);
+        ph.setFocusPanMax(540); ph.setFocusTiltMax(270);
+        ph.setLensDegreesMin(25); ph.setLensDegreesMax(25);
+        ph.setLeds(36);
+        ph.setLedLayout(layout);
+        mode->setPhysical(ph);
+    };
+    setLeds(QLCPhysical::FaceLeds);
+    def->addMode(mode);
+    Fixture *wash = new Fixture(doc);
+    wash->setName("Wash"); wash->setFixtureDefinition(def, mode);
+    QVERIFY(doc->addFixture(wash));
+    doc->monitorProperties()->setFixturePosition(wash->id(), 0, 0, QVector3D(3000.0f, 3000.0f, 3.0f));
+    QByteArray u(512, char(0));
+    u[0] = char(128); u[1] = char(200);                  // the face turned toward the camera
+    u[2] = char(255); u[3] = char(255);                  // full, red
+    wash->setChannelValues(u);
+    {
+        StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+        v.resize(800, 620);
+        v.reload();
+        v.setPlane(StructureStudioView::Angled);
+        v.setAngledView(15.0, 20.0);
+        v.setLiveValues(true);
+        v.setBeams(false);                                // only the LEDs are red
+        auto redPixels = [&v]() {
+            const QImage img = v.grab().toImage();
+            int n = 0;
+            for (int y = 0; y < img.height(); ++y)
+                for (int x = 0; x < img.width(); ++x)
+                {
+                    const QColor c = img.pixelColor(x, y);
+                    if (c.red() > 120 && c.red() > c.green() * 2 && c.red() > c.blue() * 2)
+                        ++n;
+                }
+            return n;
+        };
+        const int onFace = redPixels();
+        setLeds(QLCPhysical::ClusterLeds);
+        v.reload();
+        const int cluster = redPixels();
+        QVERIFY2(onFace > 40 && onFace > cluster * 4 + 20,
+                 qPrintable(QString("LEDs on the face lit %1 red px, a cluster %2").arg(onFace).arg(cluster)));
+    }
+    delete doc;
+}

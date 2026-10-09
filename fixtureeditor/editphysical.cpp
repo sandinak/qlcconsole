@@ -91,9 +91,12 @@ EditPhysical::EditPhysical(QLCPhysical physical, QWidget *parent)
     m_ledLayoutCombo = new QComboBox(ledsBox);
     m_ledLayoutCombo->addItem(tr("Hanging LED cluster"), int(QLCPhysical::ClusterLeds));
     m_ledLayoutCombo->addItem(tr("LED tape"),            int(QLCPhysical::TapeLeds));
+    m_ledLayoutCombo->addItem(tr("On the lens face"),    int(QLCPhysical::FaceLeds));
     m_ledLayoutCombo->setCurrentIndex(qMax(0, m_ledLayoutCombo->findData(int(m_physical.ledLayout()))));
     m_ledLayoutCombo->setToolTip(tr("How the LEDs sit in the body: a wire string let fall "
-                                    "through the cage, or tape wound tight round a core"));
+                                    "through the cage, tape wound tight round a core, or an "
+                                    "array on the lens face -- a wash's 36 x 18 W behind its "
+                                    "lenses"));
     m_ledLayoutCombo->setEnabled(m_physical.leds() > 0);
     connect(m_ledsSpin, QOverload<int>::of(&QSpinBox::valueChanged), m_ledLayoutCombo,
             [this](int n) { m_ledLayoutCombo->setEnabled(n > 0); });
