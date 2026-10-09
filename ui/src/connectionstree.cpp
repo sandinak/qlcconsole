@@ -23,6 +23,8 @@
 #include <QTimer>
 #include <QElapsedTimer>
 #include <QCheckBox>
+#include <QSettings>
+#include <QScrollBar>
 #include <QPushButton>
 #include <QHBoxLayout>
 #include <QApplication>
@@ -164,7 +166,24 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     m_undo->setEnabled(false);
     connect(m_undo, SIGNAL(clicked()), this, SLOT(slotUndoPatch()));
 
+    /* "why is there no patched folder in the connections view?" -- the tree
+       is rooted at outputs, so a patched universe is only ever under its
+       output. This lists them all, in number order, each saying where it
+       goes. */
+    m_byUniverse = new QCheckBox(tr("By universe"), this);
+    m_byUniverse->setObjectName(QStringLiteral("connectionsByUniverse"));
+    m_byUniverse->setToolTip(tr("Every universe in number order, with where each goes and what "
+                                "it carries -- rather than the wiring, output by output"));
+    m_byUniverse->setChecked(QSettings().value(QStringLiteral("connections/byUniverse"), false).toBool());
+    connect(m_byUniverse, &QCheckBox::toggled, this, [this](bool on) {
+        QSettings().setValue(QStringLiteral("connections/byUniverse"), on);
+        m_showUnused->setEnabled(!on);
+        refresh();
+    });
+    m_showUnused->setEnabled(!m_byUniverse->isChecked());
+
     QHBoxLayout *bar = new QHBoxLayout;
+    bar->addWidget(m_byUniverse);
     bar->addWidget(m_showUnused);
     bar->addStretch(1);
     bar->addWidget(m_undo);
@@ -547,6 +566,13 @@ void ConnectionsTree::refresh()
     if (focus != NULL && focus != m_tree && focus != m_tree->viewport()
             && m_tree->isAncestorOf(focus))
         return;
+
+    if (m_byUniverse != NULL && m_byUniverse->isChecked())
+    {
+        buildUniverseList();
+        return;
+    }
+    m_tree->setRootIsDecorated(true);           // the wiring is a tree
 
     /* Remember which branches are OPEN, keyed by full path, so the rebuild
        every five seconds restores exactly what was on screen.
@@ -4229,4 +4255,96 @@ void ConnectionsTree::slotItemChanged(QTreeWidgetItem *item, int column)
     iomap->setTargetAlias(addr, name);
     m_doc->setModified();
     refresh();
+}
+
+void ConnectionsTree::buildUniverseList()
+{
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    if (iomap == NULL)
+        return;
+
+    // Kept across the rebuild every few seconds: where you were, what you had.
+    const int scroll = m_tree->verticalScrollBar()->value();
+    QSet<quint32> selected;
+    foreach (QTreeWidgetItem *it, m_tree->selectedItems())
+        selected.insert(it->data(COL_NAME, ROLE_UNIVERSE).toUInt());
+
+    m_rebuilding = true;
+    m_tree->clear();
+    m_tree->setRootIsDecorated(false);
+
+    /* Where an output leg goes, in words: the protocol, and the device by its
+       name where it has one ("Art-Net → CS1 (172.18.2.211) port 1"). */
+    auto legText = [iomap](OutputPatch *op) {
+        const QString plugin = op->plugin() != NULL ? op->plugin()->name() : op->pluginName();
+        const QMap<QString, QVariant> pp = op->getPluginParameters();
+        const QString ip = pp.value(QStringLiteral("outputIP")).toString();
+        QString where;
+        if (!ip.isEmpty())
+        {
+            const QString alias = iomap->targetAlias(ip);
+            where = alias.isEmpty() ? ip : QStringLiteral("%1 (%2)").arg(alias, ip);
+            if (pp.contains(QStringLiteral("outputUni")))
+                where += QObject::tr(" port %1").arg(pp.value(QStringLiteral("outputUni")).toInt() + 1);
+        }
+        else
+        {
+            where = op->outputName();
+        }
+        return where.isEmpty() ? plugin : QStringLiteral("%1 → %2").arg(plugin, where);
+    };
+
+    foreach (Universe *u, iomap->universes())
+    {
+        if (u == NULL)
+            continue;
+        QTreeWidgetItem *item = new QTreeWidgetItem(m_tree);
+        item->setFlags(item->flags() | Qt::ItemIsEditable);       // rename inline
+        item->setText(COL_NAME, tr("%1: %2").arg(u->id() + 1).arg(u->name()));
+        item->setData(COL_NAME, ROLE_UNIVERSE, u->id());
+
+        QStringList legs;
+        OutputPatch *first = NULL;
+        for (int i = 0; i < u->outputPatchesCount(); ++i)
+        {
+            OutputPatch *op = u->outputPatch(i);
+            if (op == NULL)
+                continue;
+            if (first == NULL)
+                first = op;
+            legs << legText(op);
+        }
+        QStringList detail = legs;
+        if (InputPatch *ip = u->inputPatch())
+            detail << tr("in: %1").arg(ip->pluginName());
+        item->setText(COL_DETAIL, detail.isEmpty() ? tr("not patched") : detail.join(QStringLiteral(" · ")));
+        if (legs.size() > 1)
+            setRowTooltip(item, tr("<b>%1</b> goes out %2 ways:<br>%3")
+                                    .arg(u->name().toHtmlEscaped()).arg(legs.size())
+                                    .arg(legs.join(QStringLiteral("<br>")).toHtmlEscaped()));
+
+        /* The same actions as in the wiring view: a patched one is its (first)
+           output leg's universe row, an unpatched one the Unpatched folder's. */
+        if (first != NULL && first->plugin() != NULL)
+        {
+            item->setData(COL_NAME, ROLE_KIND, KIND_UNIVERSE);
+            item->setData(COL_NAME, ROLE_PLUGIN, first->plugin()->name());
+            item->setData(COL_NAME, ROLE_LINE, first->output());
+            item->setData(COL_NAME, ROLE_OUTPUT, true);
+        }
+        else
+        {
+            item->setData(COL_NAME, ROLE_KIND, KIND_UNPATCHED_UNIVERSE);
+            item->setForeground(COL_DETAIL, QBrush(QColor(138, 142, 153)));
+        }
+        setCarriesFixtures(item, u->id());
+        if (selected.contains(u->id()))
+            item->setSelected(true);
+    }
+
+    m_rebuilding = false;
+    m_populatedOnce = true;
+    m_tree->verticalScrollBar()->setValue(scroll);
+    if (m_status != NULL)
+        m_status->hide();
 }

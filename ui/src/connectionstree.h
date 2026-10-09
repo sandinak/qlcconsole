@@ -243,6 +243,12 @@ private:
 private:
     Doc *m_doc;
     QCheckBox *m_showUnused;
+    /** "By universe": every universe in number order, each with where it
+     *  goes, instead of the wiring tree (which has no place for a patched
+     *  universe except under its output). */
+    QCheckBox *m_byUniverse = nullptr;
+    /** Build the "By universe" list (refresh() does, when it is on). */
+    void buildUniverseList();
     class QPushButton *m_rescan;
     class QPushButton *m_undo;
     class QLabel *m_status;

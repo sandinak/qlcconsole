@@ -12,6 +12,14 @@ answers "how is this console actually wired," following the signal outward:
 Three sub-tabs — **Devices** (shown above), **Overview**, and **Detailed** —
 give the same information at different levels of depth.
 
+Because Devices follows the wiring, a patched universe appears only under
+the output it goes to, and only unpatched ones gather in their own
+**Unpatched** folder. Tick **By universe** for the other way round: every
+universe in number order, each with where it goes ("Art-Net → CS1
+(172.18.2.211) port 1", "WLED → 172.18.2.55", or "not patched") and what it
+carries — same right-click actions, renamed inline the same way. The choice
+is remembered.
+
 Right-click an interface to patch a universe to it or configure the
 protocol; right-click a universe to rename it, set its feedback line or
 input profile, unpatch it, or delete it. A full patch-change **undo**

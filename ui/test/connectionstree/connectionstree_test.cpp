@@ -1000,3 +1000,36 @@ void ConnectionsTree_Test::deviceRowCarriesItsPropertiesAsATooltip()
 }
 
 QTEST_MAIN(ConnectionsTree_Test)
+
+void ConnectionsTree_Test::byUniverseListsEveryUniverseWithWhereItGoes()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setOutputPatch(0, stub->name(), "", 0, false, 0) == true);
+    iom->setUniverseName(0, "U01-CS1");
+    iom->setTargetAlias("172.18.2.211", "CS1");
+
+    ConnectionsTree tree(m_doc);
+    QVERIFY(tree.applyTarget(0, stub->name(), 0, "172.18.2.211", 0) == true);
+    tree.m_byUniverse->setChecked(true);
+
+    // Every universe, in number order -- patched or not.
+    QCOMPARE(tree.m_tree->topLevelItemCount(), int(iom->universesCount()));
+    QTreeWidgetItem *first = tree.m_tree->topLevelItem(0);
+    QCOMPARE(first->text(COL_NAME), QString("1: U01-CS1"));
+    QVERIFY2(first->text(COL_DETAIL).contains("CS1 (172.18.2.211)"), qPrintable(first->text(COL_DETAIL)));
+    QCOMPARE(first->data(COL_NAME, ROLE_KIND).toInt(), KIND_UNIVERSE);   // the wiring view's actions
+    QCOMPARE(first->data(COL_NAME, ROLE_PLUGIN).toString(), stub->name());
+    QTreeWidgetItem *second = tree.m_tree->topLevelItem(1);
+    QCOMPARE(second->text(COL_DETAIL), QString("not patched"));
+    QCOMPARE(second->data(COL_NAME, ROLE_KIND).toInt(), 6);              // KIND_UNPATCHED_UNIVERSE
+
+    // Renamed inline, as in the wiring view.
+    second->setText(COL_NAME, "2: Spare");
+    QCOMPARE(iom->getUniverseNameByID(1), QString("Spare"));
+
+    // Back to the wiring: a tree again.
+    tree.m_byUniverse->setChecked(false);
+    QVERIFY(tree.m_tree->rootIsDecorated());
+    QVERIFY(!itemsOfKind(tree.m_tree, KIND_PLUGIN).isEmpty());
+}

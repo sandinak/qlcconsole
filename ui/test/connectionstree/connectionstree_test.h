@@ -95,6 +95,9 @@ private slots:
     /* Tooltip rendering */
     void propertyTooltipRendersPairs();
     void deviceRowCarriesItsPropertiesAsATooltip();
+    /** "why is there no patched folder in the connections view?" -- By
+     *  universe: all of them, in order, each saying where it goes. */
+    void byUniverseListsEveryUniverseWithWhereItGoes();
 
 private:
     Doc *m_doc;
