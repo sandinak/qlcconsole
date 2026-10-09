@@ -25,6 +25,7 @@
 
 class Doc;
 class Scene;
+class StageTarget;
 
 /** @addtogroup engine Engine
  * @{
@@ -101,6 +102,13 @@ namespace AimSolver
     /** The same, keeping how much reach is left. False as aimDegrees(). */
     bool reach(Doc *doc, quint32 fixtureId, const QVector3D &targetWorld,
                Solution &solution);
+
+    /** Where head @p fixtureId should point for target @p target: the shared
+     *  rule (MonitorProperties::targetAimPointFor()) with this head's place
+     *  and its beam as wide as its zoom and iris have it now -- a wider beam
+     *  following a person aims lower, so it covers them without top wash. */
+    QVector3D aimPointFor(Doc *doc, quint32 fixtureId, const StageTarget *target,
+                          bool subjectMode);
 
     /** True if @p scene carries a follow-spot effect, which is what makes an
      *  Aim look in it track a SUBJECT (chest height above the deck) rather

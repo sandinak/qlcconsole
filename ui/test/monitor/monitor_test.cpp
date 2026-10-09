@@ -46,6 +46,7 @@
 #define protected public
 #define private public
 #include "monitor.h"
+#include "righeads.h"
 #include "colourswatchbutton.h"
 #include "headtypesdialog.h"
 #include "stagegroupdialog.h"
@@ -17359,5 +17360,97 @@ void Monitor_Test::theCrosshairsSayWhereThePointerIs()
         QCOMPARE(known, 1 | 4);
         QVERIFY(qAbs(w.z() - (0.610f + 1.626f + 0.15f)) < 0.03f);
     }
+    delete doc;
+}
+
+void Monitor_Test::aWiderFollowSpotAimsLowerOnThePerson()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    // A spot with a zoom (4..40 degrees) and an iris, hung 4 m up, 4 m downstage.
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Followspot");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("5ch");
+    const QList<QPair<QString, QLCChannel::Preset> > chans = {
+        { "Pan", QLCChannel::PositionPan }, { "Tilt", QLCChannel::PositionTilt },
+        { "Dimmer", QLCChannel::IntensityDimmer }, { "Zoom", QLCChannel::BeamZoomSmallBig },
+        { "Iris", QLCChannel::ShutterIrisMinToMax } };
+    QLCFixtureHead hd;
+    for (int i = 0; i < chans.size(); ++i)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(chans.at(i).first);
+        ch->setPreset(chans.at(i).second);
+        def->addChannel(ch);
+        mode->insertChannel(ch, i);
+        hd.addChannel(quint32(i));
+    }
+    QLCPhysical ph;
+    ph.setWidth(300); ph.setHeight(400); ph.setDepth(300);
+    ph.setLensDegreesMin(4.0); ph.setLensDegreesMax(40.0);
+    ph.setFocusPanMax(540); ph.setFocusTiltMax(270);
+    mode->setPhysical(ph);
+    mode->insertHead(-1, hd);
+    def->addMode(mode);
+    Fixture *spot = new Fixture(doc);
+    spot->setName("FOH Spot");
+    spot->setFixtureDefinition(def, mode);
+    spot->setAddress(0);
+    QVERIFY(doc->addFixture(spot));
+
+    Truss *t = props->addTruss();
+    t->setType(Truss::Horizontal);
+    t->setOrigin(QVector3D(4.0f, 8.0f, 4.0f));           // downstage of the person
+    t->setDirection(QPointF(1.0, 0.0));
+    t->setLength(2.0f);
+    FixtureRigProps rp;
+    rp.trussId = t->id();
+    rp.trussOffset = 1.0f;
+    props->setFixtureRigProps(spot->id(), rp);
+
+    StageTarget *person = props->addStageTarget();
+    person->setKind(StageTarget::Kind::Person);
+    person->setPersonHeight(1.626f);                       // 5'4", on the floor
+    person->setX(5.0f); person->setY(4.0f); person->setZ(0.0f);
+
+    auto set = [spot](int zoom, int iris) {
+        QByteArray v(512, char(0));
+        v[3] = char(zoom);
+        v[4] = char(iris);
+        spot->setChannelValues(v);
+    };
+
+    // The beam: the zoom's lens, narrowed by the iris.
+    set(255, 255);
+    QVERIFY(qAbs(RigHeads::beamAngle(spot, spot->channelValues()) - 40.0) < 0.2);
+    set(255, 128);
+    const double irised = RigHeads::beamAngle(spot, spot->channelValues());
+    QVERIFY2(irised > 19.0 && irised < 22.0, qPrintable(QString("iris half open: %1").arg(irised)));
+
+    const float chest = 1.626f * 0.8f, waist = 1.626f * 0.5f;
+
+    // Narrow (a 34 cm spot on them): the chest, as before.
+    set(0, 255);
+    const float narrow = AimSolver::aimPointFor(doc, spot->id(), person, true).z();
+    QVERIFY2(qAbs(narrow - chest) < 0.01f, qPrintable(QString("narrow aimed at %1").arg(double(narrow))));
+
+    // Wider: lower -- and the spot's top edge stays just over the head.
+    set(90, 255);
+    const QVector3D mid = AimSolver::aimPointFor(doc, spot->id(), person, true);
+    QVERIFY2(mid.z() < chest - 0.05f && mid.z() > waist,
+             qPrintable(QString("a wider beam aimed at %1").arg(double(mid.z()))));
+    QVERIFY(qAbs(mid.x() - 5.0f) < 0.001f && qAbs(mid.y() - 4.0f) < 0.001f);   // only lower
+
+    // Wide open: no lower than the waist.
+    set(255, 255);
+    const float wide = AimSolver::aimPointFor(doc, spot->id(), person, true).z();
+    QVERIFY2(qAbs(wide - waist) < 0.01f, qPrintable(QString("wide aimed at %1").arg(double(wide))));
+
+    // Not a follow spot: the target's own point, whatever the beam.
+    QCOMPARE(AimSolver::aimPointFor(doc, spot->id(), person, false),
+             props->targetAimPoint(person, false));
     delete doc;
 }

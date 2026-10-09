@@ -55,6 +55,7 @@
 #include "fixturegroup.h"
 #include "function.h"
 #include "zraster.h"
+#include "aimsolver.h"
 #include <QScopedValueRollback>
 #include <array>
 #include <QVarLengthArray>
@@ -3167,9 +3168,10 @@ bool StructureStudioView::aimPointFor(quint32 fid, QVector3D &out) const
     if (t == nullptr)
         return false;
 
-    /* The shared rule -- binding, kind and height all resolved in one place, so
-       this view and QLCPalette cannot drift apart again. */
-    out = props->targetAimPoint(t, it.value().subjectHeight);
+    /* The shared rule -- binding, kind, height and this head's beam all
+       resolved in one place, so this view and QLCPalette cannot drift apart
+       again. */
+    out = AimSolver::aimPointFor(m_doc, fid, t, it.value().subjectHeight);
     return true;
 }
 

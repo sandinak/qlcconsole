@@ -21,6 +21,7 @@
 #include <QDebug>
 
 #include "aimsolver.h"
+#include "righeads.h"
 #include "monitorproperties.h"
 #include "fixturegroup.h"
 #include "stagetarget.h"
@@ -194,6 +195,20 @@ bool AimSolver::aimDegrees(Doc *doc, quint32 fixtureId, const QVector3D &targetW
     return true;
 }
 
+QVector3D AimSolver::aimPointFor(Doc *doc, quint32 fixtureId, const StageTarget *target,
+                                 bool subjectMode)
+{
+    MonitorProperties *mProps = (doc != nullptr) ? doc->monitorProperties() : nullptr;
+    if (mProps == nullptr || target == nullptr)
+        return QVector3D();
+    Frame frame;
+    Fixture *fx = doc->fixture(fixtureId);
+    if (fx == nullptr || !frameFor(doc, fixtureId, frame))
+        return mProps->targetAimPoint(target, subjectMode);
+    return mProps->targetAimPointFor(target, subjectMode, frame.position,
+                                     RigHeads::beamAngle(fx, fx->channelValues()));
+}
+
 bool AimSolver::sceneFollowsSubject(Doc *doc, const Scene *scene)
 {
     if (doc == NULL || scene == NULL)
@@ -242,8 +257,6 @@ QList<AimSolver::SceneAim> AimSolver::sceneAims(Doc *doc, const Scene *scene)
         StageTarget *tgt = mProps->stageTarget(pal->stageTargetId());
         if (tgt == NULL)
             continue;
-        const QVector3D point = mProps->targetAimPoint(tgt, subject);
-
         foreach (quint32 fid, heads)
         {
             Fixture *fxi = doc->fixture(fid);
@@ -252,6 +265,7 @@ QList<AimSolver::SceneAim> AimSolver::sceneAims(Doc *doc, const Scene *scene)
             if (fxi->channelNumber(QLCChannel::Pan,  QLCChannel::MSB) == QLCChannel::invalid()
                 && fxi->channelNumber(QLCChannel::Tilt, QLCChannel::MSB) == QLCChannel::invalid())
                 continue;               // nothing to point
+            const QVector3D point = aimPointFor(doc, fid, tgt, subject);
             SceneAim aim;
             aim.fixtureId = fid;
             aim.targetId = tgt->id();

@@ -145,6 +145,10 @@ private slots:
     /** "can we have the crosshairs hover give H, V, and Z" -- the point under
      *  the pointer, exact in every view, from the depth buffer. */
     void theCrosshairsSayWhereThePointerIs();
+    /** "for followspot .. iris/aperture/zoom .. if we have a wider field the
+     *  center should move down so that it covers more of the target w/o too
+     *  much top overwash". */
+    void aWiderFollowSpotAimsLowerOnThePerson();
     void hangersAreRiggingCopiedToEveryTower();
     void theSplitWizardOffersAViewAndKeepsAnExistingGroup();
     /** "I can't click on any side arrow to open any of the groups": an

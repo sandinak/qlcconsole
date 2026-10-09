@@ -16,6 +16,8 @@
 #include <QVector3D>
 
 class Doc;
+class Fixture;
+class QByteArray;
 struct FixtureRigProps;
 
 /** Where a fixture and each of its heads are on the stage, in world metres.
@@ -62,6 +64,15 @@ namespace RigHeads
      *  than diffusing glass (the default: it glows) -- the fixture's own
      *  setting (FixtureRigProps::lightGlass), else the definition's. */
     bool clearGlass(Doc *doc, quint32 fid);
+
+    /** The full angle of @p fx's beam right now, in degrees, from its channel
+     *  @p values: the lens its zoom channel has it at (the definition's
+     *  narrowest to widest -- which way the channel runs is read, both are
+     *  common), narrowed by an iris as far as it is closed. A fixed lens is its
+     *  one angle; a range with no zoom channel, the widest. 0 = no lens
+     *  declared at all. One rule for the views that draw the beam and the
+     *  follow spot that aims it. */
+    double beamAngle(const Fixture *fx, const QByteArray &values);
 }
 
 #endif

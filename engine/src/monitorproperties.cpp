@@ -1696,6 +1696,33 @@ QVector3D MonitorProperties::targetAimPoint(const StageTarget *t, bool subjectMo
     return p;
 }
 
+QVector3D MonitorProperties::targetAimPointFor(const StageTarget *t, bool subjectMode,
+                                               const QVector3D &from, double beamDeg) const
+{
+    const QVector3D chest = targetAimPoint(t, subjectMode);
+    if (t == nullptr || !subjectMode || t->kind() != StageTarget::Kind::Person || beamDeg <= 0.0)
+        return chest;
+    const double tall = double(targetFigureHeight(t));
+    const double foot = double(chest.z()) - double(targetAimHeight(t, true));
+    const double waist = foot + 0.5 * tall;
+    if (double(chest.z()) <= waist)
+        return chest;                           // aimed low already (an override)
+
+    const QVector3D toSubject = chest - from;
+    const double dist = double(toSubject.length());
+    if (dist < 0.1)
+        return chest;
+    /* The spot's half-height on a standing body: its radius at that throw,
+       stretched by how steeply it comes down onto something upright. */
+    const double radius = dist * qTan(qDegreesToRadians(beamDeg * 0.5));
+    const double level = std::hypot(double(toSubject.x()), double(toSubject.y())) / dist;
+    const double halfHeight = radius / qMax(0.25, level);
+    // Its top edge a little over the head, and no lower than the waist.
+    const double top = foot + tall * 1.05;
+    const double z = qBound(waist, top - halfHeight, double(chest.z()));
+    return QVector3D(chest.x(), chest.y(), float(z));
+}
+
 float MonitorProperties::targetAimHeight(const StageTarget *t, bool subjectMode) const
 {
     if (t == nullptr)

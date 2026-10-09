@@ -966,7 +966,7 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
                 // Follow spot: aim at the SUBJECT's body, not the target's
                 // configured Z — through the shared rule, so a bound target
                 // follows its structure and a Person is aimed at its own height.
-                const QVector3D tgtPos = mp->targetAimPoint(tgt, true);
+                const QVector3D tgtPos = AimSolver::aimPointFor(m_doc, fid, tgt, true);
 
                 // Use the SHARED aim solver — the exact same geometry the Aim
                 // palette uses in Edit — so the beam doesn't jump on Edit→Run.
@@ -1021,7 +1021,11 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
                     // fade a head out before it sticks.
                     // distance: metres from the head to that point, so a script can
                     // size the beam on the subject rather than at the lens.
-                    const QVector3D tp = mp->targetAimPoint(st, true);
+                    // Pointed where its beam covers the subject best; sized
+                    // at the subject itself (its chest), so the size it asks
+                    // the zoom for does not move with the aim it gets.
+                    const QVector3D tp = AimSolver::aimPointFor(m_doc, fid, st, true);
+                    const QVector3D subject = mp->targetAimPoint(st, true);
                     AimSolver::Frame frame;
                     if (AimSolver::frameFor(m_doc, fid, frame))
                     {
@@ -1029,7 +1033,7 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
                         so.setProperty("pan",  double(sol.panDeg));
                         so.setProperty("tilt", double(sol.tiltDeg));
                         so.setProperty("reachMargin", double(sol.marginDeg));
-                        so.setProperty("distance", double((tp - frame.position).length()));
+                        so.setProperty("distance", double((subject - frame.position).length()));
                     }
                     obj.setProperty("sceneTarget", so);
                     break; // first Aim look wins

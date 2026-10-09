@@ -608,6 +608,14 @@ public:
      */
     QVector3D targetAimPoint(const class StageTarget *t, bool subjectMode = false) const;
 
+    /** The point a head at @p from with a beam @p beamDeg wide should aim at,
+     *  for target @p t. A follow spot on a Person: the chest while the beam is
+     *  narrow; as it widens, lower -- so its top edge stays just over the
+     *  head, covering more of them without washing the wall above -- down to
+     *  the waist at most. Anything else: targetAimPoint(). */
+    QVector3D targetAimPointFor(const class StageTarget *t, bool subjectMode,
+                                const QVector3D &from, double beamDeg) const;
+
     /** How far above its footing @p t is aimed. A per-target override wins;
      *  otherwise a Person is aimed at the follow-spot subject height -- the
      *  one setting that says how high a subject's chest is, so changing it

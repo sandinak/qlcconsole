@@ -13,6 +13,7 @@
 
 #include "monitorproperties.h"
 #include "qlcfixturemode.h"
+#include "qlcchannel.h"
 #include "qlcphysical.h"
 #include "headlayout.h"
 #include "righeads.h"
@@ -286,4 +287,56 @@ bool RigHeads::clearGlass(Doc *doc, quint32 fid)
     if (own >= 0)
         return own == 1;
     return fx->fixtureMode() != nullptr && fx->fixtureMode()->physical().clearGlass();
+}
+
+double RigHeads::beamAngle(const Fixture *fx, const QByteArray &values)
+{
+    const QLCFixtureMode *mode = (fx != nullptr) ? fx->fixtureMode() : nullptr;
+    if (mode == nullptr)
+        return 0.0;
+    const QLCPhysical &phys = mode->physical();
+    const double lo = qMin(phys.lensDegreesMin(), phys.lensDegreesMax());
+    const double hi = qMax(phys.lensDegreesMin(), phys.lensDegreesMax());
+    if (hi <= 0.0)
+        return 0.0;                       // no lens declared at all
+
+    double angle = hi;                    // a fixed cone, or no zoom to read
+    double open = 1.0;                    // the iris, fully open
+    const int count = qMin(mode->channels().size(), values.size());
+    for (int c = 0; c < count; ++c)
+    {
+        const QLCChannel *ch = mode->channel(quint32(c));
+        if (ch == nullptr)
+            continue;
+        const double v = uchar(values.at(c)) / 255.0;
+        switch (ch->preset())
+        {
+        case QLCChannel::BeamZoomSmallBig:
+            if (lo > 0.0 && hi - lo >= 0.51)
+                angle = lo + (hi - lo) * v;
+            break;
+        case QLCChannel::BeamZoomBigSmall:
+            if (lo > 0.0 && hi - lo >= 0.51)
+                angle = lo + (hi - lo) * (1.0 - v);
+            break;
+        case QLCChannel::ShutterIrisMinToMax:
+            open = v;
+            break;
+        case QLCChannel::ShutterIrisMaxToMin:
+            open = 1.0 - v;
+            break;
+        default:
+            break;
+        }
+    }
+    /* An iris cuts the cone down from its edge: the beam it leaves is the
+       same lens with a smaller hole, its half-angle's tangent in proportion.
+       Never quite shut -- a shut iris is the dimmer's business, not a
+       zero-width beam. */
+    if (open < 1.0)
+    {
+        const double t = qMax(0.1, open) * qTan(qDegreesToRadians(angle * 0.5));
+        angle = 2.0 * qRadiansToDegrees(qAtan(t));
+    }
+    return angle;
 }

@@ -643,41 +643,13 @@ bool fixtureAimDirection(Fixture *fx, const FixtureRigProps &rp, QVector3D &dir,
 double fixtureBeamAngle(Fixture *fx, const QByteArray &v,
                         const FixtureVisualTraits &traits)
 {
-    const double lo = double(traits.beamMinDeg);
-    const double hi = double(traits.beamMaxDeg);
-
-    if (hi <= 0.0)
+    if (double(traits.beamMaxDeg) <= 0.0)
         return 0.0;                       // no lens declared at all
-    if (lo <= 0.0 || qAbs(hi - lo) < 0.51)
-        return hi;                        // a fixed cone
-
-    if (fx == nullptr)
-        return hi;
-    QLCFixtureMode *mode = fx->fixtureMode();
-    if (mode == nullptr || v.isEmpty())
-        return hi;
-
-    /* Where the zoom is sitting. Which way the channel runs is part of the
-       definition and both directions are common, so it has to be read rather
-       than assumed. */
-    const int count = qMin(mode->channels().size(), v.size());
-    for (int c = 0; c < count; ++c)
-    {
-        QLCChannel *ch = mode->channel(quint32(c));
-        if (ch == nullptr)
-            continue;
-        double frac = -1.0;
-        if (ch->preset() == QLCChannel::BeamZoomSmallBig)
-            frac = uchar(v.at(c)) / 255.0;
-        else if (ch->preset() == QLCChannel::BeamZoomBigSmall)
-            frac = 1.0 - uchar(v.at(c)) / 255.0;
-        if (frac >= 0.0)
-            return lo + (hi - lo) * qBound(0.0, frac, 1.0);
-    }
-
-    /* A range declared but no zoom channel to drive it: the widest is the safer
-       read, since a narrow cone hides a fixture that is plainly visible. */
-    return hi;
+    if (fx == nullptr || v.isEmpty())
+        return double(traits.beamMaxDeg); // the widest is the safer read
+    /* The engine's rule -- zoom, and an iris -- so the beam drawn is the one
+       the follow spot aims (RigHeads::beamAngle()). */
+    return RigHeads::beamAngle(fx, v);
 }
 
 QVector3D fixtureWorldCentre(Doc *doc, quint32 fid)

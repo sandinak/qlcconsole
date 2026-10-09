@@ -116,6 +116,13 @@ with an Aim look:
   height (chest height by default) above whatever's actually under the
   target right now — so it tracks a person walking across a riser, not just
   across the flat floor.
+- **The beam's size moves the aim.** On a Person, each head aims at the
+  chest while its beam is narrow; as its zoom opens (or its iris closes
+  less), it aims lower, so the top of the spot stays just over the head —
+  covering more of them without washing the wall behind — down to the waist
+  at most. Each head works from its own throw and its own beam, read live
+  from its zoom and iris channels, so a near head and a far one land the
+  same way. The rig view draws the same thing.
 - Movement stays **target-converged**: the effect moves the shared aim
   point, and the scene's Aim look re-aims every head at it — which is what
   keeps multiple heads genuinely converged on the same spot, rather than
