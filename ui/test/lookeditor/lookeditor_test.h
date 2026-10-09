@@ -39,6 +39,8 @@ private slots:
     /** "when selecting an effect we need a better way than a drop down ...
      *  AND for WLED based fixtures we should be selecting WLED effects". */
     void effectsArePickedFromABrowserWithWledsOwn();
+    /** "can we put the sets in alpha order?" */
+    void theBrowsersListsAreAToZ();
 };
 
 #endif

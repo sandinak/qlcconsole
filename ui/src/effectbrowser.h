@@ -79,6 +79,9 @@ private:
         QString description;
         QString scriptPath;     ///< for the preview: the engine script, or a WLED port
         bool isPreset = false;
+        /** What it is listed by: its own label -- a preset, its generator's
+         *  then its own, so it stays under the effect it came from. */
+        QString sortName;
         QString key() const;    ///< for Recent: kind and name
     };
 

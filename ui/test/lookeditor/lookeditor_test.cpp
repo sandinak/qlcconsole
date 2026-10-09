@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include <QCollator>
 #include <QSlider>
 #include <QLabel>
 #include <QComboBox>
@@ -336,6 +337,40 @@ void LookEditor_Test::effectsArePickedFromABrowserWithWledsOwn()
         browser->tickPreviews();
         browser->grab().save(qEnvironmentVariable("BROWSER_PNG"));
         browser->setParent(&ed);
+    }
+}
+
+void LookEditor_Test::theBrowsersListsAreAToZ()
+{
+    Doc doc(this);
+    doc.effectScriptRunner()->cache()->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    QLCFixtureDef *def = new QLCFixtureDef();
+    QCOMPARE(def->loadXML(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures/WLED/WLED-Lantern.qxf"),
+             QFile::NoError);
+    Fixture *lantern = new Fixture(&doc);
+    lantern->setFixtureDefinition(def, def->mode("Effect (15ch)"));
+    QVERIFY(doc.addFixture(lantern));
+    QLCPalette *look = new QLCPalette(QLCPalette::Effect, &doc);
+    QVERIFY(doc.addPalette(look));
+    LookEditor ed(&doc);
+    ed.setPalette(look->id());
+    EffectBrowser *browser = ed.m_effectBrowser;
+    QVERIFY(browser != nullptr);
+
+    QCollator collator;
+    collator.setNumericMode(true);
+    collator.setCaseSensitivity(Qt::CaseInsensitive);
+    const QStringList tabs = browser->tabNames();
+    for (int t = 1; t < tabs.size(); ++t)                // Recent keeps its order
+    {
+        browser->m_tabs->setCurrentIndex(t);
+        QStringList keys;
+        for (int i = 0; i < browser->list()->count(); ++i)
+            keys << browser->m_entries.at(browser->list()->item(i)->data(Qt::UserRole + 10).toInt()).sortName;
+        QVERIFY2(keys.size() > 0 || tabs.at(t) != "WLED", "the WLED tab is empty");
+        for (int i = 1; i < keys.size(); ++i)
+            QVERIFY2(collator.compare(keys.at(i - 1), keys.at(i)) <= 0,
+                     qPrintable(QString("%1: \"%2\" before \"%3\"").arg(tabs.at(t), keys.at(i - 1), keys.at(i))));
     }
 }
 

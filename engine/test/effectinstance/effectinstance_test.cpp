@@ -1027,4 +1027,23 @@ void EffectInstance_Test::anEffectRunsOnUnpatchedFixturesToo()
     QVERIFY2(forStaged > 0, "the effect skipped the unpatched fixture");
 }
 
+void EffectInstance_Test::aScriptsMissingTextIsEmptyNotUndefined()
+{
+    QTemporaryDir dir;
+    QFile f(dir.filePath("bare.js"));
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write("(function() { var e = {}; e.apiVersion = 1; e.name = 'Bare';"
+            " e.tick = function(f) { return f.map(function() { return {}; }); };"
+            " return e; })()");
+    f.close();
+    EffectScript script;
+    QVERIFY(script.load(f.fileName()));
+    QCOMPARE(script.name(), QString("Bare"));
+    QVERIFY2(script.notes().isEmpty(), qPrintable(script.notes()));
+    QVERIFY(script.description().isEmpty());
+    QCOMPARE(script.syncTo(), QString("span"));
+    QCOMPARE(script.lifecycle(), QString("loop"));
+    QCOMPARE(script.onFinish(), QString("hold"));
+}
+
 QTEST_GUILESS_MAIN(EffectInstance_Test)

@@ -51,6 +51,9 @@ private slots:
     /** Size On Subject zooms a head so its beam is that wide where it lands,
      *  whatever the throw, within the lens's range. */
     void followSpotZoomsToHoldSizeOnSubject();
+    /** A script that leaves out notes, lifecycle and the rest: empty and
+     *  the defaults -- not the word "undefined" shown under the effect. */
+    void aScriptsMissingTextIsEmptyNotUndefined();
 
 private:
     Doc          *m_doc = nullptr;

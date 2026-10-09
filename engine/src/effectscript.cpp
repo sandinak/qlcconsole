@@ -6,6 +6,17 @@
 */
 
 #include "effectscript.h"
+
+namespace
+{
+/* A script's optional text: empty when it does not say. QJSValue's own
+   toString() gives "undefined" for a missing property -- shown as the
+   effect's notes, and taken for a lifecycle nobody chose. */
+QString jsText(const QJSValue &v)
+{
+    return (v.isUndefined() || v.isNull()) ? QString() : v.toString();
+}
+}
 #include "effectscriptcache.h"
 
 #include <QRegularExpression>
@@ -217,23 +228,23 @@ bool EffectScript::parseMeta()
         return false;
     }
 
-    m_name        = m_script.property("name").toString();
-    m_description = m_script.property("description").toString();
-    m_notes       = m_script.property("notes").toString();
-    m_author      = m_script.property("author").toString();
-    m_wled        = m_script.property("wled").toString();
+    m_name        = jsText(m_script.property("name"));
+    m_description = jsText(m_script.property("description"));
+    m_notes       = jsText(m_script.property("notes"));
+    m_author      = jsText(m_script.property("author"));
+    m_wled        = jsText(m_script.property("wled"));
     m_version     = m_script.property("version").toInt();
     if (m_version < 1)
         m_version = 1;   // default for Generators that don't declare one
 
     // Lifecycle (see EFFECT_LIFECYCLE_DESIGN.md). Absent → loop (today's default).
-    m_lifecycle = m_script.property("lifecycle").toString().toLower();
+    m_lifecycle = jsText(m_script.property("lifecycle")).toLower();
     if (m_lifecycle.isEmpty())
         m_lifecycle = QStringLiteral("loop");
-    m_syncTo = m_script.property("syncTo").toString().toLower();
+    m_syncTo = jsText(m_script.property("syncTo")).toLower();
     if (m_syncTo.isEmpty())
         m_syncTo = QStringLiteral("span");
-    m_onFinish = m_script.property("onFinish").toString().toLower();
+    m_onFinish = jsText(m_script.property("onFinish")).toLower();
     if (m_onFinish.isEmpty())
         m_onFinish = QStringLiteral("hold");
     m_naturalDurationMs = m_script.property("naturalDurationMs").toInt();
@@ -255,8 +266,8 @@ bool EffectScript::parseMeta()
         {
             QJSValue item = inArr.property(i);
             InputDef def;
-            def.name         = item.property("name").toString();
-            def.description  = item.property("description").toString();
+            def.name         = jsText(item.property("name"));
+            def.description  = jsText(item.property("description"));
             def.defaultValue = (float)item.property("defaultValue").toNumber();
             if (!def.name.isEmpty())
                 m_inputs.append(def);
@@ -272,9 +283,9 @@ bool EffectScript::parseMeta()
         {
             QJSValue item = palArr.property(i);
             PaletteDef def;
-            def.name        = item.property("name").toString();
-            def.description = item.property("description").toString();
-            def.type        = item.property("type").toString();
+            def.name        = jsText(item.property("name"));
+            def.description = jsText(item.property("description"));
+            def.type        = jsText(item.property("type"));
             def.optional    = item.property("optional").toBool();
             if (!def.name.isEmpty())
                 m_palettes.append(def);
@@ -290,8 +301,8 @@ bool EffectScript::parseMeta()
         {
             QJSValue item = tgtArr.property(i);
             TargetDef def;
-            def.name        = item.property("name").toString();
-            def.description = item.property("description").toString();
+            def.name        = jsText(item.property("name"));
+            def.description = jsText(item.property("description"));
             def.optional    = item.property("optional").toBool();
             if (!def.name.isEmpty())
                 m_targets.append(def);
@@ -307,9 +318,9 @@ bool EffectScript::parseMeta()
         {
             QJSValue item = prArr.property(i);
             ParamDef def;
-            def.name         = item.property("name").toString();
-            def.description  = item.property("description").toString();
-            def.type         = item.property("type").toString();
+            def.name         = jsText(item.property("name"));
+            def.description  = jsText(item.property("description"));
+            def.type         = jsText(item.property("type"));
             def.min          = (float)item.property("min").toNumber();
             def.max          = (float)item.property("max").toNumber();
             def.defaultValue = (float)item.property("defaultValue").toNumber();
@@ -365,10 +376,10 @@ bool EffectScript::loadRGBScript()
 {
     QJSValue algo = m_script;   // the RGBScript's algo object (from the IIFE)
 
-    m_name   = algo.property("name").toString();
+    m_name   = jsText(algo.property("name"));
     if (m_name.isEmpty())
         m_name = QFileInfo(m_filePath).baseName();
-    m_author       = algo.property("author").toString();
+    m_author       = jsText(algo.property("author"));
     m_apiVersion   = 1;
     m_version      = 1;
     m_fixtureTypes = QStringList() << "rgb" << "dimmer";

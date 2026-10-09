@@ -9,6 +9,8 @@
       http://www.apache.org/licenses/LICENSE-2.0.txt
 */
 
+#include <algorithm>
+#include <QCollator>
 #include <QStyledItemDelegate>
 #include <QStandardItemModel>
 #include <QListWidget>
@@ -222,6 +224,7 @@ void EffectBrowser::reload()
                                    ? m_doc->effectScriptRunner()->cache() : nullptr;
     QString category;
     QString lastScriptPath;
+    QString lastScriptLabel;
     QStringList categories;
     for (int i = 0; i < m_source->count(); ++i)
     {
@@ -260,6 +263,9 @@ void EffectBrowser::reload()
         }
         if (kind == KindScript && e.description.isEmpty() && cache != nullptr)
             e.description = cache->scriptMeta(name).description;
+        if (kind == KindScript)
+            lastScriptLabel = e.label;
+        e.sortName = (kind == KindPreset) ? lastScriptLabel + QChar(1) + e.label : e.label;
         m_entries << e;
     }
 
@@ -320,6 +326,19 @@ void EffectBrowser::refill()
         for (int i = 0; i < m_entries.size(); ++i)
             if (m_entries.at(i).category == tab)
                 shown << i;
+    }
+
+    /* A to Z ("can we put the sets in alpha order?"), numbers as numbers --
+       Pulse 2 before Pulse 10 -- and a preset right under its effect. Recent
+       stays in the order it was used. */
+    if (!recentTab || !q.isEmpty())
+    {
+        QCollator collator;
+        collator.setNumericMode(true);
+        collator.setCaseSensitivity(Qt::CaseInsensitive);
+        std::stable_sort(shown.begin(), shown.end(), [this, &collator](int a, int b) {
+            return collator.compare(m_entries.at(a).sortName, m_entries.at(b).sortName) < 0;
+        });
     }
 
     foreach (int i, shown)
