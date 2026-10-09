@@ -4065,22 +4065,39 @@ void MonitorGraphicsView::updatePlatforms()
     {
         const QPointF anchor = projectMm(sc->originX() * 1000.0, sc->originY() * 1000.0,
                                          sc->bottom() * 1000.0);
-        QPolygonF outline;
-        const int segs = 16;
-        for (int i = 0; i <= segs; ++i)
+        auto at = [&](double u, double z, double off) {
+            const QVector3D p = sc->pointAt(u, z, off);
+            return projectMm(p.x() * 1000.0, p.y() * 1000.0, p.z() * 1000.0);
+        };
+        const float lo = sc->bottom(), hi = sc->bottom() + sc->height();
+        const double half = double(sc->thickness()) / 2.0;
+        QList<QPair<double, double> > spans = sc->spans();
+        if (spans.isEmpty())                     // flown out: where it hangs, dashed
+            spans << qMakePair(-1.0, 1.0);
+        QList<QPolygonF> parts;
+        for (const QPair<double, double> &sp : spans)
         {
-            const QVector3D p = sc->pointAt(-1.0 + 2.0 * i / segs, sc->bottom());
-            outline << projectMm(p.x() * 1000.0, p.y() * 1000.0, p.z() * 1000.0);
-        }
-        if (m_pov != PovTop)
-        {
-            for (int i = segs; i >= 0; --i)
+            const int segs = qMax(1, int(qCeil(qMax(16, sc->segments()) * (sp.second - sp.first) / 2.0)));
+            QPolygonF part;
+            if (m_pov == PovTop)
             {
-                const QVector3D p = sc->pointAt(-1.0 + 2.0 * i / segs, sc->bottom() + sc->height());
-                outline << projectMm(p.x() * 1000.0, p.y() * 1000.0, p.z() * 1000.0);
+                // Its line; a wall's footprint, out along one face and back along the other.
+                for (int i = 0; i <= segs; ++i)
+                    part << at(sp.first + (sp.second - sp.first) * i / segs, lo, -half);
+                if (half > 0.0)
+                    for (int i = segs; i >= 0; --i)
+                        part << at(sp.first + (sp.second - sp.first) * i / segs, lo, half);
             }
+            else
+            {
+                for (int i = 0; i <= segs; ++i)
+                    part << at(sp.first + (sp.second - sp.first) * i / segs, lo, 0.0);
+                for (int i = segs; i >= 0; --i)
+                    part << at(sp.first + (sp.second - sp.first) * i / segs, hi, 0.0);
+            }
+            parts << part;
         }
-        SceneryItem *sci = new SceneryItem(sc, m_doc, anchor, outline, m_pov != PovTop);
+        SceneryItem *sci = new SceneryItem(sc, m_doc, anchor, parts, m_pov != PovTop);
         sci->setMovable(!m_layoutLocked);
         m_scene->addItem(sci);
         m_sceneryItems.insert(sc->id(), sci);

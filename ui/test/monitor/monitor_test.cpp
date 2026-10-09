@@ -12302,6 +12302,143 @@ void Monitor_Test::beamsLandOnTheCycloramaInTheRigView()
     delete doc;
 }
 
+void Monitor_Test::everySceneryKindIsAddedWhereItUsuallyGoes()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Meters);
+    props->setGridSize(QVector3D(12, 6, 8));             // 12 m wide, 8 deep
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        foreach (int kind, Scenery::kinds())
+        {
+            QString title;
+            driveDialog([&title](QWidget *dlg) {
+                title = dlg->windowTitle();
+                return true;
+            });
+            mon.slotAddScenery(kind);
+            QVERIFY2(title.startsWith(Scenery::kindName(kind)), qPrintable(title));
+        }
+        // One of each, and legs come as a pair.
+        QCOMPARE(props->sceneries().size(), Scenery::kinds().size() + 1);
+        QList<Scenery *> legs;
+        foreach (Scenery *sc, props->sceneries())
+        {
+            QCOMPARE(sc->color(), Scenery::defaultColor(sc->kind()));
+            QVERIFY(mon.m_graphicsView->m_sceneryItems.contains(sc->id()));
+            switch (sc->kind())
+            {
+                case Scenery::Leg:       legs << sc; break;
+                case Scenery::MainDrape: QVERIFY(sc->originY() > 7.0f); break;   // across the front
+                case Scenery::BackWall:  QVERIFY(sc->originY() < 0.5f && sc->thickness() > 0.0f); break;
+                case Scenery::Border:    QVERIFY(sc->bottom() > 4.0f); break;   // hung above
+                case Scenery::Wall:      QVERIFY(sc->thickness() > 0.0f && sc->height() < 1.0f); break;
+                default: break;
+            }
+        }
+        QCOMPARE(legs.size(), 2);
+        QVERIFY(qAbs(legs.at(0)->originX() + legs.at(1)->originX() - 12.0f) < 0.01f);   // either side
+    }
+    delete doc;
+}
+
+void Monitor_Test::anOpenMainDrapeShowsTheCycBehindIt()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Scenery *cyc = props->addScenery();
+    cyc->setOriginX(6.0f);
+    cyc->setOriginY(0.5f);
+    cyc->setWidth(10.0f);
+    cyc->setHeight(6.0f);
+    Scenery *drape = props->addScenery();
+    drape->setKind(Scenery::MainDrape);
+    drape->setColor(Scenery::defaultColor(Scenery::MainDrape));
+    drape->setOriginX(6.0f);
+    drape->setOriginY(6.0f);
+    drape->setWidth(10.0f);
+    drape->setHeight(6.0f);
+    {
+        StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+        v.resize(800, 600);
+        v.reload();
+        v.setPlane(StructureStudioView::Angled);
+        v.setAngledView(0.0, 10.0);
+        // The pale cyc's pixels in the middle of the view.
+        auto pale = [&v]() {
+            v.reload();
+            const QImage img = v.grab().toImage();
+            int n = 0;
+            for (int y = img.height() / 4; y < img.height() * 3 / 4; ++y)
+                for (int x = img.width() / 3; x < img.width() * 2 / 3; ++x)
+                {
+                    const QColor q = img.pixelColor(x, y);
+                    if (q.blue() > 60 && qAbs(q.red() - q.blue()) < 30 && q.red() > q.green() - 30)
+                        ++n;
+                }
+            return n;
+        };
+        const int closed = pale();
+        drape->setState(Scenery::Open);
+        const int open = pale();
+        QVERIFY2(open > 4 * closed + 2000,
+                 qPrintable(QString("closed %1 px of cyc, open %2").arg(closed).arg(open)));
+        drape->setState(Scenery::Flown);
+        QVERIFY(pale() >= open);
+        // Light goes through where it is open.
+        bool hit = false;
+        QVector3D n;
+        drape->setState(Scenery::Open);
+        const double t = v.beamThrow(QVector3D(6.0f, 9.0f, 3.0f), QVector3D(0.0f, -1.0f, 0.0f), &hit, &n);
+        QVERIFY(hit && qAbs(t - 8.5) < 0.05);              // on the cyc, not the drape
+    }
+    delete doc;
+}
+
+void Monitor_Test::aUWallIsDrawnRoundItsFrontWithItsTop()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    StagePlatform *deck = props->addPlatform();
+    deck->setOriginX(0.0f); deck->setOriginY(0.0f);
+    deck->setWidth(4.0f); deck->setDepth(4.0f); deck->setHeight(0.05f);
+    {
+        StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+        v.resize(800, 600);
+        v.reload();
+        v.setPlane(StructureStudioView::Angled);
+        v.setAngledView(20.0, 40.0);
+        const QImage without = v.grab().toImage();
+        Scenery *rim = props->addScenery();
+        rim->setKind(Scenery::Wall);
+        rim->setColor(QColor(230, 120, 40));
+        rim->setOutline(Scenery::RoundedU);
+        rim->setOriginX(2.0f);
+        rim->setOriginY(1.4f);
+        rim->setWidth(0.9144f);
+        rim->setDepth(1.2192f);
+        rim->setHeight(0.2032f);
+        rim->setThickness(0.1016f);
+        v.reload();
+        const QImage with = v.grab().toImage();
+        int changed = 0;
+        for (int y = 0; y < with.height(); ++y)
+            for (int x = 0; x < with.width(); ++x)
+                if (with.pixel(x, y) != without.pixel(x, y))
+                    ++changed;
+        QVERIFY2(changed > 1500, qPrintable(QString("the rim changed %1 px").arg(changed)));
+        // Seen from above: a beam straight down onto its top stops there.
+        bool hit = false;
+        QVector3D n;
+        const QVector3D front = rim->pointAt(0.0, 3.0);
+        const double t = v.beamThrow(front, QVector3D(0.0f, 0.0f, -1.0f), &hit, &n);
+        QVERIFY2(hit && qAbs(t - (3.0 - 0.2032)) < 0.02, qPrintable(QString::number(t)));
+    }
+    delete doc;
+}
+
 void Monitor_Test::selectAllTakesEverythingSelectable()
 {
     Doc *doc = new Doc(this);

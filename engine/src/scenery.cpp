@@ -25,6 +25,10 @@
 #define KXMLSceneryBottom   QStringLiteral("Bottom")
 #define KXMLSceneryRotation QStringLiteral("Rotation")
 #define KXMLSceneryBow      QStringLiteral("Bow")
+#define KXMLSceneryOutline  QStringLiteral("Outline")
+#define KXMLSceneryDepth    QStringLiteral("Depth")
+#define KXMLSceneryThickness QStringLiteral("Thickness")
+#define KXMLSceneryState    QStringLiteral("State")
 #define KXMLSceneryColor    QStringLiteral("Color")
 #define KXMLSceneryLocked   QStringLiteral("Locked")
 #define KXMLSceneryLayerId  QStringLiteral("LayerId")
@@ -33,7 +37,7 @@
 Scenery::Scenery(quint32 id, QObject *parent)
     : QObject(parent)
     , m_id(id)
-    , m_color(QColor(226, 228, 236))     // a cyc is pale: it is there to take colour
+    , m_color(defaultColor(Cyclorama))
 {
 }
 
@@ -47,8 +51,42 @@ QString Scenery::kindName(int kind)
         case Border:    return tr("Border");
         case Traveler:  return tr("Traveler");
         case Scrim:     return tr("Scrim");
+        case Wall:      return tr("Wall");
         case Cyclorama:
         default:        return tr("Cyclorama");
+    }
+}
+
+QString Scenery::stateName(int state)
+{
+    switch (state)
+    {
+        case Open:  return tr("Open");
+        case Flown: return tr("Flown out");
+        case Closed:
+        default:    return tr("Closed");
+    }
+}
+
+QList<int> Scenery::kinds()
+{
+    return QList<int>() << Cyclorama << BackWall << MainDrape << Traveler << Leg
+                        << Border << Scrim << Wall;
+}
+
+QColor Scenery::defaultColor(int kind)
+{
+    switch (kind)
+    {
+        case BackWall:  return QColor(70, 70, 76);      // a painted black-ish wall
+        case MainDrape: return QColor(118, 22, 34);     // house red
+        case Leg:
+        case Border:
+        case Traveler:  return QColor(28, 28, 32);      // masking black
+        case Scrim:     return QColor(200, 202, 210);
+        case Wall:      return QColor(150, 142, 128);   // block
+        case Cyclorama:
+        default:        return QColor(226, 228, 236);   // a cyc is pale: it is there to take colour
     }
 }
 
@@ -65,16 +103,89 @@ QPointF Scenery::facing() const
     return QPointF(-qSin(r), qCos(r));
 }
 
-QVector3D Scenery::pointAt(double u, double z) const
+QVector3D Scenery::pointAt(double u, double z, double offset) const
 {
     u = qBound(-1.0, u, 1.0);
     const QPointF a = along(), f = facing();
-    const double half = double(m_width) / 2.0;
-    // A parabola: the full bow at the middle, none at the ends.
-    const double back = double(m_bow) * (1.0 - u * u);
-    const double x = double(m_originX) + a.x() * u * half - f.x() * back;
-    const double y = double(m_originY) + a.y() * u * half - f.y() * back;
+    double lx, ly;      // along the sheet, toward the audience
+    if (m_outline == RoundedU)
+    {
+        /* From the end of the stage-right side, down it, round the front
+           and back up the stage-left side. The open back is the origin. */
+        const double r = double(m_width) / 2.0;
+        const double side = qMax(0.0, double(m_depth) - r);
+        const double len = 2.0 * side + M_PI * r;
+        const double t = (u + 1.0) / 2.0 * len;
+        if (t <= side)
+        {
+            lx = -r;
+            ly = t;
+        }
+        else if (t <= side + M_PI * r)
+        {
+            const double th = M_PI - (t - side) / r;
+            lx = r * qCos(th);
+            ly = side + r * qSin(th);
+        }
+        else
+        {
+            lx = r;
+            ly = side - (t - side - M_PI * r);
+        }
+    }
+    else
+    {
+        // A parabola: the full bow at the middle, none at the ends.
+        lx = u * double(m_width) / 2.0;
+        ly = -double(m_bow) * (1.0 - u * u);
+    }
+    double x = double(m_originX) + a.x() * lx + f.x() * ly;
+    double y = double(m_originY) + a.y() * lx + f.y() * ly;
+    if (offset != 0.0)
+    {
+        const QPointF n = normalAt(u);
+        x += n.x() * offset;
+        y += n.y() * offset;
+    }
     return QVector3D(float(x), float(y), float(z));
+}
+
+QPointF Scenery::normalAt(double u) const
+{
+    // The line's direction there, turned a quarter toward the front.
+    const double e = 1e-4;
+    const double u0 = qMax(-1.0, u - e), u1 = qMin(1.0, u + e);
+    const QVector3D p0 = pointAt(u0, 0.0), p1 = pointAt(u1, 0.0);
+    double tx = double(p1.x() - p0.x()), ty = double(p1.y() - p0.y());
+    const double len = qSqrt(tx * tx + ty * ty);
+    if (len < 1e-12)
+        return facing();
+    tx /= len;
+    ty /= len;
+    return QPointF(-ty, tx);
+}
+
+QList<QPair<double, double> > Scenery::spans() const
+{
+    QList<QPair<double, double> > out;
+    if (hasState() && m_state == Flown)
+        return out;
+    if (hasState() && m_state == Open)
+    {
+        // Each half gathered into its own end: about a sixth of the width each.
+        const double g = 2.0 * 0.16;
+        out << qMakePair(-1.0, -1.0 + g) << qMakePair(1.0 - g, 1.0);
+        return out;
+    }
+    out << qMakePair(-1.0, 1.0);
+    return out;
+}
+
+int Scenery::segments() const
+{
+    if (m_outline == RoundedU)
+        return 40;
+    return (m_bow != 0.0f) ? 16 : 1;
 }
 
 QList<QPointF> Scenery::baseLine(int segments) const
@@ -93,39 +204,90 @@ bool Scenery::rayHit(const QVector3D &origin, const QVector3D &dir, double &t,
                      double maxT, int segments, QVector3D *normal) const
 {
     const double zLo = double(m_bottom), zHi = double(m_bottom + m_height);
-    const QList<QPointF> line = baseLine(m_bow > 0.0f ? segments : 1);
+    const int own = this->segments();
+    const int full = (own == 1) ? 1 : qMax(segments, own);
+    const double half = double(m_thickness) / 2.0;
+    QList<double> faces;
+    if (half > 0.0)
+        faces << -half << half;
+    else
+        faces << 0.0;
+
     bool hit = false;
     double best = maxT;
     QVector3D bestN;
-    for (int i = 0; i + 1 < line.size(); ++i)
+    typedef QPair<double, double> Span;
+    foreach (const Span &sp, spans())
     {
-        // A vertical panel from line[i] to line[i + 1].
-        const QPointF p0 = line.at(i), p1 = line.at(i + 1);
-        const double ex = p1.x() - p0.x(), ey = p1.y() - p0.y();
-        // Its horizontal normal.
-        const double nx = -ey, ny = ex;
-        const double denom = nx * double(dir.x()) + ny * double(dir.y());
-        if (qAbs(denom) < 1e-9)
-            continue;                         // running parallel to it
-        const double tt = (nx * (p0.x() - double(origin.x())) + ny * (p0.y() - double(origin.y()))) / denom;
-        if (tt <= 1e-6 || tt >= best)
-            continue;
-        const double hx = double(origin.x()) + double(dir.x()) * tt;
-        const double hy = double(origin.y()) + double(dir.y()) * tt;
-        const double hz = double(origin.z()) + double(dir.z()) * tt;
-        if (hz < zLo || hz > zHi)
-            continue;
-        // Within the panel's length?
-        const double len2 = ex * ex + ey * ey;
-        const double s = ((hx - p0.x()) * ex + (hy - p0.y()) * ey) / len2;
-        if (s < 0.0 || s > 1.0)
-            continue;
-        best = tt;
-        hit = true;
-        // Facing back along the ray, whichever side of the cloth it came from.
-        bestN = QVector3D(float(nx), float(ny), 0.0f).normalized();
-        if (denom > 0.0)
-            bestN = -bestN;
+        const int n = qMax(1, int(qCeil(full * (sp.second - sp.first) / 2.0)));
+        foreach (double off, faces)
+        {
+            for (int i = 0; i < n; ++i)
+            {
+                // A vertical panel from one point on the line to the next.
+                const double ua = sp.first + (sp.second - sp.first) * i / n;
+                const double ub = sp.first + (sp.second - sp.first) * (i + 1) / n;
+                const QVector3D pa = pointAt(ua, 0.0, off), pb = pointAt(ub, 0.0, off);
+                const QPointF p0(double(pa.x()), double(pa.y())), p1(double(pb.x()), double(pb.y()));
+                const double ex = p1.x() - p0.x(), ey = p1.y() - p0.y();
+                // Its horizontal normal.
+                const double nx = -ey, ny = ex;
+                const double denom = nx * double(dir.x()) + ny * double(dir.y());
+                if (qAbs(denom) < 1e-12)
+                    continue;                         // running parallel to it
+                const double tt = (nx * (p0.x() - double(origin.x())) + ny * (p0.y() - double(origin.y()))) / denom;
+                if (tt <= 1e-6 || tt >= best)
+                    continue;
+                const double hx = double(origin.x()) + double(dir.x()) * tt;
+                const double hy = double(origin.y()) + double(dir.y()) * tt;
+                const double hz = double(origin.z()) + double(dir.z()) * tt;
+                if (hz < zLo || hz > zHi)
+                    continue;
+                // Within the panel's length?
+                const double len2 = ex * ex + ey * ey;
+                if (len2 < 1e-18)
+                    continue;
+                const double s = ((hx - p0.x()) * ex + (hy - p0.y()) * ey) / len2;
+                if (s < 0.0 || s > 1.0)
+                    continue;
+                best = tt;
+                hit = true;
+                // Facing back along the ray, whichever side of the cloth it came from.
+                bestN = QVector3D(float(nx), float(ny), 0.0f).normalized();
+                if (denom > 0.0)
+                    bestN = -bestN;
+            }
+
+            /* A wall's top: light coming down on it lands there. Between the
+               faces of each panel, a quad on the plane of the top. */
+            if (half <= 0.0 || off > -half || qAbs(double(dir.z())) < 1e-9)
+                continue;
+            const double tt = (zHi - double(origin.z())) / double(dir.z());
+            if (tt <= 1e-6 || tt >= best)
+                continue;
+            const QPointF h(double(origin.x()) + double(dir.x()) * tt,
+                            double(origin.y()) + double(dir.y()) * tt);
+            for (int i = 0; i < n; ++i)
+            {
+                const double ua = sp.first + (sp.second - sp.first) * i / n;
+                const double ub = sp.first + (sp.second - sp.first) * (i + 1) / n;
+                const QVector3D a = pointAt(ua, 0.0), b = pointAt(ub, 0.0);
+                const double ex = double(b.x() - a.x()), ey = double(b.y() - a.y());
+                const double len2 = ex * ex + ey * ey;
+                if (len2 < 1e-18)
+                    continue;
+                const double s = ((h.x() - double(a.x())) * ex + (h.y() - double(a.y())) * ey) / len2;
+                if (s < 0.0 || s > 1.0)
+                    continue;
+                const double cx = double(a.x()) + ex * s - h.x(), cy = double(a.y()) + ey * s - h.y();
+                if (cx * cx + cy * cy > half * half)
+                    continue;
+                best = tt;
+                hit = true;
+                bestN = QVector3D(0.0f, 0.0f, dir.z() < 0.0f ? 1.0f : -1.0f);
+                break;
+            }
+        }
     }
     if (hit)
     {
@@ -152,6 +314,14 @@ bool Scenery::loadXML(QXmlStreamReader &root)
     if (a.hasAttribute(KXMLSceneryBottom))   setBottom(a.value(KXMLSceneryBottom).toFloat());
     if (a.hasAttribute(KXMLSceneryRotation)) m_rotation = a.value(KXMLSceneryRotation).toFloat();
     if (a.hasAttribute(KXMLSceneryBow))      setBow(a.value(KXMLSceneryBow).toFloat());
+    if (a.hasAttribute(KXMLSceneryOutline))  setOutline(a.value(KXMLSceneryOutline).toString() == "U" ? RoundedU : SheetOutline);
+    if (a.hasAttribute(KXMLSceneryDepth))    setDepth(a.value(KXMLSceneryDepth).toFloat());
+    if (a.hasAttribute(KXMLSceneryThickness)) setThickness(a.value(KXMLSceneryThickness).toFloat());
+    if (a.hasAttribute(KXMLSceneryState))
+    {
+        const QString st = a.value(KXMLSceneryState).toString();
+        setState(st == "Open" ? Open : st == "Flown" ? Flown : Closed);
+    }
     if (a.hasAttribute(KXMLSceneryColor))    m_color = QColor(a.value(KXMLSceneryColor).toString());
     if (a.hasAttribute(KXMLSceneryLocked))   m_locked = (a.value(KXMLSceneryLocked).toString() == "true");
     if (a.hasAttribute(KXMLSceneryLayerId))  m_layerId = a.value(KXMLSceneryLayerId).toUInt();
@@ -177,6 +347,15 @@ bool Scenery::saveXML(QXmlStreamWriter *doc) const
         doc->writeAttribute(KXMLSceneryRotation, QString::number(double(m_rotation), 'f', 1));
     if (m_bow != 0.0f)
         doc->writeAttribute(KXMLSceneryBow, QString::number(double(m_bow), 'f', 3));
+    if (m_outline == RoundedU)
+    {
+        doc->writeAttribute(KXMLSceneryOutline, "U");
+        doc->writeAttribute(KXMLSceneryDepth, QString::number(double(m_depth), 'f', 3));
+    }
+    if (m_thickness != 0.0f)
+        doc->writeAttribute(KXMLSceneryThickness, QString::number(double(m_thickness), 'f', 3));
+    if (m_state != Closed)
+        doc->writeAttribute(KXMLSceneryState, m_state == Open ? "Open" : "Flown");
     if (m_color.isValid())
         doc->writeAttribute(KXMLSceneryColor, m_color.name());
     if (m_locked)

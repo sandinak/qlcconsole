@@ -463,8 +463,13 @@ like main drape, cyclorama, side drapes .. etc."
   - Rig view: drawn as the cloth, lit by the room; beams going level or up
     stop on it and leave their pool ON it (pools now follow the surface a beam
     lands on, not only horizontal ones).
-  - Still to do: the other kinds (main drape open/closed, legs and tormentors,
-    borders, travelers, scrim), and opaque scenery hiding what is behind it.
+  - Shipped 2026-10-09: every kind offered (Add > Add Scenery): back wall,
+    main drape and traveler (Closed / Open / Flown out, design-time), legs
+    (added as a pair), border, scrim (seen through) and a built **Wall** with a
+    thickness and a straight/bowed or **U, rounded front** outline (a fountain
+    rim). Bow can go either way. Drapes drawn in folds; walls with faces, top
+    and ends; beams land on a wall's top; opaque pieces hide what is behind.
+  - Still to do: cueing a curtain open/closed; tormentors as their own kind.
 
 **What exists.** Structures today are things you rig ON -- trusses, towers,
 pipes, stands, platforms/steps -- plus targets. Nothing models a SURFACE that

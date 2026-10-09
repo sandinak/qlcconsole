@@ -1265,8 +1265,8 @@ void StructureStudioView::collectPointsFor(QList<QVector3D> &pts, Kind kind, qui
         if (Scenery *sc = props->scenery(id))
         {
             const float lo = sc->bottom(), hi = sc->bottom() + sc->height();
-            for (double u : { -1.0, 0.0, 1.0 })
-                pts << sc->pointAt(u, lo) << sc->pointAt(u, hi);
+            for (int i = 0; i <= 8; ++i)
+                pts << sc->pointAt(-1.0 + i / 4.0, lo) << sc->pointAt(-1.0 + i / 4.0, hi);
         }
     }
 
@@ -2487,30 +2487,67 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
     {
         /* The cloth, as a strip of panels so a bowed cyc curves and each
            panel sorts at its own depths. Lit by the room like any scenery --
-           the light the rig throws on it arrives as pools on top. */
+           the light the rig throws on it arrives as pools on top. A wall has
+           two faces, a top and its ends; a drape hangs in folds; a scrim is
+           seen through. */
         Scenery *sc = props->scenery(id);
         if (sc == nullptr) return;
-        QColor cloth = sc->color().isValid() ? sc->color() : QColor(226, 228, 236);
+        QColor cloth = sc->color().isValid() ? sc->color() : Scenery::defaultColor(sc->kind());
         const double af = 0.18 + 0.82 * m_ambient;
         cloth = QColor(qRound(cloth.red() * af), qRound(cloth.green() * af), qRound(cloth.blue() * af));
-        const QColor seam = cloth.darker(118);
+        if (sc->isSeeThrough())
+            cloth.setAlpha(70);
+        const QColor seam = sc->isSeeThrough() ? QColor() : cloth.darker(118);
         const float lo = sc->bottom(), hi = sc->bottom() + sc->height();
-        const int segs = sc->bow() > 0.0f ? 16 : 1;
-        for (int i = 0; i < segs; ++i)
-        {
-            const double u0 = -1.0 + 2.0 * i / segs, u1 = -1.0 + 2.0 * (i + 1) / segs;
-            const QVector3D c[4] = { sc->pointAt(u0, lo), sc->pointAt(u1, lo),
-                                     sc->pointAt(u1, hi), sc->pointAt(u0, hi) };
+        const bool folds = sc->isCloth() && sc->kind() != Scenery::Cyclorama && !sc->isSeeThrough();
+        const double half = double(sc->thickness()) / 2.0;
+        // About how long the line is, for how finely folds are drawn.
+        double lineLen = 0.0;
+        for (int i = 0; i < 32; ++i)
+            lineLen += double((sc->pointAt(-1.0 + 2.0 * (i + 1) / 32, 0) - sc->pointAt(-1.0 + 2.0 * i / 32, 0)).length());
+
+        auto quad = [&](const QVector3D &a, const QVector3D &b, const QVector3D &c, const QVector3D &d,
+                        const QColor &fill) {
             QPolygonF poly;
             QVector<double> vz;
-            double d = 0.0;
-            for (const QVector3D &w : c)
+            double dsum = 0.0;
+            for (const QVector3D &w : { a, b, c, d })
             {
                 poly << w2s(w);
                 vz << viewDepth(w);
-                d += vz.last();
+                dsum += vz.last();
             }
-            emitPoly(poly, d / 4.0, cloth, seam, 0.6, p, vz);
+            emitPoly(poly, dsum / 4.0, fill, seam, 0.6, p, vz);
+        };
+        typedef QPair<double, double> Span;
+        const QList<Span> spans = sc->spans();
+        const bool gathered = (spans.size() > 1);
+        foreach (const Span &sp, spans)
+        {
+            int n = qMax(1, int(qCeil(sc->segments() * (sp.second - sp.first) / 2.0)));
+            if (folds)
+            {
+                // A fold every 30 cm of cloth -- tighter where it is gathered up.
+                const double len = lineLen * (sp.second - sp.first) / 2.0;
+                n = qMax(n, int(qCeil(len / (gathered ? 0.08 : 0.3))));
+            }
+            const QList<double> faces = (half > 0.0) ? QList<double>{ -half, half } : QList<double>{ 0.0 };
+            for (int i = 0; i < n; ++i)
+            {
+                const double u0 = sp.first + (sp.second - sp.first) * i / n;
+                const double u1 = sp.first + (sp.second - sp.first) * (i + 1) / n;
+                const QColor fill = (folds && (i % 2)) ? cloth.darker(135) : cloth;
+                foreach (double off, faces)
+                    quad(sc->pointAt(u0, lo, off), sc->pointAt(u1, lo, off),
+                         sc->pointAt(u1, hi, off), sc->pointAt(u0, hi, off), fill);
+                if (half > 0.0)     // its top
+                    quad(sc->pointAt(u0, hi, -half), sc->pointAt(u1, hi, -half),
+                         sc->pointAt(u1, hi, half), sc->pointAt(u0, hi, half), cloth.lighter(112));
+            }
+            if (half > 0.0)         // its ends
+                for (double u : { sp.first, sp.second })
+                    quad(sc->pointAt(u, lo, -half), sc->pointAt(u, lo, half),
+                         sc->pointAt(u, hi, half), sc->pointAt(u, hi, -half), cloth.darker(110));
         }
     }
     else if (kind == PipeKind)

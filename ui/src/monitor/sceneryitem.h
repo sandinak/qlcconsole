@@ -37,12 +37,13 @@ public:
     /**
      * @param scenery   engine Scenery this item represents (not owned)
      * @param anchor    scene position of the middle of its bottom edge
-     * @param outline   Top: its floor line; elevation: the sheet's outline --
-     *                  in SCENE coordinates
+     * @param parts     Top: its floor line (a wall: its footprint, closed);
+     *                  elevation: the sheet's outline -- one per stretch it
+     *                  hangs in (an open curtain has two), in SCENE coordinates
      * @param elevation true in the Front/Side views (a filled sheet)
      */
     SceneryItem(Scenery *scenery, Doc *doc, const QPointF &anchor,
-                const QPolygonF &outline, bool elevation,
+                const QList<QPolygonF> &parts, bool elevation,
                 QGraphicsItem *parent = nullptr);
 
     quint32  sceneryId() const;
@@ -66,7 +67,8 @@ signals:
 
 private:
     Scenery           *m_scenery;
-    QPolygonF          m_outline;      //!< in item coordinates
+    QList<QPolygonF>   m_parts;        //!< in item coordinates
+    QRectF             m_bounds;       //!< all of them
     bool               m_elevation;
     QGraphicsTextItem *m_label;
     bool               m_dragMoved = false;

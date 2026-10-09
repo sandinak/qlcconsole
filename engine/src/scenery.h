@@ -30,6 +30,7 @@
 #include <QColor>
 #include <QString>
 #include <QList>
+#include <QPair>
 #include <climits>
 
 class QXmlStreamReader;
@@ -46,8 +47,8 @@ class Scenery final : public QObject
     Q_OBJECT
 
 public:
-    /** What the sheet is. Only Cyclorama is offered so far; the others are
-     *  named now so a saved show keeps them when they arrive. */
+    /** What it is. The soft goods are cloth (no thickness); a wall and a
+     *  back wall are built, and have one. */
     enum Kind
     {
         Cyclorama = 0,
@@ -56,11 +57,32 @@ public:
         Leg,
         Border,
         Traveler,
-        Scrim
+        Scrim,
+        Wall            ///< a low wall, a planter, a fountain's rim: anything built
+    };
+
+    /** The line it stands along on the floor. */
+    enum Outline
+    {
+        SheetOutline = 0,   ///< straight, or bowed by bow()
+        RoundedU            ///< a U: a half-round front and straight sides running back
+    };
+
+    /** Where a curtain that opens and flies is (main drape, traveler). */
+    enum DrapeState
+    {
+        Closed = 0,
+        Open,               ///< split, each half gathered at its end
+        Flown               ///< taken up out of sight: not in the way of anything
     };
 
     static quint32 invalidId() { return UINT_MAX; }
     static QString kindName(int kind);
+    static QString stateName(int state);
+    /** The kinds in the order they are offered. */
+    static QList<int> kinds();
+    /** The colour a new one of @p kind starts with. */
+    static QColor defaultColor(int kind);
 
     explicit Scenery(quint32 id, QObject *parent = nullptr);
 
@@ -92,9 +114,33 @@ public:
     void  setRotation(float deg) { m_rotation = deg; }
 
     /** How far the middle bows AWAY from the audience (metres): a cyc curves
-     *  upstage at its centre. 0 is flat. */
+     *  upstage at its centre. 0 is flat; less than 0 bows toward them. */
     float bow() const { return m_bow; }
-    void  setBow(float m) { m_bow = (m >= 0.0f) ? m : 0.0f; }
+    void  setBow(float m) { m_bow = m; }
+
+    int  outline() const { return m_outline; }
+    void setOutline(int o) { m_outline = (o == RoundedU) ? RoundedU : SheetOutline; }
+
+    /** A U's reach from its open back to the front of its curve (metres).
+     *  The front is a half circle as wide as width(); the sides are what
+     *  is left. */
+    float depth() const { return m_depth; }
+    void  setDepth(float d) { m_depth = (d > 0.05f) ? d : 0.05f; }
+
+    /** How thick it is (metres): 0 for cloth. */
+    float thickness() const { return m_thickness; }
+    void  setThickness(float t) { m_thickness = (t > 0.0f) ? t : 0.0f; }
+
+    /** Closed, open or flown -- for a curtain that does that (hasState()). */
+    int  state() const { return m_state; }
+    void setState(int st) { m_state = qBound(int(Closed), st, int(Flown)); }
+    /** Whether it is a curtain that opens and flies. */
+    bool hasState() const { return m_kind == MainDrape || m_kind == Traveler; }
+
+    /** Cloth: soft goods, drawn as fabric. */
+    bool isCloth() const { return m_kind != Wall && m_kind != BackWall; }
+    /** A scrim: seen through, though it still catches the light thrown on it. */
+    bool isSeeThrough() const { return m_kind == Scrim; }
 
     QColor color() const { return m_color; }
     void   setColor(const QColor &c) { m_color = c; }
@@ -115,15 +161,32 @@ public:
     QPointF facing() const;
 
     /** A point on the sheet: @p u in [-1, 1] from one end to the other,
-     *  at height @p z (absolute, metres). The bow pulls the middle back. */
-    QVector3D pointAt(double u, double z) const;
+     *  at height @p z (absolute, metres). The bow pulls the middle back; a
+     *  U runs from the end of its stage-right side round the front to the
+     *  end of its stage-left one. @p offset moves it off the line along
+     *  normalAt() -- a wall's faces are at plus and minus half its thickness. */
+    QVector3D pointAt(double u, double z, double offset = 0.0) const;
+
+    /** The way the sheet faces at @p u, on the floor (unit): toward the
+     *  audience for a flat one, outward round a U. */
+    QPointF normalAt(double u) const;
+
+    /** The stretches of the line it actually occupies, as [from, to] in u:
+     *  all of it, both gathered ends of an open curtain, or nothing when
+     *  it is flown. */
+    QList<QPair<double, double> > spans() const;
+
+    /** How many flat panels draw its whole line: 1 straight, more curved. */
+    int segments() const;
 
     /** The sheet's line on the floor, @p segments + 1 points end to end. */
     QList<QPointF> baseLine(int segments = 16) const;
 
     /** Where a ray from @p origin along @p dir first meets the sheet, as a
      *  distance along @p dir; false when it misses (or only grazes past
-     *  @p maxT). The bowed sheet is taken as @p segments flat panels.
+     *  @p maxT). The bowed sheet is taken as @p segments flat panels (more
+     *  when it is a U); a wall is met on either face or on its top, and an
+     *  open curtain only where it hangs.
      *  @p normal, when given, receives the (horizontal, unit) normal of the
      *  panel hit, turned to face the ray -- the surface a pool lies on. */
     bool rayHit(const QVector3D &origin, const QVector3D &dir, double &t,
@@ -143,6 +206,10 @@ private:
     float   m_bottom   = 0.0f;
     float   m_rotation = 0.0f;
     float   m_bow      = 0.0f;
+    int     m_outline  = SheetOutline;
+    float   m_depth    = 1.0f;
+    float   m_thickness = 0.0f;
+    int     m_state    = Closed;
     QColor  m_color;
     bool    m_locked   = false;
     quint32 m_layerId  = 0;

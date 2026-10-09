@@ -375,6 +375,9 @@ private slots:
     void addCycloramaSpansTheBackOfTheStage();
     void theCycloramaEditorPreviewsAndCancelReverts();
     void aCycloramaOnThePlotMovesLocksHidesAndDeletes();
+    void everySceneryKindIsAddedWhereItUsuallyGoes();
+    void anOpenMainDrapeShowsTheCycBehindIt();
+    void aUWallIsDrawnRoundItsFrontWithItsTop();
     void beamsLandOnTheCycloramaInTheRigView();
     /** "set a gobo and projected on the cyc .. and it's not visible" /
      *  "handle prisms and rotation". What the gobo wheels, their rotation and

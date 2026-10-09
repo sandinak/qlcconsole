@@ -33,6 +33,9 @@ private slots:
     void aBeamStopsWhereItMeetsTheSheet();
     void aBeamThatPassesAboveBesideOrAwayMisses();
     void aBowedCycIsHitFurtherBackInTheMiddle();
+    void aUWallRunsRoundItsFront();
+    void aWallIsMetOnItsFaceAndOnItsTop();
+    void anOpenCurtainHangsOnlyAtItsEnds();
     void xmlRoundTripAndStorage();
 };
 

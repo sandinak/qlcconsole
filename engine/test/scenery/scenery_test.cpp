@@ -63,8 +63,9 @@ void Scenery_Test::theBowPullsTheMiddleUpstage()
     QVERIFY(near(s.pointAt(0.0, 0.0).y(), -1.0));       // 1.5 m further upstage
     QVERIFY(near(s.pointAt(1.0, 0.0).y(), 0.5));        // the ends stay put
     QVERIFY(near(s.pointAt(0.5, 0.0).y(), 0.5 - 1.5 * 0.75));
-    s.setBow(-2.0f);
-    QCOMPARE(s.bow(), 0.0f);                            // no bowing toward the house
+    s.setBow(-2.0f);                                    // and toward the house
+    QVERIFY(near(s.pointAt(0.0, 0.0).y(), 2.5));
+    QVERIFY(near(s.normalAt(0.0).y(), 1.0));            // still facing it
 }
 
 void Scenery_Test::rotationTurnsTheSheet()
@@ -118,6 +119,74 @@ void Scenery_Test::aBowedCycIsHitFurtherBackInTheMiddle()
     QVERIFY2(end < 5.2, qPrintable(QString::number(end)));
 }
 
+void Scenery_Test::aUWallRunsRoundItsFront()
+{
+    // A fountain's rim: 3 ft across, 4 ft deep, its open back at (5, 5).
+    Scenery s(0);
+    s.setKind(Scenery::Wall);
+    s.setOutline(Scenery::RoundedU);
+    s.setOriginX(5.0f);
+    s.setOriginY(5.0f);
+    s.setWidth(0.9144f);
+    s.setDepth(1.2192f);
+    const double r = 0.4572, side = 1.2192 - r;
+    QVERIFY(near(s.pointAt(-1.0, 0.0).x(), 5.0 - r) && near(s.pointAt(-1.0, 0.0).y(), 5.0));
+    QVERIFY(near(s.pointAt(1.0, 0.0).x(), 5.0 + r) && near(s.pointAt(1.0, 0.0).y(), 5.0));
+    // The front of the curve is the middle, toward the audience.
+    QVERIFY(near(s.pointAt(0.0, 0.0).x(), 5.0) && near(s.pointAt(0.0, 0.0).y(), 5.0 + side + r));
+    QVERIFY(near(s.normalAt(0.0).y(), 1.0));
+    // Outward all the way round: off the stage-right side, stage right.
+    QVERIFY(near(s.normalAt(-0.95).x(), -1.0));
+    QVERIFY(near(s.normalAt(0.95).x(), 1.0));
+    // A face is half the thickness off the line.
+    s.setThickness(0.1016f);
+    QVERIFY(near(s.pointAt(0.0, 0.0, 0.0508).y(), 5.0 + side + r + 0.0508));
+    QVERIFY(s.segments() > 16);
+}
+
+void Scenery_Test::aWallIsMetOnItsFaceAndOnItsTop()
+{
+    Scenery s(0);
+    s.setKind(Scenery::Wall);
+    s.setOriginX(0.0f);
+    s.setOriginY(0.0f);
+    s.setWidth(2.0f);
+    s.setHeight(0.5f);
+    s.setThickness(0.1f);
+    double t = 0.0;
+    QVector3D n;
+    // Level, from downstage: its front face, 5 cm in front of the line.
+    QVERIFY(s.rayHit(QVector3D(0.0f, 2.0f, 0.25f), QVector3D(0.0f, -1.0f, 0.0f), t, 1e9, 16, &n));
+    QVERIFY2(near(t, 1.95), qPrintable(QString::number(t)));
+    QVERIFY(near(n.y(), 1.0));
+    // Straight down on it: its top.
+    QVERIFY(s.rayHit(QVector3D(0.3f, 0.02f, 3.0f), QVector3D(0.0f, 0.0f, -1.0f), t, 1e9, 16, &n));
+    QVERIFY(near(t, 2.5));
+    QVERIFY(near(n.z(), 1.0));
+    // Down just past its face: misses.
+    QVERIFY(!s.rayHit(QVector3D(0.3f, 0.08f, 3.0f), QVector3D(0.0f, 0.0f, -1.0f), t));
+}
+
+void Scenery_Test::anOpenCurtainHangsOnlyAtItsEnds()
+{
+    Scenery s(0);
+    cyc(s);
+    s.setKind(Scenery::MainDrape);
+    QVERIFY(s.hasState());
+    double t = 0.0;
+    QVERIFY(s.rayHit(QVector3D(6.0f, 5.5f, 3.0f), QVector3D(0.0f, -1.0f, 0.0f), t));    // closed
+    s.setState(Scenery::Open);
+    QCOMPARE(s.spans().size(), 2);
+    QVERIFY(!s.rayHit(QVector3D(6.0f, 5.5f, 3.0f), QVector3D(0.0f, -1.0f, 0.0f), t));   // through the middle
+    QVERIFY(s.rayHit(QVector3D(1.5f, 5.5f, 3.0f), QVector3D(0.0f, -1.0f, 0.0f), t));    // its gathered end
+    s.setState(Scenery::Flown);
+    QVERIFY(s.spans().isEmpty());
+    QVERIFY(!s.rayHit(QVector3D(1.5f, 5.5f, 3.0f), QVector3D(0.0f, -1.0f, 0.0f), t));
+    // A cyc does not open.
+    s.setKind(Scenery::Cyclorama);
+    QCOMPARE(s.spans().size(), 1);
+}
+
 void Scenery_Test::xmlRoundTripAndStorage()
 {
     Scenery s(7);
@@ -130,6 +199,11 @@ void Scenery_Test::xmlRoundTripAndStorage()
     s.setLocked(true);
     s.setLayerId(3);
     s.setGroupId(4);
+    s.setKind(Scenery::Wall);
+    s.setOutline(Scenery::RoundedU);
+    s.setDepth(1.25f);
+    s.setThickness(0.1f);
+    s.setState(Scenery::Open);
 
     QByteArray buf;
     QXmlStreamWriter w(&buf);
@@ -147,6 +221,10 @@ void Scenery_Test::xmlRoundTripAndStorage()
     QVERIFY(back.locked());
     QCOMPARE(back.layerId(), quint32(3));
     QCOMPARE(back.groupId(), quint32(4));
+    QCOMPARE(back.kind(), int(Scenery::Wall));
+    QCOMPARE(back.outline(), int(Scenery::RoundedU));
+    QVERIFY(near(back.depth(), 1.25) && near(back.thickness(), 0.1));
+    QCOMPARE(back.state(), int(Scenery::Open));
 
     QXmlStreamReader wrong(QByteArray("<Stand ID=\"1\"/>"));
     wrong.readNextStartElement();

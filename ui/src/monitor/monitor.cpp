@@ -1574,8 +1574,9 @@ void Monitor::initGraphicsToolbar()
                            this, SLOT(slotAddPlatform()));
         addMenu->addAction(tr("Add Steps"),
                            this, SLOT(slotAddSteps()));
-        addMenu->addAction(tr("Add Cyclorama"),
-                           this, SLOT(slotAddCyclorama()));
+        QMenu *sceneryMenu = addMenu->addMenu(tr("Add Scenery"));
+        foreach (int kind, Scenery::kinds())
+            sceneryMenu->addAction(Scenery::kindName(kind), this, [this, kind]() { slotAddScenery(kind); });
         addMenu->addAction(QIcon(":/image.png"), tr("Add Image"),
                            this, SLOT(slotAddImage()));
         addMenu->addAction(tr("Add Network Node"),
@@ -5594,29 +5595,86 @@ void Monitor::slotEditStand(quint32 sid)
 
 void Monitor::slotAddCyclorama()
 {
-    Scenery *s = m_props->addScenery();
-    s->setKind(Scenery::Cyclorama);
-    s->setName(tr("Cyclorama %1").arg(s->id() + 1));
+    slotAddScenery(Scenery::Cyclorama);
+}
+
+void Monitor::slotAddScenery(int kind)
+{
     const double mpu = (m_props->gridUnits() == MonitorProperties::Feet) ? 0.3048 : 1.0;
     const double stageW = double(m_props->gridSize().x()) * mpu;
-    if (!m_pendingAddScenePos.isNull())
+    const double stageD = double(m_props->gridSize().z()) * mpu;
+    const bool atClick = !m_pendingAddScenePos.isNull();
+    QPointF click;
+    if (atClick)
     {
-        // Where the canvas menu was opened, the stage's width wide.
         const QPointF mm = m_graphicsView->pixelsToRealPosition(
             m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
-        s->setOriginX(float(mm.x() / 1000.0));
-        s->setOriginY(float(mm.y() / 1000.0));
+        click = QPointF(mm.x() / 1000.0, mm.y() / 1000.0);
         m_pendingAddScenePos = QPointF();
     }
-    else
+    const float fullW = float(qMax(2.0, stageW - 1.0));
+
+    /* Where each usually goes: the cyc and back wall across the back, the
+       main drape across the front, a traveler mid-stage, legs and a border
+       two-thirds of the way down, a scrim just in front of the cyc. */
+    auto make = [&](double x, double y) {
+        Scenery *s = m_props->addScenery();
+        s->setKind(kind);
+        s->setColor(Scenery::defaultColor(kind));
+        s->setName(tr("%1 %2").arg(Scenery::kindName(kind)).arg(s->id() + 1));
+        s->setOriginX(float(atClick ? click.x() : x));
+        s->setOriginY(float(atClick ? click.y() : y));
+        s->setWidth(fullW);
+        s->setHeight(6.0f);
+        s->setLayerId(m_props->activeLayerId());
+        return s;
+    };
+    Scenery *s = nullptr;
+    switch (kind)
     {
-        // Across the back: centred, at the upstage edge of the stage.
-        s->setOriginX(float(stageW / 2.0));
-        s->setOriginY(0.3f);
+        case Scenery::BackWall:
+            s = make(stageW / 2.0, 0.1);
+            s->setThickness(0.2f);
+            break;
+        case Scenery::MainDrape:
+            s = make(stageW / 2.0, qMax(1.0, stageD - 0.5));
+            break;
+        case Scenery::Traveler:
+            s = make(stageW / 2.0, stageD / 2.0);
+            break;
+        case Scenery::Leg:
+        {
+            // A pair, one each side, unless it was put somewhere by hand.
+            s = make(0.6, stageD * 0.66);
+            s->setWidth(1.2f);
+            if (!atClick)
+            {
+                Scenery *other = make(stageW - 0.6, stageD * 0.66);
+                other->setWidth(1.2f);
+            }
+            break;
+        }
+        case Scenery::Border:
+            s = make(stageW / 2.0, stageD * 0.66);
+            s->setHeight(1.2f);
+            s->setBottom(4.8f);
+            break;
+        case Scenery::Scrim:
+            s = make(stageW / 2.0, 1.0);
+            break;
+        case Scenery::Wall:
+            s = make(stageW / 2.0, stageD / 2.0);
+            s->setWidth(1.0f);
+            s->setHeight(0.5f);
+            s->setThickness(0.1f);
+            break;
+        case Scenery::Cyclorama:
+        default:
+            // Across the back: centred, at the upstage edge of the stage.
+            s = make(stageW / 2.0, 0.3);
+            s->setName(tr("Cyclorama %1").arg(s->id() + 1));
+            break;
     }
-    s->setWidth(float(qMax(2.0, stageW - 1.0)));
-    s->setHeight(6.0f);
-    s->setLayerId(m_props->activeLayerId());
     m_graphicsView->updatePlatforms();
     if (m_layersPanel) m_layersPanel->reload();
     m_doc->setModified();
@@ -5654,26 +5712,74 @@ void Monitor::slotEditScenery(quint32 sid)
     QDoubleSpinBox *wSpin   = mkSpin(s->width(), 0.1, posR * 2);
     QDoubleSpinBox *hSpin   = mkSpin(s->height(), 0.1, isFeet ? 100.0 : 30.0);
     QDoubleSpinBox *bSpin   = mkSpin(s->bottom(), 0.0, isFeet ? 100.0 : 30.0);
-    QDoubleSpinBox *bowSpin = mkSpin(s->bow(), 0.0, isFeet ? 33.0 : 10.0);
+    QDoubleSpinBox *bowSpin = mkSpin(s->bow(), isFeet ? -33.0 : -10.0, isFeet ? 33.0 : 10.0);
+    QDoubleSpinBox *depthSpin = mkSpin(s->depth(), 0.05, posR);
+    QDoubleSpinBox *thickSpin = mkSpin(s->thickness(), 0.0, isFeet ? 10.0 : 3.0);
+    thickSpin->setDecimals(3);
+    QComboBox *kindCombo = new QComboBox(&dlg);
+    foreach (int k, Scenery::kinds())
+        kindCombo->addItem(Scenery::kindName(k), k);
+    kindCombo->setCurrentIndex(qMax(0, kindCombo->findData(s->kind())));
+    kindCombo->setObjectName("sceneryKind");
+    QComboBox *outlineCombo = new QComboBox(&dlg);
+    outlineCombo->addItem(tr("Straight or bowed"), int(Scenery::SheetOutline));
+    outlineCombo->addItem(tr("U, rounded front"), int(Scenery::RoundedU));
+    outlineCombo->setCurrentIndex(qMax(0, outlineCombo->findData(s->outline())));
+    outlineCombo->setObjectName("sceneryOutline");
+    outlineCombo->setToolTip(tr("A U has a half-round front as wide as it is, and straight sides "
+                                "running back to its Depth -- a fountain's rim, a planter"));
+    QComboBox *stateCombo = new QComboBox(&dlg);
+    for (int st : { int(Scenery::Closed), int(Scenery::Open), int(Scenery::Flown) })
+        stateCombo->addItem(Scenery::stateName(st), st);
+    stateCombo->setCurrentIndex(qMax(0, stateCombo->findData(s->state())));
+    stateCombo->setObjectName("sceneryState");
+    stateCombo->setToolTip(tr("Open: split, each half gathered at its end. Flown out: taken up, "
+                              "out of the way of the light"));
+    depthSpin->setToolTip(tr("From the open back to the front of the curve"));
+    thickSpin->setToolTip(tr("How thick it is; 0 for cloth"));
     QDoubleSpinBox *rotSpin = new QDoubleSpinBox(&dlg);
     rotSpin->setRange(-180, 180); rotSpin->setDecimals(0); rotSpin->setSuffix(QStringLiteral("°"));
     rotSpin->setValue(double(s->rotation()));
     xSpin->setToolTip(tr("The middle of the bottom edge, across the stage"));
     ySpin->setToolTip(tr("The middle of the bottom edge, up/down stage"));
     bSpin->setToolTip(tr("Height of the bottom edge above the floor (0 = to the deck)"));
-    bowSpin->setToolTip(tr("How far the middle curves away from the audience; 0 is flat"));
+    bowSpin->setToolTip(tr("How far the middle curves away from the audience; 0 is flat, "
+                           "less than 0 curves toward them"));
     rotSpin->setToolTip(tr("0 runs across the stage facing the audience"));
+    form->addRow(tr("Kind:"), kindCombo);
     form->addRow(tr("Centre X:"), xSpin);
     form->addRow(tr("Centre Y:"), ySpin);
+    form->addRow(tr("Shape:"), outlineCombo);
     form->addRow(tr("Width:"), wSpin);
+    form->addRow(tr("Depth:"), depthSpin);
     form->addRow(tr("Height:"), hSpin);
+    form->addRow(tr("Thickness:"), thickSpin);
     form->addRow(tr("Bottom trim:"), bSpin);
     form->addRow(tr("Bow:"), bowSpin);
     form->addRow(tr("Facing:"), rotSpin);
+    form->addRow(tr("Curtain:"), stateCombo);
+    // Each row only where it means something for the kind.
+    auto showRow = [form](QWidget *field, bool on) {
+        field->setVisible(on);
+        if (QWidget *label = form->labelForField(field))
+            label->setVisible(on);
+    };
+    auto showRows = [&]() {
+        const int k = kindCombo->currentData().toInt();
+        const bool built = (k == Scenery::Wall || k == Scenery::BackWall);
+        const bool u = built && outlineCombo->currentData().toInt() == Scenery::RoundedU;
+        showRow(outlineCombo, built);
+        showRow(depthSpin, u);
+        showRow(bowSpin, !u);
+        showRow(thickSpin, built);
+        showRow(stateCombo, k == Scenery::MainDrape || k == Scenery::Traveler);
+        dlg.adjustSize();
+    };
     QColor chosen = s->color();
     ColourSwatchButton *colorBtn = new ColourSwatchButton(chosen, tr("Cloth colour"), &dlg);
-    colorBtn->setResetColour(QColor(226, 228, 236));
+    colorBtn->setResetColour(Scenery::defaultColor(s->kind()));
     form->addRow(tr("Colour:"), colorBtn);
+    showRows();
 
     auto apply = [&]() {
         s->setName(nameEdit->text().trimmed().isEmpty() ? oldName : nameEdit->text().trimmed());
@@ -5684,11 +5790,22 @@ void Monitor::slotEditScenery(quint32 sid)
         s->setBottom(float(bSpin->value() * fromDisp));
         s->setBow(float(bowSpin->value() * fromDisp));
         s->setRotation(float(rotSpin->value()));
+        s->setKind(kindCombo->currentData().toInt());
+        const bool built = (s->kind() == Scenery::Wall || s->kind() == Scenery::BackWall);
+        s->setOutline(built ? outlineCombo->currentData().toInt() : int(Scenery::SheetOutline));
+        s->setDepth(float(depthSpin->value() * fromDisp));
+        s->setThickness(built ? float(thickSpin->value() * fromDisp) : 0.0f);
+        s->setState(stateCombo->currentData().toInt());
         s->setColor(chosen);
         m_graphicsView->updatePlatforms();
     };
-    for (QDoubleSpinBox *sp : { xSpin, ySpin, wSpin, hSpin, bSpin, bowSpin, rotSpin })
+    for (QDoubleSpinBox *sp : { xSpin, ySpin, wSpin, hSpin, bSpin, bowSpin, rotSpin, depthSpin, thickSpin })
         connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg, [&apply](double) { apply(); });
+    for (QComboBox *cb : { kindCombo, outlineCombo, stateCombo })
+        connect(cb, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg, [&](int) {
+            showRows();
+            apply();
+        });
     connect(nameEdit, &QLineEdit::textChanged, &dlg, [&apply](const QString &) { apply(); });
     connect(colorBtn, &ColourSwatchButton::colourChanged, &dlg, [&](const QColor &c) {
         chosen = c;
@@ -6569,8 +6686,9 @@ void Monitor::slotCanvasContextMenu(QPointF scenePos)
                        this, SLOT(slotAddStand()));
     addMenu->addAction(tr("Tower"),
                        this, SLOT(slotAddTower()));
-    addMenu->addAction(tr("Cyclorama"),
-                       this, SLOT(slotAddCyclorama()));
+    QMenu *sceneryMenu = addMenu->addMenu(tr("Scenery"));
+    foreach (int kind, Scenery::kinds())
+        sceneryMenu->addAction(Scenery::kindName(kind), this, [this, kind]() { slotAddScenery(kind); });
     addMenu->addSeparator();
     addMenu->addAction(tr("Target Position"),
                        this, SLOT(slotAddTarget()));

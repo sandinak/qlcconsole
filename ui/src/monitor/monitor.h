@@ -431,6 +431,9 @@ protected slots:
     /** Add a cyclorama: where the canvas menu was opened, or across the back
      *  of the stage (full width, at the upstage edge) from the toolbar. */
     void slotAddCyclorama();
+    /** Add a piece of scenery of @p kind (Scenery::Kind) where it usually
+     *  goes, or where the canvas menu was opened; then edit it. */
+    void slotAddScenery(int kind);
     void slotEditScenery(quint32 sid);
     void slotEditTower(quint32 tid);
 

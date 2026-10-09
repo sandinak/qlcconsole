@@ -80,7 +80,8 @@ per-structure editor's own Angled tab uses, just showing everything at once.
 ## Stage structures
 
 Six structure types, each its own object with its own geometry, plus
-**hangers** (rigging on a truss or tower) and **scenery** (the cyclorama):
+**hangers** (rigging on a truss or tower) and **scenery** (cyc, walls and
+drapes):
 
 - **Truss** — a horizontal or vertical run, drawn as an open lattice (four
   chords, end frames, alternating diagonal bracing) rather than a solid box
@@ -166,17 +167,42 @@ dropping to one hook. One fixture hangs below the hook.
 Hangers show in the structure editors and the 3D views; they aren't drawn on
 the 2D plot yet.
 
-### Scenery: the cyclorama
+### Scenery: cyc, walls and drapes
 
-**Add → Add Cyclorama** from the toolbar puts a cyc across the back of the
-stage, stage width and 6 m tall (from the canvas's right-click menu, it goes
-where you clicked) and opens its editor: width, height, bottom trim, facing,
-**bow** (a cyc that curves upstage at its centre), and colour, with a live
-preview (Cancel reverts). On the plot it's a band from the Top and the
-sheet in the elevations; drag, lock, rename, layer, hide, and delete it like
-any structure, and it's listed in Layers. In the 3D views it's the cloth,
-lit by the room, and beams that reach it stop on it and leave their pool
-on it. Other scenery (main drape, legs, borders, scrims) isn't built yet.
+**Add → Add Scenery** (toolbar, or the canvas's right-click menu, where it
+goes where you clicked) offers each kind and puts it where it usually goes:
+
+| Kind | Starts as |
+|---|---|
+| **Cyclorama** | across the back, stage width, 6 m tall, pale |
+| **Back wall** | across the back, 20 cm thick |
+| **Main drape** | across the front, house red |
+| **Traveler** | mid-stage, black |
+| **Leg** | a pair, one each side, 1.2 m wide, black |
+| **Border** | hung across, 1.2 m deep with its bottom at 4.8 m |
+| **Scrim** | just in front of the cyc, seen through |
+| **Wall** | a low built wall: a planter, a fountain's rim |
+
+Its editor (live preview, Cancel reverts) has the kind, position, width,
+height, bottom trim, facing, colour and **bow** — curving the middle away
+from the audience, or toward them below 0. The rows that only make sense
+for some kinds show only there:
+
+- **Curtain** (main drape, traveler) — **Closed**, **Open** (split, each
+  half gathered at its end) or **Flown out** (taken up out of the way: not
+  drawn, and the light goes through; the plot shows where it hangs from,
+  dashed). Set while designing; it isn't cued.
+- **Shape** and **Thickness** (wall, back wall) — **Straight or bowed**, or
+  **U, rounded front**: a half-round front as wide as the wall, straight sides
+  running back to its **Depth**, the open back at its position.
+
+On the plot it's a band from the Top (a built wall its footprint, an open
+curtain its two gathered ends) and the sheet in the elevations; drag, lock,
+rename, layer, hide and delete it like any structure, and it's listed in
+Layers. In the 3D views drapes hang in folds, a scrim is seen through, and a
+wall has its faces, top and ends. Everything but a flown curtain stops the
+light that reaches it and takes its pool — a beam coming down on a wall lands
+on its top — and hides what is behind it.
 
 ## Mounting a fixture
 
