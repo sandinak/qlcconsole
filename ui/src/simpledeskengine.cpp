@@ -71,6 +71,8 @@ void SimpleDeskEngine::clearContents()
         delete cs;
     m_cueStacks.clear();
     m_values.clear();
+    locker.unlock();
+    emit heldChannelsChanged();
 }
 
 /****************************************************************************
@@ -82,8 +84,18 @@ void SimpleDeskEngine::setValue(uint channel, uchar value)
     //qDebug() << Q_FUNC_INFO << "channel:" << channel << ", value:" << value;
 
     QMutexLocker locker(&m_mutex);
+    const bool taken = !m_values.contains(channel);
     m_values[channel] = value;
     setChanged(true);
+    locker.unlock();
+    if (taken)
+        emit heldChannelsChanged();
+}
+
+QList<uint> SimpleDeskEngine::heldChannels() const
+{
+    QMutexLocker locker(&m_mutex);
+    return m_values.keys();
 }
 
 uchar SimpleDeskEngine::value(uint channel) const
@@ -108,6 +120,8 @@ void SimpleDeskEngine::setCue(const Cue& cue)
     QMutexLocker locker(&m_mutex);
     m_values = cue.values();
     setChanged(true);
+    locker.unlock();
+    emit heldChannelsChanged();
 }
 
 Cue SimpleDeskEngine::cue() const
@@ -134,6 +148,8 @@ void SimpleDeskEngine::resetUniverse(int universe)
     // add command to queue. Will be taken care of at the next writeDMX call
     m_commandQueue.append(QPair<int,quint32>(ResetUniverse, universe));
     setChanged(true);
+    locker.unlock();
+    emit heldChannelsChanged();
 }
 
 void SimpleDeskEngine::resetChannel(uint channel)
@@ -145,6 +161,8 @@ void SimpleDeskEngine::resetChannel(uint channel)
     // add command to queue. Will be taken care of at the next writeDMX call
     m_commandQueue.append(QPair<int,quint32>(ResetChannel, channel));
     setChanged(true);
+    locker.unlock();
+    emit heldChannelsChanged();
 }
 
 /****************************************************************************

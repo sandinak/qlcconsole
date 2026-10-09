@@ -99,6 +99,12 @@ problem can be fixed on the spot. It checks for:
 - **universes with fixtures but no output**, so what they send goes
   nowhere;
 - **WLED devices not answering**, or on weak Wi-Fi;
+- **WLEDs not set up as the show drives them** (see WLED output), with
+  **Fix on Device…**;
+- **channels the Simple Desk is holding** — a channel touched on the desk
+  overrides every look and scene until released, so a look that "doesn't
+  change the fixture" is often this. Listed by universe and channel, with
+  **Release**;
 - **files in cloud storage that aren't on this computer** (see
   [Cloud storage](#cloud-storage));
 - **fixtures with no definition here** — standing in as plain dimmers until

@@ -875,6 +875,14 @@ void App::initDoc()
 
     /* ...and each can be fixed from there: the unpatched selected and
        patched, a definition opened to say what it puts out. */
+    ShowStatus::instance()->setAction("simpledesk.held", tr("Release"),
+        [](QWidget *, const QVariantList &items) {
+            if (SimpleDesk *desk = SimpleDesk::instance())
+            {
+                foreach (const QVariant &v, items)
+                    desk->releaseUniverse(v.toInt());
+            }
+        });
     ShowStatus::instance()->setAction("wled.config", tr("Fix on Device…"),
         [](QWidget *parent, const QVariantList &items) {
             QList<quint32> ids;

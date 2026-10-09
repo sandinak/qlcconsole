@@ -79,6 +79,9 @@ public:
 
     bool hasChannel(uint channel);
 
+    /** Every channel the desk holds (absolute: universe << 9 | address). */
+    QList<uint> heldChannels() const;
+
     /** Set a complete cue to universe */
     void setCue(const Cue& cue);
 
@@ -108,6 +111,10 @@ public:
     CueStack* cueStack(uint stack);
 
 signals:
+    /** Which channels the desk holds has changed: one taken, released, or
+     *  a universe's or a cue's worth at once. */
+    void heldChannelsChanged();
+
     /** Tells that the current cue within cuestack $stack has changed to $index */
     void currentCueChanged(uint stack, int index);
 

@@ -22,6 +22,11 @@
 #define protected public
 #define private public
 #include "simpledeskengine.h"
+#include <QSignalSpy>
+#include "inputoutputmap.h"
+#include "showstatus.h"
+#include "simpledesk.h"
+#include "virtualconsole.h"
 #include "doc.h"
 #include "cue.h"
 #include "cuestack.h"
@@ -98,6 +103,41 @@ void SimpleDeskEngine_Test::xml()
     CueStack* cs2 = eng2.cueStack(3);
     QCOMPARE(cs2->cues().size(), 1);
     QCOMPARE(cs2->cues().at(0).name(), QString("Test"));
+}
+
+void SimpleDeskEngine_Test::heldChannelsAreInTheFooterUntilReleased()
+{
+    m_doc->inputOutputMap()->setUniverseName(1, "U02-Lantern");
+    VirtualConsole *vc = new VirtualConsole(nullptr, m_doc);   // the desk's grand master reads it
+    auto dropVc = qScopeGuard([vc]() { delete vc; });
+    SimpleDesk desk(nullptr, m_doc);
+    SimpleDeskEngine *eng = desk.m_engine;
+    QSignalSpy held(eng, &SimpleDeskEngine::heldChannelsChanged);
+
+    auto entry = []() {
+        foreach (const ShowStatus::Entry &e, ShowStatus::instance()->allEntries())
+            if (e.key == "simpledesk.held")
+                return e;
+        return ShowStatus::Entry();
+    };
+
+    // Taking a channel says so; moving one already held does not.
+    eng->setValue((1 << 9) | 0, 255);
+    eng->setValue((1 << 9) | 6, 120);
+    eng->setValue((1 << 9) | 6, 200);
+    QCOMPARE(held.count(), 2);
+    QCOMPARE(eng->heldChannels().size(), 2);
+    QTRY_VERIFY(!entry().key.isEmpty());
+    const ShowStatus::Entry e = entry();
+    QCOMPARE(e.severity, ShowStatus::Warning);
+    QVERIFY2(e.summary.contains("2 channel"), qPrintable(e.summary));
+    QCOMPARE(e.items, QStringList() << "U02-Lantern — 2 channel(s): 1, 7");
+    QCOMPARE(e.itemData.first().toInt(), 1);
+
+    // Released: gone from the desk and from the footer.
+    desk.releaseUniverse(1);
+    QVERIFY(eng->heldChannels().isEmpty());
+    QTRY_VERIFY(entry().key.isEmpty());
 }
 
 QTEST_MAIN(SimpleDeskEngine_Test)

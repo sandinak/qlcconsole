@@ -114,6 +114,10 @@ public:
     void resetChannel(quint32 address);
     void resetUniverse();
     void resetUniverse(int index);
+    /** Let go of every channel the desk holds in universe @p index. */
+    void releaseUniverse(int index);
+    /** The footer's "simpledesk.held" entry, from what the desk holds. */
+    void publishHeld();
 
 private:
     void initUniversesCombo();
