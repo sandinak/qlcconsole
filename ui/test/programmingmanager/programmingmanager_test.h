@@ -34,6 +34,16 @@ private slots:
      *  view similar to search the tree for layers". */
     void fixturesAndGroupsNarrowToASearch();
 
+    /** "clicked on a fg .. it opened the fg view .. clicked back on an
+     *  effect .. and I can't get back to the effect." */
+    void fromAGroupsViewTheSceneAndItsEffectComeBack();
+    /** Transitions set from the scene's canvas. */
+    void aScenesTransitionsAreSetOnItsCanvas();
+    /** "should throw a warning if we detect cloud based storage that's not
+     *  local .. that's burned me before." */
+    void filesInCloudStorageNotHereAreAWarning();
+    void fixturesWithoutTheirDefinitionsAreAnError();
+
     /** "Didn't change colour when colour was changed in program from white
      *  to blue." A palette isn't a Function, so editing one through the real
      *  look editor UI must explicitly tell the scenes that use it -- nothing

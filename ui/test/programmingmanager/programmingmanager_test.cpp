@@ -16,6 +16,12 @@
 */
 
 #include <QtTest>
+#include <QXmlStreamReader>
+#include "qlcfile.h"
+#include "scenetransition.h"
+#include <QSpinBox>
+#include <QDoubleSpinBox>
+#include <QComboBox>
 #include <QLineEdit>
 #include <QSignalSpy>
 #include <QMimeData>
@@ -170,6 +176,11 @@ static void deliverDrop(SceneGroupLooks *canvas, QMimeData *mime, const QPoint &
 void ProgrammingManager_Test::init()
 {
     m_doc = new Doc(this);
+    /* Not this machine's cloud storage: a user folder it has not pinned
+       leaves files online-only, which the libraries skip and the footer
+       warns of -- an entry no test here expects. */
+    QLCFile::forgetSkippedOnlineOnly();
+    ShowStatus::instance()->clearStatus("storage.onlineonly");
 }
 
 void ProgrammingManager_Test::cleanup()
@@ -243,6 +254,142 @@ void ProgrammingManager_Test::fixturesAndGroupsNarrowToASearch()
     search->clear();
     QVERIFY(shown("CS1f") && shown("DS1f") && shown("AT-W-Top"));
     QVERIFY(!row("AT-W-Top")->isExpanded());
+}
+
+void ProgrammingManager_Test::fromAGroupsViewTheSceneAndItsEffectComeBack()
+{
+    QVERIFY(m_doc->inputOutputMap()->addUniverse());
+    Fixture *fx = new Fixture(m_doc);
+    fx->setName("Bar");
+    fx->setChannels(3);
+    QVERIFY(m_doc->addFixture(fx));
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    grp->setName("Towers");
+    grp->setSize(QSize(1, 1));
+    QVERIFY(m_doc->addFixtureGroup(grp));
+    grp->assignFixture(fx->id());
+    QLCPalette *chase = new QLCPalette(QLCPalette::Effect, m_doc);
+    chase->setName("Chase");
+    QVERIFY(m_doc->addPalette(chase));
+    Scene *scene = new Scene(m_doc);
+    scene->setName("01-01.01-Opening");
+    QVERIFY(m_doc->addFunction(scene));
+    scene->addFixtureGroup(grp->id());
+    scene->addPalette(chase->id());
+
+    ProgrammingManager mgr(nullptr, m_doc);
+    mgr.loadCanvas(scene->id());
+    QVERIFY(mgr.m_canvas != nullptr);
+
+    // The group's layout view: and a way back.
+    mgr.loadGroupEditor(grp->id());
+    QVERIFY(mgr.m_canvas == nullptr);
+    QVERIFY(!mgr.m_groupBackButton->isHidden());
+    QVERIFY(mgr.m_groupBackButton->text().contains("01-01.01-Opening"));
+
+    // An effect opened from there: back on its scene, the effect showing.
+    mgr.m_paletteTree->updateTree();
+    QTreeWidgetItem *row = nullptr;
+    for (QTreeWidgetItemIterator it(mgr.m_paletteTree); *it; ++it)
+        if (mgr.m_paletteTree->itemPaletteId(*it) == chase->id())
+            row = *it;
+    QVERIFY(row != nullptr);
+    mgr.slotPaletteDoubleClicked(row);
+    QCOMPARE(mgr.m_currentScene, scene->id());
+    QVERIFY(mgr.m_canvas != nullptr);
+    QVERIFY(mgr.m_groupBackButton->isHidden());
+    QVERIFY(!mgr.m_lookEditor->isHidden());
+    QCOMPARE(mgr.m_lookEditor->paletteId(), chase->id());
+
+    // And the button itself.
+    mgr.loadGroupEditor(grp->id());
+    mgr.m_groupBackButton->click();
+    QCOMPARE(mgr.m_currentScene, scene->id());
+    QVERIFY(mgr.m_canvas != nullptr);
+}
+
+void ProgrammingManager_Test::aScenesTransitionsAreSetOnItsCanvas()
+{
+    Scene *scene = new Scene(m_doc);
+    scene->setName("01-01.01-Opening");
+    QVERIFY(m_doc->addFunction(scene));
+    ProgrammingManager mgr(nullptr, m_doc);
+    mgr.loadCanvas(scene->id());
+    QVERIFY(mgr.m_canvas != nullptr);
+    QComboBox *in = mgr.m_canvas->findChild<QComboBox *>("transitionInShape");
+    QComboBox *out = mgr.m_canvas->findChild<QComboBox *>("transitionOutShape");
+    QDoubleSpinBox *inTime = mgr.m_canvas->findChild<QDoubleSpinBox *>("transitionInTime");
+    QSpinBox *edge = mgr.m_canvas->findChild<QSpinBox *>("transitionEdge");
+    QVERIFY(in && out && inTime && edge);
+    QCOMPARE(in->currentIndex(), int(SceneTransition::None));     // the scene's fade, as always
+    QVERIFY(!inTime->isEnabled());
+
+    in->setCurrentIndex(int(SceneTransition::WipeToStageLeft));
+    inTime->setValue(3.5);
+    edge->setValue(20);
+    out->setCurrentIndex(int(SceneTransition::Dissolve));
+    QCOMPARE(scene->transitionIn().shape, SceneTransition::WipeToStageLeft);
+    QCOMPARE(scene->transitionIn().time, 3500u);
+    QCOMPARE(scene->transitionIn().softness, 0.2);
+    QCOMPARE(scene->transitionOut().shape, SceneTransition::Dissolve);
+    QVERIFY(inTime->isEnabled());
+
+    // Shown again when the scene is opened again.
+    mgr.loadCanvas(Function::invalidId());
+    mgr.loadCanvas(scene->id());
+    in = mgr.m_canvas->findChild<QComboBox *>("transitionInShape");
+    QCOMPARE(in->currentIndex(), int(SceneTransition::WipeToStageLeft));
+}
+
+void ProgrammingManager_Test::filesInCloudStorageNotHereAreAWarning()
+{
+    auto entry = [](const QString &key) {
+        foreach (const ShowStatus::Entry &e, ShowStatus::instance()->allEntries())
+            if (e.key == key)
+                return e;
+        return ShowStatus::Entry();
+    };
+    QLCFile::forgetSkippedOnlineOnly();
+    AppUtil::updateFixtureReadiness(m_doc);
+    QVERIFY(entry("storage.onlineonly").key.isEmpty());
+
+    QLCFile::noteSkippedOnlineOnly("/Users/x/Library/CloudStorage/SynologyDrive-Home/QLC+/Fixtures/Betopper-LM70.qxf");
+    QLCFile::noteSkippedOnlineOnly("/Users/x/Library/CloudStorage/SynologyDrive-Home/QLC+/RGBScripts/fire.js");
+    AppUtil::updateFixtureReadiness(m_doc);
+    const ShowStatus::Entry e = entry("storage.onlineonly");
+    QCOMPARE(e.severity, ShowStatus::Warning);
+    QVERIFY2(e.summary.contains("2 file"), qPrintable(e.summary));
+    QCOMPARE(e.items, QStringList() << "Betopper-LM70.qxf" << "fire.js");
+    QCOMPARE(e.itemGroups, QStringList() << "Fixtures" << "RGBScripts");
+    QVERIFY2(e.detail.contains("SynologyDrive"), qPrintable(e.detail));   // whose cloud it waits on
+
+    QLCFile::forgetSkippedOnlineOnly();
+    AppUtil::updateFixtureReadiness(m_doc);
+    QVERIFY(entry("storage.onlineonly").key.isEmpty());
+}
+
+void ProgrammingManager_Test::fixturesWithoutTheirDefinitionsAreAnError()
+{
+    auto entry = [](const QString &key) {
+        foreach (const ShowStatus::Entry &e, ShowStatus::instance()->allEntries())
+            if (e.key == key)
+                return e;
+        return ShowStatus::Entry();
+    };
+    QXmlStreamReader in(QStringLiteral(
+        "<Fixture><Manufacturer>Warmdance</Manufacturer><Model>XL-450</Model>"
+        "<Mode>16 Channel</Mode><ID>7</ID><Name>Mover SL</Name><Universe>0</Universe>"
+        "<Address>100</Address><Channels>16</Channels></Fixture>"));
+    in.readNextStartElement();
+    QVERIFY(Fixture::loader(in, m_doc));
+    AppUtil::updateFixtureReadiness(m_doc);
+    const ShowStatus::Entry e = entry("fixtures.nodefinition");
+    QCOMPARE(e.severity, ShowStatus::Error);
+    QCOMPARE(e.items, QStringList() << "Mover SL");
+    QCOMPARE(e.itemGroups, QStringList() << "Warmdance XL-450");
+    m_doc->deleteFixture(7);
+    AppUtil::updateFixtureReadiness(m_doc);
+    QVERIFY(entry("fixtures.nodefinition").key.isEmpty());
 }
 
 void ProgrammingManager_Test::editingALookColourNotifiesItsScene()

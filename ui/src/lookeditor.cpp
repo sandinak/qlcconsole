@@ -1076,7 +1076,10 @@ void LookEditor::maybeAutoName(QLCPalette *p)
         if (!path.isEmpty() && m_doc->effectScriptRunner())
         {
             const EffectScriptCache *cache = m_doc->effectScriptRunner()->cache();
-            const QString n = cache->nameFromPath(path);
+            // Its name as listed ("Fire", "Plasma (RGB Matrix)"), else its file's.
+            QString n = cache->scriptMeta(EffectScriptCache::portableName(path)).displayName;
+            if (n.isEmpty())
+                n = cache->nameFromPath(path);
             if (!n.isEmpty()) autoName = n;
         }
         break;
@@ -2213,7 +2216,7 @@ void LookEditor::populateEffectPicker(QLCPalette *p)
         const EffectScriptCache::ScriptMeta m = scache->scriptMeta(n);
         ScriptNode node;
         node.display  = n;
-        node.basename = scache->nameFromPath(scache->scriptPath(n));
+        node.basename = EffectScriptCache::portableName(scache->scriptPath(n));
         node.category = scriptCategory(m.fixtureTypes);
         node.tooltip  = m.description;
         byBasename.insert(node.basename, nodes.size());
@@ -2450,7 +2453,7 @@ void LookEditor::slotEffectScriptChanged(int /*index*/)
         else if (kind == EffectKindPreset)
             engineBase = m_doc->effectScriptRunner()->presetCache()->preset(name).script;
         else if (!name.isEmpty())
-            engineBase = scache->nameFromPath(scache->scriptPath(name));
+            engineBase = EffectScriptCache::portableName(scache->scriptPath(name));
         if (!engineBase.isEmpty())
         {
             const EffectScriptCache::ScriptMeta meta = scache->scriptMeta(engineBase);
@@ -2497,7 +2500,7 @@ void LookEditor::slotSaveAsEffect()
             return;
     }
 
-    const QString base = scache->nameFromPath(p->scriptPath());
+    const QString base = EffectScriptCache::portableName(p->scriptPath());
     const EffectScriptCache::ScriptMeta meta = scache->scriptMeta(base);
 
     EffectPresetCache::Preset preset;
@@ -2536,7 +2539,7 @@ void LookEditor::slotExportEffect()
     }
 
     EffectScriptCache *scache = m_doc->effectScriptRunner()->cache();
-    const QString base = scache->nameFromPath(p->scriptPath());
+    const QString base = EffectScriptCache::portableName(p->scriptPath());
     const EffectScriptCache::ScriptMeta meta = scache->scriptMeta(base);
 
     // Read the script source so the file is portable (a recipient who lacks the

@@ -422,7 +422,20 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     m_canvasTitle = new QLabel(this);
     m_canvasTitle->setStyleSheet("font-weight: bold;");
     m_canvasTitle->setWordWrap(true);
-    m_canvasLayout->addWidget(m_canvasTitle);
+    {
+        QHBoxLayout *titleRow = new QHBoxLayout();
+        titleRow->addWidget(m_canvasTitle, 1);
+        m_groupBackButton = new QPushButton(this);
+        m_groupBackButton->setToolTip(tr("Back to the scene that was open before this group"));
+        m_groupBackButton->hide();
+        connect(m_groupBackButton, &QPushButton::clicked, this, [this]() {
+            const quint32 sid = m_groupReturnScene;
+            if (m_doc->function(sid) != NULL)
+                loadCanvas(sid);
+        });
+        titleRow->addWidget(m_groupBackButton);
+        m_canvasLayout->addLayout(titleRow);
+    }
     /* The empty state says ONE line. The full explanation lives behind the
        button beside it, and shows itself once on a first run.
      *
@@ -740,6 +753,7 @@ void ProgrammingManager::loadCanvas(quint32 sceneId)
     if (sceneId == m_currentScene && m_canvas != NULL)
         return;
 
+    m_groupBackButton->hide();
     stopPreview();
     m_currentScene = sceneId;
     m_canvasFunction = sceneId;
@@ -833,6 +847,7 @@ void ProgrammingManager::loadFunctionEditor(Function *f)
     if (f == NULL)
         return;
 
+    m_groupBackButton->hide();
     stopPreview();
     m_currentScene = Function::invalidId();
     resetUndoFor(Function::invalidId());  // scene undo doesn't apply to func editors
@@ -911,6 +926,11 @@ void ProgrammingManager::loadGroupEditor(quint32 groupId)
     if (grp == NULL)
         return;
 
+    // Remember the scene to go back to (not another group: the scene before).
+    if (m_currentScene != Function::invalidId())
+        m_groupReturnScene = m_currentScene;
+    Function *back = m_doc->function(m_groupReturnScene);
+
     stopPreview();
     m_currentScene = Function::invalidId();
     resetUndoFor(Function::invalidId());
@@ -937,6 +957,13 @@ void ProgrammingManager::loadGroupEditor(quint32 groupId)
 
     m_canvasTitle->setText(tr("Fixture group: %1   —   %n head(s)", "", grp->headList().count())
                            .arg(grp->name()));
+    if (back != NULL)
+    {
+        m_groupBackButton->setText(tr("← Back to %1").arg(back->name()));
+        m_groupBackButton->show();
+    }
+    else
+        m_groupBackButton->hide();
 }
 
 void ProgrammingManager::updateTitle()
@@ -1084,7 +1111,7 @@ bool ProgrammingManager::organizeEffectPalettes()
         if (!(norm.isEmpty() || norm == QLatin1String("Palettes/Effect")))
             continue;
 
-        const QString base = scache->nameFromPath(p->scriptPath());
+        const QString base = EffectScriptCache::portableName(p->scriptPath());
         const EffectScriptCache::ScriptMeta meta = scache->scriptMeta(base);
         // A WLED look files under WLED, by WLED's name for it -- as the
         // effect browser lists it -- not under its port's (or stand-in's).
@@ -1172,6 +1199,12 @@ void ProgrammingManager::slotPaletteDoubleClicked(QTreeWidgetItem *item)
     const quint32 pid = m_paletteTree->itemPaletteId(item);
     if (pid != QLCPalette::invalidId())
     {
+        /* From a fixture group's layout view: that view fills the canvas, and
+           the look editor opened under it had no room ("clicked back on an
+           effect .. I can't get back to the effect"). Go back to the scene
+           first, then open the look on it. */
+        if (!m_groupBackButton->isHidden() && m_doc->function(m_groupReturnScene) != NULL)
+            loadCanvas(m_groupReturnScene);
         m_lookEditor->setPalette(pid);
         showLookEditorPanel(); // pivot from the DMX console if it's showing
     }

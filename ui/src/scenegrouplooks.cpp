@@ -34,6 +34,8 @@
 
 #include "programmingmanager.h"
 #include "scenegrouplooks.h"
+#include "scenetransition.h"
+#include <QSpinBox>
 #include "functionstreewidget.h"   // palette MIME type
 #include "effectscriptrunner.h"
 #include "effectscriptcache.h"
@@ -149,6 +151,91 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
        guide, which this reaches; the explanation is still one click away
        without standing in front of the work. */
     QHBoxLayout *helpRow = new QHBoxLayout();
+
+    /* How the whole look arrives and leaves: each fixture at its own moment
+       -- a wipe across the stage, from the centre, a dissolve, along each
+       bar -- instead of all fading together ("transitions .. fade in ..
+       wipe .. from center"). Effects in the look follow it too. */
+    if (m_scene != nullptr)
+    {
+        auto makeShape = [this](const SceneTransition &t) {
+            QComboBox *cb = new QComboBox(this);
+            cb->addItems(SceneTransition::shapeLabels());
+            cb->setCurrentIndex(int(t.shape));
+            return cb;
+        };
+        auto makeTime = [this](const SceneTransition &t) {
+            QDoubleSpinBox *sp = new QDoubleSpinBox(this);
+            sp->setRange(0.1, 120.0);
+            sp->setDecimals(1);
+            sp->setSingleStep(0.5);
+            sp->setSuffix(tr(" s"));
+            sp->setValue(t.time / 1000.0);
+            sp->setKeyboardTracking(false);
+            return sp;
+        };
+        const SceneTransition tin = m_scene->transitionIn(), tout = m_scene->transitionOut();
+        QComboBox *inShape = makeShape(tin);
+        QDoubleSpinBox *inTime = makeTime(tin);
+        QComboBox *outShape = makeShape(tout);
+        QDoubleSpinBox *outTime = makeTime(tout);
+        QSpinBox *edge = new QSpinBox(this);
+        edge->setRange(5, 100);
+        edge->setSuffix(QStringLiteral("%"));
+        edge->setValue(qRound((tin.isActive() ? tin.softness : tout.softness) * 100.0));
+        edge->setKeyboardTracking(false);
+        inShape->setToolTip(tr("How this look arrives when the scene starts: each fixture when "
+                               "the transition reaches it, in place of the scene's fade. "
+                               "Effects in the look follow it too."));
+        outShape->setToolTip(tr("How it leaves when the scene stops"));
+        inTime->setToolTip(tr("How long the transition in takes, start to finish"));
+        outTime->setToolTip(tr("How long the transition out takes"));
+        edge->setToolTip(tr("How soft its edge is: each fixture's own fade, as a share of "
+                            "the time -- 100% all together, low a sharp line"));
+        auto apply = [this, inShape, inTime, outShape, outTime, edge]() {
+            if (m_scene == nullptr)
+                return;
+            SceneTransition tin, tout;
+            tin.shape = SceneTransition::Shape(inShape->currentIndex());
+            tin.time = uint(qRound(inTime->value() * 1000.0));
+            tin.softness = edge->value() / 100.0;
+            tout.shape = SceneTransition::Shape(outShape->currentIndex());
+            tout.time = uint(qRound(outTime->value() * 1000.0));
+            tout.softness = edge->value() / 100.0;
+            inTime->setEnabled(tin.shape != SceneTransition::None);
+            outTime->setEnabled(tout.shape != SceneTransition::None);
+            edge->setEnabled(tin.isActive() || tout.isActive());
+            if (tin == m_scene->transitionIn() && tout == m_scene->transitionOut())
+                return;
+            m_scene->setTransitionIn(tin);
+            m_scene->setTransitionOut(tout);
+            if (m_doc != nullptr)
+                m_doc->setModified();
+            emit sceneModified();
+        };
+        inTime->setEnabled(tin.shape != SceneTransition::None);
+        outTime->setEnabled(tout.shape != SceneTransition::None);
+        edge->setEnabled(tin.isActive() || tout.isActive());
+        connect(inShape, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [apply](int) { apply(); });
+        connect(outShape, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [apply](int) { apply(); });
+        connect(inTime, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [apply](double) { apply(); });
+        connect(outTime, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [apply](double) { apply(); });
+        connect(edge, QOverload<int>::of(&QSpinBox::valueChanged), this, [apply](int) { apply(); });
+        inShape->setObjectName(QStringLiteral("transitionInShape"));
+        outShape->setObjectName(QStringLiteral("transitionOutShape"));
+        inTime->setObjectName(QStringLiteral("transitionInTime"));
+        edge->setObjectName(QStringLiteral("transitionEdge"));
+        helpRow->addWidget(new QLabel(tr("In:"), this));
+        helpRow->addWidget(inShape);
+        helpRow->addWidget(inTime);
+        helpRow->addSpacing(8);
+        helpRow->addWidget(new QLabel(tr("Out:"), this));
+        helpRow->addWidget(outShape);
+        helpRow->addWidget(outTime);
+        helpRow->addSpacing(8);
+        helpRow->addWidget(new QLabel(tr("Edge:"), this));
+        helpRow->addWidget(edge);
+    }
     helpRow->addStretch();
     QPushButton *guideBtn = new QPushButton(tr("How this works"), this);
     guideBtn->setFlat(true);

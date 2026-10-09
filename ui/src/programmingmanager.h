@@ -288,6 +288,10 @@ private:
 
     QVBoxLayout *m_canvasLayout;
     QLabel *m_canvasTitle;
+    /** In a fixture group's layout view: back to the scene that was open
+     *  before it ("clicked back on an effect .. I can't get back"). */
+    class QPushButton *m_groupBackButton = nullptr;
+    quint32 m_groupReturnScene = UINT_MAX;
     QWidget *m_canvasPlaceholder;   ///< empty-state: one line plus a way in
     QLabel  *m_canvasHint;          ///< the one line
     SceneGroupLooks *m_canvas;
