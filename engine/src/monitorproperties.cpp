@@ -1712,7 +1712,10 @@ float MonitorProperties::targetAimHeight(const StageTarget *t, bool subjectMode)
     switch (t->kind())
     {
     case StageTarget::Kind::Person:
-        return m_aimSubjectHeight;
+        // A person whose height is given is aimed at their chest; one whose
+        // height is not, at the subject height (and drawn round it).
+        return t->hasPersonHeight() ? t->personHeight() * StageTarget::chestShare()
+                                    : m_aimSubjectHeight;
     case StageTarget::Kind::None:
         return subjectMode ? m_aimSubjectHeight : 0.0f;
     default:
@@ -1724,7 +1727,9 @@ float MonitorProperties::targetFigureHeight(const StageTarget *t) const
 {
     if (t == nullptr || t->kind() != StageTarget::Kind::Person)
         return 0.0f;
-    return targetAimHeight(t, true) / 0.8f;
+    if (t->hasPersonHeight())
+        return t->personHeight();
+    return targetAimHeight(t, true) / StageTarget::chestShare();
 }
 
 float MonitorProperties::platformBaseZ(quint32 id) const

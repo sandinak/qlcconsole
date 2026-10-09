@@ -17271,3 +17271,36 @@ void Monitor_Test::fixturePropertiesForSeveralIsMixedAndLive()
         QCOMPARE(props->fixtureRigProps(id).studioTilt, 0.0f);
     QCOMPARE(props->fixtureRigProps(ids.last()).panZeroDir, 90.0f);
 }
+
+void Monitor_Test::aPersonsHeightIsSetInTheTargetDialog()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Meters);
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+
+    // A new person is a usual height, aimed at the chest.
+    rig.mon->slotAddPerson();
+    StageTarget *p = nullptr;
+    foreach (StageTarget *t, props->stageTargets())
+        if (t->kind() == StageTarget::Kind::Person)
+            p = t;
+    QVERIFY(p != nullptr);
+    const quint32 id = p->id();
+    QCOMPARE(p->personHeight(), 1.75f);
+
+    // Their height, in their dialog: drawn that tall at once.
+    float live = 0.0f;
+    driveDialog([&live, props, id](QWidget *dlg) {
+        QDoubleSpinBox *h = dlg->findChild<QDoubleSpinBox *>("personHeight");
+        if (h == nullptr || !h->isEnabled())
+            return false;
+        h->setValue(1.63);
+        live = props->targetFigureHeight(props->stageTarget(id));
+        return true;
+    });
+    rig.mon->slotEditTarget(id);
+    QVERIFY(qAbs(live - 1.63f) < 0.001f);
+    QVERIFY(qAbs(props->stageTarget(id)->personHeight() - 1.63f) < 0.001f);
+    props->removeStageTarget(id);
+}

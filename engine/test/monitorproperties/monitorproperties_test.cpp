@@ -2078,3 +2078,44 @@ void MonitorProperties_Test::aSnapshotPutsTheRigBack()
     QVERIFY(mp.stageTarget(targetId) != changed);
     QCOMPARE(mp.stageTarget(targetId)->name(), QString("DSC"));
 }
+
+void MonitorProperties_Test::aPersonIsAsTallAsTheirHeight()
+{
+    MonitorProperties mp;
+    mp.setAimSubjectHeight(1.524f);                     // 5'0"
+    StagePlatform *riser = mp.addPlatform();
+    riser->setOriginX(0.0f); riser->setOriginY(0.0f);
+    riser->setWidth(2.438f); riser->setDepth(1.219f); riser->setHeight(0.610f);   // 2'
+    StageTarget *t = mp.addStageTarget();
+    t->setKind(StageTarget::Kind::Person);
+    t->setX(1.0f); t->setY(0.5f); t->setZ(0.610f);
+
+    // No height given: as before -- aimed at the subject height, drawn round it.
+    QCOMPARE(mp.targetAimHeight(t, true), 1.524f);
+    QVERIFY(qAbs(mp.targetFigureHeight(t) - 1.905f) < 0.001f);
+
+    // 5'4": drawn 5'4", aimed at the chest, the deck under them.
+    t->setPersonHeight(1.626f);
+    QCOMPARE(mp.targetFigureHeight(t), 1.626f);
+    QVERIFY(qAbs(mp.targetAimHeight(t, true) - 1.626f * 0.8f) < 0.001f);
+    const QVector3D aim = mp.targetAimPoint(t, true);
+    QVERIFY(qAbs(aim.z() - (0.610f + 1.626f * 0.8f)) < 0.001f);
+    // Head 2' + 5'4" = 7'4"; a 10' truss tops out 2'8" above it.
+    QVERIFY(qAbs(3.048f - (0.610f + mp.targetFigureHeight(t)) - 0.812f) < 0.01f);
+
+    // An aim override still wins the aim, not the height.
+    t->setAimHeightOverride(1.0f);
+    QCOMPARE(mp.targetAimHeight(t, true), 1.0f);
+    QCOMPARE(mp.targetFigureHeight(t), 1.626f);
+
+    // Saved and read back.
+    QByteArray buf;
+    QXmlStreamWriter w(&buf);
+    t->saveXML(&w);
+    QVERIFY(buf.contains("PersonHeight=\"1.626\""));
+    StageTarget back(t->id());
+    QXmlStreamReader r(buf);
+    r.readNextStartElement();
+    QVERIFY(back.loadXML(r));
+    QCOMPARE(back.personHeight(), 1.626f);
+}

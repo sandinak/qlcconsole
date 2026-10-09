@@ -129,6 +129,18 @@ public:
     void  setAimHeightOverride(float m) { m_aimHeightOverride = m; }
     bool  hasAimHeightOverride() const { return m_aimHeightOverride >= 0.0f; }
 
+    /** How tall a Person is, in metres, standing on whatever is under it:
+     *  the figure is drawn this tall, and is aimed at its chest (aimPoint()
+     *  of it). Negative = not given: the show's follow-spot subject height is
+     *  the aim point and the figure is drawn round it, as before. */
+    float personHeight() const { return m_personHeight; }
+    void  setPersonHeight(float m) { m_personHeight = m; }
+    bool  hasPersonHeight() const { return m_personHeight > 0.0f; }
+
+    /** Where on a person light is aimed, as a share of their height: the
+     *  chest. */
+    static constexpr float chestShare() { return 0.8f; }
+
     /** The height to aim at above the target's footing, override or default. */
     float effectiveAimHeight() const
     { return hasAimHeightOverride() ? m_aimHeightOverride : defaultAimHeight(m_kind); }
@@ -191,6 +203,7 @@ private:
     QColor    m_color;
     Kind      m_kind = Kind::None;
     float     m_aimHeightOverride = -1.0f;   ///< < 0 = use the kind's default
+    float     m_personHeight = -1.0f;        ///< Person: how tall; < 0 = not given
     QString   m_boundType;                   ///< "platform" | "truss" | "tower"
     quint32   m_boundId = UINT_MAX;
     QSizeF    m_footprint;                   ///< metres; empty = a point

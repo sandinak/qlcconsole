@@ -124,6 +124,10 @@ private slots:
     /** Undo and Cancel put the whole rig back from a snapshot; what they
      *  replace is retired, not freed, while the DMX thread may hold it. */
     void aSnapshotPutsTheRigBack();
+
+    /** "that target height is 5'4 .. there should be 2'6" of truss above the
+     *  person" -- a person is as tall as they are, aimed at their chest. */
+    void aPersonIsAsTallAsTheirHeight();
 };
 
 #endif

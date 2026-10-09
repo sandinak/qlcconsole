@@ -5216,6 +5216,7 @@ void Monitor::slotAddPerson()
 {
     StageTarget *t = m_props->addStageTarget();
     t->setKind(StageTarget::Kind::Person);
+    t->setPersonHeight(1.75f);          // drawn this tall, aimed at its chest
 
     /* Numbered among the people, not among the targets: "Person 1" next to
        "Target 4" is how a choir ends up impossible to read. */
@@ -5302,6 +5303,20 @@ void Monitor::slotEditTarget(quint32 tid)
                              "is aimed at and what is drawn in the rig view."));
     form->addRow(tr("Subject:"), kindCombo);
 
+    /* How tall a Person is: drawn this tall, and aimed at the chest (80% of
+       it). Left at its lowest, the follow-spot subject height is the aim
+       point and the figure is drawn round it -- what a person was before it
+       had a height. */
+    QDoubleSpinBox *personSpin = new FeetInchesSpinBox(isFeet_t, &dlg);
+    personSpin->setObjectName(QStringLiteral("personHeight"));
+    personSpin->setRange(0, isFeet_t ? 9.8 : 3.0);
+    personSpin->setDecimals(2);
+    personSpin->setSpecialValueText(tr("from the subject height"));
+    personSpin->setValue(t->hasPersonHeight() ? double(t->personHeight()) * toDisp_t : 0.0);
+    personSpin->setToolTip(tr("How tall this person is. They are drawn this tall, and "
+                              "light is aimed at their chest -- 80% of it."));
+    form->addRow(tr("Height:"), personSpin);
+
     /* What it FOLLOWS. A bound target takes its position from the structure
        every time it is read, so moving or restacking the step takes the target
        with it -- which is what actually happens between load-ins. */
@@ -5370,15 +5385,26 @@ void Monitor::slotEditTarget(quint32 tid)
                             || k == StageTarget::Kind::Area);
         wSpin->setEnabled(sized);
         dSpin->setEnabled(sized);
+        personSpin->setEnabled(k == StageTarget::Kind::Person);
         /* Unticked, show what the Subject gives -- which for a Person is the
-           follow-spot subject height above, not a number of its own. */
+           chest of its height, or the follow-spot subject height above. */
         if (ovrChk->isChecked() == false)
-            ovrSpin->setValue(k == StageTarget::Kind::Person
-                              ? subjSpin->value()
-                              : double(StageTarget::defaultAimHeight(k)) * toDisp_t);
+            ovrSpin->setValue(k != StageTarget::Kind::Person
+                              ? double(StageTarget::defaultAimHeight(k)) * toDisp_t
+                              : personSpin->value() > 0.0
+                              ? personSpin->value() * double(StageTarget::chestShare())
+                              : subjSpin->value());
     };
     connect(kindCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            &dlg, [&](int) { syncRows(); });
+            &dlg, [&](int) {
+        // Made a person: one of a usual height, to be told otherwise.
+        if (StageTarget::Kind(kindCombo->currentData().toInt()) == StageTarget::Kind::Person
+            && personSpin->value() <= 0.0)
+            personSpin->setValue(1.75 * toDisp_t);
+        syncRows();
+    });
+    connect(personSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            &dlg, [&](double) { syncRows(); });
     connect(subjSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
             &dlg, [&](double) { syncRows(); });
     syncRows();
@@ -5409,6 +5435,7 @@ void Monitor::slotEditTarget(quint32 tid)
         m_props->notifyStageTargetsChanged();
 
         t->setKind(StageTarget::Kind(kindCombo->currentData().toInt()));
+        t->setPersonHeight(personSpin->value() > 0.0 ? float(personSpin->value() * fromDisp_t) : -1.0f);
         const QString bound = boundCombo->currentData().toString();
         if (t->kind() == StageTarget::Kind::Structure && bound.isEmpty() == false)
         {
@@ -5428,7 +5455,7 @@ void Monitor::slotEditTarget(quint32 tid)
     };
     // Live: the target follows its fields; Cancel puts it back.
     connect(nameEdit, &QLineEdit::textChanged, &dlg, [&](const QString &) { apply(); });
-    for (QDoubleSpinBox *sp : { xSpin, ySpin, zSpin, subjSpin, ovrSpin, wSpin, dSpin })
+    for (QDoubleSpinBox *sp : { xSpin, ySpin, zSpin, subjSpin, personSpin, ovrSpin, wSpin, dSpin })
         connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg, [&](double) { apply(); });
     for (QComboBox *cb : { kindCombo, boundCombo })
         connect(cb, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg, [&](int) { apply(); });

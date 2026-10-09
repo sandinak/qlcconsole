@@ -141,6 +141,7 @@ private slots:
     void theInspectorShowsMixedAndSetsOnlyWhatIsSet();
     void anInspectorEditIsOneUndoStep();
     void fixturePropertiesForSeveralIsMixedAndLive();
+    void aPersonsHeightIsSetInTheTargetDialog();
     void hangersAreRiggingCopiedToEveryTower();
     void theSplitWizardOffersAViewAndKeepsAnExistingGroup();
     /** "I can't click on any side arrow to open any of the groups": an

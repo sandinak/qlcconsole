@@ -26,6 +26,7 @@
 #define KXMLStageTargetGroupId QStringLiteral("GroupId")
 #define KXMLStageTargetKind      QStringLiteral("Kind")
 #define KXMLStageTargetAimHeight QStringLiteral("AimHeight")
+#define KXMLStageTargetPersonHeight QStringLiteral("PersonHeight")
 #define KXMLStageTargetBoundType QStringLiteral("BoundType")
 #define KXMLStageTargetBoundId   QStringLiteral("BoundId")
 #define KXMLStageTargetW         QStringLiteral("W")
@@ -63,6 +64,8 @@ bool StageTarget::loadXML(QXmlStreamReader &root)
         m_kind = stringToKind(a.value(KXMLStageTargetKind).toString());
     if (a.hasAttribute(KXMLStageTargetAimHeight))
         m_aimHeightOverride = a.value(KXMLStageTargetAimHeight).toFloat();
+    if (a.hasAttribute(KXMLStageTargetPersonHeight))
+        m_personHeight = a.value(KXMLStageTargetPersonHeight).toFloat();
     if (a.hasAttribute(KXMLStageTargetBoundType))
         m_boundType = a.value(KXMLStageTargetBoundType).toString();
     if (a.hasAttribute(KXMLStageTargetBoundId))
@@ -139,6 +142,9 @@ bool StageTarget::saveXML(QXmlStreamWriter *doc) const
     if (hasAimHeightOverride())
         doc->writeAttribute(KXMLStageTargetAimHeight,
                             QString::number(double(m_aimHeightOverride), 'f', 3));
+    if (hasPersonHeight())
+        doc->writeAttribute(KXMLStageTargetPersonHeight,
+                            QString::number(double(m_personHeight), 'f', 3));
     if (isBound())
     {
         doc->writeAttribute(KXMLStageTargetBoundType, m_boundType);
