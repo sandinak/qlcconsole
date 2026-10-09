@@ -17529,3 +17529,111 @@ void Monitor_Test::aWashShowsItsLedsOnItsFace()
     }
     delete doc;
 }
+
+void Monitor_Test::lasersThrowStarsAndPencilBeams()
+{
+    Doc *doc = new Doc(this);
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Sky Laser");
+    def->setType(QLCFixtureDef::Laser);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("4ch");
+    const QList<QPair<QString, QLCChannel::Preset> > chans = {
+        { "Intensity", QLCChannel::IntensityDimmer }, { "Red", QLCChannel::IntensityRed },
+        { "Green", QLCChannel::IntensityGreen }, { "Blue", QLCChannel::IntensityBlue } };
+    QLCFixtureHead hd;
+    for (int i = 0; i < chans.size(); ++i)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(chans.at(i).first);
+        ch->setPreset(chans.at(i).second);
+        def->addChannel(ch);
+        mode->insertChannel(ch, i);
+        hd.addChannel(quint32(i));
+    }
+    mode->insertHead(-1, hd);
+    auto emitAs = [&](QLCPhysical::Emission e) {
+        QLCPhysical ph;
+        ph.setWidth(200); ph.setHeight(100); ph.setDepth(200);
+        ph.setBulbLumens(500);
+        ph.setEmission(e);
+        mode->setPhysical(ph);
+    };
+    emitAs(QLCPhysical::BeamEmission);
+    def->addMode(mode);
+    Fixture *laser = new Fixture(doc);
+    laser->setName("Stars"); laser->setFixtureDefinition(def, mode);
+    QVERIFY(doc->addFixture(laser));
+    doc->monitorProperties()->setFixturePosition(laser->id(), 0, 0, QVector3D(3000.0f, 3000.0f, 2.5f));
+    // A wide, low deck under it: what it lands on, and what the view frames.
+    StagePlatform *deck = doc->monitorProperties()->addPlatform();
+    deck->setOriginX(0.0f); deck->setOriginY(0.0f);
+    deck->setWidth(6.0f); deck->setDepth(6.0f); deck->setHeight(0.05f);
+    // Hung from a pipe over it, pointing down at the floor.
+    Truss *pipe = doc->monitorProperties()->addTruss();
+    pipe->setOrigin(QVector3D(0.0f, 3.0f, 2.5f));
+    pipe->setDirection(QPointF(1.0, 0.0));
+    pipe->setLength(6.0f);
+    pipe->setWidth(0.05f);
+    FixtureRigProps rp;
+    rp.trussId = pipe->id();
+    rp.trussOffset = 3.0f;
+    rp.mountingType = Truss::TopHung;
+    doc->monitorProperties()->setFixtureRigProps(laser->id(), rp);
+    QByteArray u(512, char(0));
+    u[0] = char(255); u[2] = char(255);                // full, green
+    laser->setChannelValues(u);
+
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.resize(800, 620);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    v.setAngledView(15.0, 35.0);
+    v.setLiveValues(true);
+    v.setHaze(0.0);                                    // no air: only what lands
+    /* What the light ADDS: each frame against the same rig dark, so the
+       fixture's own body and the deck do not count -- only where green landed. */
+    struct Count { int px = 0; int blobs = 0; QRect box; };
+    auto frame = [&v]() { v.reload(); return v.grab().toImage(); };
+    QByteArray off(512, char(0));
+    laser->setChannelValues(off);
+    const QImage dark = frame();
+    laser->setChannelValues(u);
+    auto green = [&]() {
+        const QImage img = frame();
+        Count c;
+        QVector<bool> seen(img.width() * img.height(), false);
+        for (int y = 0; y < img.height(); ++y)
+            for (int x = 0; x < img.width(); ++x)
+            {
+                const QColor q = img.pixelColor(x, y), d = dark.pixelColor(x, y);
+                if (q.green() - d.green() < 12 || q.green() - d.green() < 2 * (q.red() - d.red()))
+                    continue;
+                ++c.px;
+                c.box |= QRect(x, y, 1, 1);
+                // A new blob when no lit neighbour above or to the left.
+                const bool left = x > 0 && seen[y * img.width() + x - 1];
+                const bool up = y > 0 && seen[(y - 1) * img.width() + x];
+                if (!left && !up)
+                    ++c.blobs;
+                seen[y * img.width() + x] = true;
+            }
+        return c;
+    };
+    const Count wash = green();
+    emitAs(QLCPhysical::StarEmission);
+    const Count stars = green();
+    emitAs(QLCPhysical::LaserEmission);
+    const Count pencil = green();
+
+    QVERIFY2(stars.blobs > 60,
+             qPrintable(QString("a star field should be many points, got %1 blobs (%2 px); "
+                                "the wash was %3 blobs").arg(stars.blobs).arg(stars.px).arg(wash.blobs)));
+    // A laser is a pencil from the head to the floor: as long as the drop,
+    // no wider than the head it leaves.
+    QVERIFY2(pencil.box.height() > 2 * wash.box.height() && pencil.box.width() <= wash.box.width() + 2,
+             qPrintable(QString("a laser beam should be a thin line: %1 x %2 px, the wash's light %3 x %4")
+                            .arg(pencil.box.width()).arg(pencil.box.height())
+                            .arg(wash.box.width()).arg(wash.box.height())));
+    delete doc;
+}

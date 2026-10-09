@@ -389,6 +389,24 @@ step sends a sheet of **lit air rising** off it, both as bright as the
 pixels (colour × dimmer) and scaled by the haze. Lanterns have their own
 halo; movers show their beams.
 
+### Lasers and star projectors
+
+A fixture definition can say what its light *is* (Fixture Editor → Look in
+the rig view → **Light**). **Beam**, the default, is a cone that lands as a
+pool. **All round** is a bare source, like a lantern. Two more are for
+lasers:
+
+- **Laser beam** — a pencil line from the head to where it lands, with a
+  bright dot there; in haze, a glow along it. A head with several beams
+  fans them across its lens angle.
+- **Star field** — a projector of colour points: a few hundred stars
+  scattered across its spread (the declared angle, else 100°), each landing
+  where its ray meets the floor or a structure, with faint rays in haze. A
+  prism-rotation channel (or a Prism capability with a speed) turns the field.
+
+Both take their colour and level from the fixture's live output, like any
+other light, and follow a mover's pan and tilt.
+
 ## Lanterns
 
 A **lantern** — such as the bundled WLED Lantern — is drawn as a lantern,

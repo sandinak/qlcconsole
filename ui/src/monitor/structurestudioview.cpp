@@ -3241,6 +3241,114 @@ void StructureStudioView::setBeams(bool on)
     update();
 }
 
+namespace
+{
+/* How fast a star laser's pattern turns, degrees a second: its prism
+   rotation channel ("Prisim Rotation", PrismRotationSlowFast), or any prism
+   rotation capability. 0 = still. */
+double starTurnRate(const Fixture *fx, const QByteArray &vals)
+{
+    const QLCFixtureMode *mode = (fx != nullptr) ? fx->fixtureMode() : nullptr;
+    if (mode == nullptr)
+        return 0.0;
+    const int count = qMin(mode->channels().size(), vals.size());
+    for (int c = 0; c < count; ++c)
+    {
+        const QLCChannel *ch = mode->channel(quint32(c));
+        if (ch == nullptr)
+            continue;
+        const int v = uchar(vals.at(c));
+        if (ch->preset() == QLCChannel::PrismRotationSlowFast)
+            return v > 0 ? 10.0 + 170.0 * v / 255.0 : 0.0;
+        if (ch->preset() == QLCChannel::PrismRotationFastSlow)
+            return v > 0 ? 10.0 + 170.0 * (255 - v) / 255.0 : 0.0;
+        if (ch->group() == QLCChannel::Prism)
+        {
+            const double s = BeamOptics::rotationSpeed(ch->searchCapability(uchar(v)), v);
+            if (s != 0.0)
+                return s;
+        }
+    }
+    return 0.0;
+}
+}
+
+void StructureStudioView::drawLaserBeam(QPainter &p, const QVector3D &apex, const QVector3D &dir,
+                                        const QColor &colour, double level) const
+{
+    if (level <= 0.01 || dir.isNull())
+        return;
+    const QVector3D d = dir.normalized();
+    const QVector3D end = apex + d * float(beamThrow(apex, d));
+    const double k = qBound(0.0, level, 1.0);
+    // Laser light is saturated and hard: the colour, bright, a little white
+    // at its core.
+    const QColor hsv = colour.toHsv();
+    const QColor core = QColor::fromHsvF(qMax(0.0, double(hsv.hsvHueF())), hsv.hsvSaturationF() * 0.85,
+                                         qMin(1.0, 0.35 + 0.65 * k));
+    if (m_haze > 0.05)
+    {
+        QColor glow = colour;
+        glow.setAlphaF(qMin(0.5, 0.28 * m_haze * k));
+        emitLine(w2s(apex), w2s(end), viewDepth(apex), viewDepth(end), glow, 4.0, p);
+    }
+    emitLine(w2s(apex), w2s(end), viewDepth(apex), viewDepth(end), core, 1.4, p);
+    emitDot(w2s(end), viewDepth(end) + 0.002, 2.4, core, p);
+}
+
+void StructureStudioView::drawStarField(QPainter &p, quint32 fid, const Fixture *fx,
+                                        const QByteArray &vals, const QVector3D &apex,
+                                        const QVector3D &dir, double halfAngleRad,
+                                        const QColor &colour, double level) const
+{
+    if (level <= 0.01 || dir.isNull())
+        return;
+    const QVector3D d = dir.normalized();
+    QVector3D u = QVector3D::crossProduct(d, QVector3D(0, 0, 1));
+    if (u.length() < 1e-3f)
+        u = QVector3D(1, 0, 0);
+    u.normalize();
+    const QVector3D v = QVector3D::crossProduct(d, u).normalized();
+
+    const double rate = starTurnRate(fx, vals);
+    if (rate != 0.0)
+        m_opticsAnimating = true;
+    const double turn = qDegreesToRadians(rate * opticsTime());
+    const double k = qBound(0.0, level, 1.0);
+    const QColor hsv = colour.toHsv();
+    const QColor star = QColor::fromHsvF(qMax(0.0, double(hsv.hsvHueF())), hsv.hsvSaturationF() * 0.9,
+                                         qMin(1.0, 0.35 + 0.65 * k));
+    QColor ray = colour;
+    ray.setAlphaF(qMin(0.3, 0.10 * m_haze * k));
+
+    /* Spread over the disc evenly (a sunflower spiral), each nudged by a hash
+       of its index so it reads as a sky, not a pattern -- and the same sky
+       every frame, so it never shimmers. */
+    static const int N = 260;
+    const double spread = qTan(qMin(halfAngleRad, qDegreesToRadians(80.0)));
+    QVector<QPointF> pts;
+    QVector<double> depths;
+    pts.reserve(N);
+    depths.reserve(N);
+    double depthSum = 0.0;
+    for (int i = 0; i < N; ++i)
+    {
+        double j = qSin((i + 1) * 12.9898 + fid * 78.233) * 43758.5453;
+        j -= qFloor(j);
+        const double r = spread * qSqrt((i + 0.5) / N) * (0.85 + 0.3 * j);
+        const double a = i * 2.399963 + turn + j * 0.5;
+        const QVector3D rd = (d + u * float(r * qCos(a)) + v * float(r * qSin(a))).normalized();
+        const QVector3D at = apex + rd * float(beamThrow(apex, rd));
+        pts << w2s(at);
+        const double z = viewDepth(at) + 0.002;
+        depths << z;
+        depthSum += z;
+        if (m_haze > 0.05 && i % 3 == 0)
+            emitLine(w2s(apex), w2s(at), viewDepth(apex), viewDepth(at), ray, 0.6, p);
+    }
+    emitDots(pts, depthSum / N, 1.6, star, p, depths);
+}
+
 void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
                                       const QVector3D &dir, double halfAngleRad,
                                       const QColor &colour, double level,
@@ -3698,6 +3806,28 @@ void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
                 bool known = false;
                 const double out = fixtureOutput(m_doc->fixture(fid), &known);
                 const double headOutput = known ? out / qMax(1, traits.headCount) : 1.0;
+                if (traits.stars)
+                {
+                    // A sky laser on a yoke: its star field, where the head points.
+                    Fixture *sfx = m_doc->fixture(fid);
+                    const double starDeg = (beamAngle > 0.0 && beamAngle < 170.0) ? beamAngle : 100.0;
+                    drawStarField(p, fid, sfx, sfx != nullptr ? sfx->channelValues() : QByteArray(),
+                                  lens, beam, qDegreesToRadians(starDeg / 2.0), lightColour,
+                                  look.beamLevel * headOutput);
+                }
+                else if (traits.laser)
+                {
+                    /* Laser heads: pencil beams, fanned across the lens angle --
+                       beams per head of them -- from the one aperture. */
+                    for (int b = 0; b < beams; ++b)
+                    {
+                        const double a = (beams > 1) ? qDegreesToRadians(deg) * ((b / double(beams - 1)) - 0.5)
+                                                     : 0.0;
+                        drawLaserBeam(p, lens, beam * float(qCos(a)) + side * float(qSin(a)),
+                                      lightColour, look.beamLevel * headOutput);
+                    }
+                }
+                else
                 for (int b = 0; b < beams; ++b)
                 {
                     const QVector3D apex = lens + side * float((b - (beams - 1) * 0.5) * pitch);
@@ -5113,11 +5243,36 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                    section along it, each in its own colour. A row of cones
                    spread along each lit section shares that section's light;
                    a single head is the one cone it always was. */
-                const QVector<BarLight> sources = (traits.headCount > 1)
-                    ? barLights(fx, rp, traits, vals, apex) : QVector<BarLight>();
-                if (sources.isEmpty())
+                const double fixedLevel = dim / 255.0 * fixtureOutput(fx);
+                /* A sky laser throws a field of stars, a laser pencil beams
+                   -- not a cone of soft light. */
+                const bool special = traits.stars || traits.laser;
+                if (traits.stars)
                 {
-                    const double level = dim / 255.0 * fixtureOutput(fx);
+                    const double starDeg = (declared > 0.0 && declared < 170.0) ? declared : 100.0;
+                    drawStarField(p, fid, fx, vals, apex, dir, qDegreesToRadians(starDeg / 2.0),
+                                  live, fixedLevel);
+                }
+                else if (traits.laser)
+                {
+                    const int beams = qMax(1, traits.beamsPerHead);
+                    QVector3D side = QVector3D::crossProduct(dir, QVector3D(0, 0, 1));
+                    if (side.length() < 1e-3f)
+                        side = QVector3D(1, 0, 0);
+                    side.normalize();
+                    for (int b = 0; b < beams; ++b)
+                    {
+                        const double a = (beams > 1) ? qDegreesToRadians(deg) * ((b / double(beams - 1)) - 0.5)
+                                                     : 0.0;
+                        drawLaserBeam(p, apex, dir.normalized() * float(qCos(a)) + side * float(qSin(a)),
+                                      live, fixedLevel);
+                    }
+                }
+                const QVector<BarLight> sources = (traits.headCount > 1 && !special)
+                    ? barLights(fx, rp, traits, vals, apex) : QVector<BarLight>();
+                if (sources.isEmpty() && !special)
+                {
+                    const double level = fixedLevel;
                     drawBeamCone(p, apex, dir, half, live, level, 1.0, &optics);
                     m_frameBeams << FrameBeam{ apex, dir.normalized(), half,
                                                beamThrow(apex, dir.normalized()),

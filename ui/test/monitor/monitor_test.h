@@ -152,6 +152,9 @@ private slots:
     /** "moving head washes .. 36x18w .. I need to be able to set that":
      *  LEDs on the lens face, drawn there in the beam's colour. */
     void aWashShowsItsLedsOnItsFace();
+    /** "how are we handling laser projectors .. one that just does color
+     *  stars": a star field of points, a laser's pencil beams -- not a wash. */
+    void lasersThrowStarsAndPencilBeams();
     void hangersAreRiggingCopiedToEveryTower();
     void theSplitWizardOffersAViewAndKeepsAnExistingGroup();
     /** "I can't click on any side arrow to open any of the groups": an

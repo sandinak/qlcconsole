@@ -71,9 +71,15 @@ EditPhysical::EditPhysical(QLCPhysical physical, QWidget *parent)
     m_emissionCombo = new QComboBox(look);
     m_emissionCombo->addItem(tr("Beam"), int(QLCPhysical::BeamEmission));
     m_emissionCombo->addItem(tr("All round"), int(QLCPhysical::OmniEmission));
+    m_emissionCombo->addItem(tr("Laser beam"), int(QLCPhysical::LaserEmission));
+    m_emissionCombo->addItem(tr("Star field"), int(QLCPhysical::StarEmission));
     m_emissionCombo->setCurrentIndex(qMax(0, m_emissionCombo->findData(int(m_physical.emission()))));
     m_emissionCombo->setToolTip(tr("Beam: a cone at the lens's angle. All round: a bare "
-                                   "source -- a lantern, a bulb -- lighting what is near it."));
+                                   "source -- a lantern, a bulb -- lighting what is near it. "
+                                   "Laser beam: pencil-thin beams (Beams per head of them, "
+                                   "fanned across the lens angle), a sharp dot where each "
+                                   "lands. Star field: points of light thrown over everything "
+                                   "its spread reaches -- a sky laser."));
     lookLay->addRow(tr("Light"), m_emissionCombo);
     /* What makes the light: one point, or a set of LEDs drawn one by one --
        a WLED lantern's sixteen on a wire, an effect running along them. */

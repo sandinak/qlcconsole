@@ -73,6 +73,8 @@ struct FixtureVisualTraits
     /** Its light leaves all round (a lantern, a bulb): no cone, it lights
      *  what is near it, falling off with distance (QLCPhysical::emission). */
     bool  omni = false;
+    bool  laser = false;            ///< pencil-thin beams (QLCPhysical::LaserEmission)
+    bool  stars = false;            ///< a star field (QLCPhysical::StarEmission)
 };
 
 FixtureVisualTraits classifyFixture(Fixture *fx);

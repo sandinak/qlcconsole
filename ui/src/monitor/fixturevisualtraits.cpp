@@ -86,6 +86,8 @@ FixtureVisualTraits classifyFixture(Fixture *fx)
     if (phys.bodyShape() == QLCPhysical::LanternBody)
         t.kind = FixtureSilhouette::Lantern;
     t.omni = (phys.emission() == QLCPhysical::OmniEmission);
+    t.laser = (phys.emission() == QLCPhysical::LaserEmission);
+    t.stars = (phys.emission() == QLCPhysical::StarEmission);
 
     /* The declared pixel grid, when it is THIS mode's: one grid is declared
        for every mode, and a 32-cell grid on a 16-head mode drew a bar as two

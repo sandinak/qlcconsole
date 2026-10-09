@@ -167,7 +167,10 @@ public:
     /** How its light leaves it: a beam (a cone, the lens's angle) or all
      *  round (a bare source -- a lantern, a bulb -- lighting what is near
      *  it, falling off with distance). */
-    enum Emission { BeamEmission = 0, OmniEmission };
+    /** ... a laser (pencil-thin beams that barely spread, a sharp dot where
+     *  each lands), or a star field (hundreds of points of light thrown over
+     *  whatever its spread reaches -- a sky laser). */
+    enum Emission { BeamEmission = 0, OmniEmission, LaserEmission, StarEmission };
     void setEmission(Emission emission) { m_emission = emission; }
     Emission emission() const { return m_emission; }
 

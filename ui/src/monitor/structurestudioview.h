@@ -586,6 +586,17 @@ private:
      *  make of the beam (BeamOptics): the pool is drawn through its mask --
      *  the gobo's pattern on whatever it lands on -- and the haze in the air
      *  carries only the share of light it lets through. */
+    /** A laser's beam: a bright pencil line out to whatever it lands on, a
+     *  sharp dot there, and a glow along it in haze. */
+    void drawLaserBeam(QPainter &p, const QVector3D &apex, const QVector3D &dir,
+                       const QColor &colour, double level) const;
+    /** A sky laser's star field: points of light over everything inside
+     *  @p halfAngleRad of @p dir, each where its ray lands (the floor, a deck,
+     *  a cyc; into the room, the throw a beam fired into the air gets),
+     *  turning with the fixture's prism rotation; faint rays in haze. */
+    void drawStarField(QPainter &p, quint32 fid, const Fixture *fx, const QByteArray &vals,
+                       const QVector3D &apex, const QVector3D &dir, double halfAngleRad,
+                       const QColor &colour, double level) const;
     void drawBeamCone(QPainter &p, const QVector3D &apex, const QVector3D &dir,
                       double halfAngleRad, const QColor &colour, double level,
                       double haze = 1.0,
