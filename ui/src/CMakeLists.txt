@@ -41,6 +41,7 @@ add_library(${module_name}
     channelsselection.cpp channelsselection.h channelsselection.ui
     chasereditor.cpp chasereditor.h chasereditor.ui
     colourswatchbutton.cpp colourswatchbutton.h
+    wledconfigcheck.cpp wledconfigcheck.h
     clickandgoslider.cpp clickandgoslider.h
     clickandgowidget.cpp clickandgowidget.h
     collectioneditor.cpp collectioneditor.h collectioneditor.ui
@@ -236,6 +237,7 @@ target_link_libraries(${module_name} PUBLIC
     Qt${QT_MAJOR_VERSION}::Gui
     Qt${QT_MAJOR_VERSION}::Multimedia
     Qt${QT_MAJOR_VERSION}::MultimediaWidgets
+    Qt${QT_MAJOR_VERSION}::Network
     Qt${QT_MAJOR_VERSION}::Widgets
     qlcplusengine
 )

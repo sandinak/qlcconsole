@@ -89,6 +89,7 @@
 #include "fixturegroup.h"
 #include "qlcfile.h"
 #include "apputil.h"
+#include "wledconfigcheck.h"
 #include "controlsurfaceengine.h"
 #include "pmjoverlay.h"
 #include "showstatus.h"
@@ -852,12 +853,36 @@ void App::initDoc()
     if (m_doc->effectScriptRunner() != nullptr)
         connect(m_doc->effectScriptRunner(), &EffectScriptRunner::failuresChanged,
                 fixtureReadiness, recheckFixtures);
+
+    /* Each WLED read for whether it is set up the way this show drives it
+       (WledConfigCheck): what does not match goes in the footer and on the
+       fixture, with Fix on Device. Read again a moment after the show loads
+       or a fixture changes (a patch, a mode), and every so often anyway. */
+    WledConfigCheck *wledCheck = new WledConfigCheck(m_doc, this);
+    QTimer *wledRecheck = new QTimer(this);
+    wledRecheck->setSingleShot(true);
+    wledRecheck->setInterval(1500);
+    connect(wledRecheck, &QTimer::timeout, wledCheck, &WledConfigCheck::checkNow);
+    auto recheckWled = [wledRecheck]() { wledRecheck->start(); };
+    connect(m_doc, &Doc::loaded, wledRecheck, recheckWled);
+    connect(m_doc, &Doc::fixtureAdded, wledRecheck, recheckWled);
+    connect(m_doc, &Doc::fixtureChanged, wledRecheck, recheckWled);
+    connect(m_doc, &Doc::fixtureRemoved, wledRecheck, recheckWled);
+    wledRecheck->start();
     // Once at startup too: files skipped while the libraries loaded (in cloud
     // storage, not on this computer) are worth saying with no show open.
     fixtureReadiness->start();
 
     /* ...and each can be fixed from there: the unpatched selected and
        patched, a definition opened to say what it puts out. */
+    ShowStatus::instance()->setAction("wled.config", tr("Fix on Device…"),
+        [](QWidget *parent, const QVariantList &items) {
+            QList<quint32> ids;
+            foreach (const QVariant &v, items)
+                ids << v.toUInt();
+            if (WledConfigCheck::instance() != nullptr)
+                WledConfigCheck::instance()->confirmFix(parent, ids);
+        });
     ShowStatus::instance()->setAction("fixtures.unpatched", tr("Patch…"),
         [this](QWidget *parent, const QVariantList &items) {
             QList<quint32> ids;

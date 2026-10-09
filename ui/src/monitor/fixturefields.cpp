@@ -25,6 +25,7 @@
 #include "monitorproperties.h"
 #include "fixturefields.h"
 #include "apputil.h"
+#include "wledconfigcheck.h"
 #include "lightcontrols.h"
 #include "monitor.h"
 #include "fixture.h"
@@ -207,6 +208,33 @@ FixtureFields::FixtureFields(Monitor *monitor, QFormLayout *form, QWidget *paren
     m_dmxNote->hide();
     form->addRow(QString(), m_dmxNote);
 
+    /* A WLED whose own settings do not match how the show drives it
+       (WledConfigCheck): what is wrong, and Fix on Device. */
+    m_wledBox = new QWidget(parent);
+    QHBoxLayout *wledRow = new QHBoxLayout(m_wledBox);
+    wledRow->setContentsMargins(0, 0, 0, 0);
+    wledRow->setSpacing(4);
+    m_wledNote = new QLabel(m_wledBox);
+    m_wledNote->setObjectName(QStringLiteral("fixtureWledNote"));
+    m_wledNote->setWordWrap(true);
+    m_wledNote->setStyleSheet("color:#e0a040;");
+    QToolButton *wledFix = new QToolButton(m_wledBox);
+    wledFix->setObjectName(QStringLiteral("fixtureWledFix"));
+    wledFix->setText(tr("Fix on Device…"));
+    wledFix->setToolTip(tr("Show what would change in the WLED's own settings, then write it"));
+    wledRow->addWidget(m_wledNote, 1);
+    wledRow->addWidget(wledFix, 0, Qt::AlignTop);
+    form->addRow(tr("WLED:"), m_wledBox);
+    connect(wledFix, &QToolButton::clicked, this, [this]() {
+        if (WledConfigCheck::instance() != nullptr)
+            WledConfigCheck::instance()->confirmFix(m_parent, m_fids);
+    });
+    if (WledConfigCheck::instance() != nullptr)
+        connect(WledConfigCheck::instance(), &WledConfigCheck::changed, this, [this]() {
+            if (!m_fids.isEmpty())
+                reload();
+        });
+
     MonitorProperties *props = monitor->m_props;
     MonitorGraphicsView *gv = monitor->m_graphicsView;
 
@@ -336,7 +364,7 @@ void FixtureFields::hideAll()
                         static_cast<QWidget *>(m_face), static_cast<QWidget *>(m_placement),
                         static_cast<QWidget *>(m_angle), static_cast<QWidget *>(m_tilt),
                         m_light->lightRow(), static_cast<QWidget *>(m_light->glassCombo()),
-                        m_dmxBox, static_cast<QWidget *>(m_dmxNote) })
+                        m_dmxBox, static_cast<QWidget *>(m_dmxNote), m_wledBox })
         row(w, false);
 }
 
@@ -553,6 +581,26 @@ void FixtureFields::setFixtures(const QList<quint32> &fids, quint32 shown)
     m_dmxNote->setText(note);
     m_dmxNote->setStyleSheet(many ? "color:#8a8e99;" : "color:#e07070;");
     row(m_dmxNote, !note.isEmpty());
+
+    // Its WLED's own settings, where they do not match how it is driven.
+    QStringList wled;
+    if (WledConfigCheck *check = WledConfigCheck::instance())
+    {
+        int wrong = 0;
+        foreach (quint32 fid, m_fids)
+        {
+            const WledConfigCheck::Finding f = check->finding(fid);
+            if (f.problems.isEmpty())
+                continue;
+            ++wrong;
+            if (!many)
+                wled = f.problems;
+        }
+        if (many && wrong > 0)
+            wled << tr("%n of these is not set up as this show drives it", "", wrong);
+    }
+    m_wledNote->setText(wled.join(QLatin1Char('\n')));
+    row(m_wledBox, !wled.isEmpty());
 
     m_loading = false;
 }

@@ -104,6 +104,8 @@ private:
     QSpinBox *m_dmxAddr;
     QLabel *m_dmxNote;
     class QToolButton *m_patch;
+    QWidget *m_wledBox;         ///< WLED settings that do not match, + Fix
+    QLabel *m_wledNote;
 };
 
 /** @} */

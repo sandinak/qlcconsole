@@ -53,6 +53,23 @@ WLED output rather than borrowing Art-Net.
   what its LEDs are actually showing and draws that — a **live view** of the
   real pixels. It stops asking when the view is closed.
 
+**Is each WLED set up the way the show drives it?** Every 30 s (and a
+moment after the show loads or a fixture changes) each WLED fixture's own
+settings are read from the device (`/json/cfg`) and compared:
+
+- Driven through **WLED's API**: it should not take realtime streams — an
+  E1.31/Art-Net stream on its universe would take it over from the show.
+- Driven by **Art-Net or sACN**: it has to listen for that protocol, on the
+  universe its output sends, at its patched address, in the DMX mode its
+  definition's mode needs (Effect (15ch) → WLED's *Effect*, Single DRGB →
+  *Single DRGB*, Single RGB → *Single RGB*).
+
+What does not match is listed in the footer ("N WLEDs not set up as this
+show drives them") and on the fixture itself (a **WLED** row in the studio
+inspector and Fixture Properties). **Fix on Device…**, in both places, shows
+exactly what it would change on the device and writes it there only when you
+agree, then reads it back.
+
 Effects that the WLED device runs itself are picked in the look editor —
 see [WLED effects](programming-tab.md#wled-effects).
 
