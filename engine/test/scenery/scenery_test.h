@@ -36,6 +36,7 @@ private slots:
     void aUWallRunsRoundItsFront();
     void aWallIsMetOnItsFaceAndOnItsTop();
     void anOpenCurtainHangsOnlyAtItsEnds();
+    void aProsceniumIsTwoPiersAndAHeader();
     void xmlRoundTripAndStorage();
 };
 

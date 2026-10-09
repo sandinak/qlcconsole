@@ -187,6 +187,44 @@ void Scenery_Test::anOpenCurtainHangsOnlyAtItsEnds()
     QCOMPARE(s.spans().size(), 1);
 }
 
+void Scenery_Test::aProsceniumIsTwoPiersAndAHeader()
+{
+    // 14 m wide, 7 m high; a 10 m x 5 m opening; 40 cm thick; at y = 8.
+    Scenery s(0);
+    s.setKind(Scenery::Proscenium);
+    s.setOriginX(7.0f);
+    s.setOriginY(8.0f);
+    s.setWidth(14.0f);
+    s.setHeight(7.0f);
+    s.setThickness(0.4f);
+    s.setOpeningWidth(10.0f);
+    s.setOpeningHeight(5.0f);
+    QVERIFY(s.isBuilt() && !s.isCloth());
+    const QList<Scenery::Piece> pieces = s.pieces();
+    QCOMPARE(pieces.size(), 3);
+    double t = 0.0;
+    QVector3D n;
+    // Through the opening, from the house.
+    QVERIFY(!s.rayHit(QVector3D(7.0f, 15.0f, 2.0f), QVector3D(0.0f, -1.0f, 0.0f), t));
+    // On a pier: its front face, 20 cm in front of the line.
+    QVERIFY(s.rayHit(QVector3D(1.0f, 15.0f, 2.0f), QVector3D(0.0f, -1.0f, 0.0f), t, 1e9, 16, &n));
+    QVERIFY2(near(t, 6.8), qPrintable(QString::number(t)));
+    // On the header, above the opening.
+    QVERIFY(s.rayHit(QVector3D(7.0f, 15.0f, 6.0f), QVector3D(0.0f, -1.0f, 0.0f), t));
+    // Up under the header, from the stage: its underside, at 5 m.
+    QVERIFY(s.rayHit(QVector3D(7.0f, 8.0f, 1.0f), QVector3D(0.0f, 0.0f, 1.0f), t, 1e9, 16, &n));
+    QVERIFY(near(t, 4.0) && near(n.z(), -1.0));
+
+    QByteArray buf;
+    QXmlStreamWriter w(&buf);
+    QVERIFY(s.saveXML(&w));
+    QXmlStreamReader r(buf);
+    r.readNextStartElement();
+    Scenery back(0);
+    QVERIFY(back.loadXML(r));
+    QVERIFY(near(back.openingWidth(), 10.0) && near(back.openingHeight(), 5.0));
+}
+
 void Scenery_Test::xmlRoundTripAndStorage()
 {
     Scenery s(7);

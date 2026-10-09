@@ -395,8 +395,8 @@ and colour, not pixel mapping.
   new show that uses the same layout and hardware -- instead of copying a
   .qlcc and stripping it.
 - **Front-of-stage shape, proscenium and side drapes** in the rig view, as
-  (2026-10-09: the rounded front is built -- a platform's Front curve; side
-  drapes are the scenery Legs; the proscenium is next)
+  (2026-10-09: built -- a platform's Front curve, the scenery Legs, and a
+  Proscenium scenery kind: two piers and a header round its opening)
   visual options: a stage edge that is curved (an apron / thrust arc) or
   squared off, a proscenium arch framing the stage, and side drapes (legs)
   -- so the rig view shows the room the light lands in. (Related: the

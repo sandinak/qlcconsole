@@ -58,7 +58,8 @@ public:
         Border,
         Traveler,
         Scrim,
-        Wall            ///< a low wall, a planter, a fountain's rim: anything built
+        Wall,           ///< a low wall, a planter, a fountain's rim: anything built
+        Proscenium      ///< the arch that frames the stage: two piers and a header
     };
 
     /** The line it stands along on the floor. */
@@ -138,9 +139,31 @@ public:
     bool hasState() const { return m_kind == MainDrape || m_kind == Traveler; }
 
     /** Cloth: soft goods, drawn as fabric. */
-    bool isCloth() const { return m_kind != Wall && m_kind != BackWall; }
+    bool isCloth() const { return !isBuilt(); }
     /** A scrim: seen through, though it still catches the light thrown on it. */
     bool isSeeThrough() const { return m_kind == Scrim; }
+    /** Built rather than hung: it has a thickness. */
+    bool isBuilt() const { return m_kind == Wall || m_kind == BackWall || m_kind == Proscenium; }
+
+    /** A proscenium's opening: how wide (metres, centred) and how high from
+     *  its bottom. The piers either side are what is left of width(); the
+     *  header is what is above the opening. */
+    float openingWidth() const { return m_openWidth; }
+    void  setOpeningWidth(float w) { m_openWidth = (w > 0.1f) ? w : 0.1f; }
+    float openingHeight() const { return m_openHeight; }
+    void  setOpeningHeight(float h) { m_openHeight = (h > 0.1f) ? h : 0.1f; }
+
+    /** One solid stretch of it: from @p u0 to @p u1 along its line, from
+     *  @p z0 to @p z1 high (absolute). */
+    struct Piece
+    {
+        double u0, u1;
+        float z0, z1;
+    };
+    /** What it is made of: one piece for a sheet or a wall, the gathered
+     *  ends of an open curtain, nothing when flown, a proscenium's two piers
+     *  and its header. */
+    QList<Piece> pieces() const;
 
     QColor color() const { return m_color; }
     void   setColor(const QColor &c) { m_color = c; }
@@ -210,6 +233,8 @@ private:
     float   m_depth    = 1.0f;
     float   m_thickness = 0.0f;
     int     m_state    = Closed;
+    float   m_openWidth = 8.0f;
+    float   m_openHeight = 5.0f;
     QColor  m_color;
     bool    m_locked   = false;
     quint32 m_layerId  = 0;

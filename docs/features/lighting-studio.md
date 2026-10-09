@@ -181,6 +181,7 @@ goes where you clicked) offers each kind and puts it where it usually goes:
 |---|---|
 | **Cyclorama** | across the back, stage width, 6 m tall, pale |
 | **Back wall** | across the back, 20 cm thick |
+| **Proscenium** | framing the front: an arch 2 m wider than the stage, 7 m high, 40 cm thick, its opening the stage's width and 5.5 m high |
 | **Main drape** | across the front, house red |
 | **Traveler** | mid-stage, black |
 | **Leg** | a pair, one each side, 1.2 m wide, black |
@@ -197,7 +198,12 @@ for some kinds show only there:
   half gathered at its end) or **Flown out** (taken up out of the way: not
   drawn, and the light goes through; the plot shows where it hangs from,
   dashed). Set while designing; it isn't cued.
-- **Shape** and **Thickness** (wall, back wall) — **Straight or bowed**, or
+- **Opening width** and **Opening height** (proscenium) — the opening,
+  centred; the piers are the rest of the width and the header the rest of
+  the height. Light goes through the opening and lands on the piers, the
+  header and its underside.
+- **Shape** and **Thickness** (wall, back wall; a proscenium has a thickness
+  too) — **Straight or bowed**, or
   **U, rounded front**: a half-round front as wide as the wall, straight sides
   running back to its **Depth**, the open back at its position.
 

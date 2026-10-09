@@ -4069,14 +4069,15 @@ void MonitorGraphicsView::updatePlatforms()
             const QVector3D p = sc->pointAt(u, z, off);
             return projectMm(p.x() * 1000.0, p.y() * 1000.0, p.z() * 1000.0);
         };
-        const float lo = sc->bottom(), hi = sc->bottom() + sc->height();
         const double half = double(sc->thickness()) / 2.0;
-        QList<QPair<double, double> > spans = sc->spans();
-        if (spans.isEmpty())                     // flown out: where it hangs, dashed
-            spans << qMakePair(-1.0, 1.0);
+        QList<Scenery::Piece> pieces = sc->pieces();
+        if (pieces.isEmpty())                    // flown out: where it hangs, dashed
+            pieces << Scenery::Piece{ -1.0, 1.0, sc->bottom(), sc->bottom() + sc->height() };
         QList<QPolygonF> parts;
-        for (const QPair<double, double> &sp : spans)
+        for (const Scenery::Piece &pc : pieces)
         {
+            const QPair<double, double> sp(pc.u0, pc.u1);
+            const float lo = pc.z0, hi = pc.z1;
             const int segs = qMax(1, int(qCeil(qMax(16, sc->segments()) * (sp.second - sp.first) / 2.0)));
             QPolygonF part;
             if (m_pov == PovTop)

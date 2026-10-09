@@ -12315,12 +12315,29 @@ void Monitor_Test::everySceneryKindIsAddedWhereItUsuallyGoes()
         foreach (int kind, Scenery::kinds())
         {
             QString title;
-            driveDialog([&title](QWidget *dlg) {
+            bool opening = false, curtain = false, thickness = false;
+            driveDialog([&](QWidget *dlg) {
                 title = dlg->windowTitle();
+                auto shown = [dlg](const char *name) {
+                    QWidget *w = dlg->findChild<QWidget *>(name);
+                    return w != nullptr && w->isVisibleTo(dlg);
+                };
+                opening = shown("sceneryOpeningWidth");
+                curtain = shown("sceneryState");
+                QDoubleSpinBox *thick = nullptr;
+                foreach (QDoubleSpinBox *sp, dlg->findChildren<QDoubleSpinBox *>())
+                    if (sp->toolTip().startsWith("How thick"))
+                        thick = sp;
+                thickness = thick != nullptr && thick->isVisibleTo(dlg);
                 return true;
             });
             mon.slotAddScenery(kind);
             QVERIFY2(title.startsWith(Scenery::kindName(kind)), qPrintable(title));
+            // Each row only where it means something.
+            QCOMPARE(opening, kind == Scenery::Proscenium);
+            QCOMPARE(curtain, kind == Scenery::MainDrape || kind == Scenery::Traveler);
+            QCOMPARE(thickness, kind == Scenery::Wall || kind == Scenery::BackWall
+                                    || kind == Scenery::Proscenium);
         }
         // One of each, and legs come as a pair.
         QCOMPARE(props->sceneries().size(), Scenery::kinds().size() + 1);
@@ -12336,6 +12353,11 @@ void Monitor_Test::everySceneryKindIsAddedWhereItUsuallyGoes()
                 case Scenery::BackWall:  QVERIFY(sc->originY() < 0.5f && sc->thickness() > 0.0f); break;
                 case Scenery::Border:    QVERIFY(sc->bottom() > 4.0f); break;   // hung above
                 case Scenery::Wall:      QVERIFY(sc->thickness() > 0.0f && sc->height() < 1.0f); break;
+                case Scenery::Proscenium:
+                    // Framing the front: wider than the stage, its opening the stage's width.
+                    QVERIFY(sc->originY() > 7.0f && sc->width() > 12.0f && sc->thickness() > 0.0f);
+                    QVERIFY(qAbs(sc->openingWidth() - 11.5f) < 0.01f);
+                    break;
                 default: break;
             }
         }

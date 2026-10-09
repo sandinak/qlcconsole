@@ -5639,6 +5639,15 @@ void Monitor::slotAddScenery(int kind)
         case Scenery::MainDrape:
             s = make(stageW / 2.0, qMax(1.0, stageD - 0.5));
             break;
+        case Scenery::Proscenium:
+            // Framing the stage at its front: the opening the stage's width.
+            s = make(stageW / 2.0, qMax(1.0, stageD - 0.2));
+            s->setWidth(float(stageW + 2.0));
+            s->setHeight(7.0f);
+            s->setThickness(0.4f);
+            s->setOpeningWidth(float(qMax(2.0, stageW - 0.5)));
+            s->setOpeningHeight(5.5f);
+            break;
         case Scenery::Traveler:
             s = make(stageW / 2.0, stageD / 2.0);
             break;
@@ -5716,6 +5725,12 @@ void Monitor::slotEditScenery(quint32 sid)
     QDoubleSpinBox *depthSpin = mkSpin(s->depth(), 0.05, posR);
     QDoubleSpinBox *thickSpin = mkSpin(s->thickness(), 0.0, isFeet ? 10.0 : 3.0);
     thickSpin->setDecimals(3);
+    QDoubleSpinBox *openWSpin = mkSpin(s->openingWidth(), 0.1, posR * 2);
+    QDoubleSpinBox *openHSpin = mkSpin(s->openingHeight(), 0.1, isFeet ? 100.0 : 30.0);
+    openWSpin->setObjectName("sceneryOpeningWidth");
+    openHSpin->setObjectName("sceneryOpeningHeight");
+    openWSpin->setToolTip(tr("How wide the opening is, centred; the piers are the rest of the width"));
+    openHSpin->setToolTip(tr("How high the opening is; the header is the rest of the height"));
     QComboBox *kindCombo = new QComboBox(&dlg);
     foreach (int k, Scenery::kinds())
         kindCombo->addItem(Scenery::kindName(k), k);
@@ -5758,6 +5773,8 @@ void Monitor::slotEditScenery(quint32 sid)
     form->addRow(tr("Bow:"), bowSpin);
     form->addRow(tr("Facing:"), rotSpin);
     form->addRow(tr("Curtain:"), stateCombo);
+    form->addRow(tr("Opening width:"), openWSpin);
+    form->addRow(tr("Opening height:"), openHSpin);
     // Each row only where it means something for the kind.
     auto showRow = [form](QWidget *field, bool on) {
         field->setVisible(on);
@@ -5766,12 +5783,15 @@ void Monitor::slotEditScenery(quint32 sid)
     };
     auto showRows = [&]() {
         const int k = kindCombo->currentData().toInt();
-        const bool built = (k == Scenery::Wall || k == Scenery::BackWall);
-        const bool u = built && outlineCombo->currentData().toInt() == Scenery::RoundedU;
-        showRow(outlineCombo, built);
+        const bool arch = (k == Scenery::Proscenium);
+        const bool built = (k == Scenery::Wall || k == Scenery::BackWall || arch);
+        const bool u = built && !arch && outlineCombo->currentData().toInt() == Scenery::RoundedU;
+        showRow(outlineCombo, built && !arch);
         showRow(depthSpin, u);
-        showRow(bowSpin, !u);
+        showRow(bowSpin, !u && !arch);
         showRow(thickSpin, built);
+        showRow(openWSpin, arch);
+        showRow(openHSpin, arch);
         showRow(stateCombo, k == Scenery::MainDrape || k == Scenery::Traveler);
         dlg.adjustSize();
     };
@@ -5791,15 +5811,21 @@ void Monitor::slotEditScenery(quint32 sid)
         s->setBow(float(bowSpin->value() * fromDisp));
         s->setRotation(float(rotSpin->value()));
         s->setKind(kindCombo->currentData().toInt());
-        const bool built = (s->kind() == Scenery::Wall || s->kind() == Scenery::BackWall);
-        s->setOutline(built ? outlineCombo->currentData().toInt() : int(Scenery::SheetOutline));
+        const bool built = s->isBuilt();
+        s->setOutline(built && s->kind() != Scenery::Proscenium ? outlineCombo->currentData().toInt()
+                                                                : int(Scenery::SheetOutline));
+        if (s->kind() == Scenery::Proscenium)
+            s->setBow(0.0f);
+        s->setOpeningWidth(float(openWSpin->value() * fromDisp));
+        s->setOpeningHeight(float(openHSpin->value() * fromDisp));
         s->setDepth(float(depthSpin->value() * fromDisp));
         s->setThickness(built ? float(thickSpin->value() * fromDisp) : 0.0f);
         s->setState(stateCombo->currentData().toInt());
         s->setColor(chosen);
         m_graphicsView->updatePlatforms();
     };
-    for (QDoubleSpinBox *sp : { xSpin, ySpin, wSpin, hSpin, bSpin, bowSpin, rotSpin, depthSpin, thickSpin })
+    for (QDoubleSpinBox *sp : { xSpin, ySpin, wSpin, hSpin, bSpin, bowSpin, rotSpin, depthSpin, thickSpin,
+                                openWSpin, openHSpin })
         connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg, [&apply](double) { apply(); });
     for (QComboBox *cb : { kindCombo, outlineCombo, stateCombo })
         connect(cb, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg, [&](int) {

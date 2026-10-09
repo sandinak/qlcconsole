@@ -29,6 +29,8 @@
 #define KXMLSceneryDepth    QStringLiteral("Depth")
 #define KXMLSceneryThickness QStringLiteral("Thickness")
 #define KXMLSceneryState    QStringLiteral("State")
+#define KXMLSceneryOpenWidth  QStringLiteral("OpeningWidth")
+#define KXMLSceneryOpenHeight QStringLiteral("OpeningHeight")
 #define KXMLSceneryColor    QStringLiteral("Color")
 #define KXMLSceneryLocked   QStringLiteral("Locked")
 #define KXMLSceneryLayerId  QStringLiteral("LayerId")
@@ -52,6 +54,7 @@ QString Scenery::kindName(int kind)
         case Traveler:  return tr("Traveler");
         case Scrim:     return tr("Scrim");
         case Wall:      return tr("Wall");
+        case Proscenium: return tr("Proscenium");
         case Cyclorama:
         default:        return tr("Cyclorama");
     }
@@ -70,8 +73,8 @@ QString Scenery::stateName(int state)
 
 QList<int> Scenery::kinds()
 {
-    return QList<int>() << Cyclorama << BackWall << MainDrape << Traveler << Leg
-                        << Border << Scrim << Wall;
+    return QList<int>() << Cyclorama << BackWall << Proscenium << MainDrape << Traveler
+                        << Leg << Border << Scrim << Wall;
 }
 
 QColor Scenery::defaultColor(int kind)
@@ -85,6 +88,7 @@ QColor Scenery::defaultColor(int kind)
         case Traveler:  return QColor(28, 28, 32);      // masking black
         case Scrim:     return QColor(200, 202, 210);
         case Wall:      return QColor(150, 142, 128);   // block
+        case Proscenium: return QColor(46, 44, 50);     // a dark arch
         case Cyclorama:
         default:        return QColor(226, 228, 236);   // a cyc is pale: it is there to take colour
     }
@@ -181,6 +185,26 @@ QList<QPair<double, double> > Scenery::spans() const
     return out;
 }
 
+QList<Scenery::Piece> Scenery::pieces() const
+{
+    QList<Piece> out;
+    const float lo = m_bottom, hi = m_bottom + m_height;
+    if (m_kind == Proscenium)
+    {
+        // The opening, centred: the piers are what is left either side.
+        const double f = qBound(0.0, double(m_openWidth) / double(m_width), 0.98);
+        const float head = qMin(hi, lo + m_openHeight);
+        out << Piece{ -1.0, -f, lo, hi } << Piece{ f, 1.0, lo, hi };
+        if (head < hi)
+            out << Piece{ -f, f, head, hi };
+        return out;
+    }
+    typedef QPair<double, double> Span;
+    foreach (const Span &sp, spans())
+        out << Piece{ sp.first, sp.second, lo, hi };
+    return out;
+}
+
 int Scenery::segments() const
 {
     if (m_outline == RoundedU)
@@ -203,7 +227,6 @@ QList<QPointF> Scenery::baseLine(int segments) const
 bool Scenery::rayHit(const QVector3D &origin, const QVector3D &dir, double &t,
                      double maxT, int segments, QVector3D *normal) const
 {
-    const double zLo = double(m_bottom), zHi = double(m_bottom + m_height);
     const int own = this->segments();
     const int full = (own == 1) ? 1 : qMax(segments, own);
     const double half = double(m_thickness) / 2.0;
@@ -216,9 +239,10 @@ bool Scenery::rayHit(const QVector3D &origin, const QVector3D &dir, double &t,
     bool hit = false;
     double best = maxT;
     QVector3D bestN;
-    typedef QPair<double, double> Span;
-    foreach (const Span &sp, spans())
+    foreach (const Piece &pc, pieces())
     {
+        const double zLo = double(pc.z0), zHi = double(pc.z1);
+        const QPair<double, double> sp(pc.u0, pc.u1);
         const int n = qMax(1, int(qCeil(full * (sp.second - sp.first) / 2.0)));
         foreach (double off, faces)
         {
@@ -258,11 +282,15 @@ bool Scenery::rayHit(const QVector3D &origin, const QVector3D &dir, double &t,
                     bestN = -bestN;
             }
 
-            /* A wall's top: light coming down on it lands there. Between the
-               faces of each panel, a quad on the plane of the top. */
+            /* A wall's top: light coming down on it lands there; and the
+               underside of a header, for light coming up. Between the faces
+               of each panel, a quad on that plane. */
             if (half <= 0.0 || off > -half || qAbs(double(dir.z())) < 1e-9)
                 continue;
-            const double tt = (zHi - double(origin.z())) / double(dir.z());
+            const double capZ = (dir.z() < 0.0f) ? zHi : zLo;
+            if (dir.z() > 0.0f && capZ <= double(m_bottom) + 1e-4)
+                continue;                             // its foot is on the floor
+            const double tt = (capZ - double(origin.z())) / double(dir.z());
             if (tt <= 1e-6 || tt >= best)
                 continue;
             const QPointF h(double(origin.x()) + double(dir.x()) * tt,
@@ -317,6 +345,8 @@ bool Scenery::loadXML(QXmlStreamReader &root)
     if (a.hasAttribute(KXMLSceneryOutline))  setOutline(a.value(KXMLSceneryOutline).toString() == "U" ? RoundedU : SheetOutline);
     if (a.hasAttribute(KXMLSceneryDepth))    setDepth(a.value(KXMLSceneryDepth).toFloat());
     if (a.hasAttribute(KXMLSceneryThickness)) setThickness(a.value(KXMLSceneryThickness).toFloat());
+    if (a.hasAttribute(KXMLSceneryOpenWidth)) setOpeningWidth(a.value(KXMLSceneryOpenWidth).toFloat());
+    if (a.hasAttribute(KXMLSceneryOpenHeight)) setOpeningHeight(a.value(KXMLSceneryOpenHeight).toFloat());
     if (a.hasAttribute(KXMLSceneryState))
     {
         const QString st = a.value(KXMLSceneryState).toString();
@@ -356,6 +386,11 @@ bool Scenery::saveXML(QXmlStreamWriter *doc) const
         doc->writeAttribute(KXMLSceneryThickness, QString::number(double(m_thickness), 'f', 3));
     if (m_state != Closed)
         doc->writeAttribute(KXMLSceneryState, m_state == Open ? "Open" : "Flown");
+    if (m_kind == Proscenium)
+    {
+        doc->writeAttribute(KXMLSceneryOpenWidth, QString::number(double(m_openWidth), 'f', 3));
+        doc->writeAttribute(KXMLSceneryOpenHeight, QString::number(double(m_openHeight), 'f', 3));
+    }
     if (m_color.isValid())
         doc->writeAttribute(KXMLSceneryColor, m_color.name());
     if (m_locked)

@@ -2564,7 +2564,6 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
         if (sc->isSeeThrough())
             cloth.setAlpha(70);
         const QColor seam = sc->isSeeThrough() ? QColor() : cloth.darker(118);
-        const float lo = sc->bottom(), hi = sc->bottom() + sc->height();
         const bool folds = sc->isCloth() && sc->kind() != Scenery::Cyclorama && !sc->isSeeThrough();
         const double half = double(sc->thickness()) / 2.0;
         // About how long the line is, for how finely folds are drawn.
@@ -2585,11 +2584,12 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
             }
             emitPoly(poly, dsum / 4.0, fill, seam, 0.6, p, vz);
         };
-        typedef QPair<double, double> Span;
-        const QList<Span> spans = sc->spans();
-        const bool gathered = (spans.size() > 1);
-        foreach (const Span &sp, spans)
+        const QList<Scenery::Piece> pieces = sc->pieces();
+        const bool gathered = sc->hasState() && (pieces.size() > 1);
+        foreach (const Scenery::Piece &pc, pieces)
         {
+            const QPair<double, double> sp(pc.u0, pc.u1);
+            const float lo = pc.z0, hi = pc.z1;
             int n = qMax(1, int(qCeil(sc->segments() * (sp.second - sp.first) / 2.0)));
             if (folds)
             {
@@ -2609,6 +2609,9 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
                 if (half > 0.0)     // its top
                     quad(sc->pointAt(u0, hi, -half), sc->pointAt(u1, hi, -half),
                          sc->pointAt(u1, hi, half), sc->pointAt(u0, hi, half), cloth.lighter(112));
+                if (half > 0.0 && lo > sc->bottom() + 1e-4f)     // a header's underside
+                    quad(sc->pointAt(u0, lo, -half), sc->pointAt(u1, lo, -half),
+                         sc->pointAt(u1, lo, half), sc->pointAt(u0, lo, half), cloth.darker(140));
             }
             if (half > 0.0)         // its ends
                 for (double u : { sp.first, sp.second })
