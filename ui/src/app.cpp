@@ -65,6 +65,13 @@
 #include "monitorproperties.h"
 #include "vcframe.h"
 #include "app.h"
+#include "effectscriptrunner.h"
+#include <QPointer>
+#include <thread>
+#include <QRegularExpression>
+#include <memory>
+#include <atomic>
+#include <QProgressDialog>
 #include "doc.h"
 #include "fixture.h"
 #include "programmercontroller.h"
@@ -73,6 +80,7 @@
 #include "lastlookeffect.h"
 
 #include "qlcfixturedefcache.h"
+#include "qlcfixturemode.h"
 #include "patchinventorydialog.h"
 #include "audioplugincache.h"
 #include "rgbscriptscache.h"
@@ -840,6 +848,9 @@ void App::initDoc()
     connect(m_doc, &Doc::fixtureRemoved, fixtureReadiness, recheckFixtures);
     connect(m_doc, &Doc::fixtureChanged, fixtureReadiness, recheckFixtures);
     connect(m_doc, &Doc::loaded, fixtureReadiness, recheckFixtures);
+    // Once at startup too: files skipped while the libraries loaded (in cloud
+    // storage, not on this computer) are worth saying with no show open.
+    fixtureReadiness->start();
 
     /* ...and each can be fixed from there: the unpatched selected and
        patched, a definition opened to say what it puts out. */
@@ -927,6 +938,63 @@ void App::initDoc()
             AppUtil::updateFixtureReadiness(m_doc);
         };
     ShowStatus::instance()->addAction("definitions.failed", tr("Move to Trash…"), trashDefinitions);
+    /* Online-only files: fetch them without holding anything up -- a thread
+       of their own reads each one (which makes the cloud send it), however
+       long that takes. Fixtures and effects then load at once; anything else
+       loads next time qlcconsole starts. */
+    ShowStatus::instance()->setAction("fixtures.nodefinition", tr("Fetch Definitions"),
+        [this](QWidget *parent, const QVariantList &) { recoverUnavailableDefinitions(parent); });
+    ShowStatus::instance()->setAction("storage.onlineonly", tr("Download Now"),
+        [this](QWidget *parent, const QVariantList &items) {
+            QStringList paths;
+            foreach (const QVariant &v, items)
+                paths << v.toString();
+            if (paths.isEmpty())
+                return;
+            QPointer<App> self(this);
+            QPointer<QWidget> where(parent);
+            std::thread([self, where, paths]() {
+                QStringList fetched;
+                for (const QString &path : paths)
+                {
+                    QFile f(path);
+                    if (f.open(QIODevice::ReadOnly))
+                    {
+                        f.readAll();
+                        f.close();
+                    }
+                    if (!QLCFile::isOnlineOnly(path))
+                        fetched << path;
+                }
+                QMetaObject::invokeMethod(qApp, [self, where, paths, fetched]() {
+                    if (self.isNull())
+                        return;
+                    bool scripts = false;
+                    QStringList later;
+                    for (const QString &path : fetched)
+                    {
+                        QLCFile::forgetSkippedOnlineOnly(path);
+                        if (path.endsWith(QLatin1String(".qxf"), Qt::CaseInsensitive))
+                            self->m_doc->fixtureDefCache()->loadQXF(path, true);
+                        else if (path.endsWith(QLatin1String(".js"), Qt::CaseInsensitive))
+                            scripts = true;
+                        else
+                            later << QFileInfo(path).fileName();
+                    }
+                    if (scripts && self->m_doc->effectScriptRunner() != nullptr)
+                        self->m_doc->effectScriptRunner()->cache()->rescan();
+                    AppUtil::updateFixtureReadiness(self->m_doc);
+                    QString text = tr("Downloaded %1 of %2.").arg(fetched.size()).arg(paths.size());
+                    if (fetched.size() < paths.size())
+                        text += QLatin1Char(' ') + tr("The rest did not come -- is the cloud storage "
+                                                      "connected?");
+                    if (!later.isEmpty())
+                        text += QLatin1Char(' ') + tr("These load next time qlcconsole starts: %1")
+                                                       .arg(later.join(QStringLiteral(", ")));
+                    QMessageBox::information(where, tr("Cloud storage"), text);
+                });
+            }).detach();
+        });
     ShowStatus::instance()->setAction("definitions.duplicates", tr("Move to Trash…"), trashDefinitions);
     ShowStatus::instance()->setAction("universes.nooutput", tr("Open Connections"),
         [this](QWidget *parent, const QVariantList &items) {
@@ -2225,9 +2293,12 @@ QFile::FileError App::slotFileSave()
     QFile::FileError error;
     QString asfName = autoSaveFileName();
 
-    /* Attempt to save with the existing name. Fall back to Save As. */
+    /* Attempt to save with the existing name. Fall back to Save As (which
+       asks about missing definitions itself). */
     if (fileName().isEmpty() == true)
         error = slotFileSaveAs();
+    else if (!confirmSaveWithoutDefinitions())
+        return QFile::NoError;
     else
         error = saveXML(fileName());
 
@@ -2243,6 +2314,9 @@ QFile::FileError App::slotFileSaveAs()
 {
     QString fn;
     QString asfName = autoSaveFileName();
+
+    if (!confirmSaveWithoutDefinitions())
+        return QFile::NoError;
 
     /* Create a file save dialog */
     QFileDialog dialog(this);
@@ -2305,8 +2379,10 @@ void App::slotRigOverview()
 {
     /* Ask the Lighting Studio for it: the Monitor owns the window (and the
        raise-the-existing-one behaviour), so the menu entry and the footer
-       button open the SAME window rather than two that drift apart. */
-    Monitor::createAndShow(this, m_doc);
+       button open the SAME window rather than two that drift apart. But do
+       NOT bring the Studio tab forward to do it -- the overview is a window
+       of its own, opened to look at the rig beside whatever you are working
+       in ("every time I open the rig view .. the studio tab comes up"). */
     if (Monitor *mon = Monitor::instance())
         mon->showStageOverview();
 }
@@ -2804,12 +2880,211 @@ QString App::autoSaveFileName() const
     return autosaveFilePath();
 }
 
+/*****************************************************************************
+ * Definitions a show needs, kept on this computer
+ *****************************************************************************/
+
+namespace
+{
+/** Letters and digits only, lower case: "PHS Chorus" ~ "PHS-Chorus-8". */
+QString squash(const QString &s)
+{
+    QString out;
+    for (const QChar &c : s)
+        if (c.isLetterOrNumber())
+            out += c.toLower();
+    return out;
+}
+
+/** The online-only definition files that may be @p manufacturer @p model,
+ *  by their names (what is in them cannot be read without fetching them). */
+QStringList candidatesFor(const QString &manufacturer, const QString &model)
+{
+    QStringList out;
+    const QString man = squash(manufacturer), mod = squash(model);
+    foreach (const QString &path, QLCFile::skippedOnlineOnly())
+    {
+        if (!path.endsWith(QString(KExtFixture), Qt::CaseInsensitive))
+            continue;
+        const QString name = squash(QFileInfo(path).completeBaseName());
+        if ((!mod.isEmpty() && name.contains(mod)) || (!man.isEmpty() && name.contains(man)))
+            out << path;
+    }
+    return out;
+}
+}
+
+QStringList App::fetchFromCloud(const QStringList &paths, QWidget *parent)
+{
+    QStringList fetched;
+    if (paths.isEmpty())
+        return fetched;
+    QProgressDialog progress(parent != nullptr ? parent : this);
+    progress.setWindowTitle(tr("Cloud storage"));
+    progress.setCancelButtonText(tr("Skip"));
+    progress.setRange(0, paths.size());
+    progress.setMinimumDuration(0);
+    progress.setWindowModality(Qt::ApplicationModal);
+    for (int i = 0; i < paths.size(); ++i)
+    {
+        const QString path = paths.at(i);
+        progress.setValue(i);
+        progress.setLabelText(tr("Waiting for the cloud to send %1…\n(%2 of %3 -- Skip to go on without the rest)")
+                                  .arg(QFileInfo(path).fileName()).arg(i + 1).arg(paths.size()));
+        // Reading it is what makes the cloud send it -- in a thread, so a
+        // cloud that never answers holds up nothing but this window.
+        auto done = std::make_shared<std::atomic<bool> >(false);
+        std::thread([path, done]() {
+            QFile f(path);
+            if (f.open(QIODevice::ReadOnly))
+                f.readAll();
+            done->store(true);
+        }).detach();
+        while (!done->load() && !progress.wasCanceled())
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+        if (progress.wasCanceled())
+            break;
+        if (!QLCFile::isOnlineOnly(path))
+        {
+            fetched << path;
+            QLCFile::forgetSkippedOnlineOnly(path);
+        }
+    }
+    progress.setValue(paths.size());
+    return fetched;
+}
+
+void App::prepareShowDefinitions(const QString &fileName)
+{
+    // The show itself first: not here, it cannot even be read.
+    if (QLCFile::isOnlineOnly(fileName))
+        fetchFromCloud(QStringList() << fileName, this);
+    QFile f(fileName);
+    if (QLCFile::isOnlineOnly(fileName) || !f.open(QIODevice::ReadOnly))
+        return;
+    const QString text = QString::fromUtf8(f.readAll());
+    f.close();
+
+    // What it names, and which of those are not to hand.
+    static const QRegularExpression fixtureRe(
+        QStringLiteral("<Fixture>\\s*<Manufacturer>([^<]*)</Manufacturer>\\s*<Model>([^<]*)</Model>"));
+    QLCFixtureDefCache *defs = m_doc->fixtureDefCache();
+    QList<QPair<QString, QString> > missing;
+    QRegularExpressionMatchIterator it = fixtureRe.globalMatch(text);
+    while (it.hasNext())
+    {
+        const QRegularExpressionMatch m = it.next();
+        const QPair<QString, QString> fx(m.captured(1).trimmed(), m.captured(2).trimmed());
+        if (fx.second == QString(KXMLFixtureGeneric) || fx.second == QString(KXMLFixtureRGBPanel)
+            || missing.contains(fx) || defs->fixtureDef(fx.first, fx.second) != nullptr)
+            continue;
+        if (defs->loadFromShowCache(fx.first, fx.second))
+            continue;                               // the copy kept for shows
+        missing << fx;
+    }
+    if (missing.isEmpty())
+        return;
+
+    // Not here, not cached: the cloud copies that may be them.
+    QStringList fetch;
+    for (const auto &fx : missing)
+        foreach (const QString &path, candidatesFor(fx.first, fx.second))
+            if (!fetch.contains(path))
+                fetch << path;
+    foreach (const QString &path, fetchFromCloud(fetch, this))
+        defs->loadQXF(path, true);
+    // And keep them, so the next run of this show needs nothing remote.
+    for (const auto &fx : missing)
+        defs->cacheForShows(defs->fixtureDef(fx.first, fx.second));
+}
+
+void App::cacheShowDefinitions()
+{
+    QLCFixtureDefCache *defs = m_doc->fixtureDefCache();
+    foreach (Fixture *fx, m_doc->fixtures())
+        if (fx != nullptr && !fx->definitionUnavailable())
+            defs->cacheForShows(fx->fixtureDef());
+}
+
+bool App::confirmSaveWithoutDefinitions()
+{
+    QStringList models;
+    int count = 0;
+    foreach (Fixture *fx, m_doc->fixtures())
+    {
+        if (fx == nullptr || !fx->definitionUnavailable())
+            continue;
+        ++count;
+        const QString m = fx->unavailableManufacturer() + QLatin1Char(' ') + fx->unavailableModel();
+        if (!models.contains(m))
+            models << m;
+    }
+    if (count == 0)
+        return true;
+    return QMessageBox::warning(this, tr("Save"),
+        tr("%n fixture(s) have no definition on this computer and are standing in as "
+           "dimmers:\n\n%1\n\nThey are saved as what they really are -- their make, model "
+           "and mode -- so nothing is lost. But until their definitions are back they "
+           "cannot be programmed properly. Fetch them first (the footer's warning) if "
+           "you can.\n\nSave anyway?", "", count).arg(models.join(QStringLiteral("\n"))),
+        QMessageBox::Save | QMessageBox::Cancel, QMessageBox::Cancel) == QMessageBox::Save;
+}
+
+void App::recoverUnavailableDefinitions(QWidget *parent)
+{
+    QLCFixtureDefCache *defs = m_doc->fixtureDefCache();
+    QList<Fixture *> waiting;
+    QStringList fetch;
+    foreach (Fixture *fx, m_doc->fixtures())
+    {
+        if (fx == nullptr || !fx->definitionUnavailable())
+            continue;
+        waiting << fx;
+        if (defs->fixtureDef(fx->unavailableManufacturer(), fx->unavailableModel()) != nullptr
+            || defs->loadFromShowCache(fx->unavailableManufacturer(), fx->unavailableModel()))
+            continue;
+        foreach (const QString &path, candidatesFor(fx->unavailableManufacturer(), fx->unavailableModel()))
+            if (!fetch.contains(path))
+                fetch << path;
+    }
+    foreach (const QString &path, fetchFromCloud(fetch, parent))
+        defs->loadQXF(path, true);
+
+    // Each its own definition back -- where the mode is there and the
+    // channel count is what it was patched as.
+    int restored = 0;
+    QStringList still;
+    foreach (Fixture *fx, waiting)
+    {
+        QLCFixtureDef *def = defs->fixtureDef(fx->unavailableManufacturer(), fx->unavailableModel());
+        QLCFixtureMode *mode = def != nullptr ? def->mode(fx->unavailableMode()) : nullptr;
+        if (mode != nullptr && quint32(mode->channels().size()) == fx->channels())
+        {
+            defs->cacheForShows(def);
+            fx->setFixtureDefinition(def, mode);
+            ++restored;
+        }
+        else
+            still << fx->name();
+    }
+    if (restored > 0)
+        m_doc->setModified();
+    AppUtil::updateFixtureReadiness(m_doc);
+    QMessageBox::information(parent, tr("Definitions"),
+        still.isEmpty() ? tr("%n fixture(s) have their definitions back.", "", restored)
+                        : tr("%1 fixture(s) have their definitions back; these still have none: %2")
+                              .arg(restored).arg(still.join(QStringLiteral(", "))));
+}
+
 QFile::FileError App::loadXML(const QString& fileName)
 {
     QFile::FileError retval = QFile::NoError;
 
     if (fileName.isEmpty() == true)
         return QFile::OpenError;
+
+    // Every definition it needs on this computer before it loads.
+    prepareShowDefinitions(fileName);
 
     QXmlStreamReader *doc = QLCFile::getXMLReader(fileName);
     if (doc == NULL || doc->device() == NULL || doc->hasError())
@@ -2848,6 +3123,7 @@ QFile::FileError App::loadXML(const QString& fileName)
             setFileName(fileName);
             m_doc->resetModified();
             retval = QFile::NoError;
+            cacheShowDefinitions();     // the next run of it needs nothing remote
 
             // Tabs constructed before this load (e.g. the app's startup-active
             // tab, built during App::startup() — BEFORE a -o/--open command-line
@@ -3110,6 +3386,7 @@ QFile::FileError App::saveXML(const QString& fileName, bool autosave)
            set it also in an unmodified state. */
         setFileName(fileName);
         m_doc->resetModified();
+        cacheShowDefinitions();     // what it uses, kept on this computer
     }
 
     return QFile::NoError;

@@ -233,6 +233,11 @@ QList<StudioTemplate::Info> StudioTemplate::library()
     QDir dir(libraryPath());
     foreach (const QString &f, dir.entryList(QStringList() << "*.json", QDir::Files, QDir::Name))
     {
+        if (QLCFile::isOnlineOnly(dir.absoluteFilePath(f)))   // in cloud storage, not on this machine: do not wait for it
+        {
+            QLCFile::noteSkippedOnlineOnly(dir.absoluteFilePath(f));
+            continue;
+        }
         const Info i = info(dir.absoluteFilePath(f));
         if (i.isValid())
             out << i;

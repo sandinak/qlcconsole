@@ -435,6 +435,28 @@ public:
      */
     QFile::FileError saveXML(const QString& fileName, bool autosave = false);
 
+    /*********************************************************************
+     * Definitions a show needs, kept on this computer
+     *********************************************************************/
+public:
+    /** Before @p fileName loads: every fixture definition it names, from
+     *  the library, else the show cache, else fetched from cloud storage
+     *  (with a window that says what it waits on, and lets you skip). */
+    void prepareShowDefinitions(const QString &fileName);
+    /** Copy every definition the show uses into the show cache, so the next
+     *  run of it needs nothing remote. */
+    void cacheShowDefinitions();
+    /** Fixtures standing in as dimmers for a definition that was not here:
+     *  fetch what can be fetched and give them their own back. */
+    void recoverUnavailableDefinitions(QWidget *parent);
+    /** A save with fixtures standing in for missing definitions: say so
+     *  first. False when the user cancels. */
+    bool confirmSaveWithoutDefinitions();
+    /** Read @p paths (online-only files), which makes the cloud send them,
+     *  in a thread, under a window saying what it waits on; Skip stops.
+     *  The ones now on this computer. */
+    QStringList fetchFromCloud(const QStringList &paths, QWidget *parent);
+
 public slots:
     void slotLoadDocFromMemory(QString xmlData);
 

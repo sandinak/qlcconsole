@@ -18,12 +18,19 @@
 */
 
 #include <QtTest>
+#include <QRegularExpression>
+#include <QTemporaryDir>
 #include <QTabWidget>
 #include <QTabBar>
+#include <QDialog>
 
 #include "appviews_test.h"
 
 #define private public
+#include "qlcfixturedefcache.h"
+#include "qlcfixturedef.h"
+#include "doc.h"
+#include "monitor.h"
 #define protected public
 #include "app.h"
 #undef protected
@@ -109,6 +116,63 @@ void AppViews_Test::jumpingToADetachedViewRaisesItsWindow()
              "picking an already-detached view did not bring its window forward");
 
     reattach(m_app, label);
+}
+
+void AppViews_Test::theRigOverviewOpensWithoutTakingYouToTheStudio()
+{
+    QTabWidget *tabs = m_app->m_tab;
+    // Somewhere that is not the Lighting Studio.
+    int other = -1;
+    for (int i = 0; i < tabs->count(); ++i)
+        if (!tabs->tabBar()->tabData(i).toString().contains("Studio"))
+            other = i;
+    QVERIFY(other >= 0);
+    tabs->setCurrentIndex(other);
+    const QString was = tabs->tabBar()->tabData(other).toString();
+
+    m_app->slotRigOverview();
+    QCOMPARE(tabs->tabBar()->tabData(tabs->currentIndex()).toString(), was);
+    Monitor *mon = Monitor::instance();
+    QVERIFY(mon != nullptr && mon->m_overviewDlg != nullptr);
+    QVERIFY(mon->m_overviewDlg->isVisible());
+    mon->m_overviewDlg->close();
+}
+
+void AppViews_Test::aShowsDefinitionsComeFromTheShowCache()
+{
+    QTemporaryDir home;
+    const QByteArray realHome = qgetenv("HOME");
+    qputenv("HOME", home.path().toUtf8());
+
+    // A definition that is only in the show cache.
+    QLCFixtureDefCache *defs = m_app->m_doc->fixtureDefCache();
+    QFile src(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures/Futurelight/Futurelight-DJScan250.qxf");
+    QVERIFY(src.open(QIODevice::ReadOnly));
+    QString text = QString::fromUtf8(src.readAll());
+    text.replace(QRegularExpression("<Manufacturer>[^<]*</Manufacturer>"), "<Manufacturer>Branson</Manufacturer>");
+    text.replace(QRegularExpression("<Model>[^<]*</Model>"), "<Model>Cached Head</Model>");
+    QFile cached(QLCFixtureDefCache::showCacheFile("Branson", "Cached Head"));
+    QVERIFY(cached.open(QIODevice::WriteOnly));
+    cached.write(text.toUtf8());
+    cached.close();
+    QVERIFY(defs->fixtureDef("Branson", "Cached Head") == nullptr);
+
+    // A show that uses it.
+    QTemporaryDir shows;
+    const QString show = shows.filePath("cached.qlcc");
+    QFile f(show);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write("<?xml version=\"1.0\"?><!DOCTYPE Workspace><Workspace><Engine>"
+            "<Fixture><Manufacturer>Branson</Manufacturer><Model>Cached Head</Model>"
+            "<Mode>Mode 1</Mode><ID>0</ID><Name>Head</Name><Universe>0</Universe>"
+            "<Address>0</Address><Channels>6</Channels></Fixture></Engine></Workspace>");
+    f.close();
+
+    m_app->prepareShowDefinitions(show);
+    QVERIFY2(defs->fixtureDef("Branson", "Cached Head") != nullptr,
+             "the show's definition did not come from the show cache");
+
+    qputenv("HOME", realHome);
 }
 
 QTEST_MAIN(AppViews_Test)

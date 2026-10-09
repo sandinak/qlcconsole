@@ -47,6 +47,7 @@
 #endif
 
 #include "apputil.h"
+#include "qlcfile.h"
 #include "qlcconfig.h"
 #include "qlcpalette.h"
 #include "scene.h"
@@ -667,6 +668,66 @@ void AppUtil::updateFixtureReadiness(Doc *doc)
                 QCoreApplication::translate("AppUtil", "What they send goes nowhere. Give each "
                                             "an output in Connections."),
                 items, universes);
+    }
+
+    /* Fixtures standing in as dimmers for a definition that was not here
+       when the show loaded: they keep their real make and model, but cannot
+       be programmed as what they are until it is back. */
+    {
+        QStringList items, groups;
+        QVariantList ids;
+        foreach (Fixture *fx, doc->fixtures())
+        {
+            if (fx == nullptr || !fx->definitionUnavailable())
+                continue;
+            items << fx->name();
+            groups << fx->unavailableManufacturer() + QLatin1Char(' ') + fx->unavailableModel();
+            ids << fx->id();
+        }
+        if (items.isEmpty())
+            status->clearStatus("fixtures.nodefinition");
+        else
+            status->setStatus("fixtures.nodefinition", ShowStatus::Error,
+                QCoreApplication::translate("AppUtil", "%n fixture(s) have no definition on this computer",
+                                            "", items.count()),
+                QCoreApplication::translate("AppUtil", "Standing in as dimmers. Saved as what they "
+                                            "really are, but not programmable as that until "
+                                            "their definitions are back."),
+                items, ids, groups);
+    }
+
+    /* Files in cloud storage that are not on this machine -- an online-only
+       placeholder (Synology Drive, iCloud, OneDrive...). Reading one waits on
+       the cloud, and with it out of reach that wait was the whole startup, so
+       they were skipped ("that's burned me before"): say so, and which. */
+    {
+        QStringList items, groups;
+        QVariantList files;
+        QString provider;
+        foreach (const QString &path, QLCFile::skippedOnlineOnly())
+        {
+            items << QFileInfo(path).fileName();
+            groups << QFileInfo(path).dir().dirName();      // Fixtures, RGBScripts, ...
+            files << path;
+            // Whose cloud: ~/Library/CloudStorage/<Provider>-<Account>/...
+            QString real = QFileInfo(path).canonicalFilePath();   // through the links
+            if (real.isEmpty())
+                real = path;
+            const int at = real.indexOf(QLatin1String("/CloudStorage/"));
+            if (provider.isEmpty() && at >= 0)
+                provider = real.mid(at + 14).section(QLatin1Char('/'), 0, 0).section(QLatin1Char('-'), 0, 0);
+        }
+        if (items.isEmpty())
+            status->clearStatus("storage.onlineonly");
+        else
+            status->setStatus("storage.onlineonly", ShowStatus::Warning,
+                QCoreApplication::translate("AppUtil", "%n file(s) in cloud storage are not on this computer",
+                                            "", items.count()),
+                QCoreApplication::translate("AppUtil", "Not loaded -- reading them waits on %1. Keep "
+                                            "the folder on this computer (pin it), or download "
+                                            "them now.")
+                    .arg(provider.isEmpty() ? QCoreApplication::translate("AppUtil", "the cloud") : provider),
+                items, files, groups);
     }
 }
 

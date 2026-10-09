@@ -121,7 +121,15 @@ static void loadManufacturerDirectory(const QDir &manufacturerDir, QList<DeviceP
     xmlDir.setFilter(QDir::Files);
     xmlDir.setNameFilters(QStringList() << QString("*.xml"));
     foreach (const QString &fileName, xmlDir.entryList())
-        loadDeviceProfileFile(xmlDir.absoluteFilePath(fileName), out);
+    {
+        const QString path = xmlDir.absoluteFilePath(fileName);
+        if (QLCFile::isOnlineOnly(path))   // in cloud storage, not here: do not wait for it
+        {
+            QLCFile::noteSkippedOnlineOnly(path);
+            continue;
+        }
+        loadDeviceProfileFile(path, out);
+    }
 }
 
 /** Walk one root (the bundled library, or a user's own) for its

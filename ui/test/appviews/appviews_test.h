@@ -41,6 +41,14 @@ private slots:
      *  was no tab left to select. */
     void jumpingToADetachedViewRaisesItsWindow();
 
+    /** "every time I open the rig view .. the studio tab comes up": the Rig
+     *  Overview is a window of its own; opening it leaves the tab alone. */
+    void theRigOverviewOpensWithoutTakingYouToTheStudio();
+
+    /** "fetch and CACHE .. we cannot have remote stuff for a showfile on a
+     *  production run": a show's definitions come from this computer. */
+    void aShowsDefinitionsComeFromTheShowCache();
+
 private:
     App *m_app;
 };
