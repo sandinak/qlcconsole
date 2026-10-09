@@ -108,7 +108,7 @@ private:
     QTableWidget *m_table;
     QLabel *m_summary;
     QPushButton *m_apply;
-    class QSpinBox *m_placeUni;     //!< Place: universe (1-based)
+    class UniverseCombo *m_placeUni; //!< Place: universe, by name
     class QSpinBox *m_placeAddr;    //!< Place: address (1-based)
     class QComboBox *m_placeHow;    //!< Place: keep spacing / pack
     bool m_filling;

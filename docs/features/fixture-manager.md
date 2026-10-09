@@ -93,6 +93,9 @@ opens on a proposal, which you review and edit before anything changes:
   channels, **Connection**, **Universe**, **Address**, **Via** (the node port
   that will feed it) and **Status** (ok / new universe / moves from U.A /
   CONFLICT). Conflicts are flagged live and Apply stays off while any remain.
+  The universe is picked **by name** from a list of the show's universes in
+  name order (numbers in names count as numbers, so U3 comes before U12),
+  followed by **New universe N** for the ones a patch can open.
 - **"Place by nearest node"** — a DMX fixture placed on the plot goes to the
   nearest network-node port (or wireless receiver) with room; a free port on
   that node claims a new universe, written onto the port when you Apply.

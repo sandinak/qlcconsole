@@ -32,6 +32,7 @@
 
 #define private public
 #include "patchinventorydialog.h"
+#include "universecombo.h"
 #undef private
 #include "scene.h"
 #include <QCheckBox>
@@ -91,6 +92,39 @@ void PatchInventoryDialog_Test::onlyTheGivenFixturesAreListed()
     PatchInventoryDialog dlg(m_doc, QList<quint32>() << a->id());
     QCOMPARE(dlg.m_table->rowCount(), 1);
     QCOMPARE(dlg.currentPlan().first().fixtureId, a->id());
+}
+
+void PatchInventoryDialog_Test::universesArePickedByNameInNameOrder()
+{
+    // "select which U by a drop down vs an id .. sorted by location (which
+    // should be by name)": numbers in names compare as numbers.
+    InputOutputMap *io = m_doc->inputOutputMap();
+    while (io->universesCount() < 4)
+        QVERIFY(io->addUniverse());
+    io->setUniverseName(0, "U12-SL");
+    io->setUniverseName(1, "U3-SR");
+    io->setUniverseName(2, "U03-Cyc");
+    io->setUniverseName(3, "Booth");
+    Fixture *a = staged(m_doc, 8, "A");
+
+    PatchInventoryDialog dlg(m_doc);
+    UniverseCombo *uni = qobject_cast<UniverseCombo *>(dlg.m_table->cellWidget(0, 5));
+    QVERIFY(uni != nullptr);
+    QStringList names;
+    for (int i = 0; i < uni->count(); i++)
+        names << uni->itemText(i);
+    QCOMPARE(names.mid(0, 4), QStringList() << "Booth" << "U03-Cyc" << "U3-SR" << "U12-SL");
+    QVERIFY2(names.at(4).startsWith("New universe 5"), qPrintable(names.join(", ")));
+
+    // Chosen by name, patched to that universe.
+    uni->setCurrentIndex(uni->findText("U3-SR"));
+    QCOMPARE(dlg.currentPlan().first().universe, quint32(1));
+    dlg.accept();
+    QCOMPARE(a->universe(), quint32(1));
+
+    // The Place control lists them the same way.
+    PatchInventoryDialog again(m_doc);
+    QCOMPARE(again.m_placeUni->itemText(0), QString("Booth"));
 }
 
 void PatchInventoryDialog_Test::editingIntoACollisionFlagsItAndBlocksApply()
@@ -482,16 +516,16 @@ void PatchInventoryDialog_Test::aHandEditedUniverseDropsTheProposedPort()
     QVERIFY2(dlg.m_table->item(r, 7)->text().contains("assigns the port"), qPrintable(dlg.m_table->item(r, 7)->text()));
 
     // Moved by hand to universe 1: no longer the free port's, and says what carries it.
-    qobject_cast<QSpinBox *>(dlg.m_table->cellWidget(r, 5))->setValue(1);
+    qobject_cast<UniverseCombo *>(dlg.m_table->cellWidget(r, 5))->setUniverse(0);
     a = dlg.currentPlan().at(r);
     QVERIFY(!a.claimsPort);
     QCOMPARE(a.nodeIndex, -1);
     QCOMPARE(dlg.m_table->item(r, 7)->text(), QString::fromUtf8("—"));   // nothing carries universe 1
-    qobject_cast<QSpinBox *>(dlg.m_table->cellWidget(r, 5))->setValue(2);
+    qobject_cast<UniverseCombo *>(dlg.m_table->cellWidget(r, 5))->setUniverse(1);
     QCOMPARE(dlg.m_table->item(r, 7)->text(), QString::fromUtf8("SL Node · port 1"));
 
     // Back to 1 and apply: the free port stays free.
-    qobject_cast<QSpinBox *>(dlg.m_table->cellWidget(r, 5))->setValue(1);
+    qobject_cast<UniverseCombo *>(dlg.m_table->cellWidget(r, 5))->setUniverse(0);
     dlg.accept();
     QCOMPARE(m_doc->networkTopology()->nodes().first().ports.at(1).universe,
              InputOutputMap::invalidUniverse());

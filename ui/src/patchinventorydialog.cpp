@@ -27,6 +27,7 @@
 #include "qlcfixturemode.h"
 #include "qlcfixturedef.h"
 #include "patchinventorydialog.h"
+#include "universecombo.h"
 #include "networktopology.h"
 #include "inputoutputmap.h"
 #include "fixture.h"
@@ -114,8 +115,7 @@ PatchInventoryDialog::PatchInventoryDialog(Doc *doc, const QList<quint32> &fixtu
     // Place: the selected rows (or all of them) at one universe and address.
     QHBoxLayout *placeRow = new QHBoxLayout;
     placeRow->addWidget(new QLabel(tr("Place selected at universe"), this));
-    m_placeUni = new QSpinBox(this);
-    m_placeUni->setRange(1, 999);
+    m_placeUni = new UniverseCombo(m_doc, 1, this);
     placeRow->addWidget(m_placeUni);
     placeRow->addWidget(new QLabel(tr("address"), this));
     m_placeAddr = new QSpinBox(this);
@@ -227,9 +227,9 @@ void PatchInventoryDialog::slotPlace()
         rows << idx.row();
     std::sort(rows.begin(), rows.end());
     if (m_placeHow->currentIndex() == 2)
-        placeCountingUp(quint32(m_placeUni->value() - 1), quint32(m_placeAddr->value() - 1), rows);
+        placeCountingUp(m_placeUni->universe(), quint32(m_placeAddr->value() - 1), rows);
     else
-        placeRows(quint32(m_placeUni->value() - 1), quint32(m_placeAddr->value() - 1),
+        placeRows(m_placeUni->universe(), quint32(m_placeAddr->value() - 1),
                   m_placeHow->currentIndex() == 0, rows);
 }
 
@@ -293,8 +293,8 @@ void PatchInventoryDialog::setRowAddresses(const QList<PatchPlanner::Assignment>
         if (name == NULL || !byId.contains(name->data(Qt::UserRole).toUInt()))
             continue;
         const PatchPlanner::Assignment a = byId.value(name->data(Qt::UserRole).toUInt());
-        if (QSpinBox *uni = qobject_cast<QSpinBox *>(m_table->cellWidget(r, COL_UNI)))
-            uni->setValue(int(a.universe) + 1);
+        if (UniverseCombo *uni = qobject_cast<UniverseCombo *>(m_table->cellWidget(r, COL_UNI)))
+            uni->setUniverse(a.universe);
         if (QSpinBox *addr = qobject_cast<QSpinBox *>(m_table->cellWidget(r, COL_ADDR)))
             addr->setValue(int(a.address) + 1);
         // Placed by hand: the nearest-node proposal no longer applies.
@@ -404,6 +404,12 @@ void PatchInventoryDialog::fill(const QList<PatchPlanner::Assignment> &plan,
     m_filling = true;
     m_table->setRowCount(0);
     m_table->setRowCount(plan.size());
+    // Each row's universe list offers the new ones the plan opens, and one more.
+    const quint32 existing = m_doc->inputOutputMap()->universesCount();
+    quint32 past = existing;
+    foreach (const PatchPlanner::Assignment &a, plan)
+        past = qMax(past, a.universe + 1);
+    const int newOnes = int(past - existing) + 1;
     for (int r = 0; r < plan.size(); r++)
     {
         const PatchPlanner::Assignment &a = plan.at(r);
@@ -500,10 +506,9 @@ void PatchInventoryDialog::fill(const QList<PatchPlanner::Assignment> &plan,
         ci->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
         m_table->setItem(r, COL_CONN, ci);
 
-        QSpinBox *uni = new QSpinBox(m_table);
-        uni->setRange(1, 999);
-        uni->setValue(int(a.universe) + 1);
-        connect(uni, QOverload<int>::of(&QSpinBox::valueChanged), this, &PatchInventoryDialog::slotCellEdited);
+        UniverseCombo *uni = new UniverseCombo(m_doc, newOnes, m_table);
+        uni->setUniverse(a.universe);
+        connect(uni, &UniverseCombo::universeChanged, this, &PatchInventoryDialog::slotCellEdited);
         m_table->setCellWidget(r, COL_UNI, uni);
 
         QSpinBox *addr = new QSpinBox(m_table);
@@ -538,13 +543,13 @@ QList<PatchPlanner::Assignment> PatchInventoryDialog::currentPlan() const
     for (int r = 0; r < m_table->rowCount(); r++)
     {
         QTableWidgetItem *name = m_table->item(r, COL_NAME);
-        QSpinBox *uni = qobject_cast<QSpinBox *>(m_table->cellWidget(r, COL_UNI));
+        UniverseCombo *uni = qobject_cast<UniverseCombo *>(m_table->cellWidget(r, COL_UNI));
         QSpinBox *addr = qobject_cast<QSpinBox *>(m_table->cellWidget(r, COL_ADDR));
         if (name == NULL || uni == NULL || addr == NULL)
             continue;
         PatchPlanner::Assignment a;
         a.fixtureId = name->data(Qt::UserRole).toUInt();
-        a.universe = quint32(uni->value() - 1);
+        a.universe = uni->universe();
         a.address = quint32(addr->value() - 1);
         a.newUniverse = (a.universe >= existing);
         if (QTableWidgetItem *st = m_table->item(r, COL_STATUS))

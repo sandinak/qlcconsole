@@ -63,6 +63,7 @@ private slots:
     /** "an option on the patching window to do them incrementally": one
      *  universe each, counting up. */
     void placeCountingUpGivesEachTheNextUniverse();
+    void universesArePickedByNameInNameOrder();
 
 private:
     Doc *m_doc;

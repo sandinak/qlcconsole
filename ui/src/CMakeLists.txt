@@ -143,6 +143,7 @@ add_library(${module_name}
     networkreportdialog.cpp networkreportdialog.h
     networktopologydialog.cpp networktopologydialog.h
     patchinventorydialog.cpp patchinventorydialog.h
+    universecombo.cpp universecombo.h
     powerdistributiondialog.cpp powerdistributiondialog.h
     powerdistributionwidget.cpp powerdistributionwidget.h
     universeusagewidget.cpp universeusagewidget.h
