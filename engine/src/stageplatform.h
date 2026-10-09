@@ -33,6 +33,7 @@
 
 #include <QObject>
 #include <QList>
+#include <QPointF>
 #include <QColor>
 #include <QString>
 #include <climits>
@@ -95,8 +96,27 @@ public:
     void setTopMaterial(TopMaterial m) { m_topMaterial = m; }
     void  setHeight(float h) { m_height = (h >= 0.0f) ? h : 0.0f; }
 
-    /** Return true if the point (x, y) in metres falls within this platform. */
+    /** Return true if the point (x, y) in metres falls within this platform
+     *  (inside its rounded front, when it has one). */
     bool containsPoint(float x, float y) const;
+
+    /** A rounded front: how far the middle of the downstage edge reaches past
+     *  its corners (metres; 0 is square). The front is an arc across the full
+     *  width; depth() is still the depth at the middle, so the outside box --
+     *  dragging, overlap, the elevations -- does not change; the corners are
+     *  cut back. A box only (steps ignore it). Up to half the width (a half
+     *  circle) and no more than the depth. */
+    float frontCurve() const;
+    void  setFrontCurve(float m) { m_frontCurve = (m > 0.0f) ? m : 0.0f; }
+    bool  hasRoundedFront() const { return frontCurve() > 0.0f; }
+
+    /** Where the downstage edge is at @p x (metres): originY() + depth() for
+     *  a square front, nearer the corners on a rounded one. */
+    float frontEdgeAt(float x) const;
+
+    /** Its outline on the floor, corner to corner round the front --
+     *  @p segments panels along a rounded front. Metres, plan coordinates. */
+    QList<QPointF> footprint(int segments = 24) const;
 
     /********************************************************************
      * Shape: a box, or a flight of steps
@@ -183,6 +203,7 @@ private:
     float   m_width   = 2.0f;
     float   m_depth   = 2.0f;
     float   m_height  = 0.5f;
+    float   m_frontCurve = 0.0f;
     TopMaterial m_topMaterial = SolidTop;
     Shape   m_shape = BoxShape;
     Climb   m_climb = ClimbUpstage;

@@ -112,6 +112,11 @@ drapes):
     with an UP arrow from above, risers face-on, and the staircase side-on.
     Beams land on each tread, a deck-mounted fixture stands on the tread
     under it, and a target bound to the steps aims at the middle tread.
+  - **A rounded front** (an apron arc): **Front curve** in a platform's
+    editor is how far the middle of the downstage edge reaches past its
+    corners — 0 is square, half the width a half circle. The depth is the
+    depth at the middle; the corners are cut back. Drawn round from above
+    and in the 3D views, and light only lands on the deck inside the curve.
 - **Network node** — an Art-Net/sACN node or wireless DMX transmitter,
   placed where it's rigged (see [Network nodes and cable runs](#network-nodes-and-cable-runs)).
 

@@ -6471,6 +6471,15 @@ void Monitor::slotEditPlatform(quint32 pid)
     hSpin->setValue(double(p->height()) * toDisp_p);
     form->addRow(tr("Height:"), hSpin);
 
+    FeetInchesSpinBox *curveSpin = new FeetInchesSpinBox(isFeet_p, &dlg);
+    curveSpin->setRange(0.0, sizeMax_p / 2.0);
+    curveSpin->setValue(double(p->frontCurve()) * toDisp_p);
+    curveSpin->setObjectName("platformFrontCurve");
+    curveSpin->setToolTip(tr("A rounded front: how far the middle of the downstage edge reaches past "
+                             "its corners (0 is square; half the width is a half circle). The depth "
+                             "is measured at the middle."));
+    form->addRow(tr("Front curve:"), curveSpin);
+
     /* A flight of steps: count, rise, run and width say it all, and the box
        above follows from them (read-only while it is steps). */
     QComboBox *shapeCombo = new QComboBox(&dlg);
@@ -6506,8 +6515,10 @@ void Monitor::slotEditPlatform(quint32 pid)
     climbCombo->setToolTip(tr("Which way you walk going up"));
     form->addRow(tr("Climb toward:"), climbCombo);
     auto showShape = [form, shapeCombo, countSpin, riseSpin, runSpin, stepWSpin, climbCombo,
-                      wSpin, dSpin, hSpin]() {
+                      wSpin, dSpin, hSpin, curveSpin]() {
         const bool steps = shapeCombo->currentIndex() == 1;
+        curveSpin->setVisible(!steps);
+        if (QWidget *l = form->labelForField(curveSpin)) l->setVisible(!steps);
         for (QWidget *w : { (QWidget *)countSpin, (QWidget *)riseSpin, (QWidget *)runSpin,
                             (QWidget *)stepWSpin, (QWidget *)climbCombo })
         {
@@ -6615,6 +6626,7 @@ void Monitor::slotEditPlatform(quint32 pid)
             p->setWidth(float(wSpin->value() * fromDisp_p));
             p->setDepth(float(dSpin->value() * fromDisp_p));
             p->setHeight(float(hSpin->value() * fromDisp_p));
+            p->setFrontCurve(float(curveSpin->value() * fromDisp_p));
         }
         m_props->recomputeAnchoredFrames();
         m_graphicsView->updatePlatforms();
@@ -6625,7 +6637,7 @@ void Monitor::slotEditPlatform(quint32 pid)
     for (QDoubleSpinBox *sp : { oxSpin, oySpin, (QDoubleSpinBox*)wSpin,
                                 (QDoubleSpinBox*)dSpin, (QDoubleSpinBox*)hSpin,
                                 (QDoubleSpinBox*)riseSpin, (QDoubleSpinBox*)runSpin,
-                                (QDoubleSpinBox*)stepWSpin })
+                                (QDoubleSpinBox*)stepWSpin, (QDoubleSpinBox*)curveSpin })
         connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg,
                 [applyLive](double){ applyLive(); });
     connect(countSpin, QOverload<int>::of(&QSpinBox::valueChanged), &dlg, [applyLive](int){ applyLive(); });

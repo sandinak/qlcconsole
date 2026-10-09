@@ -12,6 +12,8 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 
+#include <QtMath>
+
 #include "stageplatform.h"
 
 #define KXMLPlatform        QStringLiteral("StagePlatform")
@@ -33,6 +35,7 @@
 #define KXMLPlatformRise    QStringLiteral("StepRise")
 #define KXMLPlatformRun     QStringLiteral("StepRun")
 #define KXMLPlatformClimb   QStringLiteral("StepClimb")
+#define KXMLPlatformFrontCurve QStringLiteral("FrontCurve")
 
 StagePlatform::StagePlatform(quint32 id, QObject *parent)
     : QObject(parent)
@@ -44,7 +47,47 @@ StagePlatform::StagePlatform(quint32 id, QObject *parent)
 bool StagePlatform::containsPoint(float x, float y) const
 {
     return x >= m_originX && x <= m_originX + m_width
-        && y >= m_originY && y <= m_originY + m_depth;
+        && y >= m_originY && y <= frontEdgeAt(x);
+}
+
+float StagePlatform::frontCurve() const
+{
+    if (m_shape == StepsShape)
+        return 0.0f;
+    return qMin(m_frontCurve, qMin(m_width / 2.0f, m_depth));
+}
+
+float StagePlatform::frontEdgeAt(float x) const
+{
+    const float front = m_originY + m_depth;
+    const double s = double(frontCurve());
+    if (s <= 0.0)
+        return front;
+    // The circle through both front corners and the middle of the front.
+    const double half = double(m_width) / 2.0;
+    const double r = (half * half + s * s) / (2.0 * s);
+    const double dx = qBound(-half, double(x) - (double(m_originX) + half), half);
+    return float(double(front) - r + qSqrt(qMax(0.0, r * r - dx * dx)));
+}
+
+QList<QPointF> StagePlatform::footprint(int segments) const
+{
+    QList<QPointF> out;
+    const double x0 = double(m_originX), x1 = double(m_originX + m_width);
+    const double y0 = double(m_originY);
+    out << QPointF(x0, y0) << QPointF(x1, y0);
+    if (!hasRoundedFront())
+    {
+        out << QPointF(x1, y0 + double(m_depth)) << QPointF(x0, y0 + double(m_depth));
+        return out;
+    }
+    segments = qMax(2, segments);
+    for (int i = 0; i <= segments; ++i)
+    {
+        const double x = x1 - (x1 - x0) * i / segments;
+        out << QPointF(x, double(frontEdgeAt(float(x))));
+    }
+    return out;
 }
 
 float StagePlatform::stepWidth() const
@@ -147,6 +190,7 @@ bool StagePlatform::loadXML(QXmlStreamReader &root)
     if (a.hasAttribute(KXMLPlatformStackable)) m_stackable = (a.value(KXMLPlatformStackable).toString() == "true");
     if (a.hasAttribute(KXMLPlatformLayerId)) m_layerId = a.value(KXMLPlatformLayerId).toUInt();
     if (a.hasAttribute(KXMLPlatformGroupId)) m_groupId = a.value(KXMLPlatformGroupId).toUInt();
+    if (a.hasAttribute(KXMLPlatformFrontCurve)) setFrontCurve(a.value(KXMLPlatformFrontCurve).toFloat());
     if (a.hasAttribute(KXMLPlatformSteps))
     {
         // Width/Depth/Height above are the flight's outside already; this
@@ -188,6 +232,8 @@ bool StagePlatform::saveXML(QXmlStreamWriter *doc) const
         doc->writeAttribute(KXMLPlatformLayerId, QString::number(m_layerId));
     if (m_groupId != 0)
         doc->writeAttribute(KXMLPlatformGroupId, QString::number(m_groupId));
+    if (m_frontCurve > 0.0f)
+        doc->writeAttribute(KXMLPlatformFrontCurve, QString::number(double(m_frontCurve), 'f', 3));
     if (m_shape == StepsShape)              // a plain box writes nothing new
     {
         doc->writeAttribute(KXMLPlatformSteps, QString::number(m_stepCount));

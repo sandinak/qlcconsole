@@ -4610,9 +4610,10 @@ void Monitor_Test::buildingAPlatformStepByStepThroughRealUiStaysConsistent()
         QWidget *geomPane = nameEdit ? nameEdit->parentWidget() : nullptr;
         const QList<QDoubleSpinBox *> spins =
             geomPane ? geomPane->findChildren<QDoubleSpinBox *>() : QList<QDoubleSpinBox *>();
-        // Origin X/Y, width, depth, height -- then the Steps shape's own
-        // Rise / Run / Step width, created after them and hidden for a box.
-        if (nameEdit == nullptr || spins.count() != 8)
+        // Origin X/Y, width, depth, height, front curve -- then the Steps
+        // shape's own Rise / Run / Step width, created after them and hidden
+        // for a box.
+        if (nameEdit == nullptr || spins.count() != 9)
             return false;
         nameEdit->setText("Workflow Riser");
         spins[0]->setValue(3.0);   // origin X
@@ -12435,6 +12436,61 @@ void Monitor_Test::aUWallIsDrawnRoundItsFrontWithItsTop()
         const QVector3D front = rim->pointAt(0.0, 3.0);
         const double t = v.beamThrow(front, QVector3D(0.0f, 0.0f, -1.0f), &hit, &n);
         QVERIFY2(hit && qAbs(t - (3.0 - 0.2032)) < 0.02, qPrintable(QString::number(t)));
+    }
+    delete doc;
+}
+
+void Monitor_Test::aRoundedStageFrontIsDrawnAndLitRoundItsCurve()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Meters);
+    StagePlatform *deck = props->addPlatform();
+    deck->setOriginX(0.0f);
+    deck->setOriginY(0.0f);
+    deck->setWidth(8.0f);
+    deck->setDepth(5.0f);
+    deck->setHeight(1.0f);
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        // Set from its editor.
+        driveDialog([](QWidget *dlg) {
+            QDoubleSpinBox *curve = dlg->findChild<QDoubleSpinBox *>("platformFrontCurve");
+            if (curve == nullptr) return false;
+            curve->setValue(1.5);
+            return true;
+        });
+        mon.slotEditPlatform(deck->id());
+        deck = props->platform(deck->id());
+        QVERIFY(deck != nullptr);
+        QVERIFY(qAbs(deck->frontCurve() - 1.5f) < 0.01f);
+
+        StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+        v.resize(800, 600);
+        v.reload();
+        bool hit = false;
+        QVector3D n;
+        // Down onto the middle of the front: the deck. Onto a cut corner: the floor.
+        double t = v.beamThrow(QVector3D(4.0f, 4.8f, 5.0f), QVector3D(0.0f, 0.0f, -1.0f), &hit, &n);
+        QVERIFY2(qAbs(t - 4.0) < 0.01, qPrintable(QString::number(t)));
+        t = v.beamThrow(QVector3D(0.2f, 4.8f, 5.0f), QVector3D(0.0f, 0.0f, -1.0f), &hit, &n);
+        QVERIFY2(qAbs(t - 5.0) < 0.01, qPrintable(QString::number(t)));
+
+        // Drawn round: the same deck squared off draws differently, at its corners.
+        v.setPlane(StructureStudioView::Angled);
+        v.setAngledView(0.0, 60.0);
+        v.reload();
+        const QImage round = v.grab().toImage();
+        deck->setFrontCurve(0.0f);
+        v.reload();
+        const QImage square = v.grab().toImage();
+        int changed = 0;
+        for (int y = 0; y < round.height(); ++y)
+            for (int x = 0; x < round.width(); ++x)
+                if (round.pixel(x, y) != square.pixel(x, y))
+                    ++changed;
+        QVERIFY2(changed > 500, qPrintable(QString("only %1 px differ").arg(changed)));
     }
     delete doc;
 }

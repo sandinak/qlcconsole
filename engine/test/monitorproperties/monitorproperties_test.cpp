@@ -1758,6 +1758,57 @@ void MonitorProperties_Test::stepsRoundTripInXml()
     QVERIFY(!b2.data().contains("Step"));
 }
 
+void MonitorProperties_Test::aRoundedFrontCutsTheCorners()
+{
+    // A 10 m stage, 6 m deep at the middle, its front 1 m further out there.
+    StagePlatform st(1);
+    st.setOriginX(0.0f);
+    st.setOriginY(0.0f);
+    st.setWidth(10.0f);
+    st.setDepth(6.0f);
+    QVERIFY(!st.hasRoundedFront());
+    QCOMPARE(st.frontEdgeAt(0.0f), 6.0f);
+    st.setFrontCurve(1.0f);
+    QVERIFY(st.hasRoundedFront());
+    QVERIFY(qAbs(st.frontEdgeAt(5.0f) - 6.0f) < 1e-4f);    // the middle: the full depth
+    QVERIFY(qAbs(st.frontEdgeAt(0.0f) - 5.0f) < 1e-4f);    // the corners, cut back
+    QVERIFY(qAbs(st.frontEdgeAt(10.0f) - 5.0f) < 1e-4f);
+    QVERIFY(st.frontEdgeAt(2.5f) > 5.0f && st.frontEdgeAt(2.5f) < 6.0f);
+    QVERIFY(st.containsPoint(5.0f, 5.9f));
+    QVERIFY(!st.containsPoint(0.2f, 5.9f));                 // off the cut corner
+    QVERIFY(st.containsPoint(0.2f, 4.9f));
+    // The outline runs corner to corner round the front.
+    const QList<QPointF> fp = st.footprint(10);
+    QCOMPARE(fp.size(), 2 + 11);
+    QVERIFY(qAbs(fp.at(7).y() - 6.0) < 1e-3);               // the middle of the arc
+    // No more than a half circle; steps are square.
+    st.setFrontCurve(9.0f);
+    QCOMPARE(st.frontCurve(), 5.0f);
+    QVERIFY(qAbs(st.frontEdgeAt(0.0f) - 1.0f) < 1e-3f);
+    st.setSteps(3, 0.2f, 0.3f, 2.0f);
+    QVERIFY(!st.hasRoundedFront());
+
+    // Saved, and only when it has one.
+    StagePlatform box(2);
+    box.setFrontCurve(0.75f);
+    QBuffer buf;
+    buf.open(QIODevice::WriteOnly);
+    QXmlStreamWriter w(&buf);
+    box.saveXML(&w);
+    buf.close();
+    QXmlStreamReader r(buf.data());
+    r.readNextStartElement();
+    StagePlatform back(0);
+    QVERIFY(back.loadXML(r));
+    QCOMPARE(back.frontCurve(), 0.75f);
+    StagePlatform square(3);
+    QBuffer b2;
+    b2.open(QIODevice::WriteOnly);
+    QXmlStreamWriter w2(&b2);
+    square.saveXML(&w2);
+    QVERIFY(!b2.data().contains("FrontCurve"));
+}
+
 void MonitorProperties_Test::aFixtureOnStepsStandsOnItsTread()
 {
     MonitorProperties mp;

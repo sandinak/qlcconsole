@@ -108,6 +108,7 @@ private slots:
     void stepsAreAFlightOfTreads();
     void stepsClimbEveryWay();
     void stepsRoundTripInXml();
+    void aRoundedFrontCutsTheCorners();
     void aFixtureOnStepsStandsOnItsTread();
 
     /** "No way to put this fixture on the back? Also when I say side ..

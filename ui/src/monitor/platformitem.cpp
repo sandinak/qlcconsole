@@ -17,6 +17,7 @@
 #include <QTextDocument>
 #include <QTextOption>
 #include <QPainter>
+#include <QPainterPath>
 #include <QFont>
 #include <QMenu>
 
@@ -115,7 +116,21 @@ void PlatformItem::paint(QPainter *painter,
 
     painter->setPen(QPen(border, selected ? 2.0 : 1.5));
     painter->setBrush(QBrush(fill));
-    painter->drawRect(QRectF(0, 0, m_pxW, m_pxD));
+    if (m_view == 0 && m_platform->hasRoundedFront())
+    {
+        // Its outline, round the front; the hatching stays inside it.
+        QPolygonF outline;
+        const double w = double(m_platform->width()), d = double(m_platform->depth());
+        foreach (const QPointF &q, m_platform->footprint(32))
+            outline << QPointF((q.x() - double(m_platform->originX())) / w * m_pxW,
+                               (q.y() - double(m_platform->originY())) / d * m_pxD);
+        painter->drawPolygon(outline);
+        QPainterPath clip;
+        clip.addPolygon(outline);
+        painter->setClipPath(clip);
+    }
+    else
+        painter->drawRect(QRectF(0, 0, m_pxW, m_pxD));
 
     // Hatch lines to distinguish from floor
     QPen hatchPen(border.lighter(140));

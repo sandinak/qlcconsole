@@ -2441,6 +2441,60 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
             const float b0 = props->platformBaseZ(id);
             const int topAlpha = (pl->topMaterial() == StagePlatform::SolidTop) ? 255
                                : (pl->topMaterial() == StagePlatform::ClearTop) ? 70 : 0;
+            if (pl->hasRoundedFront())
+            {
+                /* A rounded front: the deck's outline stood up into its sides,
+                   shaded by which way each faces, with the top over them. */
+                QScopedValueRollback<bool> pickable(m_emitPickable, true);
+                const QList<QPointF> fp = pl->footprint(32);
+                const float top = b0 + pl->height();
+                const double af = 0.18 + 0.82 * m_ambient;
+                auto lit = [af](QColor c) {
+                    return QColor(qRound(c.red() * af), qRound(c.green() * af), qRound(c.blue() * af), c.alpha());
+                };
+                for (int i = 0; i < fp.size(); ++i)
+                {
+                    const QPointF a = fp.at(i), b = fp.at((i + 1) % fp.size());
+                    const QVector3D c[4] = { QVector3D(float(a.x()), float(a.y()), b0),
+                                             QVector3D(float(b.x()), float(b.y()), b0),
+                                             QVector3D(float(b.x()), float(b.y()), top),
+                                             QVector3D(float(a.x()), float(a.y()), top) };
+                    // Outward is to the right of the way round (clockwise on the plan).
+                    const double nx = b.y() - a.y(), ny = -(b.x() - a.x());
+                    const double len = qSqrt(nx * nx + ny * ny);
+                    const double facing = (len > 0.0) ? (0.5 * nx + 0.8 * ny) / len : 0.0;
+                    // 95% facing the house down to 45% facing away, as a box's faces are.
+                    const double pct = 70.0 + 25.0 * qBound(-1.0, facing, 1.0);
+                    const QColor side = lit(pc.darker(qRound(10000.0 / pct)));
+                    QPolygonF poly;
+                    QVector<double> vz;
+                    double d = 0.0;
+                    for (const QVector3D &w : c)
+                    {
+                        poly << w2s(w);
+                        vz << viewDepth(w);
+                        d += vz.last();
+                    }
+                    emitPoly(poly, d / 4.0, side, edge, 1.1, p, vz);
+                }
+                if (topAlpha > 0)
+                {
+                    QColor deck = pc.lighter(118);
+                    deck.setAlpha(topAlpha);
+                    QPolygonF poly;
+                    QVector<double> vz;
+                    double d = 0.0;
+                    for (const QPointF &q : fp)
+                    {
+                        const QVector3D w(float(q.x()), float(q.y()), top);
+                        poly << w2s(w);
+                        vz << viewDepth(w);
+                        d += vz.last();
+                    }
+                    emitPoly(poly, d / fp.size(), lit(deck), edge, 1.1, p, vz);
+                }
+            }
+            else
             // A flight of steps is a box per step; a platform is one.
             foreach (const StagePlatform::Block &bk, pl->blocks())
             {
@@ -2465,6 +2519,18 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
                 outline(QRectF(w2s(QVector3D(bk.x0, bk.y0, b0)),
                                w2s(QVector3D(bk.x1, bk.y1, m_plane == Top ? b0 : b0 + bk.height)))
                             .normalized());
+        }
+        else if (m_plane == Top && pl->hasRoundedFront())
+        {
+            QPolygonF poly;
+            foreach (const QPointF &q, pl->footprint(32))
+                poly << w2s(QVector3D(float(q.x()), float(q.y()), 0));
+            p.setBrush(fill);
+            p.setPen(QPen(halo, 3.2));
+            p.drawPolygon(poly);
+            p.setBrush(Qt::NoBrush);
+            p.setPen(QPen(edge, 1.6));
+            p.drawPolygon(poly);
         }
         else if (m_plane == Top)
         {
@@ -2952,6 +3018,8 @@ double StructureStudioView::beamThrow(const QVector3D &apex, const QVector3D &di
                 continue;
             const QVector3D at = apex + dir * float(t);
             if (at.x() < bk.x0 || at.x() > bk.x1 || at.y() < bk.y0 || at.y() > bk.y1)
+                continue;
+            if (!pl->containsPoint(at.x(), at.y()))   // off a rounded front's cut corners
                 continue;
             best = t;
         }
