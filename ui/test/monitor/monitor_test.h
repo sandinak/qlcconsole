@@ -126,6 +126,10 @@ private slots:
     void aSockedTrussGlowsWithTheBarsInsideIt();
     void aTowerWearsItsFacesPlainOrPrinted();
     void ledsGlowInTheHaze();
+    /** Consolidation 3: double-click a fixture = Fixture Properties; click
+     *  again picks one out of a group. */
+    void doubleClickingAFixtureOpensItWhereverItIs();
+    void clickingAGroupMemberAgainPicksItOut();
     void hangersAreRiggingCopiedToEveryTower();
     void theSplitWizardOffersAViewAndKeepsAnExistingGroup();
     /** "I can't click on any side arrow to open any of the groups": an

@@ -3861,7 +3861,7 @@ void Monitor_Test::theLayersListOffersEverythingThePlotDoes()
             QMenu m;
             view.buildItemMenu(&m, QStringLiteral("fixture"), spot->id(), MonitorGraphicsView::MenuPlace());
             const QStringList top = menuPaths(&m);
-            QCOMPARE(top.first(), QStringLiteral("Edit Fixture…"));
+            QCOMPARE(top.first(), QStringLiteral("Fixture Properties…"));
             QCOMPARE(top.last(), QStringLiteral("Remove from View"));
         }
 
@@ -3872,7 +3872,7 @@ void Monitor_Test::theLayersListOffersEverythingThePlotDoes()
             QCOMPARE(menuPaths(&m).last(), QStringLiteral("Delete Truss"));
             QMenu f;
             panel.buildContextMenu(&f, rowFor(QStringLiteral("fixture"), spot->id()));
-            QCOMPARE(menuPaths(&f).first(), QStringLiteral("Edit Fixture…"));
+            QCOMPARE(menuPaths(&f).first(), QStringLiteral("Fixture Properties…"));
             QCOMPARE(menuPaths(&f).last(), QStringLiteral("Remove from View"));
         }
 
@@ -15333,7 +15333,7 @@ void Monitor_Test::editFixtureFromLayersEditsThatFixture()
         mon.m_graphicsView->buildItemMenu(&m, "fixture", bars[0]->id(), place);
         QAction *edit = nullptr;
         foreach (QAction *a, m.actions())
-            if (a->text().startsWith("Edit Fixture"))
+            if (a->text().startsWith("Fixture Properties"))
                 edit = a;
         QVERIFY(edit != nullptr);
         QString opened;
@@ -15965,6 +15965,112 @@ void Monitor_Test::ledsGlowInTheHaze()
     const int light = reddish(0.6);
     QVERIFY2(light > clearAir && light < heavy,
              qPrintable(QString("light %1 between clear %2 and heavy %3").arg(light).arg(clearAir).arg(heavy)));
+}
+
+void Monitor_Test::doubleClickingAFixtureOpensItWhereverItIs()
+{
+    FixtureCleanup cleanup(m_doc);
+    MonitorProperties *props = m_doc->monitorProperties();
+    StagePlatform *pl = props->addPlatform();
+    pl->setOriginX(3.0f); pl->setOriginY(3.0f);
+    pl->setWidth(2.0f); pl->setDepth(1.0f); pl->setHeight(0.4f);
+    Fixture *fx = new Fixture(m_doc);
+    fx->setName("On the riser");
+    fx->setChannels(1);
+    fx->setAddress(500);
+    QVERIFY(m_doc->addFixture(fx));
+    cleanup.ids << fx->id();
+    FixtureRigProps rp;
+    rp.riserPlatformId = pl->id();
+    rp.riserFace = FixtureRigProps::RiserTop;
+    rp.riserU = 1.0f; rp.riserV = 0.5f;
+    props->setFixtureRigProps(fx->id(), rp);
+
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+    rig.gv->addFixture(fx->id(), QPointF(4000, 3500));
+    MonitorFixtureItem *item = rig.gv->m_fixtures.value(fx->id(), nullptr);
+    QVERIFY(item != nullptr);
+    rig.gv->centerOn(item);
+
+    // The fixture, not the riser it covers.
+    QSignalSpy fixtureSpy(rig.gv, &MonitorGraphicsView::fixtureDoubleClicked);
+    QSignalSpy riserSpy(rig.gv, &MonitorGraphicsView::platformDoubleClicked);
+    inspectModal([](QWidget *dlg) { QVERIFY(dlg->windowTitle().startsWith("Fixture Properties")); });
+    const QPoint at = rig.gv->mapFromScene(item->sceneBoundingRect().center());
+    QTest::mouseDClick(rig.gv->viewport(), Qt::LeftButton, Qt::NoModifier, at);
+    QCOMPARE(fixtureSpy.count(), 1);
+    QCOMPARE(fixtureSpy.first().first().toUInt(), fx->id());
+    QCOMPARE(riserSpy.count(), 0);
+
+    // The riser is in the fixture's own menu.
+    QMenu menu;
+    rig.gv->populateItemMenu(&menu, QStringLiteral("fixture"), fx->id(), QPointF(), false);
+    QStringList texts;
+    foreach (QAction *a, menu.actions())
+        texts << a->text();
+    QVERIFY2(texts.contains("Fixture Properties…") && texts.contains("Edit Platform…"),
+             qPrintable(texts.join(" | ")));
+
+    props->removePlatform(pl->id());
+}
+
+void Monitor_Test::clickingAGroupMemberAgainPicksItOut()
+{
+    FixtureCleanup cleanup(m_doc);
+    MonitorProperties *props = m_doc->monitorProperties();
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+    rig.parent.resize(1300, 820);
+    rig.parent.show();
+    rig.gv->resize(1230, 760);
+
+    // Three free-standing pars, grouped on the plot.
+    const quint32 gid = 9100;
+    props->createGroup(gid, QStringLiteral("Front pars"), 0);
+    QList<MonitorFixtureItem *> items;
+    for (int i = 0; i < 3; ++i)
+    {
+        Fixture *fx = new Fixture(m_doc);
+        fx->setName(QString("Front par %1").arg(i));
+        fx->setChannels(1);
+        fx->setAddress(quint32(480 + i));
+        QVERIFY(m_doc->addFixture(fx));
+        cleanup.ids << fx->id();
+        rig.gv->addFixture(fx->id(), QPointF(4000 + i * 1500, 3000));
+        MonitorFixtureItem *it = rig.gv->m_fixtures.value(fx->id(), nullptr);
+        QVERIFY(it != nullptr);
+        rig.gv->setItemGroupId(it, gid);
+        items << it;
+    }
+    QCoreApplication::processEvents();
+    MonitorFixtureItem *item = items[1];
+    rig.gv->centerOn(item);
+    const QPoint at = rig.gv->mapFromScene(item->sceneBoundingRect().center());
+    QCOMPARE(rig.gv->topPickableAt(rig.gv->mapToScene(at)), static_cast<QGraphicsItem *>(item));
+
+    // One click: the group, selected together...
+    rig.gv->m_scene->clearSelection();
+    QTest::mouseClick(rig.gv->viewport(), Qt::LeftButton, Qt::NoModifier, at);
+    QVERIFY2(rig.gv->m_scene->selectedItems().size() == 3,
+             qPrintable(QString::number(rig.gv->m_scene->selectedItems().size())));
+
+    // ...click it again (not a double-click): just it, picked out.
+    QTest::qWait(QApplication::doubleClickInterval() + 100);
+    QTest::mouseClick(rig.gv->viewport(), Qt::LeftButton, Qt::NoModifier, at);
+    QCOMPARE(rig.gv->m_scene->selectedItems().size(), 1);
+    QVERIFY(item->isSelected());
+    QVERIFY(item->isIsolated());
+
+    // And a double-click on a group member opens just that one.
+    rig.gv->m_scene->clearSelection();
+    QSignalSpy opened(rig.gv, &MonitorGraphicsView::fixtureDoubleClicked);
+    QTest::qWait(QApplication::doubleClickInterval() + 100);
+    inspectModal([](QWidget *dlg) { QVERIFY(dlg->windowTitle().startsWith("Fixture Properties")); });
+    QTest::mouseDClick(rig.gv->viewport(), Qt::LeftButton, Qt::NoModifier, at);
+    QCOMPARE(opened.count(), 1);
+    QCOMPARE(opened.first().first().toUInt(), cleanup.ids.at(1));
+    props->removeGroup(gid);
 }
 
 void Monitor_Test::aLanternHangsOffATowerAndGlowsAllRound()

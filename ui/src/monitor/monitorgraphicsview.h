@@ -1192,8 +1192,6 @@ private:
      *  within QApplication::doubleClickInterval() of this timestamp is treated
      *  as a triple-click and opens the fixture's own editor directly, instead
      *  of requiring a whole separate second double-click. */
-    QGraphicsItem *m_lastFixtureDoubleClickItem = nullptr;
-    QElapsedTimer m_lastFixtureDoubleClickTimer;
 
     /** Positions snapshot taken at move-start, committed to m_moveUndo on
      *  drop if anything actually moved. */
@@ -1202,6 +1200,11 @@ private:
     /** Guards extendSelectionToGroups() against the re-entrant selectionChanged
      *  it triggers while adding group-mates to the selection. */
     bool m_extendingSelection = false;
+    /** "Click again": the member of a selected group a press landed on, and
+     *  where -- picked out on a release that did not drag. */
+    QGraphicsItem *m_clickAgainItem = nullptr;
+    QPoint m_clickAgainPos;
+    void clickAgainToPickOut(QGraphicsItem *item);
 
     /** Current point of view (Top = editable default). */
     ViewPOV m_pov = PovTop;

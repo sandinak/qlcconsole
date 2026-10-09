@@ -380,29 +380,21 @@ void MonitorGraphicsView::mousePressEvent(QMouseEvent *event)
         }
     }
 
-    // Triple-click on a fixture that mouseDoubleClickEvent just isolated (drilled
-    // into) rather than opened an editor for: Qt has no native triple-click event,
-    // so the third rapid press just arrives here as an ordinary press. Treat it as
-    // "open this fixture's editor now" instead of requiring a whole separate
-    // second double-click to reach the same result.
-    if (event->button() == Qt::LeftButton && m_lastFixtureDoubleClickItem != nullptr
-        && m_lastFixtureDoubleClickTimer.isValid()
-        && m_lastFixtureDoubleClickTimer.elapsed() <= QApplication::doubleClickInterval())
+    /* Click again: a press on a member of a group (or a truss's worth) that
+       is already selected TOGETHER -- the release, if it did not drag, picks
+       just that one out, to slide or drag clear (clickAgainToPickOut()). */
+    m_clickAgainItem = nullptr;
+    if (event->button() == Qt::LeftButton && event->modifiers() == Qt::NoModifier && !m_layoutLocked)
     {
-        // Same resolution mouseDoubleClickEvent used to pick this fixture in the
-        // first place (topPickableAt, not plain itemAt) -- keeps the two clicks'
-        // hit-testing consistent (it sees through a ghosted click-through fixture).
         QGraphicsItem *hit = topPickableAt(mapToScene(event->pos()));
-        MonitorFixtureItem *fi = (hit == m_lastFixtureDoubleClickItem)
-            ? dynamic_cast<MonitorFixtureItem *>(hit) : nullptr;
-        m_lastFixtureDoubleClickItem = nullptr;
-        m_lastFixtureDoubleClickTimer.invalidate();
-        if (fi != nullptr)
+        while (hit != nullptr && hit->parentItem() != nullptr)
+            hit = hit->parentItem();
+        MonitorFixtureItem *mfi = dynamic_cast<MonitorFixtureItem *>(hit);
+        if (hit != nullptr && hit->isSelected() && m_scene->selectedItems().size() > 1
+            && (itemGroupId(hit) != 0 || (mfi != nullptr && mfi->isBoundToTruss())))
         {
-            m_suppressNextViewClick = true;
-            emit fixtureDoubleClicked(fi->fixtureID());
-            event->accept();
-            return;
+            m_clickAgainItem = hit;
+            m_clickAgainPos = event->pos();
         }
     }
 
@@ -5632,6 +5624,14 @@ void MonitorGraphicsView::mouseReleaseEvent(QMouseEvent *e)
         return;
     }
 
+    // Click again (see mousePressEvent): after the release has done all else.
+    QGraphicsItem *pickOut = nullptr;
+    if (e->button() == Qt::LeftButton && m_clickAgainItem != nullptr
+        && (e->pos() - m_clickAgainPos).manhattanLength() < QApplication::startDragDistance())
+        pickOut = m_clickAgainItem;
+    m_clickAgainItem = nullptr;
+    auto clickAgain = qScopeGuard([this, pickOut]() { clickAgainToPickOut(pickOut); });
+
     // Everything this release records is one drag: one Ctrl+Z undoes it all.
     m_openUndoBatch = ++m_undoBatch;
     auto closeBatch = qScopeGuard([this]() { m_openUndoBatch = 0; });
@@ -5839,6 +5839,19 @@ void MonitorGraphicsView::mouseMoveEvent(QMouseEvent *event)
     QGraphicsView::mouseMoveEvent(event);
 }
 
+void MonitorGraphicsView::clickAgainToPickOut(QGraphicsItem *item)
+{
+    if (item == nullptr || item->scene() != m_scene)
+        return;
+    m_extendingSelection = true;            // not select-together: just this one
+    m_scene->clearSelection();
+    item->setSelected(true);
+    if (MonitorFixtureItem *mfi = dynamic_cast<MonitorFixtureItem *>(item))
+        mfi->setIsolated(true);
+    m_extendingSelection = false;
+    emit mapSelectionChanged();
+}
+
 void MonitorGraphicsView::mouseDoubleClickEvent(QMouseEvent *event)
 {
     // Suppress the viewClicked that would fire on the release following this
@@ -5877,85 +5890,32 @@ void MonitorGraphicsView::mouseDoubleClickEvent(QMouseEvent *event)
     // member so it can be dragged alone. Only this item selected → the next
     // double-click opens its editor (drill-in then act). Ungrouped items open
     // the editor straight away.
-    auto drilledIntoGroup = [&](QGraphicsItem *item) -> bool {
-        if (m_layoutLocked || item == nullptr)         return false;
-        if (itemGroupId(item) == 0)                    return false;   // not grouped
-        if (m_scene->selectedItems().size() <= 1)      return false;   // already isolated
-        m_extendingSelection = true;                   // suppress select-together
-        m_scene->clearSelection();
-        item->setSelected(true);
-        m_extendingSelection = false;
-        emit mapSelectionChanged();
-        return true;
-    };
+    /* Double-click OPENS: the item's own editor, grouped or not (picking one
+       member out of a group is "click again" -- see clickAgainToPickOut()).
+       It used to drill in first, so a grouped item took two double-clicks
+       and a fixture three ways to open (CONSOLIDATION_REVIEW #3). */
+    auto drilledIntoGroup = [&](QGraphicsItem *) -> bool { return false; };
 
     if (auto *fi = dynamic_cast<MonitorFixtureItem *>(it))
     {
-        // A fixture mounted ON a feature → open that FEATURE's editor (the fixture
-        // sits in its tree/inspector). This is the common "double-click the riser"
-        // case, where the feature is covered by its own fixtures. Truss binding is
-        // deliberately NOT included here -- a truss-bound fixture instead follows
-        // the drill-in-then-edit path below (first double-click isolates the
-        // fixture, second opens ITS OWN editor); a truss is a long, mostly-
-        // uncovered feature, so its own editor is still one double-click away by
-        // clicking the truss itself elsewhere.
-        MonitorProperties *mp = m_doc->monitorProperties();
-        const FixtureRigProps rp = mp->fixtureRigProps(fi->fixtureID());
-        /* Ask WHICH structure through the one shared accessor, so this can
-           never disagree with the position resolver again. It used to test the
-           ids in its own order -- deck before truss -- so a fixture carrying a
-           stale second mount was DRAWN on its truss but opened the editor for
-           an unrelated platform. (A truss deliberately falls through to the
-           drill-in path below; it is long and mostly uncovered, so its own
-           editor is a double-click away on the truss itself.) */
-        switch (rp.primaryMount())
-        {
-        case FixtureRigProps::PipeMount:  emit pipeDoubleClicked(rp.pipeId);   return;
-        case FixtureRigProps::TowerMount: emit towerDoubleClicked(rp.towerId); return;
-        case FixtureRigProps::RiserMount: emit platformDoubleClicked(rp.riserPlatformId); return;
-        case FixtureRigProps::DeckMount:  emit platformDoubleClicked(rp.deckPlatformId);  return;
-        case FixtureRigProps::TrussMount:                 // drill-in path below
-        case FixtureRigProps::NoMount:
-        default: break;
-        }
-        if (const quint32 fg = mp->fixtureFrameGroup(fi->fixtureID()))
-        {
-            const MonitorProperties::MonitorGroup g = mp->group(fg);
-            if (g.anchorKind == QStringLiteral("platform")) { emit platformDoubleClicked(g.anchorId); return; }
-        }
-
-        // Grouped OR truss-bound fixture: the FIRST double-click DRILLS IN —
-        // selects just this fixture (distinct cyan-dashed highlight) so it can
-        // be slid along its truss or dragged clear to detach. Single-click still
-        // selects the whole group / truss.
-        //
-        // A SECOND double-click on the already-drilled-in fixture opens its
-        // editor (drill-in then act — no need to reach for the right-click menu).
-        // When the plot is LOCKED, drilling-in (to slide/detach) is meaningless,
-        // so a double-click always opens the editor straight away.
-        if (!m_layoutLocked && (itemGroupId(fi) != 0 || fi->isBoundToTruss()) && !fi->isIsolated())
-        {
-            m_extendingSelection = true;   // suppress select-together
-            m_scene->clearSelection();
-            fi->setSelected(true);
-            fi->setIsolated(true);
-            m_extendingSelection = false;
-            emit mapSelectionChanged();
-            // Arm the triple-click shortcut (see mousePressEvent): a further
-            // rapid click on this same fixture opens its editor right away,
-            // rather than requiring a whole separate second double-click.
-            m_lastFixtureDoubleClickItem = fi;
-            m_lastFixtureDoubleClickTimer.restart();
-            return;
-        }
-
-        // If the double-clicked fixture was part of a multi-selection, restore
-        // that selection so the editor opens for all of them.
-        if (m_savedSelection.contains(fi) && m_savedSelection.size() > 1)
+        /* A fixture: its properties, wherever it is mounted. (Its structure
+           opened instead when the fixture covered it; that is "Edit <the
+           structure>…" in the fixture's menu now.) A selection the user made
+           of several fixtures opens for all of them; a group's or a truss's
+           worth selected together by one click opens for just this one. */
+        const bool selectedTogether = (itemGroupId(fi) != 0 || fi->isBoundToTruss());
+        if (!selectedTogether && m_savedSelection.contains(fi) && m_savedSelection.size() > 1)
         {
             m_scene->clearSelection();
             foreach (QGraphicsItem *gi, m_savedSelection)
                 gi->setSelected(true);
+        }
+        else if (selectedTogether)
+        {
+            m_extendingSelection = true;
+            m_scene->clearSelection();
+            fi->setSelected(true);
+            m_extendingSelection = false;
         }
         emit fixtureDoubleClicked(fi->fixtureID());
         return;
@@ -6747,9 +6707,47 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
     const FixtureRigProps rp = props->fixtureRigProps(fid);
     Fixture *fxi = m_doc->fixture(fid);
 
-    menu->addAction(tr("Edit Fixture…"), this, [this, fid]() {
+    menu->addAction(tr("Fixture Properties…"), this, [this, fid]() {
         emit fixtureDoubleClicked(fid);
     });
+    /* What it is mounted on: its editor, here -- double-clicking a fixture
+       opens the fixture, wherever it is (a covered riser used to open
+       instead). */
+    {
+        QString what;
+        std::function<void()> open;
+        switch (rp.primaryMount())
+        {
+        case FixtureRigProps::TrussMount:
+            what = tr("Edit Truss…");
+            open = [this, rp]() { emit trussDoubleClicked(rp.trussId); };
+            break;
+        case FixtureRigProps::PipeMount:
+            what = tr("Edit Pipe…");
+            open = [this, rp]() { emit pipeDoubleClicked(rp.pipeId); };
+            break;
+        case FixtureRigProps::TowerMount:
+            what = tr("Edit Tower…");
+            open = [this, rp]() { emit towerDoubleClicked(rp.towerId); };
+            break;
+        case FixtureRigProps::RiserMount:
+            what = tr("Edit Platform…");
+            open = [this, rp]() { emit platformDoubleClicked(rp.riserPlatformId); };
+            break;
+        case FixtureRigProps::DeckMount:
+            what = tr("Edit Platform…");
+            open = [this, rp]() { emit platformDoubleClicked(rp.deckPlatformId); };
+            break;
+        case FixtureRigProps::HangerMount:
+            what = tr("Edit Hanger…");
+            open = [this, rp]() { emit hangerDoubleClicked(rp.hangerId); };
+            break;
+        default:
+            break;
+        }
+        if (open)
+            menu->addAction(what, this, open);
+    }
     menu->addAction(tr("Locate"), this, [this, fid]() {
         /* The selected fixtures on the plot and this one: selecting a truss's
            worth of heads and asking where they are lights all of them. */

@@ -138,6 +138,7 @@
 #include "outputpatch.h"
 #include "qlccapability.h"
 #include "monitor.h"
+#include "fixturemanager.h"
 #include "patchinventorydialog.h"
 #include "createfixturegroup.h"
 #include "app.h"
@@ -9815,6 +9816,23 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
         QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
     connect(btns, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
     connect(btns, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    /* Its definition and mode -- the one thing this does not change -- in
+       the stock dialog, from here: Fixture Properties is THE fixture dialog
+       (CONSOLIDATION_REVIEW #3). The name it may change is shown again. */
+    if (fxi != nullptr)
+    {
+        QPushButton *defBtn = btns->addButton(tr("Definition && Mode…"), QDialogButtonBox::ActionRole);
+        defBtn->setObjectName(QStringLiteral("definitionAndModeButton"));
+        defBtn->setToolTip(tr("Change this fixture's definition or mode (and its name, "
+                              "connection and address) in the fixture dialog"));
+        const quint32 defFid = fxi->id();
+        connect(defBtn, &QPushButton::clicked, &dlg, [this, &dlg, defFid, nameEdit]() {
+            if (FixtureManager::editDefinitionAndMode(&dlg, m_doc, defFid))
+                if (Fixture *f = m_doc->fixture(defFid))
+                    if (nameEdit != nullptr)
+                        nameEdit->setText(f->name());
+        });
+    }
     vl->addWidget(btns);
 
     if (dlg.exec() != QDialog::Accepted)

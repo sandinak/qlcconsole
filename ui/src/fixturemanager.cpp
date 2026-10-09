@@ -1000,9 +1000,16 @@ void FixtureManager::slotDoubleClicked(QTreeWidgetItem* item)
 
     if (fxivar.isValid() == true)
     {
-        // Double-click a fixture -> properties
+        /* Double-click a fixture -> Fixture Properties, the same dialog as
+           everywhere else (CONSOLIDATION_REVIEW #3); its definition and mode
+           are a button in it, and "Definition & Mode..." in the menu. */
         if (m_doc->mode() != Doc::Operate)
-            slotProperties();
+        {
+            if (Monitor *mon = Monitor::instance())
+                mon->editFixtureProperties(fxivar.toUInt());
+            else
+                slotProperties();
+        }
     }
     else if (grpvar.isValid() == true)
     {
@@ -2006,11 +2013,14 @@ void FixtureManager::editFixtureProperties()
     QVariant var = item->data(KColumnName, PROP_ID);
     if (var.isValid() == false)
         return;
+    editDefinitionAndMode(this, m_doc, var.toUInt());
+}
 
-    quint32 id = var.toUInt();
-    Fixture* fxi = m_doc->fixture(id);
+bool FixtureManager::editDefinitionAndMode(QWidget *parent, Doc *doc, quint32 fid)
+{
+    Fixture* fxi = (doc != NULL) ? doc->fixture(fid) : NULL;
     if (fxi == NULL)
-        return;
+        return false;
 
     QString manuf;
     QString model;
@@ -2023,7 +2033,7 @@ void FixtureManager::editFixtureProperties()
         mode = fxi->fixtureMode()->name();
     }
 
-    AddFixture af(this, m_doc, fxi);
+    AddFixture af(parent, doc, fxi);
     af.setInventoryMode(!fxi->isPatched());
     af.setWindowTitle(fxi->isPatched() ? tr("Change fixture properties")
                                        : tr("Change inventory fixture"));
@@ -2096,8 +2106,12 @@ void FixtureManager::editFixtureProperties()
             if (changed)
                 fxi->setID(fxi->id());
 
-            updateView();
-            slotSelectionChanged();
+            if (FixtureManager *fm = FixtureManager::instance())
+            {
+                fm->updateView();
+                fm->slotSelectionChanged();
+            }
+            return true;
         }
         else
         {
@@ -2106,6 +2120,7 @@ void FixtureManager::editFixtureProperties()
             msg.exec();
         }
     }
+    return false;
 }
 
 void FixtureManager::editChannelGroupProperties()
@@ -2134,7 +2149,15 @@ void FixtureManager::editChannelGroupProperties()
 void FixtureManager::slotProperties()
 {
     if (m_currentTabIndex == 1)
+    {
         editChannelGroupProperties();
+        return;
+    }
+    // A fixture: Fixture Properties, the one dialog for a fixture everywhere.
+    QTreeWidgetItem *item = m_fixtures_tree->currentItem();
+    const QVariant var = item != NULL ? item->data(KColumnName, PROP_ID) : QVariant();
+    if (var.isValid() && Monitor::instance() != NULL)
+        Monitor::instance()->editFixtureProperties(var.toUInt());
     else
         editFixtureProperties();
 }
@@ -2780,6 +2803,15 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
     if (haveFixtureOrGroupSelection)
     {
         menu.addAction(m_propertiesAction);
+        // Its definition and mode: the stock dialog, kept for what Fixture
+        // Properties does not change.
+        if (selFixtures.size() == 1 && m_doc->mode() != Doc::Operate)
+        {
+            const quint32 fid = selFixtures.first();
+            menu.addAction(tr("Definition && Mode..."), this, [this, fid]() {
+                editDefinitionAndMode(this, m_doc, fid);
+            });
+        }
         menu.addAction(m_testAction);
         menu.addAction(m_locateAction);
         menu.addAction(m_fadeConfigAction);

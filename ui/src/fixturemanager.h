@@ -271,6 +271,14 @@ private:
     /** Edit properties for the selected fixture */
     void editFixtureProperties();
 
+public:
+    /** A fixture's definition and mode (and name, connection, address) in the
+     *  stock dialog -- reached from Fixture Properties' "Definition & Mode…"
+     *  and the Fixture Manager's menu. True when something changed. */
+    static bool editDefinitionAndMode(QWidget *parent, Doc *doc, quint32 fid);
+
+private:
+
     /** Edit properties for the selected channels group */
     void editChannelGroupProperties();
 

@@ -64,6 +64,11 @@ public:
     /** Get the monitor singleton instance. Can be NULL. */
     static Monitor* instance();
 
+    /** Fixture Properties for ONE fixture -- the one fixture dialog, opened by
+     *  a double-click on a fixture wherever it is (plot, studio, Layers,
+     *  Fixture Manager). */
+    void editFixtureProperties(quint32 fid);
+
     /** Constructed once as a permanent tab (see App::init()) — public like
      *  every other tab-hosted manager (FunctionManager, ShowManager, …);
      *  single-instance-ness is enforced by Q_ASSERT(s_instance == NULL) in
@@ -351,8 +356,7 @@ protected slots:
 
     /** Show the fixture properties editor on double-click. */
     void slotFixtureDoubleClicked(quint32 fid);
-    /** Edit ONE fixture's properties (studio single-fixture path). */
-    void editFixtureProperties(quint32 fid);
+
     /** True for a LINEAR fixture (strip/bar/tape): multi-head OR physically much
      *  wider than it is deep/tall. Drives the Face+Angle quick-settings. */
     bool isLinearFixture(class Fixture *fx) const;
