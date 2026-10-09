@@ -12517,6 +12517,56 @@ void Monitor_Test::aRoundedStageFrontIsDrawnAndLitRoundItsCurve()
     delete doc;
 }
 
+void Monitor_Test::aBeamPastTheEndOfTheCycStillWashesIt()
+{
+    /* "The spots aren't both backwashing": a follow-spot whose middle passes
+       just beyond the end of the cyc still has half its beam on the cloth.
+       The pool used to go only where the middle landed. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Scenery *cyc = props->addScenery();
+    cyc->setOriginX(6.0f);
+    cyc->setOriginY(0.5f);
+    cyc->setWidth(10.0f);                 // x 1 .. 11
+    cyc->setHeight(6.0f);
+    {
+        StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+        v.resize(800, 600);
+        v.reload();
+        v.setPlane(StructureStudioView::Angled);
+        v.setAngledView(0.0, 10.0);
+        v.reload();
+        // From downstage right of centre, aimed 40 cm past the cyc's stage-right end.
+        const QVector3D apex(9.0f, 9.0f, 3.0f);
+        const QVector3D dir = (QVector3D(0.6f, 0.5f, 2.5f) - apex).normalized();
+        bool hit = false;
+        int surface = 1;
+        v.beamThrow(apex, dir, &hit, nullptr, &surface);
+        QVERIFY2(surface >= 0, "the middle of the beam should miss the cyc");
+
+        QImage img(v.size(), QImage::Format_ARGB32_Premultiplied);
+        img.fill(Qt::black);
+        {
+            QPainter p(&img);
+            v.drawBeamCone(p, apex, dir, qDegreesToRadians(8.0), QColor(0, 255, 0), 1.0, 0.0, nullptr);
+        }
+        auto greenNear = [&](const QVector3D &w) {
+            const QPoint c = v.w2s(w).toPoint();
+            int n = 0;
+            for (int y = c.y() - 4; y <= c.y() + 4; ++y)
+                for (int x = c.x() - 4; x <= c.x() + 4; ++x)
+                    if (img.rect().contains(x, y) && qGreen(img.pixel(x, y)) > 20)
+                        ++n;
+            return n;
+        };
+        // On the cloth, just inside its end, within the beam: lit.
+        QVERIFY2(greenNear(QVector3D(1.3f, 0.5f, 2.5f)) > 20, "the cyc's end should take the light");
+        // Far along the cloth, outside the beam: dark.
+        QCOMPARE(greenNear(QVector3D(6.0f, 0.5f, 2.5f)), 0);
+    }
+    delete doc;
+}
+
 void Monitor_Test::selectAllTakesEverythingSelectable()
 {
     Doc *doc = new Doc(this);

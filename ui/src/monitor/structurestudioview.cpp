@@ -2986,7 +2986,7 @@ bool StructureStudioView::beamHitsSomething(const QVector3D &apex,
 }
 
 double StructureStudioView::beamThrow(const QVector3D &apex, const QVector3D &dir,
-                                     bool *hit, QVector3D *landNormal) const
+                                     bool *hit, QVector3D *landNormal, int *surface) const
 {
     static const double NO_HIT = 8.0;      // metres, for a beam fired into the air
     static const double MAX_THROW = 24.0;
@@ -3003,6 +3003,7 @@ double StructureStudioView::beamThrow(const QVector3D &apex, const QVector3D &di
     };
 
     double best = toPlane(0.0);            // the stage floor
+    int what = 0;
 
     // Platform tops, but only where the beam actually crosses the footprint.
     MonitorProperties *props = m_doc->monitorProperties();
@@ -3011,8 +3012,10 @@ double StructureStudioView::beamThrow(const QVector3D &apex, const QVector3D &di
         if (pl == nullptr)
             continue;
         // Each tread of a flight of steps is a deck of its own height.
+        int blockNo = 0;
         foreach (const StagePlatform::Block &bk, pl->blocks())
         {
+            ++blockNo;
             const double topZ = double(props->platformBaseZ(pl->id())) + double(bk.height);
             if (double(apex.z()) <= topZ)      // already at or below it
                 continue;
@@ -3025,6 +3028,7 @@ double StructureStudioView::beamThrow(const QVector3D &apex, const QVector3D &di
             if (!pl->containsPoint(at.x(), at.y()))   // off a rounded front's cut corners
                 continue;
             best = t;
+            what = int(pl->id()) * 64 + blockNo;
         }
     }
     QVector3D normal(0, 0, 1);                // floor and decks face up
@@ -3041,9 +3045,12 @@ double StructureStudioView::beamThrow(const QVector3D &apex, const QVector3D &di
         {
             best = t;
             normal = n;
+            what = -1 - int(sc->id());
         }
     }
 
+    if (surface != nullptr)
+        *surface = (best > 0.0) ? what : 0;
     if (hit != nullptr)
         *hit = (best > 0.0);
     if (landNormal != nullptr)
@@ -3482,7 +3489,8 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
        or it ends in a hard disc hanging in space. */
     bool lands = false;
     QVector3D landNormal(0, 0, 1);
-    const double len = beamThrow(apex, d, &lands, &landNormal);
+    int axisSurface = 0;
+    const double len = beamThrow(apex, d, &lands, &landNormal, &axisSurface);
 
     /* Brighter in a dark room, which is both true and useful: at work light you
        want to see the rig, at blackout you want to see the light. */
@@ -3586,11 +3594,94 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
         }
     }
 
+    /* Does ALL of it land on the one surface its middle does? The pool used
+       to be wherever the middle of the beam landed, as one oval on that
+       surface: a follow-spot whose middle went just past the end of the cyc
+       washed none of it, though half the beam was on the cloth ("the spots
+       aren't both backwashing"). The edge of the beam is asked too; when its
+       rays end on different things -- the cyc and the floor beyond, a deck
+       and the floor below its edge -- the pool is laid ray by ray instead,
+       each part on what it reaches. */
+    const double halfA = qBound(0.005, halfAngleRad, 1.4);
+    QVector3D side = QVector3D::crossProduct(QVector3D(0, 0, 1), d);
+    if (side.length() < 1e-3f)
+        side = QVector3D(1, 0, 0);
+    side.normalize();
+    const QVector3D up = QVector3D::crossProduct(d, side).normalized();
+    auto rayAt = [&](double r, double a) {
+        const QVector3D across = side * float(qCos(a)) + up * float(qSin(a));
+        return (d * float(qCos(halfA * r)) + across * float(qSin(halfA * r))).normalized();
+    };
+    bool split = false;
+    for (int i = 0; i < 16 && !split; ++i)
+    {
+        bool h = false;
+        int s = 0;
+        beamThrow(apex, rayAt(1.0, 2.0 * M_PI * i / 16), &h, nullptr, &s);
+        split = (h != lands) || (h && s != axisSurface);
+    }
+
     /* The pool, only where the beam actually arrives on something -- lying ON
        that surface, so each point carries its own depth: an oval a couple of
        metres long spans real depth, and one number for all of it sank the far
        end into the deck. */
-    if (lands && gobo)
+    if (split)
+    {
+        /* A mesh of rays across the beam, each thrown to whatever it meets.
+           A cell is lit only where its corners all land on the same surface,
+           so the pool stops at the cyc's edge or the deck's, and goes on on
+           the next thing. A gobo's mask still says how much each point gets. */
+        const int RINGS = gobo ? 16 : 12, SECTORS = gobo ? 48 : 40;
+        const int N = (RINGS + 1) * SECTORS;
+        QVector<QPointF> px(N);
+        QVector<double> pz(N), pt(N);
+        QVector<int> surf(N);
+        QVector<bool> landed(N);
+        for (int ri = 0; ri <= RINGS; ++ri)
+            for (int si = 0; si < SECTORS; ++si)
+            {
+                const double r = double(ri) / RINGS;
+                const double a = 2.0 * M_PI * si / SECTORS;
+                const QVector3D ray = (ri == 0) ? d : rayAt(r, a);
+                bool h = false;
+                int sf = 0;
+                const double run = beamThrow(apex, ray, &h, nullptr, &sf);
+                const QVector3D q = apex + ray * float(run);
+                const int k = ri * SECTORS + si;
+                px[k] = w2s(q);
+                pz[k] = viewDepth(q) + 1e-4;
+                surf[k] = sf;
+                landed[k] = h;
+                const double rs = qMin(r, 0.985);
+                pt[k] = gobo ? BeamOptics::sample(optics->mask, rs * qCos(a), rs * qSin(a)) : 1.0;
+            }
+        QColor cellCol = colour;
+        cellCol.setAlpha(qBound(0, int(poolA), 220));
+        auto tri = [&](int i, int j, int k) {
+            if (!landed[i] || !landed[j] || !landed[k])
+                return;
+            if (surf[i] != surf[j] || surf[i] != surf[k])
+                return;                                   // straddles an edge
+            if (pt[i] < 0.04 && pt[j] < 0.04 && pt[k] < 0.04)
+                return;                                   // all metal here
+            QPolygonF t;
+            t << px[i] << px[j] << px[k];
+            emitLight(t, (pz[i] + pz[j] + pz[k]) / 3.0, cellCol, p,
+                      QVector<double>({ pz[i], pz[j], pz[k] }),
+                      QVector<double>({ pt[i], pt[j], pt[k] }));
+        };
+        for (int ri = 0; ri < RINGS; ++ri)
+            for (int si = 0; si < SECTORS; ++si)
+            {
+                const int s1 = (si + 1) % SECTORS;
+                const int i00 = ri * SECTORS + si, i01 = ri * SECTORS + s1;
+                const int i10 = (ri + 1) * SECTORS + si, i11 = (ri + 1) * SECTORS + s1;
+                if (ri > 0)
+                    tri(i00, i10, i01);
+                tri(i01, i10, i11);
+            }
+    }
+    else if (lands && gobo)
     {
         /* "set a gobo and projected on the cyc .. and it's not visible." The
            pool is the gobo's image, so it is drawn as a mesh of small cells
@@ -3599,18 +3690,11 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
            fraction of the cone's angle, so it lies on the cyc or the deck
            exactly where the plain one would. */
         static const int RINGS = 16, SECTORS = 48;
-        const double halfA = qBound(0.005, halfAngleRad, 1.4);
-        QVector3D side = QVector3D::crossProduct(QVector3D(0, 0, 1), d);
-        if (side.length() < 1e-3f)
-            side = QVector3D(1, 0, 0);
-        side.normalize();
-        const QVector3D up = QVector3D::crossProduct(d, side).normalized();
         const QVector3D ln = landNormal.isNull() ? QVector3D(0, 0, 1) : landNormal.normalized();
         const double planeD = double(QVector3D::dotProduct(d * float(len), ln));
         const double maxRun = qMin(24.0, len * 4.0);
         auto landAt = [&](double r, double a) {
-            const QVector3D across = side * float(qCos(a)) + up * float(qSin(a));
-            const QVector3D ray = (d * float(qCos(halfA * r)) + across * float(qSin(halfA * r))).normalized();
+            const QVector3D ray = rayAt(r, a);
             double run = maxRun;
             const double approach = double(QVector3D::dotProduct(ray, ln));
             if (planeD * approach > 1e-8)

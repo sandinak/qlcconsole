@@ -379,6 +379,7 @@ private slots:
     void anOpenMainDrapeShowsTheCycBehindIt();
     void aUWallIsDrawnRoundItsFrontWithItsTop();
     void aRoundedStageFrontIsDrawnAndLitRoundItsCurve();
+    void aBeamPastTheEndOfTheCycStillWashesIt();
     void beamsLandOnTheCycloramaInTheRigView();
     /** "set a gobo and projected on the cyc .. and it's not visible" /
      *  "handle prisms and rotation". What the gobo wheels, their rotation and

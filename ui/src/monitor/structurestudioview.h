@@ -572,9 +572,13 @@ private:
      *  keeps both its shape and its bearing as the camera orbits. @p aim is
      *  the head's pointing direction (null = rest). */
     /** How far a beam travels before it lands: the floor, or the top of a
-     *  platform it passes over. A sensible throw when it hits nothing. */
+     *  platform it passes over. A sensible throw when it hits nothing.
+     *  @p surface, when given, says WHICH surface: 0 the floor, positive a
+     *  platform's deck (or a tread of steps), negative a piece of scenery --
+     *  so the rays of one beam can tell when they land on different things. */
     double beamThrow(const QVector3D &apex, const QVector3D &dir,
-                     bool *hit = nullptr, QVector3D *landNormal = nullptr) const;
+                     bool *hit = nullptr, QVector3D *landNormal = nullptr,
+                     int *surface = nullptr) const;
     /** Whether a beam lands on anything, or is thrown into the room. */
     bool beamHitsSomething(const QVector3D &apex, const QVector3D &dir) const;
     /** The cone from a head out to whatever it lands on, plus the pool where

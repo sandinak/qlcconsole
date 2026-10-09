@@ -356,6 +356,9 @@ it's actually doing, not just where it sits:
   actually lands — the floor, or the nearest platform top in its path —
   with a landing pool shaped like the true conic section where the beam
   meets that surface — or on the cyclorama, for a beam going level or up.
+  A beam that lands on more than one thing — half on the end of the cyc and
+  half past it, or across the edge of a deck — is split between them, each
+  part of the pool on what it reaches.
 - **Gobos and prisms** — a beam's pool is drawn through whatever its
   optics are doing: the gobo in the current slot (an open slot, or a wheel
   spinning between slots, shows none), turned by gobo rotation, repeated by
