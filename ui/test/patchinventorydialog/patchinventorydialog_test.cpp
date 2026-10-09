@@ -625,3 +625,40 @@ void PatchInventoryDialog_Test::aClashSaysWhereItWantedToBe()
     QVERIFY(clash->isPatched());
     QVERIFY(!clash->addressClash());
 }
+
+void PatchInventoryDialog_Test::placeCountingUpGivesEachTheNextUniverse()
+{
+    QList<Fixture *> lanterns;
+    for (int i = 1; i <= 3; ++i)
+    {
+        lanterns << staged(m_doc, 15, QString("Lantern #%1").arg(i));
+    }
+    Fixture *busy = new Fixture(m_doc);                  // universe 7 is in use
+    busy->setChannels(4);
+    busy->setUniverse(6);
+    QVERIFY(m_doc->addFixture(busy));
+
+    PatchInventoryDialog dlg(m_doc);
+    dlg.placeCountingUp(19, 0);                          // from universe 20, address 1
+    QHash<quint32, quint32> uni;
+    foreach (const PatchPlanner::Assignment &a, dlg.currentPlan())
+        uni.insert(a.fixtureId, a.universe);
+    QCOMPARE(uni.value(lanterns.at(0)->id()), quint32(19));
+    QCOMPARE(uni.value(lanterns.at(1)->id()), quint32(20));
+    QCOMPARE(uni.value(lanterns.at(2)->id()), quint32(21));
+    QVERIFY(dlg.m_apply->isEnabled());
+
+    // Counting up into a universe something else uses: said, not applied.
+    dlg.placeCountingUp(4, 0);                           // 5, 6, 7 -- and 7 is busy
+    bool conflict = false;
+    for (int r = 0; r < dlg.m_table->rowCount(); ++r)
+        conflict = conflict || dlg.m_table->item(r, 8)->text().contains("CONFLICT");
+    QVERIFY(conflict);
+    QVERIFY(!dlg.m_apply->isEnabled());
+
+    // Back up clear and apply: patched where they were counted.
+    dlg.placeCountingUp(19, 0);
+    dlg.accept();
+    QCOMPARE(lanterns.at(2)->universe(), quint32(21));
+    QVERIFY(lanterns.at(2)->isPatched());
+}

@@ -64,6 +64,9 @@ public:
     /** Put @p rows (empty = every row) at @p universe / @p address, both
      *  zero-based, keeping the patched ones' spacing or packing them all --
      *  what the Place button does with the selection. */
+    /** One universe each: the first of @p rows (all, when empty) at
+     *  @p universe / @p address, the next at the universe after, and on. */
+    void placeCountingUp(quint32 universe, quint32 address, const QList<int> &rows = QList<int>());
     void placeRows(quint32 universe, quint32 address, bool keepSpacing,
                    const QList<int> &rows = QList<int>());
 

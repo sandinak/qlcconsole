@@ -60,6 +60,9 @@ private slots:
     void placePacksAroundTheOtherRows();
     void applyMovesABlockOntoItsOwnChannels();
     void aClashSaysWhereItWantedToBe();
+    /** "an option on the patching window to do them incrementally": one
+     *  universe each, counting up. */
+    void placeCountingUpGivesEachTheNextUniverse();
 
 private:
     Doc *m_doc;

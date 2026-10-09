@@ -124,10 +124,14 @@ PatchInventoryDialog::PatchInventoryDialog(Doc *doc, const QList<quint32> &fixtu
     m_placeHow = new QComboBox(this);
     m_placeHow->addItem(tr("keeping their spacing"));
     m_placeHow->addItem(tr("packed together"));
+    m_placeHow->addItem(tr("one universe each, counting up"));
     m_placeHow->setToolTip(tr("Keeping their spacing moves the patched fixtures as one block, "
                               "gaps and all. Packed puts every fixture in the first free channels "
                               "from there on, around whatever else is in the universe, and "
-                              "carries on into the next universe when one fills."));
+                              "carries on into the next universe when one fills. One universe "
+                              "each gives the first row that universe, the next the one after, "
+                              "and so on -- each at that address (a row of lanterns, a node's "
+                              "ports)."));
     placeRow->addWidget(m_placeHow);
     QPushButton *place = new QPushButton(tr("Place"), this);
     place->setToolTip(tr("Move the selected rows -- every row when none is selected"));
@@ -222,8 +226,35 @@ void PatchInventoryDialog::slotPlace()
     foreach (const QModelIndex &idx, m_table->selectionModel()->selectedRows())
         rows << idx.row();
     std::sort(rows.begin(), rows.end());
-    placeRows(quint32(m_placeUni->value() - 1), quint32(m_placeAddr->value() - 1),
-              m_placeHow->currentIndex() == 0, rows);
+    if (m_placeHow->currentIndex() == 2)
+        placeCountingUp(quint32(m_placeUni->value() - 1), quint32(m_placeAddr->value() - 1), rows);
+    else
+        placeRows(quint32(m_placeUni->value() - 1), quint32(m_placeAddr->value() - 1),
+                  m_placeHow->currentIndex() == 0, rows);
+}
+
+void PatchInventoryDialog::placeCountingUp(quint32 universe, quint32 address, const QList<int> &rows)
+{
+    QList<int> which = rows;
+    if (which.isEmpty())
+        for (int r = 0; r < m_table->rowCount(); r++)
+            which << r;
+    const quint32 existing = m_doc->inputOutputMap()->universesCount();
+    QList<PatchPlanner::Assignment> plan;
+    quint32 next = universe;
+    foreach (int r, which)
+    {
+        QTableWidgetItem *name = m_table->item(r, COL_NAME);
+        if (name == NULL)
+            continue;
+        PatchPlanner::Assignment a;
+        a.fixtureId = name->data(Qt::UserRole).toUInt();
+        a.universe = next++;
+        a.address = address;
+        a.newUniverse = (a.universe >= existing);
+        plan << a;
+    }
+    setRowAddresses(plan);
 }
 
 void PatchInventoryDialog::placeRows(quint32 universe, quint32 address, bool keepSpacing,

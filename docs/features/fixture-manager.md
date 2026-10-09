@@ -102,9 +102,11 @@ opens on a proposal, which you review and edit before anything changes:
 - A **Network** fixture gets a universe of its own at its IP (unicast);
   fixtures behind one IP share it.
 - **"Place selected at universe / address"**, **keeping their spacing**
-  (move a block as is, gaps and all) or **packed together** (first free
-  channels from there, spilling into the next universe), puts the selected
-  rows — or all of them — where you say.
+  (move a block as is, gaps and all), **packed together** (first free
+  channels from there, spilling into the next universe) or **one universe
+  each, counting up** (the first row that universe, the next the one after,
+  each at that address — a row of lanterns, a node's ports), puts the
+  selected rows — or all of them — where you say.
 - Already-patched fixtures start where they are; their mode is read-only
   here (change it in the fixture's properties). A fixture a scene sets
   channel by channel keeps its mode, and a mode with a different head count
