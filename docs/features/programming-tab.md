@@ -38,7 +38,15 @@ Three panes:
   canvas, the inline **Look Editor** appears whenever a look is selected.
 - **Right — sources.** A **Palettes** tab (filterable, foldered, drag
   source) and a **Bundles** tab, with a permanent **Fixtures &amp; groups**
-  tree underneath for dragging Targets.
+  tree underneath for dragging Targets. A **Search fixtures & groups…** box
+  sits over that tree: a row stays when it or anything under it matches,
+  the folders on the way down open, and a matching group keeps all its
+  fixtures. Clear the search and the tree closes back up.
+
+Double-clicking a fixture group opens its layout view in the canvas. A
+**← Back to &lt;scene&gt;** button there returns you to the scene you came
+from; if you open an effect while in a group's view, the tab goes back to
+that scene first, with the effect showing.
 
 ## Building a look, step by step
 
@@ -66,11 +74,52 @@ Three panes:
    panel's **Remove** button.
 8. Save the workspace normally (⌘S / Ctrl+S).
 
+If some of a scene's targets are still in the inventory (not patched), an
+amber warning under Targets says so: they send no DMX, and the look shows in
+the rig view only until you patch them in the Fixture Manager. Unpatched
+target rows are also marked "(unpatched)".
+
 A **Bundle** is a related, separate shortcut: a portable, shareable snapshot
 of an ordered palette stack (no fixture targets attached). "Stamping" one
 from the Bundles tab onto the open scene replaces its whole look stack in one
 action — handy for re-using a "look" across shows without re-dragging every
 palette. One level of undo is kept for a stamp.
+
+## Transitions
+
+A scene can arrive and leave as a **transition** rather than everything
+fading together: a wipe across the stage, from the centre, a dissolve. The
+row sits on the scene's canvas:
+
+**In:** [shape] [time]  **Out:** [shape] [time]  **Edge:** [%]
+
+| Shape | What happens |
+|---|---|
+| **None (the scene's fade)** | No transition; the scene's own fade times apply. |
+| **Fade** | Everything together over the time. |
+| **Wipe to stage left / Wipe to stage right** | Across the stage. |
+| **Wipe up / Wipe down** | By height. |
+| **Wipe front to back / Wipe back to front** | Downstage to upstage, or the reverse. |
+| **From the centre / To the centre** | Outward from, or inward to, the middle of the stage. |
+| **Dissolve** | Heads in a fixed random order. |
+| **Along each bar** | Pixel by pixel along every bar. |
+
+Each head's moment comes from **where it is on stage** (its place in the
+rig), so the rig needs to be laid out in Lighting Studio for wipes to mean
+anything. **Edge** sets how soft the leading edge is: each head's own fade
+as a share of the whole time — 100% and everything fades together, low and
+it's a sharp line.
+
+The **whole look** follows the transition, effects included, cell by cell.
+Channels that can't fade (gobo, shutter and the like) switch when the
+transition reaches them, not at the start.
+
+Things to know:
+
+- An active transition **replaces the scene's fade time**.
+- It doesn't apply when the scene's tempo is **Beats**.
+- If you change it while the scene is previewing, restart the scene to see
+  the new one — the transition in is worked out when the scene starts.
 
 ## The inline Look Editor
 
@@ -87,10 +136,59 @@ The editor shown depends on the selected look's palette type:
 | **Beam** | Focus / Frost / Iris sliders. |
 | **Gobo / Shutter** | A slider plus a picker of the target fixture's actual named capabilities, with thumbnail previews. |
 | **Strobe** | A single rate slider (0–100%). |
-| **Effect** | A picker of built-in presets or raw `.js` scripts, a dynamically-built parameter panel, and Save/Export/Import for sharing `.qxfx` effect files. |
+| **Effect** | The **effect browser** (below), a dynamically-built parameter panel, and Save/Export/Import for sharing `.qxfx` effect files. |
 
 Every type except Effect also shows a per-look **Fade in / Fade out**
-override (leave at "step" to inherit the scene or chaser's own timing).
+override (leave at "step" to inherit the scene or chaser's own timing). A
+scene [transition](#transitions), when set, takes the place of the scene's
+fade.
+
+If the editor is showing a palette that isn't in the look open on the
+canvas, the look **tries it on**: it plays on top of the look's own
+palettes so you can see it on the rig, but it's never saved into the look.
+The editor says "Trying it on “&lt;look&gt;” — not saved into it"; drag the
+palette onto the look to keep it. With no look open it says "Not in a look".
+
+### The effect browser
+
+An Effect look picks its effect from a browser rather than a dropdown:
+
+- A **Search effects…** box searches every category at once, whichever tab
+  is open.
+- Tabs: **Recent**, **Color**, **Dimmer**, **Position**, **Beam**, **Other**
+  and **WLED**. Recent is remembered between sessions.
+- Each row shows the effect's name, what it does, and a live strip of 16
+  lights running it. Presets sit under the effect they're built from.
+
+Two effects are called fire-something:
+
+- **Fire** is the RGB Matrix flame, rising from the lowest heads on stage
+  (its Orientation setting flips it).
+- **Firelight** is the per-fixture flicker. (Older looks that used it keep
+  it.)
+
+RGB Matrix scripts that share a name with an effect script are listed as
+"&lt;name&gt; (RGB Matrix)" — Confetti, Lightning, Meteor, Plasma.
+
+An effect run across two or more groups is laid out **as the rig stands on
+stage**: one grid with every head where the rig view draws it — across is
+stage left to right, up is height (or upstage, when everything is at one
+height). A sine over the towers, bars and steps then moves across the stage
+as one, instead of group by group. An effect on a single group still uses
+that group's own layout.
+
+### WLED effects
+
+Picking an effect from the **WLED** tab has the WLED fixtures in the look
+run it **on the device itself**: they're sent the effect, its speed,
+intensity, palette and option, the look's three colours and the look's
+dimmer. Every other fixture in the look runs qlcconsole's own port of that
+effect where one exists (so far **Breathe** and **Chase**). A WLED effect
+with no port ("no preview yet" in the browser) leaves the other fixtures as
+the rest of the look sets them.
+
+The WLED list comes from a WLED fixture in the show, or from the installed
+WLED fixture definition if there isn't one.
 
 Red warning text appears if a look's type has no matching channel on any of
 its targets (e.g. a Gobo look applied to fixtures with no gobo wheel), and —

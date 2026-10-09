@@ -25,6 +25,99 @@ controllers, rescan working on every plugin type, hardware lines no longer
 silently filtered from the "heard on" liveness view, and manual
 targets/ports/aliases that persist with the workspace.
 
+### WLED output
+
+A new output plugin for Wi-Fi LED controllers running WLED (lanterns,
+strings, small pixel props). Each WLED device gets **one universe of its
+own, aimed at its IP address** — add the fixture with the connection
+"Network (WLED, JSON over Wi-Fi)" and patching does the rest, using the
+WLED output rather than borrowing Art-Net.
+
+- It sends WLED's own JSON state, not a DMX stream, and only **when the look
+  actually changes** — at most about ten times a second per device, with a
+  matching WLED transition so the steps blend. A held look is sent once; a
+  long fade goes as a handful of states ending on the last one. This keeps
+  Wi-Fi traffic small.
+- Every few seconds it checks in with each device. Any that **don't answer,
+  or answer on weak Wi-Fi** (weaker than -75 dBm), are listed by fixture name
+  in the [readiness footer](#readiness-footer).
+- While the rig view is open and showing a WLED fixture, it asks that device
+  what its LEDs are actually showing and draws that — a **live view** of the
+  real pixels. It stops asking when the view is closed.
+
+Effects that the WLED device runs itself are picked in the look editor —
+see [WLED effects](programming-tab.md#wled-effects).
+
+So far the WLED output has been checked against a stand-in that answers
+like a WLED device, not yet against real WLED hardware on a show network —
+try it on your own devices before relying on it for a show.
+
+## Readiness footer
+
+The status chip at the bottom of the window reads **Ready** when nothing
+needs attention, and **Not ready (N)** in red when something does. Hover it
+for a one-line reason per problem; click it for the full list, where each
+problem can be fixed on the spot. It checks for:
+
+- fixtures **not patched** (they appear in the rig view but send no DMX);
+- fixture types that **declare no light output** (no lumens or watts, so the
+  rig view has to guess how bright they are);
+- **address clashes** — a show file with two fixtures on overlapping
+  channels now loads the second one unpatched and flagged, instead of
+  silently dropping it;
+- **duplicate fixture names**;
+- **definitions that can't be read**, grouped under *Local* (your own) and
+  *Included* (shipped with the app), each with the reason and, where another
+  copy of the same fixture loaded instead, which one is being used;
+- **duplicate definitions** — two of your own files for the same fixture,
+  where only the newest is used;
+- **universes with fixtures but no output**, so what they send goes
+  nowhere;
+- **WLED devices not answering**, or on weak Wi-Fi;
+- **files in cloud storage that aren't on this computer** (see
+  [Cloud storage](#cloud-storage));
+- **fixtures with no definition here** — standing in as plain dimmers until
+  their definition is back.
+
+Select the rows you want (shift-click for a range; click a heading to take
+everything under it) and use the fix offered for that problem:
+**Patch…**, **Re-patch…** (clashes), **Edit Definition…**, **Repair in
+Fixture Editor…**, **Move to Trash…**, **Number Them** (gives duplicates
+"#2", "#3", keeping the name on the patched one), **Open Connections**,
+**Download Now**, or **Fetch Definitions**. The list updates as each fix
+lands.
+
+"Repair in Fixture Editor…" opens the broken file in the Fixture Editor's
+repair view, which shows where the file breaks and why, offers repairs it
+has already tried, and closes again when you're done. Once it's saved, the
+definition loads without restarting.
+
+## Cloud storage
+
+Show files, fixture definitions and scripts often live in a synced folder
+(Synology Drive, iCloud Drive, OneDrive, Dropbox). Those services can leave
+a file **online-only** — listed in the folder, but not actually on this
+computer — and reading one means waiting on the network. With the network
+out of reach, that wait used to hang the whole startup.
+
+- **Startup never waits on the cloud.** Online-only files are skipped
+  instead of fetched, and the footer says how many, in which folders, and
+  which service holds them. **Download Now** fetches them in the
+  background; fixtures and effects then load straight away, anything else
+  on the next start. Better still, set the folder to stay on this computer.
+- **The show cache.** Every definition a show uses that doesn't ship with
+  the app is kept in a cache on this computer, refreshed whenever the show
+  loads or saves — so a production run never needs the network.
+- **Before a show loads**, each definition it names comes from the fixture
+  library, else the show cache, else is fetched from the cloud under a
+  "Waiting for the cloud…" window with a **Skip** button — and then cached.
+- **Nothing lost on save.** A fixture whose definition isn't here still
+  stands in as a generic dimmer, but it now **keeps its real manufacturer,
+  model and mode** and saves them. (Stock QLC+ saved it as "Generic", and the
+  real fixture was gone for good.) Saving with such fixtures warns first,
+  and **Fetch Definitions** in the footer restores each one once its
+  definition is back.
+
 ## Layers panel
 
 A docked, tree-based organizer for everything on the 2D map — fixtures,
@@ -33,12 +126,32 @@ visibility, lock, and stacking order, plus a separate nested **group** tree
 for spatial select-together groupings underneath it. New items land on
 whichever layer is currently active.
 
-Multi-select a set of rows for bulk actions: move to layer, lock/unlock
-position, or "New Folder/Layer from selection…" (creates and populates it in
-one step). Rows are labeled with what kind of grouping they actually are —
-*on truss*, *on riser*, *frame*, *fixture group* — so double-clicking one
+Multi-select a set of rows for bulk actions: move to layer, or "New
+Folder/Layer from selection…" (creates and populates it in one step). Rows
+are labeled with what kind of grouping they actually are — *on truss*, *on
+riser*, *on pipe*, *frame*, *fixture group* — so double-clicking one
 reliably opens the right editor instead of guessing between four
 visually-similar folder kinds.
+
+- **One lock: the layer's.** Locking anything — from its right-click menu
+  ("Lock Layer “Rig”"), the Layers panel, or a power source's or network
+  node's own toggle — locks its whole layer, and everything locked is
+  outlined in red. (Older shows' per-object locks move onto a locked layer
+  called "Locked" when opened, so nothing that was held comes loose.) A
+  folder's own "Lock Folder Position" still holds a folder still while
+  leaving it selectable.
+- **Rename any row** — select it and press Enter (or F2), fixture groups
+  included. The editor starts from the bare name, without the "· on truss"
+  label, and a rename shows everywhere the fixture appears.
+- **Fixture groups are listed under the structures** their fixtures are on
+  — under every group a fixture belongs to — or under their layer, or under
+  "Fixture Groups" when they span layers. Right-click a group's row to move
+  its fixtures to another layer, lay it out again from the stage, or remove
+  it from a truss/tower.
+- **Select All Similar** on a fixture group's row selects the other groups
+  of the same fixtures laid out the same way (the four step fronts find each
+  other); on a fixture, every fixture of the same model and mode. Selecting
+  plot items also selects their rows here.
 
 ## Studio groups (Fixture Studio)
 

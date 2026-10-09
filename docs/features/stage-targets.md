@@ -20,7 +20,7 @@ look that aims at it re-solves automatically.
 | **Person** | A standing subject, aimed at chest height by default | Crosshair over a lofted human silhouette |
 | **Drum Kit** | A low, wide subject | Crosshair over a footprint rectangle, aimed lower by default |
 | **Area** | A region of deck, not a point | A dashed-outline footprint rectangle |
-| **Structure** | Bound to a truss/platform/tower — its position *follows* whatever it's bound to | Crosshair, position always live |
+| **Structure** | Bound to a truss/platform/steps/tower — its position *follows* whatever it's bound to | Crosshair, position always live |
 
 A target being **aimed at** by the currently-open scene shows fading
 concentric rings around its crosshair — that's a separate, temporary fact
@@ -53,6 +53,21 @@ Deleting a target doesn't touch the palettes that reference it — any Aim
 look using a deleted target just stops resolving, and the fixtures hold
 their last position. The delete confirmation names every scene that would
 be affected before you commit.
+
+### Steps as aim surfaces
+
+A flight of **Steps** (Lighting Studio: Add > Add Steps, or a platform
+whose Shape is Steps) is a real surface for aiming, tread by tread, not
+one box:
+
+- A target **bound to the steps** aims at the tread under the middle of
+  the flight — and, like any bound target, follows the steps if they're
+  moved, restacked or re-heightened.
+- A target that stands somewhere on the steps — a Person, say — is aimed
+  at its height **above the tread it's on**, not above the floor or the
+  top of the flight. The same goes for a follow-spot subject walking up
+  them.
+- A beam that passes its aim point lands on the tread it actually hits.
 
 ## The Aim Solver
 

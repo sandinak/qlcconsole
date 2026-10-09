@@ -23,8 +23,11 @@ isn't really implemented until the model derives from it, the UI can set it,
 - **Double-click any structure** (truss, tower, pipe, stand, platform) opens
   its own dedicated editor — geometry fields, a live elevation preview, and
   everything mounted on it.
-- **View → Rig Overview…** (⇧⌘R) opens a read-only, freely-rotatable 3D
-  view of the *whole* rig at once — the fastest way to sanity-check a build.
+- **View → Rig Overview…** (Ctrl/⌘+Shift+R) opens a read-only,
+  freely-rotatable 3D view of the *whole* rig at once — the fastest way to
+  sanity-check a build. It's a window of its own: opening it leaves you on
+  whatever tab you were on, rather than bringing the Lighting Studio tab
+  forward.
 
 ## The four planes
 
@@ -68,7 +71,8 @@ per-structure editor's own Angled tab uses, just showing everything at once.
 
 ## Stage structures
 
-Five structure types, each its own object with its own geometry:
+Six structure types, each its own object with its own geometry, plus
+**hangers** (rigging on a truss or tower) and **scenery** (the cyclorama):
 
 - **Truss** — a horizontal or vertical run, drawn as an open lattice (four
   chords, end frames, alternating diagonal bracing) rather than a solid box
@@ -91,10 +95,80 @@ Five structure types, each its own object with its own geometry:
   face at all). Platforms can stack on top of each other, deriving their
   base height automatically, and collide realistically so dragging one
   doesn't scramble the pile underneath it.
+  - **Steps** are a platform with a Steps shape: a staircase with a step
+    count, rise, run, step width, and which way it climbs (upstage,
+    downstage, stage left, stage right). **Add → Add Steps** gives two
+    8" × 8" steps, 3' wide; in a platform's editor, **Shape: Platform /
+    Steps** switches between the two, and the box follows from the steps. Drawn as treads
+    with an UP arrow from above, risers face-on, and the staircase side-on.
+    Beams land on each tread, a deck-mounted fixture stands on the tread
+    under it, and a target bound to the steps aims at the middle tread.
+- **Network node** — an Art-Net/sACN node or wireless DMX transmitter,
+  placed where it's rigged (see [Network nodes and cable runs](#network-nodes-and-cable-runs)).
 
 Add one from the **Add** menu on the toolbar or the Layers panel; each
 type's own editor exposes width/depth/height, position, and (for
 pipes/booms) run angle.
+
+### Truss socks
+
+A truss can wear a **sock** — fabric over the truss that diffuses LED bars
+rigged inside it. In the truss editor, tick **Sock** and set its colour
+(white by default) and how much of the truss it covers (**from / to**).
+Bars placed **Inside** the truss no longer throw beams of their own: they
+glow *through* the sock, in 20 cm stretches each lit by the bars nearest
+it, filtered by the fabric's colour. **Sock printed** adds an image
+(**Pattern…** to choose, **×** to clear) stretched over the fabric, with an
+opacity percentage beside it; the print still glows, filtering the light,
+and a PNG's clear parts show the sock colour beneath.
+
+### Tower faces
+
+A tower can have opaque **faces** — panels covering its sides. In the tower
+editor, tick **Faces** and pick which sides (Front, Back, Stage left, Stage
+right — all by default), the colour (near-black by default), and the height
+range they cover (from / to; the top follows the tower's height). Faces take
+a printed pattern and opacity the same way a sock does.
+
+Both show everywhere: in the angled view the sock or faces are lit by the
+room and by whatever the rig points at them; the flat elevations show a
+glowing band (sock) or filled stretch (faces); the plot shows a band in the
+sock's colour, or the faced sides as thick edges. Both are live in the
+editor as you change them, and Cancel undoes them.
+
+### Hangers
+
+A **hanger** is rigging, like a truss: a clamp on a truss (a tower truss
+included) or a tower, an arm reaching out from the face, and a chain
+dropping to one hook. One fixture hangs below the hook.
+
+- **Add one:** in a truss's or tower's own editor, right-click the structure
+  → **Add Hanger Here** (it lands where you clicked).
+- **Edit it:** double-click the hanger's clamp, arm or chain in the editor
+  (or right-click → **Edit Hanger…**). The hanger editor has its **height**
+  (or position along a horizontal truss), the **direction** the arm points
+  (Downstage, Stage left, Upstage right, …), the **arm** length, the
+  **drop** of the chain, and what **hangs** on it. **Copy to Every Tower**
+  puts the same hanger on every tower that doesn't already have one there.
+- **Remove it:** right-click → **Remove Hanger**. What hung on it stays in
+  the show, just unmounted. Removing the truss or tower removes its hangers
+  too.
+- **Layers** lists each hanger with its tower (rename, edit, delete there).
+
+Hangers show in the structure editors and the 3D views; they aren't drawn on
+the 2D plot yet.
+
+### Scenery: the cyclorama
+
+**Add → Add Cyclorama** from the toolbar puts a cyc across the back of the
+stage, stage width and 6 m tall (from the canvas's right-click menu, it goes
+where you clicked) and opens its editor: width, height, bottom trim, facing,
+**bow** (a cyc that curves upstage at its centre), and colour, with a live
+preview (Cancel reverts). On the plot it's a band from the Top and the
+sheet in the elevations; drag, lock, rename, layer, hide, and delete it like
+any structure, and it's listed in Layers. In the 3D views it's the cloth,
+lit by the room, and beams that reach it stop on it and leave their pool
+on it. Other scenery (main drape, legs, borders, scrims) isn't built yet.
 
 ## Mounting a fixture
 
@@ -112,15 +186,37 @@ Click a fixture in that list (or in the preview) to see its own mount panel:
 - **Mounted on** — which structure and where along/on it.
 - **Orientation** — Upright / Inverted, independent of how it's physically
   bolted on.
-- **Face** — which plane the fixture is drawn/edited in (Top / Front /
-  Side) — this has to agree with *how* it's actually mounted, or the
-  fixture looks right from one angle and wrong from another (see the
-  callout below).
+- **Face** — which way the fixture faces: **Top, Bottom, Front
+  (downstage), Back (upstage), Stage left, or Stage right**. On the outside
+  of a truss, choosing a face also moves the fixture to that side (on top,
+  underneath, the downstage or upstage chord). This has to agree with *how*
+  it's actually mounted, or the fixture looks right from one angle and
+  wrong from another (see the callout below).
 - **Placement** — **On the surface** (seated on/against the structure) or
   **Inside** (centred in its volume — for something rigged between truss
   chords, or under a Clear/Open platform top, so it reads correctly without
   needing to be visually "seated" on anything).
 - **Angle / Tilt** — fine orientation.
+- **Light / Glass** — for lanterns and other LED-source fixtures; see
+  [Lanterns](#lanterns).
+
+**Working on several fixtures at once.** Colour, Placement, Face, Angle,
+Tilt, and Orientation apply to every selected fixture (select a folder row
+— a group or "Ungrouped" — to take everything in it; ⌘-click or ⇧-click
+on the canvas to add or remove). Dragging any selected fixture moves them
+all, as one undo. **Distribute** spaces a few selected fixtures between the
+outermost two and lines them up.
+
+**Rotation handles.** Select one bar or strip in an unlocked structure
+editor and it gets a ring with a knob: drag it round to turn the bar (Angle
+when its length lies flat in the view, Tilt when you're looking down its
+length). Shift snaps to 15°; one Ctrl/⌘+Z undoes the whole drag. Movers and
+pars don't get handles.
+
+**Hanging a fixture.** Right-click a fixture on the plot → **Mount on →
+Hanger** and pick the hanger (listed with what it hangs off), or choose the
+fixture in the hanger editor's **Hangs** field. Its panel then reads e.g.
+"Mounted on: Hanger 1 on T-1".
 
 A fixture standing on a riser/deck, a truss face, a tower shelf, or a pipe
 each get their own mount fields, but only ever **one** primary mount at a
@@ -128,36 +224,56 @@ time — you can't leave a stale mount behind when you re-attach a fixture
 somewhere else.
 
 > **A fixture correct from Top but wrong from Front usually means Face is
-> stale.** A deck-mounted fixture in particular needs Face set to "Top
-> surface" — if it's left at its default ("Front / downstage", meant for a
-> fixture bolted to a vertical face), it'll show right from above but
-> appear to float or sink through the deck in an elevation view. As of this
-> fork, a deck mount left at that default is corrected automatically the
-> next time the workspace loads; setting it explicitly in this panel avoids
-> the issue entirely.
+> stale.** A deck-mounted fixture in particular needs Face set to "Top" —
+> if it's left at the default ("Front (downstage)", meant for a fixture
+> bolted to a vertical face), it'll show right from above but appear to
+> float or sink through the deck in an elevation view. A deck mount left at
+> that default is corrected automatically the next time the workspace
+> loads; a Face you've chosen deliberately in this panel (Front or Back
+> included) is remembered and left alone.
 
 ## Locks
 
-There are several independent lock layers, and it matters which one you're
-setting:
+There is **one** lock for objects: the **layer's**. Locking anything locks
+its whole layer, and everything on it:
 
 | Lock | Set from | Freezes |
 |---|---|---|
-| **Global layout lock** | The 🔒 "Edit Plot" toolbar button | The whole plot at once |
-| **Per-layer lock** | The Layers panel | Everything on that layer |
-| **Per-group lock ("position lock")** | The Layers panel / group properties | Every member's position (locking a parent group locks its children too) |
-| **Per-object lock** | Right-click a truss/platform/pipe/stand/tower → "Lock Position", or bulk from the Layers panel | That one structure — and, following it, every fixture mounted on it |
+| **Layer lock** | An object's right-click menu → **Lock Layer "Rig"** (named for its layer), the Layers panel, or a power/network node's own toggle | Everything on that layer |
+| **Folder ("group") position lock** | The Layers panel / group properties | Every member's position, but they stay selectable (locking a parent folder locks its children too) |
+| **Global layout lock** | The 🔒 "Edit Plot" toolbar button | The whole plot at once, still selectable |
 
-Fixtures don't carry a lock of their own — a fixture's movability always
-comes from whatever it's mounted on (plus layer/group/layout locks above
-it). **Locking a truss locks the fixtures riding it, everywhere** — the main
-2D plot and every per-object Lighting Studio editor honor it, not just
-whichever view you set the lock from.
+**Locked draws red**, always: every locked object, and every fixture on a
+locked layer, gets a red outline.
+
+An older workspace that had locks on individual objects has them moved onto
+a locked layer named **"Locked"** when it loads, so nothing that was held
+comes loose. Unlock that layer to move them.
+
+Fixtures don't carry a lock of their own — a fixture's movability comes
+from its layer and whatever it's mounted on. **Locking a truss's layer
+locks the fixtures riding it, everywhere** — the main 2D plot and every
+per-object Lighting Studio editor honor it, not just whichever view you set
+the lock from.
 
 The 🔒/🔓 toggle inside a per-object editor is a separate, session-only
 convenience — it starts locked every time the editor opens, purely so a
 stray drag can't move something while you're just looking. It's independent
 of, and doesn't override, the real locks above.
+
+## Selecting and undo on the plot
+
+- **Select All** (Ctrl/⌘+A, or **More → Select All**) selects every
+  visible, selectable object on the plot at once.
+- **Undo** puts back a whole drag at once: everything the drag moved
+  (structures, scenery, targets, nodes, fixtures) is one undo, and a deck
+  brings its fixtures back with it.
+- **Select All Similar** — on a fixture (plot or list), every fixture of the
+  same model and mode; on a fixture group's Layers row, the groups of the
+  same fixtures laid out the same way.
+- Selecting on the plot selects the same objects in Layers, and vice versa.
+- Count badges follow their structure through drags and undo, and keep one
+  screen size at any zoom, so zooming in uncovers what's under them.
 
 ## Beams, footprint, and coverage
 
@@ -172,7 +288,14 @@ it's actually doing, not just where it sits:
   bars too, not just movers) draws a light cone from itself to wherever it
   actually lands — the floor, or the nearest platform top in its path —
   with a landing pool shaped like the true conic section where the beam
-  meets that surface.
+  meets that surface — or on the cyclorama, for a beam going level or up.
+- **Gobos and prisms** — a beam's pool is drawn through whatever its
+  optics are doing: the gobo in the current slot (an open slot, or a wheel
+  spinning between slots, shows none), turned by gobo rotation, repeated by
+  a prism and turned by prism rotation. It shows on the floor, a deck, or
+  the cyc, and dims the haze by how much light the gobo passes. Your own gobo
+  pictures go in a slot per fixture: right-click a fixture on the plot →
+  **Gobo Wheels…**, optionally for every fixture of its type.
 - **Light footprint** (the Show menu / a structure or fixture's context
   menu) — toggles an overlay of **everywhere a selected moving head's
   pan/tilt range can possibly reach**, not just where it's currently
@@ -186,6 +309,111 @@ it's actually doing, not just where it sits:
 
 Both overlays are visualization aids only — they aren't saved with the
 workspace.
+
+### How bright each fixture is
+
+The rig view sizes each fixture's light from what the device actually puts
+out, read from its fixture definition: the **declared lumens**, or failing
+that the **declared watts at about 35 lm/W**. A 100 W LED fixture (3500 lm)
+is the reference full beam, and a fixture's output is shared between its
+heads, so one section of a bar carries its share. This applies to beams,
+pools, light on people, light from inside steps, and the wash on the cyc.
+A definition that declares neither is drawn at a guess (as before this
+change), and the footer's **Not ready** list names those fixture types
+("N fixture types declare no light output"), with **Edit Definition…** to
+fix one — save it and the show picks up the new figure without reopening.
+
+- **Pixel bars** — the light comes from the lit pixels, not one cone from
+  the bar's centre: each lit section throws its own cones along the bar, in
+  its own colour, and lit pixels fill their cell on the bar's face.
+- **A bar's light leaves its face** — the side it's faced to, with its tilt
+  and flip — so a bar hanging from a truss and faced front lights forward,
+  not straight down.
+- **Wide cones are dimmer by their spread** — a 150° flood puts less light
+  on any one spot than a 40° spot of the same output, in the air, in its
+  pool, and on people. A declared lens of 170° or more is treated as a 150°
+  flood.
+
+### Light from inside steps and platforms
+
+A fixture placed **Inside** a Clear- or Open-topped platform or step lights
+the room only through the top. Each lit head is its own light, firing along
+the fixture's facing (tilt included) in its cone, so a washer tipped
+upstage lights upstage. The top shows a footprint per lit section of the
+bar, each in its own colour, and a person is lit only where those cones
+reach. That light also washes onto **scenery**: if a step's light clears
+the top and reaches the cyc, the patch it lights there is drawn too (with
+Beams on) — handy for checking for overwash. Other structures don't yet
+block it.
+
+### Haze
+
+The Rig Overview's toolbar has a **Haze** setting — **None / Light /
+Medium / Heavy** (click to cycle; Medium is the default). It sets how
+visible beams are *in the air*; where the light lands and what it lights
+don't change with it.
+
+In haze, low-output LEDs still read: each lit section of a bar or par gets
+a soft **glow** round it, and a lit strip inside a clear- or open-topped
+step sends a sheet of **lit air rising** off it, both as bright as the
+pixels (colour × dimmer) and scaled by the haze. Lanterns have their own
+halo; movers show their beams.
+
+## Lanterns
+
+A **lantern** — such as the bundled WLED Lantern — is drawn as a lantern,
+not a spot: a **cage** (caps and posts) around a core lit in its live
+colour, with a halo in the haze; in the flat views and on the plot, a
+rounded cage with the core. It throws **light all round** rather than a
+cone, lighting whatever is near it and falling off with distance.
+
+What makes the light and what it's seen through are set per fixture, in
+the structure editor's inspector and in **Fixture Properties**:
+
+- **Light** — **Point source** (one glow), **Hanging LED cluster** (a wire
+  string let fall through the cage — more spread out), or **LED tape**
+  (wound tight round a core — less spread out), with an **LEDs** count for
+  the LED kinds.
+- **Glass** — **Diffuse** (the default: each pane glows from the LEDs
+  nearest it, the LEDs a blur behind, frosted when dark) or **Clear** (each
+  LED shows as a bead in its own colour).
+
+The definition's choice is marked **(as defined)**; leave it there and the
+fixture follows the definition. A WLED device that answers reports how many
+LEDs it drives, and that wins over the definition's count.
+
+What the LEDs show, best source first:
+
+1. **The device's own live pixels**, when it's a WLED fixture that answers
+   on the network (asked only while a rig view showing it is on screen and
+   the look is actually going out).
+2. Otherwise, the **port of its WLED effect**, run on the LEDs with the
+   speed, intensity, palette and colours the device is sent — the same
+   maths, but not in step with the device.
+3. Otherwise, **colour 1 at its dimmer**, with a **"WLED: <effect>"** tag
+   beside it naming the effect that has no port.
+
+## Network nodes and cable runs
+
+The physical DMX network can be drawn on the plot, so patching can follow
+where the cable actually goes:
+
+- **Add → Add Network Node** places an Art-Net/sACN node or a wireless DMX
+  transmitter (pick a **Model** from the built-in gear list, or your own)
+  and opens the **Network Topology** dialog for its ports and the universe
+  on each. Double-click a node, or **More → Network Topology…**, to edit
+  later. A node drags, locks, layers, groups, renames, and deletes like a
+  structure.
+- **Wireless receivers** are placed automatically among the fixtures on
+  their universe (else beside the transmitter), shown with a dashed link;
+  drag one from the Top view to where it's really rigged.
+- **Cable runs** are drawn from each port through its fixtures in address
+  order, as lines that show their stats when you hover; DMX fixtures no
+  port serves are flagged.
+- **More → Network Report…** lists nodes, ports used and free, universes
+  carried, the longest run, per-port fixtures/channels/run length, network
+  fixtures by IP, unserved fixtures, and warnings — with **Copy** and
+  **Save CSV**.
 
 ## Fixture outlines and overlap warnings
 
@@ -210,8 +438,12 @@ Two small but load-bearing visual cues:
 | **Plane** | Which of Top/Front/Side/Angled the view is currently showing. |
 | **Bar** | A short cross-piece truss hung on a parent truss — modeled as a child truss, not a separate object type. |
 | **Placement: Inside** | A fixture centred in its host structure's volume rather than seated on its face/top — for fixtures rigged inside a truss or under a see-through platform top. |
-| **Face** | Which plane (Top/Front/Side) a mounted fixture is drawn and edited in — has to agree with how it's actually attached. |
-| **Position lock** | A group-level lock that freezes every member's position but leaves them selectable. |
+| **Face** | Which way a mounted fixture faces — Top, Bottom, Front, Back, Stage left, or Stage right — has to agree with how it's actually attached. |
+| **Layer lock** | The one object lock: locking anything locks its layer and everything on it, drawn red. |
+| **Position lock** | A folder-level lock that freezes every member's position but leaves them selectable. |
+| **Hanger** | Rigging on a truss or tower — clamp, arm, and chain to one hook a fixture hangs from. |
+| **Sock / Faces** | Fabric over a truss that bars inside glow through / opaque panels on a tower's sides. |
+| **Haze** | How visible beams are in the air (None/Light/Medium/Heavy) — doesn't change where light lands. |
 | **Count badge** | The numbered circle a structure's own fixtures collapse into when they'd otherwise cover more than 40% of it on screen. |
 | **Light footprint / coverage** | Everywhere a fixture's full pan/tilt range can reach — distinct from where it's currently pointed. |
-| **Rig Overview** | The read-only, whole-rig 3D window (View → Rig Overview…). |
+| **Rig Overview** | The read-only, whole-rig 3D window (View → Rig Overview…, Ctrl/⌘+Shift+R). |
