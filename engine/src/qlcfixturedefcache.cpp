@@ -30,6 +30,9 @@
 #endif
 
 #include "qlcfixturedefcache.h"
+#include <QFileInfo>
+#include <QRegularExpression>
+#include <QStandardPaths>
 #include "qlcfixturemode.h"
 #include "qlccapability.h"
 #include "avolitesd4parser.h"
@@ -265,6 +268,11 @@ bool QLCFixtureDefCache::load(const QDir& dir)
     while (it.hasNext() == true)
     {
         QString path(dir.absoluteFilePath(it.next()));
+        if (QLCFile::isOnlineOnly(path))   // in cloud storage, not on this machine: do not wait for it
+        {
+            QLCFile::noteSkippedOnlineOnly(path);
+            continue;
+        }
 
         if (path.toLower().endsWith(KExtFixture) == true)
             loadQXF(path, true);
@@ -420,6 +428,11 @@ bool QLCFixtureDefCache::loadMap(const QDir &dir)
     while (it.hasNext() == true)
     {
         QString path(dir.absoluteFilePath(it.next()));
+        if (QLCFile::isOnlineOnly(path))   // in cloud storage, not on this machine: do not wait for it
+        {
+            QLCFile::noteSkippedOnlineOnly(path);
+            continue;
+        }
         if (definitionPaths.contains(path))
             continue;
 
@@ -454,6 +467,66 @@ QDir QLCFixtureDefCache::userDefinitionDirectory()
     filters << QString("*%1").arg(KExtAvolitesFixture);
 
     return QLCFile::userDirectory(QString(USERFIXTUREDIR), QString(FIXTUREDIR), filters);
+}
+
+QDir QLCFixtureDefCache::showCacheDirectory()
+{
+    /* Beside the user folders -- unless they are in cloud storage, which is
+       the very thing this is for not depending on: then the system cache. */
+    QDir dir(userDefinitionDirectory());
+    dir.cdUp();
+    QString base = dir.absolutePath();
+    const QString real = QFileInfo(base).canonicalFilePath();
+    if (real.isEmpty() || real.contains(QLatin1String("/CloudStorage/")))
+        base = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+    QDir cache(base + QStringLiteral("/ShowCache/Fixtures"));
+    if (!cache.exists())
+        cache.mkpath(QStringLiteral("."));
+    return cache;
+}
+
+QString QLCFixtureDefCache::showCacheFile(const QString &manufacturer, const QString &model)
+{
+    QString name = manufacturer + QLatin1Char('-') + model;
+    static const QRegularExpression unsafe(QStringLiteral("[^A-Za-z0-9._+-]+"));
+    name.replace(unsafe, QStringLiteral("-"));
+    return showCacheDirectory().absoluteFilePath(name + QString(KExtFixture));
+}
+
+bool QLCFixtureDefCache::cacheForShows(const QLCFixtureDef *def) const
+{
+    if (def == nullptr || def->source() == QLCFixtureDef::Included
+        || def->model() == QLatin1String("Generic"))
+        return false;
+    const QString from = def->definitionSourceFile();
+    const QString to = showCacheFile(def->manufacturer(), def->model());
+    if (from.isEmpty() || QFileInfo(from).absoluteFilePath() == QFileInfo(to).absoluteFilePath())
+        return QFile::exists(to);
+    if (QLCFile::isOnlineOnly(from))
+        return QFile::exists(to);           // not here to copy: keep what the cache has
+    QFile src(from);
+    if (!src.open(QIODevice::ReadOnly))
+        return QFile::exists(to);
+    const QByteArray bytes = src.readAll();
+    QFile old(to);
+    if (old.open(QIODevice::ReadOnly) && old.readAll() == bytes)
+        return true;                        // already the same
+    old.close();
+    QFile dst(to + QStringLiteral(".part"));
+    if (!dst.open(QIODevice::WriteOnly) || dst.write(bytes) != bytes.size())
+        return QFile::exists(to);
+    dst.close();
+    QFile::remove(to);
+    return QFile::rename(to + QStringLiteral(".part"), to);
+}
+
+bool QLCFixtureDefCache::loadFromShowCache(const QString &manufacturer, const QString &model)
+{
+    const QString path = showCacheFile(manufacturer, model);
+    if (!QFile::exists(path))
+        return false;
+    loadQXF(path, true);
+    return fixtureDef(manufacturer, model) != nullptr;
 }
 
 bool QLCFixtureDefCache::loadQXF(const QString& path, bool isUser)

@@ -982,6 +982,12 @@ void InputOutputMap::loadProfiles(const QDir& dir)
         QString path;
 
         path = dir.absoluteFilePath(it.next());
+        if (QLCFile::isOnlineOnly(path))   // in cloud storage, not on this machine: do not wait for it
+        {
+            QLCFile::noteSkippedOnlineOnly(path);
+            continue;
+        }
+
         prof = QLCInputProfile::loader(path);
         if (prof != NULL)
         {

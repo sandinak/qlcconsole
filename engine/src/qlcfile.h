@@ -162,6 +162,23 @@ public:
      */
     static quint32 getQtRuntimeVersion();
 
+    /**
+     * Whether @p path is a cloud-storage placeholder: listed like any file,
+     * its contents not on this machine (macOS "dataless" -- Synology Drive,
+     * iCloud Drive, OneDrive, Dropbox on demand; Windows' recall-on-access).
+     * READING one waits for the cloud to send it, and with the cloud out of
+     * reach that wait is the whole startup. This only looks at its flags --
+     * it never fetches it. Follows symlinks.
+     */
+    static bool isOnlineOnly(const QString &path);
+
+    /** A file a loader skipped for being online-only (isOnlineOnly()), and
+     *  every one skipped so far -- for the readiness footer. Thread-safe. */
+    static void noteSkippedOnlineOnly(const QString &path);
+    static QStringList skippedOnlineOnly();
+    /** Forget @p path (it is on this machine now), or all of them. */
+    static void forgetSkippedOnlineOnly(const QString &path = QString());
+
 private:
     static bool m_hasWindowManager;
 };

@@ -118,6 +118,11 @@ QList<NetworkGearModel> NetworkGearCatalog::userModels()
     const QDir dir = userDirectory();
     foreach (const QString &fn, dir.entryList(QStringList() << "*.json", QDir::Files, QDir::Name))
     {
+        if (QLCFile::isOnlineOnly(dir.absoluteFilePath(fn)))   // in cloud storage, not on this machine: do not wait for it
+        {
+            QLCFile::noteSkippedOnlineOnly(dir.absoluteFilePath(fn));
+            continue;
+        }
         QFile f(dir.absoluteFilePath(fn));
         if (!f.open(QIODevice::ReadOnly))
             continue;

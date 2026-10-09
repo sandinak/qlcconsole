@@ -218,6 +218,23 @@ public:
      */
     static QDir userDefinitionDirectory();
 
+    /**
+     * The show cache: a copy of every definition a show uses that is not
+     * shipped with qlcconsole, kept on THIS computer -- beside the user
+     * folders, never in cloud storage -- so a show on a production run never
+     * waits on a remote file ("we cannot have remote stuff for a showfile on
+     * a production run"). Filled as shows load and save.
+     */
+    static QDir showCacheDirectory();
+    /** The file a definition of @p manufacturer @p model is cached as. */
+    static QString showCacheFile(const QString &manufacturer, const QString &model);
+    /** Copy @p def into the show cache, if it is not shipped and its file is
+     *  on this computer. True when the cache holds it afterwards. */
+    bool cacheForShows(const QLCFixtureDef *def) const;
+    /** Load @p manufacturer @p model from the show cache. True when it is
+     *  then known. */
+    bool loadFromShowCache(const QString &manufacturer, const QString &model);
+
     /** Load a QLC native fixture definition from the file specified in $path */
     bool loadQXF(const QString& path, bool isUser = false);
 

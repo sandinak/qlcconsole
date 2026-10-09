@@ -730,6 +730,11 @@ void Fixture::checkAlias(int chIndex, uchar value)
 void Fixture::setFixtureDefinition(QLCFixtureDef* fixtureDef,
                                    QLCFixtureMode* fixtureMode)
 {
+    // Given a definition: it is no longer standing in for a missing one.
+    m_unavailableManufacturer.clear();
+    m_unavailableModel.clear();
+    m_unavailableMode.clear();
+
     if (fixtureDef != NULL && fixtureMode != NULL)
     {
         int i, chNum;
@@ -1451,6 +1456,16 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
         setChannels(channels);
     }
 
+    /* Standing in for a definition that could not be found: remember what it
+       really is, so a save writes that back rather than "Generic". */
+    if (model != KXMLFixtureGeneric && model != KXMLFixtureRGBPanel
+        && (fixtureDef == NULL || fixtureMode == NULL || fixtureDef->model() == KXMLFixtureGeneric))
+    {
+        m_unavailableManufacturer = manufacturer;
+        m_unavailableModel = model;
+        m_unavailableMode = modeName;
+    }
+
     setAddress(address);
     setUniverse(universe);
     setPatched(patched);
@@ -1475,6 +1490,16 @@ bool Fixture::saveXML(QXmlStreamWriter *doc) const
     /* Fixture Instance entry */
     doc->writeStartElement(KXMLFixture);
 
+    if (definitionUnavailable())
+    {
+        /* What it really is, though its definition was not to hand: the
+           generic dimmer standing in for it is never written over it. */
+        doc->writeTextElement(KXMLQLCFixtureDefManufacturer, m_unavailableManufacturer);
+        doc->writeTextElement(KXMLQLCFixtureDefModel, m_unavailableModel);
+        doc->writeTextElement(KXMLQLCFixtureMode, m_unavailableMode);
+    }
+    else
+    {
     /* Manufacturer */
     if (m_fixtureDef != NULL)
         doc->writeTextElement(KXMLQLCFixtureDefManufacturer, m_fixtureDef->manufacturer());
@@ -1492,6 +1517,7 @@ bool Fixture::saveXML(QXmlStreamWriter *doc) const
         doc->writeTextElement(KXMLQLCFixtureMode, m_fixtureMode->name());
     else
         doc->writeTextElement(KXMLQLCFixtureMode, KXMLFixtureGeneric);
+    }
 
     /* RGB Panel physical dimensions */
     if (m_fixtureDef != NULL && m_fixtureDef->model() == KXMLFixtureRGBPanel && m_fixtureMode != NULL)

@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include <QTemporaryDir>
 
 #if defined(WIN32) || defined(Q_OS_WIN)
 #else
@@ -161,6 +162,36 @@ void QLCFile_Test::windowManager()
 
     QLCFile::setHasWindowManager(false);
     QVERIFY(QLCFile::hasWindowManager() == false);
+}
+
+void QLCFile_Test::onlineOnlyFilesAreNotedNotWaitedOn()
+{
+    // An ordinary file, and one that is not there: neither is online-only.
+    QTemporaryDir dir;
+    const QString here = dir.filePath("here.qxf");
+    QFile f(here);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write("<FixtureDefinition/>");
+    f.close();
+    QVERIFY(!QLCFile::isOnlineOnly(here));
+    QVERIFY(!QLCFile::isOnlineOnly(dir.filePath("not-there.qxf")));
+
+    // What a loader skipped is listed once, and forgotten when fetched.
+    QLCFile::forgetSkippedOnlineOnly();
+    QLCFile::noteSkippedOnlineOnly("/cloud/Fixtures/a.qxf");
+    QLCFile::noteSkippedOnlineOnly("/cloud/RGBScripts/fire.js");
+    QLCFile::noteSkippedOnlineOnly("/cloud/Fixtures/a.qxf");
+    QCOMPARE(QLCFile::skippedOnlineOnly(), QStringList() << "/cloud/Fixtures/a.qxf" << "/cloud/RGBScripts/fire.js");
+    QLCFile::forgetSkippedOnlineOnly("/cloud/Fixtures/a.qxf");
+    QCOMPARE(QLCFile::skippedOnlineOnly(), QStringList() << "/cloud/RGBScripts/fire.js");
+    QLCFile::forgetSkippedOnlineOnly();
+    QVERIFY(QLCFile::skippedOnlineOnly().isEmpty());
+
+    /* Where this machine has a real online-only file (a cloud folder not
+       pinned), it is seen as one -- by its flags, without reading it. */
+    const QString probe = qEnvironmentVariable("QLC_ONLINE_ONLY_PROBE");
+    if (!probe.isEmpty())
+        QVERIFY2(QLCFile::isOnlineOnly(probe), qPrintable(probe));
 }
 
 QTEST_APPLESS_MAIN(QLCFile_Test)

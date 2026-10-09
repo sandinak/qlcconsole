@@ -512,7 +512,20 @@ public:
 
     QRectF degreesRange(int head) const;
 
+    /** Its definition could not be found when the show loaded -- in cloud
+     *  storage and not on this computer, or simply missing -- so it stands
+     *  in as a generic dimmer of the same channel count. It REMEMBERS what it
+     *  is: saving writes back the real manufacturer, model and mode, never
+     *  "Generic", so a show saved in that state loses nothing. Giving it a
+     *  definition (setFixtureDefinition()) clears this. */
+    bool definitionUnavailable() const { return !m_unavailableModel.isEmpty(); }
+    QString unavailableManufacturer() const { return m_unavailableManufacturer; }
+    QString unavailableModel() const { return m_unavailableModel; }
+    QString unavailableMode() const { return m_unavailableMode; }
+
 protected:
+    QString m_unavailableManufacturer, m_unavailableModel, m_unavailableMode;
+
     /** The fixture definition that this instance is based on */
     QLCFixtureDef* m_fixtureDef;
 

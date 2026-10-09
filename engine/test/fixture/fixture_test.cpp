@@ -19,6 +19,9 @@
 */
 
 #include <QtTest>
+#include <QRegularExpression>
+#include <QTemporaryDir>
+#include <QBuffer>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 
@@ -1058,5 +1061,105 @@ void Fixture_Test::save()
     fxi.setFixtureDefinition(fixtureDef, fixtureMode);
     info = fxi.status();
 }*/
+
+void Fixture_Test::aMissingDefinitionIsKeptNotLostOnSave()
+{
+    // A show naming a fixture whose definition is nowhere here.
+    const QString xml = QStringLiteral(
+        "<Fixture><Manufacturer>Warmdance</Manufacturer><Model>XL-450</Model>"
+        "<Mode>16 Channel</Mode><ID>42</ID><Name>Mover SL</Name><Universe>0</Universe>"
+        "<Address>100</Address><Channels>16</Channels></Fixture>");
+    QXmlStreamReader in(xml);
+    in.readNextStartElement();
+    QVERIFY(Fixture::loader(in, m_doc));
+    Fixture *fx = m_doc->fixture(42);
+    QVERIFY(fx != nullptr);
+    QVERIFY(fx->definitionUnavailable());
+    QCOMPARE(fx->unavailableManufacturer(), QString("Warmdance"));
+    QCOMPARE(fx->unavailableModel(), QString("XL-450"));
+    QCOMPARE(fx->unavailableMode(), QString("16 Channel"));
+    QCOMPARE(fx->channels(), 16u);                  // standing in, the same size
+
+    // Saved: as what it really is, never "Generic".
+    QBuffer buf;
+    buf.open(QIODevice::WriteOnly);
+    QXmlStreamWriter w(&buf);
+    QVERIFY(fx->saveXML(&w));
+    buf.close();
+    const QByteArray out = buf.data();
+    QVERIFY2(out.contains("<Manufacturer>Warmdance</Manufacturer>"), out.constData());
+    QVERIFY(out.contains("<Model>XL-450</Model>"));
+    QVERIFY(out.contains("<Mode>16 Channel</Mode>"));
+    QVERIFY(!out.contains("Generic"));
+
+    // Given a real definition: no longer standing in.
+    QLCFixtureDef *def = m_doc->fixtureDefCache()->fixtureDef("Futurelight", "DJScan250");
+    QVERIFY(def != nullptr);
+    fx->setFixtureDefinition(def, def->modes().first());
+    QVERIFY(!fx->definitionUnavailable());
+    m_doc->deleteFixture(42);
+
+    // A plain generic dimmer was never standing in for anything.
+    QXmlStreamReader g(QStringLiteral("<Fixture><Manufacturer>Generic</Manufacturer><Model>Generic</Model>"
+                                      "<Mode>Generic</Mode><ID>43</ID><Name>Dim</Name><Universe>0</Universe>"
+                                      "<Address>300</Address><Channels>2</Channels></Fixture>"));
+    g.readNextStartElement();
+    QVERIFY(Fixture::loader(g, m_doc));
+    QVERIFY(!m_doc->fixture(43)->definitionUnavailable());
+    m_doc->deleteFixture(43);
+}
+
+void Fixture_Test::theShowCacheKeepsDefinitionsOnThisComputer()
+{
+    // Somewhere that is not this machine's real home.
+    QTemporaryDir home;
+    const QByteArray realHome = qgetenv("HOME");
+    qputenv("HOME", home.path().toUtf8());
+
+    const QDir cache = QLCFixtureDefCache::showCacheDirectory();
+    QVERIFY2(cache.absolutePath().startsWith(QFileInfo(home.path()).canonicalFilePath())
+             || cache.absolutePath().startsWith(home.path()), qPrintable(cache.absolutePath()));
+    QVERIFY(cache.absolutePath().endsWith("ShowCache/Fixtures"));
+
+    // A user's own definition, loaded from where it lives.
+    QTemporaryDir lib;
+    QLCFixtureDef *src = m_doc->fixtureDefCache()->fixtureDef("Futurelight", "DJScan250");
+    QVERIFY(src != nullptr);
+    // Its file, renamed as one of the user's own (a copy of the definition
+    // object would share -- and twice free -- its channels).
+    QFile shipped(src->definitionSourceFile());
+    QVERIFY(shipped.open(QIODevice::ReadOnly));
+    QString text = QString::fromUtf8(shipped.readAll());
+    text.replace(QRegularExpression("<Manufacturer>[^<]*</Manufacturer>"), "<Manufacturer>Branson</Manufacturer>");
+    text.replace(QRegularExpression("<Model>[^<]*</Model>"), "<Model>Laser Moving Head</Model>");
+    const QString path = lib.filePath("Branson-Laser-Moving-Head.qxf");
+    QFile own(path);
+    QVERIFY(own.open(QIODevice::WriteOnly));
+    own.write(text.toUtf8());
+    own.close();
+
+    QLCFixtureDefCache defs;
+    QVERIFY(defs.loadQXF(path, true));
+    QLCFixtureDef *loaded = defs.fixtureDef("Branson", "Laser Moving Head");
+    QVERIFY(loaded != nullptr);
+    QVERIFY(defs.cacheForShows(loaded));
+    const QString cached = QLCFixtureDefCache::showCacheFile("Branson", "Laser Moving Head");
+    QVERIFY(QFile::exists(cached));
+    QVERIFY(cached.startsWith(cache.absolutePath()));
+
+    // Gone from where it lived: the cache still has it, and a new library
+    // finds it there.
+    QFile::remove(path);
+    QLCFixtureDefCache fresh;
+    QVERIFY(fresh.fixtureDef("Branson", "Laser Moving Head") == nullptr);
+    QVERIFY(fresh.loadFromShowCache("Branson", "Laser Moving Head"));
+    QVERIFY(fresh.fixtureDef("Branson", "Laser Moving Head") != nullptr);
+    QVERIFY(!fresh.loadFromShowCache("Nobody", "Nothing"));
+
+    // A shipped definition is not copied: it ships with the app.
+    QVERIFY(!m_doc->fixtureDefCache()->cacheForShows(src));
+
+    qputenv("HOME", realHome);
+}
 
 QTEST_APPLESS_MAIN(Fixture_Test)

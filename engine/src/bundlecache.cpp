@@ -99,6 +99,11 @@ void BundleCache::scanDir(const QDir &dir)
                                             QDir::Files | QDir::Readable);
     for (const QString &file : files)
     {
+        if (QLCFile::isOnlineOnly(dir.absoluteFilePath(file)))   // in cloud storage, not on this machine: do not wait for it
+        {
+            QLCFile::noteSkippedOnlineOnly(dir.absoluteFilePath(file));
+            continue;
+        }
         const QLCBundle b = QLCBundle::fromFile(dir.absoluteFilePath(file));
         if (b.isValid() && !m_bundles.contains(b.name))
         {
