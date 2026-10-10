@@ -10,7 +10,8 @@
     - the last LED of every strip is white, so a strip's length can be checked;
     - from the 10th LED, a vertical line per step number (DS1: one, CS3:
       three), every other LED -- blue for DS, green for CS, red for US;
-    - the step's name in the middle, white.
+    - the step's name in the middle, white, and beside it a spinner going
+      round once a second -- so a frozen output shows at a glance.
 
   On every top bar, a blue dot runs back and forth at a low level.
 
@@ -24,7 +25,7 @@
     effect.description = "Diagnostic: each step's strips counted, numbered and named; a dot on the tops";
     effect.author      = "qlcconsole";
     effect.fixtureTypes = ["rgb"];
-    effect.notes = "For steps whose front strips are named \"<step> #<n>\" (DS1 #3) and top bars \"<step>t<n>\" (CS2t1). Strip n lights its first n LEDs white and every strip its last; from LED 10, one line per step number (DS blue, CS green, US red); the step name in the middle; a blue dot on the tops. If the name reads backwards, the strips count from the other end: use Mirror.";
+    effect.notes = "For steps whose front strips are named \"<step> #<n>\" (DS1 #3) and top bars \"<step>t<n>\" (CS2t1). Strip n lights its first n LEDs white and every strip its last; from LED 10, one line per step number (DS blue, CS green, US red); the step name in the middle with a spinner beside it (once round a second: still means the output is frozen); a blue dot on the tops. If the name reads backwards, the strips count from the other end: use Mirror.";
 
     effect.inputs = [];
     effect.palettes = [];
@@ -67,6 +68,34 @@
         return g !== undefined && g[row].charAt(gx) === "1";
     }
 
+    // The spinner: a 3 x 3 ring beside the name, a dot going round it with a
+    // fading tail. Its cells clockwise from the top left, as [col, row].
+    var RING = [[0,0],[1,0],[2,0],[2,1],[2,2],[1,2],[0,2],[0,1]];
+    var SPIN_GAP = 2, SPIN_ROW = 2;      // columns after the name; first row
+
+    // How lit cell (col, row) of the spinner is at time t, 0..1.
+    function spinnerLevel(text, col, row, cols, t) {
+        var width = text.length * GLYPH_W + (text.length - 1) * GAP;
+        var x = col - (Math.floor((cols - width) / 2) + width + SPIN_GAP);
+        var y = row - SPIN_ROW;
+        if (x < 0 || x > 2 || y < 0 || y > 2) return 0;
+        var at = Math.floor(t * RING.length) % RING.length;
+        for (var back = 0; back < 3; back++) {
+            var c = RING[(at - back + RING.length) % RING.length];
+            if (c[0] === x && c[1] === y) return [1.0, 0.4, 0.15][back];
+        }
+        return 0;
+    }
+
+    // What a fixture's name says: a front strip, a top bar, or neither.
+    function parseName(name) {
+        var m = /^([A-Za-z]+)(\d+)\s*#(\d+)/.exec(name);
+        if (m) return { front: true, step: m[1].toUpperCase() + m[2],
+                        num: parseInt(m[2], 10), strip: parseInt(m[3], 10) };
+        if (/^([A-Za-z]+)(\d+)t(\d+)$/i.test(name)) return { top: true };
+        return {};
+    }
+
     function sectionColour(step, level) {
         var v = Math.round(255 * level);
         switch (step.charAt(0)) {
@@ -86,15 +115,21 @@
         var white  = Math.round(255 * level);
         var off    = { r: 0, g: 0, b: 0 };
 
+        // What each name says, worked out once a name, not once a pixel.
+        var names = state.names || (state.names = {});
+        function info(f) {
+            var name = f.name || "";
+            return names[name] || (names[name] = parseName(name));
+        }
+
         // Each step's strips, top first: by height on the rig, else by number.
         var strips = {};
         fixtures.forEach(function(f) {
-            var m = /^([A-Za-z]+)(\d+)\s*#(\d+)/.exec(f.name || "");
-            if (!m) return;
-            var step = m[1].toUpperCase() + m[2];
-            var s = strips[step] || (strips[step] = {});
+            var p = info(f);
+            if (!p.front) return;
+            var s = strips[p.step] || (strips[p.step] = {});
             if (s[f.id] === undefined)
-                s[f.id] = { n: parseInt(m[3], 10), z: (f.pos && f.pos.z !== undefined) ? f.pos.z : 0, heads: f.heads || 64 };
+                s[f.id] = { n: p.strip, z: (f.pos && f.pos.z !== undefined) ? f.pos.z : 0 };
         });
         var rowOf = {};       // fixture id -> row from the top
         for (var step in strips) {
@@ -113,12 +148,11 @@
         var dotAt = travel <= span ? travel : 2 * span - travel;
 
         return fixtures.map(function(f) {
-            var name = f.name || "";
-            var front = /^([A-Za-z]+)(\d+)\s*#(\d+)/.exec(name);
-            if (front) {
-                var step  = front[1].toUpperCase() + front[2];
-                var num   = parseInt(front[2], 10);
-                var strip = parseInt(front[3], 10);
+            var p = info(f);
+            if (p.front) {
+                var step  = p.step;
+                var num   = p.num;
+                var strip = p.strip;
                 var cols  = f.heads || 64;
                 var led   = mirror ? (cols - 1 - f.head) : f.head;
                 if (led < strip || led === cols - 1)
@@ -128,10 +162,12 @@
                     return sectionColour(step, level);
                 if (textPixel(step, led, rowOf[f.id], cols))
                     return { r: white, g: white, b: white };
+                var spin = spinnerLevel(step, led, rowOf[f.id], cols, t);
+                if (spin > 0)
+                    return sectionColour(step, level * spin);
                 return off;
             }
-            var top = /^([A-Za-z]+)(\d+)t(\d+)$/i.exec(name);
-            if (top) {
+            if (p.top) {
                 if (f.head >= topPx) return off;            // its white pixels
                 var d = Math.abs(f.head - dotAt);
                 var k = d < 0.5 ? 1.0 : d < 1.5 ? 0.35 : d < 2.5 ? 0.12 : 0.0;
