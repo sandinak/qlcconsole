@@ -10,8 +10,9 @@
     - the last LED of every strip is white, so a strip's length can be checked;
     - from the 10th LED, a vertical line per step number (DS1: one, CS3:
       three), every other LED -- blue for DS, green for CS, red for US;
-    - the step's name in the middle, white, and beside it a spinner going
-      round once a second -- so a frozen output shows at a glance.
+    - the step's name in the middle, white, and beside it a spinner as tall
+      as the step going round once a second -- so a frozen output shows at a
+      glance.
 
   On every top bar, a blue dot runs back and forth at a low level.
 
@@ -68,23 +69,36 @@
         return g !== undefined && g[row].charAt(gx) === "1";
     }
 
-    // The spinner: a 3 x 3 ring beside the name, a dot going round it with a
-    // fading tail. Its cells clockwise from the top left, as [col, row].
-    var RING = [[0,0],[1,0],[2,0],[2,1],[2,2],[1,2],[0,2],[0,1]];
-    var SPIN_GAP = 2, SPIN_ROW = 2;      // columns after the name; first row
+    // The spinner: a ring beside the name as tall as the step (every strip)
+    // and as wide, a dot going round it once a second with a fading tail.
+    var SPIN_GAP = 2;                    // columns after the name
+    var TAIL = [1.0, 0.5, 0.25, 0.1];
 
-    // How lit cell (col, row) of the spinner is at time t, 0..1.
-    function spinnerLevel(text, col, row, cols, t) {
+    // Where cell (x, y) is on the edge of a w x h ring, clockwise from the
+    // top left; -1 inside it.
+    function ringIndex(x, y, w, h) {
+        if (y === 0) return x;
+        if (x === w - 1) return (w - 1) + y;
+        if (y === h - 1) return (w - 1) + (h - 1) + (w - 1 - x);
+        if (x === 0) return 2 * (w - 1) + (h - 1) + (h - 1 - y);
+        return -1;
+    }
+
+    // How lit cell (col, row) of the spinner is at time t, 0..1. @rows: the
+    // step's strips.
+    function spinnerLevel(text, col, row, cols, rows, t) {
         var width = text.length * GLYPH_W + (text.length - 1) * GAP;
-        var x = col - (Math.floor((cols - width) / 2) + width + SPIN_GAP);
-        var y = row - SPIN_ROW;
-        if (x < 0 || x > 2 || y < 0 || y > 2) return 0;
-        var at = Math.floor(t * RING.length) % RING.length;
-        for (var back = 0; back < 3; back++) {
-            var c = RING[(at - back + RING.length) % RING.length];
-            if (c[0] === x && c[1] === y) return [1.0, 0.4, 0.15][back];
-        }
-        return 0;
+        var x0 = Math.floor((cols - width) / 2) + width + SPIN_GAP;
+        var h = Math.max(3, rows);
+        var w = Math.max(3, Math.min(h, cols - 1 - x0));   // never the last LED
+        var x = col - x0, y = row;
+        if (x < 0 || x >= w || y < 0 || y >= h) return 0;
+        var i = ringIndex(x, y, w, h);
+        if (i < 0) return 0;
+        var n = 2 * (w - 1) + 2 * (h - 1);
+        var at = Math.floor(t * n) % n;
+        var back = (at - i + n) % n;
+        return back < TAIL.length ? TAIL[back] : 0;
     }
 
     // What a fixture's name says: a front strip, a top bar, or neither.
@@ -132,6 +146,7 @@
                 s[f.id] = { n: p.strip, z: (f.pos && f.pos.z !== undefined) ? f.pos.z : 0 };
         });
         var rowOf = {};       // fixture id -> row from the top
+        var stepRows = {};    // step -> its strips
         for (var step in strips) {
             var list = [];
             for (var id in strips[step]) list.push({ id: id, s: strips[step][id] });
@@ -140,6 +155,7 @@
                 return a.s.n - b.s.n;
             });
             list.forEach(function(e, i) { rowOf[e.id] = i; });
+            stepRows[step] = list.length;
         }
 
         // The dot: there and back across the top's colour pixels.
@@ -162,7 +178,7 @@
                     return sectionColour(step, level);
                 if (textPixel(step, led, rowOf[f.id], cols))
                     return { r: white, g: white, b: white };
-                var spin = spinnerLevel(step, led, rowOf[f.id], cols, t);
+                var spin = spinnerLevel(step, led, rowOf[f.id], cols, stepRows[step], t);
                 if (spin > 0)
                     return sectionColour(step, level * spin);
                 return off;

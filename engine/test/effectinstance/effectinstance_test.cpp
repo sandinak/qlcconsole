@@ -1284,12 +1284,12 @@ void EffectInstance_Test::aWholeRigOfPixelsTicksQuickly()
     const double ms = double(clock.nsecsElapsed()) / 1e6 / ticks;
     qInfo().noquote() << QString("96 strips x 64 pixels: %1 ms a tick").arg(ms, 0, 'f', 2);
 
-    // The same picture -- but for the spinner beside each name (LEDs 42-44),
-    // which goes round: on every step, its dot and two cells of tail.
+    // The same picture -- but for the spinner beside each name (LEDs 42-49,
+    // all 8 strips), which goes round: on every step, its dot and its tail.
     auto still = [](const QList<EffectInstance::DmxWrite> &writes) {
         QList<QPair<quint64, int>> out;
         for (const EffectInstance::DmxWrite &w : writes)
-            if (w.channel < 42 * 3 || w.channel >= 45 * 3)
+            if (w.channel < 42 * 3 || w.channel >= 50 * 3)
                 out << qMakePair((quint64(w.fixtureId) << 32) | w.channel, int(w.value));
         return out;
     };
@@ -1297,14 +1297,14 @@ void EffectInstance_Test::aWholeRigOfPixelsTicksQuickly()
     QCOMPARE(still(last), still(first));
     QSet<QPair<quint32, quint32>> lit;
     for (const EffectInstance::DmxWrite &w : last)
-        if (w.channel >= 42 * 3 && w.channel < 45 * 3 && w.value > 0)
+        if (w.channel >= 42 * 3 && w.channel < 50 * 3 && w.value > 0)
             lit.insert(qMakePair(w.fixtureId, w.channel / 3));
     QHash<QString, int> perStep;
     for (const auto &c : lit)
         perStep[m_doc->fixture(c.first)->name().section(' ', 0, 0)]++;
     QCOMPARE(perStep.size(), 12);
     for (auto it = perStep.cbegin(); it != perStep.cend(); ++it)
-        QVERIFY2(it.value() == 3, qPrintable(QString("%1: %2 spinner cells").arg(it.key()).arg(it.value())));
+        QVERIFY2(it.value() == 4, qPrintable(QString("%1: %2 spinner cells").arg(it.key()).arg(it.value())));
     scene->stop(FunctionParent::master());
     timer.timerTick();
 }
