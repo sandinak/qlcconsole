@@ -37,7 +37,12 @@
 #include <QColor>
 #include <QSysInfo>
 
+#include <QStyledItemDelegate>
+#include <QScrollArea>
+#include <QSplitter>
+
 #include "connectionstree.h"
+#include "universeoutputview.h"
 #include "deviceprofile.h"
 #include "qlcioplugin.h"
 #include "ioplugincache.h"
@@ -227,10 +232,47 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     m_tree->header()->setSectionResizeMode(COL_CARRIES, QHeaderView::Stretch);
     connect(m_tree, SIGNAL(itemChanged(QTreeWidgetItem *, int)),
             this, SLOT(slotItemChanged(QTreeWidgetItem *, int)));
+    /* Only a row's name is edited in place ("clicking to edit the text should
+       only work on the device .. not on detail or carries"): those two are
+       what the row IS, worked out from the patch, not text to type over. */
+    class NoEdit : public QStyledItemDelegate
+    {
+    public:
+        using QStyledItemDelegate::QStyledItemDelegate;
+        QWidget *createEditor(QWidget *, const QStyleOptionViewItem &, const QModelIndex &) const override
+        {
+            return nullptr;
+        }
+    };
+    m_tree->setItemDelegateForColumn(COL_DETAIL, new NoEdit(m_tree));
+    m_tree->setItemDelegateForColumn(COL_CARRIES, new NoEdit(m_tree));
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(m_tree, SIGNAL(customContextMenuRequested(QPoint)),
             this, SLOT(slotContextMenu(QPoint)));
-    lay->addWidget(m_tree);
+    /* Beside it, what the selected universe is sending ("it would be nice to
+       see what's being sent out on a U if selected on the right hand side"). */
+    m_output = new UniverseOutputView(m_doc, this);
+    QScrollArea *outScroll = new QScrollArea(this);
+    outScroll->setWidget(m_output);
+    outScroll->setWidgetResizable(false);
+    outScroll->setMinimumWidth(320);         // narrower, it scrolls
+    m_output->resize(m_output->sizeHint());
+    QSplitter *split = new QSplitter(Qt::Horizontal, this);
+    split->addWidget(m_tree);
+    split->addWidget(outScroll);
+    split->setStretchFactor(0, 3);
+    split->setStretchFactor(1, 2);
+    lay->addWidget(split);
+    connect(m_tree, &QTreeWidget::itemSelectionChanged, this, [this]() {
+        if (m_rebuilding)
+            return;                 // a rebuild reselects; keep what is shown
+        QTreeWidgetItem *it = m_tree->currentItem();
+        if (it == nullptr || !it->isSelected())
+            return;
+        const QVariant uv = it->data(COL_NAME, ROLE_UNIVERSE);
+        if (uv.isValid() && uv.toUInt() != Universe::invalid())
+            m_output->setUniverse(uv.toUInt());
+    });
 
     /* Art-Net nodes announce themselves roughly once a second, so a node that
        is powered on (or off) mid-session should appear (or stop being current)

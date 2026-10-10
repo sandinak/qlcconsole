@@ -282,6 +282,8 @@ private:
        moments means "not yet", not "nothing there". */
     class QElapsedTimer *m_since;
     QTreeWidget *m_tree;
+    /** On the right: what the selected universe is sending. */
+    class UniverseOutputView *m_output;
     /* Nodes announce themselves about once a second, so a periodic rebuild
        keeps the view honest without a manual rescan. */
     QTimer *m_refreshTimer;

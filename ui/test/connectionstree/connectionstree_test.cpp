@@ -16,6 +16,7 @@
 */
 
 #include <QTreeWidget>
+#include <QLineEdit>
 #include <QCheckBox>
 #include <QLabel>
 #include <QTimer>
@@ -26,6 +27,8 @@
 
 #include "connectionstree_test.h"
 #include "connectionstree.h"
+#include "universeoutputview.h"
+#include "fixture.h"
 #include "iopluginstub.h"
 #include "ioplugincache.h"
 #include "inputoutputmap.h"
@@ -688,6 +691,64 @@ void ConnectionsTree_Test::selectedUniversesRejectsAMixedPluginSelection()
     unis.at(0)->setData(COL_NAME, ROLE_PLUGIN, QString("Some Other Protocol"));
     QVERIFY(tree.selectedUniverses(plug, lines).isEmpty());
     QVERIFY(plug.isEmpty());
+}
+
+void ConnectionsTree_Test::onlyTheNameIsEditedAndASelectedUniverseShowsWhatItSends()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setOutputPatch(1, stub->name(), "", 1, false, 0) == true);
+    Fixture *fx = new Fixture(m_doc);
+    fx->setName("Front Par");
+    fx->setUniverse(1);
+    fx->setAddress(10);
+    fx->setChannels(3);
+    QVERIFY(m_doc->addFixture(fx));
+
+    ConnectionsTree tree(m_doc);
+    tree.resize(1200, 700);
+    tree.show();
+    tree.refresh();
+    QTreeWidgetItem *row = nullptr;
+    foreach (QTreeWidgetItem *it, allItems(tree.m_tree))
+        if (it->data(COL_NAME, ROLE_UNIVERSE).isValid() && it->data(COL_NAME, ROLE_UNIVERSE).toUInt() == 1
+            && it->data(COL_NAME, ROLE_OUTPUT).toBool())
+            row = it;
+    QVERIFY(row != nullptr);
+
+    // "clicking to edit the text should only work on the device .. not on
+    // detail or carries"
+    auto editors = [&tree]() {
+        QApplication::processEvents();
+        return tree.m_tree->viewport()->findChildren<QLineEdit *>().size();
+    };
+    tree.m_tree->editItem(row, COL_DETAIL);
+    QCOMPARE(editors(), 0);
+    tree.m_tree->editItem(row, COL_CARRIES);
+    QCOMPARE(editors(), 0);
+    if (row->flags() & Qt::ItemIsEditable)
+    {
+        tree.m_tree->editItem(row, COL_NAME);
+        QCOMPARE(editors(), 1);
+        tree.m_tree->closePersistentEditor(row, COL_NAME);
+        QApplication::processEvents();
+    }
+
+    // Selected, its output is shown on the right: what it sends, as it sends it.
+    QCOMPARE(tree.m_output->universe(), Universe::invalid());
+    tree.m_tree->setCurrentItem(row);
+    QCOMPARE(tree.m_output->universe(), quint32(1));
+    QByteArray out(16, char(0));
+    out[10] = char(200);
+    out[12] = char(17);
+    emit iom->universeWritten(1, out);
+    emit iom->universeWritten(2, QByteArray(16, char(99)));     // another universe: not this one
+    QCOMPARE(int(uchar(tree.m_output->values().at(10))), 200);
+    QCOMPARE(int(uchar(tree.m_output->values().at(12))), 17);
+    QCOMPARE(int(uchar(tree.m_output->values().at(0))), 0);
+    QCOMPARE(tree.m_output->values().size(), 512);
+    // Drawn without trouble, a fixture's span named.
+    QVERIFY(!tree.m_output->grab().isNull());
 }
 
 void ConnectionsTree_Test::selectedUniversesDeduplicatesFannedOutUniverses()

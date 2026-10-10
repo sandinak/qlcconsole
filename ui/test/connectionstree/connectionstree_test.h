@@ -77,6 +77,7 @@ private slots:
     /* Bulk retarget across a selection */
     void selectedUniversesRejectsAMixedPluginSelection();
     void selectedUniversesDeduplicatesFannedOutUniverses();
+    void onlyTheNameIsEditedAndASelectedUniverseShowsWhatItSends();
     void bulkRetargetNumbersPortsUpwardAndIsOneUndoStep();
     /** Two universes may share a NIC, but not a node port. */
     void twoUniversesCannotTargetTheSameNodePort();
