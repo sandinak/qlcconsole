@@ -34,6 +34,10 @@ private slots:
     void theRulerMarksTheMiddleOfADraggedDrape();
     void theRigViewHidesWhatTheStudioHides();
     void aLightAtTheFootOfATowerIsNotHungOnItsTopBar();
+    void theAttachBorderShowsOnlyWithShift();
+    void aFixtureUnderABarIsDrawnBeneathIt();
+    void aBarThatPansCanBeSetUprightAndTestsAsSuch();
+    void fixturesAreStoodOnTheDeckUnderThem();
     void initTestCase();
     void cleanupTestCase();
 

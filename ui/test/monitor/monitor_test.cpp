@@ -46,6 +46,8 @@
 #define protected public
 #define private public
 #include "monitor.h"
+#include "fixturefields.h"
+#include <QFormLayout>
 #include "righeads.h"
 #include "colourswatchbutton.h"
 #include "headtypesdialog.h"
@@ -18764,3 +18766,175 @@ void Monitor_Test::aLightAtTheFootOfATowerIsNotHungOnItsTopBar()
     props->removeTruss(bar->id());
     props->removeTower(tower->id());
 }
+
+/* "when shift is pressed .. the outline should change (green?) to indicate
+   it's attaching": a free fixture dragged over a truss is green only while
+   Shift is held -- and it was never green before, the border only being
+   worked out for fixtures already on a truss. */
+void Monitor_Test::theAttachBorderShowsOnlyWithShift()
+{
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(5000, 5000, 0)));
+    rig.gv->setViewPOV(MonitorGraphicsView::PovTop);
+    MonitorProperties *props = m_doc->monitorProperties();
+    Truss *t = props->addTruss();
+    t->setName("GreenBar");
+    t->setOrigin(QVector3D(10.0f, 12.0f, 4.0f));
+    t->setDirection(QPointF(1.0, 0.0));
+    t->setLength(6.0f);
+    t->setWidth(0.3f);
+    rig.gv->updateTrusses();
+
+    const QPointF onTrussPx = rig.gv->realPositionToPixels(12000.0, 12000.0);
+    rig.item->setPos(rig.item->pos() + (onTrussPx - rig.item->iconCentreScene()));
+    rig.gv->scene()->clearSelection();
+    rig.item->setSelected(true);
+
+    rig.gv->updateDragBorders();
+    QVERIFY2(!rig.item->attachMode(), "green without Shift: a plain drop does not attach");
+    rig.gv->setAttachOnDrop(true);                  // Shift down
+    rig.gv->updateDragBorders();
+    QVERIFY2(rig.item->attachMode(), "with Shift held over the truss, the border should be green");
+    rig.gv->setAttachOnDrop(false);                 // and up again
+    rig.gv->updateDragBorders();
+    QVERIFY(!rig.item->attachMode());
+
+    props->removeTruss(t->id());
+}
+
+/* "why does the fixture at the base of the truss look like it's above it?":
+   in the top view, a fixture with a bar well above it is drawn faded and
+   dashed -- underneath -- while one hung on that bar is not; the side views
+   show heights and draw them all plainly. */
+void Monitor_Test::aFixtureUnderABarIsDrawnBeneathIt()
+{
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(5000, 5000, 0)));
+    rig.gv->setViewPOV(MonitorGraphicsView::PovTop);
+    MonitorProperties *props = m_doc->monitorProperties();
+    Truss *bar = props->addTruss();
+    bar->setName("High bar");
+    bar->setOrigin(QVector3D(10.0f, 12.0f, 2.4f));
+    bar->setDirection(QPointF(1.0, 0.0));
+    bar->setLength(4.0f);
+    bar->setWidth(0.3f);
+    rig.gv->updateTrusses();
+
+    // On the floor, right under the bar.
+    props->setFixturePosition(rig.fxi->id(), 0, 0, QVector3D(12000.0f, 12000.0f, 0.0f));
+    rig.gv->updateFixture(rig.fxi->id());
+    const QPointF underBar = rig.gv->realPositionToPixels(12000.0, 12000.0);
+    rig.item->setPos(rig.item->pos() + (underBar - rig.item->iconCentreScene()));
+    rig.gv->refreshBeneath();
+    QVERIFY2(rig.item->beneath(), "a floor light under a bar 2.4 m up should draw underneath it");
+    QVERIFY(rig.item->opacity() < 1.0);
+
+    // Hung on that bar, it is not under it.
+    FixtureRigProps rp;
+    rp.trussId = bar->id();
+    rp.trussOffset = 2.0f;
+    props->setFixtureRigProps(rig.fxi->id(), rp);
+    rig.gv->updateFixture(rig.fxi->id());
+    rig.gv->refreshBeneath();
+    QVERIFY(!rig.item->beneath());
+
+    // Off the bar again and looked at from the front: plain.
+    props->setFixtureRigProps(rig.fxi->id(), FixtureRigProps());
+    rig.gv->setViewPOV(MonitorGraphicsView::PovFront);
+    rig.gv->refreshBeneath();
+    QVERIFY(!rig.item->beneath());
+    QCOMPARE(rig.item->opacity(), 1.0);
+    rig.gv->setViewPOV(MonitorGraphicsView::PovTop);
+
+    props->removeTruss(bar->id());
+}
+
+/* "UST1-8 .. they should be upright .. but I don't see a way to put that on
+   the fixture setting .. the testing tool should know that it's upright and
+   say so vs straight down": a two-arm beam bar is long and flat like a
+   strip, but it pans and tilts, so which way up it is matters -- it has the
+   Orientation row, and the centred test pose is named for it. */
+void Monitor_Test::aBarThatPansCanBeSetUprightAndTestsAsSuch()
+{
+    Doc *doc = new Doc(this);
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Two Arm Bar");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("6 Channel");
+    const QLCChannel::Group groups[6] = { QLCChannel::Pan, QLCChannel::Tilt, QLCChannel::Intensity,
+                                          QLCChannel::Intensity, QLCChannel::Intensity, QLCChannel::Intensity };
+    const QLCChannel::PrimaryColour colours[6] = { QLCChannel::NoColour, QLCChannel::NoColour,
+                                                   QLCChannel::NoColour, QLCChannel::Red,
+                                                   QLCChannel::Green, QLCChannel::Blue };
+    for (int k = 0; k < 6; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(QString("c%1").arg(k)); ch->setGroup(groups[k]);
+        ch->setControlByte(QLCChannel::MSB);
+        if (colours[k] != QLCChannel::NoColour) ch->setColour(colours[k]);
+        def->addChannel(ch); mode->insertChannel(ch, quint32(k));
+    }
+    QLCPhysical ph;
+    ph.setWidth(1000); ph.setHeight(100); ph.setDepth(150);    // a long, flat bar
+    mode->setPhysical(ph);
+    def->addMode(mode);
+    Fixture *fxi = new Fixture(doc);
+    fxi->setName("UST-1"); fxi->setFixtureDefinition(def, mode);
+    fxi->setUniverse(3); fxi->setAddress(0);
+    QVERIFY(doc->addFixture(fxi));
+    doc->monitorProperties()->setFixturePosition(fxi->id(), 0, 0, QVector3D(3000.0f, 3000.0f, 0.0f));
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        QWidget host;
+        QFormLayout *form = new QFormLayout(&host);
+        FixtureFields fields(&mon, form, &host);
+        fields.setFixtures({ fxi->id() }, fxi->id());
+        QVERIFY2(!fields.m_orientation->isHidden(), "a bar that pans and tilts should have Orientation");
+        int upright = -1;
+        for (int i = 0; i < fields.m_orientation->count(); ++i)
+            if (fields.m_orientation->itemData(i, Qt::UserRole).toInt() == int(Truss::FloorMounted))
+                upright = i;
+        QVERIFY2(upright >= 0, "Orientation should offer upright");
+
+        QCOMPARE(mon.centredPoseName(fxi->id()), QString("Straight down"));   // hung, by default
+        fields.m_orientation->setCurrentIndex(upright);
+        QCOMPARE(doc->monitorProperties()->fixtureRigProps(fxi->id()).mountingType, Truss::FloorMounted);
+        QCOMPARE(mon.centredPoseName(fxi->id()), QString("Straight up"));
+    }
+    delete doc;
+}
+
+/* "how to place UST1-8 cleanly on the top of the platforms .. they shouldn't
+   hang in space": a free fixture 0.9 m up, lined up with a platform's back
+   edge, stood on the deck under it -- on the deck's top, upright, inside its
+   edge -- and a whole selection at once. */
+void Monitor_Test::fixturesAreStoodOnTheDeckUnderThem()
+{
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(5000, 5000, 0)));
+    rig.gv->setViewPOV(MonitorGraphicsView::PovTop);
+    MonitorProperties *props = m_doc->monitorProperties();
+    StagePlatform *deck = props->addPlatform();
+    deck->setName("USP1");
+    deck->setOriginX(3.047f); deck->setOriginY(3.624f);
+    deck->setWidth(2.438f); deck->setDepth(1.219f); deck->setHeight(0.610f);
+    rig.gv->updatePlatforms();
+
+    // In space: free, 0.9 m up, on the deck's back edge.
+    props->setFixturePosition(rig.fxi->id(), 0, 0, QVector3D(3070.0f, 3624.0f, 0.9f));
+    rig.gv->updateFixture(rig.fxi->id());
+    QCOMPARE(rig.gv->standOnDeck({ rig.fxi->id() }, FixtureRigProps::invalidPlatformId()), 1);
+
+    const FixtureRigProps rp = props->fixtureRigProps(rig.fxi->id());
+    QCOMPARE(rp.deckPlatformId, deck->id());
+    QCOMPARE(rp.mountingType, Truss::FloorMounted);
+    const QVector3D at = props->fixtureRigPosition(rig.fxi->id());
+    QVERIFY2(qAbs(at.z() - 0.610f) < 0.01f, qPrintable(QString("standing at %1 m, the deck is 0.61 m").arg(at.z())));
+    QVERIFY2(deck->containsPoint(at.x(), at.y() - 0.04f), "it should be inside the deck's edge, not on it");
+
+    props->setFixtureRigProps(rig.fxi->id(), FixtureRigProps());
+    props->removePlatform(deck->id());
+}
+

@@ -386,6 +386,9 @@ protected slots:
      *  else upright/sideways/hung). Each item carries mountingType (UserRole) +
      *  trussMountSide (UserRole+1, -1 = leave as-is). Selects the current value. */
     void fillOrientationCombo(class QComboBox *cb, const struct FixtureRigProps &rp) const;
+    /** What a fixture's centred test pose is, by its orientation: "Straight
+     *  down" hung, "Straight up" upright, "Straight out" on a side arm. */
+    QString centredPoseName(quint32 fid) const;
 
     /** Open truss edit dialog on double-click. */
     void slotTrussDoubleClicked(quint32 tid);

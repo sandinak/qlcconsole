@@ -569,6 +569,13 @@ void FixtureFields::setFixtures(const QList<quint32> &fids, quint32 shown)
     const bool frame = props->fixtureFrameGroup(m_shown) != 0;
     const bool linear = m_monitor->isLinearFixture(fx);
     const bool onTower = rp.towerId != Tower::invalidId();
+    /* Anything that pans or tilts has a base, and which way up it is matters
+       to where it points -- a two-arm beam bar standing on the deck is as
+       much upright as a mover is, though it lies like a strip ("they should
+       be upright .. but I don't see a way to put that on the fixture"). */
+    const bool pansOrTilts = fx != nullptr
+        && (fx->channelNumber(QLCChannel::Pan, QLCChannel::MSB, 0) != QLCChannel::invalid()
+            || fx->channelNumber(QLCChannel::Tilt, QLCChannel::MSB, 0) != QLCChannel::invalid());
 
     m_mountOn->setText(many ? tr("%1 (and %n more)", "", m_fids.size() - 1)
                                   .arg(m_monitor->mountDescription(rp, m_shown))
@@ -589,7 +596,7 @@ void FixtureFields::setFixtures(const QList<quint32> &fids, quint32 shown)
     comboMixed(m_orientation, differs([props, rp](quint32 f) {
         return props->fixtureRigProps(f).mountingType == rp.mountingType; }));
     m_orientation->blockSignals(false);
-    row(m_orientation, !linear || onTower);
+    row(m_orientation, !linear || onTower || pansOrTilts);
 
     // Face, Angle
     m_face->blockSignals(true);

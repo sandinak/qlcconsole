@@ -654,6 +654,11 @@ public:
     /** Mount a fixture on a tower's top, bottom, or one of its shelves
      *  (FixtureRigProps::TowerTop / TowerBottom / TowerShelf). */
     void mountFixtureOnTower(quint32 fid, quint32 towerId, int side, int shelf = 0);
+    /** Stand @p fids on the deck of @p platformId -- or, invalid, the deck
+     *  under each (the nearest within half a metre when one is on or just off
+     *  an edge) -- upright, any other mount cleared, moved just inside the
+     *  deck when it sat on its edge. Returns how many it stood. */
+    int standOnDeck(const QList<quint32> &fids, quint32 platformId);
     /** Take a fixture off whatever truss, boom or tower it is mounted on. */
     void unmountFixture(quint32 fid);
 
@@ -808,6 +813,8 @@ protected:
 
     /** During fixture drags, highlights any truss under the cursor. */
     void mouseMoveEvent(QMouseEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;
+    void keyReleaseEvent(QKeyEvent *event) override;
 
     /** Right-click on empty canvas emits contextMenuRequested; on items routes to them. */
     void contextMenuEvent(QContextMenuEvent *event) override;
@@ -1255,6 +1262,12 @@ public:
      *  if Shift were held (tests, which cannot hold a key over a call). */
     void setAttachOnDrop(bool on) { m_attachOnDrop = on; }
     bool attachHeld() const;
+    /** The attach (green) / escape (red) borders of the fixtures being
+     *  dragged, as a drop now would leave them. */
+    void updateDragBorders();
+    /** In the top view, mark the fixtures with a structure above them as
+     *  underneath it (MonitorFixtureItem::setBeneath()). */
+    void refreshBeneath();
 
     /** Shade, in the top view, where the SELECTED moving heads cannot aim.
      *

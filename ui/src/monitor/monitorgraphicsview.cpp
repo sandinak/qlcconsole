@@ -3186,6 +3186,55 @@ void MonitorGraphicsView::refreshFixtureCountBadges()
         QGraphicsItemGroup *g = m_countBadges.take(key);
         if (g != nullptr) { m_scene->removeItem(g); delete g; }
     }
+    refreshBeneath();     // what covers what changes with the same moves
+}
+
+/* "why does the fixture at the base of the truss look like it's above it?":
+   in the top view every fixture is drawn over every structure, so it can
+   always be clicked -- whatever its height. One with a truss, deck, pipe or
+   tower top more than half a metre above it, over it on the plan, is drawn
+   faded with a dashed outline: underneath, but still there to click. What it
+   is mounted on never counts. */
+void MonitorGraphicsView::refreshBeneath()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    const bool top = (m_pov == PovTop);
+    const float clearance = 0.5f;
+    for (auto it = m_fixtures.constBegin(); it != m_fixtures.constEnd(); ++it)
+    {
+        MonitorFixtureItem *mfi = it.value();
+        if (mfi == nullptr)
+            continue;
+        bool beneath = false;
+        if (top)
+        {
+            const quint32 fid = it.key();
+            const float z = props->fixtureRigPosition(fid).z();
+            const QString own = PatchPlanner::mountKey(m_doc, fid);
+            const QPointF c = mfi->iconCentreScene();
+            auto covers = [&](const QGraphicsItem *si, const QString &key, float height) {
+                return si != nullptr && si->isVisible() && key != own && height > z + clearance
+                       && si->contains(si->mapFromScene(c));
+            };
+            for (auto t = m_trussItems.constBegin(); !beneath && t != m_trussItems.constEnd(); ++t)
+                if (Truss *tr = props->truss(t.key()))
+                    beneath = covers(t.value(), QStringLiteral("truss:%1").arg(t.key()),
+                                     qMax(tr->origin().z(), tr->positionAt(tr->length()).z()));
+            for (auto p = m_platformItems.constBegin(); !beneath && p != m_platformItems.constEnd(); ++p)
+                if (StagePlatform *pl = props->platform(p.key()))
+                    beneath = covers(p.value(), QStringLiteral("platform:%1").arg(p.key()),
+                                     props->platformBaseZ(p.key())
+                                     + pl->topAt(float(c.x()), float(c.y())));
+            for (auto p = m_pipeItems.constBegin(); !beneath && p != m_pipeItems.constEnd(); ++p)
+                if (Pipe *pp = props->pipe(p.key()))
+                    beneath = covers(p.value(), QStringLiteral("pipe:%1").arg(p.key()),
+                                     qMax(pp->positionAt(0.0f).z(), pp->positionAt(pp->length()).z()));
+            for (auto t = m_towerItems.constBegin(); !beneath && t != m_towerItems.constEnd(); ++t)
+                if (Tower *tw = props->tower(t.key()))
+                    beneath = covers(t.value(), QStringLiteral("tower:%1").arg(t.key()), tw->height());
+        }
+        mfi->setBeneath(beneath);
+    }
 }
 
 bool MonitorGraphicsView::fixtureItemShouldBeVisible(quint32 fid) const
@@ -3934,7 +3983,69 @@ static bool atHeightOf(Doc *doc, quint32 fid, float z0, float z1)
 
 bool MonitorGraphicsView::attachHeld() const
 {
-    return m_attachOnDrop || (QGuiApplication::keyboardModifiers() & Qt::ShiftModifier);
+    // Asked of the keyboard itself: pressed or let go mid-drag, the event
+    // state can lag the key by an event.
+    return m_attachOnDrop || (QGuiApplication::queryKeyboardModifiers() & Qt::ShiftModifier);
+}
+
+/* The borders a fixture being dragged shows, from the same tests the drop
+   uses: green while letting go would hang it on a truss or pipe or stand it
+   on a deck (Shift held, at its height), red while it is being pulled off
+   the truss it is on. Worked out on every move, and when Shift is pressed or
+   let go ("when shift is pressed .. the outline should change"). */
+void MonitorGraphicsView::updateDragBorders()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    foreach (QGraphicsItem *gi, m_scene->selectedItems())
+    {
+        MonitorFixtureItem *mfi = dynamic_cast<MonitorFixtureItem *>(gi);
+        if (mfi == nullptr)
+            continue;
+        const quint32 fid = m_fixtures.key(mfi, Fixture::invalidId());
+        if (fid == Fixture::invalidId())
+            continue;
+        const FixtureRigProps rp = props->fixtureRigProps(fid);
+        if (rp.trussId == Truss::invalidId())
+        {
+            bool attach = trussUnderFixture(mfi, 1.0f, true) != nullptr;
+            if (!attach && rp.pipeId == Pipe::invalidId())
+                attach = pipeUnderFixture(mfi, 1.0f, true) != nullptr;
+            if (!attach && attachHeld() && rp.pipeId == Pipe::invalidId() && !rp.onRiser()
+                && m_cellPixels > 0)
+            {
+                const QPointF cPx = mfi->pos() + halfIcon(mfi);
+                const QPointF cMm = pixelsToRealPosition(cPx.x(), cPx.y());
+                const quint32 pid = props->platformIdAt(float(cMm.x() / 1000.0),
+                                                         float(cMm.y() / 1000.0));
+                attach = pid != FixtureRigProps::invalidPlatformId() && pid != rp.deckPlatformId;
+            }
+            mfi->setAttachMode(attach);
+            mfi->setEscapeMode(false);
+            continue;
+        }
+        mfi->setAttachMode(false);
+        TrussItem *ti = m_trussItems.value(rp.trussId, nullptr);
+        if (ti == nullptr)
+            continue;
+        // Same yardstick both ways: trussUnderFixture() applies the
+        // two-widths rule, so "still on it" and "far enough to detach"
+        // cannot disagree.
+        mfi->setEscapeMode(trussUnderFixture(mfi) != ti);
+    }
+}
+
+void MonitorGraphicsView::keyPressEvent(QKeyEvent *event)
+{
+    if (event->key() == Qt::Key_Shift && (QGuiApplication::mouseButtons() & Qt::LeftButton))
+        updateDragBorders();
+    QGraphicsView::keyPressEvent(event);
+}
+
+void MonitorGraphicsView::keyReleaseEvent(QKeyEvent *event)
+{
+    if (event->key() == Qt::Key_Shift && (QGuiApplication::mouseButtons() & Qt::LeftButton))
+        updateDragBorders();
+    QGraphicsView::keyReleaseEvent(event);
 }
 
 TrussItem *MonitorGraphicsView::trussUnderFixture(MonitorFixtureItem *mfi,
@@ -6225,38 +6336,7 @@ void MonitorGraphicsView::mouseMoveEvent(QMouseEvent *event)
 
         if (draggingFixture)
         {
-            MonitorProperties *props = m_doc->monitorProperties();
-
-            // NOTE: trusses are no longer highlighted as drop targets while
-            // dragging — dropping a fixture on a truss no longer binds it
-            // (assignment is explicit now). The red escape border below still
-            // shows when an ALREADY-bound fixture is being pulled off its truss.
-
-            // Show red escape-from-truss border when pulling a bound fixture far off
-            foreach (QGraphicsItem *gi, m_scene->selectedItems())
-            {
-                MonitorFixtureItem *mfi = dynamic_cast<MonitorFixtureItem *>(gi);
-                if (!mfi || !mfi->isBoundToTruss()) continue;
-                quint32 fid = m_fixtures.key(mfi, Fixture::invalidId());
-                if (fid == Fixture::invalidId()) continue;
-                FixtureRigProps rp = props->fixtureRigProps(fid);
-                if (rp.trussId == Truss::invalidId())
-                {
-                    /* Unbound: green while it is over a truss, so releasing
-                       there visibly means "attach". The mirror of the red
-                       escape border below. */
-                    mfi->setAttachMode(trussUnderFixture(mfi, 1.0f, true) != nullptr);
-                    continue;
-                }
-                mfi->setAttachMode(false);
-                TrussItem *ti = m_trussItems.value(rp.trussId, nullptr);
-                if (!ti) continue;
-
-                // Same yardstick both ways: trussUnderFixture() applies the
-                // two-widths rule, so "still on it" and "far enough to detach"
-                // cannot disagree.
-                mfi->setEscapeMode(trussUnderFixture(mfi) != ti);
-            }
+            updateDragBorders();
         }
         else
         {
@@ -7391,6 +7471,35 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
                 a->setChecked(rp.towerId == twid && rp.towerMountSide == FixtureRigProps::TowerShelf
                               && rp.towerShelf == si);
             }
+        }
+
+        /* Stood on a deck -- every selected fixture at once ("how to place
+           UST1-8 cleanly on the top of the platforms .. they shouldn't hang
+           in space"): the deck under each, or one by name. */
+        QList<quint32> deckIds;
+        foreach (QGraphicsItem *gi, m_scene->selectedItems())
+            if (MonitorFixtureItem *mfi = dynamic_cast<MonitorFixtureItem *>(gi))
+                deckIds << mfi->fixtureID();
+        if (!deckIds.contains(fid))
+            deckIds = { fid };
+        QMenu *deckMenu = mountMenu->addMenu(deckIds.size() > 1 ? tr("Deck (%1 fixtures)").arg(deckIds.size())
+                                                                 : tr("Deck"));
+        const QList<StagePlatform *> decks = props->platforms();
+        deckMenu->setEnabled(!decks.isEmpty());
+        deckMenu->addAction(deckIds.size() > 1 ? tr("The deck under each") : tr("The deck under it"),
+                            this, [this, deckIds]() {
+            standOnDeck(deckIds, FixtureRigProps::invalidPlatformId());
+        });
+        deckMenu->addSeparator();
+        for (StagePlatform *pl : decks)
+        {
+            if (pl == nullptr)
+                continue;
+            const quint32 pid = pl->id();
+            QAction *a = deckMenu->addAction(pl->name().isEmpty() ? tr("Platform %1").arg(pid) : pl->name(),
+                                             this, [this, deckIds, pid]() { standOnDeck(deckIds, pid); });
+            a->setCheckable(true);
+            a->setChecked(rp.deckPlatformId == pid);
         }
     }
 
@@ -9177,4 +9286,96 @@ void MonitorGraphicsView::patchOthersLike(const QString &key, const QStringList 
     foreach (quint32 f, ids)
         updateFixture(f);
     emit mapStructureChanged();
+}
+
+int MonitorGraphicsView::standOnDeck(const QList<quint32> &fids, quint32 platformId)
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    int stood = 0;
+    foreach (quint32 fid, fids)
+    {
+        if (m_doc->fixture(fid) == nullptr)
+            continue;
+        ensureFixtureOnPlot(fid);
+        const QVector3D at = props->fixtureRigPosition(fid);       // metres
+        QPointF xy(at.x(), at.y());
+
+        // The deck under it -- or, on an edge or just off one, the nearest
+        // within half a metre.
+        quint32 pid = platformId;
+        if (pid == FixtureRigProps::invalidPlatformId())
+        {
+            pid = props->platformIdAt(float(xy.x()), float(xy.y()));
+            double best = 0.5;
+            if (pid == FixtureRigProps::invalidPlatformId())
+            {
+                foreach (StagePlatform *pl, props->platforms())
+                {
+                    if (pl == nullptr)
+                        continue;
+                    const QList<QPointF> fp = pl->footprint(8);
+                    for (int i = 0; i < fp.size(); ++i)
+                    {
+                        const QPointF a = fp.at(i), b = fp.at((i + 1) % fp.size());
+                        const QPointF ab = b - a;
+                        const double len2 = QPointF::dotProduct(ab, ab);
+                        const double t = len2 > 0 ? qBound(0.0, QPointF::dotProduct(xy - a, ab) / len2, 1.0) : 0.0;
+                        const QPointF d = xy - (a + ab * t);
+                        const double dist = qSqrt(QPointF::dotProduct(d, d));
+                        if (dist < best)
+                        {
+                            best = dist;
+                            pid = pl->id();
+                        }
+                    }
+                }
+            }
+        }
+        StagePlatform *pl = props->platform(pid);
+        if (pl == nullptr)
+            continue;
+
+        /* On it, not on its edge: a fixture lined up with a deck's edge is on
+           the boundary, where the deck under it is anyone's guess. In steps
+           toward the middle until well inside. */
+        const QList<QPointF> fp = pl->footprint(8);
+        QPointF mid;
+        foreach (const QPointF &q, fp)
+            mid += q;
+        if (!fp.isEmpty())
+            mid /= fp.size();
+        auto inside = [pl](const QPointF &p) { return pl->containsPoint(float(p.x()), float(p.y())); };
+        auto wellInside = [&](const QPointF &p) {
+            const double m = 0.05;
+            return inside(p) && inside(p + QPointF(m, 0)) && inside(p - QPointF(m, 0))
+                   && inside(p + QPointF(0, m)) && inside(p - QPointF(0, m));
+        };
+        for (int step = 0; step < 200 && !wellInside(xy); ++step)
+        {
+            const QPointF d = mid - xy;
+            const double len = qSqrt(QPointF::dotProduct(d, d));
+            if (len < 0.01)
+                break;
+            xy += d * (0.02 / len);
+        }
+
+        FixtureRigProps rp = props->fixtureRigProps(fid);
+        if (rp.deckPlatformId != pid)
+            leaveMountGroupsOf(fid);
+        rp.clearMounts();
+        rp.deckPlatformId = pid;
+        rp.deckHeightOffset = 0.0f;
+        rp.mountingType = Truss::FloorMounted;     // standing on it: base down
+        props->setFixtureRigProps(fid, rp);
+        props->setFixturePosition(fid, 0, 0, QVector3D(float(xy.x() * 1000.0), float(xy.y() * 1000.0), 0.0f));
+        updateFixture(fid);
+        ++stood;
+    }
+    if (stood > 0)
+    {
+        m_doc->setModified();
+        emit mapStructureChanged();
+        refreshItemLayerState();
+    }
+    return stood;
 }

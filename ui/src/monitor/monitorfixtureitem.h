@@ -218,6 +218,18 @@ public:
     void setAttachMode(bool a) { if (m_attachMode != a) { m_attachMode = a; update(); } }
     bool attachMode() const    { return m_attachMode; }
 
+    /** Under a structure that is over it on the plan (the top view draws
+     *  every fixture on top, to keep it clickable): faded, outlined dashed. */
+    void setBeneath(bool b)
+    {
+        if (m_beneath == b)
+            return;
+        m_beneath = b;
+        setOpacity(b ? 0.45 : 1.0);
+        update();
+    }
+    bool beneath() const { return m_beneath; }
+
     /** Highlight from an external source (e.g. Programming tab selection). */
     void setHighlighted(bool h) { m_highlighted = h; update(); }
 
@@ -338,6 +350,7 @@ private:
     bool m_trussGroupSelected = false;
     bool m_escapeMode    = false;
     bool m_attachMode    = false;
+    bool m_beneath       = false;   ///< setBeneath()
     bool m_isolated      = false;   ///< drilled-in single selection within a group
     bool m_ghosted       = false;   ///< locked-layer indicator: red + click-through
     bool m_highlighted   = false;

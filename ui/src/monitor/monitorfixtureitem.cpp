@@ -877,6 +877,11 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
             bodyPen.setStyle(Qt::DashLine);
             bodyPen.setCosmetic(true);
         }
+        else if (m_beneath && !this->isSelected() && !m_highlighted)
+        {
+            bodyPen.setStyle(Qt::DashLine);    // under a structure (setBeneath())
+            bodyPen.setColor(QColor(170, 170, 170));
+        }
         else if (this->isSelected() || m_highlighted)
         {
             /* A one-pixel outline disappears on a multi-head bar: the LED

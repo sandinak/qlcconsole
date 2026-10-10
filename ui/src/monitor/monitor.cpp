@@ -2824,6 +2824,16 @@ void Monitor::slotFixtureDoubleClicked(quint32 fid)
     showFixtureItemEditor();
 }
 
+QString Monitor::centredPoseName(quint32 fid) const
+{
+    switch (m_props->fixtureRigProps(fid).mountingType)
+    {
+        case Truss::FloorMounted: return tr("Straight up");
+        case Truss::SideArm:      return tr("Straight out");
+        default:                  return tr("Straight down");
+    }
+}
+
 void Monitor::fillOrientationCombo(QComboBox *cb, const FixtureRigProps &rp) const
 {
     cb->blockSignals(true);
@@ -9247,10 +9257,18 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     testRowLayout->setContentsMargins(0, 0, 0, 0);
     testRowLayout->setSpacing(4);
     QComboBox *testModeCb = new QComboBox;
-    testModeCb->addItem(tr("Straight down"),             QVariant(0));
+    testModeCb->setObjectName(QStringLiteral("testOrientation"));
+    testModeCb->addItem(centredPoseName(fxItem->fixtureID()), QVariant(0));
     testModeCb->addItem(tr("Aim at 0° (stage front)"),  QVariant(1));
     testModeCb->addItem(tr("Aim at target:"),            QVariant(2));
-    testModeCb->setToolTip(tr("Straight down: center pan+tilt — confirms physical position.\n"
+    /* The centred pose is straight down only for a hung fixture: say what it
+       is for this one, and follow its Orientation as it is changed here. */
+    connect(m_props, &MonitorProperties::rigPropsChanged, testModeCb, [this, testFid = fxItem->fixtureID(), testModeCb](quint32 f) {
+        if (f == testFid)
+            testModeCb->setItemText(0, centredPoseName(testFid));
+    });
+    testModeCb->setToolTip(tr("Centred: pan and tilt at their middle -- straight down for a hung fixture,\n"
+                              "straight up for an upright one -- confirms physical position.\n"
                               "Aim at 0° (stage front): pans the fixture to aim horizontally\n"
                               "toward downstage (0°) given the current panZeroDir setting.\n"
                               "Aim at target: aims at a stage target using rig geometry —\n"
