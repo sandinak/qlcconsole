@@ -488,6 +488,15 @@ public:
      *  number of items ungrouped. */
     int ungroupSelectedItems();
 
+    /** Turn the selection about the vertical by @p deg (+X toward +Y, the
+     *  way everything on the plot turns), about the middle of what is
+     *  selected: every item's place and its own facing, and everything
+     *  mounted on what turns -- its fixtures, its hangers, what stands on a
+     *  deck. One undo step. Returns how many items turned. */
+    int rotateSelectedItems(double deg);
+    /** The middle that rotateSelectedItems() turns about (world metres). */
+    QPointF selectionPivot() const;
+
     /** Dissolve a specific group by one level: its child groups and items are
      *  promoted to the group's parent. Used by the Layers-tree context menu. */
     void ungroupById(quint32 groupId);
@@ -828,6 +837,8 @@ public:
     void pushRigUndo(const QByteArray &before);
     /** Who puts a rig snapshot back: the Monitor, which owns the rebuild. */
     void setRigRestorer(std::function<void(const QByteArray &)> fn) { m_rigRestorer = fn; }
+    /** Who takes one (Monitor::rigSnapshot()), for edits made here. */
+    void setRigSnapshotter(std::function<QByteArray()> fn) { m_rigSnapshotter = fn; }
     /** Is there anything for Ctrl+Z to undo? */
     bool canUndo() const { return !m_moveUndo.isEmpty(); }
 
@@ -1182,6 +1193,7 @@ private:
         QByteArray rigBefore;                       ///< type == RigEdit
     };
     std::function<void(const QByteArray &)> m_rigRestorer;
+    std::function<QByteArray()> m_rigSnapshotter;
     QList<UndoEntry> m_moveUndo;
     int m_undoBatch = 0;          ///< last batch number handed out
     int m_openUndoBatch = 0;      ///< the drag in progress's batch, 0 = none

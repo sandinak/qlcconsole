@@ -121,7 +121,7 @@ void PlatformItem::paint(QPainter *painter,
         // Its outline, round the front; the hatching stays inside it.
         QPolygonF outline;
         const double w = double(m_platform->width()), d = double(m_platform->depth());
-        foreach (const QPointF &q, m_platform->footprint(32))
+        foreach (const QPointF &q, m_platform->localFootprint(32))
             outline << QPointF((q.x() - double(m_platform->originX())) / w * m_pxW,
                                (q.y() - double(m_platform->originY())) / d * m_pxD);
         painter->drawPolygon(outline);
@@ -243,7 +243,10 @@ QVariant PlatformItem::itemChange(GraphicsItemChange change, const QVariant &val
         return mprops != nullptr && mprops->platformBaseZ(p->id()) > 0.001f;
     };
 
-    if (change == ItemPositionChange && scene() != nullptr && !permitsOverlap(m_platform))
+    // A turned platform is not held off its neighbours: the rule below is
+    // square rectangles against square rectangles.
+    if (change == ItemPositionChange && scene() != nullptr && !permitsOverlap(m_platform)
+        && !m_platform->isRotated())
     {
         // Skip collision during a GROUP drag (>1 platform selected): the group
         // moves rigidly, and clamping each member independently would scramble its
@@ -269,7 +272,9 @@ QVariant PlatformItem::itemChange(GraphicsItemChange change, const QVariant &val
                     continue;                     // that one permits overlap
                 if (o->isSelected())
                     continue;                     // moving together (group drag)
-                const QRectF orect(o->pos(), QSizeF(o->m_pxW, o->m_pxD));
+                const QRectF orect = o->m_platform->isRotated()
+                                         ? o->sceneBoundingRect()
+                                         : QRectF(o->pos(), QSizeF(o->m_pxW, o->m_pxD));
                 if (r.intersects(orect))
                     return orect;
             }

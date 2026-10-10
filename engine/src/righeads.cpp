@@ -21,7 +21,8 @@
 #include "truss.h"
 #include "doc.h"
 
-QVector3D RigHeads::axis(const FixtureRigProps &rp)
+/* Its length within its face, before any turn about the vertical. */
+static QVector3D faceAxis(const FixtureRigProps &rp)
 {
     const double th = qDegreesToRadians(double(rp.studioAngle));
     const double c = qCos(th), s = qSin(th);
@@ -34,9 +35,23 @@ QVector3D RigHeads::axis(const FixtureRigProps &rp)
     }
 }
 
+static QVector3D yawed(const FixtureRigProps &rp, const QVector3D &v)
+{
+    if (qFuzzyIsNull(rp.studioYaw))
+        return v;
+    const double y = qDegreesToRadians(double(rp.studioYaw));
+    const float c = float(qCos(y)), sn = float(qSin(y));
+    return QVector3D(v.x() * c - v.y() * sn, v.x() * sn + v.y() * c, v.z());
+}
+
+QVector3D RigHeads::axis(const FixtureRigProps &rp)
+{
+    return yawed(rp, faceAxis(rp));
+}
+
 void RigHeads::frame(const FixtureRigProps &rp, QVector3D &L, QVector3D &N, QVector3D &H)
 {
-    L = axis(rp);
+    L = faceAxis(rp);
     switch (rp.studioMount)
     {
     case 0:  N = QVector3D(0, 0, 1); break;            // laid flat: depth is up
@@ -74,6 +89,12 @@ void RigHeads::frame(const FixtureRigProps &rp, QVector3D &L, QVector3D &N, QVec
         N = -N;
         H = -H;
     }
+
+    // Turned about the vertical with whatever it is part of (a group, the
+    // platform or tower it is on): the whole frame, last.
+    L = yawed(rp, L);
+    N = yawed(rp, N);
+    H = yawed(rp, H);
 }
 
 QVector3D RigHeads::fixtureCentre(Doc *doc, quint32 fid)

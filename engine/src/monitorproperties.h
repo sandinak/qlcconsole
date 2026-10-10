@@ -528,6 +528,18 @@ public:
      *  move/resize and once after load. See recomputeAnchoredFrames impl. */
     void recomputeAnchoredFrames();
 
+    /** Turn a fixture about the vertical by @p deltaDeg: the face it is on
+     *  (studioYaw) and, for a moving head, where its pan counts from. Its
+     *  position is the caller's business. */
+    void turnFixtureFacing(quint32 fid, float deltaDeg);
+    /** Turn platform @p id to face @p deg, and what is on it with it: what
+     *  stands on its deck goes round its centre, and everything on its faces
+     *  or in its studio frame turns to match. */
+    void turnPlatform(quint32 id, float deg);
+    /** Turn tower @p id to face @p deg, with what is on its shelves and the
+     *  hangers on its sides. */
+    void turnTower(quint32 id, float deg);
+
     /** Rebuild the plot item for any fixture that is rigged on a structure but
      *  has no FxItem -- removeFixture() drops the item and leaves the rig
      *  props, stranding the fixture out of everything driven by

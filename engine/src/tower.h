@@ -37,6 +37,7 @@
 #include <QColor>
 #include <QString>
 #include <QList>
+#include <QPointF>
 #include <climits>
 
 class QXmlStreamReader;
@@ -92,10 +93,23 @@ public:
     void  setShelves(const QList<float> &z) { m_shelves = z; }
     void  clearShelves() { m_shelves.clear(); }
 
+    /** Which way it faces, degrees about its centre (0: square to the stage;
+     *  +X turning toward +Y). origin/width/depth and (u,v) into the footprint
+     *  are LOCAL -- the tower unturned; toWorld() turns them. */
+    float rotation() const { return m_rotation; }
+    void  setRotation(float deg);
+    bool  isRotated() const { return m_rotation != 0.0f; }
+    QPointF centre() const { return QPointF(double(m_originX + m_width * 0.5f), double(m_originY + m_depth * 0.5f)); }
+    QPointF toWorld(const QPointF &local) const;
+    QPointF toLocal(const QPointF &world) const;
+    /** Its four corners on the floor, turned: x0y0, x1y0, x1y1, x0y1. */
+    QList<QPointF> corners() const;
+
     /** World position of a point on shelf @p i at (u,v) metres into the footprint. */
     QVector3D shelfPos(int i, float u, float v) const
     {
-        return QVector3D(m_originX + u, m_originY + v, shelfHeight(i));
+        const QPointF w = toWorld(QPointF(double(m_originX + u), double(m_originY + v)));
+        return QVector3D(float(w.x()), float(w.y()), shelfHeight(i));
     }
     /** Centre of shelf @p i. */
     QVector3D shelfCentre(int i) const { return shelfPos(i, m_width * 0.5f, m_depth * 0.5f); }
@@ -140,6 +154,7 @@ private:
     QString      m_name;
     float        m_originX = 0.0f;
     float        m_originY = 0.0f;
+    float        m_rotation = 0.0f;
     float        m_width   = 0.406f;   ///< 16"
     float        m_depth   = 0.406f;   ///< 16"
     float        m_height  = 2.438f;   ///< 8'

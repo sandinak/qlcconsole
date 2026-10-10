@@ -329,6 +329,18 @@ of, and doesn't override, the real locks above.
   paste or edit: a whole drag at once (everything it moved — structures,
   scenery, targets, nodes, fixtures — and a deck brings its fixtures back
   with it), or everything one dialog did when you pressed OK.
+- **Rotate** — right-click → **Rotate…** (an angle, clockwise seen from
+  above; less than 0 the other way), or **]** / **[** for 15° clockwise /
+  anticlockwise and **}** / **{** for 1°. The selection — a group, or
+  anything selected — turns about its middle: each thing's place and its own
+  facing, and everything on it turns with it (fixtures on a truss, a tower's
+  shelves or a riser's face; what stands on a deck; hangers; a studio frame's
+  members). One Undo puts it all back. A backdrop image and a mark bound to a
+  structure stay put; the mark follows its structure.
+- **Platforms and towers face any way** — **Facing** in their editors
+  (degrees, about their middle); what is on them turns with them. Light lands
+  on a turned deck where it really is, and a turned flight of steps climbs
+  the way it now faces.
 - **Every rig dialog works the same way** — truss, pipe, platform, tower,
   stand, scenery, group, hanger, image, target and Fixture Properties: the
   plot follows its fields as you change them, **Cancel** puts back

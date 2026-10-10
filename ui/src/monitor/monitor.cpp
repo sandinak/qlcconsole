@@ -391,6 +391,7 @@ void Monitor::initGraphicsView()
 
     m_graphicsView = new MonitorGraphicsView(m_doc, this);
     m_graphicsView->setRigRestorer([this](const QByteArray &snap) { restoreRig(snap); });
+    m_graphicsView->setRigSnapshotter([this]() { return rigSnapshot(); });
     if (m_undoAction != nullptr)
     {
         connect(m_undoAction, &QAction::triggered, m_graphicsView, &MonitorGraphicsView::undoLastMove);
@@ -2389,6 +2390,19 @@ void Monitor::slotGroupItems()
         m_graphicsView->groupSelectedItems();
 }
 
+void Monitor::slotRotateSelection()
+{
+    if (m_graphicsView == NULL || m_graphicsView->scene()->selectedItems().isEmpty())
+        return;
+    bool ok = false;
+    const double deg = QInputDialog::getDouble(this, tr("Rotate"),
+                                               tr("Turn the selection clockwise (seen from above) by, degrees "
+                                                  "-- less than 0 turns it the other way:"),
+                                               15.0, -360.0, 360.0, 1, &ok);
+    if (ok)
+        m_graphicsView->rotateSelectedItems(deg);
+}
+
 void Monitor::slotUngroupItems()
 {
     if (m_graphicsView != NULL)
@@ -2628,6 +2642,7 @@ void Monitor::slotCopySelected()
             c.name = p->name();
             c.originX = p->originX(); c.originY = p->originY();
             c.width = p->width(); c.depth = p->depth(); c.height = p->height();
+            c.rotation = p->rotation(); c.frontCurve = p->frontCurve();
             c.color = p->color();
             platforms.append(c);
         }
@@ -2685,6 +2700,8 @@ void Monitor::pasteClipboard(float dxM, float dyM)
         p->setWidth(c.width);
         p->setDepth(c.depth);
         p->setHeight(c.height);
+        p->setRotation(c.rotation);
+        p->setFrontCurve(c.frontCurve);
         p->setColor(c.color);
         p->setLayerId(m_props->activeLayerId());
         newPlatformIds.append(p->id());
@@ -5966,6 +5983,14 @@ void Monitor::slotEditTower(quint32 tid)
     form->addRow(tr("Width:"), wSpin);
     form->addRow(tr("Depth:"), dSpin);
     form->addRow(tr("Height:"), hSpin);
+    QDoubleSpinBox *facingSpin = new QDoubleSpinBox(&dlg);
+    facingSpin->setRange(-180.0, 180.0);
+    facingSpin->setDecimals(1);
+    facingSpin->setSuffix(QStringLiteral("°"));
+    facingSpin->setValue(double(t->rotation()));
+    facingSpin->setObjectName("towerFacing");
+    facingSpin->setToolTip(tr("Turned about its middle; what is on its shelves turns with it"));
+    form->addRow(tr("Facing:"), facingSpin);
 
     /* Faces: opaque panels on its sides -- a black facade, or a printed one --
        on the sides ticked, over the stretch of its height given. */
@@ -6058,9 +6083,10 @@ void Monitor::slotEditTower(quint32 tid)
         t->setWidth(float(wSpin->value() * fromDisp));
         t->setDepth(float(dSpin->value() * fromDisp));
         t->setHeight(float(hSpin->value() * fromDisp));
+        m_props->turnTower(t->id(), float(facingSpin->value()));
         if (view) view->reload();
     };
-    for (QDoubleSpinBox *sp : { oxSpin, oySpin, wSpin, dSpin, hSpin })
+    for (QDoubleSpinBox *sp : { oxSpin, oySpin, wSpin, dSpin, hSpin, facingSpin })
         connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg,
                 [applyLive](double){ applyLive(); });
     connect(nameEdit, &QLineEdit::textChanged, &dlg, [applyLive](const QString &){ applyLive(); });
@@ -6506,6 +6532,16 @@ void Monitor::slotEditPlatform(quint32 pid)
                              "is measured at the middle."));
     form->addRow(tr("Front curve:"), curveSpin);
 
+    QDoubleSpinBox *facingSpin = new QDoubleSpinBox(&dlg);
+    facingSpin->setRange(-180.0, 180.0);
+    facingSpin->setDecimals(1);
+    facingSpin->setSuffix(QStringLiteral("°"));
+    facingSpin->setValue(double(p->rotation()));
+    facingSpin->setObjectName("platformFacing");
+    facingSpin->setToolTip(tr("Turned about its middle; what stands on it and what is fixed "
+                              "to its faces turn with it"));
+    form->addRow(tr("Facing:"), facingSpin);
+
     /* A flight of steps: count, rise, run and width say it all, and the box
        above follows from them (read-only while it is steps). */
     QComboBox *shapeCombo = new QComboBox(&dlg);
@@ -6654,6 +6690,7 @@ void Monitor::slotEditPlatform(quint32 pid)
             p->setHeight(float(hSpin->value() * fromDisp_p));
             p->setFrontCurve(float(curveSpin->value() * fromDisp_p));
         }
+        m_props->turnPlatform(p->id(), float(facingSpin->value()));
         m_props->recomputeAnchoredFrames();
         m_graphicsView->updatePlatforms();
         m_graphicsView->refreshRiserFixtures();
@@ -6663,7 +6700,7 @@ void Monitor::slotEditPlatform(quint32 pid)
     for (QDoubleSpinBox *sp : { oxSpin, oySpin, (QDoubleSpinBox*)wSpin,
                                 (QDoubleSpinBox*)dSpin, (QDoubleSpinBox*)hSpin,
                                 (QDoubleSpinBox*)riseSpin, (QDoubleSpinBox*)runSpin,
-                                (QDoubleSpinBox*)stepWSpin, (QDoubleSpinBox*)curveSpin })
+                                (QDoubleSpinBox*)stepWSpin, (QDoubleSpinBox*)curveSpin, facingSpin })
         connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg,
                 [applyLive](double){ applyLive(); });
     connect(countSpin, QOverload<int>::of(&QSpinBox::valueChanged), &dlg, [applyLive](int){ applyLive(); });
@@ -6745,6 +6782,8 @@ void Monitor::slotCanvasContextMenu(QPointF scenePos)
     QAction *ungroupAct = menu.addAction(QIcon(":/ungroup.png"), tr("Ungroup (Ctrl+Shift+G)"),
                                          this, SLOT(slotUngroupItems()));
     ungroupAct->setEnabled(m_graphicsView != NULL && m_graphicsView->selectionHasGroup());
+    QAction *rotateAct = menu.addAction(tr("Rotate…  ([ / ])"), this, [this]() { slotRotateSelection(); });
+    rotateAct->setEnabled(m_graphicsView != NULL && !m_graphicsView->scene()->selectedItems().isEmpty());
 
     // Fixture Studio component library — browse/stamp saved components. Stamps
     // onto the current fixture selection (the browser disables stamp if none).

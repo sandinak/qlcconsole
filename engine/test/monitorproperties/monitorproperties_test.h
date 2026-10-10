@@ -109,6 +109,8 @@ private slots:
     void stepsClimbEveryWay();
     void stepsRoundTripInXml();
     void aRoundedFrontCutsTheCorners();
+    void aPlatformTurnsAboutItsMiddle();
+    void whatIsOnAPlatformOrTowerTurnsWithIt();
     void aFixtureOnStepsStandsOnItsTread();
 
     /** "No way to put this fixture on the back? Also when I say side ..

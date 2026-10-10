@@ -12,6 +12,8 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <algorithm>
+#include <cmath>
+#include <QtMath>
 
 #include "tower.h"
 
@@ -29,6 +31,43 @@
 #define KXMLTowerGroupId QStringLiteral("GroupId")
 #define KXMLTowerShelf   QStringLiteral("Shelf")
 #define KXMLTowerShelfZ  QStringLiteral("Z")
+#define KXMLTowerRotation QStringLiteral("Rotation")
+
+void Tower::setRotation(float deg)
+{
+    double d = std::fmod(double(deg), 360.0);
+    if (d > 180.0) d -= 360.0;
+    if (d <= -180.0) d += 360.0;
+    m_rotation = (qAbs(d) < 1e-4) ? 0.0f : float(d);
+}
+
+static QPointF turnAbout(const QPointF &p, const QPointF &about, double deg)
+{
+    if (deg == 0.0)
+        return p;
+    const double r = qDegreesToRadians(deg);
+    const double c = qCos(r), s = qSin(r);
+    const double dx = p.x() - about.x(), dy = p.y() - about.y();
+    return QPointF(about.x() + dx * c - dy * s, about.y() + dx * s + dy * c);
+}
+
+QPointF Tower::toWorld(const QPointF &local) const
+{
+    return turnAbout(local, centre(), double(m_rotation));
+}
+
+QPointF Tower::toLocal(const QPointF &world) const
+{
+    return turnAbout(world, centre(), -double(m_rotation));
+}
+
+QList<QPointF> Tower::corners() const
+{
+    const double x0 = double(m_originX), y0 = double(m_originY);
+    const double x1 = x0 + double(m_width), y1 = y0 + double(m_depth);
+    return QList<QPointF>() << toWorld(QPointF(x0, y0)) << toWorld(QPointF(x1, y0))
+                            << toWorld(QPointF(x1, y1)) << toWorld(QPointF(x0, y1));
+}
 
 Tower::Tower(quint32 id, QObject *parent)
     : QObject(parent)
@@ -92,6 +131,7 @@ bool Tower::loadXML(QXmlStreamReader &root)
     if (a.hasAttribute(KXMLTowerLocked))  m_locked  = (a.value(KXMLTowerLocked).toString() == "true");
     if (a.hasAttribute(KXMLTowerLayerId)) m_layerId = a.value(KXMLTowerLayerId).toUInt();
     if (a.hasAttribute(KXMLTowerGroupId)) m_groupId = a.value(KXMLTowerGroupId).toUInt();
+    if (a.hasAttribute(KXMLTowerRotation)) setRotation(a.value(KXMLTowerRotation).toFloat());
     m_faces = a.hasAttribute(QStringLiteral("Faces"));
     if (m_faces)
         setFacesSides(a.value(QStringLiteral("Faces")).toInt());
@@ -140,6 +180,8 @@ bool Tower::saveXML(QXmlStreamWriter *doc) const
         doc->writeAttribute(KXMLTowerLayerId, QString::number(m_layerId));
     if (m_groupId != 0)
         doc->writeAttribute(KXMLTowerGroupId, QString::number(m_groupId));
+    if (m_rotation != 0.0f)
+        doc->writeAttribute(KXMLTowerRotation, QString::number(double(m_rotation), 'f', 2));
     if (m_faces)
     {
         doc->writeAttribute(QStringLiteral("Faces"), QString::number(m_facesSides));

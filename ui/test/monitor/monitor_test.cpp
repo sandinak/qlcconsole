@@ -4610,10 +4610,10 @@ void Monitor_Test::buildingAPlatformStepByStepThroughRealUiStaysConsistent()
         QWidget *geomPane = nameEdit ? nameEdit->parentWidget() : nullptr;
         const QList<QDoubleSpinBox *> spins =
             geomPane ? geomPane->findChildren<QDoubleSpinBox *>() : QList<QDoubleSpinBox *>();
-        // Origin X/Y, width, depth, height, front curve -- then the Steps
-        // shape's own Rise / Run / Step width, created after them and hidden
-        // for a box.
-        if (nameEdit == nullptr || spins.count() != 9)
+        // Origin X/Y, width, depth, height, front curve, facing -- then the
+        // Steps shape's own Rise / Run / Step width, created after them and
+        // hidden for a box.
+        if (nameEdit == nullptr || spins.count() != 10)
             return false;
         nameEdit->setText("Workflow Riser");
         spins[0]->setValue(3.0);   // origin X
@@ -12563,6 +12563,128 @@ void Monitor_Test::aBeamPastTheEndOfTheCycStillWashesIt()
         QVERIFY2(greenNear(QVector3D(1.3f, 0.5f, 2.5f)) > 20, "the cyc's end should take the light");
         // Far along the cloth, outside the beam: dark.
         QCOMPARE(greenNear(QVector3D(6.0f, 0.5f, 2.5f)), 0);
+    }
+    delete doc;
+}
+
+void Monitor_Test::rotatingASelectionTurnsItAboutItsMiddle()
+{
+    /* "can we fix to rotate a group": everything selected turns about the
+       middle of the selection -- each thing's place and its own facing, with
+       what is mounted on it -- and one undo puts it all back. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Meters);
+    StagePlatform *deck = props->addPlatform();
+    deck->setOriginX(0.0f); deck->setOriginY(0.0f);
+    deck->setWidth(2.0f); deck->setDepth(2.0f); deck->setHeight(0.3f);
+    Scenery *wall = props->addScenery();
+    wall->setKind(Scenery::Wall);
+    wall->setOriginX(5.0f); wall->setOriginY(1.0f);
+    wall->setWidth(2.0f); wall->setHeight(0.5f); wall->setThickness(0.1f);
+    Truss *bar = props->addTruss();
+    bar->setOrigin(QVector3D(0.0f, 4.0f, 3.0f));
+    bar->setDirection(QPointF(1.0, 0.0));
+    bar->setLength(4.0f);
+    Fixture *hung = new Fixture(doc);
+    hung->setChannels(4);
+    QVERIFY(doc->addFixture(hung));
+    FixtureRigProps rh;
+    rh.trussId = bar->id();
+    rh.trussOffset = 1.0f;
+    props->setFixtureRigProps(hung->id(), rh);
+    Fixture *free = new Fixture(doc);
+    free->setChannels(4);
+    free->setAddress(10);
+    QVERIFY(doc->addFixture(free));
+    props->setFixturePosition(free->id(), 0, 0, QVector3D(4000.0f, 0.0f, 0.0f));
+    const quint32 deckId = deck->id(), wallId = wall->id(), barId = bar->id();
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        MonitorGraphicsView *gv = mon.m_graphicsView;
+        gv->updatePlatforms();
+        QVERIFY(gv->selectAllMapItems() >= 4);
+        // The selection reaches x 0..6, y 0..4: its middle is (3, 2).
+        const QPointF pivot = gv->selectionPivot();
+        QVERIFY2(QLineF(pivot, QPointF(3.0, 2.0)).length() < 1e-3,
+                 qPrintable(QString("%1, %2").arg(pivot.x()).arg(pivot.y())));
+
+        QVERIFY(gv->rotateSelectedItems(90.0) >= 4);
+        // A quarter turn about (3, 2) sends (x, y) to (5 - y, x - 1).
+        StagePlatform *pl = props->platform(deckId);
+        QVERIFY(QLineF(pl->centre(), QPointF(4.0, 0.0)).length() < 1e-3);
+        QCOMPARE(pl->rotation(), 90.0f);
+        QVERIFY(gv->m_platformItems.value(deckId) != nullptr);
+        QCOMPARE(gv->m_platformItems.value(deckId)->rotation(), 90.0);
+        Scenery *w = props->scenery(wallId);
+        QVERIFY(qAbs(w->originX() - 4.0f) < 1e-3f && qAbs(w->originY() - 4.0f) < 1e-3f);
+        QCOMPARE(w->rotation(), 90.0f);
+        Truss *t = props->truss(barId);
+        QVERIFY(qAbs(t->origin().x() - 1.0f) < 1e-3f && qAbs(t->origin().y() + 1.0f) < 1e-3f);
+        QVERIFY(qAbs(t->direction().y() - 1.0) < 1e-4);
+        const QVector3D fp = props->fixtureRigPosition(free->id());
+        QVERIFY2(qAbs(fp.x() - 5.0f) < 1e-3f && qAbs(fp.y() - 3.0f) < 1e-3f,
+                 qPrintable(QString("%1, %2").arg(fp.x()).arg(fp.y())));
+        QCOMPARE(props->fixtureRigProps(free->id()).studioYaw, 90.0f);
+        // The one on the truss rides it and turns with it.
+        QCOMPARE(props->fixtureRigProps(hung->id()).studioYaw, 90.0f);
+        const QVector3D hp = props->fixtureRigPosition(hung->id());
+        QVERIFY2(qAbs(hp.x() - 1.0f) < 0.05f && qAbs(hp.y() - 0.0f) < 0.05f,
+                 qPrintable(QString("%1, %2").arg(hp.x()).arg(hp.y())));
+
+        // One undo: all of it back.
+        QVERIFY(gv->canUndo());
+        gv->undoLastMove();
+        pl = props->platform(deckId);
+        QCOMPARE(pl->rotation(), 0.0f);
+        QVERIFY(QLineF(pl->centre(), QPointF(1.0, 1.0)).length() < 1e-3);
+        QCOMPARE(props->scenery(wallId)->rotation(), 0.0f);
+        QVERIFY(qAbs(props->truss(barId)->direction().x() - 1.0) < 1e-4);
+        QCOMPARE(props->fixtureRigProps(free->id()).studioYaw, 0.0f);
+        QVERIFY(qAbs(props->fixtureRigPosition(free->id()).x() - 4.0f) < 1e-3f);
+        QVERIFY(!gv->canUndo());
+    }
+    delete doc;
+}
+
+void Monitor_Test::aTurnedDeckIsDrawnAndLitWhereItIs()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    StagePlatform *deck = props->addPlatform();
+    deck->setOriginX(0.0f); deck->setOriginY(0.0f);
+    deck->setWidth(4.0f); deck->setDepth(1.0f); deck->setHeight(1.0f);
+    {
+        StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+        v.resize(800, 600);
+        v.reload();
+        bool hit = false;
+        QVector3D n;
+        // (2, 2) is off the square deck, which reaches y 1 ...
+        double t = v.beamThrow(QVector3D(2.0f, 2.0f, 5.0f), QVector3D(0.0f, 0.0f, -1.0f), &hit, &n);
+        QVERIFY(qAbs(t - 5.0) < 0.01);
+        // ... and on it once it is turned a quarter about its middle (2, 0.5).
+        deck->setRotation(90.0f);
+        t = v.beamThrow(QVector3D(2.0f, 2.0f, 5.0f), QVector3D(0.0f, 0.0f, -1.0f), &hit, &n);
+        QVERIFY2(qAbs(t - 4.0) < 0.01, qPrintable(QString::number(t)));
+        t = v.beamThrow(QVector3D(3.5f, 0.5f, 5.0f), QVector3D(0.0f, 0.0f, -1.0f), &hit, &n);
+        QVERIFY2(qAbs(t - 5.0) < 0.01, qPrintable(QString::number(t)));
+
+        // Drawn turned: not the same picture as square.
+        v.setPlane(StructureStudioView::Angled);
+        v.setAngledView(0.0, 60.0);
+        v.reload();
+        const QImage turned = v.grab().toImage();
+        deck->setRotation(0.0f);
+        v.reload();
+        const QImage square = v.grab().toImage();
+        int changed = 0;
+        for (int y = 0; y < turned.height(); ++y)
+            for (int x = 0; x < turned.width(); ++x)
+                if (turned.pixel(x, y) != square.pixel(x, y))
+                    ++changed;
+        QVERIFY2(changed > 2000, qPrintable(QString("only %1 px differ").arg(changed)));
     }
     delete doc;
 }

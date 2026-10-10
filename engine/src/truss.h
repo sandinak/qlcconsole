@@ -350,6 +350,11 @@ struct FixtureRigProps
      *  0 = flat in its mounting face, which is every fixture that predates
      *  this, so old files are unchanged. */
     float            studioTilt = 0.0f;
+    /** A turn of the whole fixture about the vertical, degrees (+X toward
+     *  +Y, as everything on the plot turns): the face it is on, and so its
+     *  beam, turned with it. What a group or a platform/tower being turned
+     *  adds to everything on it. */
+    float            studioYaw = 0.0f;
 
     /** Faces the OTHER way across its mounting plane: a 180-degree roll about
      *  its own length. studioMount names a plane, not a direction -- the front

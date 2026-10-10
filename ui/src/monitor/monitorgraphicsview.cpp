@@ -50,6 +50,7 @@
 #include "monitorproperties.h"
 #include <cmath>
 #include "monitorgraphicsview.h"
+#include "righeads.h"
 #include "patchinventorydialog.h"
 #include "headtypesdialog.h"
 #include "monitorfixtureitem.h"
@@ -155,6 +156,18 @@ MonitorGraphicsView::MonitorGraphicsView(Doc *doc, QWidget *parent)
     QShortcut *ungroupSc = new QShortcut(QKeySequence(tr("Ctrl+Shift+G")), this);
     ungroupSc->setContext(Qt::WidgetWithChildrenShortcut);
     connect(ungroupSc, &QShortcut::activated, this, [this]() { ungroupSelectedItems(); });
+
+    // ] / [ turn the selection 15 degrees clockwise / anticlockwise (seen from
+    // above); } / { (Shift with them) a single degree.
+    const struct { const char *key; double deg; } turns[] = {
+        { "]", 15.0 }, { "[", -15.0 }, { "}", 1.0 }, { "{", -1.0 } };
+    for (const auto &tk : turns)
+    {
+        QShortcut *sc = new QShortcut(QKeySequence(QString::fromLatin1(tk.key)), this);
+        sc->setContext(Qt::WidgetWithChildrenShortcut);
+        const double deg = tk.deg;
+        connect(sc, &QShortcut::activated, this, [this, deg]() { rotateSelectedItems(deg); });
+    }
 
     // Refresh aim lines whenever the active scene's fixture/value list changes.
     //
@@ -283,8 +296,14 @@ void MonitorGraphicsView::refreshLabelRotations()
     {
         if (it->type() == QGraphicsSimpleTextItem::Type || it->type() == QGraphicsTextItem::Type)
         {
+            // A turned platform's or tower's name stays upright too (a truss's
+            // runs along it, as it always has).
+            qreal parentTurn = 0.0;
+            QGraphicsItem *host = it->parentItem();
+            if (dynamic_cast<PlatformItem *>(host) != nullptr || dynamic_cast<TowerItem *>(host) != nullptr)
+                parentTurn = host->rotation();
             it->setTransformOriginPoint(it->boundingRect().center());
-            it->setRotation(counter);
+            it->setRotation(counter - parentTurn);
         }
     }
 }
@@ -1864,10 +1883,12 @@ void MonitorGraphicsView::openStudioGroupForGroup(quint32 groupId)
         // unit follows the platform. Otherwise adopt the members' centroid.
         StagePlatform *pl = (g0.anchorKind == QStringLiteral("platform"))
                                 ? props->platform(g0.anchorId) : nullptr;
+        const QPointF corner = (pl != nullptr)
+            ? pl->toWorld(QPointF(double(pl->originX()), double(pl->originY()))) : QPointF();
         const QVector3D origin = (pl != nullptr)
-            ? QVector3D(pl->originX(), pl->originY(), 0.0f)
+            ? QVector3D(float(corner.x()), float(corner.y()), 0.0f)
             : (members.isEmpty() ? QVector3D() : (sum / float(members.size())));
-        props->setGroupFrame(groupId, origin, 0.0f);
+        props->setGroupFrame(groupId, origin, pl != nullptr ? pl->rotation() : 0.0f);
         props->setGroupHasFrame(groupId, true);
 
         foreach (quint32 fid, members)
@@ -1912,6 +1933,329 @@ void MonitorGraphicsView::openStudioGroupEditor(quint32 groupId)
     // editing; the old StudioGroupEditor lives on behind its "Group settings…"
     // button. Route the request up to the host.
     emit studioGroupEditRequested(groupId);
+}
+
+QPointF MonitorGraphicsView::selectionPivot() const
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    double x0 = 1e18, y0 = 1e18, x1 = -1e18, y1 = -1e18;
+    auto add = [&](double x, double y) {
+        x0 = qMin(x0, x); x1 = qMax(x1, x);
+        y0 = qMin(y0, y); y1 = qMax(y1, y);
+    };
+    auto add3 = [&](const QVector3D &w) { add(double(w.x()), double(w.y())); };
+    foreach (QGraphicsItem *gi, m_scene->selectedItems())
+    {
+        if (auto *mfi = dynamic_cast<MonitorFixtureItem *>(gi))
+            add3(props->fixtureRigPosition(mfi->fixtureID()));
+        else if (auto *ti = dynamic_cast<TrussItem *>(gi))
+        {
+            if (Truss *t = ti->truss()) { add3(t->origin()); add3(t->positionAt(t->length())); }
+        }
+        else if (auto *pi = dynamic_cast<PlatformItem *>(gi))
+        {
+            if (StagePlatform *pl = pi->platform())
+            {
+                foreach (const QPointF &q, pl->footprint(8))
+                    add(q.x(), q.y());
+            }
+        }
+        else if (auto *tg = dynamic_cast<TargetItem *>(gi))
+        {
+            if (StageTarget *t = tg->target()) add(double(t->x()), double(t->y()));
+        }
+        else if (auto *ps = dynamic_cast<PowerSourceItem *>(gi))
+        {
+            const QList<PowerSource> &src = m_doc->powerDistribution()->sources();
+            if (ps->sourceIndex() >= 0 && ps->sourceIndex() < src.size())
+                add(src.at(ps->sourceIndex()).posX, src.at(ps->sourceIndex()).posY);
+        }
+        else if (auto *nn = dynamic_cast<NetworkNodeItem *>(gi))
+        {
+            const QList<NetworkNode> &nodes = m_doc->networkTopology()->nodes();
+            if (nn->nodeIndex() >= 0 && nn->nodeIndex() < nodes.size())
+                add(nodes.at(nn->nodeIndex()).posX, nodes.at(nn->nodeIndex()).posY);
+        }
+        else if (auto *bi = dynamic_cast<PipeItem *>(gi))
+        {
+            if (Pipe *pp = bi->pipe()) { add3(pp->positionAt(0.0f)); add3(pp->positionAt(pp->length())); }
+        }
+        else if (auto *si = dynamic_cast<StandItem *>(gi))
+        {
+            if (Stand *st = si->stand()) add(double(st->originX()), double(st->originY()));
+        }
+        else if (auto *sc = dynamic_cast<SceneryItem *>(gi))
+        {
+            if (Scenery *s = sc->scenery())
+                for (int i = 0; i <= 4; ++i)
+                    add3(s->pointAt(-1.0 + i / 2.0, s->bottom()));
+        }
+        else if (auto *twi = dynamic_cast<TowerItem *>(gi))
+        {
+            if (Tower *tw = twi->tower())
+            {
+                foreach (const QPointF &q, tw->corners())
+                    add(q.x(), q.y());
+            }
+        }
+        else if (auto *ii = dynamic_cast<MonitorImageItem *>(gi))
+        {
+            const MonitorProperties::MonitorImage img = props->image(ii->imageId());
+            add(double(img.originX), double(img.originY));
+            add(double(img.originX + img.width), double(img.originY + img.height));
+        }
+    }
+    if (x0 > x1)
+        return QPointF();
+    return QPointF((x0 + x1) / 2.0, (y0 + y1) / 2.0);
+}
+
+int MonitorGraphicsView::rotateSelectedItems(double deg)
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    const QList<QGraphicsItem *> sel = m_scene->selectedItems();
+    if (sel.isEmpty() || qFuzzyIsNull(deg))
+        return 0;
+
+    const QPointF c = selectionPivot();
+    const double r = qDegreesToRadians(deg);
+    const double cs = qCos(r), sn = qSin(r);
+    // A plan point turned about the middle of the selection.
+    auto turnPt = [&](double x, double y) {
+        const double dx = x - c.x(), dy = y - c.y();
+        return QPointF(c.x() + dx * cs - dy * sn, c.y() + dx * sn + dy * cs);
+    };
+    auto turnDir = [&](const QPointF &d) {
+        return QPointF(d.x() * cs - d.y() * sn, d.x() * sn + d.y() * cs);
+    };
+    const float fdeg = float(deg);
+
+    // One undo step: the rig as it was, and the nodes and power sources
+    // (which live outside it) where they were.
+    m_openUndoBatch = ++m_undoBatch;
+    auto closeBatch = qScopeGuard([this]() { m_openUndoBatch = 0; });
+    if (m_rigSnapshotter)
+        pushRigUndo(m_rigSnapshotter());
+    UndoEntry outside;
+    outside.type = UndoEntry::ItemMove;
+
+    QSet<quint32> trusses, platforms, towers, pipes, frames;
+    QSet<quint32> fixtures;            // whose place is their own (free, on a deck)
+    int turned = 0;
+
+    foreach (QGraphicsItem *gi, sel)
+    {
+        if (auto *ti = dynamic_cast<TrussItem *>(gi))
+        {
+            Truss *t = ti->truss();
+            if (t == nullptr || t->isChildBar())
+                continue;                       // a bar follows the truss it is on
+            const QPointF o = turnPt(double(t->origin().x()), double(t->origin().y()));
+            t->setOrigin(QVector3D(float(o.x()), float(o.y()), t->origin().z()));
+            t->setDirection(turnDir(t->direction()));
+            trusses.insert(t->id());
+            ++turned;
+        }
+        else if (auto *pi = dynamic_cast<PlatformItem *>(gi))
+        {
+            StagePlatform *pl = pi->platform();
+            if (pl == nullptr)
+                continue;
+            const QPointF nc = turnPt(pl->centre().x(), pl->centre().y());
+            pl->setOriginX(float(nc.x() - double(pl->width()) / 2.0));
+            pl->setOriginY(float(nc.y() - double(pl->depth()) / 2.0));
+            pl->setRotation(pl->rotation() + fdeg);
+            platforms.insert(pl->id());
+            ++turned;
+        }
+        else if (auto *twi = dynamic_cast<TowerItem *>(gi))
+        {
+            Tower *tw = twi->tower();
+            if (tw == nullptr)
+                continue;
+            const QPointF nc = turnPt(tw->centre().x(), tw->centre().y());
+            tw->setOriginX(float(nc.x() - double(tw->width()) / 2.0));
+            tw->setOriginY(float(nc.y() - double(tw->depth()) / 2.0));
+            tw->setRotation(tw->rotation() + fdeg);
+            towers.insert(tw->id());
+            ++turned;
+        }
+        else if (auto *bi = dynamic_cast<PipeItem *>(gi))
+        {
+            Pipe *pp = bi->pipe();
+            if (pp == nullptr || pp->isStandMounted() || pp->isBarOnPipe())
+                continue;                       // these follow what they are on
+            const QPointF o = turnPt(double(pp->originX()), double(pp->originY()));
+            pp->setOriginX(float(o.x()));
+            pp->setOriginY(float(o.y()));
+            pp->setRunAngle(pp->runAngle() + fdeg);
+            pipes.insert(pp->id());
+            ++turned;
+        }
+        else if (auto *si = dynamic_cast<StandItem *>(gi))
+        {
+            Stand *st = si->stand();
+            if (st == nullptr)
+                continue;
+            const QPointF o = turnPt(double(st->originX()), double(st->originY()));
+            st->setOriginX(float(o.x()));
+            st->setOriginY(float(o.y()));
+            st->setRotation(st->rotation() + fdeg);
+            foreach (Pipe *pp, props->pipes())          // the pipe standing on it
+                if (pp->isStandMounted() && pp->standId() == st->id())
+                {
+                    pp->setOriginX(st->originX());
+                    pp->setOriginY(st->originY());
+                    pp->setRunAngle(pp->runAngle() + fdeg);
+                    pipes.insert(pp->id());
+                }
+            ++turned;
+        }
+        else if (auto *sc = dynamic_cast<SceneryItem *>(gi))
+        {
+            Scenery *s = sc->scenery();
+            if (s == nullptr)
+                continue;
+            const QPointF o = turnPt(double(s->originX()), double(s->originY()));
+            s->setOriginX(float(o.x()));
+            s->setOriginY(float(o.y()));
+            s->setRotation(s->rotation() + fdeg);
+            ++turned;
+        }
+        else if (auto *tg = dynamic_cast<TargetItem *>(gi))
+        {
+            StageTarget *t = tg->target();
+            if (t == nullptr || t->isBound())
+                continue;                       // a bound mark follows its structure
+            const QPointF o = turnPt(double(t->x()), double(t->y()));
+            t->setX(float(o.x()));
+            t->setY(float(o.y()));
+            ++turned;
+        }
+        else if (auto *ii = dynamic_cast<MonitorImageItem *>(gi))
+        {
+            MonitorProperties::MonitorImage img = props->image(ii->imageId());
+            if (img.plane != MonitorProperties::MonitorImage::Floor)
+                continue;                       // a backdrop stands where it stands
+            const QPointF nc = turnPt(double(img.originX + img.width / 2.0f),
+                                      double(img.originY + img.height / 2.0f));
+            img.originX = float(nc.x()) - img.width / 2.0f;
+            img.originY = float(nc.y()) - img.height / 2.0f;
+            img.rotation += fdeg;
+            props->setImage(img);
+            ++turned;
+        }
+        else if (auto *ps = dynamic_cast<PowerSourceItem *>(gi))
+        {
+            QList<PowerSource> &src = m_doc->powerDistribution()->sources();
+            const int i = ps->sourceIndex();
+            if (i < 0 || i >= src.size())
+                continue;
+            outside.itemKeys << qMakePair(QStringLiteral("power"), quint32(i));
+            outside.itemOrigins << QPointF(src[i].posX, src[i].posY);
+            const QPointF o = turnPt(src[i].posX, src[i].posY);
+            src[i].posX = o.x();
+            src[i].posY = o.y();
+            ++turned;
+        }
+        else if (auto *nn = dynamic_cast<NetworkNodeItem *>(gi))
+        {
+            QList<NetworkNode> &nodes = m_doc->networkTopology()->nodes();
+            const int i = nn->nodeIndex();
+            if (i < 0 || i >= nodes.size())
+                continue;
+            outside.itemKeys << qMakePair(QStringLiteral("network"), quint32(i));
+            outside.itemOrigins << QPointF(nodes[i].posX, nodes[i].posY);
+            const QPointF o = turnPt(nodes[i].posX, nodes[i].posY);
+            nodes[i].posX = o.x();
+            nodes[i].posY = o.y();
+            ++turned;
+        }
+        else if (auto *mfi = dynamic_cast<MonitorFixtureItem *>(gi))
+        {
+            fixtures.insert(mfi->fixtureID());
+            ++turned;
+        }
+    }
+
+    // Hangers on what turned turn with it (their angle runs the other way:
+    // 0 downstage, 90 stage left).
+    foreach (Hanger *h, props->hangers())
+        if ((h->parentKind() == Hanger::OnTruss && trusses.contains(h->parentId()))
+            || (h->parentKind() == Hanger::OnTower && towers.contains(h->parentId())))
+            h->setAngle(h->angle() - fdeg);
+
+    /* The fixtures: every one selected or on something that turned has its
+       facing turned; where its place is its own -- standing free, or on a
+       deck -- that goes round too. Studio frames carry their members. */
+    QSet<quint32> facing = fixtures;
+    foreach (Fixture *fx, m_doc->fixtures())
+    {
+        const quint32 fid = fx->id();
+        const FixtureRigProps rp = props->fixtureRigProps(fid);
+        if (trusses.contains(rp.trussId) || towers.contains(rp.towerId)
+            || pipes.contains(rp.pipeId) || platforms.contains(rp.riserPlatformId))
+            facing.insert(fid);
+        if (platforms.contains(rp.deckPlatformId))
+        {
+            facing.insert(fid);
+            fixtures.insert(fid);
+        }
+        if (rp.hangerId != UINT_MAX)
+            if (Hanger *h = props->hanger(rp.hangerId))
+                if ((h->parentKind() == Hanger::OnTruss && trusses.contains(h->parentId()))
+                    || (h->parentKind() == Hanger::OnTower && towers.contains(h->parentId())))
+                    facing.insert(fid);
+        const quint32 fg = props->fixtureFrameGroup(fid);
+        if (fg != 0 && (fixtures.contains(fid)
+                        || (props->group(fg).anchorKind == QStringLiteral("platform")
+                            && platforms.contains(props->group(fg).anchorId))))
+        {
+            facing.insert(fid);
+            frames.insert(fg);
+        }
+    }
+    foreach (quint32 fid, fixtures)
+    {
+        const FixtureRigProps rp = props->fixtureRigProps(fid);
+        const bool ownPlace = rp.trussId == Truss::invalidId() && rp.pipeId == UINT_MAX
+                              && rp.towerId == Tower::invalidId() && !rp.onRiser()
+                              && rp.hangerId == UINT_MAX && props->fixtureFrameGroup(fid) == 0;
+        if (!ownPlace)
+            continue;
+        const QVector3D p = props->fixturePosition(fid, 0, 0);       // mm
+        const QPointF o = turnPt(double(p.x()) / 1000.0, double(p.y()) / 1000.0);
+        props->setFixturePosition(fid, 0, 0, QVector3D(float(o.x() * 1000.0), float(o.y() * 1000.0), p.z()));
+    }
+    // A free studio frame turns about the same middle; one on a platform follows it.
+    foreach (quint32 fg, frames)
+    {
+        const MonitorProperties::MonitorGroup g = props->group(fg);
+        if (g.anchorKind == QStringLiteral("platform"))
+            continue;
+        const QPointF o = turnPt(double(g.origin.x()), double(g.origin.y()));
+        props->setGroupFrame(fg, QVector3D(float(o.x()), float(o.y()), g.origin.z()),
+                             g.rotation + fdeg);
+    }
+    foreach (quint32 fid, facing)
+        props->turnFixtureFacing(fid, fdeg);
+
+    props->recomputeAnchoredFrames();
+    props->recomputeChildTrusses();
+    props->recomputeHangers();
+    if (!outside.itemKeys.isEmpty())
+        pushUndo(outside);
+
+    updateTrusses();
+    updatePlatforms();
+    updatePowerSources();
+    updateNetworkNodes();
+    updateImages();
+    updateTargets();
+    refreshAllItems();
+    m_doc->setModified();
+    emit mapStructureChanged();
+    return turned;
 }
 
 int MonitorGraphicsView::ungroupSelectedItems()
@@ -2979,9 +3323,7 @@ float MonitorGraphicsView::floorHeightAt(float xMetres, float yMetres) const
     {
         if (p == nullptr || !p->solid())
             continue;
-        if (xMetres < p->originX() || xMetres > p->originX() + p->width())
-            continue;
-        if (yMetres < p->originY() || yMetres > p->originY() + p->depth())
+        if (!p->containsPoint(xMetres, yMetres))      // turned or rounded, too
             continue;
         best = qMax(best, p->topAt(xMetres, yMetres));   // the tread, on steps
     }
@@ -3048,15 +3390,8 @@ void MonitorGraphicsView::setViewPOV(ViewPOV pov)
 // agree. Defaults (Front face, angle 0) → along X, which is the common tape case.
 static QVector3D fixtureLongAxis(const FixtureRigProps &rp)
 {
-    const double th = qDegreesToRadians(double(rp.studioAngle));
-    const double c = qCos(th), s = qSin(th);
-    switch (rp.studioMount)
-    {
-    case 0:  return QVector3D(float(c), float(s), 0.0f);   // Top/deck: X-Y
-    case 2:  return QVector3D(0.0f, float(c), float(s));   // Side: Y-Z
-    case 1:
-    default: return QVector3D(float(c), 0.0f, float(s));   // Front/face: X-Z
-    }
+    // The same length the rig view draws, turned with its group or host.
+    return RigHeads::axis(rp);
 }
 
 void MonitorGraphicsView::updateFixture(quint32 id)
@@ -3974,11 +4309,31 @@ void MonitorGraphicsView::updatePlatforms()
             pxY = float(tl.y());
             pxW = float(((m_pov == PovFront) ? p->width() : p->depth()) * 1000.0f * scale);
             pxD = qMax(2.0f, float(p->height() * 1000.0f * scale));
+            if (p->isRotated())
+            {
+                // Turned, it is seen as wide as its outline reaches.
+                double ax = 1e9, ay = 1e9, bx = -1e9, by = -1e9;
+                foreach (const QPointF &q, p->footprint(16))
+                {
+                    ax = qMin(ax, q.x()); bx = qMax(bx, q.x());
+                    ay = qMin(ay, q.y()); by = qMax(by, q.y());
+                }
+                const QPointF a = projectMm(ax * 1000.0, ay * 1000.0, top * 1000.0);
+                const QPointF b = projectMm(bx * 1000.0, by * 1000.0, top * 1000.0);
+                pxX = float(qMin(a.x(), b.x()));
+                pxW = float(qAbs(b.x() - a.x()));
+            }
         }
 
         PlatformItem *pi = new PlatformItem(p, m_doc, pxX, pxY, pxW, pxD);
         pi->setView(m_pov == PovTop ? 0 : m_pov == PovSide ? 2 : 1);
-        pi->setMovable(!m_layoutLocked);
+        if (m_pov == PovTop && p->isRotated())
+        {
+            // Turned about its middle; its position is still the unturned corner.
+            pi->setTransformOriginPoint(pxW / 2.0, pxD / 2.0);
+            pi->setRotation(double(p->rotation()));
+        }
+        pi->setMovable(!m_layoutLocked && (m_pov == PovTop || !p->isRotated()));
         pi->showLabel(m_doc->monitorProperties()->layer(p->layerId()).labels);
         m_scene->addItem(pi);
         m_platformItems.insert(p->id(), pi);
@@ -4116,16 +4471,35 @@ void MonitorGraphicsView::updatePlatforms()
             const float pxW = float((tw->width() * 1000.0 * m_cellPixels) / m_unitValue);
             const float pxD = float((tw->depth() * 1000.0 * m_cellPixels) / m_unitValue);
             twi = new TowerItem(tw, m_doc, pxX, pxY, pxW, pxD);
+            if (tw->isRotated())
+            {
+                twi->setTransformOriginPoint(pxW / 2.0, pxD / 2.0);
+                twi->setRotation(double(tw->rotation()));
+            }
         }
         else
         {
-            const QPointF base = projectMm(tw->originX() * 1000.0, tw->originY() * 1000.0, 0.0);
+            QPointF base = projectMm(tw->originX() * 1000.0, tw->originY() * 1000.0, 0.0);
             const QPointF top  = projectMm(tw->originX() * 1000.0, tw->originY() * 1000.0, tw->height() * 1000.0);
-            const float pxW = float(((m_pov == PovFront) ? tw->width() : tw->depth()) * 1000.0f * m_cellPixels / m_unitValue);
+            float pxW = float(((m_pov == PovFront) ? tw->width() : tw->depth()) * 1000.0f * m_cellPixels / m_unitValue);
+            if (tw->isRotated())
+            {
+                // Turned, it is seen as wide as its corners reach.
+                double ax = 1e9, ay = 1e9, bx = -1e9, by = -1e9;
+                foreach (const QPointF &q, tw->corners())
+                {
+                    ax = qMin(ax, q.x()); bx = qMax(bx, q.x());
+                    ay = qMin(ay, q.y()); by = qMax(by, q.y());
+                }
+                const QPointF a = projectMm(ax * 1000.0, ay * 1000.0, 0.0);
+                const QPointF b = projectMm(bx * 1000.0, by * 1000.0, 0.0);
+                base.setX(qMin(a.x(), b.x()));
+                pxW = float(qAbs(b.x() - a.x()));
+            }
             const float pxH = float(qAbs(top.y() - base.y()));
             twi = new TowerItem(tw, m_doc, float(base.x()), float(base.y()), pxW, pxH, true);
         }
-        twi->setMovable(!m_layoutLocked);
+        twi->setMovable(!m_layoutLocked && (m_pov == PovTop || !tw->isRotated()));
         twi->showLabel(m_doc->monitorProperties()->layer(tw->layerId()).labels);
         m_scene->addItem(twi);
         m_towerItems.insert(tw->id(), twi);

@@ -431,6 +431,9 @@ protected slots:
     /** Add a cyclorama: where the canvas menu was opened, or across the back
      *  of the stage (full width, at the upstage edge) from the toolbar. */
     void slotAddCyclorama();
+    /** Ask how far, and turn the plot's selection (MonitorGraphicsView::
+     *  rotateSelectedItems()). */
+    void slotRotateSelection();
     /** Add a piece of scenery of @p kind (Scenery::Kind) where it usually
      *  goes, or where the canvas menu was opened; then edit it. */
     void slotAddScenery(int kind);
@@ -623,6 +626,7 @@ private:
         QString name;
         float   originX, originY;   ///< metres
         float   width, depth, height;
+        float   rotation, frontCurve;
         QColor  color;
     };
     struct TargetClip

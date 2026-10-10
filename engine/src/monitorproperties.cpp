@@ -1073,8 +1073,8 @@ static QVector3D barFaceVector(int face)
 void MonitorProperties::recomputeAnchoredFrames()
 {
     // A studio group anchored to a platform is SLAVED to it: its local frame
-    // origin tracks the platform's reference corner (upstage-left) with no
-    // rotation (platforms are axis-aligned). The origin Z is the platform's BASE
+    // origin tracks the platform's reference corner (upstage-left) and turns
+    // with it, so the frame's axes are the platform's own. The origin Z is the platform's BASE
     // — the floor, or the deck of a platform it's stacked on — so members stored
     // in group-local metres follow the platform in height as well as plan when it
     // moves/resizes/stacks, and the group's Front plane IS the riser face. Call
@@ -1087,9 +1087,83 @@ void MonitorProperties::recomputeAnchoredFrames()
         const StagePlatform *pl = m_platforms.value(g.anchorId, nullptr);
         if (pl == nullptr)
             continue;
-        g.origin   = QVector3D(pl->originX(), pl->originY(), platformBaseZ(pl->id()));
-        g.rotation = 0.0f;
+        const QPointF corner = pl->toWorld(QPointF(double(pl->originX()), double(pl->originY())));
+        g.origin   = QVector3D(float(corner.x()), float(corner.y()), platformBaseZ(pl->id()));
+        g.rotation = pl->rotation();
     }
+}
+
+void MonitorProperties::turnFixtureFacing(quint32 fid, float deltaDeg)
+{
+    if (deltaDeg == 0.0f)
+        return;
+    FixtureRigProps rp = fixtureRigProps(fid);
+    double y = std::fmod(double(rp.studioYaw + deltaDeg), 360.0);
+    if (y > 180.0) y -= 360.0;
+    if (y <= -180.0) y += 360.0;
+    rp.studioYaw = (qAbs(y) < 1e-4) ? 0.0f : float(y);
+    double pz = std::fmod(double(rp.panZeroDir + deltaDeg), 360.0);
+    if (pz < 0.0) pz += 360.0;
+    rp.panZeroDir = float(pz);
+    setFixtureRigProps(fid, rp);
+}
+
+void MonitorProperties::turnPlatform(quint32 id, float deg)
+{
+    StagePlatform *pl = m_platforms.value(id, nullptr);
+    if (pl == nullptr)
+        return;
+    const float before = pl->rotation();
+    pl->setRotation(deg);
+    const float delta = pl->rotation() - before;
+    if (delta == 0.0f)
+        return;
+    const QPointF c = pl->centre();
+    const double r = qDegreesToRadians(double(delta));
+    const double cs = qCos(r), sn = qSin(r);
+
+    QList<quint32> fids = m_rigProps.keys();
+    foreach (quint32 fid, fids)
+    {
+        const FixtureRigProps rp = m_rigProps.value(fid);
+        bool turns = (rp.riserPlatformId == id);
+        if (rp.deckPlatformId == id && m_fixtureItems.contains(fid))
+        {
+            // Standing on the deck: round its centre (the stored position is mm).
+            QVector3D &p = m_fixtureItems[fid].m_baseItem.m_position;
+            const double dx = double(p.x()) / 1000.0 - c.x(), dy = double(p.y()) / 1000.0 - c.y();
+            p.setX(float((c.x() + dx * cs - dy * sn) * 1000.0));
+            p.setY(float((c.y() + dx * sn + dy * cs) * 1000.0));
+            turns = true;
+        }
+        const quint32 fg = fixtureFrameGroup(fid);
+        if (fg != 0 && m_groups.value(fg).anchorKind == QStringLiteral("platform")
+            && m_groups.value(fg).anchorId == id)
+            turns = true;
+        if (turns)
+            turnFixtureFacing(fid, delta);
+    }
+    recomputeAnchoredFrames();
+}
+
+void MonitorProperties::turnTower(quint32 id, float deg)
+{
+    Tower *tw = m_towers.value(id, nullptr);
+    if (tw == nullptr)
+        return;
+    const float before = tw->rotation();
+    tw->setRotation(deg);
+    const float delta = tw->rotation() - before;
+    if (delta == 0.0f)
+        return;
+    QList<quint32> fids = m_rigProps.keys();
+    foreach (quint32 fid, fids)
+        if (m_rigProps.value(fid).towerId == id)
+            turnFixtureFacing(fid, delta);
+    // A hanger's angle runs the other way round (0 downstage, 90 stage left).
+    foreach (Hanger *h, hangersOn(Hanger::OnTower, id))
+        h->setAngle(h->angle() - delta);
+    recomputeHangers();
 }
 
 void MonitorProperties::recomputeChildTrusses()
@@ -1618,10 +1692,13 @@ void MonitorProperties::recomputeHangers()
             const Tower *tw = m_towers.value(h->parentId(), nullptr);
             if (tw == nullptr)
                 continue;
-            const QVector3D centre(tw->originX() + tw->width() * 0.5f,
-                                   tw->originY() + tw->depth() * 0.5f, h->along());
-            const float tx = qAbs(dir.x()) > 1e-4f ? (tw->width() * 0.5f) / qAbs(dir.x()) : 1e9f;
-            const float ty = qAbs(dir.y()) > 1e-4f ? (tw->depth() * 0.5f) / qAbs(dir.y()) : 1e9f;
+            const QVector3D centre(float(tw->centre().x()), float(tw->centre().y()), h->along());
+            // Out to its side, measured in the tower's own (turned) axes.
+            const double r = -qDegreesToRadians(double(tw->rotation()));
+            const float lx = float(double(dir.x()) * qCos(r) - double(dir.y()) * qSin(r));
+            const float ly = float(double(dir.x()) * qSin(r) + double(dir.y()) * qCos(r));
+            const float tx = qAbs(lx) > 1e-4f ? (tw->width() * 0.5f) / qAbs(lx) : 1e9f;
+            const float ty = qAbs(ly) > 1e-4f ? (tw->depth() * 0.5f) / qAbs(ly) : 1e9f;
             h->setFastened(centre + dir * qMin(tx, ty));
         }
     }
@@ -1685,7 +1762,7 @@ QVector3D MonitorProperties::targetAimPoint(const StageTarget *t, bool subjectMo
         else if (type == QLatin1String("tower"))
         {
             if (Tower *tw = tower(t->boundId()))
-                p = QVector3D(tw->originX(), tw->originY(), tw->height() * 0.5f);
+                p = QVector3D(float(tw->centre().x()), float(tw->centre().y()), tw->height() * 0.5f);
         }
     }
 
@@ -1985,10 +2062,12 @@ QVector3D MonitorProperties::fixtureBasePosition(quint32 fid) const
     if (tw != nullptr)
     {
         QVector3D p;
+        const QPointF at = tw->toWorld(QPointF(double(tw->originX() + rp.towerU),
+                                               double(tw->originY() + rp.towerV)));
         if (rp.towerMountSide == FixtureRigProps::TowerTop)
-            p = QVector3D(tw->originX() + rp.towerU, tw->originY() + rp.towerV, tw->height());
+            p = QVector3D(float(at.x()), float(at.y()), tw->height());
         else if (rp.towerMountSide == FixtureRigProps::TowerBottom)
-            p = QVector3D(tw->originX() + rp.towerU, tw->originY() + rp.towerV, 0.0f);
+            p = QVector3D(float(at.x()), float(at.y()), 0.0f);
         else
             p = tw->shelfPos(rp.towerShelf, rp.towerU, rp.towerV);
         p.setZ(p.z() + rp.mountZOffset);
@@ -2043,21 +2122,20 @@ QVector3D MonitorProperties::fixtureBasePosition(quint32 fid) const
                  * bottom of the box shining up through the top, and
                  * mountZOffset raises it within the box. Clamped, because a
                  * fixture that is inside something should not poke out of it. */
+                const QPointF at = pl->toWorld(QPointF(double(pl->originX() + rp.riserU),
+                                                       double(pl->originY() + rp.riserV)));
                 if (rp.placement == FixtureRigProps::Inside)
-                    return QVector3D(pl->originX() + rp.riserU,
-                                     pl->originY() + rp.riserV,
+                    return QVector3D(float(at.x()), float(at.y()),
                                      base + qBound(0.0f, rp.mountZOffset, pl->height()));
-                return QVector3D(pl->originX() + rp.riserU,
-                                 pl->originY() + rp.riserV,
-                                 base + pl->height());
+                return QVector3D(float(at.x()), float(at.y()), base + pl->height());
             }
             // Front (downstage) face: Y = the DOWNSTAGE edge (originY + depth —
             // originY is the upstage edge in this plan view), X across the
             // width, Z = up the face FROM the platform base (which may sit on a
             // lower platform, not the floor).
-            return QVector3D(pl->originX() + rp.riserU,
-                             pl->originY() + pl->depth(),
-                             platformBaseZ(pl->id()) + rp.riserV);
+            const QPointF at = pl->toWorld(QPointF(double(pl->originX() + rp.riserU),
+                                                   double(pl->originY() + pl->depth())));
+            return QVector3D(float(at.x()), float(at.y()), platformBaseZ(pl->id()) + rp.riserV);
         }
     }
 
@@ -2617,6 +2695,7 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
             }
             if (a.hasAttribute("SA")) rp.studioAngle = a.value("SA").toFloat();
             if (a.hasAttribute("ST")) rp.studioTilt = a.value("ST").toFloat();
+            if (a.hasAttribute("SY")) rp.studioYaw = a.value("SY").toFloat();
             if (a.hasAttribute("SF")) rp.studioFlip = (a.value("SF").toInt() != 0);
             if (a.hasAttribute("Boom"))
             {
@@ -3388,6 +3467,8 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
             doc->writeAttribute(QStringLiteral("SA"), QString::number(double(rp.studioAngle), 'f', 1));
         if (!qFuzzyIsNull(rp.studioTilt))
             doc->writeAttribute(QStringLiteral("ST"), QString::number(double(rp.studioTilt), 'f', 1));
+        if (!qFuzzyIsNull(rp.studioYaw))
+            doc->writeAttribute(QStringLiteral("SY"), QString::number(double(rp.studioYaw), 'f', 2));
         if (rp.studioFlip)
             doc->writeAttribute(QStringLiteral("SF"), QStringLiteral("1"));
         doc->writeEndElement();

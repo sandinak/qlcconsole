@@ -414,8 +414,9 @@ bool StructureStudioView::dragFixtureTo(quint32 fid, const QPointF &px)
         const QPointF ab = screenToPlane(px);
         if (m_plane == Top)
         {
-            rp.towerU = qBound(0.0f, float(ab.x() - t->originX()), t->width());
-            rp.towerV = qBound(0.0f, float(ab.y() - t->originY()), t->depth());
+            const QPointF loc = t->toLocal(ab);     // in the tower's own axes
+            rp.towerU = qBound(0.0f, float(loc.x() - t->originX()), t->width());
+            rp.towerV = qBound(0.0f, float(loc.y() - t->originY()), t->depth());
         }
         else
         {
@@ -461,8 +462,9 @@ bool StructureStudioView::dragFixtureTo(quint32 fid, const QPointF &px)
             // Top surface: U across width (X), V into depth (Y).
             if (m_plane == Top)
             {
-                rp.riserU = qBound(0.0f, float(ab.x() - pl->originX()), pl->width());
-                rp.riserV = qBound(0.0f, float(ab.y() - pl->originY()), pl->depth());
+                const QPointF loc = pl->toLocal(ab);    // in the platform's own axes
+                rp.riserU = qBound(0.0f, float(loc.x() - pl->originX()), pl->width());
+                rp.riserV = qBound(0.0f, float(loc.y() - pl->originY()), pl->depth());
             }
             else if (m_plane == Front)
                 rp.riserU = qBound(0.0f, float(ab.x() - pl->originX()), pl->width());
@@ -492,7 +494,7 @@ bool StructureStudioView::dragFixtureTo(quint32 fid, const QPointF &px)
             else if (m_plane == Side)
                 rp.riserV = qBound(0.0f, float(ab.y()), pl->height());
             else   // Top
-                rp.riserU = qBound(0.0f, float(ab.x() - pl->originX()), pl->width());
+                rp.riserU = qBound(0.0f, float(pl->toLocal(ab).x() - pl->originX()), pl->width());
         }
         props->setFixtureRigProps(fid, rp);
         return true;
@@ -1226,8 +1228,9 @@ void StructureStudioView::collectPointsFor(QList<QVector3D> &pts, Kind kind, qui
     {
         if (Tower *t = props->tower(id))
         {
-            pts << QVector3D(t->originX(), t->originY(), 0.0f);
-            pts << QVector3D(t->originX() + t->width(), t->originY() + t->depth(), t->height());
+            foreach (const QPointF &q, t->corners())
+                pts << QVector3D(float(q.x()), float(q.y()), 0.0f)
+                    << QVector3D(float(q.x()), float(q.y()), t->height());
         }
     }
     else if (kind == TrussKind)
@@ -1241,10 +1244,11 @@ void StructureStudioView::collectPointsFor(QList<QVector3D> &pts, Kind kind, qui
     else if (kind == PlatformKind)
     {
         if (StagePlatform *pl = props->platform(id))
-            for (int i = 0; i < 8; ++i)
-                pts << QVector3D(pl->originX() + ((i & 1) ? pl->width() : 0.0f),
-                                 pl->originY() + ((i & 2) ? pl->depth() : 0.0f),
-                                 (i & 4) ? pl->height() : 0.0f);
+        {
+            foreach (const QPointF &q, pl->footprint(8))
+                pts << QVector3D(float(q.x()), float(q.y()), 0.0f)
+                    << QVector3D(float(q.x()), float(q.y()), pl->height());
+        }
     }
     else if (kind == PipeKind)
     {
@@ -1984,6 +1988,29 @@ static void boxCorners(QVector3D out[8], float x0, float y0, float z0,
     out[6] = QVector3D(x1, y1, z1); out[7] = QVector3D(x0, y1, z1);
 }
 
+/* Turn a box's corners about the vertical by what @p toWorld does to a plan
+ * point -- a platform's or a tower's own facing. */
+template <typename Obj>
+static void turnCorners(QVector3D c[8], const Obj *o)
+{
+    if (o == nullptr || !o->isRotated())
+        return;
+    for (int i = 0; i < 8; ++i)
+    {
+        const QPointF w = o->toWorld(QPointF(double(c[i].x()), double(c[i].y())));
+        c[i].setX(float(w.x()));
+        c[i].setY(float(w.y()));
+    }
+}
+
+/* A plan point of a turned platform or tower, at height @p z. */
+template <typename Obj>
+static QVector3D turned(const Obj *o, float x, float y, float z)
+{
+    const QPointF w = o->toWorld(QPointF(double(x), double(y)));
+    return QVector3D(float(w.x()), float(w.y()), z);
+}
+
 /* An open lattice prism: four chords running end to end, the two end frames,
  * and diagonal bracing across each of the four sides.
  *
@@ -2164,8 +2191,10 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
     {
         Tower *t = props->tower(id);
         if (t == nullptr) return;
-        const float x0 = t->originX(), y0 = t->originY();
-        const float x1 = x0 + t->width(), y1 = y0 + t->depth(), h = t->height();
+        float x0 = t->originX(), y0 = t->originY();
+        float x1 = x0 + t->width(), y1 = y0 + t->depth();
+        const float h = t->height();
+        const QList<QPointF> tc = t->corners();     // turned, round from x0y0
         p.setPen(QPen(steel, 1.8));
         p.setBrush(QColor(90, 100, 120, 60));
         if (m_plane == Angled)
@@ -2176,6 +2205,7 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
                and the top face the B end, indices already matching. */
             QVector3D c[8];
             boxCorners(c, x0, y0, 0.0f, x1, y1, h);
+            turnCorners(c, t);
             const QVector3D endA[4] = { c[0], c[1], c[2], c[3] };
             const QVector3D endB[4] = { c[4], c[5], c[6], c[7] };
             drawLattice(p, endA, endB, steel, qMax(1, int(h / qMax(0.3f, t->width()))));
@@ -2183,16 +2213,17 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
             for (int i = 0; i < t->shelfCount(); ++i)
             {
                 const float z = t->shelfHeight(i);
-                const QVector3D sa(x0, y1, z), sb(x1, y1, z);
+                const QVector3D sa = turned(t, x0, y1, z), sb = turned(t, x1, y1, z);
                 emitLine(w2s(sa), w2s(sb), viewDepth(sa), viewDepth(sb),
                          steel.lighter(140), 1.6, p);
             }
         }
         else if (m_plane == Top)
         {
-            const QPointF a = w2s(QVector3D(x0, y0, 0));
-            const QPointF b = w2s(QVector3D(x1, y1, 0));
-            p.drawRect(QRectF(a, b).normalized());
+            QPolygonF plan;
+            foreach (const QPointF &q, tc)
+                plan << w2s(QVector3D(float(q.x()), float(q.y()), 0));
+            p.drawPolygon(plan);
             if (t->hasFaces())
             {
                 // Its faced sides, as thick edges in the panels' colour.
@@ -2200,8 +2231,8 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
                 if (fc.lightness() < 60)
                     fc = fc.lighter(260);           // a black facade, still seen on the dark plan
                 p.setPen(QPen(fc, 4.0, Qt::SolidLine, Qt::FlatCap));
-                const QPointF fl = w2s(QVector3D(x0, y1, 0)), fr = w2s(QVector3D(x1, y1, 0));
-                const QPointF bl = w2s(QVector3D(x0, y0, 0)), br = w2s(QVector3D(x1, y0, 0));
+                const QPointF fl = plan.at(3), fr = plan.at(2);
+                const QPointF bl = plan.at(0), br = plan.at(1);
                 if (t->facesSides() & Tower::FrontSide) p.drawLine(fl, fr);
                 if (t->facesSides() & Tower::BackSide)  p.drawLine(bl, br);
                 if (t->facesSides() & Tower::LeftSide)  p.drawLine(fr, br);
@@ -2218,6 +2249,17 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
             const bool isFeet = (props->gridUnits() == MonitorProperties::Feet);
             const double toDisp = isFeet ? 3.28084 : 1.0;
             const QString sfx = isFeet ? tr(" ft") : tr(" m");
+            if (t->isRotated())
+            {
+                // Seen flat, a turned tower is as wide as its corners reach.
+                x0 = y0 = 1e9f;
+                x1 = y1 = -1e9f;
+                foreach (const QPointF &q, tc)
+                {
+                    x0 = qMin(x0, float(q.x())); x1 = qMax(x1, float(q.x()));
+                    y0 = qMin(y0, float(q.y())); y1 = qMax(y1, float(q.y()));
+                }
+            }
             const QPointF a = w2s(QVector3D(x0, y0, 0));
             const QPointF b = w2s(QVector3D(x1, y1, h));
             p.drawRect(QRectF(a, b).normalized());
@@ -2500,6 +2542,7 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
             {
                 QVector3D c[8];
                 boxCorners(c, bk.x0, bk.y0, b0, bk.x1, bk.y1, b0 + bk.height);
+                turnCorners(c, pl);
                 drawSolidBox(p, c, pc, edge, topAlpha);
             }
         }
@@ -2516,11 +2559,33 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
                 return a.height > b.height;
             });
             foreach (const StagePlatform::Block &bk, bl)
-                outline(QRectF(w2s(QVector3D(bk.x0, bk.y0, b0)),
-                               w2s(QVector3D(bk.x1, bk.y1, m_plane == Top ? b0 : b0 + bk.height)))
+            {
+                const QList<QPointF> cn = pl->corners(bk);
+                if (m_plane == Top)
+                {
+                    // Each tread, turned with the flight.
+                    QPolygonF poly;
+                    foreach (const QPointF &q, cn)
+                        poly << w2s(QVector3D(float(q.x()), float(q.y()), b0));
+                    p.setBrush(fill);
+                    p.setPen(QPen(halo, 3.2));
+                    p.drawPolygon(poly);
+                    p.setBrush(Qt::NoBrush);
+                    p.setPen(QPen(edge, 1.6));
+                    p.drawPolygon(poly);
+                    continue;
+                }
+                float ax = 1e9f, ay = 1e9f, bx = -1e9f, by = -1e9f;
+                foreach (const QPointF &q, cn)
+                {
+                    ax = qMin(ax, float(q.x())); bx = qMax(bx, float(q.x()));
+                    ay = qMin(ay, float(q.y())); by = qMax(by, float(q.y()));
+                }
+                outline(QRectF(w2s(QVector3D(ax, ay, b0)), w2s(QVector3D(bx, by, b0 + bk.height)))
                             .normalized());
+            }
         }
-        else if (m_plane == Top && pl->hasRoundedFront())
+        else if (m_plane == Top && (pl->hasRoundedFront() || pl->isRotated()))
         {
             QPolygonF poly;
             foreach (const QPointF &q, pl->footprint(32))
@@ -2540,13 +2605,25 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
         {
             // Riser box silhouette from its BASE (which may sit on a lower
             // platform, not the floor) up to its deck top (base + own thickness).
+            // Turned, it is as wide as its outline reaches.
+            float ax = x0, ay = y0, bx = x1, by = y1;
+            if (pl->isRotated())
+            {
+                ax = ay = 1e9f;
+                bx = by = -1e9f;
+                foreach (const QPointF &q, pl->footprint(16))
+                {
+                    ax = qMin(ax, float(q.x())); bx = qMax(bx, float(q.x()));
+                    ay = qMin(ay, float(q.y())); by = qMax(by, float(q.y()));
+                }
+            }
             const float b0  = props->platformBaseZ(id);
             const float top = b0 + h;
-            const QPointF a = w2s(QVector3D(x0, y0, b0));
-            const QPointF b = w2s(QVector3D(x1, y1, top));
+            const QPointF a = w2s(QVector3D(ax, ay, b0));
+            const QPointF b = w2s(QVector3D(bx, by, top));
             outline(QRectF(a, b).normalized());
             p.setPen(QPen(edge.lighter(115), 1.8));   // deck line (bright, on top)
-            p.drawLine(w2s(QVector3D(x0, y0, top)), w2s(QVector3D(x1, y1, top)));
+            p.drawLine(w2s(QVector3D(ax, ay, top)), w2s(QVector3D(bx, by, top)));
         }
     }
     else if (kind == SceneryKind)
@@ -3023,7 +3100,8 @@ double StructureStudioView::beamThrow(const QVector3D &apex, const QVector3D &di
             if (t < 0.0 || (best > 0.0 && t >= best))
                 continue;
             const QVector3D at = apex + dir * float(t);
-            if (at.x() < bk.x0 || at.x() > bk.x1 || at.y() < bk.y0 || at.y() > bk.y1)
+            const QPointF loc = pl->toLocal(QPointF(double(at.x()), double(at.y())));
+            if (loc.x() < bk.x0 || loc.x() > bk.x1 || loc.y() < bk.y0 || loc.y() > bk.y1)
                 continue;
             if (!pl->containsPoint(at.x(), at.y()))   // off a rounded front's cut corners
                 continue;
@@ -4181,8 +4259,9 @@ void StructureStudioView::collectInsideLight(QPainter &p) const
         const QVector3D centre = fixtureCentre(fx->id());
         const float base = props->platformBaseZ(plId);
         StagePlatform::Block blk = pl->blocks().value(0);
+        const QPointF loc = pl->toLocal(QPointF(double(centre.x()), double(centre.y())));
         foreach (const StagePlatform::Block &bk, pl->blocks())
-            if (centre.x() >= bk.x0 && centre.x() <= bk.x1 && centre.y() >= bk.y0 && centre.y() <= bk.y1)
+            if (loc.x() >= bk.x0 && loc.x() <= bk.x1 && loc.y() >= bk.y0 && loc.y() <= bk.y1)
                 blk = bk;
         const float topZ = base + blk.height;
 
@@ -4480,11 +4559,16 @@ void StructureStudioView::drawTowerFaces(QPainter &p) const
             { Tower::BackSide,  { {x1, y0, z0}, {x0, y0, z0}, {x0, y0, z1}, {x1, y0, z1} }, { 0, -1, 0 } },
             { Tower::LeftSide,  { {x1, y1, z0}, {x1, y0, z0}, {x1, y0, z1}, {x1, y1, z1} }, { 1, 0, 0 } },
             { Tower::RightSide, { {x0, y0, z0}, {x0, y1, z0}, {x0, y1, z1}, {x0, y0, z1} }, { -1, 0, 0 } } };
-        for (const Side &side : sides)
+        const double yaw = qDegreesToRadians(double(t->rotation()));
+        for (Side side : sides)
         {
             if (!(t->facesSides() & side.bit))
                 continue;
-            const QVector3D n = side.n;
+            // Turned with the tower.
+            for (QVector3D &q : side.q)
+                q = turned(t, q.x(), q.y(), q.z());
+            const QVector3D n(float(double(side.n.x()) * qCos(yaw) - double(side.n.y()) * qSin(yaw)),
+                              float(double(side.n.x()) * qSin(yaw) + double(side.n.y()) * qCos(yaw)), 0.0f);
             emitPatternedFace(p, side.q, pattern, plain, t->facesPatternOpacity(),
                 [&](const QColor &albedo, const QVector3D &at) {
                     // The room on it, and whatever of the rig is pointed at it.
@@ -5202,6 +5286,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                 QVector3D hc[8];
                 boxCorners(hc, hx0, hy0, hb0,
                            hx0 + host->width(), hy0 + host->depth(), hb0 + host->height());
+                turnCorners(hc, host);
                 depthBias = qMax(0.0, boxNearFaceDepth(hc) + layer
                                       - boxNearFaceDepth(corner));
             }
@@ -6640,12 +6725,21 @@ void StructureStudioView::drawDimensions(QPainter &p) const
         }
     }
     else if (m_kind == PlatformKind)
-    { if (StagePlatform *pl = props->platform(m_id)) for (int i = 0; i < 8; ++i)
-        c << QVector3D(pl->originX() + ((i & 1) ? pl->width() : 0.0f),
-                       pl->originY() + ((i & 2) ? pl->depth() : 0.0f), (i & 4) ? pl->height() : 0.0f); }
+    {
+        if (StagePlatform *pl = props->platform(m_id))
+        {
+            foreach (const QPointF &q, pl->footprint(16))
+                c << QVector3D(float(q.x()), float(q.y()), 0.0f) << QVector3D(float(q.x()), float(q.y()), pl->height());
+        }
+    }
     else if (m_kind == TowerKind)
-    { if (Tower *t = props->tower(m_id)) c << QVector3D(t->originX(), t->originY(), 0)
-                                           << QVector3D(t->originX() + t->width(), t->originY() + t->depth(), t->height()); }
+    {
+        if (Tower *t = props->tower(m_id))
+        {
+            foreach (const QPointF &q, t->corners())
+                c << QVector3D(float(q.x()), float(q.y()), 0.0f) << QVector3D(float(q.x()), float(q.y()), t->height());
+        }
+    }
     else if (m_kind == StandKind)
     { if (Stand *s = props->stand(m_id)) { c << QVector3D(s->originX(), s->originY(), 0) << s->topPos();
         foreach (const Pipe *pp, standPipes(m_id)) c << pp->positionAt(0) << pp->positionAt(pp->length()); } }

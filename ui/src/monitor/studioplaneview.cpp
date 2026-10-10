@@ -178,9 +178,11 @@ void StudioPlaneView::refit()
         const float w = pl->width(), d = pl->depth(), h = pl->height();
         for (int i = 0; i < 8; ++i)
         {
-            const QVector3D corner(ox + ((i & 1) ? w : 0),
-                                   oy + ((i & 2) ? d : 0),
-                                   (i & 4) ? h : 0);
+            // Turned with the platform: the frame turns with it, so in the
+            // frame it is square again.
+            const QPointF xy = pl->toWorld(QPointF(double(ox + ((i & 1) ? w : 0)),
+                                                   double(oy + ((i & 2) ? d : 0))));
+            const QVector3D corner(float(xy.x()), float(xy.y()), (i & 4) ? h : 0);
             include(project(props->worldToGroupLocal(m_groupId, corner)));
         }
     }
@@ -383,7 +385,11 @@ void StudioPlaneView::drawStructure(QPainter &p) const
         }
         QPolygonF poly;
         foreach (const QVector3D &c, face)
-            poly << worldToScreen(project(props->worldToGroupLocal(m_groupId, c)));
+        {
+            const QPointF xy = pl->toWorld(QPointF(double(c.x()), double(c.y())));
+            const QVector3D w(float(xy.x()), float(xy.y()), c.z());
+            poly << worldToScreen(project(props->worldToGroupLocal(m_groupId, w)));
+        }
         p.drawPolygon(poly);
     }
     else if (g.anchorKind == QStringLiteral("truss"))

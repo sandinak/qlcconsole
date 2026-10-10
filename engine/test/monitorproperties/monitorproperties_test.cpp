@@ -25,6 +25,8 @@
 #include <QBuffer>
 #define private public
 #include "monitorproperties.h"
+#include "righeads.h"
+#include "hanger.h"
 #include "qlcphysical.h"
 #include "qlcchannel.h"
 #include "qlcfixturehead.h"
@@ -1807,6 +1809,148 @@ void MonitorProperties_Test::aRoundedFrontCutsTheCorners()
     QXmlStreamWriter w2(&b2);
     square.saveXML(&w2);
     QVERIFY(!b2.data().contains("FrontCurve"));
+}
+
+void MonitorProperties_Test::aPlatformTurnsAboutItsMiddle()
+{
+    // 4 m wide, 2 m deep, its middle at (5, 3); turned a quarter.
+    StagePlatform st(1);
+    st.setOriginX(3.0f);
+    st.setOriginY(2.0f);
+    st.setWidth(4.0f);
+    st.setDepth(2.0f);
+    QVERIFY(st.containsPoint(6.5f, 3.0f));
+    QVERIFY(!st.containsPoint(5.0f, 4.5f));
+    st.setRotation(90.0f);
+    QVERIFY(st.isRotated());
+    QCOMPARE(st.centre(), QPointF(5.0, 3.0));
+    // Now 2 m across and 4 m up and down stage.
+    QVERIFY(!st.containsPoint(6.5f, 3.0f));
+    QVERIFY(st.containsPoint(5.0f, 4.5f));
+    const QList<QPointF> fp = st.footprint();
+    QCOMPARE(fp.size(), 4);
+    // Its upstage-left corner (3, 2) goes round to (6, 1).
+    QVERIFY(qAbs(fp.at(0).x() - 6.0) < 1e-4 && qAbs(fp.at(0).y() - 1.0) < 1e-4);
+    // Local and world go back and forth.
+    const QPointF w(6.2, 4.1);
+    QVERIFY(QLineF(st.toWorld(st.toLocal(w)), w).length() < 1e-9);
+    // Kept between -180 and 180; saved, and only when turned.
+    st.setRotation(270.0f);
+    QCOMPARE(st.rotation(), -90.0f);
+    QBuffer buf;
+    buf.open(QIODevice::WriteOnly);
+    QXmlStreamWriter wr(&buf);
+    st.saveXML(&wr);
+    buf.close();
+    QXmlStreamReader r(buf.data());
+    r.readNextStartElement();
+    StagePlatform back(0);
+    QVERIFY(back.loadXML(r));
+    QCOMPARE(back.rotation(), -90.0f);
+
+    // Steps turned: the tread under a point is found in the flight's own axes.
+    StagePlatform steps(2);
+    steps.setOriginX(0.0f);
+    steps.setOriginY(0.0f);
+    steps.setSteps(2, 0.2f, 0.5f, 1.0f, StagePlatform::ClimbUpstage);   // 1 m x 1 m
+    const float lowAt = steps.topAt(0.5f, 0.9f);                      // downstage: bottom step
+    QCOMPARE(lowAt, 0.2f);
+    steps.setRotation(180.0f);                                         // now it climbs downstage
+    QCOMPARE(steps.topAt(0.5f, 0.9f), 0.4f);
+}
+
+void MonitorProperties_Test::whatIsOnAPlatformOrTowerTurnsWithIt()
+{
+    Doc doc(this);
+    MonitorProperties *props = doc.monitorProperties();
+    StagePlatform *pl = props->addPlatform();
+    pl->setOriginX(0.0f);
+    pl->setOriginY(0.0f);
+    pl->setWidth(2.0f);
+    pl->setDepth(2.0f);
+    pl->setHeight(0.5f);
+
+    // On its front face, at its middle; and standing on its deck, off-centre.
+    Fixture *face = new Fixture(&doc);
+    face->setChannels(1);
+    QVERIFY(doc.addFixture(face));
+    FixtureRigProps rf;
+    rf.riserPlatformId = pl->id();
+    rf.riserFace = FixtureRigProps::RiserFront;
+    rf.riserU = 1.0f;
+    rf.riserV = 0.25f;
+    props->setFixtureRigProps(face->id(), rf);
+    QVERIFY(qAbs(props->fixtureRigPosition(face->id()).y() - 2.0f) < 1e-4f);
+
+    Fixture *deck = new Fixture(&doc);
+    deck->setChannels(1);
+    deck->setAddress(10);
+    QVERIFY(doc.addFixture(deck));
+    props->setFixturePosition(deck->id(), 0, 0, QVector3D(1500.0f, 1000.0f, 0.0f));
+    FixtureRigProps rd;
+    rd.deckPlatformId = pl->id();
+    props->setFixtureRigProps(deck->id(), rd);
+
+    props->turnPlatform(pl->id(), 90.0f);
+    // The front face now looks stage right: (1, 2) went round the middle (1, 1) to (0, 1).
+    const QVector3D f = props->fixtureRigPosition(face->id());
+    QVERIFY2(qAbs(f.x() - 0.0f) < 1e-4f && qAbs(f.y() - 1.0f) < 1e-4f,
+             qPrintable(QString("%1, %2").arg(f.x()).arg(f.y())));
+    QCOMPARE(props->fixtureRigProps(face->id()).studioYaw, 90.0f);
+    QCOMPARE(props->fixtureRigProps(face->id()).panZeroDir, 90.0f);
+    // The deck one: (1.5, 1) round to (1, 1.5), still on top.
+    const QVector3D d = props->fixtureRigPosition(deck->id());
+    QVERIFY2(qAbs(d.x() - 1.0f) < 1e-3f && qAbs(d.y() - 1.5f) < 1e-3f && qAbs(d.z() - 0.5f) < 1e-3f,
+             qPrintable(QString("%1, %2, %3").arg(d.x()).arg(d.y()).arg(d.z())));
+
+    // Its facing: a front-face fixture's depth looks upstage (+Y); turned a
+    // quarter, toward stage right (-X).
+    QVector3D L, N, H;
+    RigHeads::frame(props->fixtureRigProps(face->id()), L, N, H);
+    QVERIFY2(qAbs(N.x() + 1.0f) < 1e-4f && qAbs(N.y()) < 1e-4f,
+             qPrintable(QString("%1, %2, %3").arg(N.x()).arg(N.y()).arg(N.z())));
+    QVERIFY(qAbs(RigHeads::axis(props->fixtureRigProps(face->id())).y() - 1.0f) < 1e-4f);
+
+    // A tower: its shelf fixture goes round, and a hanger on its side with it.
+    Tower *tw = props->addTower();
+    tw->setOriginX(10.0f);
+    tw->setOriginY(10.0f);
+    tw->setWidth(0.4f);
+    tw->setDepth(0.4f);
+    tw->addShelf(1.0f);
+    Fixture *shelf = new Fixture(&doc);
+    shelf->setChannels(1);
+    shelf->setAddress(20);
+    QVERIFY(doc.addFixture(shelf));
+    FixtureRigProps rs;
+    rs.towerId = tw->id();
+    rs.towerShelf = 0;
+    rs.towerU = 0.4f;           // its stage-left edge, middle depth
+    rs.towerV = 0.2f;
+    props->setFixtureRigProps(shelf->id(), rs);
+    Hanger *h = props->addHanger(Hanger::OnTower, tw->id());
+    h->setAngle(90.0f);         // out of its stage-left side
+    props->turnTower(tw->id(), 90.0f);
+    const QVector3D sp = props->fixtureRigPosition(shelf->id());
+    QVERIFY2(qAbs(sp.x() - 10.2f) < 1e-4f && qAbs(sp.y() - 10.4f) < 1e-4f,
+             qPrintable(QString("%1, %2").arg(sp.x()).arg(sp.y())));
+    QCOMPARE(props->fixtureRigProps(shelf->id()).studioYaw, 90.0f);
+    QCOMPARE(h->angle(), 0.0f);                       // now out of its downstage side
+
+    // Saved with the fixture.
+    QByteArray ws;
+    QXmlStreamWriter ww(&ws);
+    ww.writeStartDocument();
+    QVERIFY(doc.saveXML(&ww));
+    ww.writeEndDocument();
+    Doc other(this);
+    QXmlStreamReader rr(ws);
+    while (rr.readNextStartElement() && rr.name() != QStringLiteral("Engine"))
+        ;
+    QVERIFY(other.loadXML(rr));
+    QCOMPARE(other.monitorProperties()->fixtureRigProps(face->id()).studioYaw, 90.0f);
+    QCOMPARE(other.monitorProperties()->platform(pl->id())->rotation(), 90.0f);
+    QCOMPARE(other.monitorProperties()->tower(tw->id())->rotation(), 90.0f);
 }
 
 void MonitorProperties_Test::aFixtureOnStepsStandsOnItsTread()

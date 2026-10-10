@@ -96,8 +96,21 @@ public:
     void setTopMaterial(TopMaterial m) { m_topMaterial = m; }
     void  setHeight(float h) { m_height = (h >= 0.0f) ? h : 0.0f; }
 
+    /** Which way it faces, degrees about its centre (0: square to the stage,
+     *  the front downstage; turning +X toward +Y, as everything else on the
+     *  plot does). Its own geometry -- the origin, width and depth, blocks(),
+     *  frontEdgeAt() -- is LOCAL: the platform as it would be unturned, in
+     *  the same plan coordinates. toWorld()/toLocal() go between the two. */
+    float rotation() const { return m_rotation; }
+    void  setRotation(float deg);
+    bool  isRotated() const { return m_rotation != 0.0f; }
+    /** The middle of its footprint (turning does not move it). */
+    QPointF centre() const;
+    QPointF toWorld(const QPointF &local) const;
+    QPointF toLocal(const QPointF &world) const;
+
     /** Return true if the point (x, y) in metres falls within this platform
-     *  (inside its rounded front, when it has one). */
+     *  (inside its rounded front, when it has one). World coordinates. */
     bool containsPoint(float x, float y) const;
 
     /** A rounded front: how far the middle of the downstage edge reaches past
@@ -115,8 +128,10 @@ public:
     float frontEdgeAt(float x) const;
 
     /** Its outline on the floor, corner to corner round the front --
-     *  @p segments panels along a rounded front. Metres, plan coordinates. */
+     *  @p segments panels along a rounded front. Metres, world coordinates
+     *  (turned); localFootprint() is the same outline unturned. */
     QList<QPointF> footprint(int segments = 24) const;
+    QList<QPointF> localFootprint(int segments = 24) const;
 
     /********************************************************************
      * Shape: a box, or a flight of steps
@@ -150,15 +165,18 @@ public:
     /** Back to a plain box, keeping the outside dimensions. */
     void setBoxShape() { m_shape = BoxShape; }
 
-    /** Height of the walking surface above the platform's own base at (x, y)
+    /** Height of the walking surface above the platform's own base at world (x, y)
      *  -- height() for a box, the tread there for steps (the nearest tread
      *  for a point off the platform; callers decide whether it is on it). */
     float topAt(float x, float y) const;
 
     /** The solid as boxes standing on the base: one for a box, one per step
-     *  (each from the base up to its own tread). Metres, plan coordinates. */
+     *  (each from the base up to its own tread). Metres, LOCAL plan
+     *  coordinates; corners() gives a block's four corners in the world. */
     struct Block { float x0, y0, x1, y1, height; };
     QList<Block> blocks() const;
+    /** A block's corners on the floor, turned: x0y0, x1y0, x1y1, x0y1. */
+    QList<QPointF> corners(const Block &b) const;
 
     /********************************************************************
      * Appearance
@@ -204,6 +222,7 @@ private:
     float   m_depth   = 2.0f;
     float   m_height  = 0.5f;
     float   m_frontCurve = 0.0f;
+    float   m_rotation = 0.0f;
     TopMaterial m_topMaterial = SolidTop;
     Shape   m_shape = BoxShape;
     Climb   m_climb = ClimbUpstage;

@@ -13,6 +13,7 @@
 #include <QXmlStreamWriter>
 
 #include <QtMath>
+#include <cmath>
 
 #include "stageplatform.h"
 
@@ -36,6 +37,7 @@
 #define KXMLPlatformRun     QStringLiteral("StepRun")
 #define KXMLPlatformClimb   QStringLiteral("StepClimb")
 #define KXMLPlatformFrontCurve QStringLiteral("FrontCurve")
+#define KXMLPlatformRotation QStringLiteral("Rotation")
 
 StagePlatform::StagePlatform(quint32 id, QObject *parent)
     : QObject(parent)
@@ -44,10 +46,55 @@ StagePlatform::StagePlatform(quint32 id, QObject *parent)
 {
 }
 
+void StagePlatform::setRotation(float deg)
+{
+    // -180 .. 180, so a turn round and back reads as no turn at all.
+    double d = std::fmod(double(deg), 360.0);
+    if (d > 180.0) d -= 360.0;
+    if (d <= -180.0) d += 360.0;
+    m_rotation = (qAbs(d) < 1e-4) ? 0.0f : float(d);
+}
+
+QPointF StagePlatform::centre() const
+{
+    return QPointF(double(m_originX) + double(m_width) / 2.0,
+                   double(m_originY) + double(m_depth) / 2.0);
+}
+
+static QPointF turn(const QPointF &p, const QPointF &about, double deg)
+{
+    if (deg == 0.0)
+        return p;
+    const double r = qDegreesToRadians(deg);
+    const double c = qCos(r), s = qSin(r);
+    const double dx = p.x() - about.x(), dy = p.y() - about.y();
+    return QPointF(about.x() + dx * c - dy * s, about.y() + dx * s + dy * c);
+}
+
+QPointF StagePlatform::toWorld(const QPointF &local) const
+{
+    return turn(local, centre(), double(m_rotation));
+}
+
+QPointF StagePlatform::toLocal(const QPointF &world) const
+{
+    return turn(world, centre(), -double(m_rotation));
+}
+
 bool StagePlatform::containsPoint(float x, float y) const
 {
-    return x >= m_originX && x <= m_originX + m_width
-        && y >= m_originY && y <= frontEdgeAt(x);
+    const QPointF l = toLocal(QPointF(double(x), double(y)));
+    const float lx = float(l.x()), ly = float(l.y());
+    return lx >= m_originX && lx <= m_originX + m_width
+        && ly >= m_originY && ly <= frontEdgeAt(lx);
+}
+
+QList<QPointF> StagePlatform::corners(const Block &b) const
+{
+    return QList<QPointF>() << toWorld(QPointF(double(b.x0), double(b.y0)))
+                            << toWorld(QPointF(double(b.x1), double(b.y0)))
+                            << toWorld(QPointF(double(b.x1), double(b.y1)))
+                            << toWorld(QPointF(double(b.x0), double(b.y1)));
 }
 
 float StagePlatform::frontCurve() const
@@ -71,6 +118,14 @@ float StagePlatform::frontEdgeAt(float x) const
 }
 
 QList<QPointF> StagePlatform::footprint(int segments) const
+{
+    QList<QPointF> out;
+    foreach (const QPointF &q, localFootprint(segments))
+        out << toWorld(q);
+    return out;
+}
+
+QList<QPointF> StagePlatform::localFootprint(int segments) const
 {
     QList<QPointF> out;
     const double x0 = double(m_originX), x1 = double(m_originX + m_width);
@@ -136,7 +191,8 @@ float StagePlatform::topAt(float x, float y) const
         return m_height;
     // Off the edge counts as the nearest tread: a fixture standing at the
     // very edge is on that step, not on the floor.
-    const float d = qBound(0.0f, intoFlight(this, x, y), float(m_stepCount) * m_stepRun);
+    const QPointF l = toLocal(QPointF(double(x), double(y)));
+    const float d = qBound(0.0f, intoFlight(this, float(l.x()), float(l.y())), float(m_stepCount) * m_stepRun);
     const int k = qBound(0, int(d / m_stepRun), m_stepCount - 1);
     return float(k + 1) * m_stepRise;
 }
@@ -191,6 +247,7 @@ bool StagePlatform::loadXML(QXmlStreamReader &root)
     if (a.hasAttribute(KXMLPlatformLayerId)) m_layerId = a.value(KXMLPlatformLayerId).toUInt();
     if (a.hasAttribute(KXMLPlatformGroupId)) m_groupId = a.value(KXMLPlatformGroupId).toUInt();
     if (a.hasAttribute(KXMLPlatformFrontCurve)) setFrontCurve(a.value(KXMLPlatformFrontCurve).toFloat());
+    if (a.hasAttribute(KXMLPlatformRotation)) setRotation(a.value(KXMLPlatformRotation).toFloat());
     if (a.hasAttribute(KXMLPlatformSteps))
     {
         // Width/Depth/Height above are the flight's outside already; this
@@ -234,6 +291,8 @@ bool StagePlatform::saveXML(QXmlStreamWriter *doc) const
         doc->writeAttribute(KXMLPlatformGroupId, QString::number(m_groupId));
     if (m_frontCurve > 0.0f)
         doc->writeAttribute(KXMLPlatformFrontCurve, QString::number(double(m_frontCurve), 'f', 3));
+    if (m_rotation != 0.0f)
+        doc->writeAttribute(KXMLPlatformRotation, QString::number(double(m_rotation), 'f', 2));
     if (m_shape == StepsShape)              // a plain box writes nothing new
     {
         doc->writeAttribute(KXMLPlatformSteps, QString::number(m_stepCount));
