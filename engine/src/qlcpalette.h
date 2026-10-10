@@ -23,6 +23,8 @@
 #include <QColor>
 #include <QObject>
 #include <QVariant>
+#include <QHash>
+#include <QSet>
 
 class QXmlStreamReader;
 class QXmlStreamWriter;
@@ -162,8 +164,12 @@ public:
      * look's colour[k] lands on set[colorSetOffset + k]; sets past the fixture's
      * count are ignored. 0 = normal (primary) for a single colour look.
      */
+    /** @p onlyHeads, when given, limits what is set per head to those heads
+     *  of each fixture it names (a fixture group's own heads); a fixture it
+     *  does not name keeps all of them. */
     QList<SceneValue> valuesFromFixtures(Doc *doc, QList<quint32>fixtures,
-                                         const Scene *owner = nullptr, int colorSetOffset = 0);
+                                         const Scene *owner = nullptr, int colorSetOffset = 0,
+                                         const QHash<quint32, QSet<int> > *onlyHeads = nullptr);
     QList<SceneValue> valuesFromFixtureGroups(Doc *doc, QList<quint32>groups,
                                               const Scene *owner = nullptr, int colorSetOffset = 0);
 

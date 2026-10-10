@@ -27,6 +27,7 @@
 #include "effectscriptrunner.h"
 #include "aimsolver.h"
 #include "qlcpalette.h"
+#include "grouphead.h"
 #include "effectscriptcache.h"
 #include "qlcchannel.h"
 #include "qlccapability.h"
@@ -314,9 +315,17 @@ static bool sceneHasFollowSpot(Doc *doc, const Scene *scene)
 }
 
 QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtures,
-                                                 const Scene *owner, int colorSetOffset)
+                                                 const Scene *owner, int colorSetOffset,
+                                                 const QHash<quint32, QSet<int> > *onlyHeads)
 {
     QList<SceneValue> list;
+    // Whether head @p h of fixture @p fid is one this is for (see onlyHeads).
+    auto headWanted = [onlyHeads](quint32 fid, int h) {
+        if (onlyHeads == nullptr)
+            return true;
+        auto it = onlyHeads->constFind(fid);
+        return it == onlyHeads->constEnd() || it->contains(h) || it->contains(-1);
+    };
 
     int fxCount = fixtures.count();
     // normalized progress in [ 0.0, 1.0 ] range
@@ -460,6 +469,8 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
 
                 for (int i = 0; i < fixture->heads(); i++)
                 {
+                    if (!headWanted(id, i))
+                        continue;           // not one of the group's heads
                     quint32 headDimmerChannel = fixture->channelNumber(QLCChannel::Intensity, QLCChannel::MSB, i);
                     if (headDimmerChannel != QLCChannel::invalid())
                     {
@@ -504,6 +515,11 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
 
                 for (int i = 0; i < fixture->heads(); i++)
                 {
+                    /* Only the group's own heads: a group of a bar's RGB pixels
+                       must not light its separate white pixels too ("lighting
+                       the white leds as well as the RGB"). */
+                    if (!headWanted(id, i))
+                        continue;
                     // White/Amber/UV emitter values: explicit wauv, else auto
                     // White = min(R,G,B) so RGBW fixtures light their white LED.
                     QColor emitters = wauv;
@@ -993,6 +1009,7 @@ QList<SceneValue> QLCPalette::valuesFromFixtureGroups(Doc *doc, QList<quint32> g
                                                       const Scene *owner, int colorSetOffset)
 {
     QList<quint32> fixturesList;
+    QHash<quint32, QSet<int> > heads;       // each fixture's heads that are in a group
 
     foreach (quint32 id, groups)
     {
@@ -1000,10 +1017,14 @@ QList<SceneValue> QLCPalette::valuesFromFixtureGroups(Doc *doc, QList<quint32> g
         if (group == NULL)
             continue;
 
-        fixturesList.append(group->fixtureList());
+        foreach (quint32 fid, group->fixtureList())
+            if (!fixturesList.contains(fid))
+                fixturesList.append(fid);
+        foreach (const GroupHead &gh, group->headList())
+            heads[gh.fxi].insert(gh.head);
     }
 
-    return valuesFromFixtures(doc, fixturesList, owner, colorSetOffset);
+    return valuesFromFixtures(doc, fixturesList, owner, colorSetOffset, &heads);
 }
 
 qreal QLCPalette::valueFactor(qreal progress)

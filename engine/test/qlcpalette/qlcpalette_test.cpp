@@ -29,6 +29,10 @@
 #include "scenevalue.h"
 #include "fixture.h"
 #include "doc.h"
+#include "qlcpoint.h"
+#include "qlcfixturehead.h"
+#include "grouphead.h"
+#include "fixturegroup.h"
 
 void QLCPalette_Test::initialization()
 {
@@ -316,6 +320,66 @@ void QLCPalette_Test::aGoboLookReachesTheGoboChannel()
     QCOMPARE(int(vals.first().value), 49);
 
     spot->setFixtureDefinition(nullptr, nullptr);   // def is on the stack
+}
+
+void QLCPalette_Test::aColourLookOnAGroupOnlyLightsTheGroupsHeads()
+{
+    /* "lighting the white leds as well as the RGB": a bar whose RGB pixels
+       and white pixels are separate heads, and a group of only the RGB ones.
+       A colour look on the group must not reach the white heads. */
+    QLCFixtureDef def;
+    def.setManufacturer("Test");
+    def.setModel("Bar");
+    QLCFixtureMode *mode = new QLCFixtureMode(&def);
+    mode->setName("4ch");
+    const QLCChannel::Preset presets[] = { QLCChannel::IntensityRed, QLCChannel::IntensityGreen,
+                                           QLCChannel::IntensityBlue, QLCChannel::IntensityWhite };
+    for (int i = 0; i < 4; i++)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(QString("ch%1").arg(i));
+        ch->setPreset(presets[i]);
+        def.addChannel(ch);
+        mode->insertChannel(ch, i);
+    }
+    QLCFixtureHead rgb, white;
+    rgb.addChannel(0); rgb.addChannel(1); rgb.addChannel(2);
+    white.addChannel(3);
+    mode->insertHead(-1, rgb);
+    mode->insertHead(-1, white);
+    def.addMode(mode);
+
+    Doc doc(this);
+    Fixture *bar = new Fixture(&doc);
+    bar->setFixtureDefinition(&def, mode);
+    QVERIFY(doc.addFixture(bar));
+    QCOMPARE(bar->heads(), 2);
+    FixtureGroup *grp = new FixtureGroup(&doc);
+    grp->setName("Bar RGB");
+    grp->setSize(QSize(1, 1));
+    QVERIFY(grp->assignHead(QLCPoint(0, 0), GroupHead(bar->id(), 0)));
+    QVERIFY(doc.addFixtureGroup(grp));
+
+    auto channelsSet = [](const QList<SceneValue> &vals) {
+        QMap<quint32, int> m;
+        for (const SceneValue &v : vals)
+            m[v.channel] = v.value;
+        return m;
+    };
+    for (const QString &value : { QString("#ffffff"), QString("#ffffffff0000") })
+    {
+        QLCPalette white(QLCPalette::Color);
+        white.setValue(value);
+        // The group: its RGB head lit, the white head not touched.
+        const QMap<quint32, int> g = channelsSet(white.valuesFromFixtureGroups(&doc, { grp->id() }));
+        QVERIFY2(!g.contains(3), qPrintable(value));
+        QVERIFY2(g.value(0) == 255 && g.value(1) == 255 && g.value(2) == 255, qPrintable(value));
+        // The fixture itself, all its heads: the white head too.
+        const QMap<quint32, int> f = channelsSet(white.valuesFromFixtures(&doc, { bar->id() }));
+        QVERIFY2(f.value(3) == 255, qPrintable(value));
+    }
+
+    bar->setFixtureDefinition(nullptr, nullptr);    // def is on the stack
 }
 
 QTEST_GUILESS_MAIN(QLCPalette_Test)
