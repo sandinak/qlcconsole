@@ -558,6 +558,10 @@ void App::init()
     addTab(w, QIcon(":/virtualconsole.png"), tr("Virtual Console"));
     w = new SimpleDesk(m_tab, m_doc);
     addTab(w, QIcon(":/slidermatrix.png"), tr("Simple Desk"));
+    /* Functions: no tab ("I keep hitting it by mistake instead of
+       Programming"), but there to open from the Window menu, in a window of
+       its own. Closing that window puts it away again. */
+    parkContext(tr("Functions"));
 
     // Load and apply the tab label mode preference.
     {
@@ -2778,13 +2782,42 @@ void App::showContext(const QString &tabLabel)
         dw->activateWindow();
         return;
     }
+
+    /* Put away (parkContext()): open it in a window of its own. */
+    foreach (QWidget *w, m_parkedContexts)
+        if (w != NULL && w->property("tabLabel").toString() == tabLabel)
+        {
+            openContextWindow(w, tabLabel);
+            return;
+        }
+}
+
+void App::parkContext(const QString &tabLabel)
+{
+    for (int t = 0; t < m_tab->count(); ++t)
+    {
+        if (m_tab->tabBar()->tabData(t).toString() != tabLabel)
+            continue;
+        QWidget *context = m_tab->widget(t);
+        context->setProperty("tabIndex", t);
+        context->setProperty("tabIcon", QVariant::fromValue(m_tab->tabIcon(t)));
+        context->setProperty("tabLabel", tabLabel);
+        context->setProperty("parked", true);
+        m_tab->removeTab(t);
+        context->setParent(this);
+        context->hide();
+        m_parkedContexts << context;
+        updateWindowTitle();
+        return;
+    }
 }
 
 QStringList App::detachedContexts() const
 {
     QStringList out;
     foreach (DetachedContext *dw, findChildren<DetachedContext *>())
-        if (dw->centralWidget() != NULL)     // put back, a window holds nothing
+        if (dw->centralWidget() != NULL      // put back, a window holds nothing
+            && !dw->centralWidget()->property("parked").toBool())   // no tab to go back to
             out << dw->centralWidget()->property("tabLabel").toString();
     return out;
 }
@@ -2848,7 +2881,11 @@ void App::slotDetachContext(int index)
     // never shifts to reflect what's actually still showing.
     m_tab->removeTab(index);
     updateWindowTitle();
+    openContextWindow(context, tabLabel);
+}
 
+void App::openContextWindow(QWidget *context, const QString &tabLabel)
+{
     DetachedContext *detachedWindow = new DetachedContext(this);
     detachedWindow->setCentralWidget(context);
     detachedWindow->resize(800, 600);
@@ -2876,6 +2913,14 @@ void App::slotReattachContext()
     int tabIndex = context->property("tabIndex").toInt();
     QIcon tabIcon = context->property("tabIcon").value<QIcon>();
     QString tabLabel = context->property("tabLabel").toString();
+
+    if (context->property("parked").toBool())
+    {
+        // It has no tab: put it away again until it is asked for
+        context->setParent(this);
+        context->hide();
+        return;
+    }
 
     qDebug() << "Reattaching context" << tabIndex << tabLabel << context;
 
@@ -3640,10 +3685,18 @@ void App::applyTabLabelMode()
     if (!m_tab)
         return;
     const int count = m_tab->count();
-    for (int i = 0; i < count && i < m_tabOriginals.size(); ++i)
+    for (int i = 0; i < count; ++i)
     {
-        const QString &origText = m_tabOriginals.at(i).first;
-        const QIcon   &origIcon = m_tabOriginals.at(i).second;
+        /* By the tab's own label, not its place: with a view put away or in
+           a window of its own, the places no longer line up. */
+        int o = -1;
+        for (int k = 0; k < m_tabOriginals.size() && o < 0; ++k)
+            if (m_tabOriginals.at(k).first == m_tab->tabBar()->tabData(i).toString())
+                o = k;
+        if (o < 0)
+            continue;
+        const QString &origText = m_tabOriginals.at(o).first;
+        const QIcon   &origIcon = m_tabOriginals.at(o).second;
         switch (m_tabLabelMode)
         {
         case TabIconOnly:

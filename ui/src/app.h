@@ -324,6 +324,10 @@ public slots:
      *  to its tab if it is docked, or raise its own window if it has been
      *  detached. */
     void showContext(const QString &tabLabel);
+    /** Take a view off the tab bar, there to open from the Window menu in a
+     *  window of its own (showContext()); closing that window puts it away
+     *  again. Functions lives this way. */
+    void parkContext(const QString &tabLabel);
 
     /** The views broken out into their own windows, by tab label. */
     QStringList detachedContexts() const;
@@ -335,6 +339,11 @@ public slots:
     void updateWindowMenu();
 
     void slotDetachContext(int index);
+private:
+    /** Show @p context in a window of its own, titled for @p tabLabel. */
+    void openContextWindow(QWidget *context, const QString &tabLabel);
+    QList<QWidget *> m_parkedContexts;      ///< views with no tab (parkContext())
+public slots:
     void slotReattachContext();
 
     void slotHelpIndex();

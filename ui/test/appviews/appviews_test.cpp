@@ -35,6 +35,7 @@
 #include "monitor.h"
 #define protected public
 #include "app.h"
+#include "functionmanager.h"
 #undef protected
 #undef private
 
@@ -129,7 +130,7 @@ void AppViews_Test::theWindowMenuFindsAndPutsBackBrokenOutViews()
     QVERIFY(windowMenu != nullptr);
     QTabWidget *tabs = m_app->m_tab;
     const int views = tabs->count();
-    QCOMPARE(m_app->m_windowJumps.size(), views);
+    QCOMPARE(m_app->m_windowJumps.size(), views + 1);    // and Functions, which has no tab
 
     const QString label = tabs->tabBar()->tabData(2).toString();
     m_app->slotDetachContext(2);
@@ -160,6 +161,50 @@ void AppViews_Test::theWindowMenuFindsAndPutsBackBrokenOutViews()
     m_app->reattachAllContexts();
     QVERIFY(m_app->detachedContexts().isEmpty());
     QCOMPARE(tabs->count(), views);
+}
+
+/* Functions has no tab ("I keep hitting it by mistake instead of
+   Programming"), but opens from the Window menu in its own window; closed,
+   it is put away again -- not made a tab. */
+void AppViews_Test::functionsOpensFromTheWindowMenuNotATab()
+{
+    QTabWidget *tabs = m_app->m_tab;
+    const QString functions = QString("Functions");
+    for (int i = 0; i < tabs->count(); ++i)
+        QVERIFY2(tabs->tabBar()->tabData(i).toString() != functions, "Functions should have no tab");
+    const int views = tabs->count();
+
+    QAction *jump = nullptr;
+    foreach (QAction *a, m_app->m_windowJumps)
+        if (a->data().toString() == functions)
+            jump = a;
+    QVERIFY2(jump != nullptr, "Functions should be in the Window menu");
+    jump->trigger();
+    DetachedContext *dw = nullptr;
+    foreach (DetachedContext *w, m_app->findChildren<DetachedContext *>())
+        if (w->centralWidget() != nullptr && w->centralWidget() == FunctionManager::instance())
+            dw = w;
+    QVERIFY2(dw != nullptr && dw->isVisible(), "picking it should open its window");
+    QVERIFY(FunctionManager::instance()->isVisible());
+    QVERIFY2(m_app->detachedContexts().isEmpty(), "it has no tab to be put back in");
+
+    dw->close();
+    QCOMPARE(tabs->count(), views);
+    QVERIFY(!FunctionManager::instance()->isVisible());
+    QVERIFY(FunctionManager::instance()->parentWidget() == m_app);
+
+    // And again, after closing.
+    jump->trigger();
+    QVERIFY(FunctionManager::instance()->isVisible());
+    foreach (DetachedContext *w, m_app->findChildren<DetachedContext *>())
+        if (w->centralWidget() == FunctionManager::instance())
+            w->close();
+
+    // The tabs keep their own labels with one gone from among them.
+    m_app->setTabLabelMode(App::TabTextOnly);
+    for (int i = 0; i < tabs->count(); ++i)
+        QCOMPARE(tabs->tabText(i), tabs->tabBar()->tabData(i).toString());
+    m_app->setTabLabelMode(App::TabIconAndText);
 }
 
 void AppViews_Test::theRigOverviewOpensWithoutTakingYouToTheStudio()
