@@ -311,9 +311,30 @@ void MasterTimer::removeFunction(Function* function)
     // iterates m_functionList, so once this returns the timer thread is
     // guaranteed not to be ticking this function: the caller (Doc) can then
     // delete it safely, on its own thread (preserving QObject thread affinity).
-    QMutexLocker locker(&m_functionListMutex);
-    m_startQueue.removeAll(function);
-    m_functionList.removeAll(function);
+    /* A running one is STOPPED first, the way a tick stops it: postRun() lets
+       go of what it drives -- its faders, a chaser's steps. Taken out of the
+       list without it, its faders stayed in the universes with nothing left to
+       dismiss them, and the last thing it sent hung on the fixtures ("every
+       time I run a function and then remove it .. the last thing sent hangs").
+       The universes are claimed before the list lock, in the tick's own order. */
+    Doc *doc = qobject_cast<Doc *>(parent());
+    QList<Universe *> universes;
+    if (doc != nullptr)
+        universes = doc->inputOutputMap()->claimUniverses();
+    {
+        QMutexLocker locker(&m_functionListMutex);
+        const bool ticking = m_functionList.contains(function);
+        m_startQueue.removeAll(function);
+        m_functionList.removeAll(function);
+        if (ticking && function->isRunning())
+        {
+            function->stop(FunctionParent::master());
+            function->postRun(this, universes);
+            emit functionStopped(function->id());
+        }
+    }
+    if (doc != nullptr)
+        doc->inputOutputMap()->releaseUniverses();
 }
 
 void MasterTimer::stopAllFunctions()

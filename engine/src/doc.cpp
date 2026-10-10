@@ -1986,20 +1986,24 @@ bool Doc::deleteFunction(quint32 id)
 {
     if (m_functions.contains(id) == true)
     {
-        Function* func = m_functions.take(id);
+        Function* func = m_functions.value(id);
         Q_ASSERT(func != NULL);
+
+        // Remove it from the MasterTimer's running list / start queue first
+        // (synchronised with the tick) so the timer thread cannot be ticking it,
+        // then delete it here on the Doc thread (preserving QObject affinity).
+        // Deleting it without this removal would be a use-after-free in
+        // timerTickFunctions if the function is running. A running one is
+        // stopped there -- while it is still in the Doc, so anything its
+        // stopping asks the Doc about (a chaser's steps) is still found.
+        masterTimer()->removeFunction(func);
+        m_functions.remove(id);
 
         if (m_startupFunctionId == id)
             m_startupFunctionId = Function::invalidId();
 
         emit functionRemoved(id);
         setModified();
-        // Remove it from the MasterTimer's running list / start queue first
-        // (synchronised with the tick) so the timer thread cannot be ticking it,
-        // then delete it here on the Doc thread (preserving QObject affinity).
-        // Deleting it without this removal would be a use-after-free in
-        // timerTickFunctions if the function is running.
-        masterTimer()->removeFunction(func);
         delete func;
 
         return true;

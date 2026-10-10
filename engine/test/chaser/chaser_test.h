@@ -31,6 +31,7 @@ private slots:
     void initTestCase();
     void cleanupTestCase();
     void init();
+    void deletingARunningFunctionLetsGoOfItsChannels();
     void cleanup();
 
     void initial();
