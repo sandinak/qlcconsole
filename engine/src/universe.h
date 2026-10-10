@@ -29,6 +29,10 @@
 
 #include "inputpatch.h"
 #include "qlcchannel.h"
+#include "fixturepower.h"
+#include <QMutex>
+#include <QHash>
+#include <QPair>
 
 class QXmlStreamReader;
 class QLCInputProfile;
@@ -389,6 +393,36 @@ protected:
 
     /** DMX writer thread worker method */
     void run() override;
+
+    /*********************************************************************
+     * Power limits
+     *********************************************************************/
+public:
+    /** A fixture held to a maximum draw: its first channel in this universe
+     *  and its draw model (PowerModel). */
+    struct PowerLimit
+    {
+        quint32 fixtureId;
+        int base;
+        PowerModel model;
+    };
+
+    /** The fixtures held to a maximum draw in this universe (PowerLimiter). */
+    void setPowerLimits(const QVector<PowerLimit> &limits);
+
+    /** The fixtures held back as of the last output: fixture -> (amps it
+     *  asks for, amps it is held to). */
+    QHash<quint32, QPair<double, double> > powerHeldBack() const;
+
+private:
+    /** Hold each limited fixture in @p out to its maximum draw, scaling its
+     *  emitters together so its colour stays. False when none is limited. */
+    bool applyPowerLimits(QByteArray &out);
+
+    mutable QMutex m_powerMutex;
+    QVector<PowerLimit> m_powerLimits;
+    QHash<quint32, QPair<double, double> > m_powerHeldBack;
+    QByteArray m_lastLimited;
 
 signals:
     void universeWritten(quint32 universeID, const QByteArray& universeData);

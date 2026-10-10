@@ -25,6 +25,8 @@ add_library(${module_name} SHARED
     efxfixture.cpp efxfixture.h
     fadechannel.cpp fadechannel.h
     fixture.cpp fixture.h
+    fixturepower.cpp fixturepower.h
+    powerlimiter.cpp powerlimiter.h
     fixturegroup.cpp fixturegroup.h
     function.cpp function.h
     genericdmxsource.cpp genericdmxsource.h

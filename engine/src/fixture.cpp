@@ -1296,6 +1296,12 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
         {
             ipAddress = xmlDoc.readElementText();
         }
+        else if (xmlDoc.name() == KXMLFixturePower)
+        {
+            PowerProfile pp;
+            pp.loadXML(xmlDoc);
+            m_powerProfile = pp;
+        }
         else if (xmlDoc.name() == KXMLFixtureTransport)
         {
             transport = xmlDoc.readElementText() == QLatin1String("WLED") ? WledTransport : ArtNetTransport;
@@ -1605,8 +1611,19 @@ bool Fixture::saveXML(QXmlStreamWriter *doc) const
         }
     }
 
+    /* What it draws, and the most it may */
+    m_powerProfile.saveXML(doc);
+
     /* End the <Fixture> tag */
     doc->writeEndElement();
 
     return true;
+}
+
+void Fixture::setPowerProfile(const PowerProfile &profile)
+{
+    if (profile == m_powerProfile)
+        return;
+    m_powerProfile = profile;
+    emit changed(m_id);
 }

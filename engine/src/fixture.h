@@ -28,6 +28,7 @@
 #include <QMap>
 
 #include "qlcchannel.h"
+#include "fixturepower.h"
 #include "qlcfixturedef.h"
 
 class QString;
@@ -211,6 +212,10 @@ public:
     Transport transport() const { return Transport(m_transport); }
     void setTransport(Transport t) { m_transport = int(t); }
 
+    /** What it draws, as measured, and the most it may (FixturePower). */
+    PowerProfile powerProfile() const { return m_powerProfile; }
+    void setPowerProfile(const PowerProfile &profile);
+
     /**
      * Set the fixture instance's DMX universe
      *
@@ -393,6 +398,7 @@ protected:
     int m_connection;
     QString m_ipAddress;
     int m_transport = ArtNetTransport;
+    PowerProfile m_powerProfile;
 
     /** Flag that indicates if this fixture crosses a DMX Universe */
     bool m_crossUniverse;

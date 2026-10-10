@@ -74,6 +74,7 @@ add_library(${module_name}
     inputchanneleditor.cpp inputchanneleditor.h inputchanneleditor.ui
     inputoutputmanager.cpp inputoutputmanager.h
     connectionstree.cpp connectionstree.h
+    powerprofiledialog.cpp powerprofiledialog.h
     universeoutputview.cpp universeoutputview.h
     deviceprofile.cpp deviceprofile.h
     universepatchgrid.cpp universepatchgrid.h

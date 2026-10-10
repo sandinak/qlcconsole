@@ -89,6 +89,9 @@
 #undef private
 
 #include "monitor_test.h"
+#include "fixturepower.h"
+#include "powerlimiter.h"
+#include "powerprofiledialog.h"
 #include "monitorproperties.h"
 #include "truss.h"
 #include "stageplatform.h"
@@ -17872,6 +17875,151 @@ void Monitor_Test::fixturePropertiesForSeveralIsMixedAndLive()
     foreach (quint32 id, ids)                               // Cancel: back
         QCOMPARE(props->fixtureRigProps(id).studioTilt, 0.0f);
     QCOMPARE(props->fixtureRigProps(ids.last()).panZeroDir, 90.0f);
+}
+
+void Monitor_Test::aMaxDrawIsSetOnEverySelectedFixture()
+{
+    /* "set maximum brightness per fixture .. and can be applied per
+       multiselect": two fixtures with different caps read "mixed"; set, it is
+       set on both, live; Cancel puts both back; OK keeps it. */
+    FixtureCleanup cleanup(m_doc);
+    QList<quint32> ids;
+    for (int i = 0; i < 2; ++i)
+    {
+        Fixture *fx = new Fixture(m_doc);
+        fx->setName(QString("Hog %1").arg(i + 1));
+        fx->setChannels(1);
+        fx->setAddress(460 + quint32(i) * 4);
+        QVERIFY(m_doc->addFixture(fx));
+        cleanup.ids << fx->id();
+        ids << fx->id();
+        PowerProfile pp;
+        pp.colourAmps.insert(int(QLCChannel::NoColour), 6.0);
+        pp.maxAmps = (i == 0) ? 2.0 : 3.0;
+        fx->setPowerProfile(pp);
+        m_doc->monitorProperties()->setFixturePosition(fx->id(), 0, 0, QVector3D(1000 + i * 1000, 3000, 0));
+    }
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+    foreach (quint32 id, ids)
+        rig.gv->addFixture(id, m_doc->monitorProperties()->fixtureItem(id, 0, 0).m_position.toPointF());
+
+    QString maxText, note;
+    double live = -1.0;
+    driveDialog([&](QWidget *modal) {
+        QDoubleSpinBox *mx = modal->findChild<QDoubleSpinBox *>("fixtureMaxAmps");
+        QLabel *n = modal->findChild<QLabel *>("fixturePowerNote");
+        if (mx == nullptr || n == nullptr)
+            return false;
+        maxText = mx->text();
+        note = n->text();
+        mx->setValue(4.0);
+        live = m_doc->fixture(ids.last())->powerProfile().maxAmps;
+        return true;
+    }, false);
+    rig.mon->editFixturesProperties(ids);
+    QCOMPARE(maxText, QString("mixed"));
+    QVERIFY2(note.contains("2 of 2"), qPrintable(note));
+    QCOMPARE(live, 4.0);                                     // live, on both
+    QCOMPARE(m_doc->fixture(ids.first())->powerProfile().maxAmps, 2.0);   // Cancel: back
+    QCOMPARE(m_doc->fixture(ids.last())->powerProfile().maxAmps, 3.0);
+
+    driveDialog([](QWidget *modal) {
+        QDoubleSpinBox *mx = modal->findChild<QDoubleSpinBox *>("fixtureMaxAmps");
+        if (mx == nullptr)
+            return false;
+        mx->setValue(5.0);
+        return true;
+    });
+    rig.mon->editFixturesProperties(ids);
+    foreach (quint32 id, ids)
+        QCOMPARE(m_doc->fixture(id)->powerProfile().maxAmps, 5.0);
+    QCOMPARE(m_doc->fixture(ids.first())->powerProfile().colourAmps.value(int(QLCChannel::NoColour)), 6.0);
+}
+
+void Monitor_Test::measuringPowerDrivesEachStateAndKeepsTheReadings()
+{
+    FixtureCleanup cleanup(m_doc);
+    // An RGB par: red, green, blue, no dimmer.
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("RGB Par");
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("3ch");
+    const QLCChannel::Preset presets[] = { QLCChannel::IntensityRed, QLCChannel::IntensityGreen,
+                                           QLCChannel::IntensityBlue };
+    QLCFixtureHead hd;
+    for (int i = 0; i < 3; ++i)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(QString("c%1").arg(i));
+        ch->setPreset(presets[i]);
+        def->addChannel(ch);
+        mode->insertChannel(ch, quint32(i));
+        hd.addChannel(quint32(i));
+    }
+    mode->insertHead(-1, hd);
+    def->addMode(mode);
+    QVERIFY(m_doc->fixtureDefCache()->addFixtureDef(def));
+    QList<quint32> ids;
+    for (int i = 0; i < 2; ++i)
+    {
+        Fixture *fx = new Fixture(m_doc);
+        fx->setFixtureDefinition(def, mode);
+        fx->setAddress(470 + quint32(i) * 4);
+        QVERIFY(m_doc->addFixture(fx));
+        cleanup.ids << fx->id();
+        ids << fx->id();
+    }
+    Fixture *par = m_doc->fixture(ids.first());
+    PowerProfile capped;
+    capped.maxAmps = 1.0;
+    m_doc->fixture(ids.last())->setPowerProfile(capped);
+
+    PowerMeasureDialog dlg(m_doc, ids);
+    // Off, red, green, blue, half, full.
+    QCOMPARE(dlg.steps().size(), 6);
+    QVERIFY(m_doc->powerLimiter()->isMeasuring(par->id()));
+    auto sent = [this, par]() {
+        QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+        ua.at(int(par->universe()))->processFaders();
+        QByteArray out = *ua.at(int(par->universe()))->postGMValues();
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        return QList<int>() << uchar(out.at(470)) << uchar(out.at(471)) << uchar(out.at(472));
+    };
+    QDoubleSpinBox *amps = dlg.findChild<QDoubleSpinBox *>("measureAmps");
+    QPushButton *next = dlg.findChild<QPushButton *>("measureNext");
+    QVERIFY(amps != nullptr && next != nullptr);
+    const double readings[] = { 0.1, 0.8, 0.6, 0.6, 0.6, 1.9 };
+    const QList<QList<int> > expect = { { 0, 0, 0 }, { 255, 0, 0 }, { 0, 255, 0 }, { 0, 0, 255 },
+                                        { 128, 128, 128 }, { 255, 255, 255 } };
+    for (int i = 0; i < 6; ++i)
+    {
+        QCOMPARE(dlg.current(), i);
+        QCOMPARE(sent(), expect.at(i));
+        amps->setValue(readings[i]);
+        if (i < 5)
+            next->click();
+    }
+    QCheckBox *all = dlg.findChild<QCheckBox *>("measureAll");
+    QVERIFY(all != nullptr && all->isChecked());
+    next->click();                                      // Finish
+    QCOMPARE(dlg.result(), int(QDialog::Accepted));
+
+    // Given back: its channels no longer driven, its cap back on.
+    QCOMPARE(sent(), QList<int>({ 0, 0, 0 }));
+    QVERIFY(!m_doc->powerLimiter()->isMeasuring(par->id()));
+    foreach (quint32 id, ids)
+    {
+        const PowerProfile pp = m_doc->fixture(id)->powerProfile();
+        QCOMPARE(pp.colourAmps.value(int(QLCChannel::Red)), 0.8);
+        QCOMPARE(pp.colourAmps.value(int(QLCChannel::Blue)), 0.6);
+        QCOMPARE(pp.standbyAmps, 0.1);
+        QCOMPARE(pp.halfAmps, 0.6);
+        QCOMPARE(pp.fullAmps, 1.9);
+    }
+    QCOMPARE(m_doc->fixture(ids.last())->powerProfile().maxAmps, 1.0);   // its own cap kept
+    foreach (quint32 id, ids)
+        m_doc->fixture(id)->setFixtureDefinition(nullptr, nullptr);
 }
 
 void Monitor_Test::aPersonsHeightIsSetInTheTargetDialog()

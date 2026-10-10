@@ -51,6 +51,8 @@
 #include <QFormLayout>
 #include <QWidgetAction>
 #include <QInputDialog>
+#include <QXmlStreamWriter>
+#include <QXmlStreamReader>
 #include "studiotemplate.h"
 #include <QLineEdit>
 #include <QListWidget>
@@ -1178,11 +1180,18 @@ void Monitor::fillGraphicsView(bool keepView)
 QByteArray Monitor::rigSnapshot() const
 {
     QHash<quint32, QString> names;
+    QHash<quint32, QByteArray> power;     // what each draws, and its cap (undoable too)
     foreach (Fixture *fx, m_doc->fixtures())
+    {
         names.insert(fx->id(), fx->name());
+        QByteArray xml;
+        QXmlStreamWriter w(&xml);
+        fx->powerProfile().saveXML(&w);
+        power.insert(fx->id(), xml);
+    }
     QByteArray out;
     QDataStream ds(&out, QIODevice::WriteOnly);
-    ds << m_props->snapshot(m_doc) << names;
+    ds << m_props->snapshot(m_doc) << names << power;
     return out;
 }
 
@@ -1190,10 +1199,24 @@ void Monitor::restoreRig(const QByteArray &snap)
 {
     QByteArray props;
     QHash<quint32, QString> names;
+    QHash<quint32, QByteArray> power;
     QDataStream ds(snap);
     ds >> props >> names;
+    if (!ds.atEnd())
+        ds >> power;
     if (props.isEmpty())
         return;
+    for (auto it = power.constBegin(); it != power.constEnd(); ++it)
+    {
+        Fixture *fx = m_doc->fixture(it.key());
+        if (fx == nullptr)
+            continue;
+        PowerProfile pp;
+        QXmlStreamReader r(it.value());
+        if (r.readNextStartElement())
+            pp.loadXML(r);
+        fx->setPowerProfile(pp);
+    }
 
     m_props->restoreSnapshot(props, m_doc);
     for (auto it = names.constBegin(); it != names.constEnd(); ++it)

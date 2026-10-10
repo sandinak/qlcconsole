@@ -50,6 +50,7 @@
 #include <QFileInfo>
 
 #include "powerdistributionwidget.h"
+#include "powerlimiter.h"
 #include "powerdistribution.h"
 #include "venue.h"
 #include "inputoutputmap.h"
@@ -942,7 +943,10 @@ void PowerDistributionWidget::addFixtureRow(QTreeWidgetItem *parent, quint32 fxI
 {
     Fixture *fx = m_doc->fixture(fxId);
     QTreeWidgetItem *fi = new QTreeWidgetItem(parent);
-    fi->setText(ColName, fx ? fx->name() : tr("(missing fixture %1)").arg(fxId));
+    QString name = fx ? fx->name() : tr("(missing fixture %1)").arg(fxId);
+    if (fx != nullptr && fx->powerProfile().maxAmps > 0.0)
+        name += tr("  · max %1 A").arg(fx->powerProfile().maxAmps, 0, 'f', 1);
+    fi->setText(ColName, name);
     fi->setText(ColMax, tr("%1 W").arg(m_fixtureFullWatts.value(fxId, 0.0), 0, 'f', 0));
     fi->setTextAlignment(ColMax, Qt::AlignRight | Qt::AlignVCenter);
     fi->setData(0, RoleType, TypeFixture);
@@ -1193,6 +1197,24 @@ void PowerDistributionWidget::updateFooter()
              .arg(designW / 1000.0, 0, 'f', 2)
              .arg(maxW / 1000.0, 0, 'f', 2)
              .arg(liveW / 1000.0, 0, 'f', 2);
+
+    // Fixtures their maximum draw is holding back right now.
+    if (PowerLimiter *pl = m_doc->powerLimiter())
+    {
+        const QHash<quint32, QPair<double, double> > held = pl->heldBack();
+        if (!held.isEmpty())
+        {
+            QStringList who;
+            for (auto it = held.constBegin(); it != held.constEnd() && who.size() < 3; ++it)
+                if (Fixture *fx = m_doc->fixture(it.key()))
+                    who << tr("%1 %2→%3 A").arg(fx->name()).arg(it.value().first, 0, 'f', 1)
+                                          .arg(it.value().second, 0, 'f', 1);
+            parts << tr("<span style='color:#d68910'><b>%n held to their maximum</b> (%1%2)</span>",
+                        "", held.size())
+                     .arg(who.join(QStringLiteral(", ")))
+                     .arg(held.size() > who.size() ? QStringLiteral(", …") : QString());
+        }
+    }
 
     if (overCircuits > 0)
         parts << tr("<span style='color:#c0392b'><b>⚠ %n circuit(s) over</b> "

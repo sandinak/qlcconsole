@@ -363,11 +363,61 @@ void Universe::processFaders()
     }
 
     bool dataChanged = hasChanged();
-    const QByteArray postGM = m_postGMValues->mid(0, m_usedChannels);
+    QByteArray postGM = m_postGMValues->mid(0, m_usedChannels);
+    /* The fixtures held to a maximum draw, on what goes out -- never on the
+       stored values, which only the channels written this frame refresh:
+       scaled there, an unchanged colour would shrink again every frame. */
+    if (applyPowerLimits(postGM) && postGM != m_lastLimited)
+    {
+        m_lastLimited = postGM;
+        dataChanged = true;
+    }
     dumpOutput(postGM, dataChanged);
 
     if (dataChanged)
         emit universeWritten(id(), postGM);
+}
+
+void Universe::setPowerLimits(const QVector<PowerLimit> &limits)
+{
+    QMutexLocker locker(&m_powerMutex);
+    m_powerLimits = limits;
+    if (limits.isEmpty())
+        m_powerHeldBack.clear();
+}
+
+QHash<quint32, QPair<double, double> > Universe::powerHeldBack() const
+{
+    QMutexLocker locker(&m_powerMutex);
+    return m_powerHeldBack;
+}
+
+bool Universe::applyPowerLimits(QByteArray &out)
+{
+    QMutexLocker locker(&m_powerMutex);
+    if (m_powerLimits.isEmpty())
+        return false;
+    QHash<quint32, QPair<double, double> > held;
+    foreach (const PowerLimit &lim, m_powerLimits)
+    {
+        auto value = [&out, &lim](int offset) {
+            const int a = lim.base + offset;
+            return (a >= 0 && a < out.size()) ? uchar(out.at(a)) : uchar(0);
+        };
+        const double asks = lim.model.amps(value);
+        const double k = lim.model.limitFactor(asks);
+        if (k >= 1.0)
+            continue;
+        foreach (const PowerModel::Emitter &e, lim.model.emitters)
+        {
+            const int a = lim.base + e.offset;
+            if (a >= 0 && a < out.size())
+                out[a] = char(int(uchar(out.at(a)) * k));
+        }
+        held.insert(lim.fixtureId, qMakePair(asks, lim.model.amps(value)));
+    }
+    m_powerHeldBack = held;
+    return true;
 }
 
 void Universe::run()

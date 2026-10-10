@@ -106,6 +106,8 @@ private:
     class QToolButton *m_patch;
     QWidget *m_wledBox;         ///< WLED settings that do not match, + Fix
     QLabel *m_wledNote;
+    QDoubleSpinBox *m_maxAmps;  ///< the most it may draw (PowerProfile::maxAmps)
+    QLabel *m_powerNote;        ///< what has been measured
 };
 
 /** @} */

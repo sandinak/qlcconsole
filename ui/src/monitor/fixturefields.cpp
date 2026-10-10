@@ -13,6 +13,7 @@
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QHBoxLayout>
+#include <QVBoxLayout>
 #include <QToolButton>
 #include <QComboBox>
 #include <QSpinBox>
@@ -26,6 +27,7 @@
 #include "fixturefields.h"
 #include "apputil.h"
 #include "wledconfigcheck.h"
+#include "powerprofiledialog.h"
 #include "lightcontrols.h"
 #include "monitor.h"
 #include "fixture.h"
@@ -234,6 +236,73 @@ FixtureFields::FixtureFields(Monitor *monitor, QFormLayout *form, QWidget *paren
             if (!m_fids.isEmpty())
                 reload();
         });
+
+    /* What it draws and the most it may ("some fixtures are wattage hogs ..
+       set maximum brightness per fixture .. to prevent overload"): the cap in
+       amps, what has been measured, and where to type or measure it. */
+    QWidget *powerBox = new QWidget(parent);
+    QVBoxLayout *powerCol = new QVBoxLayout(powerBox);
+    powerCol->setContentsMargins(0, 0, 0, 0);
+    powerCol->setSpacing(2);
+    QHBoxLayout *powerRow = new QHBoxLayout;
+    powerRow->setSpacing(4);
+    m_maxAmps = new QDoubleSpinBox(powerBox);
+    m_maxAmps->setObjectName(QStringLiteral("fixtureMaxAmps"));
+    m_maxAmps->setRange(0.0, 100.0);
+    m_maxAmps->setDecimals(1);
+    m_maxAmps->setSingleStep(0.1);
+    m_maxAmps->setSuffix(QStringLiteral(" A"));
+    m_maxAmps->setSpecialValueText(tr("No limit"));
+    m_maxAmps->setToolTip(tr("The most it may draw. Whenever what it is sent would draw more, "
+                             "its output is scaled down -- every colour together, so the colour "
+                             "holds. Needs its draw measured (Measure… or Profile…)."));
+    QToolButton *profileBtn = new QToolButton(powerBox);
+    profileBtn->setObjectName(QStringLiteral("fixtureProfile"));
+    profileBtn->setText(tr("Profile…"));
+    profileBtn->setToolTip(tr("Type in its meter readings"));
+    QToolButton *measureBtn = new QToolButton(powerBox);
+    measureBtn->setObjectName(QStringLiteral("fixtureMeasure"));
+    measureBtn->setText(tr("Measure…"));
+    measureBtn->setToolTip(tr("Light it a step at a time and enter what the meter reads"));
+    powerRow->addWidget(m_maxAmps, 1);
+    powerRow->addWidget(profileBtn);
+    powerRow->addWidget(measureBtn);
+    m_powerNote = new QLabel(powerBox);
+    m_powerNote->setObjectName(QStringLiteral("fixturePowerNote"));
+    m_powerNote->setWordWrap(true);
+    m_powerNote->setStyleSheet("color:#8a8e99;");
+    powerCol->addLayout(powerRow);
+    powerCol->addWidget(m_powerNote);
+    form->addRow(tr("Max draw:"), powerBox);
+    connect(m_maxAmps, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double v) {
+        if (m_loading || m_fids.isEmpty() || v < 0.0)
+            return;                         // "mixed": nothing set yet
+        emit aboutToEdit(QStringLiteral("maxAmps"));
+        foreach (quint32 fid, m_fids)
+            if (Fixture *fx = m_monitor->m_doc->fixture(fid))
+            {
+                PowerProfile pp = fx->powerProfile();
+                pp.maxAmps = v;
+                fx->setPowerProfile(pp);
+            }
+        finishEdit();
+    });
+    connect(profileBtn, &QToolButton::clicked, this, [this]() {
+        if (m_fids.isEmpty())
+            return;
+        emit aboutToEdit(QStringLiteral("powerProfile"));
+        PowerProfileDialog dlg(m_monitor->m_doc, m_fids, m_parent);
+        if (dlg.exec() == QDialog::Accepted)
+            finishEdit();
+    });
+    connect(measureBtn, &QToolButton::clicked, this, [this]() {
+        if (m_fids.isEmpty())
+            return;
+        emit aboutToEdit(QStringLiteral("powerProfile"));
+        PowerMeasureDialog dlg(m_monitor->m_doc, m_fids, m_parent);
+        if (dlg.exec() == QDialog::Accepted)
+            finishEdit();
+    });
 
     MonitorProperties *props = monitor->m_props;
     MonitorGraphicsView *gv = monitor->m_graphicsView;
@@ -601,6 +670,55 @@ void FixtureFields::setFixtures(const QList<quint32> &fids, quint32 shown)
     }
     m_wledNote->setText(wled.join(QLatin1Char('\n')));
     row(m_wledBox, !wled.isEmpty());
+
+    // The most it may draw, and what has been measured.
+    {
+        Doc *pdoc = m_monitor->m_doc;
+        const Fixture *first = pdoc->fixture(m_fids.isEmpty() ? Fixture::invalidId() : m_fids.first());
+        const PowerProfile pp = first != nullptr ? first->powerProfile() : PowerProfile();
+        bool maxDiffers = false;
+        int measured = 0;
+        foreach (quint32 fid, m_fids)
+            if (const Fixture *fx = pdoc->fixture(fid))
+            {
+                maxDiffers = maxDiffers || fx->powerProfile().maxAmps != pp.maxAmps;
+                if (fx->powerProfile().isMeasured())
+                    ++measured;
+            }
+        if (maxDiffers)
+        {
+            m_maxAmps->setMinimum(-1.0);
+            m_maxAmps->setSpecialValueText(tr("mixed"));
+            m_maxAmps->setValue(-1.0);
+        }
+        else
+        {
+            m_maxAmps->setMinimum(0.0);
+            m_maxAmps->setSpecialValueText(tr("No limit"));
+            m_maxAmps->setValue(pp.maxAmps);
+        }
+        QString note;
+        if (many)
+            note = tr("%1 of %2 measured").arg(measured).arg(m_fids.size());
+        else if (pp.isMeasured())
+        {
+            QStringList parts;
+            for (auto it = pp.colourAmps.constBegin(); it != pp.colourAmps.constEnd(); ++it)
+                parts << QStringLiteral("%1 %2").arg(powerColourName(it.key())).arg(it.value(), 0, 'f', 1);
+            if (pp.fullAmps > 0.0)
+                parts << tr("full %1").arg(pp.fullAmps, 0, 'f', 1);
+            if (pp.halfAmps > 0.0)
+                parts << tr("half %1").arg(pp.halfAmps, 0, 'f', 1);
+            if (pp.standbyAmps > 0.0)
+                parts << tr("off %1").arg(pp.standbyAmps, 0, 'f', 1);
+            note = tr("Measured: %1 A").arg(parts.join(QStringLiteral(" · ")));
+        }
+        else
+            note = tr("Not measured: its draw can't be modelled or capped yet");
+        if (!pp.isMeasured() && pp.maxAmps > 0.0 && !many)
+            note += QStringLiteral("\n") + tr("The maximum does nothing until it is measured.");
+        m_powerNote->setText(note);
+    }
 
     m_loading = false;
 }

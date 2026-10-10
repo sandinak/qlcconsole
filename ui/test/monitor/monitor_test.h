@@ -141,6 +141,8 @@ private slots:
     void theInspectorShowsMixedAndSetsOnlyWhatIsSet();
     void anInspectorEditIsOneUndoStep();
     void fixturePropertiesForSeveralIsMixedAndLive();
+    void aMaxDrawIsSetOnEverySelectedFixture();
+    void measuringPowerDrivesEachStateAndKeepsTheReadings();
     void aPersonsHeightIsSetInTheTargetDialog();
     /** "can we have the crosshairs hover give H, V, and Z" -- the point under
      *  the pointer, exact in every view, from the depth buffer. */

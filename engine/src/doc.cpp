@@ -61,6 +61,7 @@
 #include "scene.h"
 #include "show.h"
 #include "doc.h"
+#include "powerlimiter.h"
 #include "bus.h"
 #include "qlcpalette.h"
 #include "qlcphysical.h"
@@ -122,6 +123,9 @@ Doc::Doc(QObject* parent, int universes)
     // forwarder methods so no call sites / connect() sites elsewhere
     // change. Created after m_masterTimer so it can wire to it.
     m_programmer = new ProgrammerController(this);
+
+    // Fixtures held to a maximum draw: kept in step with the show.
+    m_powerLimiter = new PowerLimiter(this);
 
     // Track running Scenes for programmer edit-routing (LTP).
     // DirectConnection: the signal is emitted from MasterTimer's worker
@@ -213,6 +217,9 @@ Doc::Doc(QObject* parent, int universes)
 
 Doc::~Doc()
 {
+    delete m_powerLimiter;
+    m_powerLimiter = nullptr;
+
     delete m_masterTimer;
     m_masterTimer = NULL;
 
@@ -1450,6 +1457,7 @@ bool Doc::replaceFixtures(QList<Fixture*> newFixturesList)
         newFixture->setConnection(fixture->connection());
         newFixture->setIPAddress(fixture->ipAddress());
         newFixture->setTransport(fixture->transport());
+        newFixture->setPowerProfile(fixture->powerProfile());
 
         if (fixture->fixtureDef() == NULL ||
             (fixture->fixtureDef()->manufacturer() == KXMLFixtureGeneric &&

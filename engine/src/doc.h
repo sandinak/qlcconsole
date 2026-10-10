@@ -188,6 +188,7 @@ private:
     mutable QSharedPointer<AudioCapture> m_inputCapture;
     MonitorProperties *m_monitorProps;
     PowerDistribution *m_powerDist;
+    class PowerLimiter *m_powerLimiter = nullptr;
     NetworkTopology *m_networkTopology;
     TimecodeSource *m_timecodeSource;
 
@@ -1120,6 +1121,8 @@ public:
 public:
     /** Returns a reference to the power distribution model instance */
     PowerDistribution *powerDistribution();
+    /** Holds fixtures to their maximum draw (PowerLimiter) */
+    class PowerLimiter *powerLimiter() const { return m_powerLimiter; }
 
     /*********************************************************************
      * Network Topology

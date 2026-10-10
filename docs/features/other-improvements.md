@@ -245,6 +245,38 @@ each carrying a set of fixtures. A live amperage/wattage estimate appears in
 the footer in Design mode; a circuit-assignment dialog can auto-bin-pack
 fixtures onto circuits, and UPS/battery entries get a runtime estimate.
 
+### A fixture's maximum draw
+
+Some fixtures are power hogs — a wall-washer bar pulling 6 A at full — and
+a breaker doesn't care that the show only ran them full for one cue. Each
+fixture can be held to a **maximum draw**, in amps (Fixture Properties →
+**Max draw**, set on several at once with a multi-selection).
+
+That needs its draw **measured**, because LED fixtures are far from linear:
+the same bar drew 1.7 A at half, not 3, and 2 A with only red at full. The
+readings are the whole fixture's current off a clamp meter, standby included:
+each colour alone at full, everything at half, everything off, and
+(optionally) everything at full.
+
+- **Measure…** lights the fixture a state at a time — over anything else, and
+  past its cap — and asks for each reading, then gives it back. Its other
+  channels are left alone, so stop what else is running on it first. The
+  readings can be used for all the fixtures selected (each keeps its own
+  maximum).
+- **Profile…** types in readings already taken. A colour left unmeasured
+  shares what is left of the everything-at-full reading.
+
+From those it works out what the fixture draws at whatever it's sent: each
+colour's share, split among its pixels, bent by the curve the half reading
+gives. Whenever that would go over the maximum, its colours are scaled down
+**together** — the colour holds, only the brightness drops — on what its
+universe sends. Red alone at 2 A under a 3 A maximum is left as it is; full
+white at 6 A is sent at about 69%. The universe panel in Connections, the
+rig view and the power panel all show the held-back output, and the power
+panel's footer names the fixtures being held back. A fixture with a maximum
+but no readings isn't limited, and says so. The live and full-load
+estimates use the readings (and the cap) wherever a fixture has them.
+
 ## Show timeline &amp; MTC follow
 
 The Show Manager tab and the Programming tab's embedded timeline editor
