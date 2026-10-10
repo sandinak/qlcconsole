@@ -32,6 +32,7 @@ private slots:
     void aShowsRigViewDrawTime();
     void theRigOverviewShortcutTogglesIt();
     void theRulerMarksTheMiddleOfADraggedDrape();
+    void theRigViewHidesWhatTheStudioHides();
     void initTestCase();
     void cleanupTestCase();
 

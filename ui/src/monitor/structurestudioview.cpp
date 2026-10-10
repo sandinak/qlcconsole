@@ -826,22 +826,37 @@ bool StructureStudioView::dragPipeBarTo(quint32 barId, const QPointF &px)
  * structure the dialog was opened on. Parameterising them on (kind, id) and
  * looping is all a whole-stage overview needs -- no second renderer to keep in
  * step with the first, which is the thing that would rot. */
+/* The whole-rig view shows what the Lighting Studio shows: a layer hidden
+   there ("follow the viewability of the studio") is hidden here too -- not
+   drawn, not framed, and not in the way of a beam. An editor shows its own
+   object whatever layer it is on. */
+bool StructureStudioView::layerShown(quint32 layerId) const
+{
+    return m_kind != StageKind || m_doc->monitorProperties()->layer(layerId).visible;
+}
+
+bool StructureStudioView::fixtureShown(quint32 fid) const
+{
+    return layerShown(m_doc->monitorProperties()->fixtureLayer(fid));
+}
+
 QList<QPair<StructureStudioView::Kind, quint32> > StructureStudioView::everyStructure() const
 {
     MonitorProperties *props = m_doc->monitorProperties();
     QList<QPair<Kind, quint32> > out;
     foreach (Truss *t, props->trusses())
-        if (t != nullptr) out << qMakePair(TrussKind, t->id());
+        if (t != nullptr && layerShown(t->layerId())) out << qMakePair(TrussKind, t->id());
     foreach (StagePlatform *pl, props->platforms())
-        if (pl != nullptr) out << qMakePair(PlatformKind, pl->id());
+        if (pl != nullptr && layerShown(pl->layerId())) out << qMakePair(PlatformKind, pl->id());
     foreach (Tower *tw, props->towers())
-        if (tw != nullptr) out << qMakePair(TowerKind, tw->id());
+        if (tw != nullptr && layerShown(tw->layerId())) out << qMakePair(TowerKind, tw->id());
     foreach (Stand *st, props->stands())
-        if (st != nullptr) out << qMakePair(StandKind, st->id());
+        if (st != nullptr && layerShown(st->layerId())) out << qMakePair(StandKind, st->id());
     foreach (Pipe *pp, props->pipes())
-        if (pp != nullptr && !pp->isBarOnPipe()) out << qMakePair(PipeKind, pp->id());
+        if (pp != nullptr && !pp->isBarOnPipe() && layerShown(pp->layerId()))
+            out << qMakePair(PipeKind, pp->id());
     foreach (Scenery *sc, props->sceneries())
-        if (sc != nullptr) out << qMakePair(SceneryKind, sc->id());
+        if (sc != nullptr && layerShown(sc->layerId())) out << qMakePair(SceneryKind, sc->id());
     return out;
 }
 
@@ -934,7 +949,7 @@ void StructureStudioView::drawStageFigures(QPainter &p) const
 
     foreach (StageTarget *t, props->stageTargets())
     {
-        if (t == nullptr)
+        if (t == nullptr || !layerShown(t->layerId()))
             continue;
 
         /* An Area or a drum kit: its outline on the deck, in its colour, at
@@ -1119,12 +1134,14 @@ void StructureStudioView::collectPoints(QList<QVector3D> &pts) const
         collectPointsFor(pts, ki.first, ki.second);
     // Free-standing fixtures are part of the rig too, so the fit must frame them.
     MonitorProperties *props = m_doc->monitorProperties();
-    foreach (quint32 fid, props->fixtureItemsID())
+    foreach (quint32 fid, mountedFixtures())
         pts << fixtureCentre(fid);
     /* And the people standing on it, feet to crown: a figure is drawn, so a
        fit that ignores it cuts off the head of anyone on a deck. */
     foreach (StageTarget *t, props->stageTargets())
     {
+        if (t == nullptr || !layerShown(t->layerId()))
+            continue;
         const float tall = props->targetFigureHeight(t);
         if (tall <= 0.0f)
             continue;
@@ -1139,8 +1156,12 @@ QList<quint32> StructureStudioView::mountedFixtures() const
 {
     if (m_kind != StageKind)
         return mountedFixtures(m_kind, m_id);
-    // The whole rig: everything that has a place on the plot.
-    return m_doc->monitorProperties()->fixtureItemsID();
+    // The whole rig: everything that has a place on the plot, and is shown.
+    QList<quint32> out;
+    foreach (quint32 fid, m_doc->monitorProperties()->fixtureItemsID())
+        if (fixtureShown(fid))
+            out << fid;
+    return out;
 }
 
 QList<const Pipe *> StructureStudioView::standPipes(quint32 id) const
@@ -3124,7 +3145,7 @@ double StructureStudioView::beamThrow(const QVector3D &apex, const QVector3D &di
     MonitorProperties *props = m_doc->monitorProperties();
     foreach (StagePlatform *pl, props->platforms())
     {
-        if (pl == nullptr)
+        if (pl == nullptr || !layerShown(pl->layerId()))
             continue;
         // Each tread of a flight of steps is a deck of its own height.
         int blockNo = 0;
@@ -3153,7 +3174,7 @@ double StructureStudioView::beamThrow(const QVector3D &apex, const QVector3D &di
        even upward, which is exactly how a cyc is lit. */
     foreach (Scenery *sc, props->sceneries())
     {
-        if (sc == nullptr)
+        if (sc == nullptr || !layerShown(sc->layerId()))
             continue;
         double t = 0.0;
         QVector3D n;
@@ -4641,7 +4662,11 @@ void StructureStudioView::drawTowerFaces(QPainter &p) const
     MonitorProperties *props = m_doc->monitorProperties();
     QList<Tower *> towers;
     if (m_kind == StageKind)
-        towers = props->towers();
+    {
+        foreach (Tower *tw, props->towers())
+            if (tw != nullptr && layerShown(tw->layerId()))
+                towers << tw;
+    }
     else if (m_kind == TowerKind && props->tower(m_id) != nullptr)
         towers << props->tower(m_id);
     const double af = 0.18 + 0.82 * m_ambient;
@@ -4762,7 +4787,11 @@ void StructureStudioView::drawSocks(QPainter &p) const
     MonitorProperties *props = m_doc->monitorProperties();
     QList<Truss *> trusses;
     if (m_kind == StageKind)
-        trusses = props->trusses();
+    {
+        foreach (Truss *t, props->trusses())
+            if (t != nullptr && layerShown(t->layerId()))
+                trusses << t;
+    }
     else if (m_kind == TrussKind && props->truss(m_id) != nullptr)
         trusses << props->truss(m_id);
     const double af = 0.18 + 0.82 * m_ambient;
@@ -4983,7 +5012,10 @@ QVector<QVector<QVector3D> > StructureStudioView::washOnScenery(const QVector3D 
 {
     QVector<QVector<QVector3D> > out;
     MonitorProperties *props = m_doc->monitorProperties();
-    const QList<Scenery *> sceneries = props->sceneries();
+    QList<Scenery *> sceneries;
+    foreach (Scenery *sc, props->sceneries())
+        if (sc != nullptr && layerShown(sc->layerId()))
+            sceneries << sc;
     if (sceneries.isEmpty())
         return out;
 

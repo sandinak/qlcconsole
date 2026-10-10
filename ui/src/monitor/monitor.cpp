@@ -2402,6 +2402,9 @@ void Monitor::showStageOverview()
        the plot is edited, and a stale overview is worse than none. */
     connect(m_graphicsView, &MonitorGraphicsView::mapSelectionChanged, view,
             [view]() { view->reload(); });
+    // A layer hidden in the Studio is hidden here too.
+    connect(m_graphicsView, &MonitorGraphicsView::layerStateChanged, view,
+            &StructureStudioView::layersChanged);
 
     dlg.show();
 }

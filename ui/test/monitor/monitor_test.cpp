@@ -533,6 +533,62 @@ void Monitor_Test::theRulerMarksTheMiddleOfADraggedDrape()
     delete doc;
 }
 
+/* "for rig view .. can we have it follow the viewability of the studio": a
+   layer hidden in the Lighting Studio is hidden from the whole-rig view --
+   its structures, scenery and fixtures -- while an editor still shows its
+   own object. Toggling the layer in the Studio redraws the overview. */
+void Monitor_Test::theRigViewHidesWhatTheStudioHides()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    StagePlatform *deck = props->addPlatform();
+    deck->setOriginX(2.0f); deck->setOriginY(2.0f);
+    Scenery *cyc = props->addScenery();
+    cyc->setOriginX(5.0f); cyc->setOriginY(0.5f); cyc->setWidth(8.0f);
+    Fixture *fx = new Fixture(doc);
+    fx->setChannels(3);
+    doc->addFixture(fx);
+    props->setFixturePosition(fx->id(), 0, 0, QVector3D(3000.0f, 3000.0f, 0));
+
+    const quint32 hidden = props->addLayer("Set");
+    deck->setLayerId(hidden);
+    cyc->setLayerId(hidden);
+    props->setFixtureLayer(fx->id(), hidden);
+
+    StructureStudioView rig(doc, StructureStudioView::StageKind, 0);
+    auto has = [&rig](StructureStudioView::Kind kind, quint32 id) {
+        return rig.everyStructure().contains(qMakePair(kind, id));
+    };
+    QVERIFY(has(StructureStudioView::PlatformKind, deck->id()));
+    QVERIFY(has(StructureStudioView::SceneryKind, cyc->id()));
+    QVERIFY(rig.mountedFixtures().contains(fx->id()));
+
+    props->setLayerVisible(hidden, false);
+    QVERIFY(!has(StructureStudioView::PlatformKind, deck->id()));
+    QVERIFY(!has(StructureStudioView::SceneryKind, cyc->id()));
+    QVERIFY(!rig.mountedFixtures().contains(fx->id()));
+
+    // An editor shows its own deck whatever layer it is on.
+    StructureStudioView editor(doc, StructureStudioView::PlatformKind, deck->id());
+    QVERIFY(editor.layerShown(hidden));
+
+    // Toggled in the Studio, the open overview hears of it.
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        mon.showStageOverview();
+        QVERIFY(mon.m_overviewView != nullptr);
+        mon.m_overviewView->m_floorPointsAge.start();
+        props->setLayerVisible(hidden, true);
+        mon.m_graphicsView->refreshItemLayerState();
+        QVERIFY2(!mon.m_overviewView->m_floorPointsAge.isValid(),
+                 "the overview should measure the rig again when a layer changes");
+        if (mon.m_overviewDlg != nullptr)
+            mon.m_overviewDlg->close();
+    }
+    delete doc;
+}
+
 QTEST_MAIN(Monitor_Test)
 
 /****************************************************************************

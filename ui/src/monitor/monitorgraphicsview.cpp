@@ -2816,7 +2816,7 @@ void MonitorGraphicsView::refreshItemLayerState()
     for (auto fit = m_fixtures.constBegin(); fit != m_fixtures.constEnd(); ++fit)
         if (fit.value() != nullptr)
             fit.value()->setVisible(fixtureItemShouldBeVisible(fit.key()));
-
+    emit layerStateChanged();   // the rig view follows what is shown here
 }
 
 void MonitorGraphicsView::setSnapDivisions(int divisions)

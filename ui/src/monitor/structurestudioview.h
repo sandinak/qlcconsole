@@ -292,6 +292,10 @@ private:
     bool dragPipeBarTo(quint32 barId, const QPointF &px);
     void refit();                                    ///< scale/centre to fit everything
     void collectPoints(QList<QVector3D> &pts) const; ///< every point the fit should frame
+    /** Whether the Lighting Studio shows layer @p layerId -- the whole-rig
+     *  view hides what it hides; an editor shows its own object regardless. */
+    bool layerShown(quint32 layerId) const;
+    bool fixtureShown(quint32 fid) const;
     void collectPointsFor(QList<QVector3D> &pts, Kind kind, quint32 id) const;
     /** collectPoints() for the floor grid, which a frame needs every time:
      *  measuring the whole rig was close to half of what a frame of a big
@@ -300,6 +304,11 @@ private:
     const QList<QVector3D> &floorPoints() const;
     /** Measure the rig again next frame: the floor, the overlaps. */
     void rigMayHaveMoved();
+public:
+    /** The Studio's layers changed (layerShown()): draw again, keeping the
+     *  view where it is. */
+    void layersChanged() { rigMayHaveMoved(); update(); }
+private:
     mutable QList<QVector3D> m_floorPoints;
     mutable QImage m_floorImage;    ///< the angled floor grid, drawn once (drawGrid())
     mutable QString m_floorKey;     ///< the view it was drawn for

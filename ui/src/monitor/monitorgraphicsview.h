@@ -936,6 +936,9 @@ private:
     void captureMoveUndo();
 
 signals:
+    /** A layer was shown, hidden or locked: what the plot shows changed. */
+    void layerStateChanged();
+
     /** Something was pushed onto, or undone from, the undo stack. */
     void undoChanged();
     /** How many fixtures are sitting outside the stage grid (0 = none). */
