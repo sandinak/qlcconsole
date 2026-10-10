@@ -215,6 +215,22 @@ wall has its faces, top and ends. Everything but a flown curtain stops the
 light that reaches it and takes its pool — a beam coming down on a wall lands
 on its top — and hides what is behind it.
 
+### Fountains
+
+**Add → Add Fountain…** builds one from its sizes — by default 3 ft across
+and 4 ft deep with a round front, on a 5" base, with walls of 4" blocks, the
+outer 8" high and the inner 14", 4" apart:
+
+- the **base**: a platform with a half-round front;
+- the **outer** and **inner walls**: U-shaped walls on the base, open at the
+  back, the outer one's outside face on the base's edge;
+- a **silk flame** in the middle of the inner wall, standing on the base,
+  staged — patch it to the relay's channel (untick it to leave it out).
+
+They're one group, so the fountain drags and turns (**]** / **[**) as one.
+Light pointed at the inner wall — pars in the gap, uplighting it — lands on
+its face.
+
 ## Mounting a fixture
 
 ![A truss's own editor, with a mounted fixture's properties panel open](../images/lighting-studio-truss-editor.png)
@@ -458,6 +474,12 @@ lasers:
 
 Both take their colour and level from the fixture's live output, like any
 other light, and follow a mover's pan and tilt.
+
+- **Silk flame** — a fan blowing a sheet of silk up over its own orange and
+  yellow lights, switched by a relay: when its channel is past half, tongues
+  of flame rise off it, wavering, and warm what is near it; below half it is
+  off. The bundled **Generic → Silk Flame (relay)** is one channel for a DMX
+  relay pack.
 
 ## Lanterns
 

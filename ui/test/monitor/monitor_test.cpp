@@ -12689,6 +12689,138 @@ void Monitor_Test::aTurnedDeckIsDrawnAndLitWhereItIs()
     delete doc;
 }
 
+/* The bundled silk flame, read from its file as the app would. */
+static QLCFixtureDef *silkFlameDef()
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    const QString path = QFileInfo(QStringLiteral(__FILE__)).dir().absoluteFilePath(
+        QStringLiteral("../../../resources/fixtures/Generic/Generic-Silk-Flame.qxf"));
+    if (def->loadXML(path) != QFile::NoError)
+    {
+        delete def;
+        return nullptr;
+    }
+    return def;
+}
+
+void Monitor_Test::aSilkFlameRisesOnlyWhenItsRelayIsOn()
+{
+    Doc *doc = new Doc(this);
+    QLCFixtureDef *def = silkFlameDef();
+    QVERIFY(def != nullptr);
+    QVERIFY(doc->fixtureDefCache()->addFixtureDef(def));
+    QCOMPARE(def->modes().first()->physical().emission(), QLCPhysical::FlameEmission);
+    Fixture *flame = new Fixture(doc);
+    flame->setFixtureDefinition(def, def->modes().first());
+    QVERIFY(doc->addFixture(flame));
+    doc->monitorProperties()->setFixturePosition(flame->id(), 0, 0, QVector3D(2000.0f, 2000.0f, 0.0f));
+    FixtureRigProps rp;
+    rp.mountingType = Truss::FloorMounted;
+    doc->monitorProperties()->setFixtureRigProps(flame->id(), rp);
+    {
+        StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+        v.resize(800, 600);
+        v.reload();
+        v.setPlane(StructureStudioView::Angled);
+        v.setAngledView(15.0, 15.0);
+        v.setLiveValues(true);
+        v.m_opticsTime = 1.0;                       // a still frame
+        auto frame = [&](uchar relay) {
+            QByteArray u(512, char(0));
+            u[0] = char(relay);
+            flame->setChannelValues(u);
+            v.reload();
+            return v.grab().toImage();
+        };
+        auto flamePx = [](const QImage &img) {
+            int n = 0;
+            for (int y = 0; y < img.height(); ++y)
+                for (int x = 0; x < img.width(); ++x)
+                {
+                    const QColor q = img.pixelColor(x, y);
+                    if (q.red() > 120 && q.red() > q.blue() + 60 && q.green() > 40)
+                        ++n;
+                }
+            return n;
+        };
+        const int off = flamePx(frame(0));
+        const int half = flamePx(frame(100));       // a relay is off below half
+        const int on = flamePx(frame(255));
+        QCOMPARE(half, off);
+        QVERIFY2(on > off + 400, qPrintable(QString("off %1 px, on %2").arg(off).arg(on)));
+        // It moves: another moment is another shape.
+        v.m_opticsTime = 1.7;
+        const QImage a = frame(255);
+        v.m_opticsTime = 2.9;
+        const QImage b = frame(255);
+        QVERIFY(a != b);
+    }
+    delete doc;
+}
+
+void Monitor_Test::addFountainBuildsItAsOneGroup()
+{
+    Doc *doc = new Doc(this);
+    QLCFixtureDef *def = silkFlameDef();
+    QVERIFY(def != nullptr);
+    QVERIFY(doc->fixtureDefCache()->addFixtureDef(def));
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Feet);
+    props->setGridSize(QVector3D(40, 20, 24));
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        bool sized = false;
+        driveDialog([&sized](QWidget *dlg) {
+            // As built: 3 ft x 4 ft, a 5" base, 8" and 14" walls of 4" blocks.
+            QDoubleSpinBox *w = dlg->findChild<QDoubleSpinBox *>("fountainWidth");
+            QDoubleSpinBox *inner = dlg->findChild<QDoubleSpinBox *>("fountainInner");
+            sized = w != nullptr && inner != nullptr && qAbs(w->value() - 3.0) < 0.01
+                    && qAbs(inner->value() - 14.0 / 12.0) < 0.01;
+            return true;
+        });
+        mon.slotAddFountain();
+        QVERIFY(sized);
+
+        QCOMPARE(props->platforms().size(), 1);
+        StagePlatform *base = props->platforms().first();
+        QVERIFY(qAbs(base->width() - 0.9144f) < 1e-3f && qAbs(base->depth() - 1.2192f) < 1e-3f);
+        QVERIFY(qAbs(base->height() - 0.127f) < 1e-3f);
+        QVERIFY(qAbs(base->frontCurve() - 0.4572f) < 1e-3f);        // a half-round front
+        QCOMPARE(props->sceneries().size(), 2);
+        Scenery *outer = props->sceneries().at(0), *inner = props->sceneries().at(1);
+        if (outer->height() > inner->height())
+            qSwap(outer, inner);
+        foreach (Scenery *wl, props->sceneries())
+        {
+            QCOMPARE(wl->kind(), int(Scenery::Wall));
+            QCOMPARE(wl->outline(), int(Scenery::RoundedU));
+            QVERIFY(qAbs(wl->bottom() - 0.127f) < 1e-3f);           // on the base
+            QVERIFY(qAbs(wl->thickness() - 0.1016f) < 1e-3f);
+            QCOMPARE(wl->groupId(), base->groupId());
+        }
+        QVERIFY(qAbs(outer->height() - 0.2032f) < 1e-3f && qAbs(inner->height() - 0.3556f) < 1e-3f);
+        // The outer wall's outside face is the base's edge; the inner one a block and a gap in.
+        QVERIFY(qAbs(outer->width() + outer->thickness() - base->width()) < 1e-3f);
+        QVERIFY(qAbs(inner->width() - (0.9144f - 2.0f * (0.1016f + 0.1016f + 0.0508f))) < 1e-3f);
+        QVERIFY(base->groupId() != 0);
+
+        // The flame, staged, standing on the base, in the group.
+        Fixture *flame = nullptr;
+        foreach (Fixture *fx, doc->fixtures())
+            if (fx->fixtureDef() == def)
+                flame = fx;
+        QVERIFY(flame != nullptr);
+        QVERIFY(!flame->isPatched());
+        QCOMPARE(props->fixtureRigProps(flame->id()).deckPlatformId, base->id());
+        QCOMPARE(props->fixtureGroup(flame->id()), base->groupId());
+        const QVector3D at = props->fixtureRigPosition(flame->id());
+        QVERIFY(base->containsPoint(at.x(), at.y()));
+        QVERIFY(qAbs(at.z() - 0.127f) < 1e-3f);
+    }
+    delete doc;
+}
+
 void Monitor_Test::selectAllTakesEverythingSelectable()
 {
     Doc *doc = new Doc(this);

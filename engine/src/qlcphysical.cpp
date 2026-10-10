@@ -378,7 +378,8 @@ bool QLCPhysical::loadXML(QXmlStreamReader &doc)
             const QString e = attrs.value(KXMLQLCPhysicalBodyEmission).toString();
             m_emission = e == QLatin1String("Omni") ? OmniEmission
                        : e == QLatin1String("Laser") ? LaserEmission
-                       : e == QLatin1String("Star") ? StarEmission : BeamEmission;
+                       : e == QLatin1String("Star") ? StarEmission
+                       : e == QLatin1String("Flame") ? FlameEmission : BeamEmission;
             m_leds = qMax(0, attrs.value(KXMLQLCPhysicalBodyLEDs).toInt());
             m_ledLayout = stringToLedLayout(attrs.value(KXMLQLCPhysicalBodyLayout).toString());
             m_clearGlass = attrs.value(KXMLQLCPhysicalBodyGlass).toString() == QLatin1String("Clear");
@@ -455,7 +456,8 @@ bool QLCPhysical::saveXML(QXmlStreamWriter *doc) const
         doc->writeAttribute(KXMLQLCPhysicalBodyEmission,
                             m_emission == OmniEmission ? QStringLiteral("Omni")
                             : m_emission == LaserEmission ? QStringLiteral("Laser")
-                            : m_emission == StarEmission ? QStringLiteral("Star") : QStringLiteral("Beam"));
+                            : m_emission == StarEmission ? QStringLiteral("Star")
+                            : m_emission == FlameEmission ? QStringLiteral("Flame") : QStringLiteral("Beam"));
         if (m_leds > 0)
         {
             doc->writeAttribute(KXMLQLCPhysicalBodyLEDs, QString::number(m_leds));

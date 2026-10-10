@@ -437,6 +437,10 @@ protected slots:
     /** Add a piece of scenery of @p kind (Scenery::Kind) where it usually
      *  goes, or where the canvas menu was opened; then edit it. */
     void slotAddScenery(int kind);
+    /** A fountain: a base with a rounded front, an outer and an inner wall
+     *  of blocks round it, and a silk flame in the middle -- grouped, so it
+     *  moves and turns as one. Asks for the sizes first. */
+    void slotAddFountain();
     void slotEditScenery(quint32 sid);
     void slotEditTower(quint32 tid);
 

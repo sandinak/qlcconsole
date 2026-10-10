@@ -3489,6 +3489,75 @@ void StructureStudioView::drawLaserBeam(QPainter &p, const QVector3D &apex, cons
     emitDot(w2s(end), viewDepth(end) + 0.002, 2.4, core, p);
 }
 
+void StructureStudioView::drawSilkFlame(QPainter &p, const QVector3D &base, double width,
+                                        double height, double level, double seed) const
+{
+    /* Seven tongues across the silk, each a ribbon from a wide foot to a
+       point, its tip swaying and its height breathing with time; drawn in
+       three planes crossed at sixty degrees, so it is a flame from wherever
+       it is seen. Orange outside, a shorter yellow core inside, both as
+       light (they glow), fading to nothing at the tips. */
+    const double t = opticsTime();
+    const int TONGUES = 7, ROWS = 6;
+    const double half = width / 2.0;
+    auto noise = [](double x) { return 0.5 * qSin(x) + 0.3 * qSin(2.3 * x + 1.1) + 0.2 * qSin(5.1 * x + 2.7); };
+
+    for (int plane = 0; plane < 3; ++plane)
+    {
+        const double a = plane * M_PI / 3.0;
+        const QVector3D across(float(qCos(a)), float(qSin(a)), 0.0f);
+        const QVector3D sway(float(-qSin(a)), float(qCos(a)), 0.0f);
+        for (int k = 0; k < TONGUES; ++k)
+        {
+            const double u = (TONGUES == 1) ? 0.0 : (2.0 * k / (TONGUES - 1) - 1.0);   // -1 .. 1
+            const double ph = seed + k * 1.7 + plane * 0.9;
+            // Tallest in the middle; each breathing on its own.
+            const double tall = height * (0.55 + 0.45 * (1.0 - u * u))
+                                * (0.75 + 0.25 * noise(t * 3.1 + ph));
+            const double foot = half / TONGUES * 1.6;
+            for (int layer = 0; layer < 2; ++layer)
+            {
+                const bool core = (layer == 1);
+                const double hh = core ? tall * 0.6 : tall;
+                const double ww = core ? foot * 0.55 : foot;
+                QColor c = core ? QColor(255, 215, 70) : QColor(255, 110, 25);
+                c.setAlpha(qBound(0, int((core ? 230.0 : 200.0) * level), 255));
+                const QVector3D root = base + across * float(u * half * 0.85);
+                // The ribbon's two edges, row by row, narrowing to the tip.
+                QVector<QVector3D> left, right;
+                QVector<double> alpha;
+                for (int r = 0; r <= ROWS; ++r)
+                {
+                    const double f = double(r) / ROWS;
+                    const double bend = hh * 0.18 * f * f * noise(t * 2.3 + ph + f * 2.0);
+                    const double flick = hh * 0.10 * f * f * noise(t * 4.7 + ph * 1.3);
+                    const QVector3D mid = root + QVector3D(0.0f, 0.0f, float(hh * f))
+                                          + across * float(bend) + sway * float(flick);
+                    const double wd = ww * (1.0 - f) * (1.0 - 0.3 * f);
+                    left << mid - across * float(wd);
+                    right << mid + across * float(wd);
+                    alpha << (1.0 - f) * (1.0 - f * 0.4);
+                }
+                for (int r = 0; r < ROWS; ++r)
+                {
+                    const QVector3D q[4] = { left[r], right[r], right[r + 1], left[r + 1] };
+                    QPolygonF poly;
+                    QVector<double> zs;
+                    double zsum = 0.0;
+                    for (const QVector3D &w : q)
+                    {
+                        poly << w2s(w);
+                        zs << viewDepth(w) + 2e-4;
+                        zsum += zs.last();
+                    }
+                    emitLight(poly, zsum / 4.0, c, p, zs,
+                              QVector<double>({ alpha[r], alpha[r], alpha[r + 1], alpha[r + 1] }));
+                }
+            }
+        }
+    }
+}
+
 void StructureStudioView::drawStarField(QPainter &p, quint32 fid, const Fixture *fx,
                                         const QByteArray &vals, const QVector3D &apex,
                                         const QVector3D &dir, double halfAngleRad,
@@ -5269,8 +5338,12 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
            their housing. */
         double depthBias = 0.0;
         {
+            /* Only for what is in the box or on its faces. Something standing
+               on top of a deck is above it, not in it: lifted to the box's
+               near face it drew through whatever stands in front of it on the
+               same deck -- a fountain's flame through its walls. */
             const quint32 plId = rp.onRiser() ? rp.riserPlatformId
-                               : rp.onDeck()  ? rp.deckPlatformId
+                               : (rp.onDeck() && rp.placement == FixtureRigProps::Inside) ? rp.deckPlatformId
                                               : FixtureRigProps::invalidPlatformId();
             if (StagePlatform *host = props->platform(plId))
             {
@@ -5437,7 +5510,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
            something glows where its light gets out (collectInsideLight()). */
         if (m_haze > 0.0 && showingOutput && m_plane == Angled
             && rp.placement != FixtureRigProps::Inside
-            && traits.kind != FixtureSilhouette::Mover && !traits.omni)
+            && traits.kind != FixtureSilhouette::Mover && !traits.omni && !traits.flame)
         {
             QVector<BarLight> glows;
             if (traits.headCount > 1)
@@ -5452,9 +5525,34 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             drawHazeGlow(p, glows);
         }
 
+        /* A silk flame: on or off, as its relay is -- past half on -- and when
+           on, the silk rising off it in its own orange and yellow, lighting
+           what is near it the same warm colour. */
+        if (traits.flame)
+        {
+            QColor live = col;
+            uchar dim = 0;
+            const bool on = showingOutput && fixtureLiveState(fx, vals, live, dim, valsComplete)
+                            && dim >= 128;
+            if (on)
+            {
+                const QLCPhysical phys = (fx->fixtureMode() != nullptr) ? fx->fixtureMode()->physical()
+                                                                        : QLCPhysical();
+                const double w = (phys.width() > 0) ? phys.width() / 1000.0 : 0.3;
+                const double h = (phys.height() > 0) ? phys.height() / 1000.0 : 0.15;
+                const QVector3D c = fixtureCentre(fid);
+                drawSilkFlame(p, c + QVector3D(0.0f, 0.0f, float(h / 2.0)), w,
+                              qMax(0.45, 2.0 * w), 1.0, double(fid) * 1.618);
+                FrameBeam fb{ c + QVector3D(0.0f, 0.0f, float(h)), QVector3D(0, 0, -1), M_PI, 6.0,
+                              QColor(255, 130, 35), 0.6 * fixtureOutput(fx) };
+                fb.omni = true;
+                m_frameBeams << fb;
+                m_opticsAnimating = true;          // it moves: keep drawing it
+            }
+        }
         /* All round (a lantern): no cone to draw -- its glow is drawn with its
            body -- but what it lights near it, it lights. */
-        if (traits.omni && showingOutput)
+        else if (traits.omni && showingOutput)
         {
             QColor live = col;
             uchar dim = 0;

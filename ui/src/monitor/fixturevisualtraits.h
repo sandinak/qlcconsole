@@ -75,6 +75,7 @@ struct FixtureVisualTraits
     bool  omni = false;
     bool  laser = false;            ///< pencil-thin beams (QLCPhysical::LaserEmission)
     bool  stars = false;            ///< a star field (QLCPhysical::StarEmission)
+    bool  flame = false;            ///< a silk flame (QLCPhysical::FlameEmission)
 };
 
 FixtureVisualTraits classifyFixture(Fixture *fx);

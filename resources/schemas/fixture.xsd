@@ -386,6 +386,9 @@ when changing this list -->
             <xs:restriction base="xs:string">
                 <xs:enumeration value="Beam"/>
                 <xs:enumeration value="Omni"/>
+                <xs:enumeration value="Laser"/>
+                <xs:enumeration value="Star"/>
+                <xs:enumeration value="Flame"/>
             </xs:restriction>
         </xs:simpleType>
     </xs:attribute>
@@ -398,6 +401,7 @@ when changing this list -->
             <xs:restriction base="xs:string">
                 <xs:enumeration value="Cluster"/>
                 <xs:enumeration value="Tape"/>
+                <xs:enumeration value="Face"/>
             </xs:restriction>
         </xs:simpleType>
     </xs:attribute>

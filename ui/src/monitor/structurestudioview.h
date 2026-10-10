@@ -598,6 +598,11 @@ private:
      *  @p halfAngleRad of @p dir, each where its ray lands (the floor, a deck,
      *  a cyc; into the room, the throw a beam fired into the air gets),
      *  turning with the fixture's prism rotation; faint rays in haze. */
+    /** A silk flame on: tongues of orange and yellow rising off @p base,
+     *  @p width across and up to @p height tall, wavering with time (@p seed
+     *  keeps two flames from moving together). As light, so it glows. */
+    void drawSilkFlame(QPainter &p, const QVector3D &base, double width, double height,
+                       double level, double seed) const;
     void drawStarField(QPainter &p, quint32 fid, const Fixture *fx, const QByteArray &vals,
                        const QVector3D &apex, const QVector3D &dir, double halfAngleRad,
                        const QColor &colour, double level) const;

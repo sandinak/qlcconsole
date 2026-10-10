@@ -1578,6 +1578,7 @@ void Monitor::initGraphicsToolbar()
         QMenu *sceneryMenu = addMenu->addMenu(tr("Add Scenery"));
         foreach (int kind, Scenery::kinds())
             sceneryMenu->addAction(Scenery::kindName(kind), this, [this, kind]() { slotAddScenery(kind); });
+        addMenu->addAction(tr("Add Fountain…"), this, [this]() { slotAddFountain(); });
         addMenu->addAction(QIcon(":/image.png"), tr("Add Image"),
                            this, SLOT(slotAddImage()));
         addMenu->addAction(tr("Add Network Node"),
@@ -5707,6 +5708,144 @@ void Monitor::slotAddScenery(int kind)
     slotEditScenery(s->id());
 }
 
+void Monitor::slotAddFountain()
+{
+    const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
+    const double toDisp = isFeet ? 3.28084 : 1.0;
+    const double fromDisp = isFeet ? (1.0 / 3.28084) : 1.0;
+    const double mpu = isFeet ? 0.3048 : 1.0;
+    const double stageW = double(m_props->gridSize().x()) * mpu;
+    const double stageD = double(m_props->gridSize().z()) * mpu;
+    QPointF centre(stageW / 2.0, qMax(1.0, stageD - 1.5));
+    if (!m_pendingAddScenePos.isNull())
+    {
+        const QPointF mm = m_graphicsView->pixelsToRealPosition(
+            m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
+        centre = QPointF(mm.x() / 1000.0, mm.y() / 1000.0);
+        m_pendingAddScenePos = QPointF();
+    }
+
+    /* The sizes, as built: 3 ft across, 4 ft deep with a round front; a 5"
+       base; walls of 4" blocks, the outer 8" high and the inner 14". */
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("Add Fountain"));
+    QFormLayout *form = new QFormLayout;
+    auto mkSpin = [&](double metres, const char *name, const QString &tip) {
+        QDoubleSpinBox *sp = new FeetInchesSpinBox(isFeet, &dlg);
+        sp->setRange(0.01, isFeet ? 33.0 : 10.0);
+        sp->setDecimals(3);
+        sp->setValue(metres * toDisp);
+        sp->setObjectName(QString::fromLatin1(name));
+        sp->setToolTip(tip);
+        return sp;
+    };
+    QDoubleSpinBox *wSpin = mkSpin(0.9144, "fountainWidth", tr("Across, outside to outside"));
+    QDoubleSpinBox *dSpin = mkSpin(1.2192, "fountainDepth", tr("From the back to the front of the curve"));
+    QDoubleSpinBox *baseSpin = mkSpin(0.127, "fountainBase", tr("The base it stands on"));
+    QDoubleSpinBox *outerSpin = mkSpin(0.2032, "fountainOuter", tr("The outer wall, above the base"));
+    QDoubleSpinBox *innerSpin = mkSpin(0.3556, "fountainInner", tr("The inner wall, above the base"));
+    QDoubleSpinBox *thickSpin = mkSpin(0.1016, "fountainThickness", tr("How thick each wall is"));
+    QDoubleSpinBox *gapSpin = mkSpin(0.1016, "fountainGap", tr("Between the outer wall and the inner one"));
+    QCheckBox *flameChk = new QCheckBox(tr("A silk flame in the middle"), &dlg);
+    flameChk->setChecked(true);
+    flameChk->setObjectName("fountainFlame");
+    flameChk->setToolTip(tr("A Generic Silk Flame (relay), staged: patch it to the relay's channel"));
+    form->addRow(tr("Width:"), wSpin);
+    form->addRow(tr("Depth:"), dSpin);
+    form->addRow(tr("Base height:"), baseSpin);
+    form->addRow(tr("Outer wall:"), outerSpin);
+    form->addRow(tr("Inner wall:"), innerSpin);
+    form->addRow(tr("Wall thickness:"), thickSpin);
+    form->addRow(tr("Gap:"), gapSpin);
+    form->addRow(QString(), flameChk);
+    QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+    connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    QVBoxLayout *vl = new QVBoxLayout(&dlg);
+    vl->addLayout(form);
+    vl->addWidget(bb);
+    if (dlg.exec() != QDialog::Accepted)
+        return;
+
+    const float W = float(wSpin->value() * fromDisp), D = float(dSpin->value() * fromDisp);
+    const float base = float(baseSpin->value() * fromDisp);
+    const float t = float(thickSpin->value() * fromDisp), gap = float(gapSpin->value() * fromDisp);
+    const float back = float(centre.y()) - D / 2.0f;
+    const quint32 layer = m_props->activeLayerId();
+    const quint32 gid = m_props->nextGroupId();
+    const int n = gid;
+    m_props->createGroup(gid, tr("Fountain %1").arg(n), layer, 0);
+
+    // The base: as wide and deep as the fountain, its front a half circle.
+    StagePlatform *pl = m_props->addPlatform();
+    pl->setName(tr("Fountain %1 base").arg(n));
+    pl->setOriginX(float(centre.x()) - W / 2.0f);
+    pl->setOriginY(back);
+    pl->setWidth(W);
+    pl->setDepth(D);
+    pl->setHeight(base);
+    pl->setFrontCurve(W / 2.0f);
+    pl->setColor(QColor(120, 116, 108));
+    pl->setLayerId(layer);
+    pl->setGroupId(gid);
+
+    /* The walls: Us on the base, open at the back. A wall's line is its
+       middle, so the outer one is half a block in from the edge and the
+       inner one a block, the gap and half a block more. */
+    auto wall = [&](const QString &name, float inset, float height) {
+        Scenery *s = m_props->addScenery();
+        s->setKind(Scenery::Wall);
+        s->setName(name);
+        s->setOutline(Scenery::RoundedU);
+        s->setOriginX(float(centre.x()));
+        s->setOriginY(back);
+        s->setWidth(qMax(0.1f, W - 2.0f * inset));
+        s->setDepth(qMax(0.05f, D - inset));
+        s->setThickness(t);
+        s->setHeight(height);
+        s->setBottom(base);
+        s->setColor(Scenery::defaultColor(Scenery::Wall));
+        s->setLayerId(layer);
+        s->setGroupId(gid);
+        return s;
+    };
+    wall(tr("Fountain %1 outer wall").arg(n), t / 2.0f, float(outerSpin->value() * fromDisp));
+    const float innerInset = t + gap + t / 2.0f;
+    wall(tr("Fountain %1 inner wall").arg(n), innerInset, float(innerSpin->value() * fromDisp));
+
+    // The flame, standing on the base in the middle of the inner wall.
+    if (flameChk->isChecked())
+    {
+        QLCFixtureDef *def = m_doc->fixtureDefCache()->fixtureDef(QStringLiteral("Generic"),
+                                                                   QStringLiteral("Silk Flame (relay)"));
+        if (def != nullptr && !def->modes().isEmpty())
+        {
+            Fixture *fx = new Fixture(m_doc);
+            fx->setFixtureDefinition(def, def->modes().first());
+            fx->setName(tr("Fountain %1 flame").arg(n));
+            fx->setPatched(false);
+            if (m_doc->addFixture(fx))
+            {
+                const QPointF at(centre.x(), double(back) + double(D - innerInset) * 0.5);
+                m_props->setFixturePosition(fx->id(), 0, 0,
+                                            QVector3D(float(at.x() * 1000.0), float(at.y() * 1000.0), 0.0f));
+                FixtureRigProps rp = m_props->fixtureRigProps(fx->id());
+                rp.deckPlatformId = pl->id();
+                rp.mountingType = Truss::FloorMounted;
+                m_props->setFixtureRigProps(fx->id(), rp);
+                m_props->setFixtureGroup(fx->id(), gid);
+                m_graphicsView->addFixture(fx->id(), QPointF(at.x() * 1000.0, at.y() * 1000.0));
+            }
+            else
+                delete fx;
+        }
+    }
+
+    m_graphicsView->updatePlatforms();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+}
+
 void Monitor::slotEditScenery(quint32 sid)
 {
     Scenery *s = m_props->scenery(sid);
@@ -6764,6 +6903,7 @@ void Monitor::slotCanvasContextMenu(QPointF scenePos)
     QMenu *sceneryMenu = addMenu->addMenu(tr("Scenery"));
     foreach (int kind, Scenery::kinds())
         sceneryMenu->addAction(Scenery::kindName(kind), this, [this, kind]() { slotAddScenery(kind); });
+    addMenu->addAction(tr("Fountain…"), this, [this]() { slotAddFountain(); });
     addMenu->addSeparator();
     addMenu->addAction(tr("Target Position"),
                        this, SLOT(slotAddTarget()));

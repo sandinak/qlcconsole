@@ -170,7 +170,10 @@ public:
     /** ... a laser (pencil-thin beams that barely spread, a sharp dot where
      *  each lands), or a star field (hundreds of points of light thrown over
      *  whatever its spread reaches -- a sky laser). */
-    enum Emission { BeamEmission = 0, OmniEmission, LaserEmission, StarEmission };
+    /** FlameEmission: a silk flame -- a fan under a sheet of silk lit from
+     *  below, switched on and off (a relay): tongues of orange and yellow
+     *  rising off it, whatever colour the show asks for. */
+    enum Emission { BeamEmission = 0, OmniEmission, LaserEmission, StarEmission, FlameEmission };
     void setEmission(Emission emission) { m_emission = emission; }
     Emission emission() const { return m_emission; }
 
