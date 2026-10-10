@@ -18,7 +18,7 @@ isn't really implemented until the model derives from it, the UI can set it,
 
 ## Opening it
 
-- **View → Lighting Studio** (⇧⌘3) opens the 2D plot with the Layers panel,
+- **Window → Lighting Studio** (⇧⌘3) opens the 2D plot with the Layers panel,
   where you build the rig and place structures/fixtures.
 - **Double-click any structure** (truss, tower, pipe, stand, platform) opens
   its own dedicated editor — geometry fields, a live elevation preview, and

@@ -325,6 +325,15 @@ public slots:
      *  detached. */
     void showContext(const QString &tabLabel);
 
+    /** The views broken out into their own windows, by tab label. */
+    QStringList detachedContexts() const;
+    /** Put the view @p tabLabel back in the main window, and show it. */
+    void reattachContext(const QString &tabLabel);
+    /** Put every broken-out view back in the main window. */
+    void reattachAllContexts();
+    /** The Window menu, as things are: which views are in their own windows. */
+    void updateWindowMenu();
+
     void slotDetachContext(int index);
     void slotReattachContext();
 
@@ -346,6 +355,9 @@ private:
     QAction* m_controlMonitorAction;
     QAction* m_addressToolAction;
     QAction* m_rigOverviewAction;
+    QList<QAction *> m_windowJumps;         ///< Window menu: a view each
+    QMenu *m_windowDockMenu = nullptr;      ///< Window > Put Back in Main Window
+    QAction *m_windowDockAll = nullptr;
     QAction* m_controlBlackoutAction;
     QAction* m_controlBlindAction;
     QAction* m_showLockAction;

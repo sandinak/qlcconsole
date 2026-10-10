@@ -43,6 +43,7 @@ private slots:
 
     /** "every time I open the rig view .. the studio tab comes up": the Rig
      *  Overview is a window of its own; opening it leaves the tab alone. */
+    void theWindowMenuFindsAndPutsBackBrokenOutViews();
     void theRigOverviewOpensWithoutTakingYouToTheStudio();
 
     /** "fetch and CACHE .. we cannot have remote stuff for a showfile on a

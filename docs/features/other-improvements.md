@@ -84,6 +84,14 @@ So far the WLED output has been checked against a stand-in that answers
 like a WLED device, not yet against real WLED hardware on a show network —
 try it on your own devices before relying on it for a show.
 
+## Window menu
+
+Every view is in **Window**, with its shortcut (⇧⌘1 Connections … ⇧⌘8 Simple
+Desk): choosing one brings it forward — its tab, or its own window when it
+has been broken out (double-click a tab), which the menu marks "in its own
+window". **Put Back in Main Window** returns one, **Put All Back in Main
+Window** all of them; **Minimize** (⌘M) as usual.
+
 ## Readiness footer
 
 The status chip at the bottom of the window reads **Ready** when nothing

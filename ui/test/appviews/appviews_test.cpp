@@ -18,6 +18,8 @@
 */
 
 #include <QtTest>
+#include <QMenu>
+#include <QMenuBar>
 #include <QRegularExpression>
 #include <QTemporaryDir>
 #include <QTabWidget>
@@ -116,6 +118,48 @@ void AppViews_Test::jumpingToADetachedViewRaisesItsWindow()
              "picking an already-detached view did not bring its window forward");
 
     reattach(m_app, label);
+}
+
+void AppViews_Test::theWindowMenuFindsAndPutsBackBrokenOutViews()
+{
+    /* "the menubar needs a windows thing .. if I break out a tab it's hard to
+       find": every view in a Window menu, marked when it is in its own window,
+       and put back from there. */
+    QMenu *windowMenu = m_app->menuBar()->findChild<QMenu *>("windowMenu");
+    QVERIFY(windowMenu != nullptr);
+    QTabWidget *tabs = m_app->m_tab;
+    const int views = tabs->count();
+    QCOMPARE(m_app->m_windowJumps.size(), views);
+
+    const QString label = tabs->tabBar()->tabData(2).toString();
+    m_app->slotDetachContext(2);
+    QCOMPARE(m_app->detachedContexts(), QStringList() << label);
+    m_app->updateWindowMenu();
+    QAction *jump = nullptr;
+    foreach (QAction *a, m_app->m_windowJumps)
+        if (a->data().toString() == label)
+            jump = a;
+    QVERIFY(jump != nullptr);
+    QVERIFY2(jump->text().contains("in its own window"), qPrintable(jump->text()));
+    QVERIFY(m_app->m_windowDockMenu->isEnabled());
+    QCOMPARE(m_app->m_windowDockMenu->actions().size(), 1);
+    QCOMPARE(m_app->m_windowDockMenu->actions().first()->text(), label);
+
+    // Put back from the menu: a tab again, and shown.
+    m_app->m_windowDockMenu->actions().first()->trigger();
+    QCOMPARE(tabs->count(), views);
+    QCOMPARE(tabs->tabBar()->tabData(tabs->currentIndex()).toString(), label);
+    m_app->updateWindowMenu();
+    QVERIFY(!jump->text().contains("in its own window"));
+    QVERIFY(!m_app->m_windowDockAll->isEnabled());
+
+    // Two out, all put back at once.
+    m_app->slotDetachContext(1);
+    m_app->slotDetachContext(1);
+    QCOMPARE(m_app->detachedContexts().size(), 2);
+    m_app->reattachAllContexts();
+    QVERIFY(m_app->detachedContexts().isEmpty());
+    QCOMPARE(tabs->count(), views);
 }
 
 void AppViews_Test::theRigOverviewOpensWithoutTakingYouToTheStudio()

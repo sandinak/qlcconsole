@@ -1791,25 +1791,6 @@ void App::initMenuBar()
     m_rigOverviewAction->setToolTip(tr("An angled, read-only view of the whole rig"));
     connect(m_rigOverviewAction, &QAction::triggered, this, &App::slotRigOverview);
 
-    viewMenu->addSeparator();
-    // Jump-to-tab entries, taken from the real tab list (m_tabOriginals keeps
-    // each tab's label/icon regardless of the icon-only/text-only display mode).
-    for (int i = 0; i < m_tabOriginals.size(); i++)
-    {
-        QAction* jump = viewMenu->addAction(m_tabOriginals.at(i).second,
-                                            m_tabOriginals.at(i).first);
-        // Ctrl+Shift+<n> (⇧⌘n on macOS): the plain Ctrl+<n> row is taken by
-        // the Function Manager's "add function" shortcuts.
-        jump->setShortcut(QKeySequence(QString("CTRL+SHIFT+%1").arg(i + 1)));
-        /* Resolve by LABEL, not by construction order. Detaching a view calls
-           removeTab(), so every index after it shifts and a raw
-           setCurrentIndex(i) lands on the wrong page -- or on nothing at all
-           for the detached view itself. */
-        const QString label = m_tabOriginals.at(i).first;
-        connect(jump, &QAction::triggered, this, [this, label]() {
-            showContext(label);
-        });
-    }
 
     // Backstage color themes: low-glare palettes for working near a stage/
     // audience. Persisted (App::setTheme() -> workspace/theme).
@@ -1945,6 +1926,46 @@ void App::initMenuBar()
     ctrlMenu->addAction(m_timelineSuspendAction);
     ctrlMenu->addAction(m_lastLookAction);
     ctrlMenu->addAction(m_clearLastLookAction);
+
+    /* ---- Window: every view, wherever it is ----
+       "the menubar needs a windows thing so I can find them .. if I break out
+       a tab it's hard to find". Each view is listed with its shortcut and
+       brings it forward -- the tab, or its own window when it has been broken
+       out (marked so). A broken-out view can be put back from here, one or
+       all of them. */
+    QMenu* windowMenu = mb->addMenu(tr("&Window"));
+    windowMenu->setObjectName("windowMenu");
+    for (int i = 0; i < m_tabOriginals.size(); i++)
+    {
+        QAction* jump = windowMenu->addAction(m_tabOriginals.at(i).second,
+                                              m_tabOriginals.at(i).first);
+        // Ctrl+Shift+<n> (⇧⌘n on macOS): the plain Ctrl+<n> row is taken by
+        // the Function Manager's "add function" shortcuts.
+        jump->setShortcut(QKeySequence(QString("CTRL+SHIFT+%1").arg(i + 1)));
+        /* Resolve by LABEL, not by construction order. Detaching a view calls
+           removeTab(), so every index after it shifts and a raw
+           setCurrentIndex(i) lands on the wrong page -- or on nothing at all
+           for the detached view itself. */
+        const QString label = m_tabOriginals.at(i).first;
+        jump->setData(label);
+        connect(jump, &QAction::triggered, this, [this, label]() {
+            showContext(label);
+        });
+        m_windowJumps << jump;
+    }
+    windowMenu->addSeparator();
+    m_windowDockMenu = windowMenu->addMenu(tr("Put Back in Main Window"));
+    m_windowDockAll = windowMenu->addAction(tr("Put All Back in Main Window"));
+    connect(m_windowDockAll, &QAction::triggered, this, &App::reattachAllContexts);
+    windowMenu->addSeparator();
+    QAction *minimize = windowMenu->addAction(tr("Minimize"));
+    minimize->setShortcut(QKeySequence(QStringLiteral("CTRL+M")));
+    connect(minimize, &QAction::triggered, this, []() {
+        if (QWidget *w = QApplication::activeWindow())
+            w->showMinimized();
+    });
+    connect(windowMenu, &QMenu::aboutToShow, this, &App::updateWindowMenu);
+    updateWindowMenu();
 
     /* ---- Help ---- */
     QMenu* helpMenu = mb->addMenu(tr("&Help"));
@@ -2757,6 +2778,52 @@ void App::showContext(const QString &tabLabel)
         dw->activateWindow();
         return;
     }
+}
+
+QStringList App::detachedContexts() const
+{
+    QStringList out;
+    foreach (DetachedContext *dw, findChildren<DetachedContext *>())
+        if (dw->centralWidget() != NULL)     // put back, a window holds nothing
+            out << dw->centralWidget()->property("tabLabel").toString();
+    return out;
+}
+
+void App::updateWindowMenu()
+{
+    const QStringList away = detachedContexts();
+    foreach (QAction *jump, m_windowJumps)
+    {
+        const QString label = jump->data().toString();
+        jump->setText(away.contains(label) ? tr("%1 — in its own window").arg(label) : label);
+    }
+    if (m_windowDockMenu != NULL)
+    {
+        m_windowDockMenu->clear();
+        foreach (const QString &label, away)
+            m_windowDockMenu->addAction(label, this, [this, label]() { reattachContext(label); });
+        m_windowDockMenu->setEnabled(!away.isEmpty());
+    }
+    if (m_windowDockAll != NULL)
+        m_windowDockAll->setEnabled(!away.isEmpty());
+}
+
+void App::reattachContext(const QString &tabLabel)
+{
+    foreach (DetachedContext *dw, findChildren<DetachedContext *>())
+        if (dw->centralWidget() != NULL && dw->centralWidget()->property("tabLabel").toString() == tabLabel)
+        {
+            dw->close();                // closing puts it back (slotReattachContext)
+            showContext(tabLabel);
+            return;
+        }
+}
+
+void App::reattachAllContexts()
+{
+    foreach (DetachedContext *dw, findChildren<DetachedContext *>())
+        if (dw->centralWidget() != NULL)
+            dw->close();
 }
 
 void App::slotDetachContext(int index)
