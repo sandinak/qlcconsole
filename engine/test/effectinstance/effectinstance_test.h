@@ -23,6 +23,7 @@ private slots:
     void theStepTestPatternCountsNumbersAndNamesTheSteps();
     void theFixturesAScriptSeesFollowTheRig();
     void aWholeRigOfPixelsTicksQuickly();
+    void theTextEffectSpellsOnAGrid();
     void init();
     void cleanup();
 

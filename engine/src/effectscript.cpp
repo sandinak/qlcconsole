@@ -324,6 +324,8 @@ bool EffectScript::parseMeta()
             def.min          = (float)item.property("min").toNumber();
             def.max          = (float)item.property("max").toNumber();
             def.defaultValue = (float)item.property("defaultValue").toNumber();
+            if (item.property("defaultValue").isString())
+                def.defaultText = item.property("defaultValue").toString();
             QJSValue vals = item.property("values");
             if (vals.isArray())
             {

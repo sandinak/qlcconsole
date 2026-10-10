@@ -1940,6 +1940,27 @@ void LookEditor::rebuildEffectDynWidget()
                 });
                 form->addRow(pd.name, pdw);
             }
+            else if (pd.type == QLatin1String("text"))
+            {
+                // Words for the effect to show → a line to type them in; taken
+                // as they are typed, so the rig shows them as they are.
+                QLineEdit *le = new QLineEdit(m_effectDynWidget);
+                const QString existing = p->effectStringParams().contains(pd.name)
+                                         ? p->effectStringParam(pd.name) : pd.defaultText;
+                le->setText(existing);
+                le->setToolTip(pd.description);
+                le->setObjectName(QStringLiteral("effectText_") + pd.name);
+                const QString paramName = pd.name;
+                connect(le, &QLineEdit::textChanged,
+                        this, [this, paramName](const QString &text) {
+                    QLCPalette *pp = m_doc->palette(m_paletteId);
+                    if (!pp) return;
+                    pp->setEffectStringParam(paramName, text);
+                    m_doc->setModified();
+                    emit paletteValueChanged(m_paletteId);
+                });
+                form->addRow(pd.name, le);
+            }
             else if (pd.type == QLatin1String("direction"))
             {
                 // Gradient-direction param → visual compass that previews the

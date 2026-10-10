@@ -1309,4 +1309,79 @@ void EffectInstance_Test::aWholeRigOfPixelsTicksQuickly()
     timer.timerTick();
 }
 
+/* The Text effect on a grid of 8 strips of 24: "HI" held still in the
+   middle, dot for dot; scrolling, it starts off the right edge. */
+void EffectInstance_Test::theTextEffectSpellsOnAGrid()
+{
+    MasterTimer timer(m_doc);
+    QLCFixtureDef *stripDef = makePixelDef("Text strip", 24, 0);
+    m_doc->fixtureDefCache()->addFixtureDef(stripDef);
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    grp->setSize(QSize(24, 8));
+    QList<Fixture *> strips;
+    for (int s = 0; s < 8; ++s)
+    {
+        Fixture *f = new Fixture(m_doc);
+        f->setFixtureDefinition(stripDef, stripDef->modes().first());
+        f->setName(QString("Sign #%1").arg(s + 1));
+        f->setUniverse(4 + quint32(s / 4));
+        f->setAddress(quint32((s % 4) * 72));
+        QVERIFY(m_doc->addFixture(f));
+        strips << f;
+        for (int h = 0; h < 24; ++h)
+            grp->assignHead(QLCPoint(h, s), GroupHead(f->id(), h));
+    }
+    m_doc->addFixtureGroup(grp);
+
+    QLCPalette *text = new QLCPalette(QLCPalette::Effect, m_doc);
+    text->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/text.js");
+    text->setEffectStringParam("text", "HI");
+    text->setEffectParamValue("style", 1);          // Still
+    QVERIFY(m_doc->addPalette(text));
+    Scene *scene = new Scene(m_doc);
+    for (Fixture *f : strips)
+        scene->addFixture(f->id());
+    scene->addFixtureGroup(grp->id());
+    scene->addPalette(text->id());
+    m_doc->addFunction(scene);
+    scene->start(&timer, FunctionParent::master());
+    timer.timerTick();
+
+    auto lit = [&](EffectInstance &inst) {
+        inst.runTick();
+        QSet<QPair<int, int>> on;            // (column, row)
+        foreach (const EffectInstance::DmxWrite &w, inst.dmxWrites())
+            if (w.channel % 3 == 0 && w.value > 0)
+                on.insert(qMakePair(int(w.channel / 3), strips.indexOf(m_doc->fixture(w.fixtureId))));
+        return on;
+    };
+
+    EffectInstance still(m_doc, scene->id(), text->id());
+    QVERIFY2(still.isValid(), qPrintable(still.error()));
+    const QSet<QPair<int, int>> on = lit(still);
+    // "HI" is 11 dots wide: from column 6. H's uprights, its bar on row 3.
+    for (int row = 0; row < 7; ++row)
+    {
+        QVERIFY2(on.contains(qMakePair(6, row)), qPrintable(QString("H left, row %1").arg(row)));
+        QVERIFY(on.contains(qMakePair(10, row)));
+        QVERIFY(on.contains(qMakePair(14, row)));       // I's stem
+    }
+    QVERIFY(on.contains(qMakePair(8, 3)));
+    QVERIFY(!on.contains(qMakePair(8, 2)));
+    QVERIFY(on.contains(qMakePair(13, 0)) && on.contains(qMakePair(13, 6)) && !on.contains(qMakePair(13, 3)));
+    QVERIFY(!on.contains(qMakePair(5, 3)) && !on.contains(qMakePair(17, 3)));
+    for (int col = 0; col < 24; ++col)
+        QVERIFY(!on.contains(qMakePair(col, 7)));        // 7 rows tall: the 8th is clear
+    QCOMPARE(on.size(), (7 + 3 + 7) + (2 + 7 + 2));      // H, I
+
+    // Scrolling, slowly: it comes in from the right, so nothing shows yet.
+    text->setEffectParamValue("style", 0);
+    text->setEffectParamValue("speed", 1);
+    EffectInstance scroll(m_doc, scene->id(), text->id());
+    QVERIFY(lit(scroll).isEmpty());
+
+    scene->stop(FunctionParent::master());
+    timer.timerTick();
+}
+
 QTEST_GUILESS_MAIN(EffectInstance_Test)

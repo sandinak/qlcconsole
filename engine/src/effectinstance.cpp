@@ -94,6 +94,12 @@ EffectInstance::EffectInstance(Doc *doc, quint32 sceneId, quint32 effectPaletteI
     {
         if (d.type == QLatin1String("path"))
             continue;  // path params seeded from string params below
+        if (d.type == QLatin1String("text"))
+        {
+            // Words, not a number: the script's own until the look says else
+            m_stringParamValues[d.name] = d.defaultText;
+            continue;
+        }
         if (!m_paramValues.contains(d.name))
             m_paramValues[d.name] = d.defaultValue;
     }

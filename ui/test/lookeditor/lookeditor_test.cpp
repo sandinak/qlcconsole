@@ -343,6 +343,38 @@ void LookEditor_Test::effectsArePickedFromABrowserWithWledsOwn()
     }
 }
 
+/* An effect with words to show (the Text effect) gets a box to type them in,
+   showing the script's own words to start with; what is typed is the look's. */
+void LookEditor_Test::anEffectsTextIsTypedIn()
+{
+    Doc doc(this);
+    doc.effectScriptRunner()->cache()->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    QLCPalette *look = new QLCPalette(QLCPalette::Effect, &doc);
+    look->setName("Sign");
+    QVERIFY(doc.addPalette(look));
+    LookEditor ed(&doc);
+    ed.resize(1000, 640);
+    ed.show();
+    ed.setPalette(look->id());
+    EffectBrowser *browser = ed.m_effectBrowser;
+    browser->search()->setText("Text");             // whichever tab it is under
+    QApplication::processEvents();
+    QListWidgetItem *textItem = nullptr;
+    for (int i = 0; i < browser->list()->count() && textItem == nullptr; ++i)
+        if (browser->list()->item(i)->text() == QLatin1String("Text"))
+            textItem = browser->list()->item(i);
+    QVERIFY2(textItem != nullptr, "the Text effect should be in the list");
+    browser->pick(textItem);
+    QApplication::processEvents();
+    QVERIFY(look->scriptPath().endsWith("text.js"));
+
+    QLineEdit *box = ed.m_effectDynWidget->findChild<QLineEdit *>("effectText_text");
+    QVERIFY2(box != nullptr, "a text setting should be a box to type in");
+    QCOMPARE(box->text(), QString("HELLO"));
+    box->setText("SHOW TIME");
+    QCOMPARE(look->effectStringParam("text"), QString("SHOW TIME"));
+}
+
 void LookEditor_Test::theEffectListAndItsSettingsSitSideBySide()
 {
     /* "on a regular sized screen we're running out of space in the bottom ..
