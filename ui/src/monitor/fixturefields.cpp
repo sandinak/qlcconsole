@@ -15,6 +15,8 @@
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QToolButton>
+#include <QPushButton>
+#include <QMessageBox>
 #include <QComboBox>
 #include <QSpinBox>
 #include <QLabel>
@@ -31,6 +33,8 @@
 #include "lightcontrols.h"
 #include "monitor.h"
 #include "fixture.h"
+#include "qlcfixturedef.h"
+#include "qlcfixturemode.h"
 #include "tower.h"
 #include "doc.h"
 
@@ -265,8 +269,14 @@ FixtureFields::FixtureFields(Monitor *monitor, QFormLayout *form, QWidget *paren
     measureBtn->setText(tr("Measure…"));
     measureBtn->setToolTip(tr("Light it a step at a time and enter what the meter reads"));
     powerRow->addWidget(m_maxAmps, 1);
+    m_copyPower = new QToolButton(powerBox);
+    m_copyPower->setObjectName(QStringLiteral("fixtureCopyPower"));
+    m_copyPower->setText(tr("Copy to Same Fixtures…"));
+    m_copyPower->setToolTip(tr("Give its readings to every fixture of the same make, model and mode "
+                               "in this show -- each keeps its own maximum"));
     powerRow->addWidget(profileBtn);
     powerRow->addWidget(measureBtn);
+    powerRow->addWidget(m_copyPower);
     m_powerNote = new QLabel(powerBox);
     m_powerNote->setObjectName(QStringLiteral("fixturePowerNote"));
     m_powerNote->setWordWrap(true);
@@ -294,6 +304,33 @@ FixtureFields::FixtureFields(Monitor *monitor, QFormLayout *form, QWidget *paren
         PowerProfileDialog dlg(m_monitor->m_doc, m_fids, m_parent);
         if (dlg.exec() == QDialog::Accepted)
             finishEdit();
+    });
+    /* "an easy way to copy amperage profile to the same fixtures across a
+       showfile": measure one, give its readings to all the others like it. */
+    connect(m_copyPower, &QToolButton::clicked, this, [this]() {
+        Doc *doc = m_monitor->m_doc;
+        Fixture *src = powerSource(doc, m_fids, m_shown);
+        if (src == nullptr)
+            return;
+        const QList<quint32> to = sameFixtures(doc, src);
+        QMessageBox box(QMessageBox::Question, tr("Copy Power Readings"),
+                        to.isEmpty()
+                            ? tr("There are no other %1 (%2) fixtures in this show.")
+                                  .arg(src->fixtureDef()->model(), src->fixtureMode()->name())
+                            : tr("Give %1's readings to the %n other %2 (%3) fixture(s) in this show? "
+                                 "Each keeps its own maximum.", "", to.size())
+                                  .arg(src->name(), src->fixtureDef()->model(), src->fixtureMode()->name()),
+                        QMessageBox::NoButton, m_parent);
+        QPushButton *copy = to.isEmpty() ? nullptr : box.addButton(tr("Copy"), QMessageBox::AcceptRole);
+        box.addButton(to.isEmpty() ? QMessageBox::Ok : QMessageBox::Cancel);
+        if (copy != nullptr)
+            copy->setObjectName(QStringLiteral("copyPowerConfirm"));
+        box.exec();
+        if (copy == nullptr || box.clickedButton() != copy)
+            return;
+        emit aboutToEdit(QStringLiteral("powerProfile"));
+        copyPowerReadings(doc, src, to);
+        finishEdit();
     });
     connect(measureBtn, &QToolButton::clicked, this, [this]() {
         if (m_fids.isEmpty())
@@ -698,8 +735,16 @@ void FixtureFields::setFixtures(const QList<quint32> &fids, quint32 shown)
             m_maxAmps->setValue(pp.maxAmps);
         }
         QString note;
+        Fixture *src = powerSource(pdoc, m_fids, m_shown);
+        const int alike = src != nullptr ? sameFixtures(pdoc, src).size() : 0;
+        m_copyPower->setEnabled(src != nullptr && alike > 0);
         if (many)
+        {
             note = tr("%1 of %2 measured").arg(measured).arg(m_fids.size());
+            if (src != nullptr && alike > 0)
+                note += tr(" — Copy to Same Fixtures… gives %1's readings to the %n like it", "", alike)
+                            .arg(src->name());
+        }
         else if (pp.isMeasured())
         {
             QStringList parts;

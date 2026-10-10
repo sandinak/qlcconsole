@@ -264,7 +264,12 @@ each colour alone at full, everything at half, everything off, and
   readings can be used for all the fixtures selected (each keeps its own
   maximum).
 - **Profile…** types in readings already taken. A colour left unmeasured
-  shares what is left of the everything-at-full reading.
+  shares what is left of the everything-at-full reading. With several
+  selected, it opens on the readings of one that has been measured.
+- **Copy to Same Fixtures…** gives a measured fixture's readings to every
+  other fixture of the same make, model and mode in the show — measure one
+  bar, copy, done. Each keeps its own maximum. With several selected, the
+  measured one among them is the source, wherever it is in the selection.
 
 From those it works out what the fixture draws at whatever it's sent: each
 colour's share, split among its pixels, bent by the curve the half reading

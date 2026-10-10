@@ -44,6 +44,16 @@ QList<int> powerColours(const Fixture *fx);
 /** A colour's name, as the meter readings are asked for ("Red", "Lamp"). */
 QString powerColourName(int colour);
 
+/** Of @p fids, the one whose readings stand for them: @p prefer when it is
+ *  measured, else the first that is; nullptr when none is. */
+Fixture *powerSource(Doc *doc, const QList<quint32> &fids, quint32 prefer);
+/** Every other fixture in the show that is the same as @p fx: the same
+ *  make, model and mode. */
+QList<quint32> sameFixtures(Doc *doc, const Fixture *fx);
+/** Give @p to @p from's readings, each keeping its own maximum. Returns how
+ *  many changed. */
+int copyPowerReadings(Doc *doc, const Fixture *from, const QList<quint32> &to);
+
 /**
  * What a fixture draws, typed in from readings already taken: each colour
  * alone at full, everything at full, at half and off, and the most it may

@@ -299,7 +299,11 @@ MonitorLayersPanel::MonitorLayersPanel(Doc *doc, MonitorGraphicsView *view, QWid
        (X is not on screen), so they stack and only the top one can be clicked;
        picking it by name here reaches the rest. */
     connect(m_tree, &QTreeWidget::itemSelectionChanged, this, [this]() {
-        if (m_syncingSelection || m_view == nullptr)
+        /* Not while the tree is being rebuilt: clearing it "deselects" every
+           row, and passing that on emptied the plot's selection whenever a
+           fixture changed -- setting Max draw on several fixtures deselected
+           them all ("it deselected the fixtures"). */
+        if (m_syncingSelection || m_reloading || m_view == nullptr)
             return;
         m_syncingSelection = true;
         m_view->selectMapItems(selectedObjects());
@@ -1136,6 +1140,10 @@ void MonitorLayersPanel::reload()
                                             .arg((*it)->data(0, NodeIdRole).toUInt())))
             (*it)->setExpanded(true);
     }
+
+    // What is selected on the plot is selected here again after the rebuild.
+    if (m_view != nullptr)
+        followMapSelection(m_view->selectedMapObjects());
 
     // Restore the scroll position (overriding the scrollTo that setCurrentItem
     // just did), so a reload doesn't jump the view around.

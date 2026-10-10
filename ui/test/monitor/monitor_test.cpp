@@ -18022,6 +18022,139 @@ void Monitor_Test::measuringPowerDrivesEachStateAndKeepsTheReadings()
         m_doc->fixture(id)->setFixtureDefinition(nullptr, nullptr);
 }
 
+void Monitor_Test::powerReadingsAreCopiedToEveryFixtureLikeIt()
+{
+    /* "need an easy way to copy amperage profile to the same fixtures across a
+       showfile. I selected them all and it didn't find the one I did." */
+    FixtureCleanup cleanup(m_doc);
+    auto makeDef = [this](const QString &model) {
+        QLCFixtureDef *def = new QLCFixtureDef();
+        def->setManufacturer("Test"); def->setModel(model);
+        QLCFixtureMode *mode = new QLCFixtureMode(def);
+        mode->setName("3ch");
+        const QLCChannel::Preset presets[] = { QLCChannel::IntensityRed, QLCChannel::IntensityGreen,
+                                               QLCChannel::IntensityBlue };
+        for (int i = 0; i < 3; ++i)
+        {
+            QLCChannel *ch = new QLCChannel();
+            ch->setName(QString("c%1").arg(i));
+            ch->setPreset(presets[i]);
+            def->addChannel(ch);
+            mode->insertChannel(ch, quint32(i));
+        }
+        def->addMode(mode);
+        m_doc->fixtureDefCache()->addFixtureDef(def);
+        return def;
+    };
+    QLCFixtureDef *bar = makeDef("Copy Bar");
+    QLCFixtureDef *other = makeDef("Other Par");
+    QList<quint32> bars;
+    for (int i = 0; i < 4; ++i)
+    {
+        Fixture *fx = new Fixture(m_doc);
+        QLCFixtureDef *d = (i == 3) ? other : bar;
+        fx->setFixtureDefinition(d, d->modes().first());
+        fx->setAddress(480 + quint32(i) * 4);
+        QVERIFY(m_doc->addFixture(fx));
+        cleanup.ids << fx->id();
+        bars << fx->id();
+        m_doc->monitorProperties()->setFixturePosition(fx->id(), 0, 0, QVector3D(1000 + i * 1000, 5000, 0));
+    }
+    // The one measured is the second; the third has a maximum of its own.
+    PowerProfile measured;
+    measured.colourAmps.insert(int(QLCChannel::Red), 2.7);
+    measured.halfAmps = 1.7;
+    measured.maxAmps = 3.0;
+    m_doc->fixture(bars.at(1))->setPowerProfile(measured);
+    PowerProfile own;
+    own.maxAmps = 4.0;
+    m_doc->fixture(bars.at(2))->setPowerProfile(own);
+
+    // Profile..., opened on a selection whose first is not measured: the measured one's.
+    {
+        PowerProfileDialog dlg(m_doc, QList<quint32>() << bars.at(0) << bars.at(1));
+        QCOMPARE(dlg.findChild<QDoubleSpinBox *>("powerHalf")->value(), 1.7);
+    }
+
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+    foreach (quint32 id, bars)
+        rig.gv->addFixture(id, m_doc->monitorProperties()->fixtureItem(id, 0, 0).m_position.toPointF());
+    QString note;
+    bool enabled = false;
+    driveDialog([&](QWidget *modal) {
+        QToolButton *copy = modal->findChild<QToolButton *>("fixtureCopyPower");
+        QLabel *n = modal->findChild<QLabel *>("fixturePowerNote");
+        if (copy == nullptr || n == nullptr)
+            return false;
+        note = n->text();
+        enabled = copy->isEnabled();
+        QTimer::singleShot(0, []() {                 // the confirmation: Copy
+            if (QWidget *box = QApplication::activeModalWidget())
+                if (QPushButton *yes = box->findChild<QPushButton *>("copyPowerConfirm"))
+                    yes->click();
+        });
+        copy->click();
+        return true;
+    });
+    rig.mon->editFixturesProperties(QList<quint32>() << bars.at(0) << bars.at(1));
+    QVERIFY(enabled);
+    QVERIFY2(note.contains("1 of 2 measured"), qPrintable(note));
+    for (int i = 0; i < 3; ++i)
+    {
+        const PowerProfile pp = m_doc->fixture(bars.at(i))->powerProfile();
+        QCOMPARE(pp.colourAmps.value(int(QLCChannel::Red)), 2.7);
+        QCOMPARE(pp.halfAmps, 1.7);
+    }
+    QCOMPARE(m_doc->fixture(bars.at(0))->powerProfile().maxAmps, 0.0);   // each keeps its own
+    QCOMPARE(m_doc->fixture(bars.at(2))->powerProfile().maxAmps, 4.0);
+    QVERIFY(!m_doc->fixture(bars.at(3))->powerProfile().isMeasured());   // not the same fixture
+}
+
+void Monitor_Test::changingAFixtureKeepsWhatIsSelected()
+{
+    /* "I tried to select multiple fixtures .. set max draw to 1.0 A .. and it
+       deselected the fixtures": a fixture's own change rebuilds the Layers
+       list, and clearing the list emptied the plot's selection. */
+    FixtureCleanup cleanup(m_doc);
+    QList<quint32> ids;
+    for (int i = 0; i < 2; ++i)
+    {
+        Fixture *fx = new Fixture(m_doc);
+        fx->setName(QString("Sel %1").arg(i + 1));
+        fx->setChannels(1);
+        fx->setAddress(500 + quint32(i) * 4);
+        QVERIFY(m_doc->addFixture(fx));
+        cleanup.ids << fx->id();
+        ids << fx->id();
+        m_doc->monitorProperties()->setFixturePosition(fx->id(), 0, 0, QVector3D(2000 + i * 1000, 6000, 0));
+    }
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+    foreach (quint32 id, ids)
+        rig.gv->addFixture(id, m_doc->monitorProperties()->fixtureItem(id, 0, 0).m_position.toPointF());
+    QVERIFY(rig.mon->m_layersPanel != nullptr);
+    rig.mon->m_layersPanel->reload();
+
+    QList<QPair<QString, quint32> > both;
+    foreach (quint32 id, ids)
+        both << qMakePair(QStringLiteral("fixture"), id);
+    rig.gv->selectMapItems(both);
+    QCOMPARE(rig.gv->selectedMapObjects().size(), 2);
+
+    // Their maximum draw set, as Fixture Properties does: each fixture changes.
+    foreach (quint32 id, ids)
+    {
+        PowerProfile pp;
+        pp.maxAmps = 1.0;
+        m_doc->fixture(id)->setPowerProfile(pp);
+    }
+    QTest::qWait(50);                                   // the list's deferred rebuild
+    QCOMPARE(rig.gv->selectedMapObjects().size(), 2);
+    // And the list shows them selected again.
+    QCOMPARE(rig.mon->m_layersPanel->selectedObjects().size(), 2);
+}
+
 void Monitor_Test::aPersonsHeightIsSetInTheTargetDialog()
 {
     MonitorProperties *props = m_doc->monitorProperties();

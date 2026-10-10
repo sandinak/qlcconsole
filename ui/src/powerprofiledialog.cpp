@@ -28,6 +28,7 @@
 
 #include "powerprofiledialog.h"
 #include "qlcfixturemode.h"
+#include "qlcfixturedef.h"
 #include "inputoutputmap.h"
 #include "powerlimiter.h"
 #include "genericfader.h"
@@ -80,6 +81,60 @@ QString powerColourName(int colour)
     return QLCChannel::colourToString(QLCChannel::PrimaryColour(colour));
 }
 
+Fixture *powerSource(Doc *doc, const QList<quint32> &fids, quint32 prefer)
+{
+    Fixture *p = doc->fixture(prefer);
+    if (p != nullptr && fids.contains(prefer) && p->powerProfile().isMeasured())
+        return p;
+    foreach (quint32 fid, fids)
+    {
+        Fixture *fx = doc->fixture(fid);
+        if (fx != nullptr && fx->powerProfile().isMeasured())
+            return fx;
+    }
+    return nullptr;
+}
+
+QList<quint32> sameFixtures(Doc *doc, const Fixture *fx)
+{
+    QList<quint32> out;
+    if (fx == nullptr || fx->fixtureDef() == nullptr || fx->fixtureMode() == nullptr)
+        return out;
+    foreach (Fixture *o, doc->fixtures())
+    {
+        if (o == fx || o->fixtureDef() == nullptr || o->fixtureMode() == nullptr)
+            continue;
+        if (o->fixtureDef()->manufacturer() == fx->fixtureDef()->manufacturer()
+            && o->fixtureDef()->model() == fx->fixtureDef()->model()
+            && o->fixtureMode()->name() == fx->fixtureMode()->name())
+            out << o->id();
+    }
+    return out;
+}
+
+int copyPowerReadings(Doc *doc, const Fixture *from, const QList<quint32> &to)
+{
+    if (from == nullptr)
+        return 0;
+    int n = 0;
+    foreach (quint32 fid, to)
+    {
+        Fixture *fx = doc->fixture(fid);
+        if (fx == nullptr || fx == from)
+            continue;
+        PowerProfile pp = from->powerProfile();
+        pp.maxAmps = fx->powerProfile().maxAmps;          // its own maximum stays
+        if (pp != fx->powerProfile())
+        {
+            fx->setPowerProfile(pp);
+            ++n;
+        }
+    }
+    if (n > 0)
+        doc->setModified();
+    return n;
+}
+
 static QDoubleSpinBox *ampsSpin(QWidget *parent, double value, const QString &none)
 {
     QDoubleSpinBox *sp = new QDoubleSpinBox(parent);
@@ -102,7 +157,11 @@ PowerProfileDialog::PowerProfileDialog(Doc *doc, const QList<quint32> &fids, QWi
     , m_fids(fids)
 {
     setWindowTitle(fids.size() > 1 ? tr("Power — %n fixtures", "", fids.size()) : tr("Power"));
-    Fixture *first = fids.isEmpty() ? nullptr : doc->fixture(fids.first());
+    /* Filled from one that has been measured, wherever it is in the
+       selection -- not from whichever came first, which may have none. */
+    Fixture *first = powerSource(doc, fids, Fixture::invalidId());
+    if (first == nullptr && !fids.isEmpty())
+        first = doc->fixture(fids.first());
     const PowerProfile pp = (first != nullptr) ? first->powerProfile() : PowerProfile();
 
     QFormLayout *form = new QFormLayout;

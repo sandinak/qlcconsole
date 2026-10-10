@@ -108,6 +108,7 @@ private:
     QLabel *m_wledNote;
     QDoubleSpinBox *m_maxAmps;  ///< the most it may draw (PowerProfile::maxAmps)
     QLabel *m_powerNote;        ///< what has been measured
+    class QToolButton *m_copyPower; ///< readings to every fixture like it
 };
 
 /** @} */
