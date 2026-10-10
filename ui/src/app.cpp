@@ -2442,7 +2442,7 @@ void App::slotRigOverview()
        of its own, opened to look at the rig beside whatever you are working
        in ("every time I open the rig view .. the studio tab comes up"). */
     if (Monitor *mon = Monitor::instance())
-        mon->showStageOverview();
+        mon->toggleStageOverview();
 }
 
 void App::slotControlMonitor()

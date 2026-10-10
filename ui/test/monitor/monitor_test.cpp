@@ -460,6 +460,38 @@ void Monitor_Test::aShowsRigViewDrawTime()
     }
 }
 
+/* ⇧⌘R opens the Rig Overview, and closes it again when it is the window in
+   front; ⌘W closes it too. */
+void Monitor_Test::theRigOverviewShortcutTogglesIt()
+{
+    QWidget parent;
+    Monitor mon(&parent, m_doc);
+    auto overview = []() -> QDialog * {
+        foreach (QWidget *w, QApplication::topLevelWidgets())
+            if (QDialog *d = qobject_cast<QDialog *>(w))
+                if (d->windowTitle() == QString("Rig Overview") && d->isVisible())
+                    return d;
+        return nullptr;
+    };
+
+    mon.toggleStageOverview();
+    QPointer<QDialog> dlg = overview();
+    QVERIFY(dlg != nullptr);
+    dlg->activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(dlg));
+    mon.toggleStageOverview();          // in front: closed
+    QTRY_VERIFY(dlg.isNull());
+    QVERIFY(overview() == nullptr);
+
+    mon.toggleStageOverview();          // and open again
+    dlg = overview();
+    QVERIFY(dlg != nullptr);
+    dlg->activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(dlg));
+    QTest::keySequence(dlg, QKeySequence::Close);
+    QTRY_VERIFY(dlg.isNull());
+}
+
 QTEST_MAIN(Monitor_Test)
 
 /****************************************************************************

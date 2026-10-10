@@ -2200,6 +2200,16 @@ void Monitor::slotToggleLayersPanel(bool show)
     }
 }
 
+void Monitor::toggleStageOverview()
+{
+    if (m_overviewDlg != NULL && m_overviewDlg->isVisible() && m_overviewDlg->isActiveWindow())
+    {
+        m_overviewDlg->close();
+        return;
+    }
+    showStageOverview();
+}
+
 void Monitor::showStageOverview()
 {
     /* A read-only angled look at the whole rig. StructureStudioView already
@@ -2230,6 +2240,9 @@ void Monitor::showStageOverview()
     });
     dlg.setAttribute(Qt::WA_DeleteOnClose);
     dlg.setWindowTitle(tr("Rig Overview"));
+    // ⌘W closes it like any other window; ⇧⌘R (toggleStageOverview()) too.
+    QShortcut *closeKey = new QShortcut(QKeySequence::Close, dlgPtr);
+    connect(closeKey, &QShortcut::activated, dlgPtr, &QDialog::close);
     dlg.resize(1100, 760);
     QVBoxLayout *vl = new QVBoxLayout(&dlg);
 

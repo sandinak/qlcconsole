@@ -283,6 +283,9 @@ public:
      *  StageKind). Public so App's View menu and the studio footer button open
      *  the SAME window; the Monitor owns it and raises the existing one. */
     void showStageOverview();
+    /** ⇧⌘R: open it -- or, when it is the window in front, close it. Open
+     *  behind others, it is brought forward rather than shut unseen. */
+    void toggleStageOverview();
 
 protected:
 
