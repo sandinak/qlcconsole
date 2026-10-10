@@ -33,6 +33,7 @@ private slots:
     void theRigOverviewShortcutTogglesIt();
     void theRulerMarksTheMiddleOfADraggedDrape();
     void theRigViewHidesWhatTheStudioHides();
+    void aLightAtTheFootOfATowerIsNotHungOnItsTopBar();
     void initTestCase();
     void cleanupTestCase();
 

@@ -3912,6 +3912,31 @@ bool MonitorGraphicsView::elevationFixtureDraggable(quint32 fid) const
     return rp.trussId != Truss::invalidId();   // slides along its truss/bar
 }
 
+/* Whether a fixture can be taken onto a structure running from height @p z0
+   to @p z1 (metres): the plan alone says nothing about height, so a light at
+   the foot of a tower, moved under the bar on its top, was hung on the bar
+   ("they're in different Z planes .. shouldn't have done that"). A fixture
+   already mounted on something else has a height of its own, and keeps it
+   unless the structure is within half a metre of it. A free-standing one is
+   hung by where it is dropped on the plan, as ever -- that is how a fixture
+   is hung from the plot. */
+static bool atHeightOf(Doc *doc, quint32 fid, float z0, float z1)
+{
+    MonitorProperties *props = doc->monitorProperties();
+    const FixtureRigProps rp = props->fixtureRigProps(fid);
+    if (rp.primaryMount() == FixtureRigProps::NoMount
+        || rp.primaryMount() == FixtureRigProps::TrussMount)
+        return true;
+    const float z = props->fixtureRigPosition(fid).z();
+    const float tolerance = 0.5f;
+    return z >= qMin(z0, z1) - tolerance && z <= qMax(z0, z1) + tolerance;
+}
+
+bool MonitorGraphicsView::attachHeld() const
+{
+    return m_attachOnDrop || (QGuiApplication::keyboardModifiers() & Qt::ShiftModifier);
+}
+
 TrussItem *MonitorGraphicsView::trussUnderFixture(MonitorFixtureItem *mfi,
                                                   float widths, bool forAttach) const
 {
@@ -3922,6 +3947,8 @@ TrussItem *MonitorGraphicsView::trussUnderFixture(MonitorFixtureItem *mfi,
     // one down and makes it depend on whether labels happen to be showing
     // on this layer, disagreeing with the deck-mount attach path's own
     // (stable) reading of the same fixture. See WORKFLOW-SUBTLETIES.md #10.
+    if (forAttach && !attachHeld())
+        return nullptr;     // a plain drop only moves; Shift attaches
     const QPointF centre = mfi->iconCentreScene();
     TrussItem *best = nullptr;
     float bestDist = 0.0f;
@@ -3933,6 +3960,9 @@ TrussItem *MonitorGraphicsView::trussUnderFixture(MonitorFixtureItem *mfi,
             continue;
         if (forAttach && t->locked())
             continue;   // a locked structure does not acquire new members
+        if (forAttach && !atHeightOf(m_doc, mfi->fixtureID(), t->origin().z(),
+                                     t->positionAt(t->length()).z()))
+            continue;   // over it on the plan, but not at its height
 
         const QPointF local = ti->mapFromScene(centre);
         float dist;
@@ -3966,6 +3996,8 @@ PipeItem *MonitorGraphicsView::pipeUnderFixture(MonitorFixtureItem *mfi,
 
     // See trussUnderFixture()'s own comment on iconCentreScene() vs
     // sceneBoundingRect().center() -- same reasoning applies here.
+    if (forAttach && !attachHeld())
+        return nullptr;     // a plain drop only moves; Shift attaches
     const QPointF centre = mfi->iconCentreScene();
     PipeItem *best = nullptr;
     float bestDist = 0.0f;
@@ -3977,6 +4009,9 @@ PipeItem *MonitorGraphicsView::pipeUnderFixture(MonitorFixtureItem *mfi,
             continue;
         if (forAttach && b->locked())
             continue;   // a locked structure does not acquire new members
+        if (forAttach && !atHeightOf(m_doc, mfi->fixtureID(), b->positionAt(0.0f).z(),
+                                     b->positionAt(b->length()).z()))
+            continue;   // over it on the plan, but not at its height
 
         // PipeItem keeps its own screen geometry private; derive it the same
         // way updatePlatforms() built the item in the first place, straight
@@ -6425,6 +6460,10 @@ void MonitorGraphicsView::dropEvent(QDropEvent *event)
 
 void MonitorGraphicsView::finishFixtureDrop(quint32 fid)
 {
+    /* From the Inventory: placing it IS the point, so dropped on a truss or
+       a deck it goes there, Shift or not -- Shift is for moving what is on
+       the plot already. */
+    QScopedValueRollback<bool> attach(m_attachOnDrop, true);
     if (MonitorFixtureItem *item = m_fixtures.value(fid, nullptr))
         slotFixtureMoved(item);
 }
@@ -8829,7 +8868,10 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
             const QPointF cMm = pixelsToRealPosition(cPx.x(), cPx.y());
             const quint32 pid = props->platformIdAt(float(cMm.x() / 1000.0),
                                                      float(cMm.y() / 1000.0));
-            if (pid != rp.deckPlatformId)
+            /* Onto a deck takes Shift, like any attach; off every deck is
+               leaving it, which a plain drag does, as off a truss. */
+            const bool offDecks = pid == FixtureRigProps::invalidPlatformId();
+            if (pid != rp.deckPlatformId && (offDecks || attachHeld()))
             {
                 rp.deckPlatformId   = pid;   // invalid → un-decked
                 rp.deckHeightOffset = 0.0f;  // sit on the new deck; edit Z to move it

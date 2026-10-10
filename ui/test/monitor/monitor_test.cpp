@@ -753,7 +753,15 @@ void Monitor_Test::dropOnTrussAttachesAndStays()
     const QPointF onTrussPx = rig.gv->realPositionToPixels(12000.0, 12000.0);
     rig.item->setPos(rig.item->pos() + (onTrussPx - rig.item->iconCentreScene()));
     const QPointF target = rig.item->pos();
+    // A plain drop only moves it ("use a shift drag/drop to enable that").
     rig.gv->slotFixtureMoved(rig.item);
+    QVERIFY2(props->fixtureRigProps(rig.fxi->id()).trussId == Truss::invalidId(),
+             "a drop without Shift hung it on the truss");
+    // With Shift held, the same drop hangs it.
+    rig.item->setPos(rig.item->pos() + (onTrussPx - rig.item->iconCentreScene()));
+    rig.gv->setAttachOnDrop(true);
+    rig.gv->slotFixtureMoved(rig.item);
+    rig.gv->setAttachOnDrop(false);
 
     const FixtureRigProps rp = props->fixtureRigProps(rig.fxi->id());
     QVERIFY2(rp.trussId == t->id(), "released on the truss but did not attach");
@@ -4279,6 +4287,7 @@ void Monitor_Test::buildingARigStepByStepThroughRealUiStaysConsistent()
     QWidget parent;
     Monitor *mon = new Monitor(&parent, doc);
     MonitorGraphicsView *gv = mon->findChild<MonitorGraphicsView *>();
+    gv->setAttachOnDrop(true);   // its drops are Shift-drops: they hang what they drop
     QVERIFY(gv != nullptr);
     MonitorLayersPanel *layers = mon->findChild<MonitorLayersPanel *>();
     QVERIFY(layers != nullptr);
@@ -4760,6 +4769,7 @@ void Monitor_Test::buildingAPlatformStepByStepThroughRealUiStaysConsistent()
     QWidget parent;
     Monitor *mon = new Monitor(&parent, doc);
     MonitorGraphicsView *gv = mon->findChild<MonitorGraphicsView *>();
+    gv->setAttachOnDrop(true);   // its drops are Shift-drops: they hang what they drop
     QVERIFY(gv != nullptr);
     gv->resize(1230, 760);
     gv->setSnapDivisions(0);
@@ -4971,6 +4981,7 @@ void Monitor_Test::buildingAStandStepByStepThroughRealUiStaysConsistent()
     QWidget parent;
     Monitor *mon = new Monitor(&parent, doc);
     MonitorGraphicsView *gv = mon->findChild<MonitorGraphicsView *>();
+    gv->setAttachOnDrop(true);   // its drops are Shift-drops: they hang what they drop
     QVERIFY(gv != nullptr);
     gv->resize(1230, 760);
     gv->setSnapDivisions(0);
@@ -18695,4 +18706,61 @@ void Monitor_Test::lasersThrowStarsAndPencilBeams()
                             .arg(pencil.box.width()).arg(pencil.box.height())
                             .arg(wash.box.width()).arg(wash.box.height())));
     delete doc;
+}
+
+/* "I moved a light that's at the base of a tower with a bar on top .. and it
+   added it to the bar .. they're in different Z planes": over the bar on the
+   plan is not on it. A fixture at the foot of a tower stays on the tower; a
+   free-standing one is still hung by being dropped on the bar. */
+void Monitor_Test::aLightAtTheFootOfATowerIsNotHungOnItsTopBar()
+{
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(5000, 5000, 0)));
+    rig.gv->setViewPOV(MonitorGraphicsView::PovTop);
+    MonitorProperties *props = m_doc->monitorProperties();
+
+    Tower *tower = props->addTower();
+    tower->setOriginX(11.8f); tower->setOriginY(11.8f);
+    tower->setWidth(0.4f); tower->setDepth(0.4f); tower->setHeight(2.4f);
+    Truss *bar = props->addTruss();
+    bar->setName("Top bar");
+    bar->setOrigin(QVector3D(10.0f, 12.0f, 2.4f));    // across the tower's top
+    bar->setDirection(QPointF(1.0, 0.0));
+    bar->setLength(4.0f);
+    bar->setWidth(0.3f);
+    rig.gv->updateTrusses();
+    rig.gv->updatePlatforms();          // towers too
+
+    FixtureRigProps rp;
+    rp.towerId = tower->id();
+    rp.towerMountSide = FixtureRigProps::TowerBottom;
+    rp.towerU = 0.2f; rp.towerV = 0.2f;
+    props->setFixtureRigProps(rig.fxi->id(), rp);
+    rig.gv->updateFixture(rig.fxi->id());
+    QVERIFY(props->fixtureRigPosition(rig.fxi->id()).z() < 0.5f);
+
+    // Right under the bar on the plan.
+    const QPointF underBar = rig.gv->realPositionToPixels(12000.0, 12000.0);
+    rig.item->setPos(rig.item->pos() + (underBar - rig.item->iconCentreScene()));
+    QVERIFY2(rig.gv->trussUnderFixture(rig.item, 1.0f, false) != nullptr, "it is under the bar on the plan");
+    rig.gv->setAttachOnDrop(true);   // even with Shift held
+    QVERIFY2(rig.gv->trussUnderFixture(rig.item, 1.0f, true) == nullptr,
+             "a fixture at the foot of the tower should not be offered the bar 2.4 m up");
+    rig.gv->slotFixtureMoved(rig.item);
+    QVERIFY2(props->fixtureRigProps(rig.fxi->id()).trussId == Truss::invalidId(),
+             "dropped under the bar, it was hung on it");
+    rig.gv->setAttachOnDrop(false);
+
+    // Free-standing, a Shift-drop there hangs it -- how a fixture is hung from the plot.
+    props->setFixtureRigProps(rig.fxi->id(), FixtureRigProps());
+    rig.gv->updateFixture(rig.fxi->id());
+    rig.item->setPos(rig.item->pos() + (underBar - rig.item->iconCentreScene()));
+    QVERIFY(rig.gv->trussUnderFixture(rig.item, 1.0f, true) == nullptr);   // no Shift
+    rig.gv->setAttachOnDrop(true);
+    QVERIFY(rig.gv->trussUnderFixture(rig.item, 1.0f, true) != nullptr);
+    rig.gv->setAttachOnDrop(false);
+
+    props->setFixtureRigProps(rig.fxi->id(), FixtureRigProps());
+    props->removeTruss(bar->id());
+    props->removeTower(tower->id());
 }

@@ -1247,6 +1247,15 @@ public:
     void setMountedFixturesVisible(bool on);
     bool mountedFixturesVisible() const { return m_showMountedFixtures; }
 
+    /** A fixture is hung on the truss or pipe, or stood on the deck, it is
+     *  dropped over only when Shift is held as it is dropped ("this gets
+     *  really complicated with features at different levels .. use a shift
+     *  drag/drop"); a plain drag only moves it. attachHeld() says whether
+     *  this drop attaches; setAttachOnDrop(true) makes every drop attach, as
+     *  if Shift were held (tests, which cannot hold a key over a call). */
+    void setAttachOnDrop(bool on) { m_attachOnDrop = on; }
+    bool attachHeld() const;
+
     /** Shade, in the top view, where the SELECTED moving heads cannot aim.
      *
      *  Measured at subject height -- aimSubjectHeight() above whatever deck is
@@ -1340,6 +1349,7 @@ private:
     bool m_reachUpdatePending = false;
 
     bool m_showMountedFixtures = true;
+    bool m_attachOnDrop = false;        ///< setAttachOnDrop()
     int  m_viewRotation = 0;   ///< plot turn, 0..3 quarter turns clockwise
 
     /** Counter-rotate every text item so labels stay upright while turned. */
