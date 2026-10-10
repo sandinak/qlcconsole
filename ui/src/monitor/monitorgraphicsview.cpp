@@ -7788,6 +7788,7 @@ void MonitorGraphicsView::attachFixtureToHanger(quint32 fid, quint32 hangerId)
     rp.clearMounts();
     rp.hangerId = hangerId;
     rp.mountingType = Truss::TopHung;      // it hangs from the hook
+    props->repairMountPlane(rp);           // and straight: no face left over
     props->setFixtureRigProps(fid, rp);
     updateFixture(fid);
     m_doc->setModified();

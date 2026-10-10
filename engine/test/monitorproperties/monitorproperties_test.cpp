@@ -524,6 +524,30 @@ void MonitorProperties_Test::trussMountPlaneMatchesWhichWayItRuns()
     QCOMPARE(live.studioMount, 0);
 }
 
+/* "why do the lanterns not all look the same": three of six lanterns on
+   hangers kept the Top face of what they hung from before and were drawn on
+   their side. A fixture on a hanger hangs straight -- on load, and when it is
+   hung. */
+void MonitorProperties_Test::aFixtureOnAHangerHangsStraight()
+{
+    MonitorProperties mp;
+    FixtureRigProps rp;
+    rp.hangerId = 2;
+    rp.mountingType = Truss::TopHung;
+    rp.studioMount = 0;            // left from a truss mount
+    rp.studioAngle = 90.0f;
+    rp.trussOffset = 0.111f;
+    mp.repairMountPlane(rp);
+    QCOMPARE(rp.studioMount, 1);
+    QCOMPARE(rp.studioAngle, 0.0f);
+
+    // And when a show loads with it so.
+    rp.studioMount = 0;
+    mp.setFixtureRigProps(7, rp);
+    mp.repairMountPlanes();
+    QCOMPARE(mp.fixtureRigProps(7).studioMount, 1);
+}
+
 void MonitorProperties_Test::settingAFaceTakesTheRiserFaceWithIt()
 {
     MonitorProperties mp;

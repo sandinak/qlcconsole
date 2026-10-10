@@ -2974,6 +2974,25 @@ void MonitorProperties::setFixtureFace(FixtureRigProps &rp, FixtureRigProps::Fac
 
 void MonitorProperties::repairMountPlane(FixtureRigProps &rp) const
 {
+    /* A fixture on a hanger hangs from its chain: it has no face, whatever it
+       was given on what it hung from before. One left on the Top plane from
+       an earlier truss mount was drawn lying on its side -- three of six
+       lanterns on their hooks as dark squares beside three that looked like
+       lanterns ("why do the lanterns not all look the same"). */
+    if (rp.onHanger())
+    {
+        if (rp.studioMount != 1 || rp.studioAngle != 0.0f || rp.studioTilt != 0.0f)
+        {
+            qDebug() << "[Monitor] fixture hangs from a hanger"
+                     << "but kept the face of an earlier mount (plane" << rp.studioMount
+                     << ") -- hangs straight now";
+            rp.studioMount = 1;
+            rp.studioAngle = 0.0f;
+            rp.studioTilt = 0.0f;
+        }
+        return;
+    }
+
     if (rp.onDeck() && rp.studioMount == 1 && !rp.studioFaceChosen)
     {
         qDebug() << "[Monitor] fixture is standing on a deck"

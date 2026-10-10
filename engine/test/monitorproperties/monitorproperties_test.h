@@ -43,6 +43,7 @@ private slots:
     void riserFaceAndDrawingPlaneCannotDisagree();
     /** ...and setting the plane carries the face with it, so the repair above
      *  never has a legitimate edit to undo. */
+    void aFixtureOnAHangerHangsStraight();
     void settingAFaceTakesTheRiserFaceWithIt();
     /** A deck mount has exactly one surface, the platform's top -- unlike a
      *  riser it has no second face to legitimately disagree with, so a stray
