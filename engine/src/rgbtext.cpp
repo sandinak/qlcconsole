@@ -92,7 +92,7 @@ QFont RGBText::font() const
 
 void RGBText::setAnimationStyle(RGBText::AnimationStyle ani)
 {
-    if (ani >= StaticLetters && ani <= Vertical)
+    if (ani >= StaticLetters && ani <= Centered)
         m_animationStyle = ani;
     else
         m_animationStyle = StaticLetters;
@@ -114,6 +114,8 @@ QString RGBText::animationStyleToString(RGBText::AnimationStyle ani)
         return QString("Horizontal");
     case Vertical:
         return QString("Vertical");
+    case Centered:
+        return QString("Centered");
     }
 }
 
@@ -123,6 +125,8 @@ RGBText::AnimationStyle RGBText::stringToAnimationStyle(const QString& str)
         return Horizontal;
     else if (str == QString("Vertical"))
         return Vertical;
+    else if (str == QString("Centered"))
+        return Centered;
     else
         return StaticLetters;
 }
@@ -133,6 +137,7 @@ QStringList RGBText::animationStyles()
     list << animationStyleToString(StaticLetters);
     list << animationStyleToString(Horizontal);
     list << animationStyleToString(Vertical);
+    list << animationStyleToString(Centered);
     return list;
 }
 
@@ -253,6 +258,32 @@ void RGBText::renderStaticLetters(const QSize& size, uint rgb, int step, RGBMap 
     }
 }
 
+void RGBText::renderCentered(const QSize& size, uint rgb, RGBMap &map) const
+{
+    QImage image(size, QImage::Format_RGB32);
+    image.fill(QRgb(0));
+
+    QPainter p(&image);
+    p.setRenderHint(QPainter::TextAntialiasing, false);
+    p.setRenderHint(QPainter::Antialiasing, false);
+    p.setFont(m_font);
+    p.setPen(QColor(rgb));
+
+    // The whole text at once, in the middle; wider than the matrix, its
+    // middle shows
+    QRect rect(xOffset(), yOffset(), size.width(), size.height());
+    p.drawText(rect, Qt::AlignCenter | Qt::TextDontClip, m_text);
+    p.end();
+
+    map.resize(size.height());
+    for (int y = 0; y < size.height(); y++)
+    {
+        map[y].resize(size.width());
+        for (int x = 0; x < size.width(); x++)
+            map[y][x] = image.pixel(x, y);
+    }
+}
+
 /****************************************************************************
  * RGBAlgorithm
  ****************************************************************************/
@@ -262,6 +293,8 @@ int RGBText::rgbMapStepCount(const QSize& size)
     Q_UNUSED(size);
     if (animationStyle() == StaticLetters)
         return m_text.length();
+    else if (animationStyle() == Centered)
+        return 1;
     else
         return scrollingTextStepCount();
 }
@@ -280,6 +313,8 @@ void RGBText::rgbMap(const QSize& size, uint rgb, int step, RGBMap &map)
 {
     if (animationStyle() == StaticLetters)
         renderStaticLetters(size, rgb, step, map);
+    else if (animationStyle() == Centered)
+        renderCentered(size, rgb, map);
     else
         renderScrollingText(size, rgb, step, map);
 }

@@ -40,6 +40,7 @@ private slots:
     void save();
     void load();
     void staticLetters();
+    void centered();
     void horizontalScroll();
     void verticalScroll();
     void unused();
