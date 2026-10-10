@@ -1060,6 +1060,24 @@ void ConnectionsTree_Test::deviceRowCarriesItsPropertiesAsATooltip()
     }
 }
 
+/* "wasting a lot of space in the connections view with the top panel": the
+   explanation is one line beside the controls (the rest on hover), and the
+   list and output take the height. */
+void ConnectionsTree_Test::theListTakesTheHeightNotTheHeader()
+{
+    ConnectionsTree tree(m_doc);
+    tree.resize(1200, 900);
+    tree.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&tree));
+    QLabel *hint = tree.findChild<QLabel *>("connectionsHint");
+    QVERIFY(hint != nullptr);
+    QVERIFY(!hint->wordWrap());
+    QVERIFY2(hint->toolTip().contains("following the signal outward"), "the full explanation on hover");
+    QVERIFY2(hint->height() < 40, qPrintable(QString("hint is %1 px tall").arg(hint->height())));
+    QVERIFY2(tree.m_tree->height() > 900 - 120,
+             qPrintable(QString("the list is %1 px of 900").arg(tree.m_tree->height())));
+}
+
 QTEST_MAIN(ConnectionsTree_Test)
 
 void ConnectionsTree_Test::byUniverseListsEveryUniverseWithWhereItGoes()

@@ -131,14 +131,18 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     QVBoxLayout *lay = new QVBoxLayout(this);
     lay->setContentsMargins(6, 6, 6, 6);
 
-    QLabel *hint = new QLabel(
+    /* One short line, the rest on hover: as a paragraph above everything it
+       took the space the list needed ("wasting a lot of space in the
+       connections view with the top panel"). */
+    QLabel *hint = new QLabel(tr("Right-click a row for what it can do"), this);
+    hint->setObjectName(QStringLiteral("connectionsHint"));
+    hint->setStyleSheet(QStringLiteral("QLabel { color: #8a8e99; }"));
+    hint->setToolTip(
         tr("How this console is wired, following the signal outward: protocol → "
            "interface → devices heard on it → the universes they carry. "
            "Right-click an interface to patch a universe to it or configure "
            "the protocol; right-click a universe to rename it, set its "
-           "feedback line or input profile, unpatch it, or delete it."), this);
-    hint->setWordWrap(true);
-    lay->addWidget(hint);
+           "feedback line or input profile, unpatch it, or delete it."));
 
     /* Default to only what is live: configured or discovered. A stock build
        exposes 14 plugins and dozens of lines, nearly all of them irrelevant --
@@ -190,6 +194,8 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     QHBoxLayout *bar = new QHBoxLayout;
     bar->addWidget(m_byUniverse);
     bar->addWidget(m_showUnused);
+    bar->addSpacing(12);
+    bar->addWidget(hint);
     bar->addStretch(1);
     bar->addWidget(m_undo);
     bar->addWidget(m_rescan);
@@ -210,7 +216,7 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
        that is exactly the case where the absence is invisible. */
     m_status = new QLabel(tr("Searching for devices…"), this);
     m_status->setStyleSheet("QLabel { color: #a06000; }");
-    lay->addWidget(m_status);
+    bar->insertWidget(bar->indexOf(hint) + 1, m_status);   // on the same row
 
     m_tree = new QTreeWidget(this);
     m_tree->setColumnCount(3);
@@ -262,7 +268,7 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     split->addWidget(outScroll);
     split->setStretchFactor(0, 3);
     split->setStretchFactor(1, 2);
-    lay->addWidget(split);
+    lay->addWidget(split, 1);           // every spare pixel goes to the list
     connect(m_tree, &QTreeWidget::itemSelectionChanged, this, [this]() {
         if (m_rebuilding)
             return;                 // a rebuild reselects; keep what is shown
