@@ -147,7 +147,8 @@ public:
 
     /** A proscenium's opening: how wide (metres, centred) and how high from
      *  its bottom. The piers either side are what is left of width(); the
-     *  header is what is above the opening. */
+     *  header is what is above the opening. An open curtain's opening is the
+     *  gap between its halves, each gathered into what is left at its end. */
     float openingWidth() const { return m_openWidth; }
     void  setOpeningWidth(float w) { m_openWidth = (w > 0.1f) ? w : 0.1f; }
     float openingHeight() const { return m_openHeight; }

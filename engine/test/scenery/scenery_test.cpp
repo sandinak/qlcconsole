@@ -179,6 +179,12 @@ void Scenery_Test::anOpenCurtainHangsOnlyAtItsEnds()
     QCOMPARE(s.spans().size(), 2);
     QVERIFY(!s.rayHit(QVector3D(6.0f, 5.5f, 3.0f), QVector3D(0.0f, -1.0f, 0.0f), t));   // through the middle
     QVERIFY(s.rayHit(QVector3D(1.5f, 5.5f, 3.0f), QVector3D(0.0f, -1.0f, 0.0f), t));    // its gathered end
+    // Opened by as much as asked: 2 m across the middle of the 10 m.
+    s.setOpeningWidth(2.0f);
+    QVERIFY(s.rayHit(QVector3D(4.5f, 5.5f, 3.0f), QVector3D(0.0f, -1.0f, 0.0f), t));    // a half, gathered
+    QVERIFY(!s.rayHit(QVector3D(6.5f, 5.5f, 3.0f), QVector3D(0.0f, -1.0f, 0.0f), t));   // the opening
+    s.setOpeningWidth(9.0f);
+    QVERIFY(!s.rayHit(QVector3D(4.5f, 5.5f, 3.0f), QVector3D(0.0f, -1.0f, 0.0f), t));
     s.setState(Scenery::Flown);
     QVERIFY(s.spans().isEmpty());
     QVERIFY(!s.rayHit(QVector3D(1.5f, 5.5f, 3.0f), QVector3D(0.0f, -1.0f, 0.0f), t));

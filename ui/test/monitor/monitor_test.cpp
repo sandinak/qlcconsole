@@ -5853,6 +5853,49 @@ void Monitor_Test::fixturesThatBuryTheirStructureBecomeACount()
    fixture on the real run (spread along X, which Side also collapses)
    trivially "covered" more than 40% of a square that was never the truss's
    real on-screen size. Front, which keeps X, must not be fooled the same way. */
+void Monitor_Test::aFixtureOverATowerBecomesItsCount()
+{
+    /* "why is this AT light on top covering the truss vs showing the blue
+       circle with the count": one head standing on a 16" tower covers the
+       tower from above -- it was measured against the tower's base plate,
+       about five times its size, and never counted as covering it. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Tower *tw = props->addTower();
+    tw->setName("AT2");
+    tw->setOriginX(3.0f);
+    tw->setOriginY(3.0f);
+    tw->setWidth(0.405f);
+    tw->setDepth(0.405f);
+    tw->setHeight(2.4f);
+    Fixture *f = makeMover(doc, 14.0, 0, "AT2-36-1", QVector3D(3.2f, 3.2f, 2.4f));
+    QVERIFY(f != nullptr);
+    FixtureRigProps rp;
+    rp.towerId = tw->id();
+    rp.towerMountSide = FixtureRigProps::TowerTop;
+    rp.towerU = 0.2f;
+    rp.towerV = 0.2f;
+    rp.mountingType = Truss::FloorMounted;
+    props->setFixtureRigProps(f->id(), rp);
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(1000, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(10, 7));
+        view.setViewPOV(MonitorGraphicsView::PovTop);
+        view.updatePlatforms();
+        view.addFixture(f->id(), QPointF(3200.0, 3200.0));
+        view.refreshItemLayerState();
+        view.refreshFixtureCountBadges();
+        const double cover = view.structureCoverageByItsFixtures(QStringLiteral("tower"), tw->id());
+        QVERIFY2(cover > 0.40, qPrintable(QString("the head covers %1 of the tower").arg(cover)));
+        QVERIFY2(view.m_countBadges.contains(QStringLiteral("tower:%1").arg(tw->id())),
+                 "no count bubble on the tower its head covers");
+        QVERIFY(!view.m_fixtures.value(f->id())->isVisible());
+    }
+    delete doc;
+}
+
 void Monitor_Test::endOnTrussIsNotBuriedByItsOwnFixtures()
 {
     Doc *doc = new Doc(this);
@@ -12363,6 +12406,45 @@ void Monitor_Test::everySceneryKindIsAddedWhereItUsuallyGoes()
         }
         QCOMPARE(legs.size(), 2);
         QVERIFY(qAbs(legs.at(0)->originX() + legs.at(1)->originX() - 12.0f) < 0.01f);   // either side
+    }
+    delete doc;
+}
+
+void Monitor_Test::aDrapeOverTheStepsIsWhatADoubleClickOpens()
+{
+    // "when I double click to edit it .. I get the step nearest it"
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Meters);
+    StagePlatform *steps = props->addPlatform();
+    steps->setOriginX(4.0f); steps->setOriginY(6.0f);
+    steps->setSteps(2, 0.2f, 0.3f, 2.0f);
+    Scenery *drape = props->addScenery();
+    drape->setKind(Scenery::MainDrape);
+    drape->setOriginX(5.0f); drape->setOriginY(6.3f);
+    drape->setWidth(8.0f);
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        MonitorGraphicsView *gv = mon.m_graphicsView;
+        gv->updatePlatforms();
+        QSignalSpy scenerySpy(gv, &MonitorGraphicsView::sceneryDoubleClicked);
+        QSignalSpy platformSpy(gv, &MonitorGraphicsView::platformDoubleClicked);
+        SceneryItem *item = gv->m_sceneryItems.value(drape->id());
+        QVERIFY(item != nullptr);
+        // On the drape's line, where it crosses the steps.
+        const QPointF onLine = item->mapToScene(QPointF(0, 0));
+        const QPoint vp = gv->mapFromScene(onLine);
+        QVERIFY(gv->m_platformItems.value(steps->id())->sceneBoundingRect().contains(onLine));
+        QString opened;
+        driveDialog([&opened](QWidget *dlg) {      // its editor opens: note which, close it
+            opened = dlg->windowTitle();
+            return true;
+        }, false);
+        QTest::mouseDClick(gv->viewport(), Qt::LeftButton, Qt::NoModifier, vp);
+        QVERIFY2(opened.startsWith(Scenery::kindName(Scenery::MainDrape)), qPrintable(opened));
+        QCOMPARE(scenerySpy.count(), 1);
+        QCOMPARE(platformSpy.count(), 0);
     }
     delete doc;
 }

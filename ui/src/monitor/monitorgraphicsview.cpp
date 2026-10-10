@@ -2982,7 +2982,17 @@ double MonitorGraphicsView::structureCoverageByItsFixtures(const QString &kind, 
                                && ti->pxLen() <= ti->pxWid());
         }
     }
-    else if (kind == QStringLiteral("tower"))    host = m_towerItems.value(id, nullptr);
+    else if (kind == QStringLiteral("tower"))
+    {
+        /* The tower, not its base plate: boundingRect() takes in the plate
+           drawn round it in Top, about five times the tower, so a fixture
+           sitting over the whole tower measured a fifth of it and never
+           brought up the count ("the light overshadowing the feature"). */
+        TowerItem *twi = m_towerItems.value(id, nullptr);
+        host = twi;
+        if (twi != nullptr)
+            hostRect = twi->mapRectToScene(twi->footprintRect());
+    }
     else if (kind == QStringLiteral("pipe"))     host = m_pipeItems.value(id, nullptr);
     else if (kind == QStringLiteral("platform")) host = m_platformItems.value(id, nullptr);
     if (host == nullptr)

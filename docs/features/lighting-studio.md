@@ -195,7 +195,8 @@ from the audience, or toward them below 0. The rows that only make sense
 for some kinds show only there:
 
 - **Curtain** (main drape, traveler) — **Closed**, **Open** (split, each
-  half gathered at its end) or **Flown out** (taken up out of the way: not
+  half gathered at its end, with **Opening width** for how wide the gap
+  between them is) or **Flown out** (taken up out of the way: not
   drawn, and the light goes through; the plot shows where it hangs from,
   dashed). Set while designing; it isn't cued.
 - **Opening width** and **Opening height** (proscenium) — the opening,
@@ -210,14 +211,18 @@ for some kinds show only there:
 On the plot it's a band from the Top (a built wall its footprint, an open
 curtain its two gathered ends) and the sheet in the elevations; drag, lock,
 rename, layer, hide and delete it like any structure, and it's listed in
-Layers. In the 3D views drapes hang in folds, a scrim is seen through, and a
-wall has its faces, top and ends. Everything but a flown curtain stops the
+Layers. From above it is picked before the deck it stands on or over, so
+double-clicking a drape across the steps opens the drape. In the 3D views
+drapes hang in folds, a scrim is seen through, and a wall has its faces, top
+and ends. Everything but a flown curtain stops the
 light that reaches it and takes its pool — a beam coming down on a wall lands
 on its top — and hides what is behind it.
 
 ### Fountains
 
-**Add → Add Fountain…** builds one from its sizes — by default 3 ft across
+**Add → Add Fountain…** builds one from its sizes — a drawing beside the
+fields shows each one where it is measured, from above and cut through the
+front, with its value, and the one being edited picked out — by default 3 ft across
 and 4 ft deep with a round front, on a 5" base, with walls of 4" blocks, the
 outer 8" high and the inner 14", 4" apart:
 

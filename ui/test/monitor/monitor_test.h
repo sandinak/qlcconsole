@@ -376,6 +376,7 @@ private slots:
     void theCycloramaEditorPreviewsAndCancelReverts();
     void aCycloramaOnThePlotMovesLocksHidesAndDeletes();
     void everySceneryKindIsAddedWhereItUsuallyGoes();
+    void aDrapeOverTheStepsIsWhatADoubleClickOpens();
     void anOpenMainDrapeShowsTheCycBehindIt();
     void aUWallIsDrawnRoundItsFrontWithItsTop();
     void aRoundedStageFrontIsDrawnAndLitRoundItsCurve();
@@ -474,6 +475,7 @@ private slots:
     /** Fixtures that bury their structure in THIS view are replaced by a count;
      *  in a view where they do not bury it, they stay. */
     void fixturesThatBuryTheirStructureBecomeACount();
+    void aFixtureOverATowerBecomesItsCount();
     void endOnTrussIsNotBuriedByItsOwnFixtures();
     void anEditedStructureRecountsItsFixtures();
     void aFixtureMountedFromAnEditorLandsOnThePlot();

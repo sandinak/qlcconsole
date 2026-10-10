@@ -142,6 +142,7 @@
 #include "outputpatch.h"
 #include "qlccapability.h"
 #include "monitor.h"
+#include "fountaindiagram.h"
 #include "fixturemanager.h"
 #include "patchinventorydialog.h"
 #include "createfixturegroup.h"
@@ -5758,11 +5759,42 @@ void Monitor::slotAddFountain()
     form->addRow(tr("Wall thickness:"), thickSpin);
     form->addRow(tr("Gap:"), gapSpin);
     form->addRow(QString(), flameChk);
+    /* Beside the fields, what each one measures: the fountain from above and
+       cut through its front, every value where it is taken, the field being
+       edited picked out ("a side display showing what each measurement is"). */
+    FountainDiagram *diagram = new FountainDiagram(&dlg);
+    const QList<QPair<QString, QDoubleSpinBox *> > fields = {
+        { QStringLiteral("width"), wSpin }, { QStringLiteral("depth"), dSpin },
+        { QStringLiteral("base"), baseSpin }, { QStringLiteral("outer"), outerSpin },
+        { QStringLiteral("inner"), innerSpin }, { QStringLiteral("thickness"), thickSpin },
+        { QStringLiteral("gap"), gapSpin } };
+    for (const auto &fd : fields)
+    {
+        const QString key = fd.first;
+        QDoubleSpinBox *sp = fd.second;
+        auto show = [diagram, key, sp, fromDisp]() {
+            diagram->setValue(key, sp->value() * fromDisp, sp->text().trimmed());
+        };
+        show();
+        connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), diagram, [show](double) { show(); });
+    }
+    connect(flameChk, &QCheckBox::toggled, diagram, &FountainDiagram::setFlame);
+    connect(qApp, &QApplication::focusChanged, diagram, [diagram, fields](QWidget *, QWidget *now) {
+        QString key;
+        for (const auto &fd : fields)
+            if (now != nullptr && (now == fd.second || fd.second->isAncestorOf(now)))
+                key = fd.first;
+        diagram->setHighlight(key);
+    });
+
     QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
     connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
     connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    QHBoxLayout *hl = new QHBoxLayout;
+    hl->addLayout(form);
+    hl->addWidget(diagram, 1);
     QVBoxLayout *vl = new QVBoxLayout(&dlg);
-    vl->addLayout(form);
+    vl->addLayout(hl);
     vl->addWidget(bb);
     if (dlg.exec() != QDialog::Accepted)
         return;
@@ -5881,11 +5913,15 @@ void Monitor::slotEditScenery(quint32 sid)
     QDoubleSpinBox *depthSpin = mkSpin(s->depth(), 0.05, posR);
     QDoubleSpinBox *thickSpin = mkSpin(s->thickness(), 0.0, isFeet ? 10.0 : 3.0);
     thickSpin->setDecimals(3);
-    QDoubleSpinBox *openWSpin = mkSpin(s->openingWidth(), 0.1, posR * 2);
+    // A curtain whose opening was never set shows the one it is drawn with.
+    const float openNow = (s->hasState() && s->openingWidth() >= s->width()) ? 0.68f * s->width()
+                                                                             : s->openingWidth();
+    QDoubleSpinBox *openWSpin = mkSpin(openNow, 0.1, posR * 2);
     QDoubleSpinBox *openHSpin = mkSpin(s->openingHeight(), 0.1, isFeet ? 100.0 : 30.0);
     openWSpin->setObjectName("sceneryOpeningWidth");
     openHSpin->setObjectName("sceneryOpeningHeight");
-    openWSpin->setToolTip(tr("How wide the opening is, centred; the piers are the rest of the width"));
+    openWSpin->setToolTip(tr("How wide the opening is, centred: a proscenium's piers, or an open "
+                             "curtain's halves gathered at its ends, are the rest of the width"));
     openHSpin->setToolTip(tr("How high the opening is; the header is the rest of the height"));
     QComboBox *kindCombo = new QComboBox(&dlg);
     foreach (int k, Scenery::kinds())
@@ -5946,7 +5982,8 @@ void Monitor::slotEditScenery(quint32 sid)
         showRow(depthSpin, u);
         showRow(bowSpin, !u && !arch);
         showRow(thickSpin, built);
-        showRow(openWSpin, arch);
+        const bool curtain = (k == Scenery::MainDrape || k == Scenery::Traveler);
+        showRow(openWSpin, arch || (curtain && stateCombo->currentData().toInt() == Scenery::Open));
         showRow(openHSpin, arch);
         showRow(stateCombo, k == Scenery::MainDrape || k == Scenery::Traveler);
         dlg.adjustSize();

@@ -28,8 +28,11 @@ SceneryItem::SceneryItem(Scenery *scenery, Doc *doc, const QPointF &anchor,
 {
     Q_UNUSED(doc)
     setFlags(ItemIsSelectable | ItemSendsGeometryChanges);
-    // Behind everything: it is the back of the stage, not something on it.
-    setZValue(-1.2);
+    /* Seen flat it is a sheet behind the stage, behind everything. From above
+       it is a line standing on or over the deck -- a drape across the front
+       steps, a fountain's wall on its base -- so it is picked before the deck
+       under it ("when I double click to edit it .. I get the step nearest it"). */
+    setZValue(elevation ? -1.2 : -0.95);
     setPos(anchor);
     foreach (const QPolygonF &part, parts)
     {

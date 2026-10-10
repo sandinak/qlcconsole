@@ -176,9 +176,12 @@ QList<QPair<double, double> > Scenery::spans() const
         return out;
     if (hasState() && m_state == Open)
     {
-        // Each half gathered into its own end: about a sixth of the width each.
-        const double g = 2.0 * 0.16;
-        out << qMakePair(-1.0, -1.0 + g) << qMakePair(1.0 - g, 1.0);
+        /* Open by its opening, centred; each half gathered into what is left
+           at its end. An opening as wide as the curtain (never set for it)
+           leaves about a sixth of the width each side. */
+        const double gap = (m_openWidth < m_width) ? double(m_openWidth) : 0.68 * double(m_width);
+        const double f = qBound(0.0, gap / double(m_width), 0.98);
+        out << qMakePair(-1.0, -f) << qMakePair(f, 1.0);
         return out;
     }
     out << qMakePair(-1.0, 1.0);
@@ -391,6 +394,8 @@ bool Scenery::saveXML(QXmlStreamWriter *doc) const
         doc->writeAttribute(KXMLSceneryOpenWidth, QString::number(double(m_openWidth), 'f', 3));
         doc->writeAttribute(KXMLSceneryOpenHeight, QString::number(double(m_openHeight), 'f', 3));
     }
+    else if (hasState())
+        doc->writeAttribute(KXMLSceneryOpenWidth, QString::number(double(m_openWidth), 'f', 3));
     if (m_color.isValid())
         doc->writeAttribute(KXMLSceneryColor, m_color.name());
     if (m_locked)
