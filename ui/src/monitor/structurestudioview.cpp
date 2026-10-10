@@ -1395,19 +1395,38 @@ void StructureStudioView::drawGrid(QPainter &p) const
         double step = cell;
         while ((x1 - x0) / step > 80.0 || (y1 - y0) / step > 80.0)
             step *= 2.0;
-        p.setPen(QPen(QColor(58, 62, 72), 1.0));
-        for (double x = x0; x <= x1 + 1e-6; x += step)
-            p.drawLine(w2s(QVector3D(float(x), float(y0), 0)),
-                       w2s(QVector3D(float(x), float(y1), 0)));
-        for (double y = y0; y <= y1 + 1e-6; y += step)
-            p.drawLine(w2s(QVector3D(float(x0), float(y), 0)),
-                       w2s(QVector3D(float(x1), float(y), 0)));
-        p.setPen(QPen(QColor(92, 96, 108), 1.4));
         QPolygonF edge;
         edge << w2s(QVector3D(float(x0), float(y0), 0)) << w2s(QVector3D(float(x1), float(y0), 0))
              << w2s(QVector3D(float(x1), float(y1), 0)) << w2s(QVector3D(float(x0), float(y1), 0));
-        p.setBrush(Qt::NoBrush);
-        p.drawPolygon(edge);
+
+        /* Drawn once and kept: the same floor every frame until the view or
+           the rig's extent changes -- which its corners on screen say -- and
+           anti-aliased lines across the whole canvas were a third of what a
+           frame of a big show cost. */
+        const qreal dpr = devicePixelRatioF();
+        QString key = QString("%1x%2@%3/%4/").arg(width()).arg(height()).arg(dpr).arg(step);
+        foreach (const QPointF &c, edge)
+            key += QString("%1,%2;").arg(c.x(), 0, 'f', 2).arg(c.y(), 0, 'f', 2);
+        if (key != m_floorKey || m_floorImage.isNull())
+        {
+            m_floorKey = key;
+            m_floorImage = QImage(size() * dpr, QImage::Format_ARGB32_Premultiplied);
+            m_floorImage.setDevicePixelRatio(dpr);
+            m_floorImage.fill(Qt::transparent);
+            QPainter fp(&m_floorImage);
+            fp.setRenderHints(p.renderHints());
+            fp.setPen(QPen(QColor(58, 62, 72), 1.0));
+            for (double x = x0; x <= x1 + 1e-6; x += step)
+                fp.drawLine(w2s(QVector3D(float(x), float(y0), 0)),
+                            w2s(QVector3D(float(x), float(y1), 0)));
+            for (double y = y0; y <= y1 + 1e-6; y += step)
+                fp.drawLine(w2s(QVector3D(float(x0), float(y), 0)),
+                            w2s(QVector3D(float(x1), float(y), 0)));
+            fp.setPen(QPen(QColor(92, 96, 108), 1.4));
+            fp.setBrush(Qt::NoBrush);
+            fp.drawPolygon(edge);
+        }
+        p.drawImage(QPointF(0, 0), m_floorImage);
     }
     else
     {

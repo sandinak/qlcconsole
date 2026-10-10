@@ -301,6 +301,8 @@ private:
     /** Measure the rig again next frame: the floor, the overlaps. */
     void rigMayHaveMoved();
     mutable QList<QVector3D> m_floorPoints;
+    mutable QImage m_floorImage;    ///< the angled floor grid, drawn once (drawGrid())
+    mutable QString m_floorKey;     ///< the view it was drawn for
     mutable QElapsedTimer m_floorPointsAge;
     /** Every structure in the workspace, for StageKind. */
     QList<QPair<Kind, quint32> > everyStructure() const;
