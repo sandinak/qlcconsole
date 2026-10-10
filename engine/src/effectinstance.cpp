@@ -29,6 +29,8 @@
 
 #include "mastertimer.h"
 
+#include <QJSValueIterator>
+#include <QVarLengthArray>
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QSet>
@@ -839,229 +841,335 @@ EffectInstance::effectiveCells(int &gridCols, int &gridRows) const
 QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCell> &cells,
                                             int gridCols, int gridRows)
 {
-    QJSValue arr = m_script.engine()->newArray(cells.size());
+    QJSEngine *engine = m_script.engine();
     const MonitorProperties *mp = m_doc->monitorProperties();
     QLCPalette *effectPal = m_doc->palette(m_effectPaletteId);
+    ++m_factsTick;
 
-    for (int i = 0; i < cells.size(); ++i)
+    /* Each fixture once: its facts when it has changed, where it is now. */
+    bool rebuild = cells != m_cellsBuilt || gridCols != m_cellsBuiltCols
+                   || gridRows != m_cellsBuiltRows;
+    for (const EffectCell &cell : cells)
     {
-        const EffectCell &cell = cells.at(i);
-        quint32 fid = cell.fixtureId;
-        Fixture *fxi = m_doc->fixture(fid);
-        if (!fxi)
+        FixtureFacts &f = m_facts[cell.fixtureId];
+        if (f.seen == m_factsTick)
             continue;
-
-        QJSValue obj = m_script.engine()->newObject();
-        obj.setProperty("id",   (int)fid);
-        obj.setProperty("head", cell.head);
-        // Its name, for a script that works by how a rig is named ("DS1 #3",
-        // "CS2t1") -- a test pattern that knows each step and strip.
-        obj.setProperty("name", fxi->name());
-        obj.setProperty("heads", fxi->heads());
-
-        float panRange  = 360.0f;
-        float tiltRange = 270.0f;
-        float lensMin   = 0.0f;
-        float lensMax   = 0.0f;
-        bool  hasZoom   = false;
-        bool  hasPT     = false;
-        bool  hasRGB    = false;
-        bool  hasColorWheel = false;
-        bool  hasDimmer = false;
-        bool  hasGobo   = false;
-        bool  hasShutt  = false;
-
-        if (fxi->fixtureMode())
+        f.seen = m_factsTick;
+        Fixture *fxi = m_doc->fixture(cell.fixtureId);
+        if (fxi == nullptr)
         {
-            const QLCPhysical &phy = fxi->fixtureMode()->physical();
-            if (phy.focusPanMax() > 0)  panRange  = (float)phy.focusPanMax();
-            if (phy.focusTiltMax() > 0) tiltRange = (float)phy.focusTiltMax();
-            lensMin = float(qMin(phy.lensDegreesMin(), phy.lensDegreesMax()));
-            lensMax = float(qMax(phy.lensDegreesMin(), phy.lensDegreesMax()));
+            rebuild = rebuild || f.fixture != nullptr;
+            f.fixture = nullptr;
+            continue;
         }
-
-        bool hasR = false, hasG = false, hasB = false;
-        quint32 nCh = fxi->channels();
-        for (quint32 c = 0; c < nCh; ++c)
+        if (fxi != f.fixture || fxi->fixtureMode() != f.mode
+            || fxi->heads() != f.heads || fxi->name() != f.name)
         {
-            if (!fxi->fixtureMode()) break;
-            QLCChannel *ch = fxi->fixtureMode()->channel(c);
-            if (!ch) continue;
-            switch (ch->group())
-            {
-                case QLCChannel::Pan:
-                case QLCChannel::Tilt:
-                    hasPT = true; break;
-                case QLCChannel::Colour:
-                    if (ch->colour() == QLCChannel::Red)        hasR = true;
-                    else if (ch->colour() == QLCChannel::Green)  hasG = true;
-                    else if (ch->colour() == QLCChannel::Blue)   hasB = true;
-                    else hasColorWheel = true;
-                    break;
-                case QLCChannel::Intensity:
-                    // IntensityRed/Green/Blue presets land in the Intensity group
-                    // but carry a colour value — treat them as additive RGB channels.
-                    if (ch->colour() == QLCChannel::Red)        hasR = true;
-                    else if (ch->colour() == QLCChannel::Green)  hasG = true;
-                    else if (ch->colour() == QLCChannel::Blue)   hasB = true;
-                    else hasDimmer = true;
-                    break;
-                case QLCChannel::Beam:
-                    if (ch->preset() == QLCChannel::BeamZoomSmallBig
-                        || ch->preset() == QLCChannel::BeamZoomBigSmall)
-                        hasZoom = true;
-                    break;
-                case QLCChannel::Gobo:
-                    hasGobo = true; break;
-                case QLCChannel::Shutter:
-                    hasShutt = true; break;
-                default: break;
-            }
+            rebuild = true;
+            f.fixture = fxi;
+            f.mode = fxi->fixtureMode();
+            f.name = fxi->name();
+            f.heads = fxi->heads();
+            readFixtureFacts(fxi, f);
         }
-        hasRGB = hasR && hasG && hasB;
-
-        obj.setProperty("panRange",      panRange);
-        obj.setProperty("tiltRange",     tiltRange);
-        obj.setProperty("hasPanTilt",    hasPT);
-        obj.setProperty("hasRGB",        hasRGB);
-        obj.setProperty("hasColorWheel", hasColorWheel);
-        obj.setProperty("hasDimmer",     hasDimmer);
-        obj.setProperty("hasGobo",       hasGobo);
-        obj.setProperty("hasShutter",    hasShutt);
-        // The lens a zoom channel sweeps: its intent 0..1 runs lensMin..lensMax.
-        obj.setProperty("hasZoom",       hasZoom && lensMax > lensMin);
-        obj.setProperty("lensMin",       double(lensMin));
-        obj.setProperty("lensMax",       double(lensMax));
 
         // 3D rig position from MonitorProperties (0,0,0 if not set)
-        QVector3D pos(0, 0, 0);
-        if (mp)
-            pos = mp->fixtureRigPosition(fid);
-
-        QJSValue posObj = m_script.engine()->newObject();
-        posObj.setProperty("x", (double)pos.x());
-        posObj.setProperty("y", (double)pos.y());
-        posObj.setProperty("z", (double)pos.z());
-        obj.setProperty("pos", posObj);
-
-        // grid: this HEAD's cell for pixel-style effects. col/row = cell position
-        // (from the group head layout, or a 1-D strip); cols/rows = grid size.
-        QJSValue gridObj = m_script.engine()->newObject();
-        gridObj.setProperty("col",  cell.col);
-        gridObj.setProperty("row",  cell.row);
-        gridObj.setProperty("cols", gridCols);
-        gridObj.setProperty("rows", gridRows);
-        obj.setProperty("grid", gridObj);
-
-        // aimAt: pre-computed pan/tilt for each bound target slot
-        QJSValue aimAt = m_script.engine()->newObject();
-        if (mp && effectPal)
+        const QVector3D pos = mp ? mp->fixtureRigPosition(cell.fixtureId) : QVector3D();
+        if (f.posObj.isUndefined())
         {
-            const QMap<QString, quint32> &tgtBindings = effectPal->effectTargetBindings();
-            for (const EffectScript::TargetDef &td : m_script.targetDefs())
-            {
-                quint32 tid = tgtBindings.value(td.name, StageTarget::invalidId());
-                StageTarget *tgt = mp->stageTarget(tid);
-                if (!tgt || pos == QVector3D())
-                {
-                    aimAt.setProperty(td.name, m_script.engine()->newObject());
-                    continue;
-                }
-                // Follow spot: aim at the SUBJECT's body, not the target's
-                // configured Z — through the shared rule, so a bound target
-                // follows its structure and a Person is aimed at its own height.
-                const QVector3D tgtPos = AimSolver::aimPointFor(m_doc, fid, tgt, true);
-
-                // Use the SHARED aim solver — the exact same geometry the Aim
-                // palette uses in Edit — so the beam doesn't jump on Edit→Run.
-                // aimAt.pan/tilt are fixture degrees; the host converts via
-                // positionToValues (see parseIntents).
-                AimSolver::Solution sol;
-                QJSValue aimObj = m_script.engine()->newObject();
-                if (AimSolver::reach(m_doc, fid, tgtPos, sol))
-                {
-                    aimObj.setProperty("pan",  (double)sol.panDeg);
-                    aimObj.setProperty("tilt", (double)sol.tiltDeg);
-                    aimObj.setProperty("reachMargin", (double)sol.marginDeg);
-                }
-                aimAt.setProperty(td.name, aimObj);
-            }
+            f.posObj = engine->newObject();
+            f.pos = QVector3D(qQNaN(), 0, 0);   // so it is written below
         }
-        obj.setProperty("aimAt", aimAt);
+        if (pos != f.pos)
+        {
+            f.pos = pos;
+            f.posObj.setProperty("x", double(pos.x()));
+            f.posObj.setProperty("y", double(pos.y()));
+            f.posObj.setProperty("z", double(pos.z()));
+        }
+    }
 
+    /* The cells: what does not change from tick to tick. */
+    if (rebuild)
+    {
+        for (auto it = m_facts.begin(); it != m_facts.end(); )
+        {
+            if (it->seen != m_factsTick)
+                it = m_facts.erase(it);
+            else
+                ++it;
+        }
+        m_cellObjects.clear();
+        m_cellObjects.reserve(cells.size());
+        for (const EffectCell &cell : cells)
+        {
+            FixtureFacts &f = m_facts[cell.fixtureId];
+            f.sceneTargetSet = f.lastSpotSet = false;
+            if (f.fixture == nullptr)
+            {
+                m_cellObjects.append(QJSValue());
+                continue;
+            }
+            QJSValue obj = engine->newObject();
+            obj.setProperty("id",   int(cell.fixtureId));
+            obj.setProperty("head", cell.head);
+            // Its name, for a script that works by how a rig is named ("DS1 #3",
+            // "CS2t1") -- a test pattern that knows each step and strip.
+            obj.setProperty("name", f.name);
+            obj.setProperty("heads", f.heads);
+            obj.setProperty("panRange",      f.panRange);
+            obj.setProperty("tiltRange",     f.tiltRange);
+            obj.setProperty("hasPanTilt",    f.hasPanTilt);
+            obj.setProperty("hasRGB",        f.hasRGB);
+            obj.setProperty("hasColorWheel", f.hasColorWheel);
+            obj.setProperty("hasDimmer",     f.hasDimmer);
+            obj.setProperty("hasGobo",       f.hasGobo);
+            obj.setProperty("hasShutter",    f.hasShutter);
+            // The lens a zoom channel sweeps: its intent 0..1 runs lensMin..lensMax.
+            obj.setProperty("hasZoom",       f.hasZoom && f.lensMax > f.lensMin);
+            obj.setProperty("lensMin",       double(f.lensMin));
+            obj.setProperty("lensMax",       double(f.lensMax));
+            obj.setProperty("pos", f.posObj);
+
+            // grid: this HEAD's cell for pixel-style effects. col/row = cell position
+            // (from the group head layout, or a 1-D strip); cols/rows = grid size.
+            QJSValue gridObj = engine->newObject();
+            gridObj.setProperty("col",  cell.col);
+            gridObj.setProperty("row",  cell.row);
+            gridObj.setProperty("cols", gridCols);
+            gridObj.setProperty("rows", gridRows);
+            obj.setProperty("grid", gridObj);
+            obj.setProperty("aimAt", engine->newObject());
+            m_cellObjects.append(obj);
+        }
+        m_cellsBuilt = cells;
+        m_cellsBuiltCols = gridCols;
+        m_cellsBuiltRows = gridRows;
+    }
+
+    /* What changes as it runs, worked out once a fixture. */
+    const bool aiming = mp && effectPal && !m_script.targetDefs().isEmpty();
+    StageTarget *sceneTarget = nullptr;
+    if (mp)
+    {
         // sceneTarget: the per-fixture aim toward the SCENE's own Aim look (not a
         // manual binding).  The followspot reads its target IMPLICITLY from the
         // scene this way, so it needs no followTarget slot in its menu.  Present
         // only when the scene actually carries an Aim look; the script defers to
         // the host's converged aim whenever it is present.
-        if (mp)
+        if (Scene *sc = qobject_cast<Scene*>(m_doc->function(m_sceneId)))
         {
-            Scene *sc = qobject_cast<Scene*>(m_doc->function(m_sceneId));
-            if (sc)
+            for (quint32 spid : sc->palettes())
             {
-                for (quint32 spid : sc->palettes())
-                {
-                    QLCPalette *ap = m_doc->palette(spid);
-                    if (ap == NULL || ap->type() != QLCPalette::Aim)
-                        continue;
-                    StageTarget *st = mp->stageTarget(ap->stageTargetId());
-                    if (st == NULL)
-                        continue;
-                    QVector3D raw = st->position();
-
-                    QJSValue so = m_script.engine()->newObject();
-                    // Raw target world location (metres) — the anchor a shape /
-                    // formation effect centres on.  Shared by every fixture and
-                    // independent of rig geometry, so it is always present.
-                    so.setProperty("x", double(raw.x()));
-                    so.setProperty("y", double(raw.y()));
-                    so.setProperty("z", double(raw.z()));
-
-                    // Convenience aim angles at the SUBJECT's body (not the
-                    // target's configured Z), present only when this fixture has
-                    // usable rig geometry.  The followspot defers on these.
-                    // reachMargin: degrees to spare before the head's pan/tilt
-                    // limit (negative = it cannot point there), so a script can
-                    // fade a head out before it sticks.
-                    // distance: metres from the head to that point, so a script can
-                    // size the beam on the subject rather than at the lens.
-                    // Pointed where its beam covers the subject best; sized
-                    // at the subject itself (its chest), so the size it asks
-                    // the zoom for does not move with the aim it gets.
-                    const QVector3D tp = AimSolver::aimPointFor(m_doc, fid, st, true);
-                    const QVector3D subject = mp->targetAimPoint(st, true);
-                    AimSolver::Frame frame;
-                    if (AimSolver::frameFor(m_doc, fid, frame))
-                    {
-                        const AimSolver::Solution sol = AimSolver::solve(frame, tp);
-                        so.setProperty("pan",  double(sol.panDeg));
-                        so.setProperty("tilt", double(sol.tiltDeg));
-                        so.setProperty("reachMargin", double(sol.marginDeg));
-                        so.setProperty("distance", double((subject - frame.position).length()));
-                    }
-                    obj.setProperty("sceneTarget", so);
+                QLCPalette *ap = m_doc->palette(spid);
+                if (ap == NULL || ap->type() != QLCPalette::Aim)
+                    continue;
+                sceneTarget = mp->stageTarget(ap->stageTargetId());
+                if (sceneTarget != NULL)
                     break; // first Aim look wins
-                }
             }
         }
-
-        // lastSpot: pan/tilt (degrees) where this fixture's beam was left by the
-        // previous Operate-mode tick (possibly from a different scene).  Lets a
-        // followspot script seed followMode = "lastPosition" so the beam holds
-        // across scene transitions instead of snapping.  Property is absent when
-        // no prior position is known (e.g. first use after launch).
-        if (m_lastSpotIn.contains(fid))
+    }
+    QHash<quint32, QJSValue> aimAtOf, sceneTargetOf, lastSpotOf;
+    if (aiming || sceneTarget || !m_lastSpotIn.isEmpty())
+    {
+        for (auto it = m_facts.begin(); it != m_facts.end(); ++it)
         {
-            const QPointF ls = m_lastSpotIn.value(fid);
-            QJSValue lastObj = m_script.engine()->newObject();
-            lastObj.setProperty("pan",  ls.x());
-            lastObj.setProperty("tilt", ls.y());
-            obj.setProperty("lastSpot", lastObj);
+            const quint32 fid = it.key();
+            const FixtureFacts &f = it.value();
+            if (f.fixture == nullptr)
+                continue;
+            if (aiming)
+                aimAtOf.insert(fid, aimAtObject(fid, f.pos, effectPal));
+            if (sceneTarget)
+                sceneTargetOf.insert(fid, sceneTargetObject(fid, sceneTarget));
+            // lastSpot: pan/tilt (degrees) where this fixture's beam was left by the
+            // previous Operate-mode tick (possibly from a different scene).  Lets a
+            // followspot script seed followMode = "lastPosition" so the beam holds
+            // across scene transitions instead of snapping.  Property is absent when
+            // no prior position is known (e.g. first use after launch).
+            if (m_lastSpotIn.contains(fid))
+            {
+                const QPointF ls = m_lastSpotIn.value(fid);
+                QJSValue lastObj = engine->newObject();
+                lastObj.setProperty("pan",  ls.x());
+                lastObj.setProperty("tilt", ls.y());
+                lastSpotOf.insert(fid, lastObj);
+            }
         }
+    }
 
-        arr.setProperty(i, obj);
+    QJSValue arr = engine->newArray(uint(cells.size()));
+    QSet<quint32> sceneTargetCleared, lastSpotCleared;
+    for (int i = 0; i < cells.size(); ++i)
+    {
+        QJSValue &obj = m_cellObjects[i];
+        if (obj.isUndefined())
+            continue;
+        const quint32 fid = cells.at(i).fixtureId;
+        FixtureFacts &f = m_facts[fid];
+        if (aiming)
+            obj.setProperty("aimAt", aimAtOf.value(fid));
+        if (sceneTarget)
+            obj.setProperty("sceneTarget", sceneTargetOf.value(fid));
+        else if (f.sceneTargetSet)
+        {
+            obj.deleteProperty("sceneTarget");
+            sceneTargetCleared.insert(fid);
+        }
+        if (lastSpotOf.contains(fid))
+            obj.setProperty("lastSpot", lastSpotOf.value(fid));
+        else if (f.lastSpotSet)
+        {
+            obj.deleteProperty("lastSpot");
+            lastSpotCleared.insert(fid);
+        }
+        arr.setProperty(quint32(i), obj);
+    }
+    for (auto it = m_facts.begin(); it != m_facts.end(); ++it)
+    {
+        if (sceneTarget)
+            it->sceneTargetSet = true;
+        else if (sceneTargetCleared.contains(it.key()))
+            it->sceneTargetSet = false;
+        if (lastSpotOf.contains(it.key()))
+            it->lastSpotSet = true;
+        else if (lastSpotCleared.contains(it.key()))
+            it->lastSpotSet = false;
     }
     return arr;
+}
+
+void EffectInstance::readFixtureFacts(const Fixture *fxi, FixtureFacts &f) const
+{
+    f.panRange = 360.0f;
+    f.tiltRange = 270.0f;
+    f.lensMin = f.lensMax = 0.0f;
+    f.hasPanTilt = f.hasRGB = f.hasColorWheel = f.hasDimmer = false;
+    f.hasGobo = f.hasShutter = f.hasZoom = false;
+    const QLCFixtureMode *mode = fxi->fixtureMode();
+    if (mode == nullptr)
+        return;
+
+    const QLCPhysical &phy = mode->physical();
+    if (phy.focusPanMax() > 0)  f.panRange  = (float)phy.focusPanMax();
+    if (phy.focusTiltMax() > 0) f.tiltRange = (float)phy.focusTiltMax();
+    f.lensMin = float(qMin(phy.lensDegreesMin(), phy.lensDegreesMax()));
+    f.lensMax = float(qMax(phy.lensDegreesMin(), phy.lensDegreesMax()));
+
+    bool hasR = false, hasG = false, hasB = false;
+    quint32 nCh = fxi->channels();
+    for (quint32 c = 0; c < nCh; ++c)
+    {
+        QLCChannel *ch = mode->channel(c);
+        if (!ch) continue;
+        switch (ch->group())
+        {
+            case QLCChannel::Pan:
+            case QLCChannel::Tilt:
+                f.hasPanTilt = true; break;
+            case QLCChannel::Colour:
+                if (ch->colour() == QLCChannel::Red)        hasR = true;
+                else if (ch->colour() == QLCChannel::Green)  hasG = true;
+                else if (ch->colour() == QLCChannel::Blue)   hasB = true;
+                else f.hasColorWheel = true;
+                break;
+            case QLCChannel::Intensity:
+                // IntensityRed/Green/Blue presets land in the Intensity group
+                // but carry a colour value — treat them as additive RGB channels.
+                if (ch->colour() == QLCChannel::Red)        hasR = true;
+                else if (ch->colour() == QLCChannel::Green)  hasG = true;
+                else if (ch->colour() == QLCChannel::Blue)   hasB = true;
+                else f.hasDimmer = true;
+                break;
+            case QLCChannel::Beam:
+                if (ch->preset() == QLCChannel::BeamZoomSmallBig
+                    || ch->preset() == QLCChannel::BeamZoomBigSmall)
+                    f.hasZoom = true;
+                break;
+            case QLCChannel::Gobo:
+                f.hasGobo = true; break;
+            case QLCChannel::Shutter:
+                f.hasShutter = true; break;
+            default: break;
+        }
+    }
+    f.hasRGB = hasR && hasG && hasB;
+}
+
+QJSValue EffectInstance::aimAtObject(quint32 fid, const QVector3D &pos, QLCPalette *effectPal)
+{
+    // aimAt: pre-computed pan/tilt for each bound target slot
+    QJSValue aimAt = m_script.engine()->newObject();
+    const MonitorProperties *mp = m_doc->monitorProperties();
+    const QMap<QString, quint32> &tgtBindings = effectPal->effectTargetBindings();
+    for (const EffectScript::TargetDef &td : m_script.targetDefs())
+    {
+        quint32 tid = tgtBindings.value(td.name, StageTarget::invalidId());
+        StageTarget *tgt = mp->stageTarget(tid);
+        if (!tgt || pos == QVector3D())
+        {
+            aimAt.setProperty(td.name, m_script.engine()->newObject());
+            continue;
+        }
+        // Follow spot: aim at the SUBJECT's body, not the target's
+        // configured Z — through the shared rule, so a bound target
+        // follows its structure and a Person is aimed at its own height.
+        const QVector3D tgtPos = AimSolver::aimPointFor(m_doc, fid, tgt, true);
+
+        // Use the SHARED aim solver — the exact same geometry the Aim
+        // palette uses in Edit — so the beam doesn't jump on Edit→Run.
+        // aimAt.pan/tilt are fixture degrees; the host converts via
+        // positionToValues (see parseIntents).
+        AimSolver::Solution sol;
+        QJSValue aimObj = m_script.engine()->newObject();
+        if (AimSolver::reach(m_doc, fid, tgtPos, sol))
+        {
+            aimObj.setProperty("pan",  (double)sol.panDeg);
+            aimObj.setProperty("tilt", (double)sol.tiltDeg);
+            aimObj.setProperty("reachMargin", (double)sol.marginDeg);
+        }
+        aimAt.setProperty(td.name, aimObj);
+    }
+    return aimAt;
+}
+
+QJSValue EffectInstance::sceneTargetObject(quint32 fid, StageTarget *st)
+{
+    const MonitorProperties *mp = m_doc->monitorProperties();
+    QVector3D raw = st->position();
+
+    QJSValue so = m_script.engine()->newObject();
+    // Raw target world location (metres) — the anchor a shape /
+    // formation effect centres on.  Shared by every fixture and
+    // independent of rig geometry, so it is always present.
+    so.setProperty("x", double(raw.x()));
+    so.setProperty("y", double(raw.y()));
+    so.setProperty("z", double(raw.z()));
+
+    // Convenience aim angles at the SUBJECT's body (not the
+    // target's configured Z), present only when this fixture has
+    // usable rig geometry.  The followspot defers on these.
+    // reachMargin: degrees to spare before the head's pan/tilt
+    // limit (negative = it cannot point there), so a script can
+    // fade a head out before it sticks.
+    // distance: metres from the head to that point, so a script can
+    // size the beam on the subject rather than at the lens.
+    // Pointed where its beam covers the subject best; sized
+    // at the subject itself (its chest), so the size it asks
+    // the zoom for does not move with the aim it gets.
+    const QVector3D tp = AimSolver::aimPointFor(m_doc, fid, st, true);
+    const QVector3D subject = mp->targetAimPoint(st, true);
+    AimSolver::Frame frame;
+    if (AimSolver::frameFor(m_doc, fid, frame))
+    {
+        const AimSolver::Solution sol = AimSolver::solve(frame, tp);
+        so.setProperty("pan",  double(sol.panDeg));
+        so.setProperty("tilt", double(sol.tiltDeg));
+        so.setProperty("reachMargin", double(sol.marginDeg));
+        so.setProperty("distance", double((subject - frame.position).length()));
+    }
+    return so;
 }
 
 QJSValue EffectInstance::buildInputsObject() const
@@ -1397,6 +1505,22 @@ EffectInstance::parseIntents(const QJSValue &intents,
         QJSValue intent = intents.property(i);
         if (!intent.isObject())
             continue;
+        /* Its own keys, read once: asking each answer for every key it might
+           have, head after head, was most of what reading them cost -- an
+           answer usually has three. */
+        QVarLengthArray<QPair<QString, QJSValue>, 8> keys;
+        QJSValueIterator kit(intent);
+        while (kit.hasNext())
+        {
+            kit.next();
+            keys.append(qMakePair(kit.name(), kit.value()));
+        }
+        auto iv = [&keys](const char *name) -> QJSValue {
+            for (const auto &k : keys)
+                if (k.first == QLatin1String(name))
+                    return k.second;
+            return QJSValue();
+        };
 
         const EffectCell &cell = cells.at(i);
         quint32 fid  = cell.fixtureId;
@@ -1432,12 +1556,12 @@ EffectInstance::parseIntents(const QJSValue &intents,
         bool  havePan = false, haveTilt = false;
         float panDeg  = 0.0f,  tiltDeg  = 0.0f;
 
-        QJSValue axVal = intent.property("aimX");
-        QJSValue ayVal = intent.property("aimY");
+        QJSValue axVal = iv("aimX");
+        QJSValue ayVal = iv("aimY");
         if (!axVal.isUndefined() && !ayVal.isUndefined())
         {
-            float az = intent.property("aimZ").isUndefined()
-                       ? 0.0f : (float)intent.property("aimZ").toNumber();
+            float az = iv("aimZ").isUndefined()
+                       ? 0.0f : (float)iv("aimZ").toNumber();
             QVector3D world((float)axVal.toNumber(), (float)ayVal.toNumber(), az);
             float pd = 0.0f, td = 0.0f;
             if (AimSolver::aimDegrees(m_doc, fid, world, pd, td))
@@ -1447,9 +1571,9 @@ EffectInstance::parseIntents(const QJSValue &intents,
             }
         }
 
-        QJSValue panVal = intent.property("pan");
+        QJSValue panVal = iv("pan");
         if (!panVal.isUndefined())  { panDeg  = (float)panVal.toNumber();  havePan  = true; }
-        QJSValue tiltVal = intent.property("tilt");
+        QJSValue tiltVal = iv("tilt");
         if (!tiltVal.isUndefined()) { tiltDeg = (float)tiltVal.toNumber(); haveTilt = true; }
 
         // Pan
@@ -1489,7 +1613,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
         // Written REPLACE so the effect can dip the value BELOW the scene base
         // (HTP could only push it up).  Per-fixture phase (script `spread`) makes
         // fixtures flicker independently rather than in unison.
-        QJSValue dimVal = intent.property("dimmer");
+        QJSValue dimVal = iv("dimmer");
         if (!dimVal.isUndefined())
         {
             const float mul = qBound(0.0f, (float)dimVal.toNumber(), 1.0f) * envelope;
@@ -1571,8 +1695,8 @@ EffectInstance::parseIntents(const QJSValue &intents,
             }
             return matched;
         };
-        auto writeColour = [&](const QString &prop, QLCChannel::PrimaryColour colour) -> bool {
-            QJSValue v = intent.property(prop);
+        auto writeColour = [&](const char *prop, QLCChannel::PrimaryColour colour) -> bool {
+            QJSValue v = iv(prop);
             if (v.isUndefined()) return true; // nothing requested — not a "miss"
             uchar dmxVal = (uchar)qBound(0, v.toInt(), 255);
             return writeEmitter(colour, dmxVal);
@@ -1582,9 +1706,9 @@ EffectInstance::parseIntents(const QJSValue &intents,
         // Also drives White (wMix): RGB intensity is HTP, so if the look's base
         // colour already saturates R/G the boost would be masked — White usually
         // has headroom, so it carries the visible pulse while R/G add the hue.
-        auto writeAsRGB = [&](const QString &prop,
+        auto writeAsRGB = [&](const char *prop,
                               float rMix, float gMix, float bMix, float wMix) {
-            QJSValue v = intent.property(prop);
+            QJSValue v = iv(prop);
             if (v.isUndefined()) return;
             uchar amount = (uchar)qBound(0, v.toInt(), 255);
             writeEmitter(QLCChannel::Red,   (uchar)qBound(0, (int)qRound(amount * rMix), 255));
@@ -1607,7 +1731,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
             // candle.  Instead express the amber pulse as a BRIGHTNESS flicker on
             // the master dimmer, written with REPLACE semantics so it drives the
             // full range (incl. downward) and the scene's warm colour flickers.
-            QJSValue av = intent.property("a");
+            QJSValue av = iv("a");
             quint32 miCh = fxi->masterIntensityChannel();
             if (!av.isUndefined() && miCh != QLCChannel::invalid())
             {
@@ -1625,14 +1749,14 @@ EffectInstance::parseIntents(const QJSValue &intents,
 
         // Color-wheel fallback: if r/g/b intent present but no additive RGB found,
         // find the closest color-wheel slot and write it.
-        bool hasColorIntent = !intent.property("r").isUndefined()
-                           || !intent.property("g").isUndefined()
-                           || !intent.property("b").isUndefined();
+        bool hasColorIntent = !iv("r").isUndefined()
+                           || !iv("g").isUndefined()
+                           || !iv("b").isUndefined();
         if (hasColorIntent && writes.size() == colourWritesBefore)
         {
-            int tR = qBound(0, intent.property("r").toInt(), 255);
-            int tG = qBound(0, intent.property("g").toInt(), 255);
-            int tB = qBound(0, intent.property("b").toInt(), 255);
+            int tR = qBound(0, iv("r").toInt(), 255);
+            int tG = qBound(0, iv("g").toInt(), 255);
+            int tB = qBound(0, iv("b").toInt(), 255);
             quint32 nCh = fxi->channels();
             for (quint32 c = 0; c < nCh; ++c)
             {
@@ -1668,8 +1792,8 @@ EffectInstance::parseIntents(const QJSValue &intents,
 
         // Shutter channel: "shutterOpen" (0=closed, 1=open) or
         // "strobeRate" (0..1 normalized within the fixture's strobe capability range).
-        QJSValue shutterOpenVal = intent.property("shutterOpen");
-        QJSValue strobeRateVal  = intent.property("strobeRate");
+        QJSValue shutterOpenVal = iv("shutterOpen");
+        QJSValue strobeRateVal  = iv("strobeRate");
         if (!shutterOpenVal.isUndefined() || !strobeRateVal.isUndefined())
         {
             quint32 nCh = fxi->channels();
@@ -1743,11 +1867,11 @@ EffectInstance::parseIntents(const QJSValue &intents,
         //   zoom   0..1  — BeamZoomSmallBig (or BigSmall inverted)
         //   iris   0..1  — ShutterIrisMinToMax (or MaxToMin inverted); in Shutter group
         //   gobo   int   — 0-based index into the GoboWheel's non-shake capabilities
-        QJSValue focusV = intent.property("focus");
-        QJSValue frostV = intent.property("frost");
-        QJSValue zoomV  = intent.property("zoom");
-        QJSValue irisV  = intent.property("iris");
-        QJSValue goboV  = intent.property("gobo");
+        QJSValue focusV = iv("focus");
+        QJSValue frostV = iv("frost");
+        QJSValue zoomV  = iv("zoom");
+        QJSValue irisV  = iv("iris");
+        QJSValue goboV  = iv("gobo");
 
         bool hasBeamIntent = !focusV.isUndefined() || !frostV.isUndefined()
                           || !zoomV.isUndefined()  || !irisV.isUndefined()

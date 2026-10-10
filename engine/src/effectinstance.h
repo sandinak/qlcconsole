@@ -24,11 +24,16 @@
 #include <QPointF>
 #include <QElapsedTimer>
 #include <QVariantMap>
+#include <QVector3D>
+#include <QVector>
 
 #include "effectscript.h"
 #include "scenetransition.h"
 
 class Doc;
+class Fixture;
+class QLCPalette;
+class StageTarget;
 
 class EffectInstance
 {
@@ -139,6 +144,10 @@ public:
         int     head;
         int     col;
         int     row;
+        bool operator==(const EffectCell &o) const
+        {
+            return fixtureId == o.fixtureId && head == o.head && col == o.col && row == o.row;
+        }
     };
     /** Build the per-head cell list + grid size the effect draws on. Sourced from
      *  the scene's fixture-group head layouts (concatenated left→right), filtered
@@ -163,6 +172,10 @@ public:
 
 private:
     QJSValue buildFixturesArray(const QList<EffectCell> &cells, int gridCols, int gridRows);
+    struct FixtureFacts;
+    void readFixtureFacts(const Fixture *fxi, FixtureFacts &f) const;
+    QJSValue aimAtObject(quint32 fid, const QVector3D &pos, QLCPalette *effectPal);
+    QJSValue sceneTargetObject(quint32 fid, StageTarget *st);
     QJSValue buildInputsObject() const;
     QJSValue buildPalettesObject() const;
     /** The look's colours, in its order (those after this effect, else all),
@@ -180,6 +193,36 @@ private:
 
     QList<DmxWrite> parseIntents(const QJSValue &intents,
                                  const QList<EffectCell> &cells) const;
+
+    /* What the script is handed is kept from tick to tick: building a JS
+       object for every head of every fixture, every tick, was most of what
+       an effect on a big rig cost -- the script itself next to nothing. A
+       fixture's facts (its name, heads, what it can do) are read again only
+       when it changes, its place on the rig each tick but once a fixture,
+       not once a head; the cells are rebuilt when the cells or a fixture
+       change. A fresh array holds them each tick, so a script that sorts
+       the list it is given does not sort the next one. */
+    struct FixtureFacts
+    {
+        const Fixture *fixture = nullptr;
+        const void *mode = nullptr;     //!< its mode, to see it change
+        QString name;
+        int heads = 0;
+        float panRange = 360.0f, tiltRange = 270.0f;
+        float lensMin = 0.0f, lensMax = 0.0f;
+        bool hasPanTilt = false, hasRGB = false, hasColorWheel = false;
+        bool hasDimmer = false, hasGobo = false, hasShutter = false, hasZoom = false;
+        QVector3D pos;
+        QJSValue posObj;                //!< shared by its cells
+        quint64 seen = 0;               //!< the tick it was last looked at
+        bool sceneTargetSet = false;    //!< on its cells now
+        bool lastSpotSet = false;
+    };
+    QHash<quint32, FixtureFacts> m_facts;
+    QVector<QJSValue> m_cellObjects;
+    QList<EffectCell> m_cellsBuilt;
+    int m_cellsBuiltCols = -1, m_cellsBuiltRows = -1;
+    quint64 m_factsTick = 0;
 
     Doc    *m_doc;
     quint32 m_sceneId;

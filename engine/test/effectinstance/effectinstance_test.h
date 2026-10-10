@@ -21,6 +21,8 @@ class EffectInstance_Test final : public QObject
 
 private slots:
     void theStepTestPatternCountsNumbersAndNamesTheSteps();
+    void theFixturesAScriptSeesFollowTheRig();
+    void aWholeRigOfPixelsTicksQuickly();
     void init();
     void cleanup();
 

@@ -1046,6 +1046,42 @@ void EffectInstance_Test::aScriptsMissingTextIsEmptyNotUndefined()
     QCOMPARE(script.onFinish(), QString("hold"));
 }
 
+/* A pixel fixture: @p rgbHeads heads of red, green and blue, then
+   @p whiteHeads heads of white alone -- an LED strip, or a bar with both. */
+static QLCFixtureDef *makePixelDef(const QString &model, int rgbHeads, int whiteHeads)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel(model);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("px");
+    int n = 0;
+    auto add = [&](QLCChannel::Preset preset) {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(QString("c%1").arg(n));
+        ch->setPreset(preset);
+        def->addChannel(ch);
+        mode->insertChannel(ch, quint32(n));
+        return quint32(n++);
+    };
+    for (int h = 0; h < rgbHeads; ++h)
+    {
+        QLCFixtureHead head;
+        head.addChannel(add(QLCChannel::IntensityRed));
+        head.addChannel(add(QLCChannel::IntensityGreen));
+        head.addChannel(add(QLCChannel::IntensityBlue));
+        mode->insertHead(-1, head);
+    }
+    for (int h = 0; h < whiteHeads; ++h)
+    {
+        QLCFixtureHead head;
+        head.addChannel(add(QLCChannel::IntensityWhite));
+        mode->insertHead(-1, head);
+    }
+    mode->cacheHeads();
+    def->addMode(mode);
+    return def;
+}
+
 /* The step test card: each strip of a step counted and its last LED lit,
    the step's number as lines in its section's colour, its name in the
    middle; a dot running on the top bars. Worked out from the fixtures' names. */
@@ -1053,40 +1089,8 @@ void EffectInstance_Test::theStepTestPatternCountsNumbersAndNamesTheSteps()
 {
     MasterTimer timer(m_doc);
     // A 64-pixel RGB strip, and a top bar of 16 RGB pixels then 16 white ones.
-    auto makeDef = [](const QString &model, int rgbHeads, int whiteHeads) {
-        QLCFixtureDef *def = new QLCFixtureDef();
-        def->setManufacturer("Test"); def->setModel(model);
-        QLCFixtureMode *mode = new QLCFixtureMode(def);
-        mode->setName("px");
-        int n = 0;
-        auto add = [&](QLCChannel::Preset preset) {
-            QLCChannel *ch = new QLCChannel();
-            ch->setName(QString("c%1").arg(n));
-            ch->setPreset(preset);
-            def->addChannel(ch);
-            mode->insertChannel(ch, quint32(n));
-            return quint32(n++);
-        };
-        for (int h = 0; h < rgbHeads; ++h)
-        {
-            QLCFixtureHead head;
-            head.addChannel(add(QLCChannel::IntensityRed));
-            head.addChannel(add(QLCChannel::IntensityGreen));
-            head.addChannel(add(QLCChannel::IntensityBlue));
-            mode->insertHead(-1, head);
-        }
-        for (int h = 0; h < whiteHeads; ++h)
-        {
-            QLCFixtureHead head;
-            head.addChannel(add(QLCChannel::IntensityWhite));
-            mode->insertHead(-1, head);
-        }
-        mode->cacheHeads();
-        def->addMode(mode);
-        return def;
-    };
-    QLCFixtureDef *stripDef = makeDef("Strip", 64, 0);
-    QLCFixtureDef *topDef = makeDef("Top", 16, 16);
+    QLCFixtureDef *stripDef = makePixelDef("Strip", 64, 0);
+    QLCFixtureDef *topDef = makePixelDef("Top", 16, 16);
     m_doc->fixtureDefCache()->addFixtureDef(stripDef);
     m_doc->fixtureDefCache()->addFixtureDef(topDef);
     QList<Fixture *> fx;
@@ -1157,6 +1161,150 @@ void EffectInstance_Test::theStepTestPatternCountsNumbersAndNamesTheSteps()
     QVERIFY(dots >= 1 && dots <= 3);
     for (int h = 0; h < 16; ++h)
         QCOMPARE(v.value((quint64(top->id()) << 32) | quint32(48 + h)), 0);
+    scene->stop(FunctionParent::master());
+    timer.timerTick();
+}
+
+/* What the script is handed is kept between ticks -- but a fixture renamed
+   or moved is seen the next tick, and a script that reorders the list it is
+   given does not reorder it for the next one. */
+void EffectInstance_Test::theFixturesAScriptSeesFollowTheRig()
+{
+    MasterTimer timer(m_doc);
+    QLCFixtureDef *def = makePixelDef("Probe strip", 4, 0);
+    m_doc->fixtureDefCache()->addFixtureDef(def);
+    Fixture *fx = new Fixture(m_doc);
+    fx->setFixtureDefinition(def, def->modes().first());
+    fx->setName("Strip");
+    fx->setUniverse(3);
+    fx->setAddress(0);
+    QVERIFY(m_doc->addFixture(fx));
+    m_doc->monitorProperties()->setFixturePosition(fx->id(), 0, 0, QVector3D(500.0f, 0, 0));
+
+    // Each head's red is its number; green says its name, blue where it is.
+    // The list is reversed in place and the answers put back in its order.
+    QTemporaryDir dir;
+    QFile js(dir.filePath("probe.js"));
+    QVERIFY(js.open(QIODevice::WriteOnly));
+    js.write("(function() { var e = {}; e.apiVersion = 1; e.name = 'Probe';"
+             " e.fixtureTypes = ['rgb'];"
+             " e.tick = function(fixtures) { var n = fixtures.length; fixtures.reverse();"
+             "  var out = new Array(n);"
+             "  for (var i = 0; i < n; i++) { var f = fixtures[i];"
+             "   out[n - 1 - i] = { r: f.head * 10 + 1, g: f.name === 'Moved' ? 200 : 100,"
+             "                      b: f.pos.x > 1 ? 200 : 100 }; }"
+             "  return out; };"
+             " return e; })()");
+    js.close();
+
+    QLCPalette *probe = new QLCPalette(QLCPalette::Effect, m_doc);
+    probe->setScriptPath(js.fileName());
+    QVERIFY(m_doc->addPalette(probe));
+    Scene *scene = new Scene(m_doc);
+    scene->addFixture(fx->id());
+    scene->addPalette(probe->id());
+    m_doc->addFunction(scene);
+    scene->start(&timer, FunctionParent::master());
+    timer.timerTick();
+
+    EffectInstance inst(m_doc, scene->id(), probe->id());
+    QVERIFY(inst.isValid());
+    auto frame = [&]() {
+        inst.runTick();
+        QHash<quint32, int> v;
+        foreach (const EffectInstance::DmxWrite &w, inst.dmxWrites())
+            v[w.channel] = w.value;
+        return v;
+    };
+    for (int tick = 0; tick < 3; ++tick)
+    {
+        QHash<quint32, int> v = frame();
+        for (int h = 0; h < 4; ++h)
+            QVERIFY2(v.value(quint32(h * 3)) == h * 10 + 1,
+                     qPrintable(QString("tick %1 head %2: red %3").arg(tick).arg(h).arg(v.value(quint32(h * 3)))));
+        QCOMPARE(v.value(1), 100);
+        QCOMPARE(v.value(2), 100);
+    }
+
+    fx->setName("Moved");
+    m_doc->monitorProperties()->setFixturePosition(fx->id(), 0, 0, QVector3D(3000.0f, 0, 0));
+    QHash<quint32, int> v = frame();
+    QCOMPARE(v.value(1), 200);           // the new name
+    QCOMPARE(v.value(2), 200);           // where it is now
+    QCOMPARE(v.value(9), 31);            // still in its own order
+
+    scene->stop(FunctionParent::master());
+    timer.timerTick();
+}
+
+/* A rig the size of a real one -- 96 strips of 64 pixels -- run tick after
+   tick: the same picture each time, and how long a tick takes (reported, not
+   checked: it is the number to watch when making this faster). */
+void EffectInstance_Test::aWholeRigOfPixelsTicksQuickly()
+{
+    MasterTimer timer(m_doc);
+    QLCFixtureDef *stripDef = makePixelDef("Rig strip", 64, 0);
+    m_doc->fixtureDefCache()->addFixtureDef(stripDef);
+    Scene *scene = new Scene(m_doc);
+    static const char *sections[] = { "US", "CS", "DS" };
+    for (int s = 0; s < 3; ++s)
+        for (int step = 1; step <= 4; ++step)
+            for (int strip = 1; strip <= 8; ++strip)
+            {
+                Fixture *f = new Fixture(m_doc);
+                f->setFixtureDefinition(stripDef, stripDef->modes().first());
+                f->setName(QString("%1%2 #%3").arg(sections[s]).arg(step).arg(strip));
+                f->setUniverse(quint32((s * 4 + step - 1) * 4 + (strip - 1) / 2));
+                f->setAddress((strip - 1) % 2 ? 192 : 0);
+                m_doc->addFixture(f);
+                m_doc->monitorProperties()->setFixturePosition(f->id(), 0, 0,
+                    QVector3D(1000.0f * step, 2000.0f * s, 1000.0f - 100.0f * strip));
+                scene->addFixture(f->id());
+            }
+
+    QLCPalette *card = new QLCPalette(QLCPalette::Effect, m_doc);
+    card->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/step-test-pattern.js");
+    QVERIFY(m_doc->addPalette(card));
+    scene->addPalette(card->id());
+    m_doc->addFunction(scene);
+    scene->start(&timer, FunctionParent::master());
+    timer.timerTick();
+
+    EffectInstance inst(m_doc, scene->id(), card->id());
+    QVERIFY(inst.isValid());
+    inst.runTick();
+    const QList<EffectInstance::DmxWrite> first = inst.dmxWrites();
+    QVERIFY(first.size() > 96 * 3);
+
+    const int ticks = qMax(20, qEnvironmentVariableIntValue("QLC_RIG_TICKS"));
+    QElapsedTimer clock;
+    clock.start();
+    for (int i = 0; i < ticks; ++i)
+        inst.runTick();
+    const double ms = double(clock.nsecsElapsed()) / 1e6 / ticks;
+    qInfo().noquote() << QString("96 strips x 64 pixels: %1 ms a tick").arg(ms, 0, 'f', 2);
+
+    // The same picture -- but for the spinner beside each name (LEDs 42-44),
+    // which goes round: on every step, its dot and two cells of tail.
+    auto still = [](const QList<EffectInstance::DmxWrite> &writes) {
+        QList<QPair<quint64, int>> out;
+        for (const EffectInstance::DmxWrite &w : writes)
+            if (w.channel < 42 * 3 || w.channel >= 45 * 3)
+                out << qMakePair((quint64(w.fixtureId) << 32) | w.channel, int(w.value));
+        return out;
+    };
+    const QList<EffectInstance::DmxWrite> last = inst.dmxWrites();
+    QCOMPARE(still(last), still(first));
+    QSet<QPair<quint32, quint32>> lit;
+    for (const EffectInstance::DmxWrite &w : last)
+        if (w.channel >= 42 * 3 && w.channel < 45 * 3 && w.value > 0)
+            lit.insert(qMakePair(w.fixtureId, w.channel / 3));
+    QHash<QString, int> perStep;
+    for (const auto &c : lit)
+        perStep[m_doc->fixture(c.first)->name().section(' ', 0, 0)]++;
+    QCOMPARE(perStep.size(), 12);
+    for (auto it = perStep.cbegin(); it != perStep.cend(); ++it)
+        QVERIFY2(it.value() == 3, qPrintable(QString("%1: %2 spinner cells").arg(it.key()).arg(it.value())));
     scene->stop(FunctionParent::master());
     timer.timerTick();
 }
