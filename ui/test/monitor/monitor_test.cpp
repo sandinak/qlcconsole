@@ -412,6 +412,54 @@ void Monitor_Test::removeSelectedCancelled()
 
 
 
+/* How long the rig view takes to draw a real show: QLC_RIG_BENCH=<show file>
+   (skipped without it). Reported, not checked -- the number to watch when
+   making the rig view faster. */
+void Monitor_Test::aShowsRigViewDrawTime()
+{
+    const QString path = qEnvironmentVariable("QLC_RIG_BENCH");
+    if (path.isEmpty())
+        QSKIP("set QLC_RIG_BENCH to a show file");
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QXmlStreamReader r(&file);
+    QVERIFY(r.readNextStartElement());
+    bool loaded = false;
+    while (r.readNextStartElement())
+    {
+        if (r.name() == QLatin1String("Engine"))
+        {
+            loaded = m_doc->loadXML(r);
+            break;
+        }
+        r.skipCurrentElement();
+    }
+    QVERIFY(loaded);
+
+    const int frames = qMax(1, qEnvironmentVariableIntValue("QLC_RIG_FRAMES"));
+    for (int quality = 1; quality <= 2; ++quality)
+    {
+        StructureStudioView view(m_doc, StructureStudioView::StageKind, 0);
+        view.resize(1100, 680);
+        view.reload();
+        view.setPlane(StructureStudioView::Angled);
+        view.setLiveValues(true);
+        view.setBeams(true);
+        view.setHaze(1.0);
+        view.setSupersample(quality);
+        view.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&view));
+        view.repaint();                      // the first frame builds what it keeps
+        QElapsedTimer clock;
+        clock.start();
+        for (int i = 0; i < frames; ++i)
+            view.repaint();
+        qInfo().noquote() << QString("rig view, %1 fixtures, quality %2: %3 ms a frame")
+                             .arg(m_doc->fixtures().size()).arg(quality)
+                             .arg(double(clock.nsecsElapsed()) / 1e6 / frames, 0, 'f', 1);
+    }
+}
+
 QTEST_MAIN(Monitor_Test)
 
 /****************************************************************************

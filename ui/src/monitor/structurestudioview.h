@@ -293,6 +293,15 @@ private:
     void refit();                                    ///< scale/centre to fit everything
     void collectPoints(QList<QVector3D> &pts) const; ///< every point the fit should frame
     void collectPointsFor(QList<QVector3D> &pts, Kind kind, quint32 id) const;
+    /** collectPoints() for the floor grid, which a frame needs every time:
+     *  measuring the whole rig was close to half of what a frame of a big
+     *  show cost, for a floor that changes only when the rig does. Kept for
+     *  half a second, and measured again at once on reload(). */
+    const QList<QVector3D> &floorPoints() const;
+    /** Measure the rig again next frame: the floor, the overlaps. */
+    void rigMayHaveMoved();
+    mutable QList<QVector3D> m_floorPoints;
+    mutable QElapsedTimer m_floorPointsAge;
     /** Every structure in the workspace, for StageKind. */
     QList<QPair<Kind, quint32> > everyStructure() const;
 
@@ -461,11 +470,11 @@ private:
     /** Fixtures whose physical body overlaps another fixture's -- rigged in
      *  the same physical space, whether that is two heads stacked on the same
      *  truss offset or a deck fixture dragged into another one's footprint.
-     *  Recomputed every frame (see rebuildOverlapWarnings()): cheap, since it
-     *  is N^2 simple box comparisons, not the per-fixture palette resolution
-     *  that per-frame work elsewhere in this view has to avoid. */
+     *  Worked out at most twice a second, and at once when the rig changes
+     *  under this view (see rebuildOverlapWarnings()). */
     void rebuildOverlapWarnings() const;
     mutable QSet<quint32> m_overlappingFixtures;
+    mutable QElapsedTimer m_overlapAge;   ///< when they were last worked out
     /** The edge colour a fixture body/beam-stub draws with: the usual
      *  contrast-safe tint, or a flat warning colour when it overlaps another
      *  fixture's -- unmistakable and independent of either fixture's own

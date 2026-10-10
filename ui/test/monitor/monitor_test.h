@@ -29,6 +29,7 @@ class Monitor_Test final : public QObject
     Q_OBJECT
 
 private slots:
+    void aShowsRigViewDrawTime();
     void initTestCase();
     void cleanupTestCase();
 

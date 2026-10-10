@@ -128,6 +128,7 @@ void StructureStudioView::setPlane(Plane p)
 void StructureStudioView::reload()
 {
     m_zoomed = false;   // re-frame: this is a deliberate view change
+    rigMayHaveMoved();                  // the rig has changed: measure it again
     refit();
     update();
 
@@ -1087,11 +1088,30 @@ void StructureStudioView::drawStageFigures(QPainter &p) const
     }
 }
 
+void StructureStudioView::rigMayHaveMoved()
+{
+    m_floorPointsAge.invalidate();
+    m_overlapAge.invalidate();
+}
+
+const QList<QVector3D> &StructureStudioView::floorPoints() const
+{
+    if (!m_floorPointsAge.isValid() || m_floorPointsAge.elapsed() > 500)
+    {
+        m_floorPoints.clear();
+        collectPoints(m_floorPoints);
+        m_floorPointsAge.start();
+    }
+    return m_floorPoints;
+}
+
 void StructureStudioView::collectPoints(QList<QVector3D> &pts) const
 {
     if (m_kind != StageKind)
     {
         collectPointsFor(pts, m_kind, m_id);
+        foreach (quint32 fid, mountedFixtures())
+            pts << fixtureCentre(fid);
         return;
     }
     typedef QPair<Kind, quint32> KindId;
@@ -1273,9 +1293,10 @@ void StructureStudioView::collectPointsFor(QList<QVector3D> &pts, Kind kind, qui
                 pts << sc->pointAt(-1.0 + i / 4.0, lo) << sc->pointAt(-1.0 + i / 4.0, hi);
         }
     }
-
-    foreach (quint32 fid, mountedFixtures())
-        pts << fixtureCentre(fid);
+    /* Only the structure's own points. Every fixture's centre was added here
+       too, once for each structure the whole-rig view asked about: every
+       fixture placed once a structure, every frame -- most of what drawing
+       a big show cost. collectPoints() adds the fixtures, once. */
 }
 
 void StructureStudioView::refit()
@@ -1361,9 +1382,7 @@ void StructureStudioView::drawGrid(QPainter &p) const
 
         /* ...but never smaller than what is actually rigged. A structure
            standing off the end of the declared stage still needs a floor. */
-        QList<QVector3D> pts;
-        collectPoints(pts);
-        foreach (const QVector3D &w, pts)
+        foreach (const QVector3D &w, floorPoints())
         {
             x0 = qMin(x0, double(w.x())); x1 = qMax(x1, double(w.x()));
             y0 = qMin(y0, double(w.y())); y1 = qMax(y1, double(w.y()));
@@ -7425,12 +7444,16 @@ void StructureStudioView::takeLiveSnapshot() const
  * in. Conservative (can over-warn on a long fixture end-on to another) is
  * the right side to err on for a warning, unlike a hard constraint.
  *
- * O(fixtures^2), but that is a few hundred simple box comparisons, not the
- * per-fixture palette resolution the rest of this view has to be careful
- * about -- cheap enough to redo every frame rather than invalidate on
- * whatever subset of rig-geometry changes might move a fixture. */
+ * O(fixtures^2), and placing every fixture to compare them was a quarter of
+ * what a frame of a 200-fixture show cost -- for warnings that change only
+ * when the rig does. So they are worked out at most twice a second (and at
+ * once on reload()) rather than invalidated on whatever subset of
+ * rig-geometry changes might move a fixture. */
 void StructureStudioView::rebuildOverlapWarnings() const
 {
+    if (m_overlapAge.isValid() && m_overlapAge.elapsed() < 500)
+        return;
+    m_overlapAge.start();
     m_overlappingFixtures.clear();
     if (m_doc == nullptr)
         return;
@@ -7834,6 +7857,8 @@ void StructureStudioView::mousePressEvent(QMouseEvent *e)
 void StructureStudioView::mouseMoveEvent(QMouseEvent *e)
 {
     m_cursorPx = e->pos();   // live ruler readout
+    if (e->buttons() != Qt::NoButton)
+        rigMayHaveMoved();   // a drag here moves things: see it at once
     m_hasCursor = true;
     if (m_orbiting)
     {
@@ -7933,6 +7958,7 @@ void StructureStudioView::leaveEvent(QEvent *)
 
 void StructureStudioView::mouseReleaseEvent(QMouseEvent *)
 {
+    rigMayHaveMoved();
     if (m_orbiting)
     {
         m_orbiting = false;

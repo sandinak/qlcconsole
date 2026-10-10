@@ -82,7 +82,11 @@ QLCPhysical& QLCPhysical::operator=(const QLCPhysical& physical)
         m_focusTiltMax = physical.focusTiltMax();
         m_layout = physical.layoutSize();
 
-        m_powerConsumption = physical.powerConsumption();
+        /* What it says, not powerConsumption()'s guess from the bulb when
+           it says nothing: a copy is the same physical, and that guess built
+           a regular expression on every copy -- thousands a frame in the
+           rig view. */
+        m_powerConsumption = physical.m_powerConsumption;
         m_dmxConnector = physical.dmxConnector();
         m_bodyShape = physical.bodyShape();
         m_emission = physical.emission();
@@ -283,7 +287,8 @@ int QLCPhysical::powerConsumption() const
         /* If power consumption value is missing, return bulb watts
          * plus a guesstimate 100W, since there's usually other
           * electronics consuming power as well. */
-        int bulbWatts = bulbType().remove(QRegularExpression("[A-Z]*")).toInt();
+        static const QRegularExpression letters("[A-Z]*");
+        int bulbWatts = bulbType().remove(letters).toInt();
         if (bulbWatts > 0)
             return bulbWatts + 100;
         else
