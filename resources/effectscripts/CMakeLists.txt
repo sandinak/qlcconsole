@@ -19,6 +19,7 @@ set(SCRIPT_FILES
     fire.js
     followspot.js
     grid-probe.js
+    step-test-pattern.js
     diamond.js
     gobo-chase.js
     iris-pulse.js

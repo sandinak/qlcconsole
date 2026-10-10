@@ -1046,4 +1046,119 @@ void EffectInstance_Test::aScriptsMissingTextIsEmptyNotUndefined()
     QCOMPARE(script.onFinish(), QString("hold"));
 }
 
+/* The step test card: each strip of a step counted and its last LED lit,
+   the step's number as lines in its section's colour, its name in the
+   middle; a dot running on the top bars. Worked out from the fixtures' names. */
+void EffectInstance_Test::theStepTestPatternCountsNumbersAndNamesTheSteps()
+{
+    MasterTimer timer(m_doc);
+    // A 64-pixel RGB strip, and a top bar of 16 RGB pixels then 16 white ones.
+    auto makeDef = [](const QString &model, int rgbHeads, int whiteHeads) {
+        QLCFixtureDef *def = new QLCFixtureDef();
+        def->setManufacturer("Test"); def->setModel(model);
+        QLCFixtureMode *mode = new QLCFixtureMode(def);
+        mode->setName("px");
+        int n = 0;
+        auto add = [&](QLCChannel::Preset preset) {
+            QLCChannel *ch = new QLCChannel();
+            ch->setName(QString("c%1").arg(n));
+            ch->setPreset(preset);
+            def->addChannel(ch);
+            mode->insertChannel(ch, quint32(n));
+            return quint32(n++);
+        };
+        for (int h = 0; h < rgbHeads; ++h)
+        {
+            QLCFixtureHead head;
+            head.addChannel(add(QLCChannel::IntensityRed));
+            head.addChannel(add(QLCChannel::IntensityGreen));
+            head.addChannel(add(QLCChannel::IntensityBlue));
+            mode->insertHead(-1, head);
+        }
+        for (int h = 0; h < whiteHeads; ++h)
+        {
+            QLCFixtureHead head;
+            head.addChannel(add(QLCChannel::IntensityWhite));
+            mode->insertHead(-1, head);
+        }
+        mode->cacheHeads();
+        def->addMode(mode);
+        return def;
+    };
+    QLCFixtureDef *stripDef = makeDef("Strip", 64, 0);
+    QLCFixtureDef *topDef = makeDef("Top", 16, 16);
+    m_doc->fixtureDefCache()->addFixtureDef(stripDef);
+    m_doc->fixtureDefCache()->addFixtureDef(topDef);
+    QList<Fixture *> fx;
+    auto add = [&](QLCFixtureDef *def, const QString &name, quint32 uni, quint32 addr, float z) {
+        Fixture *f = new Fixture(m_doc);
+        f->setFixtureDefinition(def, def->modes().first());
+        f->setName(name);
+        f->setUniverse(uni);
+        f->setAddress(addr);
+        m_doc->addFixture(f);
+        m_doc->monitorProperties()->setFixturePosition(f->id(), 0, 0, QVector3D(2000.0f, 1000.0f, z));
+        fx << f;
+        return f;
+    };
+    Fixture *s1 = add(stripDef, "CS3 #1", 1, 0, 0.6f);      // the higher strip: the top row
+    Fixture *s2 = add(stripDef, "CS3 #2", 1, 192, 0.3f);
+    Fixture *top = add(topDef, "CS3t1", 2, 0, 0.8f);
+
+    QLCPalette *card = new QLCPalette(QLCPalette::Effect, m_doc);
+    card->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/step-test-pattern.js");
+    QVERIFY(m_doc->addPalette(card));
+    Scene *scene = new Scene(m_doc);
+    for (Fixture *f : fx)
+        scene->addFixture(f->id());
+    scene->addPalette(card->id());
+    m_doc->addFunction(scene);
+    scene->start(&timer, FunctionParent::master());
+    timer.timerTick();
+
+    EffectInstance inst(m_doc, scene->id(), card->id());
+    QVERIFY(inst.isValid());
+    inst.runTick();
+    QHash<quint64, int> v;              // (fixture, channel) -> value
+    foreach (const EffectInstance::DmxWrite &w, inst.dmxWrites())
+        v[(quint64(w.fixtureId) << 32) | w.channel] = w.value;
+    auto rgb = [&](Fixture *f, int head) {
+        const quint64 k = quint64(f->id()) << 32;
+        return QList<int>() << v.value(k | quint32(head * 3)) << v.value(k | quint32(head * 3 + 1))
+                            << v.value(k | quint32(head * 3 + 2));
+    };
+    auto isWhite = [&](Fixture *f, int head) { QList<int> c = rgb(f, head); return c[0] > 0 && c[0] == c[1] && c[1] == c[2]; };
+    auto isOff = [&](Fixture *f, int head) { return rgb(f, head) == QList<int>({ 0, 0, 0 }); };
+    auto isGreen = [&](Fixture *f, int head) { QList<int> c = rgb(f, head); return c[0] == 0 && c[1] > 0 && c[2] == 0; };
+
+    // Strip 1: its first LED; strip 2: its first two. Every strip's last.
+    QVERIFY(isWhite(s1, 0) && isOff(s1, 1));
+    QVERIFY(isWhite(s2, 0) && isWhite(s2, 1) && isOff(s2, 2));
+    QVERIFY(isWhite(s1, 63) && isWhite(s2, 63));
+    // CS3: three green lines from the 10th LED, every other one.
+    for (Fixture *f : { s1, s2 })
+    {
+        QVERIFY(isGreen(f, 9) && isGreen(f, 11) && isGreen(f, 13));
+        QVERIFY(isOff(f, 10) && isOff(f, 12) && !isGreen(f, 15));
+    }
+    // "CS3" in the middle (17 wide from LED 24): C's top row is .###. -- on the top strip.
+    QVERIFY(isOff(s1, 23) && isWhite(s1, 24) && isWhite(s1, 26) && isOff(s1, 27));
+    // C's second row is #...# -- the second strip.
+    QVERIFY(isWhite(s2, 23) && isOff(s2, 24) && isWhite(s2, 27));
+    // The top: blue on its colour pixels only, never its white ones.
+    int dots = 0;
+    for (int h = 0; h < 16; ++h)
+    {
+        QList<int> c = rgb(top, h);
+        QVERIFY(c[0] == 0 && c[1] == 0);
+        if (c[2] > 0)
+            ++dots;
+    }
+    QVERIFY(dots >= 1 && dots <= 3);
+    for (int h = 0; h < 16; ++h)
+        QCOMPARE(v.value((quint64(top->id()) << 32) | quint32(48 + h)), 0);
+    scene->stop(FunctionParent::master());
+    timer.timerTick();
+}
+
 QTEST_GUILESS_MAIN(EffectInstance_Test)

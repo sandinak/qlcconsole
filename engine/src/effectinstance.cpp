@@ -854,6 +854,10 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
         QJSValue obj = m_script.engine()->newObject();
         obj.setProperty("id",   (int)fid);
         obj.setProperty("head", cell.head);
+        // Its name, for a script that works by how a rig is named ("DS1 #3",
+        // "CS2t1") -- a test pattern that knows each step and strip.
+        obj.setProperty("name", fxi->name());
+        obj.setProperty("heads", fxi->heads());
 
         float panRange  = 360.0f;
         float tiltRange = 270.0f;

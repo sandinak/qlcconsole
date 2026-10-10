@@ -20,6 +20,7 @@ class EffectInstance_Test final : public QObject
     Q_OBJECT
 
 private slots:
+    void theStepTestPatternCountsNumbersAndNamesTheSteps();
     void init();
     void cleanup();
 
