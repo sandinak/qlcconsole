@@ -1055,6 +1055,14 @@ bool Monitor::eventFilter(QObject *watched, QEvent *event)
             {
                 if (m_hRuler != NULL) m_hRuler->setItemRange(sr.left(), sr.right());
                 if (m_vRuler != NULL) m_vRuler->setItemRange(sr.top(), sr.bottom());
+                /* Dragging it, the mark is its middle, not wherever it was
+                   grabbed ("when moving the drape .. the mark on the ruler
+                   should be the center of the drape"). */
+                if (me->buttons() & Qt::LeftButton)
+                {
+                    if (m_hRuler != NULL) m_hRuler->setCursorPixel(sr.center().x());
+                    if (m_vRuler != NULL) m_vRuler->setCursorPixel(sr.center().y());
+                }
             }
             else
             {

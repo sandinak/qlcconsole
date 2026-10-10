@@ -250,8 +250,8 @@ public:
      *  labels flag. Call after a layer's labels toggle changes. */
     void refreshFixtureLabels();
 
-    /** Bounding rect (viewport pixels) of the currently selected fixtures, or an
-     *  invalid QRect if none. Used to band the rulers with the selection's
+    /** Bounding rect (viewport pixels) of what is selected -- fixtures,
+     *  structures, scenery -- or an invalid QRect if nothing is. Used to band the rulers with the selection's
      *  extent while it is moved. */
     QRect selectionViewportRect() const;
 

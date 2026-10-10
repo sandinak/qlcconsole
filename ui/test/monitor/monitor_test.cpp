@@ -63,6 +63,7 @@
 #include "monitorfixture.h"
 #include "networknodeitem.h"
 #include "sceneryitem.h"
+#include "monitorruler.h"
 #include "beamoptics.h"
 #include "gobolibrary.h"
 #include "fixturetreewidget.h"
@@ -490,6 +491,46 @@ void Monitor_Test::theRigOverviewShortcutTogglesIt()
     QVERIFY(QTest::qWaitForWindowActive(dlg));
     QTest::keySequence(dlg, QKeySequence::Close);
     QTRY_VERIFY(dlg.isNull());
+}
+
+/* Moving a drape, the ruler marks its middle, not where it was grabbed;
+   just hovering, the mark is the pointer. */
+void Monitor_Test::theRulerMarksTheMiddleOfADraggedDrape()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Meters);
+    Scenery *drape = props->addScenery();
+    drape->setKind(Scenery::MainDrape);
+    drape->setOriginX(6.0f); drape->setOriginY(6.0f);
+    drape->setWidth(8.0f);
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        parent.resize(1200, 800);
+        parent.show();
+        MonitorGraphicsView *gv = mon.m_graphicsView;
+        SceneryItem *item = gv->m_sceneryItems.value(drape->id());
+        QVERIFY(item != nullptr);
+        QVERIFY(mon.m_hRuler != nullptr);
+        item->setSelected(true);
+        const QRect band = gv->selectionViewportRect();
+        QVERIFY(band.isValid());
+
+        // Grabbed well off its middle: a quarter of the way along it.
+        const QPoint grab(band.left() + band.width() / 4, band.center().y());
+        auto move = [&](Qt::MouseButtons buttons) {
+            QMouseEvent me(QEvent::MouseMove, QPointF(grab), QPointF(gv->viewport()->mapToGlobal(grab)),
+                           Qt::NoButton, buttons, Qt::NoModifier);
+            QApplication::sendEvent(gv->viewport(), &me);
+        };
+        move(Qt::NoButton);
+        QCOMPARE(mon.m_hRuler->cursorPixel(), grab.x());
+        QCOMPARE(mon.m_hRuler->itemRange(), qMakePair(band.left(), band.right()));
+        move(Qt::LeftButton);
+        QCOMPARE(mon.m_hRuler->cursorPixel(), band.center().x());
+    }
+    delete doc;
 }
 
 QTEST_MAIN(Monitor_Test)

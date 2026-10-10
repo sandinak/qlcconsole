@@ -2908,11 +2908,13 @@ void MonitorGraphicsView::refreshFixtureLabels()
 
 QRect MonitorGraphicsView::selectionViewportRect() const
 {
-    const QList<MonitorFixtureItem *> items = selectedFixtureItems();
+    /* Whatever is selected, not only fixtures: a drape, a truss or a deck
+       being moved reads on the rulers the same way. */
+    const QList<QGraphicsItem *> items = m_scene->selectedItems();
     if (items.isEmpty())
         return QRect();
     QRectF scene;
-    foreach (MonitorFixtureItem *it, items)
+    foreach (QGraphicsItem *it, items)
         scene = scene.isNull() ? it->sceneBoundingRect()
                                : scene.united(it->sceneBoundingRect());
     return mapFromScene(scene).boundingRect();

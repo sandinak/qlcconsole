@@ -60,6 +60,10 @@ public slots:
      *  clear. Lets you read where the moving item sits on the ruler. */
     void setItemRange(int pxA, int pxB);
 
+    /** Where the mark is (-1: none), and the band (-1, -1: none). */
+    int cursorPixel() const { return m_cursorPixel; }
+    QPair<int, int> itemRange() const { return qMakePair(m_rangeA, m_rangeB); }
+
 protected:
     void paintEvent(QPaintEvent *event) override;
 
