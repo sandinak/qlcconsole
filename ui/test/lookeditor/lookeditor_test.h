@@ -40,6 +40,7 @@ private slots:
      *  AND for WLED based fixtures we should be selecting WLED effects". */
     void effectsArePickedFromABrowserWithWledsOwn();
     /** "can we put the sets in alpha order?" */
+    void theEffectListAndItsSettingsSitSideBySide();
     void theBrowsersListsAreAToZ();
 };
 

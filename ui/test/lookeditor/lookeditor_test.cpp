@@ -18,6 +18,9 @@
 */
 
 #include <QtTest>
+#include <QScrollArea>
+#include <QPushButton>
+#include <QCheckBox>
 #include <QCollator>
 #include <QSlider>
 #include <QLabel>
@@ -338,6 +341,48 @@ void LookEditor_Test::effectsArePickedFromABrowserWithWledsOwn()
         browser->grab().save(qEnvironmentVariable("BROWSER_PNG"));
         browser->setParent(&ed);
     }
+}
+
+void LookEditor_Test::theEffectListAndItsSettingsSitSideBySide()
+{
+    /* "on a regular sized screen we're running out of space in the bottom ..
+       move the effect list to the left side and options on the right": the
+       list keeps the height, the picked effect's settings sit beside it. */
+    Doc doc(this);
+    doc.effectScriptRunner()->cache()->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    QLCPalette *look = new QLCPalette(QLCPalette::Effect, &doc);
+    look->setName("Side");
+    QVERIFY(doc.addPalette(look));
+    LookEditor ed(&doc);
+    ed.resize(1000, 640);
+    ed.show();
+    ed.setPalette(look->id());
+    EffectBrowser *browser = ed.m_effectBrowser;
+    QVERIFY(browser->list()->count() > 1);
+    // Pick one with settings, the way a click does.
+    QListWidgetItem *withParams = nullptr;
+    for (int i = 0; i < browser->list()->count() && withParams == nullptr; ++i)
+        if (browser->list()->item(i)->text() == QLatin1String("Fireworks"))
+            withParams = browser->list()->item(i);
+    if (withParams == nullptr)
+        withParams = browser->list()->item(1);
+    browser->pick(withParams);
+    QApplication::processEvents();
+    QVERIFY2(ed.m_effectDynWidget->findChildren<QSlider *>().size()
+                 + ed.m_effectDynWidget->findChildren<QAbstractSpinBox *>().size() > 0,
+             "the picked effect's settings should be shown beside the list");
+
+    QScrollArea *details = ed.findChild<QScrollArea *>("effectDetails");
+    QVERIFY(details != nullptr);
+    QVERIFY(details->isAncestorOf(ed.m_effectPersistentCb));
+    QVERIFY(details->isAncestorOf(ed.m_saveAsEffectButton));
+    const QRect b = browser->geometry(), d = details->geometry();
+    QVERIFY2(b.right() < d.left(), "the list and its settings should be side by side");
+    QVERIFY2(qAbs(b.top() - d.top()) < 4, "side by side, from the same top");
+    // The list has the page's height, not what the settings leave of it.
+    QVERIFY2(b.height() > details->height() - 4, qPrintable(QString("%1 vs %2").arg(b.height()).arg(details->height())));
+    if (!qEnvironmentVariableIsEmpty("LOOKEDITOR_SHOT"))
+        ed.grab().save(qEnvironmentVariable("LOOKEDITOR_SHOT"));
 }
 
 void LookEditor_Test::theBrowsersListsAreAToZ()

@@ -12,6 +12,8 @@
 #include <QStackedWidget>
 #include <QColorDialog>
 #include <QCheckBox>
+#include <QScrollArea>
+#include <QSplitter>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QSlider>
@@ -621,8 +623,47 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     browseBtn->hide();
     effectLabel->hide();
     efScriptRow->insertStretch(0, 1);
-    m_effectBrowser = new EffectBrowser(m_doc, m_effectScriptCombo, effectPage);
-    efv->addWidget(m_effectBrowser, 1);
+    /* Side by side: the list on the left, the full height, and what the one
+       picked does and its settings on the right ("on a regular sized screen
+       we're running out of space .. move the effect list to the left side and
+       options on the right like the color picker"). Stacked, the parameters
+       pushed the list down to a few rows. */
+    QSplitter *effectSplit = new QSplitter(Qt::Horizontal, effectPage);
+    effectSplit->setObjectName(QStringLiteral("effectSplit"));
+    effectSplit->setChildrenCollapsible(false);
+    m_effectBrowser = new EffectBrowser(m_doc, m_effectScriptCombo, effectSplit);
+    m_effectBrowser->setMinimumWidth(260);
+    QScrollArea *detailScroll = new QScrollArea(effectSplit);
+    detailScroll->setObjectName(QStringLiteral("effectDetails"));
+    detailScroll->setWidgetResizable(true);
+    detailScroll->setFrameShape(QFrame::NoFrame);
+    detailScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);   // it fits the width
+    detailScroll->setMinimumWidth(240);
+    QWidget *details = new QWidget(detailScroll);
+    QVBoxLayout *detailCol = new QVBoxLayout(details);
+    detailCol->setContentsMargins(6, 0, 6, 0);
+    detailCol->setSpacing(4);
+    detailScroll->setWidget(details);
+    effectSplit->addWidget(m_effectBrowser);
+    effectSplit->addWidget(detailScroll);
+    effectSplit->setStretchFactor(0, 3);
+    effectSplit->setStretchFactor(1, 2);
+    {
+        QSettings settings;
+        const QByteArray st = settings.value(QStringLiteral("lookeditor/effectSplit")).toByteArray();
+        if (!st.isEmpty())
+            effectSplit->restoreState(st);
+    }
+    connect(effectSplit, &QSplitter::splitterMoved, this, [effectSplit](int, int) {
+        QSettings settings;
+        settings.setValue(QStringLiteral("lookeditor/effectSplit"), effectSplit->saveState());
+    });
+    efv->addWidget(effectSplit, 1);
+    // From here, the details column.
+    QVBoxLayout *efvPage = efv;
+    efv = detailCol;
+    QWidget *effectPageOuter = effectPage;
+    effectPage = details;
 
     // Short description label (one line, shown below combo)
     m_effectDescLabel = new QLabel(effectPage);
@@ -684,11 +725,17 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     m_saveAsEffectButton = new QPushButton(tr("Save as Effect…"), effectPage);
     m_saveAsEffectButton->setToolTip(
         tr("Save this Generator + its current settings as a named Effect you can reuse"));
-    efSaveRow->addWidget(m_saveAsEffectButton);
+    // On a row of its own: the column beside the list is narrow.
+    QHBoxLayout *efSaveAsRow = new QHBoxLayout();
+    efSaveAsRow->addStretch(1);
+    efSaveAsRow->addWidget(m_saveAsEffectButton);
     efv->addLayout(efSaveRow);
+    efv->addLayout(efSaveAsRow);
     connect(m_saveAsEffectButton, &QPushButton::clicked, this, &LookEditor::slotSaveAsEffect);
 
     efv->addStretch(1);
+    efv = efvPage;
+    effectPage = effectPageOuter;
 
     m_pageEffect = m_stack->addWidget(effectPage);
     connect(m_effectScriptCombo, SIGNAL(currentIndexChanged(int)),
@@ -699,6 +746,11 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
 
 LookEditor::~LookEditor()
 {
+    /* Its children outlive this body: a Name field that still has focus loses
+       it as they go and says "edited" -- into an editor already gone (a Qt
+       assertion; a crash without one). */
+    if (m_nameEdit != nullptr)
+        m_nameEdit->disconnect(this);
 }
 
 void LookEditor::setTrialNote(const QString &text)
@@ -1683,7 +1735,7 @@ void LookEditor::rebuildEffectDynWidget()
         m_effectDescLabel->hide();
         m_effectNotesLabel->hide();
         m_effectTypesLabel->hide();
-        dv->addWidget(new QLabel(tr("(select a generator above to configure it)"), m_effectDynWidget));
+        dv->addWidget(new QLabel(tr("(pick an effect from the list to set it up)"), m_effectDynWidget));
         dv->addStretch(1);
         m_loading = false;
         return;
