@@ -255,6 +255,10 @@ public:
      *  extent while it is moved. */
     QRect selectionViewportRect() const;
 
+    /** The Patch view on structure @p key ("truss:1") and its @p like ones,
+     *  matched to it (PatchPlanner::matchLike()). */
+    void patchOthersLike(const QString &key, const QStringList &like);
+
     /** Return the gel color of the fixture with the given ID */
     QColor fixtureGelColor(quint32 id);
 

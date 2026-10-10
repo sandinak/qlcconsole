@@ -29,6 +29,7 @@ class PatchInventoryDialog_Test final : public QObject
     Q_OBJECT
 
 private slots:
+    void likeStructuresAreMatched();
     void init();
     void cleanup();
 

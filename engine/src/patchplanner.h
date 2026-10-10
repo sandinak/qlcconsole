@@ -142,6 +142,35 @@ public:
      *  called "Universe N"; a name somebody gave is never changed. */
     static QString universeNameFor(Doc *doc, quint32 universe);
 
+    /*********************************************************************
+     * Like structures, patched alike
+     *********************************************************************/
+
+    /** What @p fixtureId is mounted on, as "truss:2", "tower:0", "pipe:4" or
+     *  "platform:1"; empty when it stands free. */
+    static QString mountKey(Doc *doc, quint32 fixtureId);
+    /** A structure's name, from its key ("T-2"). */
+    static QString structureName(Doc *doc, const QString &key);
+    /** Every fixture on the structure @p key, in their order on it: along
+     *  a truss or up a pipe, shelf by shelf up a tower, across a deck. */
+    static QList<quint32> fixturesOn(Doc *doc, const QString &key);
+    /** The other structures of the same kind carrying the same fixtures --
+     *  the same models in the same modes, in the same order -- as @p key:
+     *  the other three towers when one is picked. */
+    static QStringList likeStructures(Doc *doc, const QString &key);
+
+    /** Patch @p targets the way @p pattern is patched ("the lights on T1, 2,
+     *  3, 4 should all be addressed the same"): each fixture takes the
+     *  address of the one in the same place on the pattern -- paired in
+     *  their order on it -- in its own structure's universe. That universe is
+     *  where the target's first fixture is, and the rest follow the
+     *  pattern's universes from there. A target with a different number or
+     *  kind of fixtures is paired as far as it goes and said so in
+     *  @p problems; one with nothing patched is left alone (it has no
+     *  universe to keep). Pure, like plan(): the Patch view shows it. */
+    QList<Assignment> matchLike(const QString &pattern, const QStringList &targets,
+                                QStringList *problems = NULL) const;
+
 private:
     Doc *m_doc;
     bool m_useProximity;

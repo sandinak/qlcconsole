@@ -31,6 +31,7 @@ class Inventory_Test final : public QObject
     Q_OBJECT
 
 private slots:
+    void likeStructuresArePatchedAlike();
     void init();
     void cleanup();
 

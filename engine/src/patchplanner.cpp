@@ -787,3 +787,202 @@ QString PatchPlanner::universeNameFor(Doc *doc, quint32 universe)
         unique = QStringLiteral("%1-%2").arg(name).arg(i);
     return unique;
 }
+
+/****************************************************************************
+ * Like structures, patched alike
+ ****************************************************************************/
+
+QString PatchPlanner::mountKey(Doc *doc, quint32 fixtureId)
+{
+    const FixtureRigProps rp = doc->monitorProperties()->fixtureRigProps(fixtureId);
+    switch (rp.primaryMount())
+    {
+        case FixtureRigProps::TrussMount: return QStringLiteral("truss:%1").arg(rp.trussId);
+        case FixtureRigProps::PipeMount:  return QStringLiteral("pipe:%1").arg(rp.pipeId);
+        case FixtureRigProps::TowerMount: return QStringLiteral("tower:%1").arg(rp.towerId);
+        case FixtureRigProps::DeckMount:  return QStringLiteral("platform:%1").arg(rp.deckPlatformId);
+        case FixtureRigProps::RiserMount: return QStringLiteral("platform:%1").arg(rp.riserPlatformId);
+        default: return QString();
+    }
+}
+
+QString PatchPlanner::structureName(Doc *doc, const QString &key)
+{
+    MonitorProperties *props = doc->monitorProperties();
+    const QString kind = key.section(':', 0, 0);
+    const quint32 id = key.section(':', 1, 1).toUInt();
+    QString name;
+    if (kind == QLatin1String("truss") && props->truss(id) != nullptr)
+        name = props->truss(id)->name();
+    else if (kind == QLatin1String("pipe") && props->pipe(id) != nullptr)
+        name = props->pipe(id)->name();
+    else if (kind == QLatin1String("tower") && props->tower(id) != nullptr)
+        name = props->tower(id)->name();
+    else if (kind == QLatin1String("platform") && props->platform(id) != nullptr)
+        name = props->platform(id)->name();
+    return name.isEmpty() ? key : name;
+}
+
+/* A fixture's place on what it is mounted on, to put a structure's fixtures
+   in order: the same place on two like structures is the same position in
+   that order. */
+static QList<double> placeOn(Doc *doc, quint32 fid)
+{
+    MonitorProperties *props = doc->monitorProperties();
+    const FixtureRigProps rp = props->fixtureRigProps(fid);
+    switch (rp.primaryMount())
+    {
+        case FixtureRigProps::TrussMount:
+            return { rp.trussOffset, rp.trussCross, rp.trussCrossY };
+        case FixtureRigProps::PipeMount:
+            return { rp.pipeOffset };
+        case FixtureRigProps::TowerMount:
+            return { double(rp.towerMountSide), double(rp.towerShelf), rp.towerU, rp.towerV };
+        case FixtureRigProps::RiserMount:
+            return { rp.riserU, rp.riserV };
+        default:
+        {
+            const QVector3D p = props->fixtureRigPosition(fid);
+            return { p.x(), p.y(), p.z() };
+        }
+    }
+}
+
+QList<quint32> PatchPlanner::fixturesOn(Doc *doc, const QString &key)
+{
+    QList<quint32> out;
+    if (key.isEmpty())
+        return out;
+    foreach (Fixture *fx, doc->fixtures())
+        if (fx != nullptr && mountKey(doc, fx->id()) == key)
+            out << fx->id();
+    QCollator byName;
+    byName.setNumericMode(true);
+    std::sort(out.begin(), out.end(), [doc, &byName](quint32 a, quint32 b) {
+        const QList<double> pa = placeOn(doc, a), pb = placeOn(doc, b);
+        for (int i = 0; i < qMin(pa.size(), pb.size()); ++i)
+            if (qAbs(pa.at(i) - pb.at(i)) > 0.005)
+                return pa.at(i) < pb.at(i);
+        return byName.compare(doc->fixture(a)->name(), doc->fixture(b)->name()) < 0;
+    });
+    return out;
+}
+
+/* What a fixture is, for "the same fixtures": its model and mode. */
+static QString fixtureKind(Fixture *fx)
+{
+    if (fx == nullptr)
+        return QString();
+    const QString mode = fx->fixtureMode() != nullptr ? fx->fixtureMode()->name() : QString();
+    const QString def = fx->fixtureDef() != nullptr
+        ? fx->fixtureDef()->manufacturer() + QLatin1Char('/') + fx->fixtureDef()->model()
+        : QString();
+    return def + QLatin1Char('/') + mode + QLatin1Char('/') + QString::number(fx->channels());
+}
+
+QStringList PatchPlanner::likeStructures(Doc *doc, const QString &key)
+{
+    QStringList out;
+    const QList<quint32> mine = fixturesOn(doc, key);
+    if (mine.isEmpty())
+        return out;
+    QStringList kinds;
+    foreach (quint32 fid, mine)
+        kinds << fixtureKind(doc->fixture(fid));
+
+    const QString kind = key.section(':', 0, 0);
+    QSet<QString> seen;
+    foreach (Fixture *fx, doc->fixtures())
+    {
+        const QString other = fx != nullptr ? mountKey(doc, fx->id()) : QString();
+        if (other.isEmpty() || other == key || seen.contains(other)
+            || other.section(':', 0, 0) != kind)
+            continue;
+        seen.insert(other);
+        QStringList theirs;
+        foreach (quint32 fid, fixturesOn(doc, other))
+            theirs << fixtureKind(doc->fixture(fid));
+        if (theirs == kinds)
+            out << other;
+    }
+    QCollator byName;
+    byName.setNumericMode(true);
+    std::sort(out.begin(), out.end(), [doc, &byName](const QString &a, const QString &b) {
+        return byName.compare(structureName(doc, a), structureName(doc, b)) < 0;
+    });
+    return out;
+}
+
+QList<PatchPlanner::Assignment> PatchPlanner::matchLike(const QString &pattern,
+                                                        const QStringList &targets,
+                                                        QStringList *problems) const
+{
+    QList<Assignment> out;
+    const QList<quint32> model = fixturesOn(m_doc, pattern);
+    QList<Fixture *> pat;
+    foreach (quint32 fid, model)
+        pat << m_doc->fixture(fid);
+    // The pattern's own patch, and where its universes start.
+    int patBase = -1;
+    foreach (Fixture *fx, pat)
+        if (fx->isPatched())
+        {
+            patBase = int(fx->universe());
+            break;
+        }
+    if (patBase < 0)
+    {
+        if (problems != NULL)
+            *problems << QObject::tr("%1 has nothing patched to copy").arg(structureName(m_doc, pattern));
+        return out;
+    }
+
+    foreach (const QString &target, targets)
+    {
+        if (target == pattern)
+            continue;
+        const QString name = structureName(m_doc, target);
+        const QList<quint32> theirs = fixturesOn(m_doc, target);
+        if (theirs.size() != pat.size() && problems != NULL)
+            *problems << QObject::tr("%1 has %2 fixtures, %3 has %4: paired as far as they go")
+                         .arg(name).arg(theirs.size())
+                         .arg(structureName(m_doc, pattern)).arg(pat.size());
+
+        // The target's universe: where its first patched fixture is, taken
+        // back to the pattern's first universe.
+        int base = -1;
+        for (int i = 0; i < theirs.size() && i < pat.size() && base < 0; ++i)
+        {
+            Fixture *fx = m_doc->fixture(theirs.at(i));
+            if (fx->isPatched() && pat.at(i)->isPatched())
+                base = int(fx->universe()) - (int(pat.at(i)->universe()) - patBase);
+        }
+        if (base < 0)
+        {
+            if (problems != NULL)
+                *problems << QObject::tr("%1 has nothing patched: no universe to keep").arg(name);
+            continue;
+        }
+
+        for (int i = 0; i < theirs.size() && i < pat.size(); ++i)
+        {
+            Fixture *fx = m_doc->fixture(theirs.at(i));
+            Fixture *like = pat.at(i);
+            if (!like->isPatched())
+                continue;
+            Assignment a;
+            a.fixtureId = fx->id();
+            a.universe = quint32(base + (int(like->universe()) - patBase));
+            a.address = like->address();
+            if (fixtureKind(fx) != fixtureKind(like))
+            {
+                a.note = QObject::tr("not the same fixture as %1 on %2")
+                             .arg(like->name(), structureName(m_doc, pattern));
+                if (problems != NULL)
+                    *problems << QStringLiteral("%1: %2").arg(fx->name(), a.note);
+            }
+            out << a;
+        }
+    }
+    return out;
+}

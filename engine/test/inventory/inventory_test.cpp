@@ -1040,6 +1040,76 @@ void Inventory_Test::nothingNearWithRoomFallsBackToFirstFit()
     QVERIFY2(a.note.contains("no node near it has room"), qPrintable(a.note));
 }
 
+/* "the lights on T1, 2, 3, 4 .. should all be addressed the same in the
+   single U": four like trusses, two bars each, one in its own universe;
+   T-2's are off by one. Matched to T-1, each bar takes its counterpart's
+   address -- paired by where it hangs, not by when it was added -- in its
+   own truss's universe. */
+void Inventory_Test::likeStructuresArePatchedAlike()
+{
+    MonitorProperties *props = g_doc->monitorProperties();
+    QList<Truss *> towers;
+    QHash<QString, QList<Fixture *> > bars;
+    const quint32 universes[4] = { 5, 7, 9, 11 };
+    for (int t = 0; t < 4; ++t)
+    {
+        Truss *truss = props->addTruss();
+        truss->setName(QString("T-%1").arg(t + 1));
+        towers << truss;
+        const quint32 shift = (t == 1) ? 1 : 0;       // T-2, one off
+        // Added top bar first on T-2, to show the pairing is by place.
+        for (int b : (t == 1 ? QList<int>{ 1, 0 } : QList<int>{ 0, 1 }))
+        {
+            Fixture *fx = makeDimmer(g_doc, 90, universes[t], quint32(b * 90) + shift);
+            QVERIFY(fx != nullptr);
+            fx->setName(QString("T%1-B%2").arg(t + 1).arg(b + 1));
+            FixtureRigProps rp;
+            rp.trussId = truss->id();
+            rp.trussOffset = 0.5f + b;
+            props->setFixtureRigProps(fx->id(), rp);
+            bars[truss->name()] << fx;
+        }
+    }
+    // Something else on a truss: not like them.
+    Truss *odd = props->addTruss();
+    odd->setName("Bar 1");
+    Fixture *lone = makeDimmer(g_doc, 90, 20, 0);
+    FixtureRigProps rp;
+    rp.trussId = odd->id();
+    props->setFixtureRigProps(lone->id(), rp);
+
+    const QString t1 = PatchPlanner::mountKey(g_doc, bars["T-1"].first()->id());
+    QCOMPARE(t1, QString("truss:%1").arg(towers.first()->id()));
+    QCOMPARE(PatchPlanner::structureName(g_doc, t1), QString("T-1"));
+    const QStringList like = PatchPlanner::likeStructures(g_doc, t1);
+    QStringList names;
+    for (const QString &k : like)
+        names << PatchPlanner::structureName(g_doc, k);
+    QCOMPARE(names, QStringList({ "T-2", "T-3", "T-4" }));
+
+    PatchPlanner planner(g_doc);
+    QStringList problems;
+    const QList<PatchPlanner::Assignment> plan = planner.matchLike(t1, like, &problems);
+    QVERIFY2(problems.isEmpty(), qPrintable(problems.join("; ")));
+    QCOMPARE(plan.size(), 6);
+    QCOMPARE(planner.apply(plan), 2);                  // only T-2's move
+    for (int t = 0; t < 4; ++t)
+        for (Fixture *fx : bars[towers.at(t)->name()])
+        {
+            const quint32 b = fx->name().endsWith("B2") ? 1 : 0;
+            QCOMPARE(fx->universe(), universes[t]);
+            QCOMPARE(fx->address(), b * 90);
+        }
+
+    // Asked to match the odd one out: as far as it goes, and said so.
+    problems.clear();
+    const QString oddKey = PatchPlanner::mountKey(g_doc, lone->id());
+    const QList<PatchPlanner::Assignment> partial = planner.matchLike(t1, { oddKey }, &problems);
+    QCOMPARE(partial.size(), 1);
+    QCOMPARE(partial.first().universe, quint32(20));
+    QVERIFY(!problems.isEmpty());
+}
+
 QTEST_GUILESS_MAIN(Inventory_Test)
 
 /*****************************************************************************

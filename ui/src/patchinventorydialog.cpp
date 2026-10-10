@@ -139,6 +139,38 @@ PatchInventoryDialog::PatchInventoryDialog(Doc *doc, const QList<quint32> &fixtu
     placeRow->addStretch();
     root->addLayout(placeRow);
 
+    /* Like structures patched alike ("the lights on T1, 2, 3, 4 .. should all
+       be addressed the same in the single U"): offered when these fixtures
+       hang on more than one structure. */
+    QStringList structures;
+    foreach (quint32 id, m_ids)
+    {
+        const QString key = PatchPlanner::mountKey(m_doc, id);
+        if (!key.isEmpty() && !structures.contains(key))
+            structures << key;
+    }
+    if (structures.size() > 1)
+    {
+        QHBoxLayout *matchRow = new QHBoxLayout;
+        matchRow->addWidget(new QLabel(tr("Patch the others like"), this));
+        m_matchPattern = new QComboBox(this);
+        m_matchPattern->setObjectName(QStringLiteral("matchPattern"));
+        foreach (const QString &key, structures)
+            m_matchPattern->addItem(PatchPlanner::structureName(m_doc, key), key);
+        m_matchPattern->setToolTip(tr("Every fixture on the other structures takes the address of "
+                                      "the one in its place on this one -- paired by where they "
+                                      "hang -- in its own structure's universe"));
+        matchRow->addWidget(m_matchPattern);
+        QPushButton *match = new QPushButton(tr("Match"), this);
+        match->setObjectName(QStringLiteral("matchButton"));
+        matchRow->addWidget(match);
+        matchRow->addStretch();
+        root->addLayout(matchRow);
+        connect(match, &QPushButton::clicked, this, [this]() {
+            matchStructures(m_matchPattern->currentData().toString());
+        });
+    }
+
     m_table = new QTableWidget(0, 9, this);
     m_table->setHorizontalHeaderLabels({ tr("Fixture"), tr("Model"), tr("Mode"), tr("Ch"), tr("Connection"),
                                          tr("Universe"), tr("Address"), tr("Via"), tr("Status") });
@@ -151,6 +183,11 @@ PatchInventoryDialog::PatchInventoryDialog(Doc *doc, const QList<quint32> &fixtu
 
     m_summary = new QLabel(this);
     root->addWidget(m_summary);
+    m_matchProblems = new QLabel(this);
+    m_matchProblems->setWordWrap(true);
+    m_matchProblems->setStyleSheet(QStringLiteral("QLabel { color: #d08a2a; }"));
+    m_matchProblems->hide();
+    root->addWidget(m_matchProblems);
 
     QHBoxLayout *btns = new QHBoxLayout;
     QPushButton *replan = new QPushButton(tr("Re-plan"), this);
@@ -674,4 +711,31 @@ void PatchInventoryDialog::accept()
             tr("Patched %1 fixture(s). Things to look at:\n\n%2").arg(done).arg(problems.join("\n")));
     }
     QDialog::accept();
+}
+
+int PatchInventoryDialog::matchStructures(const QString &pattern)
+{
+    QStringList others;
+    foreach (quint32 id, m_ids)
+    {
+        const QString key = PatchPlanner::mountKey(m_doc, id);
+        if (!key.isEmpty() && key != pattern && !others.contains(key))
+            others << key;
+    }
+    QStringList problems;
+    QList<PatchPlanner::Assignment> plan = planner().matchLike(pattern, others, &problems);
+    // Only the fixtures in this view.
+    for (int i = plan.size() - 1; i >= 0; --i)
+        if (!m_ids.contains(plan.at(i).fixtureId))
+            plan.removeAt(i);
+    if (m_matchPattern != nullptr)
+    {
+        const int at = m_matchPattern->findData(pattern);
+        if (at >= 0)
+            m_matchPattern->setCurrentIndex(at);
+    }
+    setRowAddresses(plan);
+    m_matchProblems->setText(problems.join(QStringLiteral("\n")));
+    m_matchProblems->setVisible(!problems.isEmpty());
+    return plan.size();
 }

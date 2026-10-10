@@ -543,6 +543,48 @@ void PatchInventoryDialog_Test::withNoNodesOnThePlotThereIsNothingToTick()
     QVERIFY(dlg.m_proximity->toolTip().contains("Place network nodes"));
 }
 
+/* Two like trusses, T-2's bars one channel off T-1's: Match on T-1 puts
+   them at T-1's addresses in T-2's own universe, and Apply makes it so. */
+void PatchInventoryDialog_Test::likeStructuresAreMatched()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    QList<quint32> ids;
+    QHash<int, QList<Fixture *> > bars;
+    QList<Truss *> trusses;
+    for (int t = 0; t < 2; ++t)
+    {
+        Truss *truss = props->addTruss();
+        truss->setName(QString("T-%1").arg(t + 1));
+        trusses << truss;
+        for (int b = 0; b < 2; ++b)
+        {
+            Fixture *f = new Fixture(m_doc);
+            f->setChannels(90);
+            f->setUniverse(quint32(5 + 2 * t));
+            f->setAddress(quint32(b * 90 + t));      // T-2 one off
+            f->setName(QString("T%1-B%2").arg(t + 1).arg(b + 1));
+            QVERIFY(m_doc->addFixture(f));
+            FixtureRigProps rp;
+            rp.trussId = truss->id();
+            rp.trussOffset = 0.5f + b;
+            props->setFixtureRigProps(f->id(), rp);
+            bars[t] << f;
+            ids << f->id();
+        }
+    }
+    PatchInventoryDialog dlg(m_doc, ids);
+    QComboBox *pattern = dlg.findChild<QComboBox *>("matchPattern");
+    QVERIFY2(pattern != nullptr, "fixtures on two structures should offer Match");
+    QCOMPARE(pattern->count(), 2);
+    const QString t1 = QString("truss:%1").arg(trusses.first()->id());
+    QCOMPARE(dlg.matchStructures(t1), 2);
+    dlg.accept();
+    QCOMPARE(bars[1].at(0)->universe(), quint32(7));
+    QCOMPARE(bars[1].at(0)->address(), quint32(0));
+    QCOMPARE(bars[1].at(1)->address(), quint32(90));
+    QCOMPARE(bars[0].at(1)->address(), quint32(90));  // the pattern stays put
+}
+
 QTEST_MAIN(PatchInventoryDialog_Test)
 
 /*****************************************************************************

@@ -6988,6 +6988,18 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
             requestEditItem(kind, id);
         });
 
+        /* Its like -- the other towers, the other step trusses, carrying the
+           same fixtures -- patched as this one is ("the lights on T1, 2, 3, 4
+           .. should all be addressed the same"). Opens the Patch view on all
+           of them, matched, to look over before Apply. */
+        const QString key = kind + QLatin1Char(':') + QString::number(id);
+        const QStringList like = PatchPlanner::likeStructures(m_doc, key);
+        if (!like.isEmpty())
+        {
+            menu->addAction(tr("Patch Others Like This (%1)…").arg(like.size()), this,
+                            [this, key, like]() { patchOthersLike(key, like); });
+        }
+
         /* One "Add" submenu per structure, rather than a handful of loose
            "Add X" entries at the top level: "the add section should probably
            have a sub menu of what can be added to keep things clean". What
@@ -9109,4 +9121,18 @@ void MonitorGraphicsView::moveFixtureTo(quint32 fid, QPointF mmPos)
         return;
     mfi->setRealPosition(mmPos);
     updateFixture(fid);
+}
+
+void MonitorGraphicsView::patchOthersLike(const QString &key, const QStringList &like)
+{
+    QList<quint32> ids = PatchPlanner::fixturesOn(m_doc, key);
+    foreach (const QString &other, like)
+        ids << PatchPlanner::fixturesOn(m_doc, other);
+    PatchInventoryDialog dlg(m_doc, ids, this);
+    dlg.matchStructures(key);
+    if (dlg.exec() != QDialog::Accepted)
+        return;
+    foreach (quint32 f, ids)
+        updateFixture(f);
+    emit mapStructureChanged();
 }

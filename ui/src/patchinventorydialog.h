@@ -67,6 +67,13 @@ public:
     /** One universe each: the first of @p rows (all, when empty) at
      *  @p universe / @p address, the next at the universe after, and on. */
     void placeCountingUp(quint32 universe, quint32 address, const QList<int> &rows = QList<int>());
+
+    /** Patch the other structures among these fixtures like @p pattern
+     *  ("truss:1"): each fixture at the address of the one in its place on
+     *  the pattern, in its own structure's universe (PatchPlanner::
+     *  matchLike()). What could not be paired is said under the table.
+     *  Returns how many rows it set. */
+    int matchStructures(const QString &pattern);
     void placeRows(quint32 universe, quint32 address, bool keepSpacing,
                    const QList<int> &rows = QList<int>());
 
@@ -111,6 +118,8 @@ private:
     class UniverseCombo *m_placeUni; //!< Place: universe, by name
     class QSpinBox *m_placeAddr;    //!< Place: address (1-based)
     class QComboBox *m_placeHow;    //!< Place: keep spacing / pack
+    class QComboBox *m_matchPattern = nullptr; //!< Match: the structure to copy
+    QLabel *m_matchProblems = nullptr;
     bool m_filling;
 };
 
