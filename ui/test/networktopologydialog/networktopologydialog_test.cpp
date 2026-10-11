@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include <QSignalSpy>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QPushButton>
@@ -224,6 +225,29 @@ void NetworkTopologyDialog_Test::portAndNodeButtonsDoNothingWithNoNodeSelected()
     QVERIFY(dlg.m_nodes.isEmpty());
     dlg.accept();
     QVERIFY(m_doc->networkTopology()->nodes().isEmpty());
+}
+
+/* Live, like every rig dialog: an edit is in the show (and the plot told)
+   before OK; Cancel puts back the network as it was, an existing node's
+   name included. */
+void NetworkTopologyDialog_Test::editsAreLiveAndCancelPutsThemBack()
+{
+    NetworkNode existing;
+    existing.name = "FOH node";
+    m_doc->networkTopology()->nodes() << existing;
+
+    NetworkTopologyDialog dlg(m_doc, 0);
+    QSignalSpy changed(&dlg, &NetworkTopologyDialog::changed);
+    dlg.m_name->setText("FOH node B");
+    emit dlg.m_name->textEdited("FOH node B");
+    QCOMPARE(m_doc->networkTopology()->nodes().first().name, QString("FOH node B"));
+    dlg.m_addNodeBtn->click();
+    QCOMPARE(m_doc->networkTopology()->nodes().size(), 2);
+    QVERIFY(changed.count() >= 2);
+
+    dlg.reject();
+    QCOMPARE(m_doc->networkTopology()->nodes().size(), 1);
+    QCOMPARE(m_doc->networkTopology()->nodes().first().name, QString("FOH node"));
 }
 
 QTEST_MAIN(NetworkTopologyDialog_Test)

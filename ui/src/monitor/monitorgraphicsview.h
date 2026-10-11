@@ -381,6 +381,9 @@ public:
     void resetViewZoom();
 
     void updateTrusses();
+    /** The hangers on the plot, from the trusses and towers they hang off
+     *  (updateTrusses() and updatePlatforms() call it). */
+    void updateHangers();
 
     /** Rebuild the platform overlay items from MonitorProperties. */
     void updatePlatforms();
@@ -1120,6 +1123,7 @@ private:
     QHash <quint32, StandItem*> m_standItems;
     QHash <quint32, SceneryItem*> m_sceneryItems;
     QHash <quint32, TowerItem*> m_towerItems;
+    QHash <quint32, class HangerItem*> m_hangerItems;
 
     /** Power-source markers, indexed positionally to PowerDistribution::sources(). */
     QList <PowerSourceItem*> m_powerSourceItems;

@@ -46,6 +46,12 @@ The latest changes, newest first. Each links to the guide with the detail.
 - **Faster rig view**: a 200-fixture show draws in about 9 ms a frame (it
   was 51).
 
+- **Hangers on the 2D plot** — arm and hook, double-click to edit.
+- The **Network Topology** dialog works like every rig dialog: the plot
+  follows as you edit, Cancel puts the network back, OK is one undo.
+- The Virtual Console's **button matrix** and **animation** keys moved to
+  ⇧⌘G and ⇧⌘N, off the app's Lighting Studio and Rig Overview keys.
+
 ### Patching
 
 - **Patch Others Like This.** Right-click a structure: the other

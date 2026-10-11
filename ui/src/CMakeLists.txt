@@ -105,6 +105,7 @@ add_library(${module_name}
     monitor/beamoptics.cpp monitor/beamoptics.h
     monitor/gobowheelsdialog.cpp monitor/gobowheelsdialog.h
     monitor/standitem.cpp monitor/standitem.h
+    monitor/hangeritem.cpp monitor/hangeritem.h
     monitor/toweritem.cpp monitor/toweritem.h
     monitor/powersourceitem.cpp monitor/powersourceitem.h
     monitor/networknodeitem.cpp monitor/networknodeitem.h

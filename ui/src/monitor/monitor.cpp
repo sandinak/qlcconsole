@@ -1197,9 +1197,15 @@ QByteArray Monitor::rigSnapshot() const
         fx->powerProfile().saveXML(&w);
         power.insert(fx->id(), xml);
     }
+    // The network too: its nodes, ports and receivers are edited like the rig.
+    QByteArray network;
+    {
+        QXmlStreamWriter w(&network);
+        m_doc->networkTopology()->saveXML(&w);
+    }
     QByteArray out;
     QDataStream ds(&out, QIODevice::WriteOnly);
-    ds << m_props->snapshot(m_doc) << names << power;
+    ds << m_props->snapshot(m_doc) << names << power << network;
     return out;
 }
 
@@ -1208,12 +1214,21 @@ void Monitor::restoreRig(const QByteArray &snap)
     QByteArray props;
     QHash<quint32, QString> names;
     QHash<quint32, QByteArray> power;
+    QByteArray network;
     QDataStream ds(snap);
     ds >> props >> names;
     if (!ds.atEnd())
         ds >> power;
+    if (!ds.atEnd())
+        ds >> network;
     if (props.isEmpty())
         return;
+    if (!network.isEmpty())
+    {
+        QXmlStreamReader r(network);
+        if (r.readNextStartElement())
+            m_doc->networkTopology()->loadXML(r, m_doc);
+    }
     for (auto it = power.constBegin(); it != power.constEnd(); ++it)
     {
         Fixture *fx = m_doc->fixture(it.key());
@@ -1237,6 +1252,7 @@ void Monitor::restoreRig(const QByteArray &snap)
     if (m_graphicsView != nullptr)
     {
         fillGraphicsView(true);
+        m_graphicsView->updateNetworkNodes();
         m_graphicsView->refreshAllItems();
         m_graphicsView->refreshFixtureBindings();
         m_graphicsView->refreshFixtureCountBadges();
@@ -4601,6 +4617,7 @@ void Monitor::slotHangerRemoveRequested(quint32 hid)
         m_graphicsView->unmountFixture(hung);
     }
     m_props->removeHanger(hid);
+    m_graphicsView->updateHangers();
     m_graphicsView->refreshFixtureBindings();
     if (m_layersPanel) m_layersPanel->reload();
     m_doc->setModified();
@@ -4624,6 +4641,7 @@ void Monitor::studioAddHanger(int kind, quint32 id, StructureStudioView *view, f
     if (h == nullptr)
         return;
     m_props->recomputeHangers();
+    m_graphicsView->updateHangers();
     m_doc->setModified();
     if (m_layersPanel) m_layersPanel->reload();
     slotEditHanger(h->id());
@@ -5175,9 +5193,19 @@ void Monitor::slotAddNetworkNode()
 
 void Monitor::slotEditNetworkNode(quint32 nodeIndex)
 {
+    /* Like every rig dialog: the plot follows the edits as they're made,
+       Cancel puts the network back, OK is one undo step. */
+    RigEditSession edit(this);
     NetworkTopologyDialog dlg(m_doc, int(nodeIndex), this);
+    connect(&dlg, &NetworkTopologyDialog::changed, this, [this]() {
+        m_graphicsView->updateNetworkNodes();
+    });
     if (dlg.exec() != QDialog::Accepted)
+    {
+        edit.cancel();
+        m_graphicsView->updateNetworkNodes();
         return;
+    }
     // Nodes are keyed to map items by index and the dialog may have added,
     // removed or reordered them, so rebuild everything from the settled list.
     m_graphicsView->updateNetworkNodes();

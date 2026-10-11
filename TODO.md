@@ -10,10 +10,6 @@ under `~/.claude/.../memory/`.
 
 ## Small fixes and leftovers
 
-- **Hangers on the 2D plot.** They draw in the rig view and editors, not on
-  the plot.
-- **Network-node dialogs apply on OK only** — the last rig dialogs outside
-  the live-edit / Cancel-restores / one-undo pattern (RigEditSession).
 - **Stage objects, leftovers:** a Stand carrying a truss or tower (pipes
   only today); fixtures at their own offsets along a horizontal pipe.
 - **No undo for a re-address** in the Patch dialog (the dialog is the

@@ -66,6 +66,8 @@
 #include "networkgearcatalog.h"
 #include "structurestudioview.h"
 #include "toweritem.h"
+#include "hangeritem.h"
+#include "hanger.h"
 #include "tower.h"
 #include "stand.h"
 #include "pipe.h"
@@ -2816,6 +2818,11 @@ void MonitorGraphicsView::refreshItemLayerState()
     for (auto fit = m_fixtures.constBegin(); fit != m_fixtures.constEnd(); ++fit)
         if (fit.value() != nullptr)
             fit.value()->setVisible(fixtureItemShouldBeVisible(fit.key()));
+    foreach (HangerItem *hgi, m_hangerItems)
+    {
+        Hanger *h = props->hanger(hgi->hangerId());
+        hgi->setVisible(props->layer(h ? h->layerId() : 0).visible);
+    }
     emit layerStateChanged();   // the rig view follows what is shown here
 }
 
@@ -3950,6 +3957,7 @@ void MonitorGraphicsView::updateTrusses()
                 this, &MonitorGraphicsView::addFixtureToTrussRequested);
     }
 
+    updateHangers();      // they hang off trusses
     refreshItemLayerState();
 }
 
@@ -4664,7 +4672,36 @@ void MonitorGraphicsView::updatePlatforms()
         connect(twi, &TowerItem::itemDropped, this, &MonitorGraphicsView::slotTowerMoved);
     }
 
+    updateHangers();      // and off towers
     refreshItemLayerState();
+}
+
+void MonitorGraphicsView::updateHangers()
+{
+    /* "Hangers on the 2D plot": the arm, chain and hook a fixture hangs from,
+       placed from the truss or tower it is fastened to -- rebuilt with them. */
+    foreach (HangerItem *hi, m_hangerItems)
+    {
+        m_scene->removeItem(hi);
+        delete hi;
+    }
+    m_hangerItems.clear();
+    MonitorProperties *props = m_doc->monitorProperties();
+    if (props == nullptr || m_cellPixels <= 0)
+        return;
+    props->recomputeHangers();
+    auto at = [this](const QVector3D &m) {
+        return projectMm(double(m.x()) * 1000.0, double(m.y()) * 1000.0, double(m.z()) * 1000.0);
+    };
+    foreach (Hanger *h, props->hangers())
+    {
+        if (h == nullptr)
+            continue;
+        HangerItem *hi = new HangerItem(h->id(), at(h->fastened()), at(h->armEnd()), at(h->hook()));
+        hi->setZValue(1.8);                // over the structures, under the fixtures (2)
+        m_scene->addItem(hi);
+        m_hangerItems.insert(h->id(), hi);
+    }
 }
 
 void MonitorGraphicsView::slotTowerMoved(TowerItem *item)
@@ -6445,6 +6482,11 @@ void MonitorGraphicsView::mouseDoubleClickEvent(QMouseEvent *event)
         emit trussDoubleClicked(ti->trussId());
         return;
     }
+    if (auto *hgi = dynamic_cast<HangerItem *>(it))
+    {
+        emit hangerDoubleClicked(hgi->hangerId());
+        return;
+    }
     if (auto *pi = dynamic_cast<PlatformItem *>(it))
     {
         if (drilledIntoGroup(pi)) return;
@@ -6567,6 +6609,7 @@ void MonitorGraphicsView::contextMenuEvent(QContextMenuEvent *event)
     else if (auto *si = dynamic_cast<StandItem *>(it))        { kind = QStringLiteral("stand");    id = si->standId(); }
     else if (auto *sci = dynamic_cast<SceneryItem *>(it))     { kind = QStringLiteral("scenery");  id = sci->sceneryId(); }
     else if (auto *twi = dynamic_cast<TowerItem *>(it))       { kind = QStringLiteral("tower");    id = twi->towerId(); }
+    else if (auto *hgi = dynamic_cast<HangerItem *>(it))      { kind = QStringLiteral("hanger");   id = hgi->hangerId(); }
     else if (auto *tgi = dynamic_cast<TargetItem *>(it))      { kind = QStringLiteral("target");   id = tgi->targetId(); }
     else if (auto *psi = dynamic_cast<PowerSourceItem *>(it)) { kind = QStringLiteral("power");    id = quint32(psi->sourceIndex()); }
     else if (auto *nni = dynamic_cast<NetworkNodeItem *>(it)) { kind = QStringLiteral("network");  id = quint32(nni->nodeIndex()); }
@@ -6623,6 +6666,7 @@ QList<QPair<QString, quint32> > MonitorGraphicsView::selectedMapObjects() const
         else if (auto *si = dynamic_cast<StandItem *>(gi))         out << qMakePair(QStringLiteral("stand"), si->standId());
         else if (auto *sc = dynamic_cast<SceneryItem *>(gi))       out << qMakePair(QStringLiteral("scenery"), sc->sceneryId());
         else if (auto *twi = dynamic_cast<TowerItem *>(gi))        out << qMakePair(QStringLiteral("tower"), twi->towerId());
+        else if (auto *hgi = dynamic_cast<HangerItem *>(gi))       out << qMakePair(QStringLiteral("hanger"), hgi->hangerId());
         else if (auto *tgi = dynamic_cast<TargetItem *>(gi))       out << qMakePair(QStringLiteral("target"), tgi->targetId());
         else if (auto *psi = dynamic_cast<PowerSourceItem *>(gi))  out << qMakePair(QStringLiteral("power"), quint32(psi->sourceIndex()));
         else if (auto *nni = dynamic_cast<NetworkNodeItem *>(gi))  out << qMakePair(QStringLiteral("network"), quint32(nni->nodeIndex()));

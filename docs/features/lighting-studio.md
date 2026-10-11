@@ -201,8 +201,11 @@ dropping to one hook. One fixture hangs below the hook.
   too.
 - **Layers** lists each hanger with its tower (rename, edit, delete there).
 
-Hangers show in the structure editors and the 3D views; they aren't drawn on
-the 2D plot yet.
+Hangers show in the structure editors, the 3D views and on the **2D plot**:
+there, the arm out from its truss or tower and a ring at the hook (with the
+chain down to it in Front and Side). They go where their structure goes —
+no dragging — and double-clicking one edits it; right-click for Edit and
+Delete. A hidden layer hides them.
 
 ### Scenery: cyc, walls and drapes
 
@@ -446,7 +449,8 @@ of, and doesn't override, the real locks above.
   on a turned deck where it really is, and a turned flight of steps climbs
   the way it now faces.
 - **Every rig dialog works the same way** — truss, pipe, platform, tower,
-  stand, scenery, group, hanger, image, target and Fixture Properties: the
+  stand, scenery, group, hanger, image, target, network nodes and Fixture
+  Properties: the
   plot follows its fields as you change them, **Cancel** puts back
   everything it did, and **OK** is one undo step. Lengths are entered in
   the show's units (feet-and-inches, or metres); colours are one swatch

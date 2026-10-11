@@ -39,6 +39,7 @@ NetworkTopologyDialog::NetworkTopologyDialog(Doc *doc, int selectNode, QWidget *
     : QDialog(parent)
     , m_doc(doc)
     , m_nodes(doc->networkTopology()->nodes())
+    , m_original(doc->networkTopology()->nodes())
     , m_row(-1)
     , m_loading(false)
 {
@@ -298,6 +299,7 @@ void NetworkTopologyDialog::slotNodeFieldEdited()
     storeNodeFields();
     updatePortsEnabled();
     refreshWarnings();
+    pushLive();
 }
 
 void NetworkTopologyDialog::slotPortCellEdited()
@@ -307,6 +309,7 @@ void NetworkTopologyDialog::slotPortCellEdited()
     storePorts();
     updatePortsEnabled();
     refreshWarnings();
+    pushLive();
 }
 
 void NetworkTopologyDialog::slotAddNode()
@@ -318,6 +321,7 @@ void NetworkTopologyDialog::slotAddNode()
     reloadList(m_nodes.size() - 1);
     m_name->setFocus();
     m_name->selectAll();
+    pushLive();
 }
 
 void NetworkTopologyDialog::slotRemoveNode()
@@ -328,6 +332,7 @@ void NetworkTopologyDialog::slotRemoveNode()
     m_nodes.removeAt(gone);
     reloadList(m_nodes.isEmpty() ? -1 : qMin(gone, m_nodes.size() - 1));
     refreshWarnings();
+    pushLive();
 }
 
 void NetworkTopologyDialog::slotAddPort()
@@ -336,6 +341,7 @@ void NetworkTopologyDialog::slotAddPort()
         return;
     m_nodes[m_row].ports.append(NetworkPort());
     loadNode(m_row);
+    pushLive();
 }
 
 void NetworkTopologyDialog::slotRemovePort()
@@ -349,6 +355,7 @@ void NetworkTopologyDialog::slotRemovePort()
         return;
     m_nodes[m_row].ports.removeAt(p);
     loadNode(m_row);
+    pushLive();
 }
 
 void NetworkTopologyDialog::refreshWarnings()
@@ -363,11 +370,26 @@ void NetworkTopologyDialog::refreshWarnings()
         m_warnings->addItems(w);
 }
 
-void NetworkTopologyDialog::accept()
+void NetworkTopologyDialog::pushLive()
 {
+    if (m_loading)
+        return;
     storeNodeFields();
     storePorts();
     m_doc->networkTopology()->nodes() = m_nodes;
     m_doc->setModified();
+    emit changed();
+}
+
+void NetworkTopologyDialog::accept()
+{
+    pushLive();
     QDialog::accept();
+}
+
+void NetworkTopologyDialog::reject()
+{
+    m_doc->networkTopology()->nodes() = m_original;
+    emit changed();
+    QDialog::reject();
 }

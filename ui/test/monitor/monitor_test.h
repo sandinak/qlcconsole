@@ -38,6 +38,8 @@ private slots:
     void aFixtureUnderABarIsDrawnBeneathIt();
     void aBarThatPansCanBeSetUprightAndTestsAsSuch();
     void fixturesAreStoodOnTheDeckUnderThem();
+    void theNetworkIsUndoneWithTheRig();
+    void hangersAreOnThePlot();
     void initTestCase();
     void cleanupTestCase();
 

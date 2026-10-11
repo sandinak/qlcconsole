@@ -59,6 +59,13 @@ public:
 
 public slots:
     void accept() override;
+    /** Cancel: the network as it was when the dialog opened. */
+    void reject() override;
+
+signals:
+    /** The network changed -- it is written to the show as it is edited,
+     *  so the plot can follow (Cancel puts it back). */
+    void changed();
 
 private slots:
     void slotNodeRowChanged(int row);
@@ -81,6 +88,9 @@ private:
 private:
     Doc *m_doc;
     QList<NetworkNode> m_nodes;
+    QList<NetworkNode> m_original;   ///< as it was when the dialog opened (reject())
+    /** Write the edit into the show now: live, like every rig dialog. */
+    void pushLive();
     int m_row;              //!< node currently shown in the editor, -1 = none
     bool m_loading;         //!< true while widgets are being filled from the model
 

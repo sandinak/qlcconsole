@@ -29,6 +29,7 @@ class NetworkTopologyDialog_Test final : public QObject
     Q_OBJECT
 
 private slots:
+    void editsAreLiveAndCancelPutsThemBack();
     void init();
     void cleanup();
 

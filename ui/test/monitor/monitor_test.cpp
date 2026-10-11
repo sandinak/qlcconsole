@@ -66,6 +66,8 @@
 #include "networknodeitem.h"
 #include "sceneryitem.h"
 #include "monitorruler.h"
+#include "hangeritem.h"
+#include "hanger.h"
 #include "beamoptics.h"
 #include "gobolibrary.h"
 #include "fixturetreewidget.h"
@@ -18936,5 +18938,77 @@ void Monitor_Test::fixturesAreStoodOnTheDeckUnderThem()
 
     props->setFixtureRigProps(rig.fxi->id(), FixtureRigProps());
     props->removePlatform(deck->id());
+}
+
+/* The network is part of the rig's undo: a network dialog's OK is one plot
+   undo step, and the rig snapshot puts its nodes back. */
+void Monitor_Test::theNetworkIsUndoneWithTheRig()
+{
+    Doc *doc = new Doc(this);
+    NetworkNode node;
+    node.name = "Stage left node";
+    doc->networkTopology()->nodes() << node;
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        const QByteArray before = mon.rigSnapshot();
+        doc->networkTopology()->nodes().first().name = "Renamed";
+        doc->networkTopology()->nodes() << NetworkNode();
+        QVERIFY(mon.rigSnapshot() != before);
+        mon.restoreRig(before);
+        QCOMPARE(doc->networkTopology()->nodes().size(), 1);
+        QCOMPARE(doc->networkTopology()->nodes().first().name, QString("Stage left node"));
+    }
+    delete doc;
+}
+
+/* Hangers on the 2D plot: a hanger on a truss shows its arm and hook where
+   the hook is; double-click edits it; its layer hides it; removing it takes
+   it off the plot. */
+void Monitor_Test::hangersAreOnThePlot()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Truss *t = props->addTruss();
+    t->setOrigin(QVector3D(2.0f, 3.0f, 4.0f));
+    t->setDirection(QPointF(1.0, 0.0));
+    t->setLength(6.0f);
+    Hanger *h = props->addHanger(Hanger::OnTruss, t->id());
+    h->setAlong(2.0f);
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        MonitorGraphicsView *gv = mon.m_graphicsView;
+        gv->setViewPOV(MonitorGraphicsView::PovTop);
+        gv->updateTrusses();
+        QCOMPARE(gv->m_hangerItems.size(), 1);
+        HangerItem *item = gv->m_hangerItems.value(h->id());
+        QVERIFY(item != nullptr);
+        const QPointF hookPx = gv->projectMm(h->hook().x() * 1000.0, h->hook().y() * 1000.0, h->hook().z() * 1000.0);
+        QVERIFY2(item->contains(item->mapFromScene(hookPx)), "the hook should be where the hanger's hook is");
+
+        QSignalSpy edit(gv, &MonitorGraphicsView::hangerDoubleClicked);
+        const QPoint vp = gv->mapFromScene(hookPx);
+        QString opened;
+        driveDialog([&opened](QWidget *dlg) {      // its editor opens: note it, cancel it
+            opened = dlg->windowTitle();
+            return true;
+        }, false);
+        QTest::mouseDClick(gv->viewport(), Qt::LeftButton, Qt::NoModifier, vp);
+        QVERIFY2(opened.contains("Hanger"), qPrintable(opened));
+        QCOMPARE(edit.count(), 1);
+        QCOMPARE(edit.first().first().toUInt(), h->id());
+
+        const quint32 hidden = props->addLayer("Rigging");
+        h->setLayerId(hidden);
+        props->setLayerVisible(hidden, false);
+        gv->refreshItemLayerState();
+        QVERIFY(!item->isVisible());
+
+        props->removeHanger(h->id());
+        gv->updateHangers();
+        QVERIFY(gv->m_hangerItems.isEmpty());
+    }
+    delete doc;
 }
 
