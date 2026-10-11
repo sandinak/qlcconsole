@@ -54,7 +54,7 @@ The tabs follow the order a show is built in:
 | **Fixtures** | The fixtures in the show, the inventory, groups and their head layouts, patching | [Fixture Manager](fixture-manager.md) |
 | **Lighting Studio** | The physical rig: structures, where every fixture hangs, the network, the 3D Rig Overview | [Lighting Studio](lighting-studio.md) |
 | **Programming** | Scenes built from looks, looks built from palettes and effects | [Programming Tab](programming-tab.md) |
-| **Shows** | The timeline | stock QLC+ |
+| **Shows** | The timeline: tracks, sequences, cues, timecode | [Shows](shows.md) |
 | **Virtual Console** | The operator's surface | stock QLC+ |
 | **Simple Desk** | Raw channel faders | stock QLC+ |
 

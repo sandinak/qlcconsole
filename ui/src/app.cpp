@@ -469,7 +469,7 @@ void App::init()
             { QStringLiteral("Lighting Studio"), QStringLiteral("lighting-studio.md") },
             { QStringLiteral("Functions"),       QStringLiteral("other-improvements.md#window-menu") },
             { QStringLiteral("Programming"),     QStringLiteral("programming-tab.md") },
-            { QStringLiteral("Shows"),           QStringLiteral("getting-started.md#running-the-show") },
+            { QStringLiteral("Shows"),           QStringLiteral("shows.md") },
             { QStringLiteral("Virtual Console"), QStringLiteral("getting-started.md#running-the-show") },
             { QStringLiteral("Simple Desk"),     QStringLiteral("getting-started.md#running-the-show") } };
         if (!w->property("helpTopic").isValid())

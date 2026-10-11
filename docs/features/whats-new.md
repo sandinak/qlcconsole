@@ -12,7 +12,8 @@ The latest changes, newest first. Each links to the guide with the detail.
   What's New, Keyboard and Mouse, Effects, Troubleshooting, and all of
   them; search finds a word in every guide. The stock QLC+ reference is
   still there, online, as **QLC+ Reference** (⇧F1).
-- New guides: [Getting started](getting-started.md) (starting the app and
+- New guides: [Shows (the timeline)](shows.md) — what tracks, items,
+  cues and the show end are; [Getting started](getting-started.md) (starting the app and
   the ways a show comes together), [Keyboard and mouse](shortcuts.md),
   [Effects](effects.md) and [Troubleshooting](troubleshooting.md).
 

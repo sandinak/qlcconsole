@@ -47,7 +47,7 @@ static QString guideText(const QString &file)
 void HelpBrowser_Test::everyGuideIsBundledAndLoads()
 {
     const auto topics = HelpBrowser::topics();
-    QVERIFY2(topics.size() >= 12, qPrintable(QString("only %1 guides bundled").arg(topics.size())));
+    QVERIFY2(topics.size() >= 13, qPrintable(QString("only %1 guides bundled").arg(topics.size())));
     HelpBrowser help;
     for (const auto &t : topics)
     {

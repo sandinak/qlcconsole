@@ -26,6 +26,7 @@ In the app, **F1** opens the guide for whatever you're looking at, and
 | [Fixture Manager](fixture-manager.md) | Fixture-group folders, the head-layout grid editor, the inventory of unpatched fixtures and the Patch dialog |
 | [Stage Targets &amp; Aim Solving](stage-targets.md) | Marking points/areas/people in the room and having fixtures aim there automatically |
 | [Other improvements](other-improvements.md) | Connections/patch overhaul, the WLED output, the readiness footer and its fixes, cloud-storage safety and the show cache, Layers panel, Studio groups, Blind/Park/Highlight, and more |
+| [Shows (the timeline)](shows.md) | Tracks, items, sequences and cues, the show end, track flags, following timecode |
 | [Effects](effects.md) | Every built-in effect, by what it does, and writing your own |
 | [Keyboard and mouse](shortcuts.md) | Every shortcut, by view |
 | [Troubleshooting](troubleshooting.md) | When lights, the rig view, files or fixtures aren't doing what you expect |

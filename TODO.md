@@ -10,30 +10,17 @@ under `~/.claude/.../memory/`.
 
 ## Small fixes and leftovers
 
-- **Shortcut clash in the Virtual Console (Design).** VC's "Add animation"
-  (⇧⌘R) and "Add button matrix" (⇧⌘M) share keys with Rig Overview and
-  Lighting Studio; with both live Qt fires neither. Documented in
-  shortcuts.md / troubleshooting.md. Give one side new keys.
-- **`QLCFile::mergeLegacyUserData()` re-links deleted files.** It runs at
-  every start and symlinks anything in the old QLC+ user folder missing from
-  the qlcconsole one, so a definition removed here comes back (the four
-  malformed PHS-Crew 8' Step files did; now set aside as `*.qxf.broken` in
-  `~/Library/Application Support/QLC+/Fixtures`). Make the merge one-time
-  (a marker), or remember what was removed.
 - **Hangers on the 2D plot.** They draw in the rig view and editors, not on
   the plot.
 - **Network-node dialogs apply on OK only** — the last rig dialogs outside
   the live-edit / Cancel-restores / one-undo pattern (RigEditSession).
 - **Stage objects, leftovers:** a Stand carrying a truss or tower (pipes
-  only today); fixtures at their own offsets along a horizontal pipe; the
-  Tower editor's Cancel still applies.
+  only today); fixtures at their own offsets along a horizontal pipe.
 - **No undo for a re-address** in the Patch dialog (the dialog is the
   confirm step; the structure editor's ⌘Z covers rig props only).
 - **Front view: moving things relative to a truss** — investigated
   2026-09-05, not fixed; needs Branson to say which case he meant (DONE.md,
   "Front (elevation) view: moving things relative to a truss").
-- **Timeline vocabulary** (Track / Cue / handles) is never explained in the
-  Show timeline — now covered by no guide either. Lowest urgency.
 
 ## Needs the real rig / hardware
 

@@ -44,7 +44,7 @@ namespace
 /* The guides, in the order to read them. */
 const char *const kTopics[] = {
     "getting-started.md", "whats-new.md", "README.md", "lighting-studio.md",
-    "programming-tab.md", "fixture-manager.md", "stage-targets.md",
+    "programming-tab.md", "fixture-manager.md", "stage-targets.md", "shows.md",
     "other-improvements.md", "effects.md", "shortcuts.md", "troubleshooting.md",
     "EFFECTSCRIPT_API.md"
 };
