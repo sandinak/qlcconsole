@@ -209,6 +209,8 @@ private:
     void probeUnheardTargets();
 
     static QString itemPath(class QTreeWidgetItem *item);
+    /** Put the list back at @p value after a rebuild. */
+    void restoreScroll(int value);
 
     /** Ordered name/value pairs as a tooltip table, or empty if there are none. */
     static QString propertyTooltip(const QString &title,

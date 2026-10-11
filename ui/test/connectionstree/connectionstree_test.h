@@ -79,6 +79,10 @@ private slots:
     void selectedUniversesRejectsAMixedPluginSelection();
     void selectedUniversesDeduplicatesFannedOutUniverses();
     void onlyTheNameIsEditedAndASelectedUniverseShowsWhatItSends();
+    /** "why does the connections set jump every time I select a universe ..
+     *  I cant select and patch cause it jumps" */
+    void aRefreshKeepsTheSelectionAndThePlace();
+    void noRefreshUnderAnOpenMenu();
     void bulkRetargetNumbersPortsUpwardAndIsOneUndoStep();
     /** Two universes may share a NIC, but not a node port. */
     void twoUniversesCannotTargetTheSameNodePort();

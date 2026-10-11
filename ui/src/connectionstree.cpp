@@ -25,6 +25,7 @@
 #include <QCheckBox>
 #include <QSettings>
 #include <QScrollBar>
+#include <QPointer>
 #include <QPushButton>
 #include <QHBoxLayout>
 #include <QApplication>
@@ -615,6 +616,13 @@ void ConnectionsTree::refresh()
             && m_tree->isAncestorOf(focus))
         return;
 
+    /* Nor while a menu or dialog is up ("I can't select and patch cause it
+       jumps"): a right-click menu holds the row it was opened on, and a
+       rebuild under it tore that row down, so Patch... acted on nothing.
+       The next tick, or the action's own refresh, catches up. */
+    if (QApplication::activePopupWidget() != NULL || QApplication::activeModalWidget() != NULL)
+        return;
+
     if (m_byUniverse != NULL && m_byUniverse->isChecked())
     {
         buildUniverseList();
@@ -645,6 +653,17 @@ void ConnectionsTree::refresh()
                 stack << it->child(c);
         }
     }
+
+    /* ...and where you were and what you had picked. The rebuild every five
+       seconds used to drop the selection and scroll back to the top, so a
+       universe clicked a moment ago was gone, and the list jumped under the
+       pointer. Kept by full path, like the open branches. */
+    const int scroll = m_tree->verticalScrollBar()->value();
+    QSet<QString> selectedPaths;
+    foreach (QTreeWidgetItem *it, m_tree->selectedItems())
+        selectedPaths.insert(itemPath(it));
+    const QString currentPath = m_tree->currentItem() != NULL ? itemPath(m_tree->currentItem())
+                                                             : QString();
 
     m_rebuilding = true;
     m_tree->clear();
@@ -1786,7 +1805,26 @@ void ConnectionsTree::refresh()
     m_knownLines = curLines;
     m_linesBaselined = true;
     m_populatedOnce = true;
+
+    if (selectedPaths.isEmpty() == false || currentPath.isEmpty() == false)
+    {
+        QList<QTreeWidgetItem *> all;
+        for (int i = 0; i < m_tree->topLevelItemCount(); i++)
+            all << m_tree->topLevelItem(i);
+        while (all.isEmpty() == false)
+        {
+            QTreeWidgetItem *it = all.takeFirst();
+            const QString path = itemPath(it);
+            if (path == currentPath)
+                m_tree->setCurrentItem(it, 0, QItemSelectionModel::NoUpdate);
+            if (selectedPaths.contains(path))
+                it->setSelected(true);
+            for (int c = 0; c < it->childCount(); c++)
+                all << it->child(c);
+        }
+    }
     m_rebuilding = false;
+    restoreScroll(scroll);
 
     /* The banner answers exactly one question -- "is an empty-looking tree
        still filling in?" -- so it belongs on screen only while that question
@@ -1799,6 +1837,18 @@ void ConnectionsTree::refresh()
 
 /** Stable identity for a row: its name plus every ancestor's, so two rows that
  *  share a display name under different parents are not confused. */
+/* Back to where the list was. The scroll range is only known once the new
+   rows are laid out, which can be after this returns -- so again then. */
+void ConnectionsTree::restoreScroll(int value)
+{
+    m_tree->verticalScrollBar()->setValue(value);
+    QPointer<QTreeWidget> tree(m_tree);
+    QTimer::singleShot(0, this, [tree, value]() {
+        if (tree != nullptr && tree->verticalScrollBar()->value() != value)
+            tree->verticalScrollBar()->setValue(value);
+    });
+}
+
 QString ConnectionsTree::itemPath(QTreeWidgetItem *item)
 {
     QStringList parts;
@@ -4316,6 +4366,8 @@ void ConnectionsTree::buildUniverseList()
     QSet<quint32> selected;
     foreach (QTreeWidgetItem *it, m_tree->selectedItems())
         selected.insert(it->data(COL_NAME, ROLE_UNIVERSE).toUInt());
+    const quint32 current = m_tree->currentItem() != NULL
+        ? m_tree->currentItem()->data(COL_NAME, ROLE_UNIVERSE).toUInt() : Universe::invalid();
 
     m_rebuilding = true;
     m_tree->clear();
@@ -4390,9 +4442,17 @@ void ConnectionsTree::buildUniverseList()
             item->setSelected(true);
     }
 
+    if (current != Universe::invalid())
+    {
+        foreach (QTreeWidgetItem *it, m_tree->selectedItems())
+        {
+            if (it->data(COL_NAME, ROLE_UNIVERSE).toUInt() == current)
+                m_tree->setCurrentItem(it, 0, QItemSelectionModel::NoUpdate);
+        }
+    }
     m_rebuilding = false;
     m_populatedOnce = true;
-    m_tree->verticalScrollBar()->setValue(scroll);
+    restoreScroll(scroll);
     if (m_status != NULL)
         m_status->hide();
 }

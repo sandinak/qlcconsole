@@ -21,6 +21,8 @@
 #include <QLabel>
 #include <QTimer>
 #include <QtTest>
+#include <QScrollBar>
+#include <QMenu>
 
 #define protected public
 #define private public
@@ -691,6 +693,64 @@ void ConnectionsTree_Test::selectedUniversesRejectsAMixedPluginSelection()
     unis.at(0)->setData(COL_NAME, ROLE_PLUGIN, QString("Some Other Protocol"));
     QVERIFY(tree.selectedUniverses(plug, lines).isEmpty());
     QVERIFY(plug.isEmpty());
+}
+
+/* The five-second rebuild dropped the selection and scrolled back to the top:
+   the universe you had just clicked was gone and the list jumped. */
+void ConnectionsTree_Test::aRefreshKeepsTheSelectionAndThePlace()
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    for (int i = 0; i < 40; ++i)
+        QVERIFY(iom->addUniverse());
+    ConnectionsTree tree(m_doc);
+    tree.resize(900, 300);                       // short: the list scrolls
+    tree.show();
+    tree.refresh();
+    tree.m_tree->expandAll();
+    QApplication::processEvents();
+
+    QTreeWidgetItem *row = nullptr;
+    foreach (QTreeWidgetItem *it, allItems(tree.m_tree))
+        if (it->data(COL_NAME, ROLE_UNIVERSE).isValid() && it->data(COL_NAME, ROLE_UNIVERSE).toUInt() == 30)
+            row = it;
+    QVERIFY(row != nullptr);
+    tree.m_tree->setCurrentItem(row);
+    QVERIFY(tree.m_tree->verticalScrollBar()->maximum() > 0);
+    const int scroll = tree.m_tree->verticalScrollBar()->value();
+    QVERIFY(scroll > 0);                         // scrolled down to it
+
+    tree.refresh();
+    QApplication::processEvents();
+    QTreeWidgetItem *cur = tree.m_tree->currentItem();
+    QVERIFY(cur != nullptr);
+    QCOMPARE(cur->data(COL_NAME, ROLE_UNIVERSE).toUInt(), quint32(30));
+    QVERIFY(cur->isSelected());
+    QCOMPARE(tree.m_tree->selectedItems().size(), 1);
+    QCOMPARE(tree.m_tree->verticalScrollBar()->value(), scroll);
+    QCOMPARE(tree.m_output->universe(), quint32(30));   // still showing it
+}
+
+/* A right-click menu holds the row it opened on; a rebuild under it tore that
+   row down, so Patch... acted on nothing. */
+void ConnectionsTree_Test::noRefreshUnderAnOpenMenu()
+{
+    ConnectionsTree tree(m_doc);
+    tree.resize(900, 500);
+    tree.show();
+    tree.refresh();
+    QVERIFY(tree.m_tree->topLevelItemCount() > 0);
+    QTreeWidgetItem *first = tree.m_tree->topLevelItem(0);
+
+    QMenu menu;
+    menu.addAction("Patch...");
+    menu.popup(tree.mapToGlobal(QPoint(10, 10)));
+    QTRY_VERIFY(QApplication::activePopupWidget() != nullptr);
+    tree.refresh();
+    QCOMPARE(tree.m_tree->topLevelItem(0), first);      // not rebuilt
+    menu.close();
+    QTRY_VERIFY(QApplication::activePopupWidget() == nullptr);
+    tree.refresh();
+    QVERIFY(tree.m_tree->topLevelItemCount() > 0);
 }
 
 void ConnectionsTree_Test::onlyTheNameIsEditedAndASelectedUniverseShowsWhatItSends()
