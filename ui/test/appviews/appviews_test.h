@@ -44,6 +44,9 @@ private slots:
     /** "every time I open the rig view .. the studio tab comes up": the Rig
      *  Overview is a window of its own; opening it leaves the tab alone. */
     void theWindowMenuFindsAndPutsBackBrokenOutViews();
+    /** "change the tab -> window from double click to shift click and/or
+     *  enable/disable that feature via a toggle on window". */
+    void shiftClickBreaksATabOutDoubleClickDoesNot();
     void functionsOpensFromTheWindowMenuNotATab();
     void helpOpensOnWhatIsInFront();
     void virtualConsoleKeysDontClashWithTheApp();

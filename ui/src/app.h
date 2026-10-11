@@ -343,6 +343,12 @@ public slots:
     void updateWindowMenu();
 
     void slotDetachContext(int index);
+
+    /** Shift-click on a tab breaks the view out into its own window (Window
+     *  menu toggle, remembered). A plain double-click no longer does: it
+     *  tore views off the tab bar by accident. */
+    bool shiftClickBreaksOut() const;
+    void setShiftClickBreaksOut(bool on);
 private:
     /** Show @p context in a window of its own, titled for @p tabLabel. */
     void openContextWindow(QWidget *context, const QString &tabLabel);
@@ -373,6 +379,8 @@ private:
     QList<QAction *> m_windowJumps;         ///< Window menu: a view each
     QMenu *m_windowDockMenu = nullptr;      ///< Window > Put Back in Main Window
     QAction *m_windowDockAll = nullptr;
+    QAction *m_windowBreakOut = nullptr;    ///< Window > Move <view> to Its Own Window
+    QAction *m_windowShiftClick = nullptr;  ///< Window > Shift-Click a Tab ... (toggle)
     QAction* m_controlBlackoutAction;
     QAction* m_controlBlindAction;
     QAction* m_showLockAction;

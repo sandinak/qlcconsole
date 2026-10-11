@@ -87,6 +87,10 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Views and windows
 
+- **Shift-click a tab** to put it in a window of its own — a double-click
+  no longer does it by accident. **Window → Move … to Its Own Window** does
+  the same for the view in front, and the Window menu can turn the
+  Shift-click off. ([Window menu](other-improvements.md#window-menu))
 - **Functions has no tab** — **Window → Functions** (⇧⌘4) opens it in its
   own window. ([Window menu](other-improvements.md#window-menu))
 - The **Window** menu lists every view, wherever it is, and puts

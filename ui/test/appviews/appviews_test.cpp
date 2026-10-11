@@ -172,6 +172,55 @@ void AppViews_Test::theWindowMenuFindsAndPutsBackBrokenOutViews()
 /* Functions has no tab ("I keep hitting it by mistake instead of
    Programming"), but opens from the Window menu in its own window; closed,
    it is put away again -- not made a tab. */
+void AppViews_Test::shiftClickBreaksATabOutDoubleClickDoesNot()
+{
+    QTabWidget *tabs = m_app->m_tab;
+    QTabBar *bar = tabs->tabBar();
+    QVERIFY(tabs->count() > 2);
+    const bool was = m_app->shiftClickBreaksOut();
+    m_app->setShiftClickBreaksOut(true);
+    const int count = tabs->count();
+    const QString label = bar->tabData(1).toString();
+    const QPoint at = bar->tabRect(1).center();
+
+    // A plain double-click selects the tab and nothing more.
+    QTest::mouseDClick(bar, Qt::LeftButton, Qt::NoModifier, at);
+    QCoreApplication::processEvents();
+    QCOMPARE(tabs->count(), count);
+    QVERIFY(m_app->detachedContexts().isEmpty());
+
+    // Shift-click breaks it out.
+    QTest::mouseClick(bar, Qt::LeftButton, Qt::ShiftModifier, at);
+    QTRY_COMPARE(tabs->count(), count - 1);
+    QCOMPARE(m_app->detachedContexts(), QStringList({ label }));
+    reattach(m_app, label);
+    QTRY_COMPARE(tabs->count(), count);
+
+    // Turned off from the Window menu: a Shift-click is just a click.
+    QAction *toggle = m_app->menuBar()->findChild<QAction *>("windowShiftClick");
+    QVERIFY(toggle != nullptr);
+    QVERIFY(toggle->isChecked());
+    toggle->trigger();
+    QVERIFY(m_app->shiftClickBreaksOut() == false);
+    QTest::mouseClick(bar, Qt::LeftButton, Qt::ShiftModifier, bar->tabRect(1).center());
+    QCoreApplication::processEvents();
+    QCOMPARE(tabs->count(), count);
+
+    // Move to Its Own Window takes the view in front, gesture or no gesture.
+    tabs->setCurrentIndex(2);
+    const QString front = bar->tabData(2).toString();
+    m_app->updateWindowMenu();
+    QAction *move = m_app->menuBar()->findChild<QAction *>("windowBreakOut");
+    QVERIFY(move != nullptr);
+    QCOMPARE(move->text(), QString("Move %1 to Its Own Window").arg(front));
+    move->trigger();
+    QCOMPARE(m_app->detachedContexts(), QStringList({ front }));
+    reattach(m_app, front);
+    QTRY_COMPARE(tabs->count(), count);
+
+    m_app->setShiftClickBreaksOut(was);
+}
+
 void AppViews_Test::functionsOpensFromTheWindowMenuNotATab()
 {
     QTabWidget *tabs = m_app->m_tab;

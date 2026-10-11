@@ -602,10 +602,9 @@ void App::init()
     // View menu can offer accurate "jump to tab" entries.
     initMenuBar();
 
-#if QT_VERSION >= QT_VERSION_CHECK(5, 6, 0)
-    /* Detach the tab's widget onto a new window on doubleClick */
-    connect(m_tab, SIGNAL(tabBarDoubleClicked(int)), this, SLOT(slotDetachContext(int)));
-#endif
+    /* Shift-click a tab: its view in a window of its own (eventFilter()). It
+       was a double-click, which broke views out by accident. */
+    m_tab->tabBar()->installEventFilter(this);
     connect(m_tab, SIGNAL(currentChanged(int)), this, SLOT(slotTabChanged(int)));
 
     // Listen to blackout changes and toggle m_controlBlackoutAction
@@ -1982,6 +1981,17 @@ void App::initMenuBar()
     m_windowDockMenu = windowMenu->addMenu(tr("Put Back in Main Window"));
     m_windowDockAll = windowMenu->addAction(tr("Put All Back in Main Window"));
     connect(m_windowDockAll, &QAction::triggered, this, &App::reattachAllContexts);
+    m_windowBreakOut = windowMenu->addAction(tr("Move to Its Own Window"));
+    m_windowBreakOut->setObjectName(QStringLiteral("windowBreakOut"));
+    connect(m_windowBreakOut, &QAction::triggered, this, [this]() {
+        if (m_tab != NULL && m_tab->currentIndex() >= 0)
+            slotDetachContext(m_tab->currentIndex());
+    });
+    m_windowShiftClick = windowMenu->addAction(tr("Shift-Click a Tab to Open It in a Window"));
+    m_windowShiftClick->setObjectName(QStringLiteral("windowShiftClick"));
+    m_windowShiftClick->setCheckable(true);
+    m_windowShiftClick->setChecked(shiftClickBreaksOut());
+    connect(m_windowShiftClick, &QAction::toggled, this, &App::setShiftClickBreaksOut);
     windowMenu->addSeparator();
     QAction *minimize = windowMenu->addAction(tr("Minimize"));
     minimize->setShortcut(QKeySequence(QStringLiteral("CTRL+M")));
@@ -2876,6 +2886,28 @@ void App::updateWindowMenu()
     }
     if (m_windowDockAll != NULL)
         m_windowDockAll->setEnabled(!away.isEmpty());
+    if (m_windowBreakOut != NULL)
+    {
+        const int idx = m_tab != NULL ? m_tab->currentIndex() : -1;
+        const QString label = idx >= 0 ? m_tab->tabBar()->tabData(idx).toString() : QString();
+        m_windowBreakOut->setText(label.isEmpty() ? tr("Move to Its Own Window")
+                                                  : tr("Move %1 to Its Own Window").arg(label));
+        m_windowBreakOut->setEnabled(idx >= 0);
+    }
+}
+
+#define SETTINGS_SHIFT_CLICK_BREAKS_OUT "workspace/shiftClickBreaksOut"
+
+bool App::shiftClickBreaksOut() const
+{
+    return QSettings().value(SETTINGS_SHIFT_CLICK_BREAKS_OUT, true).toBool();
+}
+
+void App::setShiftClickBreaksOut(bool on)
+{
+    QSettings().setValue(SETTINGS_SHIFT_CLICK_BREAKS_OUT, on);
+    if (m_windowShiftClick != NULL && m_windowShiftClick->isChecked() != on)
+        m_windowShiftClick->setChecked(on);
 }
 
 void App::reattachContext(const QString &tabLabel)
@@ -2898,7 +2930,7 @@ void App::reattachAllContexts()
 
 void App::slotDetachContext(int index)
 {
-    /* Get the widget that has been double-clicked */
+    /* Get the widget that has been shift-clicked */
     QWidget *context = m_tab->widget(index);
     context->setProperty("tabIndex", index);
     context->setProperty("tabIcon", QVariant::fromValue(m_tab->tabIcon(index)));
@@ -4481,6 +4513,27 @@ void App::initStatusBar()
 
 bool App::eventFilter(QObject *watched, QEvent *event)
 {
+    if (m_tab != NULL && watched == m_tab->tabBar() && event->type() == QEvent::MouseButtonPress)
+    {
+        QMouseEvent *me = static_cast<QMouseEvent *>(event);
+        if (me->button() == Qt::LeftButton && (me->modifiers() & Qt::ShiftModifier)
+            && shiftClickBreaksOut())
+        {
+            const int idx = m_tab->tabBar()->tabAt(me->pos());
+            if (idx >= 0)
+            {
+                // Not from inside the tab bar's own event: detaching removes the tab.
+                QWidget *view = m_tab->widget(idx);
+                QTimer::singleShot(0, this, [this, view]() {
+                    const int at = m_tab->indexOf(view);
+                    if (at >= 0)
+                        slotDetachContext(at);
+                });
+                return true;
+            }
+        }
+    }
+
     // Click the status-bar MTC chip → a menu to BIND the timecode: arm Follow
     // MTC and pick which universe carries the code (or accept any).
     if (watched == m_statusTimecodeLabel && event->type() == QEvent::MouseButtonPress

@@ -20,8 +20,10 @@
 | ⌘M | Minimize |
 | ⇧F1 | The stock QLC+ reference (online) |
 
-Double-click a **tab** to break it out into its own window; **Window →
-Put Back in Main Window** returns it.
+**Shift-click** a **tab** to break it out into its own window (or **Window
+→ Move … to Its Own Window**); **Window → Put Back in Main Window** returns
+it. **Window → Shift-Click a Tab to Open It in a Window** turns the
+Shift-click off, if it gets in the way.
 
 ## Lighting Studio (the plot)
 
