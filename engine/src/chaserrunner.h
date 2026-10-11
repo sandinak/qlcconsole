@@ -22,6 +22,7 @@
 #ifndef CHASERRUNNER_H
 #define CHASERRUNNER_H
 
+#include <limits>
 #include <QList>
 #include <QMap>
 
@@ -173,6 +174,8 @@ private:
     bool m_externalClock;                   //! If true, steps advance only on explicit action (show-clock driven)
     quint32 m_lastFunctionID;               //! ID of the last Function ran (Scene only)
     QElapsedTimer *m_roundTime;             //! Counts the time between steps
+    /** On a speed master: its last whole beat counted (none yet: min). */
+    qint64 m_masterBeat = std::numeric_limits<qint64>::min();
     QVector<int> m_order;                   //! Array of step indices in a randomized order
 
     /************************************************************************

@@ -330,4 +330,57 @@ void SpeedMasters_Test::aCollectionHandsItsMasterToItsMembers()
         timer->timerTick();
 }
 
+/* A chase that counts in beats, on a master, steps on that master's beats --
+   its tap and rate move it, and it holds while the master is paused. */
+void SpeedMasters_Test::aBeatChaseStepsOnItsMastersBeats()
+{
+    MasterTimer *timer = m_doc->masterTimer();
+    QList<Scene *> looks;
+    Chaser *chase = new Chaser(m_doc);
+    for (int i = 0; i < 4; ++i)
+    {
+        Scene *s = new Scene(m_doc);
+        m_doc->addFunction(s);
+        looks << s;
+        chase->addStep(ChaserStep(s->id(), 0, 1000, 0));    // one beat each
+    }
+    chase->setTempoType(Function::Beats);
+    chase->setDurationMode(Chaser::PerStep);
+    chase->setSpeedMaster(SpeedMasters::Master1);
+    m_doc->addFunction(chase);
+    // The main clock is off: only the master can step it.
+    timer->setBeatSourceType(MasterTimer::None);
+    SpeedMasters *sm = m_doc->speedMasters();
+    sm->setBpm(0, 600);                                     // ten beats a second
+
+    int steps = 0;
+    connect(chase, &Chaser::currentStepChanged, this, [&steps](int) { steps++; });
+    chase->start(timer, FunctionParent::master());
+    QElapsedTimer t;
+    t.start();
+    while (t.elapsed() < 600)
+    {
+        timer->timerTick();
+        QTest::qWait(10);
+    }
+    QVERIFY2(steps >= 3, qPrintable(QString("%1 steps in 0.6 s at 600 BPM").arg(steps)));
+
+    // Paused: it holds.
+    sm->setPaused(0, true);
+    for (int i = 0; i < 5; ++i)
+        timer->timerTick();
+    const int held = steps;
+    t.restart();
+    while (t.elapsed() < 400)
+    {
+        timer->timerTick();
+        QTest::qWait(10);
+    }
+    QCOMPARE(steps, held);
+
+    chase->stop(FunctionParent::master());
+    for (int i = 0; i < 5; ++i)
+        timer->timerTick();
+}
+
 QTEST_MAIN(SpeedMasters_Test)

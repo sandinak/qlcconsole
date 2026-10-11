@@ -26,22 +26,33 @@ SpreadLayer::Settings SpreadLayer::fromParams(const QMap<QString, double> &param
 {
     Settings s;
     s.amount = params.value(paramName("Amount"), 0.0);
-    s.axis = Axis(qBound(0, int(params.value(paramName("Axis"), 0)), int(StageZ)));
+    s.axis = Axis(qBound(0, int(params.value(paramName("Axis"), 0)), int(AroundTarget)));
     s.direction = Direction(qBound(0, int(params.value(paramName("Direction"), 0)), int(EndsIn)));
     s.wings = qMax(1, int(params.value(paramName("Wings"), 1)));
     s.blocks = qMax(1, int(params.value(paramName("Blocks"), 1)));
     return s;
 }
 
-QVector<double> SpreadLayer::phases(const QVector<Point> &points, const Settings &s)
+QVector<double> SpreadLayer::phases(const QVector<Point> &points, const Settings &s,
+                                    const QVector3D *centre)
 {
     QVector<double> out(points.size(), 0.0);
     if (!s.isActive() || points.isEmpty())
         return out;
 
+    QVector3D c;
+    if (centre != nullptr)
+        c = *centre;
+    else
+    {
+        for (const Point &p : points)
+            c += p.pos;
+        c /= float(points.size());
+    }
+
     /* Where each head is along the axis. Heads at the same place (one
        column, one bar's heads seen from the side) are one step. */
-    auto key = [&s](const Point &p) -> double {
+    auto key = [&s, &c](const Point &p) -> double {
         switch (s.axis)
         {
             case Columns: return p.col;
@@ -50,6 +61,17 @@ QVector<double> SpreadLayer::phases(const QVector<Point> &points, const Settings
             case StageX:  return std::round(p.pos.x() * 1000.0);
             case StageY:  return std::round(p.pos.y() * 1000.0);
             case StageZ:  return std::round(p.pos.z() * 1000.0);
+            // On the floor plan: centimetres out, tenths of a degree round.
+            case FromTarget:
+                return std::round(std::hypot(p.pos.x() - c.x(), p.pos.y() - c.y()) * 100.0);
+            case AroundTarget:
+            {
+                // 0 straight downstage of it (-y), on round towards +x.
+                double deg = std::atan2(p.pos.x() - c.x(), -(p.pos.y() - c.y())) * 180.0 / M_PI;
+                if (deg < 0)
+                    deg += 360.0;
+                return std::round(deg * 10.0);
+            }
             case Order:
             default:      return p.order;
         }

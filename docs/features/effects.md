@@ -48,7 +48,7 @@ works in any colour.
 | **Drawn Path** | Heads follow a path you draw in the look editor |
 | **Fan** / **Orbit** / **Followspot** | Fan out, orbit, or follow a joystick's X/Y |
 | **Pan/Tilt Phaser** | Independent pan and tilt sines, phase-spread |
-| **Stage Shape** | Heads trace the outline of a shape on the stage floor |
+| **Stage Shape** | Heads trace the outline of a shape (circle, polygon, star, line) round the look's Aim target, on the floor or stood up as a wall. With **Spread** on, the spread decides which head takes which point — Axis *stage left to right* puts the leftmost heads on the left of the line, no beams crossing |
 | **Sweep** | A synchronised pan or tilt scan with a cascade |
 | **Wander** | Organic drift, each head on its own path |
 
@@ -95,23 +95,36 @@ beat gently rather than jolting it.
 ### Spread
 
 Effects that chase across their heads — the phasers, pulses, orbits,
-rainbow, ballyhoo, gobo chase, native strobe — share one **Spread** row in
-the look editor, so they all spread the same way:
+rainbow, ballyhoo, gobo chase, native strobe, warm/cool, drawn path, and
+Stage Shape's outline — share one **Spread** row in the look editor, so
+they all spread the same way:
 
 - **Amount** — how far the effect's cycle runs across the heads: **1** is
   one full wave across them, **0.5** half a wave, **2** two waves. At
   **its own** (0) the effect uses its own spread setting, as before.
 - **Axis** — what puts the heads in order: **in look order**, the head
   layout's **columns** or **rows**, or where they stand: **stage left to
-  right**, **front to back**, **by height**. Heads at the same place share
-  a phase (a column, a bar seen from the side).
+  right**, **front to back**, **by height** — or round the look's **Aim
+  target**: **out from the target** (nearest first, a ripple outward) or
+  **around the target** (from downstage of it, round towards stage right,
+  a sweep). Heads at the same place share a phase (a column, a bar seen
+  from the side). With no Aim look, the target axes use the middle of the
+  heads.
 - **Direction** — **forward**, **reverse**, **centre out**, **ends in**.
 - **Wings** — split the heads into mirrored parts, each running the
   spread (2 wings: out from the middle seam both ways).
 - **Blocks of** — neighbouring heads that share a phase.
 
 With the spread on, the effect's own spread (and a phaser's reverse) is
-hidden — the Spread row stands in for them.
+hidden — the Spread row stands in for them — and a **preview** under it
+shows the look's heads where they stand, coloured by phase (the same colour
+is the same moment in the cycle; a cross marks the target).
+
+On **Stage Shape**: a closed shape gives each head its phase as its place
+round the outline (amount 1 = evenly round it once); a **Line** runs the
+heads end to end at amount 1. Any direction works: *reverse* walks them the
+other way round, *centre out* / *ends in* and **wings** pair heads up on
+the same point, which is a look in itself.
 
 ### Speed masters
 
@@ -147,6 +160,11 @@ On the main clock or a master, an effect's **rate** (or **speed**) counts
 **cycles per beat** — 1 is once a beat, 0.25 once a bar — and the look
 editor labels it "(per beat)". It stays on the beat, follows the master's
 tap and rate, and stops when it's paused.
+
+A **chase that counts in beats** (its tempo set to Beats) on a master
+steps on that master's beats — tap the master and the chase follows; pause
+it and the chase holds on its step. A chase counting in time keeps its
+times; only the effects in its looks follow the master.
 
 ## Diagnostics
 

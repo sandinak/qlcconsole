@@ -45,7 +45,12 @@
 class SpreadLayer
 {
 public:
-    enum Axis { Order = 0, Columns, Rows, StageX, StageY, StageZ };
+    enum Axis { Order = 0, Columns, Rows, StageX, StageY, StageZ,
+                FromTarget,     //!< distance from the target, on the floor: a ripple
+                AroundTarget    //!< angle around it, from downstage: a sweep
+              };
+    /** The axis needs a centre (phases()' @p centre). */
+    static bool needsCentre(Axis a) { return a == FromTarget || a == AroundTarget; }
     enum Direction { Forward = 0, Reverse, CentreOut, EndsIn };
 
     struct Settings
@@ -79,8 +84,11 @@ public:
     static Settings fromParams(const QMap<QString, double> &params);
     static QString paramName(const char *what) { return QStringLiteral("__spread") + QLatin1String(what); }
 
-    /** Each point's phase, in cycles (0 .. amount), in the points' order. */
-    static QVector<double> phases(const QVector<Point> &points, const Settings &settings);
+    /** Each point's phase, in cycles (0 .. amount), in the points' order.
+     *  @p centre is the target for FromTarget / AroundTarget; without one,
+     *  the middle of the points. */
+    static QVector<double> phases(const QVector<Point> &points, const Settings &settings,
+                                  const QVector3D *centre = nullptr);
 };
 
 /** @} */

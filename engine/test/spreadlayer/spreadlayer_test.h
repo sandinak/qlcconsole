@@ -34,6 +34,8 @@ private slots:
     void blocksShare();
     void anAxisPutsThemInItsOwnOrder();
     void theSettingsComeFromTheEffect();
+    void outFromAndAroundATarget();
+    void thePreviewSeesWhatTheEffectGets();
     void everyScriptThatTakesItUsesIt();
     void theHostSpreadReachesTheScript();
 };

@@ -51,6 +51,7 @@
 #include "monitorproperties.h"
 
 #include "speedmasters.h"
+#include "spreadpreview.h"
 #include "lookeditor_test.h"
 
 void LookEditor_Test::aColourDarkerThanAFifthIsCalledOut()
@@ -475,6 +476,63 @@ void LookEditor_Test::theHostSpreadStandsInForTheEffectsOwn()
     amount = ed.m_effectDynWidget->findChild<QDoubleSpinBox *>("spreadAmount");
     amount->setValue(0.0);
     QTRY_COMPARE(ownRows(), 2);                     // its own again
+}
+
+/* "need S3 .. resolved": the Spread row shows the look's heads coloured by
+   phase, and follows the settings as they change. */
+void LookEditor_Test::theSpreadIsPreviewed()
+{
+    Doc doc(this);
+    doc.effectScriptRunner()->cache()->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    Scene *scene = new Scene(&doc);
+    for (int i = 0; i < 3; ++i)
+    {
+        Fixture *fx = new Fixture(&doc);
+        fx->setName(QString("Par %1").arg(i + 1));
+        fx->setChannels(1);
+        fx->setAddress(quint32(i));
+        QVERIFY(doc.addFixture(fx));
+        doc.monitorProperties()->setFixturePosition(fx->id(), 0, 0, QVector3D(1000.0f * i, 0, 0));
+        scene->addFixture(fx->id());
+    }
+    doc.addFunction(scene);
+    QLCPalette *look = new QLCPalette(QLCPalette::Effect, &doc);
+    look->setName("Wave");
+    QVERIFY(doc.addPalette(look));
+    scene->addPalette(look->id());
+
+    LookEditor ed(&doc);
+    ed.resize(1000, 700);
+    ed.show();
+    ed.setContextScene(scene);
+    ed.setPalette(look->id());
+    EffectBrowser *browser = ed.m_effectBrowser;
+    browser->search()->setText("Dimmer Phaser");
+    QApplication::processEvents();
+    QListWidgetItem *item = nullptr;
+    for (int i = 0; i < browser->list()->count() && item == nullptr; ++i)
+        if (browser->list()->item(i)->text() == QLatin1String("Dimmer Phaser"))
+            item = browser->list()->item(i);
+    QVERIFY(item != nullptr);
+    browser->pick(item);
+    QApplication::processEvents();
+
+    SpreadPreview *preview = ed.m_effectDynWidget->findChild<SpreadPreview *>();
+    QVERIFY2(preview != nullptr, "a look with heads gets a preview");
+    QVERIFY(!preview->isVisible());                     // off: nothing to show
+
+    ed.m_effectDynWidget->findChild<QDoubleSpinBox *>("spreadAmount")->setValue(1.0);
+    QTRY_VERIFY(ed.m_effectDynWidget->findChild<SpreadPreview *>() != nullptr
+                && ed.m_effectDynWidget->findChild<SpreadPreview *>()->isVisible());
+    preview = ed.m_effectDynWidget->findChild<SpreadPreview *>();
+    QCOMPARE(preview->dots().size(), 3);
+    QCOMPARE(preview->dots().at(0).phase, 0.0);
+    QVERIFY(qAbs(preview->dots().at(2).phase - 2.0 / 3) < 1e-9);
+
+    ed.m_effectDynWidget->findChild<QComboBox *>("spreadDirection")->setCurrentIndex(1);   // reverse
+    QVERIFY(qAbs(preview->dots().at(0).phase - 2.0 / 3) < 1e-9);
+    QCOMPARE(preview->dots().at(2).phase, 0.0);
+    preview->grab();                                     // it paints
 }
 
 void LookEditor_Test::theEffectListAndItsSettingsSitSideBySide()

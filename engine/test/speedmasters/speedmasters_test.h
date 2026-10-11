@@ -44,6 +44,7 @@ private slots:
     void theInnermostChoiceWins();
     void aChaseHandsItsMasterToItsSteps();
     void aCollectionHandsItsMasterToItsMembers();
+    void aBeatChaseStepsOnItsMastersBeats();
 
 private:
     Doc *m_doc = nullptr;

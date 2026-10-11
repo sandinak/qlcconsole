@@ -43,6 +43,7 @@ private slots:
     void anEffectsTextIsTypedIn();
     void anEffectIsPutOnASpeedMaster();
     void theHostSpreadStandsInForTheEffectsOwn();
+    void theSpreadIsPreviewed();
     void theEffectListAndItsSettingsSitSideBySide();
     void theBrowsersListsAreAToZ();
 };

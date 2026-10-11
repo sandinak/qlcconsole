@@ -59,7 +59,7 @@ The thing everything else stands on.
 - **Tap** averages the last four taps (a gap of 2 s starts over) and puts
   the beat on the last tap.
 
-## S2 — Speed masters (and masters following masters) *(DONE 2026-10-11, but chaser step timing)*
+## S2 — Speed masters (and masters following masters) *(DONE 2026-10-11)*
 
 - **Four masters**, saved in the show. Each is either
   - **Own tempo** — its own BPM and tap, its own beat position; or
@@ -75,10 +75,9 @@ The thing everything else stands on.
   so the effect's speed reads **cycles per beat** (1 = one per beat,
   0.25 = one per bar) and stays locked to the beat. The look editor relabels
   the speed control accordingly. Off a master, nothing changes.
-- **Chasers and sequences** on a master (beat tempo, step on the master's
-  beat) — **still open**: a chase on a master hands the master to its
-  steps' effects, but its own step timing still counts the main clock's
-  beats (`Function::TempoType::Beats`) or time.
+- **Chasers and sequences** on a master: a chase whose tempo is Beats
+  steps on its master's beats (ChaserRunner counts the master's whole
+  beats; paused, it holds). A Time chase keeps its times.
 - **Storage (as built):** the masters are a `<SpeedMasters>` element in
   the show (written only once something differs from the defaults). An
   effect's choice is the palette param `__speedMaster`; a function's (scene,
@@ -93,7 +92,7 @@ The thing everything else stands on.
   the Programming toolbar's overflow, the Virtual Console (a widget per
   master: tap + fader + BPM), and the control surface (S4).
 
-## S3 — The spread layer *(DONE 2026-10-11, but the preview)*
+## S3 — The spread layer *(DONE 2026-10-11)*
 
 The host works out each head's **phase** so scripts don't each do it.
 
@@ -113,14 +112,19 @@ The host works out each head's **phase** so scripts don't each do it.
   spread params still load (old shows keep working) and are hidden in the
   look editor once the host spread is set.
 - The look editor's live preview shows the phase across the plot (a
-  gradient on the fixtures) while the Spread settings are edited — **still
-  open**.
+  gradient on the fixtures) while the Spread settings are edited — built
+  as a small plan in the Spread row (SpreadPreview, from
+  EffectInstance::spreadPreview()).
+- **Target axes**: out from / around the look's Aim target (the Stage
+  Shape centre), floor-plan distance and angle; no Aim look → the heads'
+  middle.
 - **As built:** `engine/src/spreadlayer.{h,cpp}` (pure; the phases), the
   instance sets each cell's `phase` (cycles, not wrapped) and
   `inputs._spread`; a script opts in with `effect.hostSpread = "<its own
   params>"`. Fifteen scripts take it: the dimmer/colour/pan-tilt phasers,
   native strobe, the amber/iris/UV/zoom pulses, orbit, diamond, figure 8,
-  Lissajous, rainbow, ballyhoo, gobo chase.
+  Lissajous, rainbow, ballyhoo, gobo chase; then Stage Shape (outline
+  place), drawn path and warm/cool.
 
 ## S4 — Control-surface automapping
 

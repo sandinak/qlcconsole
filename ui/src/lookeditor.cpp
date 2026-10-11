@@ -82,6 +82,7 @@
 #include "qlceventpos.h"
 #include "speedmasters.h"
 #include "spreadlayer.h"
+#include "spreadpreview.h"
 
 // VC XY pad works in DMX space [0..256); palette pan/tilt are degrees.
 static const qreal XY_MAX = 256.0;
@@ -2199,11 +2200,13 @@ void LookEditor::rebuildEffectDynWidget()
         QComboBox *axis = new QComboBox(row);
         axis->setObjectName(QStringLiteral("spreadAxis"));
         axis->addItems({ tr("In look order"), tr("Across columns"), tr("Down rows"),
-                         tr("Stage left to right"), tr("Front to back"), tr("By height") });
+                         tr("Stage left to right"), tr("Front to back"), tr("By height"),
+                         tr("Out from the target"), tr("Around the target") });
         axis->setCurrentIndex(int(hostSpread.axis));
         axis->setToolTip(tr("What the heads are put in order by: the look's list, the head "
-                            "layout's columns or rows, or where they stand on stage. Heads at "
-                            "the same place share a phase."));
+                            "layout's columns or rows, where they stand on stage, or how far "
+                            "out from / which way round the look's Aim target (a ripple, a "
+                            "sweep). Heads at the same place share a phase."));
         QComboBox *dir = new QComboBox(row);
         dir->setObjectName(QStringLiteral("spreadDirection"));
         dir->addItems({ tr("Forward"), tr("Reverse"), tr("Centre out"), tr("Ends in") });
@@ -2251,6 +2254,20 @@ void LookEditor::rebuildEffectDynWidget()
         rl->addWidget(blocks);
         rl->addStretch(1);
         dv->addWidget(row);
+
+        // The spread, seen: the look's heads coloured by phase.
+        if (m_contextScene != nullptr)
+        {
+            SpreadPreview *preview = new SpreadPreview(m_doc, m_contextScene->id(), m_paletteId,
+                                                       m_effectDynWidget);
+            preview->setVisible(hostSpread.isActive());
+            dv->addWidget(preview);
+            connect(this, &LookEditor::paletteValueChanged, preview, [preview](quint32) {
+                preview->refresh();
+            });
+            connect(amount, QOverload<double>::of(&QDoubleSpinBox::valueChanged), preview,
+                    [preview](double v) { preview->setVisible(v != 0); });
+        }
     }
 
     // --- Speed master (per look) ---

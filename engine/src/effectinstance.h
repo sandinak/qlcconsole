@@ -156,6 +156,23 @@ public:
      *  the loose fixtures when no group layout applies. */
     QList<EffectCell> effectiveCells(int &gridCols, int &gridRows) const;
 
+    /** A head as the spread preview draws it: where it stands (metres, on
+     *  the floor plan; its head-layout cell when nothing is placed) and its
+     *  phase in cycles. */
+    struct SpreadDot
+    {
+        QPointF plan;
+        int col = 0, row = 0;
+        double phase = 0;
+    };
+    /** Each head's spread, as the effect would get it now (the look
+     *  editor's preview). @p centre / @p hasCentre: the target it spreads
+     *  from, for the target axes. */
+    QList<SpreadDot> spreadPreview(QPointF *centre = nullptr, bool *hasCentre = nullptr) const;
+    /** The look's Aim target, the centre for spreading out from or round
+     *  it. False when the look has none. */
+    bool aimCentre(QVector3D *centre) const;
+
     /** Host scene's actuation level [0..1]: ramps 0→1 over the scene's fade-in,
      *  then holds at 1. Applied to the effect's intensity/colour output so the
      *  effect fires in sync with the scene rather than independent of it. */
@@ -239,6 +256,8 @@ private:
      *  set on the first tick, and again when its speed master changes. */
     mutable int      m_clockAssignment = -2;
     SpreadLayer::Settings m_spreadBuilt;    //!< what the cells' "phase" was worked out for
+    QVector3D        m_spreadCentre;        //!< ...and round which target
+    bool             m_spreadHadCentre = false;
     mutable double   m_startBeat = 0;
 
     /** The stage-laid grid of a multi-group look (effectiveCells()): placing

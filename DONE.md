@@ -6,6 +6,17 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-11 — S2/S3 finished: chases on a master, spread round a target, preview *(SHIPPED)*
+
+- A Beats chase on a speed master steps on the master's beats
+  (ChaserRunner); holds while paused.
+- Spread axes **out from** / **around** the look's Aim target
+  (`EffectInstance::aimCentre()`); recomputed as the target moves.
+- **SpreadPreview** in the look editor's Spread row (heads on the plan,
+  hue = phase, target cross), from `EffectInstance::spreadPreview()`.
+- Stage Shape, drawn path, warm/cool take the host spread (18 scripts).
+- Tests: spreadlayer (+2), speedmasters (+1), lookeditor (+1).
+
 ### 2026-10-11 — Spread layer (SPEED_SPREAD_DESIGN.md S3) *(SHIPPED)*
 
 - **`SpreadLayer`** (engine/src/spreadlayer.{h,cpp}): per-head phase in

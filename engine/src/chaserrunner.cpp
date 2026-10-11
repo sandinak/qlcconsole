@@ -27,6 +27,7 @@
 
 #include "chaserrunner.h"
 #include "speedmasters.h"
+#include <cmath>
 #include "mastertimer.h"
 #include "chaserstep.h"
 #include "qlcmacros.h"
@@ -795,9 +796,34 @@ bool ChaserRunner::write(MasterTimer *timer, QList<Universe *> universes)
 
     quint32 prevStepRoundElapsed = 0;
 
+    /* A beat: the main clock's -- or, for a chase on a speed master, that
+       master's (SPEED_SPREAD_DESIGN.md, S2), so the chase follows its tap
+       and rate and holds while it is paused. */
+    bool beat = false;
+    if (m_chaser->tempoType() == Function::Beats)
+    {
+        const int master = m_chaser->effectiveSpeedMaster();
+        double pos = 0, bpm = 0;
+        if (SpeedMasters::isMaster(master) && m_doc->speedMasters()->clockFor(master, &pos, &bpm))
+        {
+            const qint64 index = qint64(std::floor(pos));
+            if (m_masterBeat == std::numeric_limits<qint64>::min() || index < m_masterBeat)
+                m_masterBeat = index;           // counting from here
+            else if (index > m_masterBeat)
+            {
+                m_masterBeat = index;
+                beat = true;
+            }
+        }
+        else
+        {
+            beat = timer->isBeat();
+        }
+    }
+
     foreach (ChaserRunnerStep *step, m_runnerSteps)
     {
-        if (m_chaser->tempoType() == Function::Beats && timer->isBeat())
+        if (beat)
         {
             step->m_elapsedBeats += 1000;
             qDebug() << "[ChaserRunner] Function" << step->m_function->name() << "duration:" << step->m_duration << "beats:" << step->m_elapsedBeats;

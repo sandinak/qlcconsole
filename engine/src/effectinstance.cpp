@@ -846,6 +846,64 @@ EffectInstance::effectiveCells(int &gridCols, int &gridRows) const
     return cells;
 }
 
+bool EffectInstance::aimCentre(QVector3D *centre) const
+{
+    const MonitorProperties *mp = m_doc->monitorProperties();
+    Scene *sc = qobject_cast<Scene*>(m_doc->function(m_sceneId));
+    if (mp == nullptr || sc == nullptr)
+        return false;
+    for (quint32 spid : sc->palettes())
+    {
+        QLCPalette *ap = m_doc->palette(spid);
+        if (ap == nullptr || ap->type() != QLCPalette::Aim)
+            continue;
+        if (StageTarget *st = mp->stageTarget(ap->stageTargetId()))
+        {
+            *centre = st->position();
+            return true;                // first Aim look wins, as for Stage Shape
+        }
+    }
+    return false;
+}
+
+QList<EffectInstance::SpreadDot> EffectInstance::spreadPreview(QPointF *centre, bool *hasCentre) const
+{
+    QList<SpreadDot> dots;
+    QLCPalette *pal = m_doc->palette(m_effectPaletteId);
+    const MonitorProperties *mp = m_doc->monitorProperties();
+    const SpreadLayer::Settings spread = pal != nullptr ? SpreadLayer::fromParams(pal->effectParamValues())
+                                                        : SpreadLayer::Settings();
+    int cols = 0, rows = 0;
+    const QList<EffectCell> cells = effectiveCells(cols, rows);
+    QVector<SpreadLayer::Point> pts;
+    for (int i = 0; i < cells.size(); ++i)
+    {
+        SpreadLayer::Point p;
+        p.order = i;
+        p.col = cells.at(i).col;
+        p.row = cells.at(i).row;
+        p.pos = mp != nullptr ? mp->fixtureRigPosition(cells.at(i).fixtureId) : QVector3D();
+        pts << p;
+    }
+    QVector3D c;
+    const bool hc = SpreadLayer::needsCentre(spread.axis) && aimCentre(&c);
+    const QVector<double> ph = SpreadLayer::phases(pts, spread, hc ? &c : nullptr);
+    for (int i = 0; i < pts.size(); ++i)
+    {
+        SpreadDot d;
+        d.plan = QPointF(pts.at(i).pos.x(), pts.at(i).pos.y());
+        d.col = pts.at(i).col;
+        d.row = pts.at(i).row;
+        d.phase = ph.at(i);
+        dots << d;
+    }
+    if (centre != nullptr)
+        *centre = QPointF(c.x(), c.y());
+    if (hasCentre != nullptr)
+        *hasCentre = hc;
+    return dots;
+}
+
 QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCell> &cells,
                                             int gridCols, int gridRows)
 {
@@ -964,7 +1022,14 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
         const SpreadLayer::Settings spread = effectPal != nullptr
             ? SpreadLayer::fromParams(effectPal->effectParamValues()) : SpreadLayer::Settings();
         const bool onStage = spread.axis >= SpreadLayer::StageX;
-        if (rebuild || spread != m_spreadBuilt || (onStage && moved && spread.isActive()))
+        /* Out from / around a target: the look's Aim target (the one Stage
+           Shape centres on); without one, the middle of the heads. */
+        QVector3D centre;
+        const bool hasCentre = spread.isActive() && SpreadLayer::needsCentre(spread.axis)
+                               && aimCentre(&centre);
+        const bool centreMoved = hasCentre != m_spreadHadCentre || centre != m_spreadCentre;
+        if (rebuild || spread != m_spreadBuilt
+            || (onStage && spread.isActive() && (moved || centreMoved)))
         {
             QVector<SpreadLayer::Point> pts;
             pts.reserve(cells.size());
@@ -977,7 +1042,9 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
                 p.pos = m_facts.value(cells.at(i).fixtureId).pos;
                 pts << p;
             }
-            const QVector<double> ph = SpreadLayer::phases(pts, spread);
+            const QVector<double> ph = SpreadLayer::phases(pts, spread, hasCentre ? &centre : nullptr);
+            m_spreadCentre = centre;
+            m_spreadHadCentre = hasCentre;
             for (int i = 0; i < m_cellObjects.size() && i < ph.size(); ++i)
                 if (!m_cellObjects.at(i).isUndefined())
                     m_cellObjects[i].setProperty("phase", ph.at(i));

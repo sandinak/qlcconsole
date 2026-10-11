@@ -25,6 +25,8 @@
 #define private public                  // EffectInstance's cells and fixtures
 #include "effectinstance.h"
 #undef private
+#include "monitorproperties.h"
+#include "stagetarget.h"
 #include "fixturegroup.h"
 #include "effectscript.h"
 #include "spreadlayer.h"
@@ -142,6 +144,33 @@ void SpreadLayer_Test::anAxisPutsThemInItsOwnOrder()
     QCOMPARE(SpreadLayer::phases(grid, s), PHASES(0, 0, 0.5, 0.5));
 }
 
+void SpreadLayer_Test::outFromAndAroundATarget()
+{
+    // Four heads round a target at the origin, at different distances.
+    QVector<SpreadLayer::Point> pts = line(4);
+    pts[0].pos = QVector3D(0, -3, 0);       // downstage of it, far
+    pts[1].pos = QVector3D(1, 0, 0);        // to its +x, near
+    pts[2].pos = QVector3D(0, 2, 0);        // upstage, middling
+    pts[3].pos = QVector3D(-4, 0, 0);       // to its -x, furthest
+    const QVector3D target(0, 0, 0);
+    SpreadLayer::Settings s = settings(1);
+    s.axis = SpreadLayer::FromTarget;
+    // Nearest first: 1, 2, 0, 3.
+    QCOMPARE(SpreadLayer::phases(pts, s, &target), PHASES(0.5, 0, 0.25, 0.75));
+    // Round it from downstage towards +x: 0, 1, 2, 3.
+    s.axis = SpreadLayer::AroundTarget;
+    QCOMPARE(SpreadLayer::phases(pts, s, &target), PHASES(0, 0.25, 0.5, 0.75));
+    // Reverse runs the sweep the other way round.
+    s.direction = SpreadLayer::Reverse;
+    QCOMPARE(SpreadLayer::phases(pts, s, &target), PHASES(0.75, 0.5, 0.25, 0));
+    // No target: round the middle of them.
+    s.direction = SpreadLayer::Forward;
+    s.axis = SpreadLayer::FromTarget;
+    QCOMPARE(SpreadLayer::phases(pts, s).size(), 4);
+    QVERIFY(SpreadLayer::needsCentre(SpreadLayer::AroundTarget));
+    QVERIFY(!SpreadLayer::needsCentre(SpreadLayer::StageX));
+}
+
 void SpreadLayer_Test::theSettingsComeFromTheEffect()
 {
     QCOMPARE(SpreadLayer::fromParams({}), SpreadLayer::Settings());
@@ -200,6 +229,11 @@ void SpreadLayer_Test::everyScriptThatTakesItUsesIt()
                 grid.setProperty("rows", 1);
                 f.setProperty("grid", grid);
                 f.setProperty("aimAt", e->newObject());
+                QJSValue target = e->newObject();     // Stage Shape centres on it
+                target.setProperty("x", 0.0);
+                target.setProperty("y", 2.0);
+                target.setProperty("z", 0.0);
+                f.setProperty("sceneTarget", target);
                 f.setProperty("phase", phases.at(i));
                 fixtures.setProperty(quint32(i), f);
             }
@@ -229,7 +263,7 @@ void SpreadLayer_Test::everyScriptThatTakesItUsesIt()
                  qPrintable(file + ": fixture.phase is ignored: " + spread.join(" | ")));
         checked++;
     }
-    QVERIFY2(checked >= 15, qPrintable(QString("only %1 scripts take the host spread").arg(checked)));
+    QVERIFY2(checked >= 18, qPrintable(QString("only %1 scripts take the host spread").arg(checked)));
 }
 
 /* The instance hands each head its phase, and tells the script it's on. */
@@ -271,6 +305,62 @@ void SpreadLayer_Test::theHostSpreadReachesTheScript()
     QCOMPARE(inst.buildInputsObject().property("_spread").toBool(), true);
     pal->setEffectParamValue(SpreadLayer::paramName("Direction"), SpreadLayer::Reverse);
     QCOMPARE(phases(), PHASES(0.75, 0.5, 0.25, 0));
+}
+
+/* What the look editor draws is what the effect gets: each head's phase, and
+   the target it spreads round. */
+void SpreadLayer_Test::thePreviewSeesWhatTheEffectGets()
+{
+    Doc doc(this);
+    Scene *scene = new Scene(&doc);
+    for (int i = 0; i < 3; ++i)
+    {
+        Fixture *fx = new Fixture(&doc);
+        fx->setName(QString("Par %1").arg(i + 1));
+        fx->setChannels(1);
+        fx->setAddress(quint32(i));
+        QVERIFY(doc.addFixture(fx));
+        doc.monitorProperties()->setFixturePosition(fx->id(), 0, 0, QVector3D(1000.0f * (i + 1), 0, 0));
+        scene->addFixture(fx->id());
+    }
+    StageTarget *st = doc.monitorProperties()->addStageTarget();
+    st->setPosition(QVector3D(0, 0, 0));
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, &doc);
+    aim->setStageTargetId(st->id());
+    QVERIFY(doc.addPalette(aim));
+    scene->addPalette(aim->id());
+    QLCPalette *pal = new QLCPalette(QLCPalette::Effect, &doc);
+    QVERIFY(doc.addPalette(pal));
+    doc.addFunction(scene);
+    pal->setEffectParamValue(SpreadLayer::paramName("Amount"), 0.75);
+    pal->setEffectParamValue(SpreadLayer::paramName("Axis"), SpreadLayer::FromTarget);
+    pal->setEffectParamValue(SpreadLayer::paramName("Direction"), SpreadLayer::Reverse);
+
+    EffectInstance inst(&doc, scene->id(), pal->id());
+    QPointF centre;
+    bool hasCentre = false;
+    const QList<EffectInstance::SpreadDot> dots = inst.spreadPreview(&centre, &hasCentre);
+    QVERIFY(hasCentre);
+    QCOMPARE(centre, QPointF(0, 0));
+    QCOMPARE(dots.size(), 3);
+    // Furthest first, reversed: 0.5, 0.25, 0.
+    QCOMPARE(dots.at(0).phase, 0.5);
+    QCOMPARE(dots.at(2).phase, 0.0);
+    QCOMPARE(dots.at(2).plan, QPointF(3, 0));
+
+    // ...and the effect itself gets the same.
+    int cols = 0, rows = 0;
+    const QList<EffectInstance::EffectCell> cells = inst.effectiveCells(cols, rows);
+    const QJSValue arr = inst.buildFixturesArray(cells, cols, rows);
+    for (int i = 0; i < 3; ++i)
+        QCOMPARE(arr.property(quint32(i)).property("phase").toNumber(), dots.at(i).phase);
+
+    // Moving the target moves the ripple's centre.
+    st->setPosition(QVector3D(4, 0, 0));
+    const QJSValue moved = inst.buildFixturesArray(cells, cols, rows);
+    // The first head is now the furthest from it: reversed, it starts the cycle.
+    QCOMPARE(moved.property(0u).property("phase").toNumber(), 0.0);
+    QCOMPARE(moved.property(2u).property("phase").toNumber(), 0.5);
 }
 
 QTEST_MAIN(SpreadLayer_Test)
