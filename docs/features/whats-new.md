@@ -46,6 +46,8 @@ The latest changes, newest first. Each links to the guide with the detail.
 - **Faster rig view**: a 200-fixture show draws in about 9 ms a frame (it
   was 51).
 
+- **A truss between two stands** — the truss editor's **Other end on
+  stand**: it runs from one stand's top to the other's and follows them.
 - **Hangers on the 2D plot** — arm and hook, double-click to edit.
 - **A patch can be undone** — the Patch dialog's Apply is one ⌘Z, on the
   Fixtures tab or in the Studio.

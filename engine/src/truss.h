@@ -166,6 +166,16 @@ public:
     void setStandId(quint32 id) { m_standId = id; }
     bool isStandMounted() const { return m_standId != invalidId(); }
 
+    /** The stand its OTHER end rests on: a horizontal truss spanning two
+     *  stands (a goal post, a T-bar between two lifts) runs from the first
+     *  stand's top to this one's -- its direction and length follow the
+     *  stands (recomputeStandMounts()). Never for a vertical truss. */
+    quint32 endStandId() const { return m_endStandId; }
+    void setEndStandId(quint32 id) { m_endStandId = id; }
+    bool spansStands() const
+    { return isStandMounted() && m_endStandId != invalidId() && m_endStandId != m_standId
+             && m_type != Vertical; }
+
     /** A SOCK: a diffusing fabric sleeve over part of the truss, lit from
      *  within by the LED bars rigged Inside it -- they glow through it rather
      *  than throwing beams. @c sockColour is the fabric (white by default);
@@ -229,6 +239,7 @@ private:
     int       m_barRun = RunAlong;            ///< Along / Across / Drop
     float     m_barCrossShift = 0.0f;         ///< shift along the run (0 = centred)
     quint32   m_standId = invalidId();        ///< stand this truss stands on
+    quint32   m_endStandId = invalidId();     ///< stand its other end rests on
     bool      m_sock = false;                 ///< a fabric sleeve over it
     QColor    m_sockColour = QColor(Qt::white);
     float     m_sockFrom = 0.0f;              ///< metres along

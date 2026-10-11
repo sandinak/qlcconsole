@@ -10,11 +10,7 @@ under `~/.claude/.../memory/`.
 
 ## Small fixes and leftovers
 
-- **A horizontal truss on two stands** (Branson, 2026-10-11): a truss can
-  stand on ONE stand today ("On stand"); a horizontal one usually spans two
-  (goal-post / T-bar between two stands), its ends riding the stands' tops.
-  Never vertical. A tower is self-contained — no stand, no trusses on it —
-  but it carries hangers (it does already).
+(Nothing open right now.)
 
 ## Needs the real rig / hardware
 

@@ -177,6 +177,8 @@ bool Truss::loadXML(QXmlStreamReader &root)
     }
     if (attrs.hasAttribute(QStringLiteral("Stand")))
         m_standId = attrs.value(QStringLiteral("Stand")).toUInt();
+    if (attrs.hasAttribute(QStringLiteral("EndStand")))
+        m_endStandId = attrs.value(QStringLiteral("EndStand")).toUInt();
     m_sock = attrs.value(QStringLiteral("Sock")) == QLatin1String("1");
     if (attrs.hasAttribute(QStringLiteral("SockColour")))
         setSockColour(QColor(attrs.value(QStringLiteral("SockColour")).toString()));
@@ -224,6 +226,8 @@ bool Truss::saveXML(QXmlStreamWriter *doc) const
     }
     if (isStandMounted())
         doc->writeAttribute(QStringLiteral("Stand"), QString::number(m_standId));
+    if (isStandMounted() && m_endStandId != invalidId())
+        doc->writeAttribute(QStringLiteral("EndStand"), QString::number(m_endStandId));
     if (m_sock)
     {
         doc->writeAttribute(QStringLiteral("Sock"), QStringLiteral("1"));

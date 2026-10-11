@@ -42,6 +42,7 @@ private slots:
     void hangersAreOnThePlot();
     void aPatchCanBeUndone();
     void fixturesSitAlongAHorizontalPipe();
+    void theTrussEditorSpansTwoStands();
     void initTestCase();
     void cleanupTestCase();
 

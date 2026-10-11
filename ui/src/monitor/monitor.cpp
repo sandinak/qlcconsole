@@ -8225,6 +8225,36 @@ void Monitor::slotEditTruss(quint32 tid)
                            "the stand top and follows it."));
     form->addRow(tr("On stand:"), standCb);
 
+    /* Its other end on a second stand: a horizontal truss between two stands
+       (a goal post), its run and length following them. */
+    QComboBox *endStandCb = new QComboBox(&editDlg);
+    endStandCb->setObjectName(QStringLiteral("trussEndStand"));
+    endStandCb->addItem(tr("(none — its own length and direction)"), quint32(Stand::invalidId()));
+    for (Stand *st : m_props->stands())
+    {
+        endStandCb->addItem(st->name().isEmpty() ? tr("Stand %1").arg(st->id()) : st->name(), st->id());
+        if (st->id() == t->endStandId())
+            endStandCb->setCurrentIndex(endStandCb->count() - 1);
+    }
+    endStandCb->setToolTip(tr("A horizontal truss between two stands: its other end rests on this "
+                              "one, and its direction and length follow the two stands."));
+    form->addRow(tr("Other end on stand:"), endStandCb);
+    auto spanState = [=]() {
+        const bool horizontal = typeCb->currentIndex() == int(Truss::Horizontal);
+        const bool onStand = standCb->currentData().toUInt() != Stand::invalidId();
+        endStandCb->setEnabled(horizontal && onStand);
+        const bool spans = endStandCb->isEnabled()
+                           && endStandCb->currentData().toUInt() != Stand::invalidId()
+                           && endStandCb->currentData().toUInt() != standCb->currentData().toUInt();
+        // The stands set them.
+        lenSpin->setEnabled(!spans);
+        dirAngle->setEnabled(!spans);
+    };
+    connect(typeCb, QOverload<int>::of(&QComboBox::currentIndexChanged), &editDlg, [=](int) { spanState(); });
+    connect(standCb, QOverload<int>::of(&QComboBox::currentIndexChanged), &editDlg, [=](int) { spanState(); });
+    connect(endStandCb, QOverload<int>::of(&QComboBox::currentIndexChanged), &editDlg, [=](int) { spanState(); });
+    spanState();
+
     /* A sock: diffusing fabric over the truss, for LED bars rigged Inside it
        to glow through. Its colour (white unless told otherwise) and the
        stretch of the truss it covers. */
@@ -8553,8 +8583,11 @@ void Monitor::slotEditTruss(quint32 tid)
                                originZ->value() * fromDisp_e));
         const float radians = float(qDegreesToRadians(dirAngle->value()));
         t->setDirection(QPointF(qCos(radians), qSin(radians)));
-        // Stand this truss on a Stand (its origin then rides the stand top).
+        // Stand this truss on a Stand (its origin then rides the stand top),
+        // and its other end on another (it then spans them).
         t->setStandId(standCb->currentData().toUInt());
+        t->setEndStandId(endStandCb->isEnabled() ? endStandCb->currentData().toUInt()
+                                                 : quint32(Stand::invalidId()));
         m_props->recomputeStandMounts();
     }
 

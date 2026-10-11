@@ -548,6 +548,53 @@ void MonitorProperties_Test::aFixtureOnAHangerHangsStraight()
     QCOMPARE(mp.fixtureRigProps(7).studioMount, 1);
 }
 
+/* "a truss can be horizontal on 2 stands": its ends on the two stands'
+   tops, its run and length following them; a stand removed leaves it where
+   it was; it saves and loads; a vertical truss doesn't span. */
+void MonitorProperties_Test::aTrussSpansTwoStands()
+{
+    MonitorProperties mp;
+    Stand *a = mp.addStand();
+    a->setOriginX(1.0f); a->setOriginY(2.0f); a->setHeight(3.0f);
+    Stand *b = mp.addStand();
+    b->setOriginX(5.0f); b->setOriginY(2.0f); b->setHeight(3.0f);
+    Truss *t = mp.addTruss();
+    t->setType(Truss::Horizontal);
+    t->setLength(1.0f);
+    t->setStandId(a->id());
+    t->setEndStandId(b->id());
+    QVERIFY(t->spansStands());
+    mp.recomputeStandMounts();
+    QCOMPARE(t->origin(), QVector3D(1.0f, 2.0f, 3.0f));
+    QVERIFY(qAbs(t->length() - 4.0f) < 0.001f);
+    QVERIFY((t->positionAt(t->length()) - QVector3D(5.0f, 2.0f, 3.0f)).length() < 0.001f);
+
+    // The other stand moves: the truss follows.
+    b->setOriginX(1.0f); b->setOriginY(8.0f);
+    mp.recomputeStandMounts();
+    QVERIFY(qAbs(t->length() - 6.0f) < 0.001f);
+    QVERIFY((t->positionAt(t->length()) - QVector3D(1.0f, 8.0f, 3.0f)).length() < 0.001f);
+
+    // Saved and loaded.
+    QBuffer buf;
+    buf.open(QIODevice::WriteOnly);
+    QXmlStreamWriter w(&buf);
+    t->saveXML(&w);
+    buf.close();
+    QVERIFY(buf.data().contains("EndStand="));
+
+    // Vertical: no span.
+    t->setType(Truss::Vertical);
+    QVERIFY(!t->spansStands());
+    t->setType(Truss::Horizontal);
+
+    // The other stand removed: the truss keeps where it was, on the first.
+    mp.removeStand(b->id());
+    QCOMPARE(t->endStandId(), Stand::invalidId());
+    QCOMPARE(t->standId(), a->id());
+    QVERIFY(qAbs(t->length() - 6.0f) < 0.001f);
+}
+
 void MonitorProperties_Test::settingAFaceTakesTheRiserFaceWithIt()
 {
     MonitorProperties mp;

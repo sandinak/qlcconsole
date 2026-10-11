@@ -19097,3 +19097,52 @@ void Monitor_Test::fixturesSitAlongAHorizontalPipe()
     delete doc;
 }
 
+/* The truss editor's "Other end on stand": a horizontal truss on one stand
+   picks a second, and runs between them; the field is off for a vertical
+   truss. */
+void Monitor_Test::theTrussEditorSpansTwoStands()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Meters);
+    Stand *a = props->addStand();
+    a->setName("Stand A"); a->setOriginX(1.0f); a->setOriginY(2.0f); a->setHeight(2.5f);
+    Stand *b = props->addStand();
+    b->setName("Stand B"); b->setOriginX(4.0f); b->setOriginY(6.0f); b->setHeight(2.5f);
+    Truss *t = props->addTruss();
+    t->setType(Truss::Horizontal);
+    t->setStandId(a->id());
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        bool wasEnabled = false;
+        driveDialog([&](QWidget *dlg) {
+            QComboBox *end = dlg->findChild<QComboBox *>("trussEndStand");
+            if (end == nullptr)
+                return false;
+            wasEnabled = end->isEnabled();
+            end->setCurrentIndex(end->findData(b->id()));
+            return true;
+        });
+        mon.slotEditTruss(t->id());
+        QVERIFY2(wasEnabled, "a horizontal truss on a stand should offer its other end");
+        QVERIFY(t->spansStands());
+        QVERIFY2(qAbs(t->length() - 5.0f) < 0.01f, qPrintable(QString("length %1, the stands are 5 m apart").arg(t->length())));
+
+        // Vertical: not offered.
+        t->setEndStandId(Stand::invalidId());
+        t->setType(Truss::Vertical);
+        bool verticalEnabled = true;
+        driveDialog([&](QWidget *dlg) {
+            QComboBox *end = dlg->findChild<QComboBox *>("trussEndStand");
+            if (end == nullptr)
+                return false;
+            verticalEnabled = end->isEnabled();
+            return true;
+        }, false);
+        mon.slotEditTruss(t->id());
+        QVERIFY2(!verticalEnabled, "a vertical truss doesn't span stands");
+    }
+    delete doc;
+}
+

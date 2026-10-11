@@ -1546,8 +1546,12 @@ void MonitorProperties::removeStand(quint32 id)
             p->setStandId(Stand::invalidId());
     // …and any trusses that stood on it (they stay put at their last origin).
     foreach (Truss *t, m_trusses)
+    {
         if (t->standId() == id)
             t->setStandId(Stand::invalidId());
+        if (t->endStandId() == id)
+            t->setEndStandId(Stand::invalidId());   // the other end stays where it was
+    }
     delete m_stands.take(id);
 }
 
@@ -1583,6 +1587,20 @@ void MonitorProperties::recomputeStandMounts()
         if (s == nullptr)
             continue;
         t->setOrigin(s->topPos());
+        /* Spanning two stands: from this one's top to the other's -- the
+           truss's run and length follow them, at the first stand's height
+           (a truss lies level; two stands at different heights still meet it
+           at the first one's). */
+        Stand *e = t->spansStands() ? m_stands.value(t->endStandId(), nullptr) : nullptr;
+        if (e == nullptr)
+            continue;
+        const QVector3D a = s->topPos(), b = e->topPos();
+        const QPointF run(double(b.x() - a.x()), double(b.y() - a.y()));
+        const double len = qSqrt(run.x() * run.x() + run.y() * run.y());
+        if (len < 0.1)
+            continue;
+        t->setDirection(run / len);
+        t->setLength(float(len));
     }
 }
 

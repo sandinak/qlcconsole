@@ -129,8 +129,13 @@ drapes):
   truss, or free-standing) and a **house electric** (horizontal pipe, same
   object with an orientation flag). Fixtures mount up it at a height and
   facing angle.
-- **Stand** — a placeable base a pipe stands on; the pipe follows if the
-  stand moves.
+- **Stand** — a placeable base a pipe or a truss stands on; what's on it
+  follows if the stand moves. A **horizontal truss between two stands** (a
+  goal post, a T-bar between two lifts): in the truss's editor, **On stand**
+  picks one and **Other end on stand** the other — the truss then runs from
+  the first stand's top to the second's, its direction and length set by
+  them and following them as either moves. (Not for a vertical truss; a
+  tower stands on the floor, on its own, and carries hangers.)
 - **StagePlatform** — risers, decks, steps. Its top can be Solid, Clear
   (translucent, so fixtures mounted inside show through), or Open (no top
   face at all). Platforms can stack on top of each other, deriving their
