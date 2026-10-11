@@ -146,6 +146,7 @@ add_library(${module_name}
     networkreportdialog.cpp networkreportdialog.h
     networktopologydialog.cpp networktopologydialog.h
     patchinventorydialog.cpp patchinventorydialog.h
+    helpbrowser.cpp helpbrowser.h
     universecombo.cpp universecombo.h
     powerdistributiondialog.cpp powerdistributiondialog.h
     powerdistributionwidget.cpp powerdistributionwidget.h
@@ -249,13 +250,13 @@ target_link_libraries(${module_name} PUBLIC
 # Add resources and RGB Script deps
 if(QT_VERSION_MAJOR GREATER 5)
     target_link_libraries(${module_name} PUBLIC Qt${QT_MAJOR_VERSION}::Qml)
-    qt_add_resources(qlcplusui_resource_files "qlcui.qrc")
+    qt_add_resources(qlcplusui_resource_files "qlcui.qrc" "help.qrc")
 else()
     target_link_libraries(${module_name} PUBLIC Qt${QT_MAJOR_VERSION}::Script)
     # EffectScript (via lookeditor) uses QJSEngine; link privately so
     # QT_QML_LIB doesn't leak to downstream test binaries.
     target_link_libraries(${module_name} PRIVATE Qt${QT_MAJOR_VERSION}::Qml)
-    qt5_add_resources(qlcplusui_resource_files "qlcui.qrc")
+    qt5_add_resources(qlcplusui_resource_files "qlcui.qrc" "help.qrc")
 endif()
 
 target_sources(${module_name} PRIVATE ${qlcplusui_resource_files})

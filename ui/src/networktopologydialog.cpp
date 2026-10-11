@@ -42,6 +42,7 @@ NetworkTopologyDialog::NetworkTopologyDialog(Doc *doc, int selectNode, QWidget *
     , m_row(-1)
     , m_loading(false)
 {
+    setProperty("helpTopic", QStringLiteral("lighting-studio.md#network-nodes-and-cable-runs"));
     setWindowTitle(tr("Network Topology"));
     resize(880, 560);
 

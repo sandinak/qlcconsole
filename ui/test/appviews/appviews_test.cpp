@@ -36,6 +36,7 @@
 #define protected public
 #include "app.h"
 #include "functionmanager.h"
+#include "helpbrowser.h"
 #undef protected
 #undef private
 
@@ -205,6 +206,54 @@ void AppViews_Test::functionsOpensFromTheWindowMenuNotATab()
     for (int i = 0; i < tabs->count(); ++i)
         QCOMPARE(tabs->tabText(i), tabs->tabBar()->tabData(i).toString());
     m_app->setTabLabelMode(App::TabIconAndText);
+}
+
+/* F1 opens the guide for what is in front: each view its own, a dialog or
+   view inside one its own, and the Help menu lists the guides. */
+void AppViews_Test::helpOpensOnWhatIsInFront()
+{
+    QTabWidget *tabs = m_app->m_tab;
+    QHash<QString, QString> want = {
+        { "Connections", "other-improvements.md#connections--patch" },
+        { "Fixtures", "fixture-manager.md" },
+        { "Lighting Studio", "lighting-studio.md" },
+        { "Programming", "programming-tab.md" },
+        { "Virtual Console", "getting-started.md#running-the-show" } };
+    for (int i = 0; i < tabs->count(); ++i)
+    {
+        const QString label = tabs->tabBar()->tabData(i).toString();
+        if (!want.contains(label))
+            continue;
+        tabs->setCurrentIndex(i);
+        QCOMPARE(m_app->helpTopicFor(tabs->widget(i)), want.value(label));
+        want.remove(label);
+    }
+    QVERIFY2(want.isEmpty(), qPrintable("no tab for: " + want.keys().join(", ")));
+    QCOMPARE(m_app->helpTopicFor(FunctionManager::instance()), QString("other-improvements.md#window-menu"));
+
+    // Something inside a view that names its own topic wins over the view.
+    QWidget *inner = new QWidget(tabs->currentWidget());
+    inner->setProperty("helpTopic", QStringLiteral("effects.md"));
+    QWidget *deeper = new QWidget(inner);
+    QCOMPARE(m_app->helpTopicFor(deeper), QString("effects.md"));
+    delete inner;
+
+    QVERIFY(m_app->m_helpContextAction != nullptr);
+    QVERIFY(m_app->m_helpContextAction->shortcuts().contains(QKeySequence(Qt::Key_F1)));
+    QMenu *help = m_app->menuBar()->findChild<QMenu *>("helpMenu");
+    QVERIFY(help != nullptr);
+    QStringList items;
+    foreach (QAction *a, help->actions())
+        items << a->text();
+    for (const char *want2 : { "Getting Started", "What's New", "Keyboard and Mouse", "Troubleshooting" })
+        QVERIFY2(items.contains(QString(want2)), qPrintable(QString("Help lacks %1: %2").arg(want2, items.join(" | "))));
+
+    // And it opens, on the topic.
+    HelpBrowser *browser = HelpBrowser::open(QStringLiteral("lighting-studio.md#mounting-a-fixture"));
+    QVERIFY(browser != nullptr && browser->isVisible());
+    QCOMPARE(browser->currentFile(), QString("lighting-studio.md"));
+    QCOMPARE(browser->currentHeading(), QString("Mounting a fixture"));
+    browser->close();
 }
 
 void AppViews_Test::theRigOverviewOpensWithoutTakingYouToTheStudio()

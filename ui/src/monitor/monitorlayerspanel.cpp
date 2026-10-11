@@ -158,6 +158,7 @@ MonitorLayersPanel::MonitorLayersPanel(Doc *doc, MonitorGraphicsView *view, QWid
     , m_doc(doc)
     , m_view(view)
 {
+    setProperty("helpTopic", QStringLiteral("other-improvements.md#layers-panel"));
     m_props = m_doc->monitorProperties();
 
     // Floor width so the splitter can never render the panel at zero px.

@@ -45,6 +45,7 @@ private slots:
      *  Overview is a window of its own; opening it leaves the tab alone. */
     void theWindowMenuFindsAndPutsBackBrokenOutViews();
     void functionsOpensFromTheWindowMenuNotATab();
+    void helpOpensOnWhatIsInFront();
     void theRigOverviewOpensWithoutTakingYouToTheStudio();
 
     /** "fetch and CACHE .. we cannot have remote stuff for a showfile on a

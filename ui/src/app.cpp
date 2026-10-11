@@ -86,6 +86,7 @@
 #include "rgbscriptscache.h"
 #include "videoprovider.h"
 #include "qlcconfig.h"
+#include "helpbrowser.h"
 #include "fixturegroup.h"
 #include "qlcfile.h"
 #include "apputil.h"
@@ -461,6 +462,18 @@ void App::init()
         w->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
         const int idx = m_tab->addTab(w, icon, text);
         m_tabOriginals.append(qMakePair(text, icon));
+        // F1 on this view opens its guide (helpTopicFor()).
+        static const QHash<QString, QString> guide = {
+            { QStringLiteral("Connections"),     QStringLiteral("other-improvements.md#connections--patch") },
+            { QStringLiteral("Fixtures"),        QStringLiteral("fixture-manager.md") },
+            { QStringLiteral("Lighting Studio"), QStringLiteral("lighting-studio.md") },
+            { QStringLiteral("Functions"),       QStringLiteral("other-improvements.md#window-menu") },
+            { QStringLiteral("Programming"),     QStringLiteral("programming-tab.md") },
+            { QStringLiteral("Shows"),           QStringLiteral("getting-started.md#running-the-show") },
+            { QStringLiteral("Virtual Console"), QStringLiteral("getting-started.md#running-the-show") },
+            { QStringLiteral("Simple Desk"),     QStringLiteral("getting-started.md#running-the-show") } };
+        if (!w->property("helpTopic").isValid())
+            w->setProperty("helpTopic", guide.value(text, QStringLiteral("getting-started.md")));
         // Stored as tab data (travels with the tab through detach/reattach's
         // removeTab()/insertTab(), unlike m_tabOriginals' fixed construction-
         // order indexing) so the window title can find the right label
@@ -1658,8 +1671,16 @@ void App::initActions()
 
     m_controlPanicAction->setMenu(m_fadeAndStopMenu);
 
-    /* Help actions */
-    m_helpIndexAction = new QAction(QIcon(":/help.png"), tr("&Index"), this);
+    /* Help actions. The app's own guides (HelpBrowser), opened on what is
+       in front; the stock QLC+ reference, online, kept for what is unchanged
+       from it. */
+    m_helpContextAction = new QAction(QIcon(":/help.png"), tr("qlcconsole &Help"), this);
+    m_helpContextAction->setShortcuts({ QKeySequence(Qt::Key_F1), QKeySequence(QKeySequence::HelpContents) });
+    m_helpContextAction->setShortcutContext(Qt::ApplicationShortcut);
+    m_helpContextAction->setToolTip(tr("Help on what you're looking at"));
+    connect(m_helpContextAction, &QAction::triggered, this, &App::slotHelpContext);
+
+    m_helpIndexAction = new QAction(tr("QLC+ Reference (online)"), this);
     m_helpIndexAction->setShortcut(QKeySequence("SHIFT+F1"));
     connect(m_helpIndexAction, SIGNAL(triggered(bool)), this, SLOT(slotHelpIndex()));
 
@@ -1973,6 +1994,22 @@ void App::initMenuBar()
 
     /* ---- Help ---- */
     QMenu* helpMenu = mb->addMenu(tr("&Help"));
+    helpMenu->setObjectName(QStringLiteral("helpMenu"));
+    helpMenu->addAction(m_helpContextAction);
+    helpMenu->addSeparator();
+    const QList<QPair<QString, QString> > guides = {
+        { tr("Getting Started"),    QStringLiteral("getting-started.md") },
+        { tr("What's New"),         QStringLiteral("whats-new.md") },
+        { tr("Keyboard and Mouse"), QStringLiteral("shortcuts.md") },
+        { tr("Effects"),            QStringLiteral("effects.md") },
+        { tr("Troubleshooting"),    QStringLiteral("troubleshooting.md") },
+        { tr("All Guides"),         QStringLiteral("README.md") } };
+    for (const auto &g : guides)
+    {
+        const QString topic = g.second;
+        helpMenu->addAction(g.first, this, [topic]() { HelpBrowser::open(topic); });
+    }
+    helpMenu->addSeparator();
     helpMenu->addAction(m_helpIndexAction);
     helpMenu->addAction(m_helpAboutAction);         // → app menu (About) on macOS
 }
@@ -2936,6 +2973,36 @@ void App::slotReattachContext()
 /*****************************************************************************
  * Help action slots
  *****************************************************************************/
+
+QString App::helpTopicFor(QWidget *w) const
+{
+    /* The nearest "helpTopic" up from what has focus -- a dialog, a view, a
+       tab -- else, in the main window, the tab on screen. */
+    for (QWidget *p = w; p != nullptr; p = p->parentWidget())
+    {
+        if (HelpBrowser *help = qobject_cast<HelpBrowser *>(p))
+            return help->currentFile();
+        const QVariant topic = p->property("helpTopic");
+        if (topic.isValid() && !topic.toString().isEmpty())
+            return topic.toString();
+    }
+    if (m_tab != nullptr && m_tab->currentWidget() != nullptr
+        && (w == nullptr || w->window() == this))
+    {
+        const QVariant topic = m_tab->currentWidget()->property("helpTopic");
+        if (topic.isValid())
+            return topic.toString();
+    }
+    return QStringLiteral("getting-started.md");
+}
+
+void App::slotHelpContext()
+{
+    QWidget *w = QApplication::focusWidget();
+    if (w == nullptr)
+        w = QApplication::activeWindow();
+    HelpBrowser::open(helpTopicFor(w));
+}
 
 void App::slotHelpIndex()
 {

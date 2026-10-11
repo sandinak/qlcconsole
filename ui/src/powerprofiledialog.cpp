@@ -156,6 +156,7 @@ PowerProfileDialog::PowerProfileDialog(Doc *doc, const QList<quint32> &fids, QWi
     , m_doc(doc)
     , m_fids(fids)
 {
+    setProperty("helpTopic", QStringLiteral("other-improvements.md#a-fixtures-maximum-draw"));
     setWindowTitle(fids.size() > 1 ? tr("Power — %n fixtures", "", fids.size()) : tr("Power"));
     /* Filled from one that has been measured, wherever it is in the
        selection -- not from whichever came first, which may have none. */
@@ -249,6 +250,7 @@ PowerMeasureDialog::PowerMeasureDialog(Doc *doc, const QList<quint32> &fids, QWi
     , m_fixture(fids.isEmpty() ? nullptr : doc->fixture(fids.first()))
     , m_universe(Universe::invalid())
 {
+    setProperty("helpTopic", QStringLiteral("other-improvements.md#a-fixtures-maximum-draw"));
     setWindowTitle(tr("Measure Power — %1").arg(m_fixture != nullptr ? m_fixture->name() : QString()));
 
     // The states to read.

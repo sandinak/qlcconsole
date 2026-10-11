@@ -35,6 +35,7 @@
 
 #include <QDebug>
 #include "programmingmanager.h"
+#include "helpbrowser.h"
 #include "programmercontroller.h"
 #include "functionstreewidget.h"
 #include "fixturegroupsource.h"
@@ -3027,8 +3028,13 @@ void ProgrammingManager::showGuide(QWidget *parent)
         "set how the whole look arrives and leaves — a wipe across the stage, "
         "from the centre, a dissolve, along each bar — instead of the scene's "
         "fade. <i>Edge</i> is how soft the line is.</p>"
-        "<p>Reopen this any time from <i>How this works</i>.</p>"));
+        "<p>Reopen this any time from <i>How this works</i>, or press F1 for "
+        "the whole guide.</p>"));
+    QPushButton *more = box.addButton(tr("Open the Full Guide"), QMessageBox::HelpRole);
+    box.addButton(QMessageBox::Ok);
     box.exec();
+    if (box.clickedButton() == more)
+        HelpBrowser::open(QStringLiteral("programming-tab.md"));
 }
 
 void ProgrammingManager::slotButtonAction(const QString &action)

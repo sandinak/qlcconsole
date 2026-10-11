@@ -2248,6 +2248,7 @@ void Monitor::showStageOverview()
     });
     dlg.setAttribute(Qt::WA_DeleteOnClose);
     dlg.setWindowTitle(tr("Rig Overview"));
+    dlg.setProperty("helpTopic", QStringLiteral("lighting-studio.md#angled--the-free-3d-view"));
     // ⌘W closes it like any other window; ⇧⌘R (toggleStageOverview()) too.
     QShortcut *closeKey = new QShortcut(QKeySequence::Close, dlgPtr);
     connect(closeKey, &QShortcut::activated, dlgPtr, &QDialog::close);
@@ -8980,6 +8981,7 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     {
         QDialog dlg(this);
         dlg.setWindowTitle(tr("Fixture Properties — %n fixtures", "", fids.count()));
+        dlg.setProperty("helpTopic", QStringLiteral("lighting-studio.md#mounting-a-fixture"));
         QVBoxLayout *vl = new QVBoxLayout(&dlg);
         QLabel *head = new QLabel(tr("<b>%1 fixtures.</b> A row they differ on reads "
                                      "“mixed”; set it, and it is set on all of them.")
@@ -9076,6 +9078,7 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
 
     QDialog dlg(this);
     dlg.setWindowTitle(tr("Fixture Properties — %1").arg(fxItem->name()));
+    dlg.setProperty("helpTopic", QStringLiteral("lighting-studio.md#mounting-a-fixture"));
     QVBoxLayout *vl = new QVBoxLayout(&dlg);
     QLineEdit *nameEdit = nullptr;
 

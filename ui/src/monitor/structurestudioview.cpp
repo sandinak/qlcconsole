@@ -71,6 +71,9 @@ StructureStudioView::StructureStudioView(Doc *doc, Kind kind, quint32 id, QWidge
     , m_kind(kind)
     , m_id(id)
 {
+    // F1: the whole rig's guide section, or mounting for a structure's editor.
+    setProperty("helpTopic", kind == StageKind ? QStringLiteral("lighting-studio.md#angled--the-free-3d-view")
+                                               : QStringLiteral("lighting-studio.md#mounting-a-fixture"));
     setMinimumSize(360, 320);
     setMouseTracking(true);
     setFocusPolicy(Qt::StrongFocus);

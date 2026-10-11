@@ -324,6 +324,10 @@ public slots:
      *  to its tab if it is docked, or raise its own window if it has been
      *  detached. */
     void showContext(const QString &tabLabel);
+    /** The help topic for @p w ("lighting-studio.md#mounting-a-fixture"):
+     *  the nearest "helpTopic" property up its parents, else the tab on
+     *  screen's, else Getting Started. */
+    QString helpTopicFor(QWidget *w) const;
     /** Take a view off the tab bar, there to open from the Window menu in a
      *  window of its own (showContext()); closing that window puts it away
      *  again. Functions lives this way. */
@@ -347,6 +351,8 @@ public slots:
     void slotReattachContext();
 
     void slotHelpIndex();
+    /** F1: the help on what is in front (helpTopicFor()). */
+    void slotHelpContext();
     void slotHelpAbout();
 
     void slotRecentFileClicked(QAction *recent);
@@ -392,6 +398,7 @@ private:
     QAction* m_appSettingsAction;
 
     QAction* m_helpIndexAction;
+    QAction* m_helpContextAction = nullptr;
     QAction* m_helpAboutAction;
     QAction* m_quitAction;
     QMenu* m_fileOpenMenu;

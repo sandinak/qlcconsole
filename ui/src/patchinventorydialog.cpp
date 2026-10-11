@@ -66,6 +66,7 @@ PatchInventoryDialog::PatchInventoryDialog(Doc *doc, const QList<quint32> &fixtu
     , m_placeHow(NULL)
     , m_filling(false)
 {
+    setProperty("helpTopic", QStringLiteral("fixture-manager.md#patching-the-patch-dialog"));
     resize(960, 560);
 
     foreach (quint32 id, fixtureIds)
