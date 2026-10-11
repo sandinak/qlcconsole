@@ -10,19 +10,19 @@ under `~/.claude/.../memory/`.
 
 ## Small fixes and leftovers
 
-- **A tower on a stand?** A truss can stand on a stand (its editor's "On
-  stand"); a tower can't. Ask Branson whether that's wanted at all.
-- **Front view: moving things relative to a truss** — investigated
-  2026-09-05, not fixed; needs Branson to say which case he meant (DONE.md,
-  "Front (elevation) view: moving things relative to a truss"). In Front /
-  Side only a fixture on a truss drags (along it); one on a pipe or tower,
-  or a bar hung off a horizontal truss, doesn't.
+- **A horizontal truss on two stands** (Branson, 2026-10-11): a truss can
+  stand on ONE stand today ("On stand"); a horizontal one usually spans two
+  (goal-post / T-bar between two stands), its ends riding the stands' tops.
+  Never vertical. A tower is self-contained — no stand, no trusses on it —
+  but it carries hangers (it does already).
 
 ## Needs the real rig / hardware
 
 - **Rig test pass** — run `RIG_TEST_PLAN.md`, fix any ❌ (the gate on the
   freeze list).
-- **WLED on a real device** on Branson's Wi-Fi, the live view included;
+- **WLED on a real device** — Branson tested some 2026-10-11: hit or miss,
+  probably the WLED controller rather than the interface; needs more
+  testing. Still to do: the live view included;
   effect / palette names read from the device (`/json/eff`, `/json/pal`);
   the WLED effect import (Branson considering); check the Breathe/Chase ports
   against WLED's FX.cpp.
@@ -33,7 +33,9 @@ under `~/.claude/.../memory/`.
   the code looked right, root cause never confirmed (DONE.md, 2026-09-05).
 - **Verify what shipped without a rig check** — DONE.md marks each such
   entry "not yet Branson-verified"; the lists from 2026-09-05 to 2026-09-26
-  in particular.
+  in particular. **Verified on the rig 2026-10-10/11:** a real step, front
+  and top fixtures, with the power management; two-arm moving heads. The
+  rest isn't rigged yet.
 - **Hardware checks from the Connections work** — see "Connections tab —
   remaining" below (off-segment unicast probe, a hand-declared target
   actually passing DMX, reachability on `ender`).
@@ -801,6 +803,14 @@ rig edits, bulk repatching, cross-show consistency checks.
   chosen look"; a monitor context-menu Mark action. *(from the cue-policy discussion)*
 
 ## Backlog — not started
+
+### Power by intensity, per circuit (Branson, 2026-10-11, long term) — not started
+A fixture can now be held to a maximum draw (its measured profile, the
+limiter scaling its output). Take it a step further: control the power on
+a whole **circuit** by intensity — keep everything on a circuit under its
+breaker by scaling the fixtures on it together, rather than capping each
+one on its own. Builds on PowerProfile/PowerModel and the power
+distribution (circuits) already in the show.
 
 ### App-wide UI zoom, Cmd+/Cmd- (2026-09-03, long-term, not prioritized) — not started
 Branson: VS Code-style zoom — Cmd+/Cmd- (and presumably Cmd+0 to reset)
