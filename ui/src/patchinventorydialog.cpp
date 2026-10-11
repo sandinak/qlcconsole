@@ -27,6 +27,7 @@
 #include "qlcfixturemode.h"
 #include "qlcfixturedef.h"
 #include "patchinventorydialog.h"
+#include "monitor.h"
 #include "universecombo.h"
 #include "networktopology.h"
 #include "inputoutputmap.h"
@@ -696,9 +697,15 @@ void PatchInventoryDialog::refreshConflicts()
 
 void PatchInventoryDialog::accept()
 {
+    /* Undoable (⌘Z on the plot or the Fixtures tab), wherever this was
+       opened from: one rig undo step for the whole patch. */
+    Monitor *mon = Monitor::instance();
+    const QByteArray before = mon != nullptr ? mon->rigSnapshot() : QByteArray();
     PatchPlanner pp(m_doc);
     QStringList problems;
     const int done = pp.apply(currentPlan(), &problems);
+    if (done > 0 && mon != nullptr)
+        mon->pushRigUndo(before);
     if (done == 0 && !problems.isEmpty())
     {
         // Nothing changed: stay open, so the plan can be fixed and tried again.

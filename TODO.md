@@ -10,13 +10,13 @@ under `~/.claude/.../memory/`.
 
 ## Small fixes and leftovers
 
-- **Stage objects, leftovers:** a Stand carrying a truss or tower (pipes
-  only today); fixtures at their own offsets along a horizontal pipe.
-- **No undo for a re-address** in the Patch dialog (the dialog is the
-  confirm step; the structure editor's ⌘Z covers rig props only).
+- **A tower on a stand?** A truss can stand on a stand (its editor's "On
+  stand"); a tower can't. Ask Branson whether that's wanted at all.
 - **Front view: moving things relative to a truss** — investigated
   2026-09-05, not fixed; needs Branson to say which case he meant (DONE.md,
-  "Front (elevation) view: moving things relative to a truss").
+  "Front (elevation) view: moving things relative to a truss"). In Front /
+  Side only a fixture on a truss drags (along it); one on a pipe or tower,
+  or a bar hung off a horizontal truss, doesn't.
 
 ## Needs the real rig / hardware
 

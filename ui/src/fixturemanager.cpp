@@ -62,6 +62,7 @@
 #include "addchannelsgroup.h"
 #include <functional>
 #include "fixturemanager.h"
+#include <QShortcut>
 #include "fixtureremap.h"
 #include "addrgbpanel.h"
 #include "addfixture.h"
@@ -135,6 +136,15 @@ FixtureManager::FixtureManager(QWidget* parent, Doc* doc)
     s_instance = this;
 
     Q_ASSERT(doc != NULL);
+
+    /* ⌘Z here undoes the rig's last change -- a patch included (the Patch
+       dialog records one undo step for what it applied). */
+    QShortcut *undo = new QShortcut(QKeySequence::Undo, this);
+    undo->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(undo, &QShortcut::activated, this, []() {
+        if (Monitor *mon = Monitor::instance())
+            mon->undo();
+    });
 
     new QVBoxLayout(this);
     layout()->setContentsMargins(0, 0, 0, 0);

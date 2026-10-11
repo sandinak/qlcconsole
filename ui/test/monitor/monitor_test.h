@@ -40,6 +40,8 @@ private slots:
     void fixturesAreStoodOnTheDeckUnderThem();
     void theNetworkIsUndoneWithTheRig();
     void hangersAreOnThePlot();
+    void aPatchCanBeUndone();
+    void fixturesSitAlongAHorizontalPipe();
     void initTestCase();
     void cleanupTestCase();
 

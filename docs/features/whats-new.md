@@ -47,6 +47,10 @@ The latest changes, newest first. Each links to the guide with the detail.
   was 51).
 
 - **Hangers on the 2D plot** — arm and hook, double-click to edit.
+- **A patch can be undone** — the Patch dialog's Apply is one ⌘Z, on the
+  Fixtures tab or in the Studio.
+- A **house electric** (horizontal pipe) lists its fixtures by distance
+  **along** it, up to its length, rather than a boom's height.
 - The **Network Topology** dialog works like every rig dialog: the plot
   follows as you edit, Cancel puts the network back, OK is one undo.
 - The Virtual Console's **button matrix** and **animation** keys moved to

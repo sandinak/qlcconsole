@@ -195,6 +195,8 @@ public:
     void restoreRig(const QByteArray &snap);
     /** One undo step back to @p before, if the rig is not as it was. */
     void pushRigUndo(const QByteArray &before);
+    /** Undo the rig's last change -- a move, a dialog's edit, a patch. */
+    void undo();
 
 protected:
     /** Create a new MonitorFixture* and append it to the layout */

@@ -130,8 +130,10 @@ opens on a proposal, which you review and edit before anything changes:
 - **Re-plan** throws away your edits and proposes again. **Apply** patches
   and moves everything at once, all or nothing.
 
-Moving an already-patched fixture is Design mode only. There's no undo for
-a re-address — the dialog is the confirmation step.
+Moving an already-patched fixture is Design mode only. **Apply is one undo
+step**: ⌘Z — on the Fixtures tab or in the Lighting Studio — puts every
+fixture it moved back where it was, and returns any it patched from the
+inventory to it.
 
 **Dropping on a universe.** Drag fixtures, or a fixture group, onto a
 universe row: the Patch dialog opens with them packed into that universe,

@@ -1203,9 +1203,13 @@ QByteArray Monitor::rigSnapshot() const
         QXmlStreamWriter w(&network);
         m_doc->networkTopology()->saveXML(&w);
     }
+    // And where each fixture is patched, so a re-address can be undone.
+    QHash<quint32, QList<quint32> > patch;
+    foreach (Fixture *fx, m_doc->fixtures())
+        patch.insert(fx->id(), { fx->isPatched() ? 1u : 0u, fx->universe(), fx->address() });
     QByteArray out;
     QDataStream ds(&out, QIODevice::WriteOnly);
-    ds << m_props->snapshot(m_doc) << names << power << network;
+    ds << m_props->snapshot(m_doc) << names << power << network << patch;
     return out;
 }
 
@@ -1221,8 +1225,30 @@ void Monitor::restoreRig(const QByteArray &snap)
         ds >> power;
     if (!ds.atEnd())
         ds >> network;
+    QHash<quint32, QList<quint32> > patch;
+    if (!ds.atEnd())
+        ds >> patch;
     if (props.isEmpty())
         return;
+    /* The patch: unpatch what wasn't, then put the rest back where it was --
+       as one step, so fixtures can swap or shift onto each other's channels. */
+    {
+        QList<Doc::FixturePatch> back;
+        for (auto it = patch.constBegin(); it != patch.constEnd(); ++it)
+        {
+            Fixture *fx = m_doc->fixture(it.key());
+            if (fx == nullptr || it.value().size() < 3)
+                continue;
+            const bool wasPatched = it.value().at(0) != 0;
+            if (!wasPatched && fx->isPatched())
+                m_doc->unpatchFixture(fx->id());
+            else if (wasPatched && (!fx->isPatched() || fx->universe() != it.value().at(1)
+                                    || fx->address() != it.value().at(2)))
+                back << Doc::FixturePatch{ fx->id(), it.value().at(1), it.value().at(2) };
+        }
+        if (!back.isEmpty())
+            m_doc->patchFixtures(back);
+    }
     if (!network.isEmpty())
     {
         QXmlStreamReader r(network);
@@ -1258,6 +1284,12 @@ void Monitor::restoreRig(const QByteArray &snap)
         m_graphicsView->refreshFixtureCountBadges();
     }
     m_doc->setModified();
+}
+
+void Monitor::undo()
+{
+    if (m_graphicsView != nullptr)
+        m_graphicsView->undoLastMove();
 }
 
 void Monitor::pushRigUndo(const QByteArray &before)
@@ -6631,9 +6663,15 @@ void Monitor::slotEditPipe(quint32 bid)
     QList<QDoubleSpinBox *> offSpins, angSpins;
     if (!mounted.isEmpty())
     {
-        vl->addWidget(new QLabel(tr("Fixtures on this pipe (height up the pipe · facing):"), &dlg));
+        /* Up a boom, along a house electric: each fixture at its own place on
+           it, no further than the pipe goes. */
+        const bool across = !b->isVertical();
+        vl->addWidget(new QLabel(across ? tr("Fixtures on this pipe (distance along the pipe · facing):")
+                                        : tr("Fixtures on this pipe (height up the pipe · facing):"), &dlg));
         QTableWidget *tbl = new QTableWidget(mounted.size(), 3, &dlg);
-        tbl->setHorizontalHeaderLabels(QStringList() << tr("Fixture") << tr("Height") << tr("Angle"));
+        tbl->setObjectName(QStringLiteral("pipeFixtures"));
+        tbl->setHorizontalHeaderLabels(QStringList() << tr("Fixture")
+                                       << (across ? tr("Along") : tr("Height")) << tr("Angle"));
         tbl->verticalHeader()->setVisible(false);
         tbl->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
         for (int i = 0; i < mounted.size(); ++i)
@@ -6644,7 +6682,7 @@ void Monitor::slotEditPipe(quint32 bid)
             ni->setFlags(ni->flags() & ~Qt::ItemIsEditable);
             tbl->setItem(i, 0, ni);
             QDoubleSpinBox *os = new FeetInchesSpinBox(isFeet, tbl);
-            os->setRange(0.0, hMax); os->setDecimals(2);
+            os->setRange(0.0, qMax(0.1, double(b->length()) * toDisp)); os->setDecimals(2);
             os->setValue(double(rp.pipeOffset) * toDisp);
             tbl->setCellWidget(i, 1, os); offSpins << os;
             QDoubleSpinBox *as = new QDoubleSpinBox(tbl);

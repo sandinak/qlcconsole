@@ -67,6 +67,9 @@
 #include "sceneryitem.h"
 #include "monitorruler.h"
 #include "hangeritem.h"
+#include "patchinventorydialog.h"
+#include <QTableWidget>
+#include <QHeaderView>
 #include "hanger.h"
 #include "beamoptics.h"
 #include "gobolibrary.h"
@@ -19008,6 +19011,88 @@ void Monitor_Test::hangersAreOnThePlot()
         props->removeHanger(h->id());
         gv->updateHangers();
         QVERIFY(gv->m_hangerItems.isEmpty());
+    }
+    delete doc;
+}
+
+/* "No undo for a re-address": the Patch dialog's Apply is one rig undo step,
+   wherever it was opened from -- two fixtures moved, then put back where
+   they were, and one that had been unpatched goes back to the inventory. */
+void Monitor_Test::aPatchCanBeUndone()
+{
+    Doc *doc = new Doc(this);
+    Fixture *a = new Fixture(doc); a->setChannels(10); a->setUniverse(2); a->setAddress(0);
+    Fixture *b = new Fixture(doc); b->setChannels(10); b->setUniverse(2); b->setAddress(10);
+    Fixture *c = new Fixture(doc); c->setChannels(10); c->setPatched(false);
+    QVERIFY(doc->addFixture(a) && doc->addFixture(b) && doc->addFixture(c));
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        QCOMPARE(Monitor::instance(), &mon);
+        PatchInventoryDialog dlg(doc, { a->id(), b->id(), c->id() });
+        dlg.placeRows(3, 100, false);           // all three, packed, universe 4 address 101
+        dlg.accept();
+        QCOMPARE(a->universe(), quint32(3));
+        QVERIFY(c->isPatched());
+
+        mon.undo();
+        QCOMPARE(a->universe(), quint32(2));
+        QCOMPARE(a->address(), quint32(0));
+        QCOMPARE(b->universe(), quint32(2));
+        QCOMPARE(b->address(), quint32(10));
+        QVERIFY2(!c->isPatched(), "the one patched from the inventory goes back to it");
+    }
+    delete doc;
+}
+
+/* A house electric (a horizontal pipe): each fixture at its own distance
+   along it -- and the pipe's editor says "Along", up to the pipe's length,
+   rather than a boom's height. */
+void Monitor_Test::fixturesSitAlongAHorizontalPipe()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Pipe *pipe = props->addPipe();
+    pipe->setOrientation(Pipe::Horizontal);
+    pipe->setOriginX(2.0f); pipe->setOriginY(3.0f); pipe->setBaseZ(5.0f);
+    pipe->setLength(6.0f);
+    pipe->setRunAngle(0.0f);
+    QList<Fixture *> fx;
+    for (int i = 0; i < 2; ++i)
+    {
+        Fixture *f = new Fixture(doc);
+        f->setChannels(4); f->setUniverse(1); f->setAddress(quint32(i * 4));
+        QVERIFY(doc->addFixture(f));
+        FixtureRigProps rp;
+        rp.pipeId = pipe->id();
+        rp.pipeOffset = (i == 0) ? 1.0f : 4.0f;
+        props->setFixtureRigProps(f->id(), rp);
+        fx << f;
+    }
+    const QVector3D a = props->fixtureRigPosition(fx[0]->id());
+    const QVector3D b = props->fixtureRigPosition(fx[1]->id());
+    QVERIFY2(qAbs((b - a).length() - 3.0f) < 0.05f,
+             qPrintable(QString("3 m apart along the pipe, not %1").arg((b - a).length())));
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        QString header;
+        double max = 0;
+        driveDialog([&](QWidget *dlg) {
+            QTableWidget *tbl = dlg->findChild<QTableWidget *>("pipeFixtures");
+            if (tbl == nullptr)
+                return false;
+            header = tbl->horizontalHeaderItem(1)->text();
+            QDoubleSpinBox *second = qobject_cast<QDoubleSpinBox *>(tbl->cellWidget(1, 1));
+            max = second->maximum();
+            second->setValue(5.0);                  // metres here
+            return true;
+        });
+        props->setGridUnits(MonitorProperties::Meters);
+        mon.slotEditPipe(pipe->id());
+        QCOMPARE(header, QString("Along"));
+        QVERIFY2(qAbs(max - 6.0) < 0.01, qPrintable(QString("limit %1, the pipe is 6 m").arg(max)));
+        QVERIFY(qAbs(props->fixtureRigProps(fx[1]->id()).pipeOffset - 5.0f) < 0.01f);
     }
     delete doc;
 }
