@@ -94,10 +94,12 @@ beat gently rather than jolting it.
 
 ### Spread
 
-Effects that chase across their heads — the phasers, pulses, orbits,
-rainbow, ballyhoo, gobo chase, native strobe, warm/cool, drawn path, and
-Stage Shape's outline — share one **Spread** row in the look editor, so
-they all spread the same way:
+Effects that chase across their heads share one **Spread** row in the look
+editor, so they all spread the same way: the dimmer, colour and pan/tilt
+phasers, the pulses, native strobe, rainbow, warm/cool, gobo chase — and
+every movement effect: orbit, diamond, figure 8, Lissajous, ballyhoo,
+sweep, wave, wander, fan, drawn path, spotlight chase, and Stage Shape's
+outline:
 
 - **Amount** — how far the effect's cycle runs across the heads: **1** is
   one full wave across them, **0.5** half a wave, **2** two waves. At
@@ -108,8 +110,7 @@ they all spread the same way:
   target**: **out from the target** (nearest first, a ripple outward) or
   **around the target** (from downstage of it, round towards stage right,
   a sweep). Heads at the same place share a phase (a column, a bar seen
-  from the side). With no Aim look, the target axes use the middle of the
-  heads.
+  from the side). With no Aim look, the target axes use centre stage.
 - **Direction** — **forward**, **reverse**, **centre out**, **ends in**.
 - **Wings** — split the heads into mirrored parts, each running the
   spread (2 wings: out from the middle seam both ways).

@@ -40,15 +40,10 @@ QVector<double> SpreadLayer::phases(const QVector<Point> &points, const Settings
     if (!s.isActive() || points.isEmpty())
         return out;
 
-    QVector3D c;
-    if (centre != nullptr)
-        c = *centre;
-    else
-    {
-        for (const Point &p : points)
-            c += p.pos;
-        c /= float(points.size());
-    }
+    /* No target: centre stage. (The middle of the heads was the first
+       idea, but a truss of heads has its middle ON the line -- round it,
+       every head is just left or right of it.) */
+    const QVector3D c = centre != nullptr ? *centre : QVector3D();
 
     /* Where each head is along the axis. Heads at the same place (one
        column, one bar's heads seen from the side) are one step. */

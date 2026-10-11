@@ -76,8 +76,10 @@ The latest changes, newest first. Each links to the guide with the detail.
 - **Spread.** One Spread row for every chasing effect — amount in cycles,
   in look order or across columns, rows or the stage, **out from or round
   the look's target**, forward, reverse, centre out or ends in, with wings
-  and blocks — and a preview of the heads coloured by phase. **Stage
-  Shape** takes it too: which head goes where on the line or shape.
+  and blocks — and a preview of the heads coloured by phase. Every
+  movement effect takes it too (orbit, figure 8, ballyhoo, wave, sweep,
+  wander, fan, spotlight chase…), and **Stage Shape** uses it for which
+  head goes where on the line or shape.
   ([Spread](effects.md#spread))
 - **Speed masters.** Four tempo masters (Programming toolbar →
   **Masters**): each its own tempo, tap, rate and pause, or following the

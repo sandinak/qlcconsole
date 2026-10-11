@@ -8,6 +8,8 @@
     var effect = new Object;
     effect.apiVersion  = 1;
     effect.name        = "Wander";
+    // Takes the host's spread (fixture.phase, inputs._spread) in place of its own.
+    effect.hostSpread = "diverge";
     effect.description = "Organic pan/tilt drift — each fixture has its own wandering path";
     effect.author      = "QLC+";
     effect.fixtureTypes = ["moving"];
@@ -44,7 +46,7 @@
         return fixtures.map(function(f, i) {
             if (!f.hasPanTilt) return {};
 
-            var seed = i * diverge * 3.14159;
+            var seed = inputs._spread ? f.phase * 2 * 3.14159 : i * diverge * 3.14159;
             var pan  = (center + radius * drift(t, seed,           speed)) * f.panRange;
             var tilt = (tcenter + radius * drift(t, seed + 100.0,  speed)) * f.tiltRange;
 

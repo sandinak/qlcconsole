@@ -8,6 +8,8 @@
     var effect = new Object;
     effect.apiVersion  = 1;
     effect.name        = "Fan";
+    // Takes the host's spread (fixture.phase, inputs._spread) in place of its own.
+    effect.hostSpread = "invert";
     effect.description = "Spread fixtures in a pan fan from joystick center";
     effect.author      = "QLC+";
     effect.fixtureTypes = ["moving"];
@@ -42,7 +44,9 @@
 
             // Normalised position −0.5..+0.5 symmetrically across the array
             var idx = (inv > 0.5) ? (n - 1 - i) : i;
-            var pos = (n > 1) ? (idx / (n - 1) - 0.5) : 0;
+            // On the host spread: its place along the spread, -0.5..+0.5.
+            var pos = inputs._spread ? f.phase / Math.max(inputs._spreadAmount, 1e-6) - 0.5
+                    : (n > 1) ? (idx / (n - 1) - 0.5) : 0;
 
             var panDeg  = cx * f.panRange  + pos * spread;
             var tiltDeg = cy * f.tiltRange + tiltBias;

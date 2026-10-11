@@ -181,6 +181,7 @@ unbound). Plus host-injected timing, always present:
 | `inputs._beatCount` | whole beats since this effect started |
 | `inputs._beatPos` | the beat clock's running count; its fraction is `_beat` |
 | `inputs._spread` | true when the look's host spread is on (see `hostSpread`, `fixture.phase`) |
+| `inputs._spreadAmount` | the host spread's amount in cycles, for an effect that lays heads out by it rather than offsetting time (`f.phase / _spreadAmount` is 0..1 along the spread) |
 
 When the effect runs on the main clock or a **speed master** (the look
 editor's Speed, or its look, chase step, chase or collection), the clock

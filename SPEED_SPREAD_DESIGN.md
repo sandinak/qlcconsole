@@ -116,8 +116,8 @@ The host works out each head's **phase** so scripts don't each do it.
   as a small plan in the Spread row (SpreadPreview, from
   EffectInstance::spreadPreview()).
 - **Target axes**: out from / around the look's Aim target (the Stage
-  Shape centre), floor-plan distance and angle; no Aim look → the heads'
-  middle.
+  Shape centre), floor-plan distance and angle; no Aim look → centre
+  stage.
 - **As built:** `engine/src/spreadlayer.{h,cpp}` (pure; the phases), the
   instance sets each cell's `phase` (cycles, not wrapped) and
   `inputs._spread`; a script opts in with `effect.hostSpread = "<its own

@@ -1335,8 +1335,10 @@ QJSValue EffectInstance::buildInputsObject() const
 
     // The host's spread is on: read fixture.phase, not the script's own.
     QLCPalette *spreadPal = m_doc->palette(m_effectPaletteId);
-    obj.setProperty("_spread", spreadPal != nullptr
-                    && SpreadLayer::fromParams(spreadPal->effectParamValues()).isActive());
+    const SpreadLayer::Settings spreadNow = spreadPal != nullptr
+        ? SpreadLayer::fromParams(spreadPal->effectParamValues()) : SpreadLayer::Settings();
+    obj.setProperty("_spread", spreadNow.isActive());
+    obj.setProperty("_spreadAmount", spreadNow.amount);     // cycles, for effects that lay heads out by it
 
     // One-shot lifecycle: hand the effect its window so it fits any duration.
     //   phase    — 0→1 progress through the resolved run length

@@ -163,10 +163,17 @@ void SpreadLayer_Test::outFromAndAroundATarget()
     // Reverse runs the sweep the other way round.
     s.direction = SpreadLayer::Reverse;
     QCOMPARE(SpreadLayer::phases(pts, s, &target), PHASES(0.75, 0.5, 0.25, 0));
-    // No target: round the middle of them.
+    // No target: centre stage -- here the same as the target above.
     s.direction = SpreadLayer::Forward;
     s.axis = SpreadLayer::FromTarget;
-    QCOMPARE(SpreadLayer::phases(pts, s).size(), 4);
+    QCOMPARE(SpreadLayer::phases(pts, s), PHASES(0.5, 0, 0.25, 0.75));
+    // A truss of heads with no target sweeps round centre stage, each its own.
+    QVector<SpreadLayer::Point> truss = line(4);
+    for (int i = 0; i < 4; ++i)
+        truss[i].pos = QVector3D(-3 + 2 * i, 4, 6);
+    s.axis = SpreadLayer::AroundTarget;
+    const QVector<double> round = SpreadLayer::phases(truss, s);
+    QCOMPARE(QSet<double>(round.begin(), round.end()).size(), 4);
     QVERIFY(SpreadLayer::needsCentre(SpreadLayer::AroundTarget));
     QVERIFY(!SpreadLayer::needsCentre(SpreadLayer::StageX));
 }
@@ -244,6 +251,7 @@ void SpreadLayer_Test::everyScriptThatTakesItUsesIt()
             inputs.setProperty("_beatCount", 0);
             inputs.setProperty("_beatPos", 0.37);
             inputs.setProperty("_spread", true);
+            inputs.setProperty("_spreadAmount", 1.0);
             QJSValue state = script.newState();
             const QJSValue out = script.callTick(fixtures, inputs, e->newObject(), e->newObject(),
                                                  state, e->newObject());
@@ -263,7 +271,7 @@ void SpreadLayer_Test::everyScriptThatTakesItUsesIt()
                  qPrintable(file + ": fixture.phase is ignored: " + spread.join(" | ")));
         checked++;
     }
-    QVERIFY2(checked >= 18, qPrintable(QString("only %1 scripts take the host spread").arg(checked)));
+    QVERIFY2(checked >= 23, qPrintable(QString("only %1 scripts take the host spread").arg(checked)));
 }
 
 /* The instance hands each head its phase, and tells the script it's on. */

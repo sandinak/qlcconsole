@@ -86,7 +86,7 @@ public:
 
     /** Each point's phase, in cycles (0 .. amount), in the points' order.
      *  @p centre is the target for FromTarget / AroundTarget; without one,
-     *  the middle of the points. */
+     *  centre stage (0,0). */
     static QVector<double> phases(const QVector<Point> &points, const Settings &settings,
                                   const QVector3D *centre = nullptr);
 };

@@ -31,6 +31,21 @@ coloured by phase — same colour, same moment — with a cross on the target.
 | **05 line, left heads on the left** | The movers draw a 6 m line through Centre; the leftmost movers take its left end — no beams crossing. | Axis **In look order** (their list order, may cross); **Reverse** (crossed on purpose); Effect **plane: Wall** stands it up. |
 | **06 circle, no crossed beams** | A 2 m circle slowly spinning; each mover takes the point on its own side of the target. | Axis **Stage left to right** — watch beams cross; **Centre out** / **Wings 2** pair beams onto one point. |
 
+## Movement
+
+The same Spread row, on pan and tilt. These use the movers only (white,
+full); try the same settings as on the pars.
+
+| Look | Watch for | Then try |
+|---|---|---|
+| **11 pan-tilt circles, wave left to right** | Each beam draws a small circle, one after the next across the truss. | **Reverse**; **Wings 2**; Amount **0** (all in unison). |
+| **12 orbit, a ring of beams** | Eight beams spaced evenly round one circle, turning together. | Amount **0.5** — they bunch into half a ring. |
+| **13 figure 8, centre out** | Figure-8s mirrored about the middle of the truss. | **Forward** — a figure-8 chase across. |
+| **14 ballyhoo on Speed 2** | A wild scan, at Speed 2's pace. | Tap **Pars** (Speed 1): Speed 2 follows ×2 and the ballyhoo speeds up. |
+| **15 wave, round the target** | The wave runs round Centre — from the heads nearest downstage of it, round. | Move Centre: the wave's order changes. |
+| **16 fan, left to right** | A static 120° pan fan, leftmost head panned furthest left. | **Centre out** folds it; **Wings 2** mirrors it. |
+| **17 spotlight chase along the truss** | One hot head runs along the truss. | **Around the target** or **Centre out** — the hot spot takes that path instead. |
+
 ## Speed masters
 
 Open **Masters** on the Programming toolbar. **Pars** (Speed 1) is at 60 BPM;

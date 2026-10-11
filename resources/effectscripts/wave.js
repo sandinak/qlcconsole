@@ -7,6 +7,8 @@
     var effect = new Object;
     effect.apiVersion   = 1;
     effect.name         = "Wave";
+    // Takes the host's spread (fixture.phase, inputs._spread) in place of its own.
+    effect.hostSpread = "wavelength";
     effect.description  = "Traveling sine wave across the fixture array";
     effect.author       = "QLC+";
     effect.fixtureTypes = ["moving"];
@@ -57,7 +59,7 @@
 
             // Phase for this fixture: spatial offset proportional to index,
             // scaled so `wavelength` fixtures span one full cycle.
-            var spatialPhase = (n > 1) ? (i / (n - 1)) / wavelength : 0;
+            var spatialPhase = inputs._spread ? f.phase : (n > 1) ? (i / (n - 1)) / wavelength : 0;
             var phase = (waveT - spatialPhase) * 2 * Math.PI;
 
             var pan  = (panCenter  + panAmp  * Math.sin(phase)) * f.panRange;
