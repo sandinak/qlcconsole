@@ -46,6 +46,7 @@ private slots:
     void theWindowMenuFindsAndPutsBackBrokenOutViews();
     void functionsOpensFromTheWindowMenuNotATab();
     void helpOpensOnWhatIsInFront();
+    void virtualConsoleKeysDontClashWithTheApp();
     void theRigOverviewOpensWithoutTakingYouToTheStudio();
 
     /** "fetch and CACHE .. we cannot have remote stuff for a showfile on a

@@ -94,14 +94,9 @@ to zoom, ⇧⌘R or ⌘W to close.
 
 | Keys | Does |
 |---|---|
-| ⇧⌘B / M / S / I / K / D / X / C / F / O / L / A / T / R | Add a button, button matrix, slider, slider matrix, knob, speed dial, XY pad, cue list, frame, solo frame, label, audio triggers, clock, animation |
+| ⇧⌘B / G / S / I / K / D / X / C / F / O / L / A / T / N | Add a button, button matrix (grid), slider, slider matrix, knob, speed dial, XY pad, cue list, frame, solo frame, label, audio triggers, clock, animation |
 | ⌘X / ⌘C / ⌘V / Delete | Cut / copy / paste / delete widgets |
 | ⌘E | Widget properties |
 | ⇧B / ⇧I / ⇧F / ⇧O | Background colour / image, foreground colour, font (⇧⌥ resets) |
 | ⇧S / ⇧R / ⇧⌥S | Sunken / raised / no frame |
 | ⇧↑ / ⇧↓ | Raise / lower |
-
-> On the Virtual Console tab in Design mode, **⇧⌘R** and **⇧⌘M** belong to
-> both the console (add an animation / a button matrix) and the app (Rig
-> Overview / Lighting Studio), so neither fires there — use the **View** and
-> **Window** menus for those while you're laying out the console.

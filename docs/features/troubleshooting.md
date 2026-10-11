@@ -91,9 +91,8 @@ footer offers to find it in your library.
 **Where did the Functions tab go?** **Window → Functions** (⇧⌘4) — it
 opens in its own window.
 
-**A shortcut does nothing.** On the Virtual Console tab in Design mode,
-⇧⌘R and ⇧⌘M belong to both the console and the app, so neither fires —
-use the View / Window menus there. Everything else is in
-[Keyboard and mouse](shortcuts.md).
+**A shortcut does nothing.** Check [Keyboard and mouse](shortcuts.md):
+some keys only work in one view (the Virtual Console's add-widget keys
+only in its Design mode, the Functions keys only in its window).
 
 **Help** — F1 opens the help for whatever you're looking at.

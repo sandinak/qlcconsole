@@ -36,6 +36,11 @@
 #define protected public
 #include "app.h"
 #include "functionmanager.h"
+#define private public
+#define protected public
+#include "virtualconsole.h"
+#undef protected
+#undef private
 #include "helpbrowser.h"
 #undef protected
 #undef private
@@ -218,7 +223,8 @@ void AppViews_Test::helpOpensOnWhatIsInFront()
         { "Fixtures", "fixture-manager.md" },
         { "Lighting Studio", "lighting-studio.md" },
         { "Programming", "programming-tab.md" },
-        { "Virtual Console", "getting-started.md#running-the-show" } };
+        { "Virtual Console", "getting-started.md#running-the-show" },
+        { "Shows", "shows.md" } };
     for (int i = 0; i < tabs->count(); ++i)
     {
         const QString label = tabs->tabBar()->tabData(i).toString();
@@ -254,6 +260,36 @@ void AppViews_Test::helpOpensOnWhatIsInFront()
     QCOMPARE(browser->currentFile(), QString("lighting-studio.md"));
     QCOMPARE(browser->currentHeading(), QString("Mounting a fixture"));
     browser->close();
+}
+
+/* The Virtual Console's add-widget keys (Design mode) are not keys the
+   app already uses: two shortcuts on one key fire neither -- ⇧⌘R and ⇧⌘M
+   did nothing on the console tab. */
+void AppViews_Test::virtualConsoleKeysDontClashWithTheApp()
+{
+    VirtualConsole *vc = VirtualConsole::instance();
+    QVERIFY(vc != nullptr);
+    vc->enableEdit();
+    QSet<QString> app;
+    foreach (QAction *a, m_app->findChildren<QAction *>())
+    {
+        QWidget *owner = qobject_cast<QWidget *>(a->parent());
+        if (owner == vc || (owner != nullptr && vc->isAncestorOf(owner)))
+            continue;
+        foreach (const QKeySequence &k, a->shortcuts())
+        {
+            if (!k.isEmpty())
+                app.insert(k.toString());
+        }
+    }
+    const QList<QAction *> adds = { vc->m_addButtonMatrixAction, vc->m_addAnimationAction,
+                                    vc->m_addButtonAction, vc->m_addSliderAction };
+    for (QAction *a : adds)
+        QVERIFY2(!app.contains(a->shortcut().toString()),
+                 qPrintable(QString("%1 (%2) is also an app shortcut").arg(a->text(), a->shortcut().toString())));
+    QCOMPARE(vc->m_addButtonMatrixAction->shortcut(), QKeySequence("CTRL+SHIFT+G"));
+    QCOMPARE(vc->m_addAnimationAction->shortcut(), QKeySequence("CTRL+SHIFT+N"));
+    vc->disableEdit();
 }
 
 void AppViews_Test::theRigOverviewOpensWithoutTakingYouToTheStudio()
