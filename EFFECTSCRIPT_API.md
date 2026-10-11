@@ -114,6 +114,9 @@ effect.parameters = [
     // Project floor positions with px = pos.x, py = -pos.y (stage +y is upstage
     // = screen up) so it reads WYSIWYG against the 2D Monitor:
     { name: "angle", description: "Gradient direction", type: "direction", min: 0, max: 360, defaultValue: 0 },
+    // type:"text" → a text box in the look editor; the value is a string, and
+    // a string defaultValue is what the box (and params.<name>) start with:
+    { name: "text", description: "The words to show", type: "text", defaultValue: "HELLO" },
     // 'aliases' = former names for this param. A stored value under an old name
     // maps to this one, so renaming a param doesn't break saved looks/Effects:
     { name: "rate", description: "Cycles/sec", aliases: ["speed"], min: 0, max: 20, defaultValue: 1 }
@@ -146,6 +149,8 @@ One object per (filtered) fixture in the scene. Fields:
 |---|---|---|
 | `id` | int | Fixture id. |
 | `head` | int | Head index (0 = single-head). |
+| `name` | string | The fixture's name, for a script that works by how a rig is named ("DS1 #3", "CS2t1" — see `step-test-pattern.js`). |
+| `heads` | int | How many heads the fixture has (a 64-pixel strip: 64), so a pixel script knows a strip's length. |
 | `panRange` | number | Pan travel in **degrees** (from physical, default 360). |
 | `tiltRange` | number | Tilt travel in **degrees** (default 270). |
 | `hasPanTilt` | bool | Has pan and/or tilt channels. |
@@ -210,7 +215,8 @@ colours than they declare slots for (e.g. an N-way spread):
 
 `params.<name>` — scalar number for normal/dropdown params (dropdowns give the
 **integer index**). `type:"path"` params arrive as a JS array of `[x,y]` pairs
-(0..1).
+(0..1). `type:"text"` params arrive as a **string** — what was typed in the
+look editor, else the parameter's string `defaultValue`.
 
 ### `state` — persistence
 
@@ -402,6 +408,16 @@ shipped scripts for colour/position patterns.
 
 - **Order matters:** the returned array must match `fixtures[]` order and length.
   Returning fewer entries silently drops the tail.
+- **The fixture objects are kept between ticks.** The host builds each
+  fixture's object once and updates only what changes (its `pos` when it
+  moves, `aimAt`/`sceneTarget`/`lastSpot` each tick when present), so a big
+  pixel rig costs little to hand over. Treat them as **read-only**: anything
+  you set on one would still be there next tick. Keep your own per-fixture
+  data in `state` (keyed by `id`/`head`). The *array* is new every tick, so
+  sorting or reversing `fixtures` in place is safe — but return the intents
+  in the original order.
+- **Answers: only the keys you mean.** The host reads each intent's own keys
+  (an intent is usually `{r,g,b}`); a key it doesn't know is ignored.
 - **`fixtureTypes` filters the array:** if you tag `["moving"]`, wash fixtures
   won't appear in `fixtures[]` at all.
 - **Stage/azimuth convention** (for position effects): degrees are clockwise from

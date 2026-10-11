@@ -165,6 +165,26 @@ console-first programmer-mode workflow for macOS.
 - Programming tab: search over Fixtures & groups, and "← Back to <scene>"
   from a fixture group's layout view.
 
+- **In-app help** — F1 opens the guide for whatever is in front (each tab,
+  the Rig Overview, Fixture Properties, the Patch dialog, the look editor,
+  the power dialogs); the Help menu lists Getting Started, What's New,
+  Keyboard and Mouse, Effects and Troubleshooting, with search across every
+  guide. The guides are bundled into the app, and a test checks every link
+  in them.
+- New guides: Getting Started (startup and the ways a show comes together),
+  What's New, Keyboard and Mouse, Effects, Troubleshooting.
+- **Text** effect — words on a pixel grid, scrolling or still, in the look's
+  colours; effect scripts can declare a `"text"` setting (a text box in the
+  look editor). The RGB Matrix Text algorithm gains a **Centered** style.
+- **Step Test Pattern** effect — strips counted, steps numbered and named,
+  and a spinner that stops if output freezes.
+- **Patch Others Like This** / the Patch dialog's **Match** — like
+  structures (four towers, four steps) patched alike: each fixture at its
+  counterpart's address, in its own structure's universe.
+- **Mount on → Deck** — the selection stood on the deck under each (or a
+  named one), upright, on its top, nothing floating.
+- The Rig Overview follows the Lighting Studio's layers.
+
 ### Changed
 - Versioning scheme: the in-app build string now tracks the QLC+ base version
   this fork tracks, plus a git-derived build count
@@ -185,6 +205,21 @@ console-first programmer-mode workflow for macOS.
   Studio tab.
 - The effect script called "Fire" is now "Firelight" (looks using
   it keep it), so the RGB Matrix Fire is reachable again.
+
+- A drag in the Lighting Studio only moves a fixture; **Shift** held as you
+  drop hangs it on the truss or pipe, or stands it on the deck, it's over
+  (the outline turns green while it would). Inventory drops still place.
+  A mounted fixture is only offered a truss or pipe at its own height.
+- **Functions** has no tab — Window → Functions (⇧⌘4) opens it in a window
+  of its own.
+- ⇧⌘R closes the Rig Overview when it's in front; ⌘W closes it too.
+- Orientation is offered for anything that pans or tilts, bar-shaped or not,
+  and Test orientation names its centred pose (straight up / down / out).
+- Fixtures with a structure above them draw faded and dashed in the Top
+  view; the rulers band any selection and mark the middle of what's dragged.
+- The Connections Devices header is one row.
+- Effects on big pixel rigs: about 8 ms a tick for 96 × 64 pixels (was 68);
+  the rig view about 9 ms a frame on a 200-fixture show (was 51).
 
 ### Fixed
 - A workspace whose last-active tab was Lighting Studio could come up with
@@ -216,3 +251,9 @@ console-first programmer-mode workflow for macOS.
 - Add Fixture gave every fixture in a network batch the same IP.
 
 [0.1.0]: https://github.com/sandinak/qlcconsole/releases/tag/v0.1.0
+- Lanterns on hangers that kept an earlier mount's face drew on their side;
+  a fixture on a hanger now always hangs straight.
+- A light at the foot of a tower, moved under the bar on top of it, was
+  hung on the bar.
+- A copy of a fixture's physical data recompiled a regular expression and
+  wrote a guessed power figure into the copy.

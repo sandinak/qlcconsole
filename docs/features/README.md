@@ -14,13 +14,21 @@ timeline, and I/O plugin system all still work the way they always have.
 
 ## Start here
 
+In the app, **F1** opens the guide for whatever you're looking at, and
+**Help** lists them all.
+
 | Guide | What it covers |
 |---|---|
+| [Getting started](getting-started.md) | Starting the app, show files and autosave, finding your way around, and the ways a show comes together — designing first, patch first, at a venue, a row of like structures |
+| [What's new](whats-new.md) | The latest changes |
 | [Lighting Studio](lighting-studio.md) | The rig view: trusses, towers, platforms, pipes, stands, hangers, fixture mounting, locks; the Angled 3D view and Rig Overview, lit by the show (beams, haze, gobos, lanterns) |
 | [Programming Tab](programming-tab.md) | Building "looks" out of reusable palettes instead of raw DMX, drag-and-drop targets, the inline look editor and effect browser, scene transitions, WLED effects |
 | [Fixture Manager](fixture-manager.md) | Fixture-group folders, the head-layout grid editor, the inventory of unpatched fixtures and the Patch dialog |
 | [Stage Targets &amp; Aim Solving](stage-targets.md) | Marking points/areas/people in the room and having fixtures aim there automatically |
 | [Other improvements](other-improvements.md) | Connections/patch overhaul, the WLED output, the readiness footer and its fixes, cloud-storage safety and the show cache, Layers panel, Studio groups, Blind/Park/Highlight, and more |
+| [Effects](effects.md) | Every built-in effect, by what it does, and writing your own |
+| [Keyboard and mouse](shortcuts.md) | Every shortcut, by view |
+| [Troubleshooting](troubleshooting.md) | When lights, the rig view, files or fixtures aren't doing what you expect |
 
 ## The rough shape of a show, end to end
 

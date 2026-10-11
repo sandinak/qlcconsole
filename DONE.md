@@ -6,6 +6,37 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-10 — Help, docs, and a day of Studio/effects work *(SHIPPED)*
+
+- **In-app help** (`ui/src/helpbrowser.{h,cpp}`, `ui/src/help.qrc`): the
+  docs/features guides + EFFECTSCRIPT_API.md + screenshots bundled into the
+  UI library; F1 (`App::slotHelpContext()` → `helpTopicFor()`, the nearest
+  `helpTopic` property up the focus widget's parents, else the current
+  tab's) opens the topic; Help menu lists the guides. Links between guides
+  and to headings (GitHub slugs, `HelpBrowser::headingSlug()`) followed in
+  place; screenshots scaled to fit; full-text search. `helpbrowser_test`
+  checks every link in every guide lands on a bundled guide and a real
+  heading, and that every guide renders to its last heading — it caught a
+  bare `<effect>` in lighting-studio.md that made Qt's Markdown reader
+  swallow the rest of the page.
+- New guides: getting-started, whats-new, shortcuts, effects,
+  troubleshooting; lighting-studio / programming-tab / fixture-manager /
+  other-improvements / EFFECTSCRIPT_API updated for: Shift-drop attach and
+  the height rule, Mount on → Deck, beneath-fading, ruler middle mark, rig
+  view following layers, Patch Others Like This / Match, Text and Step Test
+  Pattern effects, `"text"` params, fixture `name`/`heads`, kept fixture
+  objects, Functions in Window, the compact Connections header.
+- Commits the same day: effect-input caching (68 → 8.5 ms/tick on 96×64
+  pixels), rig view per-frame waste (51 → 9 ms/frame), QLCPhysical copy
+  regex, Rig Overview toggle, Text effect, Functions window, Connections
+  header, drape ruler, floor-grid image, layers in the rig view, patch
+  matching, Shift-drop + height rule, green border on Shift, beneath
+  fading, Orientation for panning bars + named test pose, Mount on Deck,
+  hanger fixtures hang straight.
+- Overnight checks: stress `validate` PASS (all 7 scenarios within budget,
+  most 6–19% faster than baseline); 4 h engine soak and a ~3 h effect soak
+  (96 strips × 64 px, 1.3 M ticks) — results in the morning report.
+
 ### 2026-09-05 — Startup window: center the title/version block *(SHIPPED — Branson-verified)*
 
 Branson: "can we center the title and version text on the startup window."

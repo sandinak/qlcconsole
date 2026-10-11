@@ -29,7 +29,11 @@ it is ("Front Par, channel 1 — Dimmer").
 
 Right-click an interface to patch a universe to it or configure the
 protocol; right-click a universe to rename it, set its feedback line or
-input profile, unpatch it, or delete it. A full patch-change **undo**
+input profile, unpatch it, or delete it. (The Devices tab keeps all of this
+to one row over the list — **By universe**, **Show unused…**, a one-line
+"Right-click a row for what it can do" whose tooltip has the whole
+explanation, the search status, **Undo Patch Change** and **Rescan** — so
+the list and the output view get the window's height.) A full patch-change **undo**
 (Ctrl+Z, from any of the three sub-tabs) snapshots and restores the whole
 patch state, not just the last single edit.
 
@@ -86,11 +90,20 @@ try it on your own devices before relying on it for a show.
 
 ## Window menu
 
-Every view is in **Window**, with its shortcut (⇧⌘1 Connections … ⇧⌘8 Simple
-Desk): choosing one brings it forward — its tab, or its own window when it
-has been broken out (double-click a tab), which the menu marks "in its own
-window". **Put Back in Main Window** returns one, **Put All Back in Main
-Window** all of them; **Minimize** (⌘M) as usual.
+Every view is in **Window**, with its shortcut (⇧⌘1 Connections, ⇧⌘2
+Fixtures, ⇧⌘3 Lighting Studio, ⇧⌘4 Functions, ⇧⌘5 Programming, ⇧⌘6 Shows,
+⇧⌘7 Virtual Console, ⇧⌘8 Simple Desk): choosing one brings it forward — its
+tab, or its own window when it has been broken out (double-click a tab),
+which the menu marks "in its own window". **Put Back in Main Window**
+returns one, **Put All Back in Main Window** all of them; **Minimize** (⌘M)
+as usual.
+
+**Functions has no tab.** It sat beside Programming and was easy to hit by
+mistake, and Programming now covers building scenes and looks. The
+classic **Function Manager** — chasers, sequences, EFX, collections, RGB
+matrices, scripts, audio and video — is still there: **Window → Functions**
+(⇧⌘4) opens it in a window of its own, and closing that window puts it away
+again (it does not come back as a tab).
 
 ## Readiness footer
 

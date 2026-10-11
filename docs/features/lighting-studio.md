@@ -27,7 +27,10 @@ isn't really implemented until the model derives from it, the UI can set it,
   freely-rotatable 3D view of the *whole* rig at once — the fastest way to
   sanity-check a build. It's a window of its own: opening it leaves you on
   whatever tab you were on, rather than bringing the Lighting Studio tab
-  forward.
+  forward. The same shortcut **closes** it when it's the window in front (if
+  it's open behind other windows, it's brought forward instead); **⌘W**
+  closes it too.
+- **F1** anywhere in the Studio opens this guide in the in-app help.
 
 ## The four planes
 
@@ -45,6 +48,19 @@ isn't really implemented until the model derives from it, the UI can set it,
 Structures and fixtures on the familiar flat plot, plus (fork-specific) the
 dashed and solid lines you can see radiating from fixtures to **Stage
 Targets** — see [Stage Targets](stage-targets.md).
+
+**Fixtures underneath things.** Looking straight down, every fixture is
+drawn over every structure, so it can always be clicked. A fixture with a
+truss, deck, pipe or tower top more than half a metre **above** it, over it
+on the plan, is drawn **faded with a dashed grey outline** — underneath,
+but still there to click. What it is mounted on never counts (a light hung
+on a truss is not "under" that truss). Front and Side show heights, so
+nothing is faded there.
+
+**Rulers follow what you move.** While anything is selected — fixtures,
+trusses, decks, scenery — the rulers band its extent; while you drag it,
+the ruler mark sits at its **middle**, not wherever the pointer grabbed it.
+So dragging a drape reads its centre line on the ruler.
 
 ### Front / Side — elevation, and count badges
 
@@ -76,6 +92,22 @@ Drag to swing the camera, shift-drag to pan, wheel to zoom. Toggle **Live**
 to shade fixtures by their actual current output, and **Beams** to draw
 light cones from anything currently emitting. This is the same rendering a
 per-structure editor's own Angled tab uses, just showing everything at once.
+
+**It follows the Studio's layers.** Hide a layer in the Layers panel and
+everything on it — structures, scenery, stage figures and fixtures — leaves
+the Rig Overview too: not drawn, not counted when the view frames the rig,
+and not catching or blocking the light of what is still shown (a hidden
+deck no longer stops a beam). Toggling a layer redraws the open overview
+where it is, keeping your angle and zoom. A structure's own editor always
+shows that structure, whatever layer it is on.
+
+**Keeping it quick.** The toolbar's **Quality** sets how sharply edges are
+drawn: **Fast** draws at screen resolution, **Sharpest** at four times it
+each way — on a 200-fixture show roughly 8 ms a frame at Fast against 14 ms
+at Smooth. The frame rate is only a ceiling: a frame that takes longer
+slows the view by itself, and the view never asks for frames faster than it
+can draw them. The floor grid is drawn once and reused until the view or
+the rig's extent changes.
 
 ## Stage structures
 
@@ -250,8 +282,12 @@ Click a fixture in that list (or in the preview) to see its own mount panel:
 ![A mounted fixture's rig properties: mount, colour, orientation, face, placement, angle, tilt](../images/lighting-studio-fixture-mount-properties.png)
 
 - **Mounted on** — which structure and where along/on it.
-- **Orientation** — Upright / Inverted, independent of how it's physically
-  bolted on.
+- **Orientation** — which way up the body is: **Upright** (base down),
+  **Hung** (base on top) or **Sideways** — worded for what it is on (on top /
+  underhung / side arm on a truss, on or under a tower shelf). Offered for
+  movers and pars, and for **anything that pans or tilts** even when it is
+  shaped like a bar (a two-arm beam bar standing on a step is upright like
+  any mover). Hung vs Upright inverts pan/tilt.
 - **Face** — which way the fixture faces: **Top, Bottom, Front
   (downstage), Back (upstage), Stage left, or Stage right**. On the outside
   of a truss, choosing a face also moves the fixture to that side (on top,
@@ -297,7 +333,54 @@ pars don't get handles.
 **Hanging a fixture.** Right-click a fixture on the plot → **Mount on →
 Hanger** and pick the hanger (listed with what it hangs off), or choose the
 fixture in the hanger editor's **Hangs** field. Its panel then reads e.g.
-"Mounted on: Hanger 1 on T-1".
+"Mounted on: Hanger 1 on T-1". A fixture on a hanger hangs straight down
+its chain: any Face, Angle or Tilt left over from what it hung on before is
+cleared (a show saved with one is corrected when it loads — that is what
+made some lanterns draw on their side, as dark squares).
+
+**Standing fixtures on a deck.** Select them (as many as you like),
+right-click one → **Mount on → Deck (N fixtures)**:
+
+- **The deck under each** stands every selected fixture on the platform it
+  is over — the nearest within half a metre when it sits on or just off an
+  edge — with its base on the deck's top surface;
+- or pick a **platform by name** to put them all on that one.
+
+Each is set **Upright**, its old mount (truss, tower, a wrong deck) is
+cleared, and one lined up exactly with a deck's edge is nudged a few
+centimetres inside, so it is clearly on that deck. This is the clean way to
+put a row of fixtures on a set of steps without any of them floating.
+
+**Dragging onto structures: hold Shift.** A plain drag **only moves** a
+fixture. To hang it on the truss or pipe — or stand it on the deck — you
+drop it over, **hold Shift as you let go**. While you drag, the fixture's
+outline turns **green** whenever letting go would attach it (pressing or
+releasing Shift updates it at once), and **red** while you are pulling one
+off the truss it is on.
+
+- **Coming off needs no Shift.** Drag a fixture well off its truss, or off
+  every deck, and it comes off, as before.
+- **The Inventory panel is unchanged.** Dragging a fixture in from the
+  Inventory and dropping it on a truss or deck still places it there —
+  placing it is the point of that drag.
+- **Height counts.** A fixture already mounted on something else (a tower,
+  a deck, a riser, a pipe) is only offered a truss or pipe within half a
+  metre of its own height, Shift or not — a light at the foot of a tower is
+  not hung on the bar 2.4 m above it just because it is under it on the
+  plan. A free-standing fixture is hung by where you drop it.
+
+**Patching like structures alike.** Right-click a truss, tower, deck or
+pipe → **Patch Others Like This (N)…** — "like this" being the other
+structures of its kind carrying the same fixtures (models and modes, in the
+same order). The Patch dialog opens on all of them, matched to this one:
+each fixture takes the address of the one in the same place on it, in its
+own structure's universe. See
+[Fixture Manager → Patching](fixture-manager.md#patching-the-patch-dialog).
+
+**Testing which way it points.** Fixture Properties → **Test orientation**:
+the first pose centres pan and tilt, and is named for how the fixture is
+mounted — **Straight down** hung, **Straight up** upright, **Straight out**
+on a side arm — following Orientation as you change it.
 
 A fixture standing on a riser/deck, a truss face, a tower shelf, or a pipe
 each get their own mount fields, but only ever **one** primary mount at a
@@ -520,7 +603,7 @@ What the LEDs show, best source first:
 2. Otherwise, the **port of its WLED effect**, run on the LEDs with the
    speed, intensity, palette and colours the device is sent — the same
    maths, but not in step with the device.
-3. Otherwise, **colour 1 at its dimmer**, with a **"WLED: <effect>"** tag
+3. Otherwise, **colour 1 at its dimmer**, with a **"WLED: &lt;effect&gt;"** tag
    beside it naming the effect that has no port.
 
 ## Network nodes and cable runs
@@ -576,4 +659,6 @@ Two small but load-bearing visual cues:
 | **Haze** | How visible beams are in the air (None/Light/Medium/Heavy) — doesn't change where light lands. |
 | **Count badge** | The numbered circle a structure's own fixtures collapse into when they'd otherwise cover more than 40% of it on screen. |
 | **Light footprint / coverage** | Everywhere a fixture's full pan/tilt range can reach — distinct from where it's currently pointed. |
+| **Shift-drop** | Holding Shift as you drop a fixture over a truss, pipe or deck, to hang or stand it there; a plain drop only moves it. |
+| **Beneath (faded)** | In the Top view, a fixture with a structure more than half a metre above it, drawn faded and dashed but still clickable. |
 | **Rig Overview** | The read-only, whole-rig 3D window (View → Rig Overview…, Ctrl/⌘+Shift+R). |

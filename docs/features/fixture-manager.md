@@ -114,6 +114,19 @@ opens on a proposal, which you review and edit before anything changes:
   here (change it in the fixture's properties). A fixture a scene sets
   channel by channel keeps its mode, and a mode with a different head count
   is refused — both shown disabled, with the reason.
+- **Patch the others like [structure] → Match** — offered when the
+  fixtures in the dialog hang on more than one structure (four towers, four
+  step trusses). Pick one as the pattern: every fixture on the others takes
+  the address of the fixture **in the same place** on the pattern — paired
+  by where it hangs along the structure, not by name or the order it was
+  added — in **its own structure's universe** (T-2's bars stay in T-2's
+  universe, at T-1's addresses). Structures carrying a different number or
+  kind of fixtures are paired as far as they go, and a note under the table
+  says what could not be; one with nothing patched yet is left alone (it
+  has no universe to keep). The pattern is taken as it is patched in the
+  show, not as edited in the dialog. In the Lighting Studio, right-click a
+  structure → **Patch Others Like This (N)…** opens this dialog already
+  matched to it.
 - **Re-plan** throws away your edits and proposes again. **Apply** patches
   and moves everything at once, all or nothing.
 

@@ -8,6 +8,19 @@ to DONE.md when it ships. See also the session memory under
 
 ---
 
+## Open: found 2026-10-10
+
+- **Shortcut clash in the Virtual Console (Design).** VC's "Add animation"
+  (⇧⌘R) and "Add button matrix" (⇧⌘M) share keys with Rig Overview and
+  Lighting Studio; with both live, Qt fires neither. Documented in
+  shortcuts.md / troubleshooting.md. Pick new keys for one side.
+- **`QLCFile::mergeLegacyUserData()` re-links deleted files.** It runs at
+  every start and symlinks any file in the old QLC+ user folder missing from
+  the qlcconsole one — so deleting a linked definition here doesn't stick
+  (the four malformed PHS-Crew 8' Step files came back). They were set aside
+  as `*.qxf.broken` in `~/Library/Application Support/QLC+/Fixtures`. Make the
+  merge truly one-time (a marker), or remember what was removed.
+
 ## ACTIVE: network topology + inventory-first workflow
 
 Branson, 2026-09-23: design the rig from an inventory of unpatched fixtures,

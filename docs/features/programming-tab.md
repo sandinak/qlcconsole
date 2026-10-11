@@ -151,7 +151,11 @@ palette onto the look to keep it. With no look open it says "Not in a look".
 
 ### The effect browser
 
-An Effect look picks its effect from a browser rather than a dropdown:
+An Effect look picks its effect from a browser rather than a dropdown. The
+browser takes the editor's full height on the left and the picked effect's
+settings sit **beside it** on the right (as the colour picker's controls
+do), so a normal-sized screen shows the whole list and every setting at
+once:
 
 - A **Search effects…** box searches every category at once, whichever tab
   is open.
@@ -169,6 +173,62 @@ Two effects are called fire-something:
 
 RGB Matrix scripts that share a name with an effect script are listed as
 "&lt;name&gt; (RGB Matrix)" — Confetti, Lightning, Meteor, Plasma.
+
+Settings come in a few shapes: a slider for a number, a list for a choice,
+a pad for a drawn path, a compass for a direction, and — for an effect
+that shows words — a **text box**. What you type is taken as you type it,
+so the rig shows it as you go.
+
+#### Text
+
+**Text** puts words on a pixel grid — the look's group as laid out in its
+head layout: a run of LED strips, a matrix. It is not the WLED text (that
+one is drawn by the WLED device); this works on anything whose pixels are
+heads. Settings:
+
+- **text** — the words, in a 5 × 7 font covering every printable
+  character. The grid needs to be 7 pixels tall for a whole letter.
+- **style** — **Scroll** brings the text in from the right and out past the
+  left, round and round; **Still** holds it in the middle.
+- **speed** (pixels a second, scrolling), **size** (pixels per dot of a
+  letter, 1–4, for a big matrix), **level**.
+- **mirror** / **flip** — if it reads backwards or upside down, the strips
+  count from the other end or the rows the other way up.
+
+The letters are drawn in the look's **first colour**, over its **second**
+when the look has one (otherwise the background is left as the rest of the
+look sets it).
+
+(The RGB Matrix's own **Text** algorithm, in the Functions window, gained a
+**Centered** animation style too: the whole text still, centred across and
+down, the X/Y offsets nudging it.)
+
+#### Step Test Pattern
+
+A diagnostic card for LED-strip steps whose fixtures are named the usual
+way — front strips **"&lt;step&gt; #&lt;n&gt;"** ("DS1 #3": step DS1, its
+third strip) and top bars **"&lt;step&gt;t&lt;n&gt;"** ("CS2t1"). On every
+step's front:
+
+- strip *n* lights its first *n* LEDs white, so the order of the strips
+  and the end each counts from can be read;
+- the last LED of every strip is white, so a strip's length can be checked;
+- from the 10th LED, one vertical line per step number (DS1 one, CS3
+  three), every other LED — **blue for DS, green for CS, red for US**;
+- the step's **name** in the middle, white, and beside it a **spinner** as
+  tall as the step going round once a second — if it stops, the output has
+  frozen.
+
+On every top bar a dim blue dot runs back and forth over the colour
+pixels. If a name reads backwards, the strips count from the other end:
+turn on **mirror**. Which strip is the top row comes from the strips'
+heights on the rig (highest first), else their numbers.
+
+**Effects on a big rig.** An effect's script is handed every head of every
+fixture each tick; that list is now kept between ticks and only what
+changed is updated, so a rig of 96 strips × 64 pixels costs about 8 ms a
+tick in a release build (it was 68). Renaming or moving a fixture shows up
+on the next tick.
 
 An effect run across two or more groups is laid out **as the rig stands on
 stage**: one grid with every head where the rig view draws it — across is
