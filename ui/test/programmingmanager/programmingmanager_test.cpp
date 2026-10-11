@@ -20,6 +20,7 @@
 #include "qlcfile.h"
 #include "scenetransition.h"
 #include <QSpinBox>
+#include <QSlider>
 #include <QDoubleSpinBox>
 #include <QComboBox>
 #include <QLineEdit>
@@ -60,6 +61,12 @@
 #include "qlcphysical.h"
 #include "qlcchannel.h"
 #include "monitor/structurestudioview.h"
+#include "effectinstance.h"
+#include "effectscriptrunner.h"
+#include "effectscriptcache.h"
+#include "spreadlayer.h"
+#include "monitorproperties.h"
+#include "mastertimer.h"
 #undef private
 #undef protected
 
@@ -1196,6 +1203,81 @@ void ProgrammingManager_Test::theRigViewFollowsALookSwappedOnTheScene()
     scene->addPalette(red->id());
     scene->removePalette(blue->id());
     QCOMPARE(spy.count(), 0);
+}
+
+/* "if I make changes to the effect I don't see changes in the rig view": the
+   look editor's edits must reach the RUNNING effect -- its rate, its spread --
+   not just the palette. */
+void ProgrammingManager_Test::editingARunningEffectChangesItsOutput()
+{
+    QVERIFY(m_doc->fixtureDefCache()->load(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures/Generic")));
+    m_doc->effectScriptRunner()->cache()->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    QLCFixtureDef *def = m_doc->fixtureDefCache()->fixtureDef("Generic", "Generic RGB");
+    QVERIFY(def != nullptr);
+    Scene *scene = new Scene(m_doc);
+    scene->setName("01-01.01-Wave");
+    for (int i = 0; i < 4; ++i)
+    {
+        Fixture *f = new Fixture(m_doc);
+        f->setName(QString("Par %1").arg(i + 1));
+        f->setFixtureDefinition(def, def->mode("RGB Dimmer"));
+        f->setAddress(quint32(i * 4));
+        QVERIFY(m_doc->addFixture(f));
+        m_doc->monitorProperties()->setFixturePosition(f->id(), 0, 0, QVector3D(1000.0f * i, 0, 0));
+        scene->addFixture(f->id());
+    }
+    QLCPalette *cyan = new QLCPalette(QLCPalette::Color, m_doc);
+    cyan->setValue(QColor(0, 200, 255));
+    QVERIFY(m_doc->addPalette(cyan));
+    QLCPalette *wave = new QLCPalette(QLCPalette::Effect, m_doc);
+    wave->setName("Wave");
+    wave->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/dimmer-phaser.js");
+    wave->setEffectParamValue("rate", 1.0);
+    QVERIFY(m_doc->addPalette(wave));
+    scene->addPalette(cyan->id());
+    scene->addPalette(wave->id());
+    QVERIFY(m_doc->addFunction(scene));
+
+    ProgrammingManager mgr(nullptr, m_doc);
+    mgr.resize(1400, 900);
+    mgr.show();
+    m_doc->masterTimer()->start();
+    mgr.loadCanvas(scene->id());
+    EffectScriptRunner *runner = m_doc->effectScriptRunner();
+    QTRY_VERIFY2(runner->instanceForPalette(wave->id()) != nullptr, "the look's effect never started");
+    EffectInstance *inst = runner->instanceForPalette(wave->id());
+
+    mgr.m_lookEditor->setContextScene(scene);
+    mgr.m_lookEditor->setPalette(wave->id());
+    QApplication::processEvents();
+
+    // A setting: the running effect takes it.
+    QSlider *rate = nullptr;
+    foreach (QSlider *s, mgr.m_lookEditor->m_effectDynWidget->findChildren<QSlider *>())
+        if (s->property("paramName").toString() == QLatin1String("rate"))
+            rate = s;
+    QVERIFY(rate != nullptr);
+    rate->setValue(rate->maximum());
+    QVERIFY(wave->effectParamValues().value("rate") > 10);
+    QVERIFY2(inst->m_paramValues.value("rate") > 10, "the slider never reached the running effect");
+
+    // The Spread: the heads go from all together to each its own.
+    auto levels = [&]() {
+        QSet<int> v;
+        foreach (const EffectInstance::DmxWrite &w, inst->dmxWrites())
+            if (w.channel == 3)                 // RGB Dimmer: R, G, B, then the dimmer
+                v.insert(w.value);
+        return v;
+    };
+    rate->setValue(qRound(rate->maximum() * 0.05));     // slow enough to see a shape
+    QTRY_VERIFY(!inst->dmxWrites().isEmpty());
+    QTRY_COMPARE(levels().size(), 1);                    // all together
+    QDoubleSpinBox *amount = mgr.m_lookEditor->m_effectDynWidget->findChild<QDoubleSpinBox *>("spreadAmount");
+    QVERIFY(amount != nullptr);
+    amount->setValue(1.0);
+    QTRY_VERIFY2(levels().size() >= 3, "the spread never reached the running effect");
+
+    m_doc->masterTimer()->stop();
 }
 
 /* "not seeing output on farts .. we need a warning in programming view for

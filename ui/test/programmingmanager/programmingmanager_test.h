@@ -60,6 +60,7 @@ private slots:
     void theColourPickerStaysOpenWhileItsLookIsEdited();
     void theRigViewDrawsWhatTheScenesFadersSet();
     void theRigViewFollowsALookSwappedOnTheScene();
+    void editingARunningEffectChangesItsOutput();
     void unpatchedTargetsAreFlaggedInTheProgrammingView();
     void anEffectIsALookForWhatItDrives();
     void unpatchedAndSilentFixturesAreInTheFooter();

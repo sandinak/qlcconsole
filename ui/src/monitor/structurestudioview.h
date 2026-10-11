@@ -835,6 +835,15 @@ private:
     Plane    m_plane = Front;
     bool     m_beams = true;   ///< draw beam cones for lit movers
     quint32  m_activeSceneId = 0xFFFFFFFF;
+    /** The active scene is playing: its heads go where the DMX sends them. */
+    bool activeSceneRunning() const;
+public:
+    /** Which way head @p unit of mover @p fid is drawn pointing: at the
+     *  active scene's Aim target while the scene is only selected, where
+     *  its pan and tilt send it once the scene runs (or with no target).
+     *  Null when there is nothing to say. */
+    QVector3D moverAim(quint32 fid, int unit = 0) const;
+private:
     bool     m_lookRefreshPending = false;   ///< coalesces re-resolves
     /** Where a fixture is aimed, and in whose colour to say so.
      *

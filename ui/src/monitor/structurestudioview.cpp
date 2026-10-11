@@ -3412,6 +3412,32 @@ void StructureStudioView::rebuildAimTargets()
 
 /* The point a fixture is currently aimed at, read FRESH: the target may have
  * been dragged since the cache was built. */
+QVector3D StructureStudioView::moverAim(quint32 fid, int unit) const
+{
+    Fixture *fx = m_doc != nullptr ? m_doc->fixture(fid) : nullptr;
+    if (fx == nullptr)
+        return QVector3D();
+    // The scene's target while it is only selected; the DMX once it runs.
+    const bool sceneDriving = m_liveValues && activeSceneRunning();
+    QVector3D aimPt;
+    if (!sceneDriving && aimPointFor(fid, aimPt))
+    {
+        const QVector3D toTarget = aimPt - fixtureCentre(fid);
+        if (toTarget.length() > 1e-3f)
+            return toTarget.normalized();
+    }
+    QVector3D dir;
+    if (m_liveValues && fixtureAimDirection(fx, m_doc->monitorProperties()->fixtureRigProps(fid), dir, unit))
+        return dir;
+    return QVector3D();
+}
+
+bool StructureStudioView::activeSceneRunning() const
+{
+    const Function *f = m_doc != nullptr ? m_doc->function(m_activeSceneId) : nullptr;
+    return f != nullptr && f->isRunning();
+}
+
 bool StructureStudioView::aimPointFor(quint32 fid, QVector3D &out) const
 {
     const QHash<quint32, AimSpec>::const_iterator it = m_aimTarget.constFind(fid);
@@ -5461,16 +5487,12 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                indistinguishable from the channel values alone. When the scene
                is actually running, the DMX aims at the target anyway and the
                two agree. */
-            QVector3D aim;
-            QVector3D aimPt;
-            const bool aimed = aimPointFor(fid, aimPt);
-            if (aimed)
-            {
-                const QVector3D toTarget = aimPt - fixtureCentre(fid);
-                if (toTarget.length() > 1e-3f)
-                    aim = toTarget.normalized();
-            }
-
+            /* ...UNTIL the scene runs. Then the DMX is the truth: an effect
+               that moves the heads round the target (Stage Shape, an orbit
+               on an Aim look) sends them somewhere other than the target
+               itself, and drawing them all converged on it hid the effect
+               completely -- "if I make changes to the effect I don't see
+               changes in the rig view". */
             /* One look per head. A two-arm fixture's arms pan, tilt and colour
                on their own channels, so reading the first head for both drew
                them as twins whatever the desk was doing. A scene target still
@@ -5478,12 +5500,10 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             const int units = qMax(1, traits.headCount);
             QVector<MoverHeadLook> looks(units);
             for (int u = 0; u < units; ++u)
-            {
-                looks[u].aim = aim;
-                if (aim.isNull() && m_liveValues
-                    && !fixtureAimDirection(fx, rp, looks[u].aim, u))
-                    looks[u].aim = QVector3D();
-            }
+                looks[u].aim = moverAim(fid, u);
+            // The target, for the dashed trace below -- not once it runs.
+            QVector3D aimPt;
+            const bool aimed = !(m_liveValues && activeSceneRunning()) && aimPointFor(fid, aimPt);
 
             /* The beam's strength and colour are the fixture's own OUTPUT, not
                the shaded body colour.

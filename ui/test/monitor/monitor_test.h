@@ -563,6 +563,7 @@ private slots:
      *  conventions are easy to get backwards and invisible until someone looks
      *  at a rig, so pin each one. */
     void moverAimFollowsPanAndTilt();
+    void aRunningLookIsDrawnWhereItsHeadsAreSent();
     /** Room light applies whether or not live output is shown, and takes the
      *  whole picture down toward a blackout. */
     void ambientLevelDimsTheWholeView();

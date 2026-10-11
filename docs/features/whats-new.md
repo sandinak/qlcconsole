@@ -19,6 +19,11 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Lighting Studio
 
+- **The rig view shows a running position effect on an Aim look.** A head
+  under a look with an Aim target was always drawn pointing at the target —
+  so Stage Shape, or an orbit round a target, never showed. Selected, a
+  look still shows where its target is; running, the heads are drawn where
+  they're actually sent.
 - **A drag only moves; Shift-drop attaches.** Dropping a fixture over a
   truss, pipe or deck no longer hangs it there unless you hold **Shift** as
   you let go; the outline turns green while it would, and updates the

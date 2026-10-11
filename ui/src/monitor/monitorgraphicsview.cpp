@@ -8311,7 +8311,11 @@ QPolygonF MonitorGraphicsView::fixtureProjection(quint32 fid) const
        over a stage does. */
     QVector3D dir;
     bool aimed = false;
-    if (Scene *active = qobject_cast<Scene *>(m_doc->function(m_activeSceneId)))
+    /* ...until it RUNS: then the heads go where the DMX sends them, which an
+       effect on the Aim look (Stage Shape round the target, an orbit) makes
+       somewhere other than the target itself. */
+    Scene *active = qobject_cast<Scene *>(m_doc->function(m_activeSceneId));
+    if (active != nullptr && !active->isRunning())
     {
         foreach (const AimSolver::SceneAim &a, AimSolver::sceneAims(m_doc, active))
         {

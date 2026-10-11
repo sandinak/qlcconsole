@@ -55,6 +55,7 @@
 #include "monitorgraphicsview.h"
 #include "monitorfixtureitem.h"
 #include "structurestudioview.h"
+#include "mastertimer.h"
 #include "lanternpixels.h"
 #include "effectscriptrunner.h"
 #include "effectscriptcache.h"
@@ -18437,6 +18438,64 @@ void Monitor_Test::theCrosshairsSayWhereThePointerIs()
         QCOMPARE(known, 1 | 4);
         QVERIFY(qAbs(w.z() - (0.610f + 1.626f + 0.15f)) < 0.03f);
     }
+    delete doc;
+}
+
+/* "if I make changes to the effect I don't see changes in the rig view":
+   Stage Shape on an Aim look sends each head to its own point round the
+   target, but the rig view drew a head under an Aim look pointing at the
+   target whatever it was sent. Selected, the target; running, the DMX. */
+void Monitor_Test::aRunningLookIsDrawnWhereItsHeadsAreSent()
+{
+    Doc *doc = new Doc(this);
+    for (int u = 0; u < 4; ++u)
+        doc->inputOutputMap()->addUniverse();
+    MonitorProperties *props = doc->monitorProperties();
+    Fixture *head = makeMover(doc, 10.0, 0, "Spot", QVector3D(0.0f, 6.0f, 6.0f));
+    QVERIFY(head != nullptr);
+    StageTarget *tgt = props->addStageTarget();
+    tgt->setX(0.0f); tgt->setY(0.0f); tgt->setZ(0.0f);
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, doc);
+    aim->setName("At"); aim->setStageTargetId(tgt->id());
+    QVERIFY(doc->addPalette(aim));
+    Scene *scene = new Scene(doc);
+    scene->setName("Shape");
+    scene->addFixture(head->id());
+    scene->addPalette(aim->id());
+    QVERIFY(doc->addFunction(scene));
+
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.resize(600, 460);
+    v.reload();
+    v.setLiveValues(true);
+    v.setActiveScene(scene->id());
+
+    QVector3D aimPt;
+    QVERIFY(v.aimPointFor(head->id(), aimPt));
+    const QVector3D toTarget = (aimPt - v.fixtureCentre(head->id())).normalized();
+    // Only selected: drawn at the target.
+    QVERIFY(QVector3D::dotProduct(v.moverAim(head->id()), toTarget) > 0.99f);
+
+    // Running, and an effect sends it somewhere else: drawn there.
+    MasterTimer *timer = doc->masterTimer();          // not started: ticked by hand
+    scene->start(timer, FunctionParent::master());
+    for (int i = 0; i < 3; ++i)
+        timer->timerTick();
+    QVERIFY(scene->isRunning());
+    QByteArray dmx = head->channelValues();
+    dmx[0] = char(30);                          // pan well round
+    dmx[1] = char(40);                          // tilt well up
+    head->setChannelValues(dmx);
+    QVector3D sent;
+    QVERIFY(fixtureAimDirection(head, props->fixtureRigProps(head->id()), sent));
+    const QVector3D drawn = v.moverAim(head->id());
+    QVERIFY2(QVector3D::dotProduct(drawn, sent) > 0.999f, "a running look's head is drawn where it's sent");
+    QVERIFY(QVector3D::dotProduct(drawn, toTarget) < 0.95f);
+
+    scene->stop(FunctionParent::master());
+    for (int i = 0; i < 3; ++i)
+        timer->timerTick();
+    QVERIFY(QVector3D::dotProduct(v.moverAim(head->id()), toTarget) > 0.99f);
     delete doc;
 }
 

@@ -22,11 +22,11 @@ target_link_libraries(${module_name} PRIVATE
     qlcplusui
 )
 
-if(qmlui OR (QT_VERSION_MAJOR GREATER 5))
-    target_link_libraries(${module_name} PRIVATE
-        Qt${QT_MAJOR_VERSION}::Qml
-    )
-endif()
+# Qml on every Qt: the test drives a running effect, and effectinstance.h
+# needs QJSValue (QtQml on Qt5 too).
+target_link_libraries(${module_name} PRIVATE
+    Qt${QT_MAJOR_VERSION}::Qml
+)
 
 if(NOT (qmlui OR (QT_VERSION_MAJOR GREATER 5)))
     target_link_libraries(${module_name} PRIVATE
