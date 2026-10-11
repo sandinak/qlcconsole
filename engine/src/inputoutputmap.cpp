@@ -1278,6 +1278,20 @@ void InputOutputMap::setBpmNumber(int bpm)
     emit bpmNumberChanged(m_currentBPM);
 }
 
+double InputOutputMap::tapBeat()
+{
+    MasterTimer *mt = m_doc->masterTimer();
+    if (m_beatGeneratorType == Disabled)
+        return mt->bpm();
+    const double bpm = mt->tap();
+    if (qRound(bpm) != m_currentBPM)
+    {
+        m_currentBPM = qRound(bpm);
+        emit bpmNumberChanged(m_currentBPM);
+    }
+    return bpm;
+}
+
 int InputOutputMap::bpmNumber() const
 {
     if (m_beatGeneratorType == Disabled)

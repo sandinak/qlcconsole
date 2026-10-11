@@ -111,6 +111,8 @@ EffectInstance::EffectInstance(Doc *doc, quint32 sceneId, quint32 effectPaletteI
 
     m_state = m_script.newState();
     m_elapsed.start();
+    if (m_doc != nullptr && m_doc->masterTimer() != nullptr)
+        m_startBeat = std::floor(m_doc->masterTimer()->beatPosition());
 }
 
 void EffectInstance::setInputValue(const QString &slotName, float norm01)
@@ -1187,27 +1189,29 @@ QJSValue EffectInstance::buildInputsObject() const
     const double elapsedMs = (double)m_elapsed.elapsed();
     obj.setProperty("_time", elapsedMs / 1000.0);
 
-    // Beat/tempo inputs from MasterTimer so scripts can lock to music tempo.
-    //   _beat      — 0.0→1.0 sawtooth phase within the current beat period
-    //   _bpm       — current BPM (0 when no beat source is active)
-    //   _beatCount — integer count of beats since this instance started
+    // Beat/tempo inputs from MasterTimer's beat clock so scripts can lock to
+    // music tempo -- the SHARED clock, so every effect is on the same beat
+    // however far apart they were started, and a tap or an external beat
+    // pulls them all onto it (SPEED_SPREAD_DESIGN.md, S1):
+    //   _beat      — 0.0→1.0 sawtooth phase within the current beat
+    //   _bpm       — current tempo (0 when there is no clock)
+    //   _beatCount — whole beats since this instance started
+    //   _beatPos   — the clock's running beat count (fraction = _beat)
     MasterTimer *mt = m_doc->masterTimer();
-    const int beatDurationMs = mt ? mt->beatTimeDuration() : 0;
-    const int bpm            = mt ? mt->bpmNumber()        : 0;
-    if (beatDurationMs > 0)
+    if (mt != nullptr)
     {
-        const double beatPhase = std::fmod(elapsedMs, (double)beatDurationMs)
-                                 / (double)beatDurationMs;
-        const int beatCount    = (int)(elapsedMs / (double)beatDurationMs);
-        obj.setProperty("_bpm",       (double)bpm);
-        obj.setProperty("_beat",      beatPhase);
-        obj.setProperty("_beatCount", beatCount);
+        const double pos = mt->beatPosition();
+        obj.setProperty("_bpm",       mt->bpm());
+        obj.setProperty("_beat",      pos - std::floor(pos));
+        obj.setProperty("_beatCount", int(std::floor(pos) - m_startBeat));
+        obj.setProperty("_beatPos",   pos);
     }
     else
     {
         obj.setProperty("_bpm",       0.0);
         obj.setProperty("_beat",      0.0);
         obj.setProperty("_beatCount", 0);
+        obj.setProperty("_beatPos",   0.0);
     }
 
     // One-shot lifecycle: hand the effect its window so it fits any duration.

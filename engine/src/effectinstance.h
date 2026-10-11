@@ -231,6 +231,7 @@ private:
     EffectScript     m_script;
     QJSValue         m_state;
     QElapsedTimer    m_elapsed;
+    double           m_startBeat = 0;       //!< the beat clock's whole beat at the start
 
     /** The stage-laid grid of a multi-group look (effectiveCells()): placing
      *  every head on the stage is milliseconds a tick, so it is kept for up to

@@ -174,9 +174,10 @@ unbound). Plus host-injected timing, always present:
 |---|---|
 | `inputs.<name>` | declared input slot value, 0..1 |
 | `inputs._time` | seconds since the scene started |
-| `inputs._beat` | 0.0–1.0 sawtooth phase within the current beat |
-| `inputs._bpm` | current BPM (0 = no beat source) |
-| `inputs._beatCount` | integer beats since start |
+| `inputs._beat` | 0.0–1.0 sawtooth phase within the current beat — of the app's one beat clock, so every effect is on the same beat |
+| `inputs._bpm` | current tempo, may be fractional (0 = no clock) |
+| `inputs._beatCount` | whole beats since this effect started |
+| `inputs._beatPos` | the beat clock's running count; its fraction is `_beat` |
 
 ### `palettes` — resolved palette references
 

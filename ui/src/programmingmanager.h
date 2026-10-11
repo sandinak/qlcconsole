@@ -363,8 +363,6 @@ private:
     QPushButton  *m_bpmBtn;
     QSpinBox     *m_bpmSpin;
     QPushButton  *m_tapBtn;
-    QElapsedTimer m_tapTimer;
-    bool          m_tapActive = false;
 
     // Followspot config panel (kept for signal wiring; always hidden from UI)
     QWidget     *m_followSpotPanel;

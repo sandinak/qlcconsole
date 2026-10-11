@@ -6,6 +6,20 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-11 — One beat clock (SPEED_SPREAD_DESIGN.md S1) *(SHIPPED)*
+
+- **MasterTimer beat clock**: `beatPosition()` (a running, thread-safe
+  beat count, continuous across tempo changes), fractional `bpm()`/
+  `setBpm()`, `alignBeat(pull)`, `tap()` (four-interval average, 2 s reset,
+  beat on the tap). Internal beats fire when the clock crosses a whole
+  beat; `requestBeat()` (external sources) nudges the phase halfway.
+- **Effects** read it: `_beat` is the clock's phase (was time since the
+  instance started, so effects started apart stayed apart), `_bpm`
+  fractional, `_beatCount` counted on the clock, new `_beatPos`.
+- **Tap** (Programming toolbar) goes through `InputOutputMap::tapBeat()`.
+- Tests: mastertimer_test (+5), effectinstance_test
+  `effectsStartedApartAreOnTheSameBeat`.
+
 ### 2026-10-11 — Patch list *(SHIPPED)*
 
 - **Patch list** (`engine/src/patchlist.{h,cpp}`,

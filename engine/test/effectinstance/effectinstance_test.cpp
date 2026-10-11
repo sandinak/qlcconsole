@@ -105,6 +105,36 @@ void EffectInstance_Test::groupTargetDrivesItsFixtures()
     QCOMPARE(inst.effectiveFixtureIds().size(), 3);
 }
 
+/* "_beat" was the time since THIS effect started, modulo a beat: two effects
+   started a third of a beat apart stayed a third of a beat apart for ever,
+   and a tap never brought them together. Now both read the one beat clock. */
+void EffectInstance_Test::effectsStartedApartAreOnTheSameBeat()
+{
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixtureGroup(m_group->id());
+    MasterTimer *mt = m_doc->masterTimer();
+    mt->setBpm(120);                                // half a second a beat
+
+    EffectInstance first(m_doc, scene->id(), m_palette->id());
+    QTest::qWait(170);                              // a third of a beat
+    EffectInstance second(m_doc, scene->id(), m_palette->id());
+
+    const QJSValue a = first.buildInputsObject();
+    const QJSValue b = second.buildInputsObject();
+    const double beatA = a.property("_beat").toNumber(), beatB = b.property("_beat").toNumber();
+    double gap = qAbs(beatA - beatB);
+    gap = qMin(gap, 1.0 - gap);                     // across the wrap
+    QVERIFY2(gap < 0.02, qPrintable(QString("_beat %1 vs %2").arg(beatA).arg(beatB)));
+    QCOMPARE(a.property("_bpm").toNumber(), 120.0);
+    QVERIFY(qAbs(a.property("_beatPos").toNumber() - b.property("_beatPos").toNumber()) < 0.02);
+
+    // A tap puts the beat now, for both.
+    mt->tap();
+    const double after = first.buildInputsObject().property("_beat").toNumber();
+    QVERIFY2(after < 0.03 || after > 0.97, qPrintable(QString::number(after)));
+}
+
 void EffectInstance_Test::singleFixtureTargetOnly()
 {
     Scene *scene = new Scene(m_doc);

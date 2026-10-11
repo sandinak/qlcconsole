@@ -73,6 +73,11 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Effects
 
+- **Effects keep the beat together.** Every effect that follows the beat
+  reads one beat clock — two started at different moments used to stay
+  that far apart for good. **Tap** now averages your last four taps and
+  puts the beat on the last one, pulling every beat effect onto it.
+  ([On the beat](effects.md#on-the-beat))
 - **Text** — words on a pixel grid, scrolling or still in the middle, in
   the look's colours; settings that are words get a text box.
   ([Text](programming-tab.md#text))

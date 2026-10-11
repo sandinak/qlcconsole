@@ -2937,7 +2937,6 @@ void ProgrammingManager::slotBpmToggled(bool on)
         ioMap->setBeatGeneratorType(InputOutputMap::Disabled);
         m_bpmSpin->setEnabled(false);
         m_tapBtn->setEnabled(false);
-        m_tapActive = false;
     }
 }
 
@@ -2950,27 +2949,14 @@ void ProgrammingManager::slotBpmChanged(int bpm)
 
 void ProgrammingManager::slotTapBeat()
 {
-    if (!m_tapActive)
-    {
-        // First tap — just start the clock
-        m_tapTimer.start();
-        m_tapActive = true;
+    // The tempo from the last few taps, and the beat on this one -- every
+    // effect on the clock lands on it (MasterTimer::tap()).
+    InputOutputMap *ioMap = m_doc->inputOutputMap();
+    if (!ioMap || !m_bpmBtn->isChecked())
         return;
-    }
-
-    qint64 elapsed = m_tapTimer.elapsed();
-    m_tapTimer.restart();
-
-    if (elapsed < 200 || elapsed > 3000)
-    {
-        // Outside 20–300 BPM range; treat as a fresh first tap
-        m_tapActive = false;
-        return;
-    }
-
-    int bpm = qRound(60000.0 / (double)elapsed);
-    bpm = qBound(20, bpm, 400);
-    m_bpmSpin->setValue(bpm);  // triggers slotBpmChanged via valueChanged
+    const double bpm = ioMap->tapBeat();
+    const QSignalBlocker block(m_bpmSpin);
+    m_bpmSpin->setValue(qRound(bpm));
 }
 
 /* True exactly once, ever: the first time anybody asks. Consuming the flag as

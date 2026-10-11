@@ -41,9 +41,11 @@ under `~/.claude/.../memory/`.
 Effects and playback (from Branson, 2026-10-11, in this order; scope each
 before building):
 
-1. **The spread layer, with speed masters and Link** — spreading a look's
-   values across a selection, plus speed masters (and Link, which keeps
-   tempos together) to drive the timing.
+1. **The spread layer, with speed masters and Link** — scoped in
+   [SPEED_SPREAD_DESIGN.md](SPEED_SPREAD_DESIGN.md): S1 one beat clock
+   (fixes effects running out of phase), S2 four speed masters that can
+   follow each other, S3 the host-side spread layer, S4 control-surface
+   automapping (a Speed page). Ableton Link deferred (GPL licence).
 2. **Field generators sampled at positions, plus fire** — generators that
    are a field over the stage, each fixture taking its value from where it
    stands on the plot; fire as one of them.

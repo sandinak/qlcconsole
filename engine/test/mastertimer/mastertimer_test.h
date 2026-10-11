@@ -44,6 +44,12 @@ private slots:
     void stop();
     void restart();
 
+    void theBeatClockRunsAtTheTempo();
+    void aTempoChangeKeepsTheBeatsPlace();
+    void alignBeatPutsTheBeatNow();
+    void tapSetsTheTempoAndTheBeat();
+    void internalBeatsFireOnTheClocksBeats();
+
 private:
     Doc* m_doc;
 };

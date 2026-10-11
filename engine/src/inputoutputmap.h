@@ -751,6 +751,11 @@ public:
     void setBpmNumber(int bpm);
     int bpmNumber() const;
 
+    /** Tap tempo (MasterTimer::tap()): the tempo from the last few taps and
+     *  the beat on this one. Ignored while the beat generator is Disabled.
+     *  Returns the tempo, fractional. */
+    double tapBeat();
+
     /** Audio input block latency in ms (captureSize / sampleRate) when the beat
      *  generator is Audio and a capture device is live; -1 otherwise. A measured
      *  floor for the auto-tap detection-latency correction. */

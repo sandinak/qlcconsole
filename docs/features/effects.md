@@ -81,6 +81,17 @@ stands on stage.
 | **Audio Spectrum** / **Audio VU** | Light with the live audio spectrum / level |
 | **MIDI Keys** / **MIDI Flash** / **MIDI Comet** / **MIDI Puddles** | Light from the notes played on a MIDI keyboard — keys, a flash, comets, ripples |
 
+### On the beat
+
+Effects that follow the beat (a **Beat sync** setting, or a beat-made
+effect) all read **one beat clock**, so they're on the same beat however far
+apart they were started. Turn the clock on with the Programming toolbar's
+**BPM** button and set the tempo there, or **Tap** it: the tempo comes from
+your last four taps (pause two seconds to start over), and the beat lands
+on your last tap — every beat effect jumps onto it. A single tap just moves
+the beat. An external beat (MIDI clock, audio) pulls the clock onto its
+beat gently rather than jolting it.
+
 ## Diagnostics
 
 | Effect | What it does |
