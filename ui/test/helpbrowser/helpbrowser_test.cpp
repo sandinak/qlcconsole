@@ -25,6 +25,7 @@
 #include <QListWidget>
 #include <QLineEdit>
 #include <QFile>
+#include <QTextBlock>
 #include <QTextDocumentFragment>
 
 #define private public
@@ -132,6 +133,11 @@ void HelpBrowser_Test::aLinkToAHeadingScrollsToIt()
     QCOMPARE(help.currentFile(), QString("lighting-studio.md"));
     QCOMPARE(help.currentHeading(), QString("Mounting a fixture"));
     QVERIFY2(help.browser()->verticalScrollBar()->value() > 0, "it should be scrolled down to the heading");
+    // And it is the heading at the top of the view -- not just near it (a
+    // long page is laid out lazily, and scrolling by its layout landed past).
+    for (int i = 0; i < 3; ++i)
+        QApplication::processEvents();
+    QCOMPARE(help.browser()->cursorForPosition(QPoint(20, 12)).block().text(), QString("Mounting a fixture"));
     help.m_back->click();
     QCOMPARE(help.currentFile(), QString("getting-started.md"));
     // A link written for the repository, from one folder to another.

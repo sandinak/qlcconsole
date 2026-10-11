@@ -23,6 +23,8 @@
 #include <QTextBrowser>
 #include <QTextDocument>
 #include <QTextBlock>
+#include <QTextDocumentFragment>
+#include <QTimer>
 #include <QImageReader>
 #include <QListWidget>
 #include <QToolButton>
@@ -59,8 +61,8 @@ QString titleOf(const QString &file)
 {
     const QString text = readGuide(file);
     for (const QString &line : text.split(QLatin1Char('\n')))
-        if (line.startsWith(QLatin1String("# ")))
-            return line.mid(2).trimmed();
+        if (line.startsWith(QLatin1String("# ")))   // as written: "Stage Targets &amp; …"
+            return QTextDocumentFragment::fromHtml(line.mid(2).trimmed()).toPlainText();
     return file;
 }
 
@@ -215,6 +217,20 @@ void HelpBrowser::load(const QString &file, const QString &fragment, bool record
                 c.setCharFormat(img);
             }
 
+        /* Each heading an anchor, named as GitHub names it, for
+           scrollToHeading(). */
+        for (QTextBlock b = doc->begin(); b.isValid(); b = b.next())
+        {
+            if (b.blockFormat().headingLevel() <= 0 || b.length() <= 1)
+                continue;
+            QTextCursor c(b);
+            c.movePosition(QTextCursor::EndOfBlock, QTextCursor::KeepAnchor);
+            QTextCharFormat anchor;
+            anchor.setAnchor(true);
+            anchor.setAnchorNames({ headingSlug(b.text()) });
+            c.mergeCharFormat(anchor);
+        }
+
         const QString title = titleOf(file);
         setWindowTitle(tr("qlcconsole Help — %1").arg(title));
         for (int i = 0; i < m_topics->count(); ++i)
@@ -250,10 +266,17 @@ void HelpBrowser::scrollToHeading(const QString &fragment)
         if (b.blockFormat().headingLevel() <= 0 || headingSlug(b.text()) != fragment)
             continue;
         m_heading = b.text();
-        QTextCursor c(b);
-        m_browser->setTextCursor(c);
-        const qreal top = doc->documentLayout()->blockBoundingRect(b).top();
-        m_browser->verticalScrollBar()->setValue(int(top));
+        m_browser->setTextCursor(QTextCursor(b));
+        /* By its anchor (load() names each heading): scrollToAnchor() lays
+           the page out as far as it needs -- a long page is otherwise laid
+           out lazily, and a heading not reached yet has no place to scroll
+           to. Again once the window is laid out at its real width. */
+        m_browser->scrollToAnchor(fragment);
+        const QString file = m_file, heading = m_heading;
+        QTimer::singleShot(0, this, [this, file, heading, fragment]() {
+            if (m_file == file && m_heading == heading)
+                m_browser->scrollToAnchor(fragment);
+        });
         return;
     }
 }
