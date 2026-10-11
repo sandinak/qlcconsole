@@ -806,6 +806,12 @@ public:
     void setFixtureRigProps(quint32 fid, const FixtureRigProps &props);
     void removeFixtureRigProps(quint32 fid) { m_rigProps.remove(fid); }
 
+    /** What fixture $fid is mounted ON, in words ("Truss T1 · 2.5 m along",
+     *  "Tower T2 · shelf 3", "free / on the floor"). One wording for the
+     *  plot's inspector, Fixture Properties and the patch list. */
+    QString mountDescription(quint32 fid) const;
+    QString mountDescription(const FixtureRigProps &rp, quint32 fid) const;
+
 signals:
     /** Emitted when a fixture's rig assignment changes (mounting, pan-zero
      *  facing, truss, offset) so live Aim looks can re-resolve immediately

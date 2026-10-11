@@ -179,6 +179,30 @@ from the one you type (…60, …61, …62, carrying past .255), and the dialog
 shows the range under the IP field — "One each: 172.18.2.60 to
 172.18.2.63" — or says when there aren't enough addresses left.
 
+### The patch list
+
+The paperwork for the crew who hang, name and address the rig. Open it from
+the menu bar's **Fixtures → Patch List…**, or the Lighting Studio's
+**More → Patch List…**. A row per fixture, in universe and address order,
+fixtures still in the inventory last:
+
+| Column | What it says |
+|---|---|
+| **Patch** | Universe (and its name) and the channels, one-based as the crew reads them: "1: Stage left · 12–23". A clashing fixture is listed where it asked to be, marked **clash**. |
+| **Fixture** | Its name. |
+| **Make / model**, **Mode** | From its definition. |
+| **Ch** | How many channels it takes. |
+| **Connection** | DMX, or a network fixture's transport and IP ("WLED 172.18.2.50"). |
+| **Goes to** | Where its universe goes: the output and device ("Art-Net → CS1 (172.18.2.211) port 1"), or nothing. |
+| **Mounted on** | The same words as Fixture Properties: "Truss FOH · 2.5 m along", "Tower T2 · shelf 3", "free / on the floor". |
+
+- **Save CSV…** — every column plus the fixture ID, the first and last
+  channel, X/Y/Z on the plot (in the plot's units) and a note, for a
+  spreadsheet or a label printer.
+- **Save PDF…** — a landscape Letter page, a table per universe headed
+  with where that universe goes, the header row repeated on each page.
+- **Copy** — the CSV on the clipboard, to paste straight into a sheet.
+
 ## The head-layout grid editor
 
 ![The head-layout grid: a 16×5 block of fixtures with per-head labels](../images/fixture-manager-grid-editor.png)

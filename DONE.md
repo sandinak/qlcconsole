@@ -6,6 +6,21 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-11 — Patch list *(SHIPPED)*
+
+- **Patch list** (`engine/src/patchlist.{h,cpp}`,
+  `ui/src/patchlistdialog.{h,cpp}`): Fixtures → Patch List…, or the
+  Studio's More menu. A row per fixture in universe/address order, the
+  inventory last, address clashes where they asked to be: name, make/model,
+  mode, channels, one-based range, connection (DMX, or transport + IP),
+  where the universe goes (output → device/IP/port), mount, plot X/Y/Z.
+  Save CSV (every column, spreadsheet-escaped, plot units), Save PDF
+  (landscape Letter, a table per universe, header repeated per page), Copy.
+  The "Mounted on" wording moved from Monitor into
+  `MonitorProperties::mountDescription()` so the engine can say it too.
+  Tests: `patchlist_test` (14), `patchlistdialog_test` (7). Label printing
+  stays in TODO.
+
 ### 2026-10-10 — Help, docs, and a day of Studio/effects work *(SHIPPED)*
 
 - **In-app help** (`ui/src/helpbrowser.{h,cpp}`, `ui/src/help.qrc`): the

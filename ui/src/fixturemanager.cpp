@@ -47,6 +47,7 @@
 #include <QtGui>
 #include <climits>
 
+#include "patchlistdialog.h"
 #include "qlcfixturemode.h"
 #include "qlcfixturedef.h"
 #include "qlcchannel.h"
@@ -121,6 +122,7 @@ FixtureManager::FixtureManager(QWidget* parent, Doc* doc)
     , m_resetAction(NULL)
     , m_fadeConfigAction(NULL)
     , m_remapAction(NULL)
+    , m_patchListAction(NULL)
     , m_groupAction(NULL)
     , m_unGroupAction(NULL)
     , m_newGroupAction(NULL)
@@ -1516,6 +1518,10 @@ void FixtureManager::initActions()
     connect(m_remapAction, SIGNAL(triggered(bool)),
             this, SLOT(slotRemap()));
 
+    m_patchListAction = new QAction(QIcon(":/fileexport.png"), tr("Patch List..."), this);
+    m_patchListAction->setToolTip(tr("Every fixture's patch, output and mount, to save as CSV or PDF"));
+    connect(m_patchListAction, &QAction::triggered, this, &FixtureManager::slotPatchList);
+
     // Icon-less, matching ConnectionsTree::appendUniversalMenuActions()'s
     // "Collapse/Expand everything below" -- expand/collapse-all is a tree-
     // state toggle, not an add/remove of anything, so it shouldn't borrow
@@ -1643,8 +1649,15 @@ void FixtureManager::populateFixturesMenu(QMenu *menu)
     menu->addAction(m_importAction);
     menu->addAction(m_exportAction);
     menu->addAction(m_remapAction);
+    menu->addAction(m_patchListAction);
     menu->addSeparator();
     menu->addAction(m_fadeConfigAction);
+}
+
+void FixtureManager::slotPatchList()
+{
+    PatchListDialog dlg(m_doc, this);
+    dlg.exec();
 }
 
 void FixtureManager::addFixture()

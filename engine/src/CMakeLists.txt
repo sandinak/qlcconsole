@@ -42,6 +42,7 @@ add_library(${module_name} SHARED
     mastertimer.cpp mastertimer.h
     monitorproperties.cpp monitorproperties.h
     networkreport.cpp networkreport.h
+    patchlist.cpp patchlist.h
     networktopology.cpp networktopology.h
     powerdistribution.cpp powerdistribution.h
     venue.cpp venue.h

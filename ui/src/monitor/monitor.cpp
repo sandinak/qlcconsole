@@ -94,6 +94,7 @@
 #include "networkgearcatalog.h"
 #include "networktopologydialog.h"
 #include "networkreportdialog.h"
+#include "patchlistdialog.h"
 #include "fixturecreator.h"
 #include "monitorinventorypanel.h"
 #include "qlcfixturedef.h"
@@ -1738,6 +1739,10 @@ void Monitor::initGraphicsToolbar()
                         this, SLOT(slotSetBackgroundColor()));
     moreMenu->addAction(tr("Network Topology…"), this, [this]() { slotEditNetworkNode(0); });
     moreMenu->addAction(tr("Network Report…"), this, &Monitor::slotNetworkReport);
+    moreMenu->addAction(tr("Patch List…"), this, [this]() {
+        PatchListDialog dlg(m_doc, this);
+        dlg.exec();
+    });
 
     moreBtn->setMenu(moreMenu);
     m_graphicsToolBar->addWidget(moreBtn);
@@ -4245,67 +4250,9 @@ void Monitor::studioAddFixture(int kind, quint32 id, StructureStudioView *view)
     m_doc->setModified();
 }
 
-/* What a fixture is mounted ON, in words.
- *
-   ONE wording, because the Lighting Studio inspector needs to say it too. That
-   inspector showed Face and Placement -- "Top", "Inside" -- but never WHICH
-   thing those were relative to, so a fixture decked on a riser read as
-   "Top / Inside" with no riser in sight, and the same fixture described two
-   different ways in two different panels. */
 QString Monitor::mountDescription(const FixtureRigProps &rp, quint32 fid) const
 {
-    const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
-    const QString sfx = isFeet ? tr(" ft") : tr(" m");
-    const double toDisp = isFeet ? 3.28084 : 1.0;
-
-    if (rp.onHanger())
-    {
-        Hanger *h = m_props->hanger(rp.hangerId);
-        QString on;
-        if (h != nullptr && h->parentKind() == Hanger::OnTruss)
-        {
-            if (Truss *t = m_props->truss(h->parentId())) on = t->name();
-        }
-        else if (h != nullptr)
-        {
-            if (Tower *tw = m_props->tower(h->parentId())) on = tw->name();
-        }
-        return on.isEmpty() ? tr("Hanger %1").arg(h ? h->name() : QString())
-                            : tr("%1 on %2").arg(h ? h->name() : tr("Hanger"), on);
-    }
-    if (rp.trussId != Truss::invalidId())
-    {
-        Truss *t = m_props->truss(rp.trussId);
-        return tr("Truss %1 · %2%3 along").arg(t ? t->name() : QString())
-               .arg(double(rp.trussOffset) * toDisp, 0, 'f', 1).arg(sfx);
-    }
-    if (rp.pipeId != Pipe::invalidId())
-    {
-        Pipe *p = m_props->pipe(rp.pipeId);
-        return tr("Bar %1").arg(p ? p->name() : QString());
-    }
-    if (rp.towerId != Tower::invalidId())
-    {
-        Tower *t = m_props->tower(rp.towerId);
-        const QString tn = t ? t->name() : QString();
-        if (rp.towerMountSide == FixtureRigProps::TowerTop)    return tr("Tower %1 · top").arg(tn);
-        if (rp.towerMountSide == FixtureRigProps::TowerBottom) return tr("Tower %1 · bottom").arg(tn);
-        return tr("Tower %1 · shelf %2").arg(tn).arg(rp.towerShelf + 1);
-    }
-    if (rp.riserPlatformId != FixtureRigProps::invalidPlatformId())
-    {
-        StagePlatform *pl = m_props->platform(rp.riserPlatformId);
-        return tr("Riser %1 · %2").arg(pl ? pl->name() : QString())
-               .arg(rp.riserFace == FixtureRigProps::RiserTop ? tr("top") : tr("front face"));
-    }
-    if (rp.deckPlatformId != FixtureRigProps::invalidPlatformId())
-    {
-        StagePlatform *pl = m_props->platform(rp.deckPlatformId);
-        return tr("On deck %1").arg(pl ? pl->name() : QString());
-    }
-    if (m_props->fixtureFrameGroup(fid) != 0)
-        return tr("Studio group");
-    return tr("free / on the floor");
+    return m_props->mountDescription(rp, fid);
 }
 
 void Monitor::studioAddBar(int kind, quint32 id, StructureStudioView *view, float offset)

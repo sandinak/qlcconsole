@@ -1952,6 +1952,74 @@ void MonitorProperties::removeStageTarget(quint32 id)
  * Fixture rig properties
  *********************************************************************/
 
+/* What a fixture is mounted ON, in words.
+ *
+   ONE wording, because the Lighting Studio inspector needs to say it too. That
+   inspector showed Face and Placement -- "Top", "Inside" -- but never WHICH
+   thing those were relative to, so a fixture decked on a riser read as
+   "Top / Inside" with no riser in sight, and the same fixture described two
+   different ways in two different panels. */
+QString MonitorProperties::mountDescription(const FixtureRigProps &rp, quint32 fid) const
+{
+    const bool isFeet = (gridUnits() == Feet);
+    const QString sfx = isFeet ? tr(" ft") : tr(" m");
+    const double toDisp = isFeet ? 3.28084 : 1.0;
+
+    if (rp.onHanger())
+    {
+        Hanger *h = hanger(rp.hangerId);
+        QString on;
+        if (h != nullptr && h->parentKind() == Hanger::OnTruss)
+        {
+            if (Truss *t = truss(h->parentId())) on = t->name();
+        }
+        else if (h != nullptr)
+        {
+            if (Tower *tw = tower(h->parentId())) on = tw->name();
+        }
+        return on.isEmpty() ? tr("Hanger %1").arg(h ? h->name() : QString())
+                            : tr("%1 on %2").arg(h ? h->name() : tr("Hanger"), on);
+    }
+    if (rp.trussId != Truss::invalidId())
+    {
+        Truss *t = truss(rp.trussId);
+        return tr("Truss %1 · %2%3 along").arg(t ? t->name() : QString())
+               .arg(double(rp.trussOffset) * toDisp, 0, 'f', 1).arg(sfx);
+    }
+    if (rp.pipeId != Pipe::invalidId())
+    {
+        Pipe *p = pipe(rp.pipeId);
+        return tr("Bar %1").arg(p ? p->name() : QString());
+    }
+    if (rp.towerId != Tower::invalidId())
+    {
+        Tower *t = tower(rp.towerId);
+        const QString tn = t ? t->name() : QString();
+        if (rp.towerMountSide == FixtureRigProps::TowerTop)    return tr("Tower %1 · top").arg(tn);
+        if (rp.towerMountSide == FixtureRigProps::TowerBottom) return tr("Tower %1 · bottom").arg(tn);
+        return tr("Tower %1 · shelf %2").arg(tn).arg(rp.towerShelf + 1);
+    }
+    if (rp.riserPlatformId != FixtureRigProps::invalidPlatformId())
+    {
+        StagePlatform *pl = platform(rp.riserPlatformId);
+        return tr("Riser %1 · %2").arg(pl ? pl->name() : QString())
+               .arg(rp.riserFace == FixtureRigProps::RiserTop ? tr("top") : tr("front face"));
+    }
+    if (rp.deckPlatformId != FixtureRigProps::invalidPlatformId())
+    {
+        StagePlatform *pl = platform(rp.deckPlatformId);
+        return tr("On deck %1").arg(pl ? pl->name() : QString());
+    }
+    if (fixtureFrameGroup(fid) != 0)
+        return tr("Studio group");
+    return tr("free / on the floor");
+}
+
+QString MonitorProperties::mountDescription(quint32 fid) const
+{
+    return mountDescription(fixtureRigProps(fid), fid);
+}
+
 FixtureRigProps MonitorProperties::fixtureRigProps(quint32 fid) const
 {
     return m_rigProps.value(fid, FixtureRigProps());

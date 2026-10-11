@@ -293,6 +293,7 @@ private slots:
     void slotResetFixture();
     void slotFadeConfig();
     void slotRemap();
+    void slotPatchList();
     void slotUnGroup();
     void slotGroupSelected(QAction* action);
     void slotMoveGroupUp();
@@ -344,6 +345,7 @@ private:
     QAction* m_resetAction;
     QAction* m_fadeConfigAction;
     QAction* m_remapAction;
+    QAction* m_patchListAction;
     QAction* m_groupAction;
     QAction* m_unGroupAction;
     QAction* m_newGroupAction;

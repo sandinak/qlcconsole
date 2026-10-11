@@ -38,10 +38,25 @@ under `~/.claude/.../memory/`.
 
 ## Backlog — asked for, not started
 
-- **Exportable patch list** for the techs who name and address the
-  instances: per fixture its name, make/model/mode, universe/address (or IP
-  and transport), location (structure, position) and channels. CSV/PDF,
-  later label printing.
+Effects and playback (from Branson, 2026-10-11, in this order; scope each
+before building):
+
+1. **The spread layer, with speed masters and Link** — spreading a look's
+   values across a selection, plus speed masters (and Link, which keeps
+   tempos together) to drive the timing.
+2. **Field generators sampled at positions, plus fire** — generators that
+   are a field over the stage, each fixture taking its value from where it
+   stands on the plot; fire as one of them.
+3. **Layers, blend modes and masks** — effects stacked in layers, with
+   blend modes between them and masks to limit where one applies.
+4. **Beat-quantized GO and Swop** — GO and Swop that land on the next
+   beat rather than the instant they're pressed.
+5. **Keyframe shapes and spatial transitions** — the shape of a move
+   between keyframes, and transitions that sweep across the rig spatially
+   instead of everything changing at once.
+
+- **Patch-list labels** — the patch list (Fixtures → Patch List…) exports
+  CSV and PDF; still to come: printing a label per fixture from it.
 - **Stage and inventory across show files** — keep a stage layout
   (structures, platforms, scenery) and the hardware inventory (fixtures,
   network gear, their patch) outside any one show, and bring them into a

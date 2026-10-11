@@ -60,6 +60,10 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Patching
 
+- **Patch list** — every fixture's patch, where its universe goes and what
+  it hangs on, to save as **CSV** or a printable **PDF** for the crew.
+  **Fixtures → Patch List…**, or the Studio's **More** menu.
+  ([The patch list](fixture-manager.md#the-patch-list))
 - **Patch Others Like This.** Right-click a structure: the other
   structures of its kind with the same fixtures are patched as it is — each
   fixture at the address of its counterpart, in its own structure's
