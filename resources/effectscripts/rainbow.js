@@ -7,6 +7,8 @@
     var effect = new Object;
     effect.apiVersion  = 1;
     effect.name        = "Rainbow";
+    // Takes the host's spread (fixture.phase, inputs._spread) in place of its own.
+    effect.hostSpread = "spread";
     effect.description = "Continuous hue rotation across all selected fixtures";
     effect.author      = "QLC+";
     effect.fixtureTypes = ["rgb"];
@@ -54,7 +56,7 @@
         var n = Math.max(fixtures.length, 1);
 
         return fixtures.map(function(f, i) {
-            var hue  = baseHue + (i / n) * spread * 360;
+            var hue  = baseHue + (inputs._spread ? f.phase : (i / n) * spread) * 360;
             var rgb  = hsvToRgb(hue, sat, dim);
             var intent = { r: rgb.r, g: rgb.g, b: rgb.b };
             if (f.hasDimmer) intent.dimmer = dim;

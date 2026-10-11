@@ -42,6 +42,7 @@ private slots:
     /** "can we put the sets in alpha order?" */
     void anEffectsTextIsTypedIn();
     void anEffectIsPutOnASpeedMaster();
+    void theHostSpreadStandsInForTheEffectsOwn();
     void theEffectListAndItsSettingsSitSideBySide();
     void theBrowsersListsAreAToZ();
 };

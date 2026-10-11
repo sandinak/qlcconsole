@@ -92,6 +92,27 @@ on your last tap — every beat effect jumps onto it. A single tap just moves
 the beat. An external beat (MIDI clock, audio) pulls the clock onto its
 beat gently rather than jolting it.
 
+### Spread
+
+Effects that chase across their heads — the phasers, pulses, orbits,
+rainbow, ballyhoo, gobo chase, native strobe — share one **Spread** row in
+the look editor, so they all spread the same way:
+
+- **Amount** — how far the effect's cycle runs across the heads: **1** is
+  one full wave across them, **0.5** half a wave, **2** two waves. At
+  **its own** (0) the effect uses its own spread setting, as before.
+- **Axis** — what puts the heads in order: **in look order**, the head
+  layout's **columns** or **rows**, or where they stand: **stage left to
+  right**, **front to back**, **by height**. Heads at the same place share
+  a phase (a column, a bar seen from the side).
+- **Direction** — **forward**, **reverse**, **centre out**, **ends in**.
+- **Wings** — split the heads into mirrored parts, each running the
+  spread (2 wings: out from the middle seam both ways).
+- **Blocks of** — neighbouring heads that share a phase.
+
+With the spread on, the effect's own spread (and a phaser's reverse) is
+hidden — the Spread row stands in for them.
+
 ### Speed masters
 
 Four tempo masters for effects to run on, so one tap or one fader moves

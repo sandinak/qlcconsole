@@ -12,6 +12,8 @@
     var effect = new Object;
     effect.apiVersion  = 1;
     effect.name        = "Color Phaser";
+    // Takes the host's spread (fixture.phase, inputs._spread) in place of its own.
+    effect.hostSpread = "spread,reverse";
     effect.description = "Waveform crossfade between two colours with phase spread";
     effect.author      = "QLC+";
     effect.fixtureTypes = ["rgb", "rgbw"];
@@ -59,7 +61,7 @@
         var dir = (rev > 0.5) ? -1.0 : 1.0;
 
         return fixtures.map(function(f, i) {
-            var phaseFull = t * rate + dir * (spread * i / n);
+            var phaseFull = t * rate + (inputs._spread ? f.phase : dir * (spread * i / n));
             var blend = shape(type, phaseFull);
 
             // Colour only — intensity is the scene Dimmer look's job.

@@ -16,6 +16,7 @@
 #ifndef EFFECTINSTANCE_H
 #define EFFECTINSTANCE_H
 
+#include "spreadlayer.h"
 #include <QMutex>
 #include <QJSValue>
 #include <QColor>
@@ -237,6 +238,7 @@ private:
     /** The clock it reads and the whole beat _beatCount counts from --
      *  set on the first tick, and again when its speed master changes. */
     mutable int      m_clockAssignment = -2;
+    SpreadLayer::Settings m_spreadBuilt;    //!< what the cells' "phase" was worked out for
     mutable double   m_startBeat = 0;
 
     /** The stage-laid grid of a multi-group look (effectiveCells()): placing

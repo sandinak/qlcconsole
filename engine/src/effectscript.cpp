@@ -119,6 +119,8 @@ bool EffectScript::load(const QString &path)
     m_syncTo    = QStringLiteral("span");
     m_onFinish  = QStringLiteral("hold");
     m_naturalDurationMs = 2000;
+    m_takesHostSpread = false;
+    m_hostSpreadParam.clear();
     m_inputs.clear();
     m_palettes.clear();
     m_targets.clear();
@@ -244,6 +246,11 @@ bool EffectScript::parseMeta()
     m_syncTo = jsText(m_script.property("syncTo")).toLower();
     if (m_syncTo.isEmpty())
         m_syncTo = QStringLiteral("span");
+    {
+        const QJSValue hs = m_script.property("hostSpread");
+        m_takesHostSpread = !hs.isUndefined() && !hs.isNull();
+        m_hostSpreadParam = m_takesHostSpread ? hs.toString() : QString();
+    }
     m_onFinish = jsText(m_script.property("onFinish")).toLower();
     if (m_onFinish.isEmpty())
         m_onFinish = QStringLiteral("hold");

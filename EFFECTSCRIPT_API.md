@@ -78,6 +78,7 @@ how it shows up in the look editor and how the host knows what to inject.
 | `apiVersion` | int | API version (current: `1`). |
 | `version` | int | Generator content version (default `1`). Bump when you change params/behaviour so Effects (presets) authored against an older version can be reasoned about. |
 | `name` | string | Display name in the effect picker. |
+| `hostSpread` | string | The script takes the **host's spread** (the look editor's Spread row): when `inputs._spread` is true it reads each fixture's `phase` instead of working out its own offset. The value names the script's own params the host spread stands in for, comma-separated (`"spread,reverse"`); the look editor hides them while it's on. `""` if it has none. |
 | `description` | string | One-line tooltip. |
 | `notes` | string | Long help shown in the editor panel. |
 | `author` | string | Credit. |
@@ -160,6 +161,7 @@ One object per (filtered) fixture in the scene. Fields:
 | `hasGobo` | bool | Has a gobo channel. |
 | `hasShutter` | bool | Has a shutter/strobe channel. |
 | `pos` | `{x,y,z}` | 3-D rig world position in **metres** (`{0,0,0}` if unplaced). |
+| `phase` | number | Where this head is in the effect's cycle, in **cycles**, from the host's spread (amount × its place along the chosen axis, direction, wings and blocks). 0 when the spread is off. Use it as the offset you'd otherwise compute from `i / n`: `t * rate + (inputs._spread ? f.phase : i * spread / n)`. |
 | `grid` | `{col,row,cols,rows}` | Cell coords for **pixel-style / matrix effects** (ripple, comet, plasma, RGBScript ports). `col,row` = this fixture's cell; `cols,rows` = grid size. Sourced from the fixture group's **head layout** (the same map RGB Matrix uses) when the scene targets a single laid-out group; otherwise the fixtures are a **1-D strip** in list order (`cols = N, rows = 1, row = 0`). Always present, so an effect can render on a grid unconditionally — a 1×N strip is just the degenerate case. |
 | `aimAt` | `{ <slot>: {pan,tilt} }` | Per-fixture aim **degrees** toward each bound `effect.targets` slot. Empty object per slot when unbound/unsolvable. |
 | `sceneTarget` | `{x,y,z, pan,tilt}` | The scene's **own Aim look** (implicit target). **Present only when the scene carries an Aim look.** `x,y,z` = the target's **world location** in metres (shared by all fixtures) — centre a shape/formation on it and return world-space aim intents (`aimX/aimY/aimZ`). `pan,tilt` = this fixture's pre-solved aim **degrees** at the target (subject-height biased; present only with usable rig geometry) — the followspot defers to the host's converged aim when these are present. |
@@ -178,6 +180,7 @@ unbound). Plus host-injected timing, always present:
 | `inputs._bpm` | current tempo, may be fractional (0 = no clock) |
 | `inputs._beatCount` | whole beats since this effect started |
 | `inputs._beatPos` | the beat clock's running count; its fraction is `_beat` |
+| `inputs._spread` | true when the look's host spread is on (see `hostSpread`, `fixture.phase`) |
 
 When the effect runs on the main clock or a **speed master** (the look
 editor's Speed, or its look, chase step, chase or collection), the clock

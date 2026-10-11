@@ -81,6 +81,7 @@
 #include "qlcioplugin.h"
 #include "qlceventpos.h"
 #include "speedmasters.h"
+#include "spreadlayer.h"
 
 // VC XY pad works in DMX space [0..256); palette pan/tilt are degrees.
 static const qreal XY_MAX = 256.0;
@@ -1671,8 +1672,11 @@ void LookEditor::rebuildEffectDynWidget()
         const int speedKey = gp ? int(gp->effectParamValues().value(QStringLiteral("__speedMaster"),
                                                                     SpeedMasters::Inherit))
                                 : int(SpeedMasters::Inherit);
+        // ...and whether the host spread is on: it hides the script's own.
+        const bool spreadKey = gp && SpreadLayer::fromParams(gp->effectParamValues()).isActive();
         const QString buildKey = QString::number(m_paletteId) + QLatin1Char('|') + gScriptPath
-                                 + QLatin1Char('|') + QString::number(speedKey);
+                                 + QLatin1Char('|') + QString::number(speedKey)
+                                 + QLatin1Char('|') + QString::number(int(spreadKey));
         qDebug() << "[LE-DIAG] buildKey=" << buildKey
                  << "cached=" << m_effectBuildKey
                  << "hasLayout=" << (m_effectDynWidget->layout() != nullptr);
@@ -1925,6 +1929,11 @@ void LookEditor::rebuildEffectDynWidget()
     const bool onMaster = SpeedMasters::isMaster(effectiveSpeed)
                           || effectiveSpeed == SpeedMasters::MainClock;
 
+    // The host spread, when on, stands in for the script's own spread params.
+    const SpreadLayer::Settings hostSpread = SpreadLayer::fromParams(p->effectParamValues());
+    const QStringList supersededBySpread = tmpScript.takesHostSpread() && hostSpread.isActive()
+                                           ? tmpScript.hostSpreadParams() : QStringList();
+
     // --- Parameters ---
     const QList<EffectScript::ParamDef> &pdefs = tmpScript.paramDefs();
     if (!pdefs.isEmpty())
@@ -1937,6 +1946,8 @@ void LookEditor::rebuildEffectDynWidget()
         form->setContentsMargins(0, 0, 0, 0);
         for (const EffectScript::ParamDef &pd : pdefs)
         {
+            if (supersededBySpread.contains(pd.name))
+                continue;
             double cur = p->effectParamValues().value(pd.name, pd.defaultValue);
 
             if (pd.type == QLatin1String("path"))
@@ -2160,6 +2171,86 @@ void LookEditor::rebuildEffectDynWidget()
             m_learnLoParam.clear();
             m_learnHiParam.clear();
         }
+    }
+
+    // --- Spread (per look) ---
+    // How the effect's cycle is spread across its heads, worked out by the host
+    // (SPEED_SPREAD_DESIGN.md, S3) for any effect that takes it.
+    if (tmpScript.takesHostSpread())
+    {
+        QLabel *hdr = new QLabel(tr("Spread"), m_effectDynWidget);
+        hdr->setStyleSheet("font-weight: bold;");
+        dv->addWidget(hdr);
+        QWidget *row = new QWidget(m_effectDynWidget);
+        row->setObjectName(QStringLiteral("effectSpread"));
+        QHBoxLayout *rl = new QHBoxLayout(row);
+        rl->setContentsMargins(0, 0, 0, 0);
+
+        QDoubleSpinBox *amount = new QDoubleSpinBox(row);
+        amount->setObjectName(QStringLiteral("spreadAmount"));
+        amount->setRange(0.0, 8.0);
+        amount->setSingleStep(0.25);
+        amount->setDecimals(2);
+        amount->setSuffix(tr(" cycles"));
+        amount->setSpecialValueText(tr("its own"));
+        amount->setValue(hostSpread.amount);
+        amount->setToolTip(tr("How far the effect's cycle runs across its heads: 1 = one full "
+                              "wave across them, 0.5 = half, 0 = the effect's own spread."));
+        QComboBox *axis = new QComboBox(row);
+        axis->setObjectName(QStringLiteral("spreadAxis"));
+        axis->addItems({ tr("In look order"), tr("Across columns"), tr("Down rows"),
+                         tr("Stage left to right"), tr("Front to back"), tr("By height") });
+        axis->setCurrentIndex(int(hostSpread.axis));
+        axis->setToolTip(tr("What the heads are put in order by: the look's list, the head "
+                            "layout's columns or rows, or where they stand on stage. Heads at "
+                            "the same place share a phase."));
+        QComboBox *dir = new QComboBox(row);
+        dir->setObjectName(QStringLiteral("spreadDirection"));
+        dir->addItems({ tr("Forward"), tr("Reverse"), tr("Centre out"), tr("Ends in") });
+        dir->setCurrentIndex(int(hostSpread.direction));
+        QSpinBox *wings = new QSpinBox(row);
+        wings->setObjectName(QStringLiteral("spreadWings"));
+        wings->setRange(1, 8);
+        wings->setPrefix(tr("wings "));
+        wings->setValue(hostSpread.wings);
+        wings->setToolTip(tr("Split the heads into mirrored parts, each running the spread"));
+        QSpinBox *blocks = new QSpinBox(row);
+        blocks->setObjectName(QStringLiteral("spreadBlocks"));
+        blocks->setRange(1, 32);
+        blocks->setPrefix(tr("blocks of "));
+        blocks->setValue(hostSpread.blocks);
+        blocks->setToolTip(tr("Neighbouring heads that share a phase"));
+        for (QWidget *w : { (QWidget *)axis, (QWidget *)dir, (QWidget *)wings, (QWidget *)blocks })
+            w->setEnabled(hostSpread.isActive());
+
+        auto store = [this, amount, axis, dir, wings, blocks]() {
+            if (m_loading) return;
+            QLCPalette *pp = m_doc->palette(m_paletteId);
+            if (!pp || pp->type() != QLCPalette::Effect) return;
+            const bool wasOn = SpreadLayer::fromParams(pp->effectParamValues()).isActive();
+            pp->setEffectParamValue(SpreadLayer::paramName("Amount"), amount->value());
+            pp->setEffectParamValue(SpreadLayer::paramName("Axis"), axis->currentIndex());
+            pp->setEffectParamValue(SpreadLayer::paramName("Direction"), dir->currentIndex());
+            pp->setEffectParamValue(SpreadLayer::paramName("Wings"), wings->value());
+            pp->setEffectParamValue(SpreadLayer::paramName("Blocks"), blocks->value());
+            m_doc->setModified();
+            emit paletteValueChanged(m_paletteId);
+            // Turned on or off: the script's own spread shows or hides.
+            if (wasOn != (amount->value() != 0))
+                QTimer::singleShot(0, this, &LookEditor::rebuildEffectDynWidget);
+        };
+        connect(amount, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [store](double) { store(); });
+        connect(axis, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [store](int) { store(); });
+        connect(dir, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [store](int) { store(); });
+        connect(wings, QOverload<int>::of(&QSpinBox::valueChanged), this, [store](int) { store(); });
+        connect(blocks, QOverload<int>::of(&QSpinBox::valueChanged), this, [store](int) { store(); });
+        rl->addWidget(amount);
+        rl->addWidget(axis);
+        rl->addWidget(dir);
+        rl->addWidget(wings);
+        rl->addWidget(blocks);
+        rl->addStretch(1);
+        dv->addWidget(row);
     }
 
     // --- Speed master (per look) ---

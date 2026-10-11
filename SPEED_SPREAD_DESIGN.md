@@ -93,7 +93,7 @@ The thing everything else stands on.
   the Programming toolbar's overflow, the Virtual Console (a widget per
   master: tap + fader + BPM), and the control surface (S4).
 
-## S3 — The spread layer
+## S3 — The spread layer *(DONE 2026-10-11, but the preview)*
 
 The host works out each head's **phase** so scripts don't each do it.
 
@@ -113,7 +113,14 @@ The host works out each head's **phase** so scripts don't each do it.
   spread params still load (old shows keep working) and are hidden in the
   look editor once the host spread is set.
 - The look editor's live preview shows the phase across the plot (a
-  gradient on the fixtures) while the Spread settings are edited.
+  gradient on the fixtures) while the Spread settings are edited — **still
+  open**.
+- **As built:** `engine/src/spreadlayer.{h,cpp}` (pure; the phases), the
+  instance sets each cell's `phase` (cycles, not wrapped) and
+  `inputs._spread`; a script opts in with `effect.hostSpread = "<its own
+  params>"`. Fifteen scripts take it: the dimmer/colour/pan-tilt phasers,
+  native strobe, the amber/iris/UV/zoom pulses, orbit, diamond, figure 8,
+  Lissajous, rainbow, ballyhoo, gobo chase.
 
 ## S4 — Control-surface automapping
 

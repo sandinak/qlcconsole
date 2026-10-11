@@ -44,6 +44,7 @@ add_library(${module_name} SHARED
     networkreport.cpp networkreport.h
     patchlist.cpp patchlist.h
     speedmasters.cpp speedmasters.h
+    spreadlayer.cpp spreadlayer.h
     networktopology.cpp networktopology.h
     powerdistribution.cpp powerdistribution.h
     venue.cpp venue.h

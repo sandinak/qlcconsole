@@ -73,6 +73,10 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Effects
 
+- **Spread.** One Spread row for every chasing effect — amount in cycles,
+  in look order or across columns, rows or the stage, forward, reverse,
+  centre out or ends in, with wings and blocks.
+  ([Spread](effects.md#spread))
 - **Speed masters.** Four tempo masters (Programming toolbar →
   **Masters**): each its own tempo, tap, rate and pause, or following the
   main clock or another master at ×¼ … ×4. Put an effect, a look, a chase

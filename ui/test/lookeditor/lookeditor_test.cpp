@@ -25,6 +25,8 @@
 #include <QSlider>
 #include <QLabel>
 #include <QComboBox>
+#include <QSpinBox>
+#include <QDoubleSpinBox>
 #include <QTemporaryDir>
 #include <QImage>
 
@@ -420,6 +422,59 @@ void LookEditor_Test::anEffectIsPutOnASpeedMaster()
     QCOMPARE(speed->currentData().toInt(), int(SpeedMasters::Master1 + 1));
     speed->setCurrentIndex(speed->findData(SpeedMasters::Free));
     QTRY_VERIFY(!perBeatLabel());
+}
+
+/* An effect that takes the host spread gets a Spread row; turned on, it hides
+   the effect's own spread settings (the phaser's spread and reverse). */
+void LookEditor_Test::theHostSpreadStandsInForTheEffectsOwn()
+{
+    Doc doc(this);
+    doc.effectScriptRunner()->cache()->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    QLCPalette *look = new QLCPalette(QLCPalette::Effect, &doc);
+    look->setName("Chase");
+    QVERIFY(doc.addPalette(look));
+    LookEditor ed(&doc);
+    ed.resize(1000, 640);
+    ed.show();
+    ed.setPalette(look->id());
+    EffectBrowser *browser = ed.m_effectBrowser;
+    browser->search()->setText("Dimmer Phaser");
+    QApplication::processEvents();
+    QListWidgetItem *item = nullptr;
+    for (int i = 0; i < browser->list()->count() && item == nullptr; ++i)
+        if (browser->list()->item(i)->text() == QLatin1String("Dimmer Phaser"))
+            item = browser->list()->item(i);
+    QVERIFY(item != nullptr);
+    browser->pick(item);
+    QApplication::processEvents();
+
+    auto ownRows = [&]() {
+        QStringList names;
+        foreach (QLabel *l, ed.m_effectDynWidget->findChildren<QLabel *>())
+            if (l->text() == QLatin1String("spread") || l->text() == QLatin1String("reverse"))
+                names << l->text();
+        return names.size();
+    };
+    QCOMPARE(ownRows(), 2);
+    QDoubleSpinBox *amount = ed.m_effectDynWidget->findChild<QDoubleSpinBox *>("spreadAmount");
+    QVERIFY2(amount != nullptr, "the phaser takes the host spread");
+    QComboBox *dir = ed.m_effectDynWidget->findChild<QComboBox *>("spreadDirection");
+    QVERIFY(!dir->isEnabled());
+
+    amount->setValue(1.0);
+    QCOMPARE(look->effectParamValues().value("__spreadAmount"), 1.0);
+    QTRY_COMPARE(ownRows(), 0);                     // rebuilt without them
+    dir = ed.m_effectDynWidget->findChild<QComboBox *>("spreadDirection");
+    QVERIFY(dir->isEnabled());
+    dir->setCurrentIndex(2);                        // centre out
+    QCOMPARE(int(look->effectParamValues().value("__spreadDirection")), 2);
+    QSpinBox *wings = ed.m_effectDynWidget->findChild<QSpinBox *>("spreadWings");
+    wings->setValue(2);
+    QCOMPARE(int(look->effectParamValues().value("__spreadWings")), 2);
+
+    amount = ed.m_effectDynWidget->findChild<QDoubleSpinBox *>("spreadAmount");
+    amount->setValue(0.0);
+    QTRY_COMPARE(ownRows(), 2);                     // its own again
 }
 
 void LookEditor_Test::theEffectListAndItsSettingsSitSideBySide()

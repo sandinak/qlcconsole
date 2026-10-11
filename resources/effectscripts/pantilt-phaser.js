@@ -12,6 +12,8 @@
     var effect = new Object;
     effect.apiVersion  = 1;
     effect.name        = "Pan/Tilt Phaser";
+    // Takes the host's spread (fixture.phase, inputs._spread) in place of its own.
+    effect.hostSpread = "spread,reverse";
     effect.description = "Independent pan & tilt sines with phase spread";
     effect.author      = "QLC+";
     effect.fixtureTypes = ["moving"];
@@ -61,7 +63,7 @@
         return fixtures.map(function(f, i) {
             if (!f.hasPanTilt) return {};
 
-            var ph = dir * i * spread / n;
+            var ph = inputs._spread ? f.phase * 2 * Math.PI : dir * i * spread / n;
 
             var pan  = (cx + panSize  * Math.sin(TAU * panRate  * t + ph))           * f.panRange;
             var tilt = (cy + tiltSize * Math.sin(TAU * tiltRate * t + ph + ptPhase)) * f.tiltRange;

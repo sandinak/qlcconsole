@@ -6,6 +6,19 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-11 — Spread layer (SPEED_SPREAD_DESIGN.md S3) *(SHIPPED)*
+
+- **`SpreadLayer`** (engine/src/spreadlayer.{h,cpp}): per-head phase in
+  cycles from amount, axis (order / columns / rows / stage X/Y/Z), direction
+  (forward / reverse / centre out / ends in), wings (mirrored) and blocks.
+  Stored as `__spread*` params on the effect palette.
+- **EffectInstance** sets `fixture.phase` (recomputed only when cells,
+  settings or -- stage axes -- positions change) and `inputs._spread`.
+- **Scripts** opt in with `effect.hostSpread`; fifteen moved over.
+- **Look editor** Spread row; the script's own spread params hide while on.
+- Tests: spreadlayer_test (11, incl. every opted-in script reads phase),
+  lookeditor (+1). Open: the plot preview of the phase.
+
 ### 2026-10-11 — Speed masters (SPEED_SPREAD_DESIGN.md S2) *(SHIPPED)*
 
 - **`SpeedMasters`** (engine/src/speedmasters.{h,cpp}, owned by Doc, saved

@@ -144,6 +144,19 @@ public:
     /** Fallback one-shot length (ms) when nothing else resolves it. */
     int         naturalDurationMs() const { return m_naturalDurationMs; }
 
+    /** It takes the host's spread (SpreadLayer): reads fixture.phase when
+     *  inputs._spread is on. Declared as `effect.hostSpread = "spread,reverse"`,
+     *  naming its own params the host spread stands in for (comma-separated;
+     *  "" when it has none). */
+    bool        takesHostSpread() const { return m_takesHostSpread; }
+    QStringList hostSpreadParams() const
+    {
+        QStringList out;
+        foreach (const QString &p, m_hostSpreadParam.split(QLatin1Char(','), Qt::SkipEmptyParts))
+            out << p.trimmed();
+        return out;
+    }
+
     /** Fixture-type tags declared in the script (e.g. "moving", "rgb", "dimmer").
      *  Empty list means the script works with any fixture type. */
     QStringList fixtureTypes() const { return m_fixtureTypes; }
@@ -217,6 +230,8 @@ private:
     QString     m_syncTo    = QStringLiteral("span");
     QString     m_onFinish  = QStringLiteral("hold");
     int         m_naturalDurationMs = 2000;
+    bool        m_takesHostSpread = false;
+    QString     m_hostSpreadParam;
     QStringList m_fixtureTypes;
 
     QList<InputDef>   m_inputs;

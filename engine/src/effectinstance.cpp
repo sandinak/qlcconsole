@@ -7,6 +7,7 @@
 
 #include "effectinstance.h"
 #include "speedmasters.h"
+#include "spreadlayer.h"
 #include "wledfixture.h"
 #include "aimsolver.h"
 
@@ -856,6 +857,7 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
     /* Each fixture once: its facts when it has changed, where it is now. */
     bool rebuild = cells != m_cellsBuilt || gridCols != m_cellsBuiltCols
                    || gridRows != m_cellsBuiltRows;
+    bool moved = false;
     for (const EffectCell &cell : cells)
     {
         FixtureFacts &f = m_facts[cell.fixtureId];
@@ -889,6 +891,7 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
         }
         if (pos != f.pos)
         {
+            moved = true;
             f.pos = pos;
             f.posObj.setProperty("x", double(pos.x()));
             f.posObj.setProperty("y", double(pos.y()));
@@ -952,6 +955,34 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
         m_cellsBuilt = cells;
         m_cellsBuiltCols = gridCols;
         m_cellsBuiltRows = gridRows;
+    }
+
+    /* The spread layer (S3): each head's place in the cycle, as "phase" in
+       cycles. Worked out again only when the cells, the settings or -- for a
+       stage axis -- where things stand have changed. */
+    {
+        const SpreadLayer::Settings spread = effectPal != nullptr
+            ? SpreadLayer::fromParams(effectPal->effectParamValues()) : SpreadLayer::Settings();
+        const bool onStage = spread.axis >= SpreadLayer::StageX;
+        if (rebuild || spread != m_spreadBuilt || (onStage && moved && spread.isActive()))
+        {
+            QVector<SpreadLayer::Point> pts;
+            pts.reserve(cells.size());
+            for (int i = 0; i < cells.size(); ++i)
+            {
+                SpreadLayer::Point p;
+                p.order = i;
+                p.col = cells.at(i).col;
+                p.row = cells.at(i).row;
+                p.pos = m_facts.value(cells.at(i).fixtureId).pos;
+                pts << p;
+            }
+            const QVector<double> ph = SpreadLayer::phases(pts, spread);
+            for (int i = 0; i < m_cellObjects.size() && i < ph.size(); ++i)
+                if (!m_cellObjects.at(i).isUndefined())
+                    m_cellObjects[i].setProperty("phase", ph.at(i));
+            m_spreadBuilt = spread;
+        }
     }
 
     /* What changes as it runs, worked out once a fixture. */
@@ -1234,6 +1265,11 @@ QJSValue EffectInstance::buildInputsObject() const
     obj.setProperty("_beat",      pos - std::floor(pos));
     obj.setProperty("_beatCount", int(std::floor(pos) - m_startBeat));
     obj.setProperty("_beatPos",   pos);
+
+    // The host's spread is on: read fixture.phase, not the script's own.
+    QLCPalette *spreadPal = m_doc->palette(m_effectPaletteId);
+    obj.setProperty("_spread", spreadPal != nullptr
+                    && SpreadLayer::fromParams(spreadPal->effectParamValues()).isActive());
 
     // One-shot lifecycle: hand the effect its window so it fits any duration.
     //   phase    — 0→1 progress through the resolved run length
