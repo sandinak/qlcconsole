@@ -75,7 +75,9 @@ development log. For a guided tour of the fork's features — the rig-design
 **Lighting Studio** view, the palette-driven **Programming** tab, the
 **Fixture Manager**'s group folders and head-layout grid, and **Stage
 Targets**/aim-solving — with screenshots and step-by-step workflows, see the
-[feature guide](docs/features/README.md).
+[feature guide](docs/features/README.md); new to it, start with
+[Getting started](docs/features/getting-started.md). The same guides are
+built into the app: **F1** opens the one for whatever you're looking at.
 
 **Platform support:** macOS first. The upstream QLC+ codebase this is forked
 from supports Linux and Windows too, but qlcconsole's own testing, packaging,
