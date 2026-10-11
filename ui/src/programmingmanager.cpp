@@ -34,6 +34,7 @@
 #include <algorithm>
 
 #include <QDebug>
+#include "speedmasterspanel.h"
 #include "programmingmanager.h"
 #include "helpbrowser.h"
 #include "programmercontroller.h"
@@ -264,6 +265,15 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
         m_bpmBtn->setCheckable(true);
         m_bpmBtn->setToolTip(tr("Enable QLC+ internal beat generator (drives _beat/_bpm in generators)"));
         toolbar->addWidget(m_bpmBtn);
+
+        QPushButton *mastersBtn = new QPushButton(tr("Masters"), this);
+        mastersBtn->setObjectName(QStringLiteral("speedMastersButton"));
+        mastersBtn->setToolTip(tr("The four speed masters: a tempo, tap, rate and pause each, "
+                                  "for effects, looks and chases to run on"));
+        connect(mastersBtn, &QPushButton::clicked, this, [this]() {
+            SpeedMastersPanel::open(m_doc, this);
+        });
+        toolbar->addWidget(mastersBtn);
 
         toolbar->addWidget(new QLabel(tr("Jog:"), this));
 

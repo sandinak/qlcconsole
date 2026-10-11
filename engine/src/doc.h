@@ -48,6 +48,7 @@ class AudioCapture;
 class RGBScriptsCache;
 class AudioPluginCache;
 class MonitorProperties;
+class SpeedMasters;
 class PowerDistribution;
 class NetworkTopology;
 class TimecodeSource;
@@ -188,6 +189,7 @@ private:
     mutable QSharedPointer<AudioCapture> m_inputCapture;
     MonitorProperties *m_monitorProps;
     PowerDistribution *m_powerDist;
+    SpeedMasters *m_speedMasters;
     class PowerLimiter *m_powerLimiter = nullptr;
     NetworkTopology *m_networkTopology;
     TimecodeSource *m_timecodeSource;
@@ -1121,6 +1123,9 @@ public:
 public:
     /** Returns a reference to the power distribution model instance */
     PowerDistribution *powerDistribution();
+
+    /** The show's speed masters (SpeedMasters). Never null. */
+    SpeedMasters *speedMasters() const { return m_speedMasters; }
     /** Holds fixtures to their maximum draw (PowerLimiter) */
     class PowerLimiter *powerLimiter() const { return m_powerLimiter; }
 

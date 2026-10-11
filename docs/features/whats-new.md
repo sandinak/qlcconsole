@@ -73,6 +73,11 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Effects
 
+- **Speed masters.** Four tempo masters (Programming toolbar →
+  **Masters**): each its own tempo, tap, rate and pause, or following the
+  main clock or another master at ×¼ … ×4. Put an effect, a look, a chase
+  step, a chase or a collection on one; on a master an effect's rate counts
+  per beat. ([Speed masters](effects.md#speed-masters))
 - **Effects keep the beat together.** Every effect that follows the beat
   reads one beat clock — two started at different moments used to stay
   that far apart for good. **Tap** now averages your last four taps and

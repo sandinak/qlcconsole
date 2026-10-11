@@ -92,6 +92,41 @@ on your last tap — every beat effect jumps onto it. A single tap just moves
 the beat. An external beat (MIDI clock, audio) pulls the clock onto its
 beat gently rather than jolting it.
 
+### Speed masters
+
+Four tempo masters for effects to run on, so one tap or one fader moves
+everything on a master together. Open them with the Programming toolbar's
+**Masters** button. Each row has:
+
+- **Follows** — **Its own tempo** (a BPM, **Tap**, a **Rate** fader from 0
+  to 200 %), or the **Main clock** or another master at a **Ratio** (×¼ to
+  ×4): ×2 plays two beats to the other's one, on the other's beats; ×½ one
+  to its two. A master can't follow one that follows it.
+- **Pause** — the master stops; everything on it freezes where it is.
+  A following master picks up on the beat again when un-paused.
+- A light that flashes on the master's beat.
+
+**What runs on a master** — choose **Speed** in any of these; the
+innermost choice wins:
+
+| Where | Setting | Default |
+|---|---|---|
+| The effect | Look editor → **Speed** | As the look |
+| The look | The look's header → **Speed** | As played |
+| A chase step | The chaser's **Speed** column | As the chase |
+| A chase | The chaser editor's **Speed** | As played |
+| A collection | The collection editor's **Speed** | As played |
+
+"As played" means whatever started it says: a chase hands its master (or
+the step's own) to the look it plays, a collection to its members — so the
+same look can run on Speed 1 in one chase and Speed 3 in another. With
+nothing set anywhere an effect keeps its own speed, as before.
+
+On the main clock or a master, an effect's **rate** (or **speed**) counts
+**cycles per beat** — 1 is once a beat, 0.25 once a bar — and the look
+editor labels it "(per beat)". It stays on the beat, follows the master's
+tap and rate, and stops when it's paused.
+
 ## Diagnostics
 
 | Effect | What it does |

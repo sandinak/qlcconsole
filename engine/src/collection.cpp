@@ -330,6 +330,7 @@ void Collection::preRun(MasterTimer *timer)
             // Propagate this collection's fader priority to each member (the Show
             // timeline lowers a collection to Background so the VC overrides it).
             function->setFadePriority(fadePriority());
+            function->setInheritedSpeedMaster(effectiveSpeedMaster());
             function->start(timer, functionParent(), 0, overrideFadeInSpeed(), overrideFadeOutSpeed(), overrideDuration());
         }
         m_tick = 1;

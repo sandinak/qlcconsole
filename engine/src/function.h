@@ -1024,9 +1024,26 @@ public:
     void setFadePriority(int priority);
     int fadePriority() const;
 
+    /**
+     * The speed master this function runs on (a SpeedMasters::Assignment),
+     * as set: Inherit (the default) runs on whatever started it says. Saved
+     * as the "SpeedMaster" attribute.
+     */
+    int speedMaster() const { return m_speedMaster; }
+    void setSpeedMaster(int assignment);
+    /** What the parent that started it handed down (a chase step's or the
+     *  chase's, a collection's). Like the fade priority, a parent sets it
+     *  before starting the child and postRun() drops it. */
+    void setInheritedSpeedMaster(int assignment) { m_inheritedSpeedMaster = assignment; }
+    /** What it actually runs on: its own setting, else the inherited one --
+     *  the innermost explicit choice wins (SPEED_SPREAD_DESIGN.md, S2). */
+    int effectiveSpeedMaster() const;
+
 private:
     Universe::BlendMode m_blendMode;
     int m_fadePriority;
+    int m_speedMaster;
+    int m_inheritedSpeedMaster;
 };
 
 /** @} */

@@ -6,6 +6,7 @@
 */
 
 #include "effectinstance.h"
+#include "speedmasters.h"
 #include "wledfixture.h"
 #include "aimsolver.h"
 
@@ -111,8 +112,6 @@ EffectInstance::EffectInstance(Doc *doc, quint32 sceneId, quint32 effectPaletteI
 
     m_state = m_script.newState();
     m_elapsed.start();
-    if (m_doc != nullptr && m_doc->masterTimer() != nullptr)
-        m_startBeat = std::floor(m_doc->masterTimer()->beatPosition());
 }
 
 void EffectInstance::setInputValue(const QString &slotName, float norm01)
@@ -1180,39 +1179,61 @@ QJSValue EffectInstance::sceneTargetObject(quint32 fid, StageTarget *st)
     return so;
 }
 
+int EffectInstance::speedAssignment() const
+{
+    // The effect's own choice, else its look's (which may be handed down by
+    // the chase step, chase or collection playing it).
+    if (QLCPalette *pal = m_doc->palette(m_effectPaletteId))
+    {
+        const QMap<QString, double> &pp = pal->effectParamValues();
+        auto it = pp.constFind(QStringLiteral("__speedMaster"));
+        if (it != pp.constEnd() && int(it.value()) != SpeedMasters::Inherit)
+            return int(it.value());
+    }
+    if (Function *f = m_doc->function(m_sceneId))
+        return f->effectiveSpeedMaster();
+    return SpeedMasters::Inherit;
+}
+
 QJSValue EffectInstance::buildInputsObject() const
 {
     QJSValue obj = m_script.engine()->newObject();
     for (auto it = m_inputValues.constBegin(); it != m_inputValues.constEnd(); ++it)
         obj.setProperty(it.key(), (double)it.value());
 
-    const double elapsedMs = (double)m_elapsed.elapsed();
-    obj.setProperty("_time", elapsedMs / 1000.0);
-
-    // Beat/tempo inputs from MasterTimer's beat clock so scripts can lock to
-    // music tempo -- the SHARED clock, so every effect is on the same beat
-    // however far apart they were started, and a tap or an external beat
-    // pulls them all onto it (SPEED_SPREAD_DESIGN.md, S1):
+    // Beat/tempo inputs from a beat clock so scripts can lock to music
+    // tempo -- a SHARED clock, so every effect is on the same beat however far
+    // apart they were started, and a tap or an external beat pulls them all
+    // onto it (SPEED_SPREAD_DESIGN.md, S1):
     //   _beat      — 0.0→1.0 sawtooth phase within the current beat
-    //   _bpm       — current tempo (0 when there is no clock)
+    //   _bpm       — current tempo (0 when there is no clock, or it's paused)
     //   _beatCount — whole beats since this instance started
     //   _beatPos   — the clock's running beat count (fraction = _beat)
-    MasterTimer *mt = m_doc->masterTimer();
-    if (mt != nullptr)
+    // The clock is the main one, unless the effect is on a speed master (S2).
+    // ON a master, _time counts that master's BEATS, not seconds: a speed
+    // param of 1 is then one cycle a beat, the effect stays locked to the
+    // master's beat, follows its tap and rate, and stops when it's paused.
+    double pos = 0, bpm = 0;
+    const int assignment = speedAssignment();
+    const bool onMaster = assignment != SpeedMasters::Free && assignment != SpeedMasters::Inherit
+                          && m_doc->speedMasters()->clockFor(assignment, &pos, &bpm);
+    if (!onMaster)
     {
-        const double pos = mt->beatPosition();
-        obj.setProperty("_bpm",       mt->bpm());
-        obj.setProperty("_beat",      pos - std::floor(pos));
-        obj.setProperty("_beatCount", int(std::floor(pos) - m_startBeat));
-        obj.setProperty("_beatPos",   pos);
+        MasterTimer *mt = m_doc->masterTimer();
+        pos = mt != nullptr ? mt->beatPosition() : 0.0;
+        bpm = mt != nullptr ? mt->bpm() : 0.0;
     }
-    else
+    if (assignment != m_clockAssignment)
     {
-        obj.setProperty("_bpm",       0.0);
-        obj.setProperty("_beat",      0.0);
-        obj.setProperty("_beatCount", 0);
-        obj.setProperty("_beatPos",   0.0);
+        // A different clock: count beats from where it is now.
+        m_clockAssignment = assignment;
+        m_startBeat = std::floor(pos);
     }
+    obj.setProperty("_time",      onMaster ? pos : double(m_elapsed.elapsed()) / 1000.0);
+    obj.setProperty("_bpm",       bpm);
+    obj.setProperty("_beat",      pos - std::floor(pos));
+    obj.setProperty("_beatCount", int(std::floor(pos) - m_startBeat));
+    obj.setProperty("_beatPos",   pos);
 
     // One-shot lifecycle: hand the effect its window so it fits any duration.
     //   phase    — 0→1 progress through the resolved run length
@@ -1220,7 +1241,7 @@ QJSValue EffectInstance::buildInputsObject() const
     if (m_script.isOneShot())
     {
         const int dur = resolvedDurationMs();
-        obj.setProperty("phase", dur > 0 ? qMin(1.0, elapsedMs / double(dur)) : 1.0);
+        obj.setProperty("phase", dur > 0 ? qMin(1.0, double(m_elapsed.elapsed()) / double(dur)) : 1.0);
         obj.setProperty("duration", double(dur));
     }
 

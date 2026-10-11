@@ -48,6 +48,7 @@
 #include "gobolibrary.h"
 #include "monitorproperties.h"
 
+#include "speedmasters.h"
 #include "lookeditor_test.h"
 
 void LookEditor_Test::aColourDarkerThanAFifthIsCalledOut()
@@ -373,6 +374,52 @@ void LookEditor_Test::anEffectsTextIsTypedIn()
     QCOMPARE(box->text(), QString("HELLO"));
     box->setText("SHOW TIME");
     QCOMPARE(look->effectStringParam("text"), QString("SHOW TIME"));
+}
+
+/* "Speed:" puts the effect on the main clock or a speed master; its rate then
+   reads per beat. */
+void LookEditor_Test::anEffectIsPutOnASpeedMaster()
+{
+    Doc doc(this);
+    doc.effectScriptRunner()->cache()->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    QLCPalette *look = new QLCPalette(QLCPalette::Effect, &doc);
+    look->setName("Phase");
+    QVERIFY(doc.addPalette(look));
+    LookEditor ed(&doc);
+    ed.resize(1000, 640);
+    ed.show();
+    ed.setPalette(look->id());
+    EffectBrowser *browser = ed.m_effectBrowser;
+    browser->search()->setText("Dimmer Phaser");
+    QApplication::processEvents();
+    QListWidgetItem *item = nullptr;
+    for (int i = 0; i < browser->list()->count() && item == nullptr; ++i)
+        if (browser->list()->item(i)->text() == QLatin1String("Dimmer Phaser"))
+            item = browser->list()->item(i);
+    QVERIFY(item != nullptr);
+    browser->pick(item);
+    QApplication::processEvents();
+
+    auto perBeatLabel = [&]() {
+        foreach (QLabel *l, ed.m_effectDynWidget->findChildren<QLabel *>())
+            if (l->text().contains("(per beat)"))
+                return true;
+        return false;
+    };
+    QComboBox *speed = ed.m_effectDynWidget->findChild<QComboBox *>("effectSpeedMaster");
+    QVERIFY(speed != nullptr);
+    QCOMPARE(speed->currentData().toInt(), int(SpeedMasters::Inherit));
+    QVERIFY(!perBeatLabel());
+
+    speed->setCurrentIndex(speed->findData(SpeedMasters::Master1 + 1));
+    QCOMPARE(int(look->effectParamValues().value("__speedMaster")), int(SpeedMasters::Master1 + 1));
+    QTRY_VERIFY(perBeatLabel());                    // rebuilt: rate per beat
+
+    speed = ed.m_effectDynWidget->findChild<QComboBox *>("effectSpeedMaster");
+    QVERIFY(speed != nullptr);
+    QCOMPARE(speed->currentData().toInt(), int(SpeedMasters::Master1 + 1));
+    speed->setCurrentIndex(speed->findData(SpeedMasters::Free));
+    QTRY_VERIFY(!perBeatLabel());
 }
 
 void LookEditor_Test::theEffectListAndItsSettingsSitSideBySide()

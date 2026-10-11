@@ -80,6 +80,7 @@
 #include "inputoutputmap.h"
 #include "qlcioplugin.h"
 #include "qlceventpos.h"
+#include "speedmasters.h"
 
 // VC XY pad works in DMX space [0..256); palette pan/tilt are degrees.
 static const qreal XY_MAX = 256.0;
@@ -1666,7 +1667,12 @@ void LookEditor::rebuildEffectDynWidget()
             if (!gName.isEmpty() && m_doc->effectScriptRunner())
                 gScriptPath = m_doc->effectScriptRunner()->cache()->scriptPath(gName);
         }
-        const QString buildKey = QString::number(m_paletteId) + QLatin1Char('|') + gScriptPath;
+        // The speed choice too: on a master the rate reads "per beat".
+        const int speedKey = gp ? int(gp->effectParamValues().value(QStringLiteral("__speedMaster"),
+                                                                    SpeedMasters::Inherit))
+                                : int(SpeedMasters::Inherit);
+        const QString buildKey = QString::number(m_paletteId) + QLatin1Char('|') + gScriptPath
+                                 + QLatin1Char('|') + QString::number(speedKey);
         qDebug() << "[LE-DIAG] buildKey=" << buildKey
                  << "cached=" << m_effectBuildKey
                  << "hasLayout=" << (m_effectDynWidget->layout() != nullptr);
@@ -1909,6 +1915,16 @@ void LookEditor::rebuildEffectDynWidget()
         dv->addLayout(tform);
     }
 
+    // On a speed master (its own choice, else its look's), the effect's time
+    // counts the master's beats: "speed"/"rate" read as cycles per beat.
+    int speedChoice = int(p->effectParamValues().value(QStringLiteral("__speedMaster"),
+                                                       SpeedMasters::Inherit));
+    const int lookSpeed = m_contextScene != nullptr ? m_contextScene->speedMaster()
+                                                    : int(SpeedMasters::Inherit);
+    const int effectiveSpeed = speedChoice != SpeedMasters::Inherit ? speedChoice : lookSpeed;
+    const bool onMaster = SpeedMasters::isMaster(effectiveSpeed)
+                          || effectiveSpeed == SpeedMasters::MainClock;
+
     // --- Parameters ---
     const QList<EffectScript::ParamDef> &pdefs = tmpScript.paramDefs();
     if (!pdefs.isEmpty())
@@ -2097,7 +2113,12 @@ void LookEditor::rebuildEffectDynWidget()
                 rl->addWidget(val);
 
                 connect(sl, SIGNAL(valueChanged(int)), this, SLOT(slotEffectParamChanged(int)));
-                form->addRow(pd.name, row);
+                const bool perBeat = onMaster && (pd.name == QLatin1String("speed")
+                                                  || pd.name == QLatin1String("rate"));
+                if (perBeat)
+                    sl->setToolTip(tr("Cycles per beat of %1: 1 = one a beat, 0.25 = one a bar.")
+                                       .arg(m_doc->speedMasters()->assignmentName(effectiveSpeed)));
+                form->addRow(perBeat ? tr("%1 (per beat)").arg(pd.name) : pd.name, row);
             }
         }
         dv->addLayout(form);
@@ -2139,6 +2160,47 @@ void LookEditor::rebuildEffectDynWidget()
             m_learnLoParam.clear();
             m_learnHiParam.clear();
         }
+    }
+
+    // --- Speed master (per look) ---
+    // What the effect's time runs on (SPEED_SPREAD_DESIGN.md, S2): the look's
+    // choice (which a chase step, chase or collection may hand down), its own
+    // speed, the main beat clock, or a speed master.
+    {
+        QWidget *row = new QWidget(m_effectDynWidget);
+        QHBoxLayout *rl = new QHBoxLayout(row);
+        rl->setContentsMargins(0, 6, 0, 0);
+        rl->addWidget(new QLabel(tr("Speed:"), row));
+        QComboBox *cb = new QComboBox(row);
+        cb->setObjectName(QStringLiteral("effectSpeedMaster"));
+        SpeedMasters *sm = m_doc->speedMasters();
+        cb->addItem(lookSpeed == SpeedMasters::Inherit
+                        ? tr("As the look (own speed unless a chase sets one)")
+                        : tr("As the look (%1)").arg(sm->assignmentName(lookSpeed)),
+                    int(SpeedMasters::Inherit));
+        cb->addItem(sm->assignmentName(SpeedMasters::Free), int(SpeedMasters::Free));
+        cb->addItem(sm->assignmentName(SpeedMasters::MainClock), int(SpeedMasters::MainClock));
+        for (int i = 0; i < SpeedMasters::Count; ++i)
+            cb->addItem(sm->name(i), SpeedMasters::Master1 + i);
+        cb->setCurrentIndex(qMax(0, cb->findData(speedChoice)));
+        cb->setToolTip(tr("What this effect's speed follows. On the main clock or a speed "
+                          "master its speed counts in cycles per beat and it stays on the beat; "
+                          "a master's tap, rate and pause move it."));
+        connect(cb, QOverload<int>::of(&QComboBox::currentIndexChanged),
+                this, [this, cb](int) {
+            if (m_loading) return;
+            QLCPalette *pp = m_doc->palette(m_paletteId);
+            if (!pp || pp->type() != QLCPalette::Effect) return;
+            pp->setEffectParamValue(QStringLiteral("__speedMaster"), cb->currentData().toInt());
+            m_doc->setModified();
+            emit paletteValueChanged(m_paletteId);
+            // Relabel the speed for beats or seconds (not from inside the
+            // combo's own signal: the rebuild deletes it).
+            QTimer::singleShot(0, this, &LookEditor::rebuildEffectDynWidget);
+        });
+        rl->addWidget(cb);
+        rl->addStretch(1);
+        dv->addWidget(row);
     }
 
     // --- One-shot length override (per look) ---

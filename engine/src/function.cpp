@@ -26,6 +26,7 @@
 #include <math.h>
 
 #include "qlcmacros.h"
+#include "speedmasters.h"
 #include "qlcfile.h"
 
 #include "scriptwrapper.h"
@@ -98,6 +99,8 @@ Function::Function(QObject *parent)
     , m_preserveAttributes(false)
     , m_blendMode(Universe::NormalBlend)
     , m_fadePriority(Universe::Auto)
+    , m_speedMaster(SpeedMasters::Inherit)
+    , m_inheritedSpeedMaster(SpeedMasters::Inherit)
 {
 }
 
@@ -128,6 +131,8 @@ Function::Function(Doc* doc, Type t)
     , m_preserveAttributes(false)
     , m_blendMode(Universe::NormalBlend)
     , m_fadePriority(Universe::Auto)
+    , m_speedMaster(SpeedMasters::Inherit)
+    , m_inheritedSpeedMaster(SpeedMasters::Inherit)
 {
     Q_ASSERT(doc != NULL);
     registerAttribute(tr("Intensity"), Multiply | Single);
@@ -179,6 +184,7 @@ bool Function::copyFrom(const Function* function)
     m_path = function->path(true);
     m_visible = function->isVisible();
     m_blendMode = function->blendMode();
+    m_speedMaster = function->speedMaster();
     m_uiState = function->uiStateMap();
 
     emit changed(m_id);
@@ -341,6 +347,8 @@ bool Function::saveXMLCommon(QXmlStreamWriter *doc) const
         doc->writeAttribute(KXMLQLCFunctionPath, path(true));
     if (blendMode() != Universe::NormalBlend)
         doc->writeAttribute(KXMLQLCFunctionBlendMode, Universe::blendModeToString(blendMode()));
+    if (speedMaster() != SpeedMasters::Inherit)
+        doc->writeAttribute(QStringLiteral("SpeedMaster"), SpeedMasters::assignmentToString(speedMaster()));
 
     return true;
 }
@@ -910,6 +918,7 @@ bool Function::loader(QXmlStreamReader &root, Doc* doc)
         visible = false;
     if (attrs.hasAttribute(KXMLQLCFunctionBlendMode))
         blendMode = Universe::stringToBlendMode(attrs.value(KXMLQLCFunctionBlendMode).toString());
+    const int speedMaster = SpeedMasters::stringToAssignment(attrs.value(QStringLiteral("SpeedMaster")).toString());
 
     /* Check for ID validity before creating the function */
     if (id == Function::invalidId())
@@ -947,6 +956,7 @@ bool Function::loader(QXmlStreamReader &root, Doc* doc)
     function->setPath(path);
     function->setVisible(visible);
     function->setBlendMode(blendMode);
+    function->setSpeedMaster(speedMaster);
     if (function->loadXML(root) == true)
     {
         if (doc->addFunction(function, id) == true)
@@ -1055,6 +1065,8 @@ void Function::postRun(MasterTimer *timer, QList<Universe *> universes)
         // Drop any borrowed fader priority (e.g. lowered by the Show timeline)
         // so a later direct start of this same function runs at the default.
         m_fadePriority = Universe::Auto;
+        // ...and a borrowed speed master, likewise.
+        m_inheritedSpeedMaster = SpeedMasters::Inherit;
 
         m_functionStopped.wakeAll();
     }
@@ -1473,6 +1485,19 @@ void Function::setBlendMode(Universe::BlendMode mode)
 Universe::BlendMode Function::blendMode() const
 {
     return m_blendMode;
+}
+
+void Function::setSpeedMaster(int assignment)
+{
+    if (assignment == m_speedMaster)
+        return;
+    m_speedMaster = assignment;
+    emit changed(m_id);
+}
+
+int Function::effectiveSpeedMaster() const
+{
+    return m_speedMaster != SpeedMasters::Inherit ? m_speedMaster : m_inheritedSpeedMaster;
 }
 
 void Function::setFadePriority(int priority)

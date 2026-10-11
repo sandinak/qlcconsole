@@ -24,6 +24,7 @@
 #include "scene.h"
 #include "scenetransition.h"
 #include "mastertimer.h"
+#include "speedmasters.h"
 #include "qlcpalette.h"
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
@@ -133,6 +134,54 @@ void EffectInstance_Test::effectsStartedApartAreOnTheSameBeat()
     mt->tap();
     const double after = first.buildInputsObject().property("_beat").toNumber();
     QVERIFY2(after < 0.03 || after > 0.97, qPrintable(QString::number(after)));
+}
+
+/* On a speed master an effect's _time counts the master's beats (so a speed of
+   1 is a cycle a beat), follows its tempo and stops when it's paused; the
+   look's master is used unless the effect names its own. */
+void EffectInstance_Test::anEffectOnASpeedMasterCountsItsBeats()
+{
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixtureGroup(m_group->id());
+    SpeedMasters *sm = m_doc->speedMasters();
+    sm->setBpm(0, 600);
+    sm->setBpm(1, 60);
+
+    // A real (if empty) script, so the instance is running -- a scriptless
+    // one never starts its clock.
+    QTemporaryDir dir;
+    QFile js(dir.filePath("idle.js"));
+    QVERIFY(js.open(QIODevice::WriteOnly));
+    js.write("(function() { var e = {}; e.apiVersion = 1; e.name = 'Idle';"
+             " e.tick = function(fixtures) { return []; }; return e; })()");
+    js.close();
+    m_palette->setScriptPath(js.fileName());
+
+    EffectInstance inst(m_doc, scene->id(), m_palette->id());
+    QVERIFY(inst.isValid());
+    auto time = [&]() { return inst.buildInputsObject().property("_time").toNumber(); };
+
+    // Free: seconds since it started, as ever.
+    QVERIFY(time() < 1.0);
+
+    // On its look's master: that master's beats.
+    scene->setSpeedMaster(SpeedMasters::Master1 + 1);
+    QVERIFY(qAbs(time() - sm->beatPosition(1)) < 0.02);
+    QCOMPARE(inst.buildInputsObject().property("_bpm").toNumber(), 60.0);
+
+    // Its own choice wins over the look's.
+    m_palette->setEffectParamValue("__speedMaster", SpeedMasters::Master1);
+    QVERIFY(qAbs(time() - sm->beatPosition(0)) < 0.05);
+    QCOMPARE(inst.buildInputsObject().property("_bpm").toNumber(), 600.0);
+
+    // Paused: it stands still.
+    sm->setPaused(0, true);
+    const double frozen = time();
+    QTest::qWait(60);
+    QCOMPARE(time(), frozen);
+    QCOMPARE(inst.buildInputsObject().property("_bpm").toNumber(), 0.0);
+    m_palette->setEffectParamValue("__speedMaster", SpeedMasters::Inherit);
 }
 
 void EffectInstance_Test::singleFixtureTargetOnly()

@@ -177,6 +177,9 @@ private:
     QJSValue aimAtObject(quint32 fid, const QVector3D &pos, QLCPalette *effectPal);
     QJSValue sceneTargetObject(quint32 fid, StageTarget *st);
     QJSValue buildInputsObject() const;
+    /** What it runs on (a SpeedMasters::Assignment): its own "__speedMaster"
+     *  param, else its look's effective speed master. */
+    int speedAssignment() const;
     QJSValue buildPalettesObject() const;
     /** The look's colours, in its order (those after this effect, else all),
      *  and its master dimmer (1 when it has none) -- what the effect's colour
@@ -231,7 +234,10 @@ private:
     EffectScript     m_script;
     QJSValue         m_state;
     QElapsedTimer    m_elapsed;
-    double           m_startBeat = 0;       //!< the beat clock's whole beat at the start
+    /** The clock it reads and the whole beat _beatCount counts from --
+     *  set on the first tick, and again when its speed master changes. */
+    mutable int      m_clockAssignment = -2;
+    mutable double   m_startBeat = 0;
 
     /** The stage-laid grid of a multi-group look (effectiveCells()): placing
      *  every head on the stage is milliseconds a tick, so it is kept for up to

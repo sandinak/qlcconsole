@@ -71,9 +71,10 @@ void ChaserStep_Test::resolveFunction()
 void ChaserStep_Test::variant()
 {
     ChaserStep step(1, 2, 3, 4);
+    step.speedMaster = 3;
     QVariant var = step.toVariant();
     QList <QVariant> list(var.toList());
-    QCOMPARE(list.size(), 6);
+    QCOMPARE(list.size(), 7);               // + the speed master
     QCOMPARE(list[0].toUInt(), uint(1));
     QCOMPARE(list[1].toUInt(), uint(2));
     QCOMPARE(list[2].toUInt(), uint(3));
@@ -86,6 +87,12 @@ void ChaserStep_Test::variant()
     QCOMPARE(pets.hold, uint(3));
     QCOMPARE(pets.fadeOut, uint(4));
     QCOMPARE(pets.duration, uint(5));
+    QCOMPARE(pets.speedMaster, 3);
+
+    // A six-field variant (from before speed masters) still reads, as Inherit.
+    list.removeLast();
+    QCOMPARE(ChaserStep::fromVariant(list).speedMaster, -1);
+    QCOMPARE(ChaserStep::fromVariant(list).fid, uint(1));
 }
 
 #include <QDebug>

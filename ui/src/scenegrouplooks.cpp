@@ -33,6 +33,8 @@
 #include <functional>
 
 #include "programmingmanager.h"
+#include "speedmasterspanel.h"
+#include "speedmasters.h"
 #include "scenegrouplooks.h"
 #include "fadetimespin.h"
 #include "scenetransition.h"
@@ -272,6 +274,27 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
         helpRow->addSpacing(8);
         helpRow->addWidget(new QLabel(tr("Edge:"), this));
         helpRow->addWidget(edge);
+
+        /* What this look's effects run on (SPEED_SPREAD_DESIGN.md, S2): a
+           speed master, the main clock, their own speed -- or whatever the
+           chase step, chase or collection playing it says. */
+        QComboBox *speed = new QComboBox(this);
+        speed->setObjectName(QStringLiteral("sceneSpeedMaster"));
+        SpeedMastersPanel::fillCombo(speed, m_doc, tr("As played"), m_scene->speedMaster());
+        speed->setToolTip(tr("What this look's effects keep time with. \"As played\": whatever "
+                             "the chase step, chase or collection playing it says (else their own "
+                             "speed). An effect can still choose for itself in the look editor."));
+        connect(speed, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, speed](int) {
+            if (m_scene == nullptr)
+                return;
+            m_scene->setSpeedMaster(speed->currentData().toInt());
+            if (m_doc != nullptr)
+                m_doc->setModified();
+            emit sceneModified();
+        });
+        helpRow->addSpacing(8);
+        helpRow->addWidget(new QLabel(tr("Speed:"), this));
+        helpRow->addWidget(speed);
     }
     helpRow->addStretch();
     QPushButton *guideBtn = new QPushButton(tr("How this works"), this);

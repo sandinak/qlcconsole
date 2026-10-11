@@ -6,6 +6,24 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-11 — Speed masters (SPEED_SPREAD_DESIGN.md S2) *(SHIPPED)*
+
+- **`SpeedMasters`** (engine/src/speedmasters.{h,cpp}, owned by Doc, saved
+  as `<SpeedMasters>`): four masters, Own (BPM, tap, rate 0–2, pause) or
+  Follow (main clock or another master × ratio, beat-locked; loops
+  refused); `beatPosition()`/`bpm()`/`clockFor()`.
+- **Assignments**: `Function::speedMaster()` (XML `SpeedMaster`),
+  `ChaserStep::speedMaster`, effect palette `__speedMaster`; chase steps
+  and collections hand theirs down (`setInheritedSpeedMaster`, cleared in
+  postRun); innermost explicit wins.
+- **Effects on a master**: `_time` counts the master's beats (rate = cycles
+  per beat), `_beat`/`_bpm`/`_beatPos` are the master's.
+- **UI**: Speed Masters panel (Programming toolbar → Masters); Speed in the
+  look editor (rate relabelled "per beat"), the look header, the chaser
+  editor (chase + a Speed column per step) and the collection editor.
+- Tests: speedmasters_test (14), effectinstance (+1), lookeditor (+1),
+  speedmasterspanel_test (6). Open: a chase's own step timing on a master.
+
 ### 2026-10-11 — One beat clock (SPEED_SPREAD_DESIGN.md S1) *(SHIPPED)*
 
 - **MasterTimer beat clock**: `beatPosition()` (a running, thread-safe

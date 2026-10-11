@@ -34,6 +34,7 @@ private slots:
     /** Assigning a group targets exactly that group's fixtures. */
     void groupTargetDrivesItsFixtures();
     void effectsStartedApartAreOnTheSameBeat();
+    void anEffectOnASpeedMasterCountsItsBeats();
 
     /** Assigning a single fixture targets only that fixture. */
     void singleFixtureTargetOnly();

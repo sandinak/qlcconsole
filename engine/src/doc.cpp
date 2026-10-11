@@ -60,6 +60,7 @@
 #include "chaseraction.h"
 #include "scene.h"
 #include "show.h"
+#include "speedmasters.h"
 #include "doc.h"
 #include "powerlimiter.h"
 #include "bus.h"
@@ -93,6 +94,7 @@ Doc::Doc(QObject* parent, int universes)
     , m_ioMap(new InputOutputMap(this, universes))
     , m_monitorProps(NULL)
     , m_powerDist(NULL)
+    , m_speedMasters(NULL)
     , m_networkTopology(NULL)
     , m_timecodeSource(NULL)
     , m_mode(Design)
@@ -123,6 +125,9 @@ Doc::Doc(QObject* parent, int universes)
     // forwarder methods so no call sites / connect() sites elsewhere
     // change. Created after m_masterTimer so it can wire to it.
     m_programmer = new ProgrammerController(this);
+
+    // Speed masters read the main beat clock, so after m_masterTimer too.
+    m_speedMasters = new SpeedMasters(this, this);
 
     // Fixtures held to a maximum draw: kept in step with the show.
     m_powerLimiter = new PowerLimiter(this);
@@ -266,6 +271,8 @@ void Doc::clearContents()
 
     if (m_powerDist != NULL)
         m_powerDist->reset();
+
+    m_speedMasters->reset();
 
     if (m_networkTopology != NULL)
         m_networkTopology->reset();
@@ -2282,6 +2289,10 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
         {
             monitorProperties()->loadXML(doc, this);
         }
+        else if (doc.name() == KXMLQLCSpeedMasters)
+        {
+            m_speedMasters->loadXML(doc);
+        }
         else if (doc.name() == KXMLQLCPowerDistribution)
         {
             powerDistribution()->loadXML(doc, this);
@@ -2393,6 +2404,8 @@ bool Doc::saveXML(QXmlStreamWriter *doc)
 
     if (m_powerDist != NULL)
         m_powerDist->saveXML(doc);
+
+    m_speedMasters->saveXML(doc);
 
     if (m_networkTopology != NULL)
         m_networkTopology->saveXML(doc);

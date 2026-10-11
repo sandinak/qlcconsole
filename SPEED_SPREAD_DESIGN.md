@@ -59,7 +59,7 @@ The thing everything else stands on.
 - **Tap** averages the last four taps (a gap of 2 s starts over) and puts
   the beat on the last tap.
 
-## S2 — Speed masters (and masters following masters)
+## S2 — Speed masters (and masters following masters) *(DONE 2026-10-11, but chaser step timing)*
 
 - **Four masters**, saved in the show. Each is either
   - **Own tempo** — its own BPM and tap, its own beat position; or
@@ -76,8 +76,19 @@ The thing everything else stands on.
   0.25 = one per bar) and stays locked to the beat. The look editor relabels
   the speed control accordingly. Off a master, nothing changes.
 - **Chasers and sequences** on a master (beat tempo, step on the master's
-  beat) — a follow-on once effects work; `Function::TempoType::Beats` is the
-  existing hook.
+  beat) — **still open**: a chase on a master hands the master to its
+  steps' effects, but its own step timing still counts the main clock's
+  beats (`Function::TempoType::Beats`) or time.
+- **Storage (as built):** the masters are a `<SpeedMasters>` element in
+  the show (written only once something differs from the defaults). An
+  effect's choice is the palette param `__speedMaster`; a function's (scene,
+  chaser, collection, any) is its `SpeedMaster` attribute; a chase step's is
+  the step's `SpeedMaster` attribute. Values: `Inherit` (default, not
+  written), `Free`, `Main`, `1`..`4`. At run time a chase sets
+  `Function::setInheritedSpeedMaster()` on the step's function before
+  starting it (the step's choice, else the chase's effective one), a
+  collection on each member; `postRun()` drops it, like the fade priority.
+  The innermost explicit choice wins: effect, look, step, chase/collection.
 - UI: a **Speed Masters** strip (BPM, Tap, follow + ratio, pause, rate) on
   the Programming toolbar's overflow, the Virtual Console (a widget per
   master: tap + fader + BPM), and the control surface (S4).

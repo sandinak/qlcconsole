@@ -179,6 +179,14 @@ unbound). Plus host-injected timing, always present:
 | `inputs._beatCount` | whole beats since this effect started |
 | `inputs._beatPos` | the beat clock's running count; its fraction is `_beat` |
 
+When the effect runs on the main clock or a **speed master** (the look
+editor's Speed, or its look, chase step, chase or collection), the clock
+above is that master's and **`inputs._time` counts its beats instead of
+seconds**: a script computing `phase = _time * rate` then runs `rate`
+cycles per beat, locked to the master's beat, and stands still while the
+master is paused. Off a master `_time` is seconds since the effect started,
+as always.
+
 ### `palettes` — resolved palette references
 
 For each declared `effect.palettes` slot, a flattened value object (or empty):
