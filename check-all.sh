@@ -47,14 +47,31 @@ run_gate() { # <label> <build-dir> <qt-prefix-or-empty>
     # configuring at all. The whole string is one argument by design.
     [ -n "$extra" ] && args+=("$extra")
 
+    local t0 t1 t2 t3
+    t0=$(date +%s)
     if ! QTDIR="$prefix" cmake "${args[@]}"; then
         FAILED="$FAILED $label(configure)"; return 1
     fi
+    t1=$(date +%s)
+    # Build first, then test, so each is timed on its own: compiling scales
+    # with cores, the tests (run one after another, many waiting on timers)
+    # mostly don't -- which is the number that says whether more machines or
+    # a faster one would help.
+    if ! QTDIR="$prefix" cmake --build "$REPO/$dir" -j"$JOBS"; then
+        FAILED="$FAILED $label(build)"; return 1
+    fi
+    t2=$(date +%s)
     if ! QTDIR="$prefix" cmake --build "$REPO/$dir" -j"$JOBS" --target check; then
         FAILED="$FAILED $label(check)"; return 1
     fi
+    t3=$(date +%s)
+    TIMINGS="$TIMINGS
+$(printf '  %-12s configure %4ss   build %5ss   test %5ss   total %5ss' \
+        "$label" $((t1 - t0)) $((t2 - t1)) $((t3 - t2)) $((t3 - t0)))"
     echo "PASS $label"
 }
+TIMINGS=""
+GATE_START=$(date +%s)
 
 run_gate "Qt5" build-qt5 /opt/homebrew/opt/qt@5 "" || true
 run_gate "Qt6" build-qt6 /opt/homebrew/opt/qt6  "" || true
@@ -78,6 +95,9 @@ WERROR_SET="$WERROR_SET -Werror=format -Werror=macro-redefined -Werror=unused-fu
 WERROR_SET="$WERROR_SET -Werror=unused-variable -Werror=deprecated-declarations"
 run_gate "Qt6-Werror" build-qt6-werror /opt/homebrew/opt/qt6 "-DCMAKE_CXX_FLAGS=$WERROR_SET" || true
 
+echo
+echo "Timings:$TIMINGS"
+echo "  whole gate $(( $(date +%s) - GATE_START ))s"
 echo
 if [ -n "$FAILED" ]; then
     echo "FAILED:$FAILED"
