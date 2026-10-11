@@ -30,6 +30,7 @@ private slots:
     /** Cloud storage: a file whose contents are not on this machine is
      *  skipped by the loaders rather than waited on, and remembered. */
     void onlineOnlyFilesAreNotedNotWaitedOn();
+    void aRemovedLegacyLinkStaysRemoved();
     void XMLReader();
     void getXMLHeader();
     void errorString();

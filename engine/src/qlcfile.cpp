@@ -22,6 +22,8 @@
 #include <QXmlStreamWriter>
 #include <QCoreApplication>
 #include <QFile>
+#include <QFileInfo>
+#include <QSet>
 
 #ifdef QT_XML_LIB
 #   include <QtXml>
@@ -275,6 +277,20 @@ void QLCFile::mergeLegacyUserData()
         "EffectScripts", "EffectPresets" };
 #endif
 
+    /* What has been linked before, so a link removed on purpose stays
+       removed: this runs at every start, and used to put back whatever was
+       taken out (a malformed definition deleted here came back next time). */
+    const QString ledgerPath = QString("%1/.legacy-linked").arg(newRoot);
+    QSet<QString> linked;
+    {
+        QFile ledger(ledgerPath);
+        if (ledger.open(QIODevice::ReadOnly | QIODevice::Text))
+            for (const QByteArray &line : ledger.readAll().split('\n'))
+                if (!line.trimmed().isEmpty())
+                    linked.insert(QString::fromUtf8(line.trimmed()));
+    }
+    const int before = linked.size();
+
     foreach (const QString &sub, subdirs)
     {
         QDir oldSub(oldDir.filePath(sub));
@@ -286,11 +302,33 @@ void QLCFile::mergeLegacyUserData()
 
         foreach (const QString &fileName, oldSub.entryList(QDir::Files))
         {
+            const QString key = sub + QLatin1Char('/') + fileName;
             QString newFile = newSub.filePath(fileName);
-            if (QFile::exists(newFile) == true)
-                continue; // a file already placed under the new root wins
+            QFileInfo there(newFile);
+            if (there.exists() || there.isSymLink())
+            {
+                // a file already placed under the new root wins -- and a
+                // link this made earlier is now on the ledger
+                if (there.isSymLink() && there.symLinkTarget() == QFileInfo(oldSub.filePath(fileName)).absoluteFilePath())
+                    linked.insert(key);
+                continue;
+            }
+            if (linked.contains(key))
+                continue; // linked once, removed since: leave it removed
 
-            QFile::link(oldSub.filePath(fileName), newFile);
+            if (QFile::link(oldSub.filePath(fileName), newFile))
+                linked.insert(key);
+        }
+    }
+
+    if (linked.size() != before)
+    {
+        QFile ledger(ledgerPath);
+        if (ledger.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
+        {
+            QStringList keys = linked.values();
+            keys.sort();
+            ledger.write(keys.join(QLatin1Char('\n')).toUtf8() + '\n');
         }
     }
 }

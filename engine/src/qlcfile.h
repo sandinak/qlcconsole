@@ -149,7 +149,9 @@ public:
      *        root, so the USERDATADIR rename doesn't orphan existing user
      *        content. A file already present under the new root by name
      *        always wins; no-op once both roots are the same or the old
-     *        root doesn't exist.
+     *        root doesn't exist. What it links is remembered (a ".legacy-
+     *        linked" list in the new root), so a link removed afterwards is
+     *        not put back; files new to the old root still are linked.
      */
     static void mergeLegacyUserData();
 
