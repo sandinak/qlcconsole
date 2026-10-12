@@ -20,6 +20,8 @@
   limitations under the License.
 */
 
+#include <QContextMenuEvent>
+#include <QMenu>
 #include <QToolButton>
 #include <QTableWidget>
 #include <QtWidgets>
@@ -2956,7 +2958,7 @@ void App::slotDetachContext(int index)
         tabLabel = m_tab->tabText(index);
     context->setProperty("tabLabel", tabLabel);
 
-    qDebug() << "Detaching context" << context;
+    qDebug() << "[TabBreakOut] detaching" << context << "tab" << index;
 
     // Remove the tab-bar entry (the widget itself isn't deleted) — without
     // this, the tab strip is left with a dangling entry for a page that no
@@ -4539,8 +4541,44 @@ void App::initStatusBar()
     updateStatusBar();
 }
 
+QMenu *App::tabContextMenu(int index)
+{
+    QMenu *menu = new QMenu(this);
+    menu->setObjectName(QStringLiteral("tabContextMenu"));
+    QWidget *view = m_tab->widget(index);
+    if (view == nullptr)
+        return menu;
+    QAction *open = menu->addAction(tr("Open in Its Own Window"));
+    open->setObjectName(QStringLiteral("tabOpenInWindow"));
+    connect(open, &QAction::triggered, this, [this, view]() {
+        // After the menu has gone: detaching removes the tab under it.
+        QTimer::singleShot(0, this, [this, view]() {
+            const int at = m_tab->indexOf(view);
+            if (at >= 0)
+                slotDetachContext(at);
+        });
+    });
+    return menu;
+}
+
 bool App::eventFilter(QObject *watched, QEvent *event)
 {
+    /* Right-click a tab: Open in Its Own Window. A Shift-click does the same,
+       but on a Mac the first click on a window that isn't in front only
+       brings it forward -- the Shift-click is lost. */
+    if (m_tab != NULL && watched == m_tab->tabBar() && event->type() == QEvent::ContextMenu)
+    {
+        QContextMenuEvent *ce = static_cast<QContextMenuEvent *>(event);
+        const int idx = m_tab->tabBar()->tabAt(ce->pos());
+        if (idx >= 0)
+        {
+            QMenu *menu = tabContextMenu(idx);
+            menu->exec(ce->globalPos());
+            menu->deleteLater();
+            return true;
+        }
+    }
+
     if (m_tab != NULL && watched == m_tab->tabBar() && event->type() == QEvent::MouseButtonPress)
     {
         QMouseEvent *me = static_cast<QMouseEvent *>(event);

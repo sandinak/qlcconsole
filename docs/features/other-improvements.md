@@ -93,8 +93,9 @@ try it on your own devices before relying on it for a show.
 Every view is in **Window**, with its shortcut (⇧⌘1 Connections, ⇧⌘2
 Fixtures, ⇧⌘3 Lighting Studio, ⇧⌘4 Functions, ⇧⌘5 Programming, ⇧⌘6 Shows,
 ⇧⌘7 Virtual Console, ⇧⌘8 Simple Desk): choosing one brings it forward — its
-tab, or its own window when it has been broken out (Shift-click a tab, or
-**Move … to Its Own Window**),
+tab, or its own window when it has been broken out (right-click a tab →
+**Open in Its Own Window**, Shift-click it, or **Move … to Its Own
+Window**),
 which the menu marks "in its own window". **Put Back in Main Window**
 returns one, **Put All Back in Main Window** all of them; **Minimize** (⌘M)
 as usual.

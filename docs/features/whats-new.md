@@ -161,6 +161,9 @@ The latest changes, newest first. Each links to the guide with the detail.
   catch nodes coming and going; it no longer drops the universe you picked
   or scrolls back to the top when it does, and it waits while a right-click
   menu or dialog is open, so **Patch…** acts on the row you chose.
+- **Right-click a tab → Open in Its Own Window.** Works on the first
+  click, even when the app isn't in front (a Mac spends that click
+  bringing the window forward, so a Shift-click there did nothing).
 - **Shift-click a tab** to put it in a window of its own — a double-click
   no longer does it by accident. **Window → Move … to Its Own Window** does
   the same for the view in front, and the Window menu can turn the

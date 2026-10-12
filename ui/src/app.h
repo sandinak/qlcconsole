@@ -348,6 +348,8 @@ public slots:
      *  menu toggle, remembered). A plain double-click no longer does: it
      *  tore views off the tab bar by accident. */
     bool shiftClickBreaksOut() const;
+    /** A tab's right-click menu (Open in Its Own Window). */
+    QMenu *tabContextMenu(int index);
     void setShiftClickBreaksOut(bool on);
 private:
     /** Show @p context in a window of its own, titled for @p tabLabel. */
