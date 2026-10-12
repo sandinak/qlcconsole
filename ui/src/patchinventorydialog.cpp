@@ -22,6 +22,7 @@
 #include <algorithm>
 
 #include <QComboBox>
+#include <QSettings>
 #include <QCheckBox>
 #include <QStandardItemModel>
 #include "qlcfixturemode.h"
@@ -143,7 +144,28 @@ PatchInventoryDialog::PatchInventoryDialog(Doc *doc, const QList<quint32> &fixtu
                               "ports)."));
     placeRow->addWidget(m_placeHow);
     QPushButton *place = new QPushButton(tr("Place"), this);
+    /* One addressing scheme, the same every time ("we need a clean way to
+       set the addressing scheme consistent"): the rows show it, and Place
+       addresses them in it. */
+    placeRow->addSpacing(12);
+    placeRow->addWidget(new QLabel(tr("in order"), this));
+    m_order = new QComboBox(this);
+    m_order->setObjectName(QStringLiteral("addressOrder"));
+    m_order->addItem(tr("by name"), int(PatchPlanner::ByName));
+    m_order->addItem(tr("movers first, then by kind"), int(PatchPlanner::ByKind));
+    m_order->addItem(tr("as they hang"), int(PatchPlanner::AsTheyHang));
+    m_order->setToolTip(tr("The order the fixtures are addressed in, and listed: by name (numbers "
+                           "count as numbers); movers, then scanners, pixel bars, beam bars, washes, "
+                           "strobes, dimmers, effects and atmospherics, each by name; or structure "
+                           "by structure, in their order along it"));
+    {
+        QSettings settings;
+        const int i = m_order->findData(settings.value(QStringLiteral("patch/addressOrder"),
+                                                       int(PatchPlanner::ByName)).toInt());
+        m_order->setCurrentIndex(qMax(0, i));
+    }
     place->setToolTip(tr("Move the selected rows -- every row when none is selected"));
+    placeRow->addWidget(m_order);
     placeRow->addWidget(place);
     placeRow->addStretch();
     root->addLayout(placeRow);
@@ -247,6 +269,52 @@ PatchInventoryDialog::PatchInventoryDialog(Doc *doc, const QList<quint32> &fixtu
     connect(bb, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
     fill(initialPlan());
+    sortRows();
+    connect(m_order, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        QSettings settings;
+        settings.setValue(QStringLiteral("patch/addressOrder"), m_order->currentData().toInt());
+        sortRows();
+    });
+}
+
+QList<quint32> PatchInventoryDialog::inAddressOrder(const QList<quint32> &ids) const
+{
+    return PatchPlanner::ordered(m_doc, ids, PatchPlanner::AddressOrder(
+        m_order != nullptr ? m_order->currentData().toInt() : int(PatchPlanner::ByName)));
+}
+
+void PatchInventoryDialog::setAddressOrder(int order)
+{
+    const int i = m_order->findData(order);
+    if (i >= 0)
+        m_order->setCurrentIndex(i);
+    sortRows();
+}
+
+void PatchInventoryDialog::sortRows()
+{
+    // The table in the addressing order, everything as edited kept.
+    QList<PatchPlanner::Assignment> plan = currentPlan();
+    QHash<quint32, PatchPlanner::Assignment> byId;
+    QList<quint32> ids;
+    QHash<quint32, QLCFixtureMode *> modes;
+    QHash<quint32, quint32> dimmers;
+    foreach (const PatchPlanner::Assignment &a, plan)
+    {
+        byId.insert(a.fixtureId, a);
+        ids << a.fixtureId;
+        if (a.mode != NULL)
+            modes.insert(a.fixtureId, a.mode);
+        if (a.dimmerChannels > 0)
+            dimmers.insert(a.fixtureId, a.dimmerChannels);
+    }
+    const QList<quint32> order = inAddressOrder(ids);
+    if (order == ids)
+        return;
+    QList<PatchPlanner::Assignment> sorted;
+    foreach (quint32 id, order)
+        sorted << byId.value(id);
+    fill(sorted, modes, dimmers);
 }
 
 QList<PatchPlanner::Assignment> PatchInventoryDialog::initialPlan(
@@ -324,6 +392,7 @@ int PatchInventoryDialog::fitRows(quint32 universe, quint32 address, bool carryO
     foreach (int r, which)
         if (QTableWidgetItem *name = m_table->item(r, COL_NAME))
             ids << name->data(Qt::UserRole).toUInt();
+    ids = inAddressOrder(ids);
 
     const QHash<quint32, quint32> overrides = channelOverrides();
     QHash<quint32, QPair<quint32, quint32> > elsewhere;
@@ -435,6 +504,9 @@ void PatchInventoryDialog::placeRows(quint32 universe, quint32 address, bool kee
     foreach (int r, which)
         if (QTableWidgetItem *name = m_table->item(r, COL_NAME))
             ids << name->data(Qt::UserRole).toUInt();
+
+    if (!keepSpacing)
+        ids = inAddressOrder(ids);              // packed: in the addressing order
 
     // The rows NOT being placed stay where the table has them, so the
     // planner must not hand their channels out.

@@ -25,6 +25,7 @@
 #include <QSet>
 #include <QRegularExpression>
 #include <algorithm>
+#include <climits>
 
 #include "naturalcompare.h"
 #include "patchplanner.h"
@@ -501,6 +502,75 @@ QList<PatchPlanner::Assignment> PatchPlanner::place(const QList<quint32> &fixtur
     return out;
 }
 
+QList<quint32> PatchPlanner::ordered(Doc *doc, const QList<quint32> &fixtureIds, AddressOrder order)
+{
+    QList<Fixture *> fixtures;
+    foreach (quint32 fid, fixtureIds)
+        if (Fixture *fx = doc->fixture(fid))
+            fixtures << fx;
+
+    auto kindRank = [](Fixture *fx) -> int {
+        if (fx->fixtureDef() == NULL)
+            return 6;                                   // a generic dimmer
+        switch (fx->fixtureDef()->type())
+        {
+            case QLCFixtureDef::MovingHead:   return 0;
+            case QLCFixtureDef::Scanner:      return 1;
+            case QLCFixtureDef::LEDBarPixels: return 2;
+            case QLCFixtureDef::LEDBarBeams:  return 3;
+            case QLCFixtureDef::ColorChanger: return 4;
+            case QLCFixtureDef::Strobe:       return 5;
+            case QLCFixtureDef::Dimmer:       return 6;
+            case QLCFixtureDef::Laser:
+            case QLCFixtureDef::Effect:
+            case QLCFixtureDef::Flower:       return 7;
+            case QLCFixtureDef::Fan:
+            case QLCFixtureDef::Hazer:
+            case QLCFixtureDef::Smoke:        return 8;
+            default:                          return 9;
+        }
+    };
+    // As they hang: each structure's place in name order, and each
+    // fixture's place on it.
+    QHash<quint32, QPair<int, int> > hung;
+    if (order == AsTheyHang)
+    {
+        QStringList keys;
+        foreach (Fixture *fx, fixtures)
+        {
+            const QString key = mountKey(doc, fx->id());
+            if (!key.isEmpty() && !keys.contains(key))
+                keys << key;
+        }
+        std::stable_sort(keys.begin(), keys.end(), [doc](const QString &a, const QString &b) {
+            return naturalCompare(structureName(doc, a), structureName(doc, b)) < 0;
+        });
+        for (int k = 0; k < keys.size(); k++)
+        {
+            const QList<quint32> on = fixturesOn(doc, keys.at(k));
+            for (int i = 0; i < on.size(); i++)
+                hung.insert(on.at(i), qMakePair(k, i));
+        }
+    }
+
+    std::stable_sort(fixtures.begin(), fixtures.end(), [&](Fixture *a, Fixture *b) {
+        if (order == ByKind && kindRank(a) != kindRank(b))
+            return kindRank(a) < kindRank(b);
+        if (order == AsTheyHang)
+        {
+            const QPair<int, int> ha = hung.value(a->id(), qMakePair(INT_MAX, 0));
+            const QPair<int, int> hb = hung.value(b->id(), qMakePair(INT_MAX, 0));
+            if (ha != hb)
+                return ha < hb;                 // unmounted ones after, by name
+        }
+        return naturalCompare(a->name(), b->name()) < 0;
+    });
+    QList<quint32> out;
+    foreach (Fixture *fx, fixtures)
+        out << fx->id();
+    return out;
+}
+
 QList<PatchPlanner::Assignment> PatchPlanner::fit(const QList<quint32> &fixtureIds,
                                                   quint32 universe, quint32 address, bool carryOn,
                                                   const QHash<quint32, quint32> &channelOverride,
@@ -539,120 +609,58 @@ QList<PatchPlanner::Assignment> PatchPlanner::fit(const QList<quint32> &fixtureI
             mark(usedIn(ew.value().first >> 9), ew.value().first & 0x1FF, ew.value().second);
     }
 
-    /* The ones already in the universe, from the address on, that fit where
-       they are: they stay. Moving what is fine is what made a mess. */
+    /* In the order given, one after another: each takes the first free run
+       at or after the end of the one before it, around everything else. The
+       same fixtures in the same order always land the same way ("still not
+       patching the same all the time"), at addresses that read in order. */
     QHash<quint32, Assignment> planned;
-    QList<Fixture *> byAddress = fixtures;
-    std::sort(byAddress.begin(), byAddress.end(), [](Fixture *a, Fixture *b) {
-        return a->universeAddress() < b->universeAddress();
-    });
-    foreach (Fixture *fx, byAddress)
+    const quint32 existing = m_doc->inputOutputMap()->universesCount();
+    quint32 uni = universe, from = address;
+    bool spilled = false;
+    foreach (Fixture *fx, fixtures)
     {
         const quint32 n = chans(fx);
-        if (!fx->isPatched() || fx->universe() != universe || fx->address() < address
-            || n == 0 || fx->address() + n > UNI_SIZE)
-            continue;
-        bool clear = true;
-        for (quint32 i = fx->address(); i < fx->address() + n && clear; i++)
-            clear = !usedIn(universe).testBit(int(i));
-        if (!clear)
-            continue;
-        mark(usedIn(universe), fx->address(), n);
         Assignment a;
         a.fixtureId = fx->id();
-        a.universe = universe;
-        a.address = fx->address();
-        planned.insert(fx->id(), a);
-    }
-
-    // The rest, into the gaps -- in list order, or biggest first if that
-    // leaves fewer without room.
-    QList<Fixture *> rest;
-    foreach (Fixture *fx, fixtures)
-        if (!planned.contains(fx->id()))
-            rest << fx;
-    auto tryOrder = [&](const QList<Fixture *> &order, QHash<quint32, Assignment> &out,
-                        QBitArray &room) -> int {
-        int without = 0;
-        QBitArray probe = room;
-        for (quint32 i = 0; i < address && i < UNI_SIZE; i++)
-            probe.setBit(int(i));               // only from the address on
-        foreach (Fixture *fx, order)
+        int at = -1;
+        if (n > 0 && n <= UNI_SIZE)
         {
-            const quint32 n = chans(fx);
-            Assignment a;
-            a.fixtureId = fx->id();
-            const int at = (n == 0 || n > UNI_SIZE) ? -1 : firstFree(probe, n);
-            if (at < 0)
+            for (int guard = 0; guard < 4096; guard++)
             {
-                without++;
-                a.unfitted = true;
-                out.insert(fx->id(), a);
-                continue;
-            }
-            a.universe = universe;
-            a.address = quint32(at);
-            mark(probe, a.address, n);
-            mark(room, a.address, n);
-            out.insert(fx->id(), a);
-        }
-        return without;
-    };
-    QHash<quint32, Assignment> inOrder, biggest;
-    QBitArray roomA = usedIn(universe), roomB = usedIn(universe);
-    const int missA = tryOrder(rest, inOrder, roomA);
-    if (missA > 0)
-    {
-        QList<Fixture *> big = rest;
-        std::stable_sort(big.begin(), big.end(), [&chans](Fixture *a, Fixture *b) {
-            return chans(a) > chans(b);
-        });
-        const int missB = tryOrder(big, biggest, roomB);
-        if (missB < missA)
-        {
-            inOrder = biggest;
-            roomA = roomB;
-        }
-    }
-    usedIn(universe) = roomA;
-
-    // Without room: on into the next universe(s), or left where they were.
-    const quint32 existing = m_doc->inputOutputMap()->universesCount();
-    QBitArray free = usedIn(universe);
-    int freeCount = 0, widest = 0, run = 0;
-    for (int i = int(address); i < UNI_SIZE; i++)
-    {
-        run = free.testBit(i) ? 0 : run + 1;
-        freeCount += free.testBit(i) ? 0 : 1;
-        widest = qMax(widest, run);
-    }
-    quint32 uni = universe + 1;
-    foreach (Fixture *fx, rest)
-    {
-        Assignment a = inOrder.value(fx->id());
-        const quint32 n = chans(fx);
-        if (a.unfitted && carryOn && n > 0 && n <= UNI_SIZE)
-        {
-            for (int guard = 0; guard < 4096; guard++, uni++)
-            {
-                const int at = firstFree(usedIn(uni), n);
-                if (at >= 0)
-                {
-                    a.unfitted = false;
-                    a.universe = uni;
-                    a.address = quint32(at);
-                    mark(usedIn(uni), a.address, n);
+                QBitArray probe = usedIn(uni);
+                for (quint32 i = 0; i < from && i < UNI_SIZE; i++)
+                    probe.setBit(int(i));       // only at or after the cursor
+                at = firstFree(probe, n);
+                if (at >= 0 || !carryOn)
                     break;
-                }
+                uni++;                          // full: on to the next one
+                from = 0;
+                spilled = true;
             }
         }
-        else if (a.unfitted)
+        if (at < 0)
         {
+            // No room after the ones before it: flagged, left where it was.
+            int freeCount = 0, widest = 0, run = 0;
+            const QBitArray &room = usedIn(uni);
+            for (int i = int(spilled ? 0 : address); i < UNI_SIZE; i++)
+            {
+                run = room.testBit(i) ? 0 : run + 1;
+                freeCount += room.testBit(i) ? 0 : 1;
+                widest = qMax(widest, run);
+            }
+            a.unfitted = true;
             a.universe = fx->isPatched() ? fx->universe() : 0;
             a.address = fx->isPatched() ? fx->address() : 0;
             a.note = QStringLiteral("no room in universe %1: needs %2 channels, the widest gap is %3 "
-                                    "(%4 free)").arg(universe + 1).arg(n).arg(widest).arg(freeCount);
+                                    "(%4 free)").arg(uni + 1).arg(n).arg(widest).arg(freeCount);
+            planned.insert(fx->id(), a);
+            continue;
         }
+        a.universe = uni;
+        a.address = quint32(at);
+        mark(usedIn(uni), a.address, n);
+        from = a.address + n;
         planned.insert(fx->id(), a);
     }
 

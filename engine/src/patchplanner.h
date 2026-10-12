@@ -124,11 +124,24 @@ public:
                             const QHash<quint32, QPair<quint32, quint32> > &elsewhere
                                 = QHash<quint32, QPair<quint32, quint32> >()) const;
 
-    /** Arrange @p fixtureIds in @p universe from @p address, around what is
-     *  there: the ones already in it that clash with nothing stay put, the
-     *  rest fill the free gaps (in list order, or biggest first when that
-     *  fits more). What still has no room is flagged unfitted and left where
-     *  it was -- or, with @p carryOn, goes on into the next universe(s).
+    /** The order a group is addressed in -- one scheme, every time. */
+    enum AddressOrder
+    {
+        ByName,         //!< by name, numbers counted as numbers (B2 before B10)
+        ByKind,         //!< movers, then scanners, pixel bars, beam bars, washes,
+                        //!< strobes, dimmers, effects, atmospherics; each by name
+        AsTheyHang      //!< structure by structure (by name), in their order on it
+    };
+    /** @p fixtureIds in @p order (stable: ties keep their given order). */
+    static QList<quint32> ordered(Doc *doc, const QList<quint32> &fixtureIds, AddressOrder order);
+
+    /** Lay @p fixtureIds out in @p universe from @p address, in the order
+     *  given (see ordered()), around what is
+     *  there: each takes the first free run at or after the end of the one
+     *  before it, so the addresses read in that order and the same group
+     *  always lands the same way. What has no room is flagged unfitted and
+     *  left where it was -- or, with @p carryOn, goes on into the next
+     *  universe(s).
      *  @p channelOverride and @p elsewhere as for place(). */
     QList<Assignment> fit(const QList<quint32> &fixtureIds, quint32 universe, quint32 address,
                           bool carryOn,

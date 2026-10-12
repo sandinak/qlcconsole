@@ -69,10 +69,13 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Patching
 
-- **Patching fits fixtures into what's free.** The Patch dialog's Place
-  now defaults to **into the free space**: what's already in the universe
-  and clashes with nothing stays, the rest fill the gaps — no more
-  conflicts from moving a patched fixture's block onto its neighbours. Any
+- **Patching fits fixtures into what's free, in one order.** The Patch
+  dialog's Place now defaults to **into the free space**: the fixtures are
+  addressed one after another around whatever else is in the universe —
+  no more conflicts from moving a patched fixture's block onto its
+  neighbours — in one **addressing order** you choose: by name, movers
+  first then by kind, or as they hang. The same group always lands the
+  same way. Any
   with no room are flagged and left where they were, with **Carry on into
   the next universe** or **Fit by changing modes** to finish the patch.
   ([Patching](fixture-manager.md#patching-the-patch-dialog))

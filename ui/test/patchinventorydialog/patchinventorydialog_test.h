@@ -68,6 +68,8 @@ private slots:
     void fitKeepsWhatIsThereAndFillsTheGaps();
     void whatHasNoRoomIsFlaggedAndCanCarryOn();
     void fitByChangingModesShrinksTheBiggestFirst();
+    void theSameGroupLandsTheSameWayInNameOrder();
+    void moversFirstThenByKind();
 
 private:
     Doc *m_doc;

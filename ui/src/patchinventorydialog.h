@@ -86,6 +86,9 @@ public:
     /** Smaller modes for the last fitRows() so they all fit, then fit
      *  again. Returns how many still have no room. */
     int fitByChangingModes();
+    /** Put the rows in @p order (PatchPlanner::AddressOrder), the order
+     *  Place addresses them in. */
+    void setAddressOrder(int order);
 
 public slots:
     void accept() override;
@@ -128,6 +131,10 @@ private:
     class UniverseCombo *m_placeUni; //!< Place: universe, by name
     class QSpinBox *m_placeAddr;    //!< Place: address (1-based)
     class QComboBox *m_placeHow;    //!< Place: keep spacing / pack
+    class QComboBox *m_order = nullptr; //!< the addressing scheme: by name, kind, as they hang
+    /** The rows' ids in the addressing order. */
+    QList<quint32> inAddressOrder(const QList<quint32> &ids) const;
+    void sortRows();
     class QComboBox *m_matchPattern = nullptr; //!< Match: the structure to copy
     QLabel *m_matchProblems = nullptr;
     /** Under the table when a fit left fixtures without room. */

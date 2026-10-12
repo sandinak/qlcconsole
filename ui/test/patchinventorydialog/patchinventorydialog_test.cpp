@@ -865,3 +865,81 @@ void PatchInventoryDialog_Test::fitByChangingModesShrinksTheBiggestFirst()
     QCOMPARE(q->fixtureMode(), small2);
     QCOMPARE(q->channels(), quint32(40));
 }
+
+/* "still not patching the same all the time .. ordered by fixture name ..
+   then the addressing should be in that order as well" */
+void PatchInventoryDialog_Test::theSameGroupLandsTheSameWayInNameOrder()
+{
+    while (m_doc->inputOutputMap()->universesCount() < 3)
+        m_doc->inputOutputMap()->addUniverse();
+    // Scattered to start with: one in the target already, out of order.
+    Fixture *sw = patched(m_doc, 30, 2, 0, "T1-SW");
+    Fixture *b10 = patched(m_doc, 20, 2, 200, "T1-B10");
+    Fixture *b2 = staged(m_doc, 20, "T1-B2");
+    Fixture *cw = patched(m_doc, 30, 0, 50, "T1-CW");
+    patched(m_doc, 10, 2, 100, "Other");             // not in the group: worked around
+
+    auto run = [&]() {
+        PatchInventoryDialog dlg(m_doc, { sw->id(), cw->id(), b10->id(), b2->id() });
+        dlg.setAddressOrder(PatchPlanner::ByName);
+        QStringList rows;
+        for (int r = 0; r < dlg.m_table->rowCount(); r++)
+            rows << dlg.m_table->item(r, 0)->text();
+        QCOMPARE(rows, QStringList({ "T1-B2", "T1-B10", "T1-CW", "T1-SW" }));   // numbers as numbers
+        QCOMPARE(dlg.fitRows(2, 0), 0);
+        QHash<quint32, quint32> at;
+        foreach (const PatchPlanner::Assignment &a, dlg.currentPlan())
+            at.insert(a.fixtureId, a.address);
+        QCOMPARE(at[b2->id()], quint32(0));          // in name order, around "Other" at 100
+        QCOMPARE(at[b10->id()], quint32(20));
+        QCOMPARE(at[cw->id()], quint32(40));
+        QCOMPARE(at[sw->id()], quint32(70));
+        dlg.accept();
+    };
+    run();
+    // Shuffle them about and do it again: the same.
+    QVERIFY(m_doc->patchFixtures({ { sw->id(), 2, 300 }, { cw->id(), 2, 400 }, { b2->id(), 1, 7 } }));
+    run();
+}
+
+void PatchInventoryDialog_Test::moversFirstThenByKind()
+{
+    auto typed = [this](QLCFixtureDef::FixtureType type, const QString &name) {
+        QLCFixtureDef *def = new QLCFixtureDef();
+        def->setManufacturer("Test");
+        def->setModel(name + " model");
+        def->setType(type);
+        QLCFixtureMode *mode = new QLCFixtureMode(def);
+        mode->setName("Mode");
+        QLCChannel *ch = new QLCChannel();
+        ch->setName("Dimmer");
+        def->addChannel(ch);
+        mode->insertChannel(ch, 0);
+        def->addMode(mode);
+        Fixture *f = new Fixture(m_doc);
+        f->setFixtureDefinition(def, mode);
+        f->setName(name);
+        f->setPatched(false);
+        m_doc->addFixture(f);
+        return f;
+    };
+    Fixture *wash = typed(QLCFixtureDef::ColorChanger, "A Wash");
+    Fixture *bar = typed(QLCFixtureDef::LEDBarPixels, "B Bar");
+    Fixture *spot = typed(QLCFixtureDef::MovingHead, "Z Spot");
+    Fixture *beam = typed(QLCFixtureDef::MovingHead, "C Beam");
+    PatchInventoryDialog dlg(m_doc, { wash->id(), bar->id(), spot->id(), beam->id() });
+    dlg.setAddressOrder(PatchPlanner::ByKind);
+    QStringList rows;
+    for (int r = 0; r < dlg.m_table->rowCount(); r++)
+        rows << dlg.m_table->item(r, 0)->text();
+    QCOMPARE(rows, QStringList({ "C Beam", "Z Spot", "B Bar", "A Wash" }));
+    QCOMPARE(dlg.fitRows(0, 0), 0);
+    QHash<quint32, quint32> at;
+    foreach (const PatchPlanner::Assignment &a, dlg.currentPlan())
+        at.insert(a.fixtureId, a.address);
+    QCOMPARE(at[beam->id()], quint32(0));
+    QCOMPARE(at[spot->id()], quint32(1));
+    QCOMPARE(at[bar->id()], quint32(2));
+    QCOMPARE(at[wash->id()], quint32(3));
+    dlg.setAddressOrder(PatchPlanner::ByName);       // back, for the next test's dialog
+}

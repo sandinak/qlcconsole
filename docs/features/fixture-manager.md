@@ -104,12 +104,18 @@ opens on a proposal, which you review and edit before anything changes:
   on contiguous addresses.
 - A **Network** fixture gets a universe of its own at its IP (unicast);
   fixtures behind one IP share it.
-- **"Place selected at universe / address"** puts the selected rows — or
-  all of them — where you say:
-  - **into the free space** (the default) arranges them around what's
-    already in the universe: the ones there that clash with nothing **stay
-    put**, the rest fill the gaps from that address on (biggest first when
-    that fits more). Any with no room are **flagged** — "no room in U06:
+- **"Place selected at universe / address … in order …"** puts the
+  selected rows — or all of them — where you say, in one **addressing
+  order**, the same every time: **by name** (numbers count as numbers, so
+  B2 before B10), **movers first, then by kind** (movers, scanners, pixel
+  bars, beam bars, washes, strobes, dimmers, effects, atmospherics — each
+  by name), or **as they hang** (structure by structure, in their order
+  along it). The table lists the rows in that order, and the choice is
+  remembered.
+  - **into the free space** (the default) addresses them one after another
+    in that order, around whatever else is in the universe — so the
+    addresses read in order, and the same group always lands the same way,
+    wherever its fixtures were before. Any with no room are **flagged** — "no room in U06:
     needs 165 channels, the widest gap is 47" — and left where they were,
     and a bar under the table offers two ways on: **Carry on into the next
     universe** (the patch continues there, packed) or **Fit by changing
@@ -117,8 +123,8 @@ opens on a proposal, which you review and edit before anything changes:
     time, until everything fits — only to modes they can take; it says so
     if even their smallest modes don't fit);
   - **keeping their spacing** (move a block as is, gaps and all);
-  - **packed together** (first free channels from there, spilling into the
-    next universe);
+  - **packed together** (in the order too, first free channels from there,
+    spilling into the next universe);
   - **one universe each, counting up** (the first row that universe, the
     next the one after, each at that address — a row of lanterns, a node's
     ports).
