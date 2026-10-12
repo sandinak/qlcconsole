@@ -18,6 +18,9 @@
 */
 
 #include <QDoubleSpinBox>
+#include <QSpinBox>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
 #include <QGridLayout>
 #include <QPushButton>
 #include <QComboBox>
@@ -33,17 +36,16 @@
 #include "speedmasters.h"
 #include "doc.h"
 
-static_assert(SpeedMasters::Count == 4, "SpeedMastersPanel lays out four rows");
-
 QList<double> SpeedMastersPanel::ratios()
 {
     return { 0.25, 1.0 / 3.0, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0 };
 }
 
-QList<int> SpeedMastersPanel::choiceValues()
+QList<int> SpeedMastersPanel::choiceValues(Doc *doc)
 {
     QList<int> v = { int(SpeedMasters::Inherit), int(SpeedMasters::Free), int(SpeedMasters::MainClock) };
-    for (int i = 0; i < SpeedMasters::Count; ++i)
+    const int n = doc != nullptr ? doc->speedMasters()->count() : SpeedMasters::DefaultCount;
+    for (int i = 0; i < n; ++i)
         v << SpeedMasters::Master1 + i;
     return v;
 }
@@ -51,14 +53,14 @@ QList<int> SpeedMastersPanel::choiceValues()
 QStringList SpeedMastersPanel::choiceNames(Doc *doc, const QString &inheritText)
 {
     QStringList names;
-    foreach (int v, choiceValues())
+    foreach (int v, choiceValues(doc))
         names << (v == SpeedMasters::Inherit ? inheritText : doc->speedMasters()->assignmentName(v));
     return names;
 }
 
 void SpeedMastersPanel::fillCombo(QComboBox *cb, Doc *doc, const QString &inheritText, int current)
 {
-    const QList<int> values = choiceValues();
+    const QList<int> values = choiceValues(doc);
     const QStringList names = choiceNames(doc, inheritText);
     for (int i = 0; i < values.size(); ++i)
         cb->addItem(names.at(i), values.at(i));
@@ -84,14 +86,33 @@ SpeedMastersPanel::SpeedMastersPanel(Doc *doc, QWidget *parent)
     setProperty("helpTopic", QStringLiteral("effects.md#speed-masters"));
     SpeedMasters *sm = m_doc->speedMasters();
 
-    QGridLayout *grid = new QGridLayout(this);
+    /* How many the show uses (4 to 16): the rest are there, unused, so a
+       surface's fixed slots and anything already assigned are untouched. */
+    QVBoxLayout *outer = new QVBoxLayout(this);
+    QHBoxLayout *countRow = new QHBoxLayout();
+    countRow->addWidget(new QLabel(tr("Masters:"), this));
+    m_countSpin = new QSpinBox(this);
+    m_countSpin->setObjectName(QStringLiteral("speedMasterCount"));
+    m_countSpin->setRange(SpeedMasters::DefaultCount, SpeedMasters::MaxCount);
+    m_countSpin->setValue(sm->count());
+    m_countSpin->setToolTip(tr("How many speed masters this show uses (4 to 16)"));
+    connect(m_countSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int n) {
+        if (m_refreshing) return;
+        m_doc->speedMasters()->setCount(n);
+        m_doc->setModified();
+    });
+    countRow->addWidget(m_countSpin);
+    countRow->addStretch(1);
+    outer->addLayout(countRow);
+    QGridLayout *grid = new QGridLayout();
+    outer->addLayout(grid);
     const QStringList heads = { QString(), tr("Name"), tr("Follows"), tr("Ratio"), tr("BPM"),
                                 QString(), tr("Rate"), QString(), QString() };
     for (int c = 0; c < heads.size(); ++c)
         if (!heads.at(c).isEmpty())
             grid->addWidget(new QLabel(QStringLiteral("<b>%1</b>").arg(heads.at(c)), this), 0, c);
 
-    for (int i = 0; i < SpeedMasters::Count; ++i)
+    for (int i = 0; i < SpeedMasters::MaxCount; ++i)
     {
         Row &r = m_rows[i];
         const int g = i + 1;
@@ -110,11 +131,6 @@ SpeedMastersPanel::SpeedMastersPanel(Doc *doc, QWidget *parent)
         });
 
         r.source = new QComboBox(this);
-        r.source->addItem(tr("Its own tempo"), -1);
-        r.source->addItem(tr("Main clock"), int(SpeedMasters::MainClock));
-        for (int j = 0; j < SpeedMasters::Count; ++j)
-            if (j != i)
-                r.source->addItem(tr("Speed %1").arg(j + 1), j);
         r.source->setToolTip(tr("Keep its own tempo, or follow the main clock or another master "
                                 "at a ratio, on its beats."));
         grid->addWidget(r.source, g, 2);
@@ -131,7 +147,9 @@ SpeedMastersPanel::SpeedMastersPanel(Doc *doc, QWidget *parent)
         r.bpm = new QDoubleSpinBox(this);
         r.bpm->setRange(1, 999);
         r.bpm->setDecimals(1);
-        r.bpm->setKeyboardTracking(false);
+        // Typed tempos apply as they're typed ("I changed Pars .. no change"
+        // was a value waiting for Enter).
+        r.bpm->setKeyboardTracking(true);
         grid->addWidget(r.bpm, g, 4);
         connect(r.bpm, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this, i](double v) {
             if (m_refreshing) return;
@@ -172,13 +190,12 @@ SpeedMastersPanel::SpeedMastersPanel(Doc *doc, QWidget *parent)
             m_doc->setModified();
         });
     }
-    // Only once every row exists: a row's refresh renames it in the others'
-    // "Follows" lists.
-    for (int i = 0; i < SpeedMasters::Count; ++i)
-        refresh(i);
+    // Only once every row exists: the "Follows" lists name the others.
+    applyCount();
     grid->setColumnStretch(6, 1);
 
     connect(sm, &SpeedMasters::changed, this, &SpeedMastersPanel::refresh);
+    connect(sm, &SpeedMasters::countChanged, this, [this](int) { applyCount(); });
     m_lightTimer = new QTimer(this);
     m_lightTimer->setInterval(30);
     connect(m_lightTimer, &QTimer::timeout, this, &SpeedMastersPanel::tickLights);
@@ -212,7 +229,7 @@ void SpeedMastersPanel::applySource(int index)
 
 void SpeedMastersPanel::refresh(int index)
 {
-    if (index < 0 || index >= SpeedMasters::Count)
+    if (index < 0 || index >= SpeedMasters::MaxCount)
         return;
     SpeedMasters *sm = m_doc->speedMasters();
     Row &r = m_rows[index];
@@ -235,7 +252,7 @@ void SpeedMastersPanel::refresh(int index)
     r.rate->setEnabled(own);
     r.pause->setChecked(sm->isPaused(index));
     // Other masters' "Follows" lists name them; keep the names current.
-    for (int j = 0; j < SpeedMasters::Count; ++j)
+    for (int j = 0; j < SpeedMasters::MaxCount; ++j)
     {
         const int k = m_rows[j].source->findData(index);
         if (j != index && k >= 0)
@@ -244,10 +261,40 @@ void SpeedMastersPanel::refresh(int index)
     m_refreshing = false;
 }
 
+void SpeedMastersPanel::applyCount()
+{
+    SpeedMasters *sm = m_doc->speedMasters();
+    const int n = sm->count();
+    m_refreshing = true;
+    m_countSpin->setValue(n);
+    m_refreshing = false;
+    for (int i = 0; i < SpeedMasters::MaxCount; ++i)
+    {
+        const Row &r = m_rows[i];
+        for (QWidget *w : { (QWidget *)r.light, (QWidget *)r.name, (QWidget *)r.source, (QWidget *)r.ratio,
+                            (QWidget *)r.bpm, (QWidget *)r.tap, (QWidget *)r.rate, (QWidget *)r.rateText,
+                            (QWidget *)r.pause })
+            w->setVisible(i < n);
+        // What it can follow: its own tempo, the main clock, the others in use.
+        m_refreshing = true;
+        r.source->clear();
+        r.source->addItem(tr("Its own tempo"), -1);
+        r.source->addItem(tr("Main clock"), int(SpeedMasters::MainClock));
+        r.source->addItem(tr("Show timeline"), int(SpeedMasters::ShowTimeline));
+        for (int j = 0; j < n; ++j)
+            if (j != i)
+                r.source->addItem(sm->name(j), j);
+        m_refreshing = false;
+    }
+    for (int i = 0; i < SpeedMasters::MaxCount; ++i)
+        refresh(i);
+    adjustSize();
+}
+
 void SpeedMastersPanel::tickLights()
 {
     SpeedMasters *sm = m_doc->speedMasters();
-    for (int i = 0; i < SpeedMasters::Count; ++i)
+    for (int i = 0; i < sm->count(); ++i)
     {
         const double pos = sm->beatPosition(i);
         const bool on = !sm->isPaused(i) && pos - std::floor(pos) < 0.15;

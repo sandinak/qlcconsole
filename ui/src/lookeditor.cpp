@@ -2518,7 +2518,7 @@ void LookEditor::rebuildEffectDynWidget()
                     int(SpeedMasters::Inherit));
         cb->addItem(sm->assignmentName(SpeedMasters::Free), int(SpeedMasters::Free));
         cb->addItem(sm->assignmentName(SpeedMasters::MainClock), int(SpeedMasters::MainClock));
-        for (int i = 0; i < SpeedMasters::Count; ++i)
+        for (int i = 0; i < m_doc->speedMasters()->count(); ++i)
             cb->addItem(sm->name(i), SpeedMasters::Master1 + i);
         cb->setCurrentIndex(qMax(0, cb->findData(speedChoice)));
         cb->setToolTip(tr("What this effect's speed follows. On the main clock or a speed "

@@ -111,8 +111,9 @@ The latest changes, newest first. Each links to the guide with the detail.
   wander, fan, spotlight chase…), and **Stage Shape** uses it for which
   head goes where on the line or shape.
   ([Spread](effects.md#spread))
-- **Speed masters.** Four tempo masters (Programming toolbar →
-  **Beat → Speed masters…**): each its own tempo, tap, rate and pause, or following the
+- **Speed masters.** 4 to 16 tempo masters (Programming toolbar →
+  **Beat → Speed masters…**), one of which can follow the **show timeline**
+  (and so timecode): each its own tempo, tap, rate and pause, or following the
   main clock or another master at ×¼ … ×4. Put an effect, a look, a chase
   step, a chase or a collection on one; on a master an effect's rate counts
   per beat; a chase counting in beats steps on its master's beats.

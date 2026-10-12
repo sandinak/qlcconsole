@@ -19,6 +19,7 @@
 
 #include <QtTest>
 #include <QDoubleSpinBox>
+#include <QSpinBox>
 #include <QTreeWidget>
 #include <QPushButton>
 #include <QComboBox>
@@ -140,7 +141,7 @@ void SpeedMastersPanel_Test::aChaseAndItsStepsAreGivenAMaster()
     QTreeWidgetItem *second = tree->topLevelItem(1);
     QVERIFY(second->text(7).isEmpty());                    // as the chase
     // The Speed column's choice, as its drop-down sets it.
-    const int idx = SpeedMastersPanel::choiceValues().indexOf(SpeedMasters::MainClock);
+    const int idx = SpeedMastersPanel::choiceValues(m_doc).indexOf(SpeedMasters::MainClock);
     second->setData(7, Qt::UserRole, idx);
     second->setData(7, Qt::DisplayRole, QString("Main clock"));
     QCOMPARE(chase->steps().at(1).speedMaster, int(SpeedMasters::MainClock));
@@ -165,6 +166,40 @@ void SpeedMastersPanel_Test::aCollectionIsGivenAMaster()
     QCOMPARE(speed->currentData().toInt(), int(SpeedMasters::Inherit));
     speed->setCurrentIndex(speed->findData(SpeedMasters::Master1 + 3));
     QCOMPARE(col->speedMaster(), int(SpeedMasters::Master1 + 3));
+}
+
+void SpeedMastersPanel_Test::theCountShowsTheMastersInUse()
+{
+    SpeedMasters *sm = m_doc->speedMasters();
+    SpeedMastersPanel panel(m_doc);
+    panel.show();
+    QSpinBox *count = panel.findChild<QSpinBox *>("speedMasterCount");
+    QVERIFY(count != nullptr);
+    QCOMPARE(count->value(), 4);
+    QVERIFY(panel.row(3).name->isVisible());
+    QVERIFY(!panel.row(4).name->isVisible());
+
+    count->setValue(8);
+    QCOMPARE(sm->count(), 8);
+    QVERIFY(panel.row(7).name->isVisible());
+    QVERIFY(!panel.row(8).name->isVisible());
+    // Any of the eight can follow another of them, the main clock or the show.
+    QVERIFY(panel.row(0).source->findData(7) >= 0);
+    QVERIFY(panel.row(0).source->findData(8) < 0);
+    QVERIFY(panel.row(0).source->findData(int(SpeedMasters::ShowTimeline)) >= 0);
+    // ...and everywhere a master is chosen offers the eight.
+    QCOMPARE(SpeedMastersPanel::choiceValues(m_doc).size(), 3 + 8);
+
+    // A typed tempo applies as it's typed.
+    QDoubleSpinBox *bpm = panel.row(0).bpm;
+    bpm->selectAll();
+    QTest::keyClicks(bpm, "95");
+    QCOMPARE(sm->setBpm(0), 95.0);
+
+    // Back down to six: the rows go, the show remembers.
+    count->setValue(6);
+    QCOMPARE(sm->count(), 6);
+    QVERIFY(!panel.row(6).name->isVisible());
 }
 
 QTEST_MAIN(SpeedMastersPanel_Test)

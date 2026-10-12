@@ -48,6 +48,8 @@ private slots:
     void aGoLandsOnTheNextBeat();
     void aGoOnTheBarWaitsForTheBar();
     void goQuantizeIsSavedWithTheChase();
+    void aShowUsesFourToSixteen();
+    void aMasterFollowsTheShowTimeline();
 
 private:
     Doc *m_doc = nullptr;

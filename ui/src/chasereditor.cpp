@@ -761,7 +761,7 @@ void ChaserEditor::slotItemChanged(QTreeWidgetItem *item, int column)
     }
     else if (column == COL_SPEED)
     {
-        const QList<int> values = SpeedMastersPanel::choiceValues();
+        const QList<int> values = SpeedMastersPanel::choiceValues(m_doc);
         const int i = item->data(COL_SPEED, Qt::UserRole).toInt();
         step.speedMaster = (i >= 0 && i < values.size()) ? values.at(i) : int(SpeedMasters::Inherit);
     }
@@ -1455,7 +1455,7 @@ void ChaserEditor::updateItem(QTreeWidgetItem* item, ChaserStep& step)
     if (step.note.isEmpty() == false)
         item->setText(COL_NOTES, step.note);
     {
-        const int i = SpeedMastersPanel::choiceValues().indexOf(step.speedMaster);
+        const int i = SpeedMastersPanel::choiceValues(m_doc).indexOf(step.speedMaster);
         item->setData(COL_SPEED, Qt::UserRole, qMax(0, i));
         item->setText(COL_SPEED, step.speedMaster == SpeedMasters::Inherit
                                      ? QString() : m_doc->speedMasters()->assignmentName(step.speedMaster));

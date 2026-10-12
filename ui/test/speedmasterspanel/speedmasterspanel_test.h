@@ -38,6 +38,7 @@ private slots:
     void tapRateAndPauseReachTheMaster();
     void aChaseAndItsStepsAreGivenAMaster();
     void aCollectionIsGivenAMaster();
+    void theCountShowsTheMastersInUse();
 
 private:
     Doc *m_doc = nullptr;

@@ -56,7 +56,7 @@ public:
 
     /** The speed choices every editor offers, in order: @p inheritText
      *  (Inherit), Own speed, Main clock, the four masters by name. */
-    static QList<int> choiceValues();
+    static QList<int> choiceValues(Doc *doc);
     static QStringList choiceNames(Doc *doc, const QString &inheritText);
     /** Fill @p cb with them, @p current selected. */
     static void fillCombo(QComboBox *cb, Doc *doc, const QString &inheritText, int current);
@@ -77,11 +77,14 @@ public:
 
 private:
     void refresh(int index);
+    /** Show the rows the show uses and fill the "Follows" lists to match. */
+    void applyCount();
     void applySource(int index);
     void tickLights();
 
     Doc *m_doc;
-    Row m_rows[4];
+    Row m_rows[16];                 // SpeedMasters::MaxCount
+    class QSpinBox *m_countSpin = nullptr;
     QTimer *m_lightTimer;
     bool m_refreshing = false;
 };

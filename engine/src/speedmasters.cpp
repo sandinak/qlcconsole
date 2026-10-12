@@ -26,6 +26,7 @@
 
 #include "speedmasters.h"
 #include "mastertimer.h"
+#include "show.h"
 #include "doc.h"
 
 #define KXMLMaster  QStringLiteral("Master")
@@ -46,18 +47,37 @@ SpeedMasters::SpeedMasters(Doc *doc, QObject *parent)
     reset();
 }
 
+int SpeedMasters::count() const
+{
+    QMutexLocker locker(&m_mutex);
+    return m_count;
+}
+
+void SpeedMasters::setCount(int count)
+{
+    count = qBound(int(DefaultCount), count, int(MaxCount));
+    {
+        QMutexLocker locker(&m_mutex);
+        if (count == m_count)
+            return;
+        m_count = count;
+    }
+    emit countChanged(count);
+}
+
 void SpeedMasters::reset()
 {
     {
         QMutexLocker locker(&m_mutex);
+        m_count = DefaultCount;
         const qint64 now = m_clock.nsecsElapsed();
-        for (int i = 0; i < Count; ++i)
+        for (int i = 0; i < MaxCount; ++i)
         {
             m_masters[i] = Master();
             m_masters[i].anchorNs = now;
         }
     }
-    for (int i = 0; i < Count; ++i)
+    for (int i = 0; i < MaxCount; ++i)
         emit changed(i);
 }
 
@@ -144,12 +164,16 @@ double SpeedMasters::ratio(int index) const
 
 bool SpeedMasters::setFollow(int index, int source, double ratio)
 {
-    if (!valid(index) || !(ratio > 0) || (source != MainClock && !valid(source)))
+    if (!valid(index) || !(ratio > 0)
+        || (source != MainClock && source != ShowTimeline && !valid(source)))
         return false;
     {
         QMutexLocker locker(&m_mutex);
+        // Only another master the show uses.
+        if (source != MainClock && source != ShowTimeline && source >= m_count)
+            return false;
         // Following itself, or something that (eventually) follows it: a loop.
-        for (int s = source; s != MainClock; )
+        for (int s = source; s != MainClock && s != ShowTimeline; )
         {
             if (s == index)
                 return false;
@@ -294,6 +318,44 @@ void SpeedMasters::mainClock(double *pos, double *bpm) const
     MasterTimer *mt = m_doc != nullptr ? m_doc->masterTimer() : nullptr;
     *pos = mt != nullptr ? mt->beatPosition() : 0.0;
     *bpm = mt != nullptr ? mt->bpm() : 0.0;
+
+    /* The show timeline, read here -- outside m_mutex -- for the masters
+       that follow it: its playhead in beats of the show's grid. */
+    bool wanted;
+    {
+        QMutexLocker locker(&m_mutex);
+        wanted = anyFollowsTimelineLocked();
+    }
+    double tp = 0, tb = 0;
+    const bool running = wanted && timelineClock(&tp, &tb);
+    QMutexLocker locker(&m_mutex);
+    const_cast<SpeedMasters *>(this)->m_timelinePos = running ? tp : *pos;
+    const_cast<SpeedMasters *>(this)->m_timelineBpm = running ? tb : *bpm;
+}
+
+bool SpeedMasters::anyFollowsTimelineLocked() const
+{
+    for (int i = 0; i < m_count; ++i)
+        if (m_masters[i].mode == Follow && m_masters[i].follows == ShowTimeline)
+            return true;
+    return false;
+}
+
+bool SpeedMasters::timelineClock(double *pos, double *bpm) const
+{
+    if (m_doc == nullptr)
+        return false;
+    foreach (Function *f, m_doc->functions())
+    {
+        Show *show = qobject_cast<Show *>(f);
+        if (show == nullptr || !show->isRunning() || show->timeDivisionType() == Show::Time
+            || show->timeDivisionBPM() <= 0)
+            continue;
+        *bpm = show->timeDivisionBPM();
+        *pos = double(show->runningTime()) / (60000.0 / *bpm);
+        return true;
+    }
+    return false;
 }
 
 double SpeedMasters::positionLocked(int index, qint64 now, double mainPos, int depth) const
@@ -301,10 +363,11 @@ double SpeedMasters::positionLocked(int index, qint64 now, double mainPos, int d
     const Master &m = m_masters[index];
     if (m.paused)
         return m.anchorBeats;
-    if (m.mode == Own || depth > Count)
+    if (m.mode == Own || depth > MaxCount)
         return m.anchorBeats + double(now - m.anchorNs) / 1e9 * m.bpm * m.rate / 60.0;
     const double src = m.follows == MainClock ? mainPos
-                                              : positionLocked(m.follows, now, mainPos, depth + 1);
+                     : m.follows == ShowTimeline ? m_timelinePos
+                     : positionLocked(m.follows, now, mainPos, depth + 1);
     return src * m.ratio;
 }
 
@@ -313,9 +376,11 @@ double SpeedMasters::bpmLocked(int index, double mainBpm, int depth) const
     const Master &m = m_masters[index];
     if (m.paused)
         return 0;
-    if (m.mode == Own || depth > Count)
+    if (m.mode == Own || depth > MaxCount)
         return m.bpm * m.rate;
-    const double src = m.follows == MainClock ? mainBpm : bpmLocked(m.follows, mainBpm, depth + 1);
+    const double src = m.follows == MainClock ? mainBpm
+                     : m.follows == ShowTimeline ? m_timelineBpm
+                     : bpmLocked(m.follows, mainBpm, depth + 1);
     return src * m.ratio;
 }
 
@@ -374,13 +439,13 @@ bool SpeedMasters::clockFor(int assignment, double *beatPos, double *bpm) const
 bool SpeedMasters::isDefault() const
 {
     QMutexLocker locker(&m_mutex);
-    for (int i = 0; i < Count; ++i)
+    for (int i = 0; i < MaxCount; ++i)
     {
         const Master &m = m_masters[i];
         if (!m.name.isEmpty() || m.mode != Own || m.bpm != 120.0 || m.rate != 1.0 || m.paused)
             return false;
     }
-    return true;
+    return m_count == DefaultCount;
 }
 
 bool SpeedMasters::saveXML(QXmlStreamWriter *doc) const
@@ -389,7 +454,9 @@ bool SpeedMasters::saveXML(QXmlStreamWriter *doc) const
         return true;
     QMutexLocker locker(&m_mutex);
     doc->writeStartElement(KXMLQLCSpeedMasters);
-    for (int i = 0; i < Count; ++i)
+    if (m_count != DefaultCount)
+        doc->writeAttribute(QStringLiteral("Count"), QString::number(m_count));
+    for (int i = 0; i < m_count; ++i)
     {
         const Master &m = m_masters[i];
         doc->writeStartElement(KXMLMaster);
@@ -400,7 +467,8 @@ bool SpeedMasters::saveXML(QXmlStreamWriter *doc) const
         if (m.mode == Follow)
         {
             doc->writeAttribute(KXMLFollows, m.follows == MainClock ? QStringLiteral("Main")
-                                                                    : QString::number(m.follows + 1));
+                                           : m.follows == ShowTimeline ? QStringLiteral("Timeline")
+                                           : QString::number(m.follows + 1));
             doc->writeAttribute(KXMLRatio, QString::number(m.ratio));
         }
         doc->writeAttribute(KXMLBpm, QString::number(m.bpm));
@@ -419,6 +487,7 @@ bool SpeedMasters::loadXML(QXmlStreamReader &root)
     if (root.name() != KXMLQLCSpeedMasters)
         return false;
     reset();
+    setCount(root.attributes().value(QStringLiteral("Count")).toString().toInt());
     struct Pending { int index; int follows; double ratio; };
     QList<Pending> follows;
     while (root.readNextStartElement())
@@ -449,7 +518,9 @@ bool SpeedMasters::loadXML(QXmlStreamReader &root)
             if (a.value(KXMLMode).toString() == QLatin1String("Follow"))
             {
                 const QString f = a.value(KXMLFollows).toString();
-                const int src = f == QLatin1String("Main") ? int(MainClock) : f.toInt() - 1;
+                const int src = f == QLatin1String("Main") ? int(MainClock)
+                              : f == QLatin1String("Timeline") ? int(ShowTimeline)
+                              : f.toInt() - 1;
                 follows << Pending{ i, src, a.value(KXMLRatio).toString().toDouble() };
             }
         }
@@ -460,7 +531,7 @@ bool SpeedMasters::loadXML(QXmlStreamReader &root)
     foreach (const Pending &p, follows)
         if (!setFollow(p.index, p.follows, p.ratio))
             qWarning() << "[SpeedMasters] master" << p.index + 1 << "can't follow" << p.follows;
-    for (int i = 0; i < Count; ++i)
+    for (int i = 0; i < MaxCount; ++i)
         emit changed(i);
     return true;
 }

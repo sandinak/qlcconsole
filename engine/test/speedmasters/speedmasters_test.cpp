@@ -29,6 +29,9 @@
 #include "speedmasters.h"
 #include "chaserstep.h"
 #include "collection.h"
+#include "show.h"
+#include "track.h"
+#include "showfunction.h"
 #include "chaser.h"
 #include "scene.h"
 #include "doc.h"
@@ -50,7 +53,7 @@ void SpeedMasters_Test::cleanup()
 void SpeedMasters_Test::freshMastersRunOnTheirOwnAt120()
 {
     SpeedMasters *sm = m_doc->speedMasters();
-    for (int i = 0; i < SpeedMasters::Count; ++i)
+    for (int i = 0; i < SpeedMasters::MaxCount; ++i)
     {
         QCOMPARE(sm->mode(i), SpeedMasters::Own);
         QCOMPARE(sm->bpm(i), 120.0);
@@ -509,6 +512,86 @@ void SpeedMasters_Test::goQuantizeIsSavedWithTheChase()
     r.readNextStartElement();
     QVERIFY(back.loadXML(r));
     QCOMPARE(back.goQuantize(), Chaser::GoOnBar);
+}
+
+/* "yes .. 4-16 seems right" */
+void SpeedMasters_Test::aShowUsesFourToSixteen()
+{
+    SpeedMasters *sm = m_doc->speedMasters();
+    QCOMPARE(sm->count(), 4);
+    sm->setCount(8);
+    QCOMPARE(sm->count(), 8);
+    sm->setCount(2);
+    QCOMPARE(sm->count(), 4);                        // no fewer than four
+    sm->setCount(40);
+    QCOMPARE(sm->count(), 16);                       // no more than sixteen
+    QVERIFY(!sm->isDefault());
+    // Master 12 is a master like any other.
+    QVERIFY(SpeedMasters::isMaster(SpeedMasters::Master1 + 11));
+    sm->setBpm(11, 90);
+    QCOMPARE(sm->bpm(11), 90.0);
+
+    sm->setCount(6);
+    sm->setName(5, "Six");
+    QByteArray xml;
+    {
+        QXmlStreamWriter w(&xml);
+        QVERIFY(sm->saveXML(&w));
+    }
+    QVERIFY(xml.contains("Count=\"6\""));
+    QVERIFY(!xml.contains("Index=\"6\""));           // only the ones in use
+    Doc other(this);
+    QXmlStreamReader r(xml);
+    r.readNextStartElement();
+    QVERIFY(other.speedMasters()->loadXML(r));
+    QCOMPARE(other.speedMasters()->count(), 6);
+    QCOMPARE(other.speedMasters()->name(5), QString("Six"));
+}
+
+/* "I don't see timecode in there": a master can follow the show timeline --
+   its BPM grid at its playhead -- so whatever drives the show (timecode)
+   drives the master. */
+void SpeedMasters_Test::aMasterFollowsTheShowTimeline()
+{
+    SpeedMasters *sm = m_doc->speedMasters();
+    MasterTimer *timer = m_doc->masterTimer();
+    QVERIFY(sm->setFollow(0, SpeedMasters::ShowTimeline, 1.0));
+    // No show running: the main clock.
+    QVERIFY(qAbs(sm->beatPosition(0) - timer->beatPosition()) < 0.02);
+    QCOMPARE(sm->bpm(0), timer->bpm());
+
+    // A show with something on it (an empty one stops at once).
+    Scene *look = new Scene(m_doc);
+    m_doc->addFunction(look);
+    Show *show = new Show(m_doc);
+    show->setTimeDivision(Show::BPM_4_4, 150);       // 400 ms a beat
+    QVERIFY(m_doc->addFunction(show));
+    Track *track = new Track(Function::invalidId(), show);
+    ShowFunction *item = new ShowFunction(show->getLatestShowFunctionId());
+    item->setFunctionID(look->id());
+    item->setStartTime(0);
+    item->setDuration(60000);
+    track->addShowFunction(item);
+    show->addTrack(track);
+    show->start(timer, FunctionParent::master());
+    for (int i = 0; i < 60; ++i)                     // 1.2 s of ticks
+        timer->timerTick();
+    QVERIFY(show->isRunning());
+    const double expect = double(show->runningTime()) / 400.0;
+    QVERIFY2(expect > 1.0, qPrintable(QString::number(show->runningTime())));
+    QVERIFY2(qAbs(sm->beatPosition(0) - expect) < 0.01,
+             qPrintable(QString("%1 vs %2").arg(sm->beatPosition(0)).arg(expect)));
+    QCOMPARE(sm->bpm(0), 150.0);
+    // Saved as following the timeline.
+    QByteArray xml;
+    {
+        QXmlStreamWriter w(&xml);
+        sm->saveXML(&w);
+    }
+    QVERIFY(xml.contains("Follows=\"Timeline\""));
+    show->stop(FunctionParent::master());
+    for (int i = 0; i < 5; ++i)
+        timer->timerTick();
 }
 
 QTEST_MAIN(SpeedMasters_Test)

@@ -130,14 +130,21 @@ the same point, which is a look in itself.
 
 ### Speed masters
 
-Four tempo masters for effects to run on, so one tap or one fader moves
+Tempo masters for effects to run on, so one tap or one fader moves
 everything on a master together. Open them from the Programming toolbar's
-**Beat** menu → **Speed masters…**. Each row has:
+**Beat** menu → **Speed masters…**. **Masters:** at the top sets how many
+the show uses — 4 to 16 (fixed slots, so a control surface can map them).
+Each row has:
 
-- **Follows** — **Its own tempo** (a BPM, **Tap**, a **Rate** fader from 0
-  to 200 %), or the **Main clock** or another master at a **Ratio** (×¼ to
+- **Follows** — **Its own tempo** (a BPM — typed numbers apply as you
+  type — **Tap**, a **Rate** fader from 0 to 200 %), or the **Main
+  clock**, the **Show timeline** or another master at a **Ratio** (×¼ to
   ×4): ×2 plays two beats to the other's one, on the other's beats; ×½ one
   to its two. A master can't follow one that follows it.
+- **Show timeline** follows the running show's beat grid (its BPM) at its
+  playhead — so when the show follows MIDI timecode, everything on the
+  master locks to the song's bars and beats. With no show running it
+  follows the main clock.
 - **Pause** — the master stops; everything on it freezes where it is.
   A following master picks up on the beat again when un-paused.
 - A light that flashes on the master's beat.

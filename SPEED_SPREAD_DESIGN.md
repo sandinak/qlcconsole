@@ -61,7 +61,10 @@ The thing everything else stands on.
 
 ## S2 — Speed masters (and masters following masters) *(DONE 2026-10-11)*
 
-- **Four masters**, saved in the show. Each is either
+- **Four masters** (4 to 16 since 2026-10-12: sixteen always exist, the
+  show uses the first `count()`), saved in the show. A master can also
+  follow the **show timeline** (the running show's BPM grid at its
+  playhead; the main clock when none runs) -- timecode-locked masters. Each is either
   - **Own tempo** — its own BPM and tap, its own beat position; or
   - **Follow** — the main clock or another master, times a **ratio**
     (¼, ½, 1, 2, 4; plus ⅓/¾/1½ for swing). This is the "linking masters"
