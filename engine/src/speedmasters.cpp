@@ -27,6 +27,8 @@
 #include "speedmasters.h"
 #include "mastertimer.h"
 #include "show.h"
+#include "chaser.h"
+#include "qlcpalette.h"
 #include "doc.h"
 
 #define KXMLMaster  QStringLiteral("Master")
@@ -430,6 +432,63 @@ bool SpeedMasters::clockFor(int assignment, double *beatPos, double *bpm) const
     *beatPos = positionLocked(index, m_clock.nsecsElapsed(), mainPos);
     *bpm = bpmLocked(index, mainBpm);
     return true;
+}
+
+/*********************************************************************
+ * In use
+ *********************************************************************/
+
+quint32 SpeedMasters::usedMask() const
+{
+    quint32 mask = 0;
+    auto mark = [&mask](int assignment) {
+        if (isMaster(assignment))
+            mask |= 1u << (assignment - Master1);
+    };
+    if (m_doc != nullptr)
+    {
+        foreach (Function *f, m_doc->functions())
+        {
+            mark(f->speedMaster());
+            if (Chaser *c = qobject_cast<Chaser *>(f))
+            {
+                foreach (const ChaserStep &step, c->steps())
+                    mark(step.speedMaster);
+            }
+        }
+        foreach (QLCPalette *p, m_doc->palettes())
+        {
+            if (p->type() != QLCPalette::Effect)
+                continue;
+            const QMap<QString, double> pp = p->effectParamValues();
+            auto it = pp.constFind(QStringLiteral("__speedMaster"));
+            if (it != pp.constEnd())
+                mark(int(it.value()));
+        }
+    }
+
+    QMutexLocker locker(&m_mutex);
+    for (int i = 0; i < m_count; ++i)
+        for (int c = 0; c < ControlCount; ++c)
+            if (m_masters[i].inUniverse[c] != UINT_MAX)
+                mask |= 1u << i;
+    // What a used master follows is used too: its tempo drives it.
+    for (bool grew = true; grew; )
+    {
+        grew = false;
+        for (int i = 0; i < m_count; ++i)
+        {
+            const Master &m = m_masters[i];
+            if (!((mask >> i) & 1u) || m.mode != Follow || !valid(m.follows))
+                continue;
+            if (!((mask >> m.follows) & 1u))
+            {
+                mask |= 1u << m.follows;
+                grew = true;
+            }
+        }
+    }
+    return m_count >= 32 ? mask : mask & ((1u << m_count) - 1);
 }
 
 /*********************************************************************

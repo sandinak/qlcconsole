@@ -51,6 +51,7 @@ private slots:
     void aShowUsesFourToSixteen();
     void aMasterFollowsTheShowTimeline();
     void aControlSurfaceDrivesAMaster();
+    void onlyTheMastersSomethingIsOnAreUsed();
 
 private:
     Doc *m_doc = nullptr;

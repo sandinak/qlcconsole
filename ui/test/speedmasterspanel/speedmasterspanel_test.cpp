@@ -218,17 +218,29 @@ void SpeedMastersPanel_Test::theFooterShowsEachMastersTempo()
     sm->setBpm(0, 128);
     SpeedMastersFooter footer(m_doc);
     footer.show();
+    // Nothing on any master: nothing in the footer, nothing flashing.
+    for (int i = 0; i < SpeedMasters::MaxCount; ++i)
+        QVERIFY(!footer.button(i)->isVisible());
+
+    Scene *look = new Scene(m_doc);
+    m_doc->addFunction(look);
+    look->setSpeedMaster(SpeedMasters::Master1);
+    Scene *other = new Scene(m_doc);
+    m_doc->addFunction(other);
+    other->setSpeedMaster(SpeedMasters::Master1 + 1);
+    QTRY_VERIFY(footer.button(0)->isVisible());      // looks are on Speed 1 and 2
     QTRY_COMPARE(footer.button(0)->text(), QString("Pars 128"));
-    QVERIFY(footer.button(3)->isVisible());
-    QVERIFY(!footer.button(4)->isVisible());          // four in use
-    sm->setCount(6);
-    QVERIFY(footer.button(5)->isVisible());
+    QVERIFY(footer.button(1)->isVisible());
+    QVERIFY(!footer.button(2)->isVisible());          // the others stay out of the way
+    QVERIFY(!footer.button(3)->isVisible());
     sm->setPaused(1, true);
     QTRY_COMPARE(footer.button(1)->text(), QString("Speed 2 paused"));
+    other->setSpeedMaster(SpeedMasters::Inherit);
+    QTRY_VERIFY(!footer.button(1)->isVisible());      // taken off: gone again
     QCOMPARE(SpeedMastersFooter::buttonText("A very long name", 90, false),
              QString("A very lo%1 90").arg(QChar(0x2026)));
 
-    footer.button(2)->click();                       // opens the window
+    footer.button(0)->click();                       // opens the window
     SpeedMastersPanel *panel = nullptr;
     foreach (QWidget *w, QApplication::topLevelWidgets())
         if (qobject_cast<SpeedMastersPanel *>(w) != nullptr && w->isVisible())

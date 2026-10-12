@@ -27,6 +27,7 @@
 #include "mastertimer.h"
 #undef private
 #include "speedmasters.h"
+#include "qlcpalette.h"
 #include "chaserstep.h"
 #include "collection.h"
 #include "show.h"
@@ -663,6 +664,48 @@ void SpeedMasters_Test::aControlSurfaceDrivesAMaster()
 
     sm->clearInput(1, SpeedMasters::TapControl);
     QVERIFY(!sm->input(1, SpeedMasters::TapControl, nullptr, nullptr));
+}
+
+/* "If the masters are not used .. they should not fire or be visible" */
+void SpeedMasters_Test::onlyTheMastersSomethingIsOnAreUsed()
+{
+    SpeedMasters *sm = m_doc->speedMasters();
+    QCOMPARE(sm->usedMask(), quint32(0));            // a fresh show: none
+
+    Scene *look = new Scene(m_doc);
+    m_doc->addFunction(look);
+    look->setSpeedMaster(SpeedMasters::Master1);     // a look on Speed 1
+    QCOMPARE(sm->usedMask(), quint32(0x1));
+    look->setSpeedMaster(SpeedMasters::MainClock);   // the main clock isn't a master
+    QCOMPARE(sm->usedMask(), quint32(0));
+
+    Chaser *chase = new Chaser(m_doc);
+    ChaserStep step(look->id());
+    step.speedMaster = SpeedMasters::Master1 + 2;    // a chase step on Speed 3
+    chase->addStep(step);
+    m_doc->addFunction(chase);
+    QCOMPARE(sm->usedMask(), quint32(0x4));
+
+    QLCPalette *fx = new QLCPalette(QLCPalette::Effect, m_doc);
+    fx->setEffectParamValue(QStringLiteral("__speedMaster"), SpeedMasters::Master1 + 1);
+    QVERIFY(m_doc->addPalette(fx));                  // an effect on Speed 2
+    QCOMPARE(sm->usedMask(), quint32(0x6));
+    fx->setEffectParamValue(QStringLiteral("__speedMaster"), SpeedMasters::Inherit);
+    QCOMPARE(sm->usedMask(), quint32(0x4));
+
+    QVERIFY(sm->setFollow(2, 3, 2.0));               // Speed 3 follows Speed 4: both
+    QCOMPARE(sm->usedMask(), quint32(0xC));
+    QVERIFY(sm->setFollow(1, 0, 1.0));               // a follower nothing uses: neither
+    QCOMPARE(sm->usedMask(), quint32(0xC));
+
+    sm->setInput(1, SpeedMasters::TapControl, 0, 3); // a surface drives Speed 2
+    QCOMPARE(sm->usedMask(), quint32(0xF));          // and so Speed 1, which it follows
+    QVERIFY(sm->isUsed(0));
+
+    look->setSpeedMaster(SpeedMasters::Master1 + 7); // Speed 8, with 4 in use: not counted
+    QCOMPARE(sm->usedMask() & 0x80u, quint32(0));
+    sm->setCount(8);
+    QCOMPARE(sm->usedMask() & 0x80u, quint32(0x80));
 }
 
 QTEST_MAIN(SpeedMasters_Test)

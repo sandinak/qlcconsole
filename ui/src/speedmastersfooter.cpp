@@ -75,18 +75,27 @@ QString SpeedMastersFooter::buttonText(const QString &name, double bpm, bool pau
 
 void SpeedMastersFooter::applyCount()
 {
-    const int n = m_doc->speedMasters()->count();
+    // Only the masters something is on: an unused one neither shows nor
+    // flashes ("If the masters are not used .. they should not fire or be
+    // visible").
+    m_used = m_doc->speedMasters()->usedMask();
     for (int i = 0; i < m_buttons.size(); ++i)
-        m_buttons.at(i)->setVisible(i < n);
+        m_buttons.at(i)->setVisible((m_used >> i) & 1u);
 }
 
 void SpeedMastersFooter::tick()
 {
     if (!isVisible())
         return;
+    // What's used changes with any edit anywhere (a look's Speed, a chase
+    // step's): look again twice a second rather than chase every signal.
+    if (++m_ticks % 16 == 0)
+        applyCount();
     SpeedMasters *sm = m_doc->speedMasters();
     for (int i = 0; i < sm->count() && i < m_buttons.size(); ++i)
     {
+        if (!((m_used >> i) & 1u))
+            continue;
         QToolButton *b = m_buttons.at(i);
         const bool paused = sm->isPaused(i);
         const double pos = sm->beatPosition(i);

@@ -127,6 +127,13 @@ public:
      *  for Free/Inherit. */
     bool clockFor(int assignment, double *beatPos, double *bpm) const;
 
+    /** Which masters in use (bit N = master N+1) the show actually uses:
+     *  an effect, look, chase, chase step or collection is on it, a control
+     *  surface input drives it, or a used master follows it. One nothing
+     *  uses has no business lighting up or taking footer room. */
+    quint32 usedMask() const;
+    bool isUsed(int index) const { return (usedMask() >> index) & 1u; }
+
     /** What a control surface can drive on a master: Tap (a button),
      *  Rate (a fader, 0..200 %), Pause (a button: press to toggle). */
     enum Control { TapControl, RateControl, PauseControl, ControlCount };

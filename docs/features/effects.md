@@ -154,8 +154,15 @@ Each row has:
   the bottom stopped. Move the control with **Auto Detect** on, or choose
   it; the button then reads how many are mapped. Saved with the show.
 
-The masters also sit in the **footer**, beside the Grand Master: a button
-for each, reading its tempo ("Pars 120", or "paused") and lit on its beat;
+A master **nothing uses** stays out of the way: its row is here to set up,
+but its light is an empty ring ("Nothing is on this master yet") and doesn't
+flash. A master is used when an effect, a look, a chase, a chase step or a
+collection is on it, when a controller input drives it, or when a used
+master follows it.
+
+The used masters also sit in the **footer**, beside the Grand Master: a
+button for each, reading its tempo ("Pars 120", or "paused") and lit on its
+beat — none at all until something is on a master;
 click one to open this window at that master. **View → Show Speed Masters
 in Footer** turns them off. With more than eight in use the names are
 shortened (an unnamed one shows its number, "S9"); the tooltip has it all.

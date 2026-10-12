@@ -94,6 +94,8 @@ private:
     class QSpinBox *m_countSpin = nullptr;
     QTimer *m_lightTimer;
     bool m_refreshing = false;
+    quint32 m_used = 0;             // SpeedMasters::usedMask()
+    int m_ticks = 0;
 };
 
 /** @} */

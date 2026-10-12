@@ -31,7 +31,8 @@ class Doc;
  */
 
 /**
- * The speed masters in the footer: a button for each master the show uses,
+ * The speed masters in the footer: a button for each master the show uses
+ * (one nothing is on stays out of the way),
  * reading its tempo ("Pars 120") and lighting on its beat. A click opens the
  * Speed Masters window at that master.
  */
@@ -54,6 +55,8 @@ private:
     Doc *m_doc;
     QList<QToolButton *> m_buttons;
     QTimer *m_timer;
+    quint32 m_used = 0;     //!< SpeedMasters::usedMask(), re-read twice a second
+    int m_ticks = 0;
 };
 
 /** @} */

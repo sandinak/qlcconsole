@@ -368,17 +368,25 @@ void SpeedMastersPanel::applyCount()
 void SpeedMastersPanel::tickLights()
 {
     SpeedMasters *sm = m_doc->speedMasters();
+    // Every row stays here to be set up, but only a master something is on
+    // flashes its beat; re-read twice a second.
+    if (++m_ticks % 16 == 1)
+        m_used = sm->usedMask();
     for (int i = 0; i < sm->count(); ++i)
     {
+        const bool used = (m_used >> i) & 1u;
         const double pos = sm->beatPosition(i);
-        const bool on = !sm->isPaused(i) && pos - std::floor(pos) < 0.15;
-        if (m_rows[i].light->property("lit").toBool() != on
+        const bool on = used && !sm->isPaused(i) && pos - std::floor(pos) < 0.15;
+        const int state = !used ? 0 : on ? 2 : 1;
+        if (m_rows[i].light->property("lit").toInt() != state
             || !m_rows[i].light->property("lit").isValid())
         {
             // Only on a change: a stylesheet re-polishes the widget.
-            m_rows[i].light->setProperty("lit", on);
-            m_rows[i].light->setStyleSheet(on ? QStringLiteral("background:#f5a623;border-radius:7px;")
-                                              : QStringLiteral("background:#444;border-radius:7px;"));
+            m_rows[i].light->setProperty("lit", state);
+            m_rows[i].light->setStyleSheet(state == 2 ? QStringLiteral("background:#f5a623;border-radius:7px;")
+                                         : state == 1 ? QStringLiteral("background:#444;border-radius:7px;")
+                                                      : QStringLiteral("border:1px solid #444;border-radius:7px;"));
+            m_rows[i].light->setToolTip(used ? QString() : tr("Nothing is on this master yet"));
         }
         // A follower's tempo moves with what it follows.
         if (sm->mode(i) == SpeedMasters::Follow && !m_rows[i].bpm->hasFocus())
