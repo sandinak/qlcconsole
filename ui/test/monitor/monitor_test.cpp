@@ -18499,6 +18499,40 @@ void Monitor_Test::aRunningLookIsDrawnWhereItsHeadsAreSent()
     delete doc;
 }
 
+/* "we should always start with centering on the floor and center stage":
+   the Rig Overview used to centre the rig's bounding box, so a rig with
+   trusses at 6 m had its floor half that below the middle of the window. */
+void Monitor_Test::theAngledViewStandsOnCentreStage()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridSize(QVector3D(12, 3, 10));           // metres
+    Truss *t = props->addTruss();
+    t->setOrigin(QVector3D(2, 2, 6));                   // high, upstage, to one side
+    t->setLength(8);
+    makeMover(doc, 10.0, 0, "High", QVector3D(4.0f, 2.0f, 6.0f));
+
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.resize(800, 600);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    v.setStandOnCentreStage(true);              // as the Rig Overview does
+    v.refit();
+    // Across the middle, a little below half way: the rig stands above it.
+    const QPointF c = v.w2s(props->stageCentre());
+    QVERIFY2(qAbs(c.x() - 400) < 2 && qAbs(c.y() - 360) < 2,
+             qPrintable(QString("centre stage drawn at %1,%2, not (400, 360)")
+                        .arg(c.x()).arg(c.y())));
+    // ...and everything still fits on screen.
+    const QPointF top = v.w2s(QVector3D(6, 2, 6));
+    QVERIFY(QRectF(0, 0, 800, 600).contains(top));
+    // Turning the view keeps it there.
+    v.setAngledView(120, 30);
+    const QPointF turned = v.w2s(props->stageCentre());
+    QVERIFY(qAbs(turned.x() - 400) < 2 && qAbs(turned.y() - 360) < 2);
+    delete doc;
+}
+
 void Monitor_Test::aWiderFollowSpotAimsLowerOnThePerson()
 {
     Doc *doc = new Doc(this);

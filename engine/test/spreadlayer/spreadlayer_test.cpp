@@ -147,23 +147,24 @@ void SpreadLayer_Test::anAxisPutsThemInItsOwnOrder()
 void SpreadLayer_Test::outFromAndAroundATarget()
 {
     // Four heads round a target at the origin, at different distances.
+    // (+Y is downstage, +X stage left.)
     QVector<SpreadLayer::Point> pts = line(4);
-    pts[0].pos = QVector3D(0, -3, 0);       // downstage of it, far
-    pts[1].pos = QVector3D(1, 0, 0);        // to its +x, near
-    pts[2].pos = QVector3D(0, 2, 0);        // upstage, middling
-    pts[3].pos = QVector3D(-4, 0, 0);       // to its -x, furthest
+    pts[0].pos = QVector3D(0, -3, 0);       // upstage of it, far
+    pts[1].pos = QVector3D(1, 0, 0);        // stage left of it, near
+    pts[2].pos = QVector3D(0, 2, 0);        // downstage, middling
+    pts[3].pos = QVector3D(-4, 0, 0);       // stage right of it, furthest
     const QVector3D target(0, 0, 0);
     SpreadLayer::Settings s = settings(1);
     s.axis = SpreadLayer::FromTarget;
     // Nearest first: 1, 2, 0, 3.
     QCOMPARE(SpreadLayer::phases(pts, s, &target), PHASES(0.5, 0, 0.25, 0.75));
-    // Round it from downstage towards +x: 0, 1, 2, 3.
+    // Round it from downstage towards stage right: 2, 3, 0, 1.
     s.axis = SpreadLayer::AroundTarget;
-    QCOMPARE(SpreadLayer::phases(pts, s, &target), PHASES(0, 0.25, 0.5, 0.75));
+    QCOMPARE(SpreadLayer::phases(pts, s, &target), PHASES(0.5, 0.75, 0, 0.25));
     // Reverse runs the sweep the other way round.
     s.direction = SpreadLayer::Reverse;
-    QCOMPARE(SpreadLayer::phases(pts, s, &target), PHASES(0.75, 0.5, 0.25, 0));
-    // No target: centre stage -- here the same as the target above.
+    QCOMPARE(SpreadLayer::phases(pts, s, &target), PHASES(0.25, 0, 0.75, 0.5));
+    // No centre given: the world origin -- here the same as the target above.
     s.direction = SpreadLayer::Forward;
     s.axis = SpreadLayer::FromTarget;
     QCOMPARE(SpreadLayer::phases(pts, s), PHASES(0.5, 0, 0.25, 0.75));
@@ -362,6 +363,21 @@ void SpreadLayer_Test::thePreviewSeesWhatTheEffectGets()
     const QJSValue arr = inst.buildFixturesArray(cells, cols, rows);
     for (int i = 0; i < 3; ++i)
         QCOMPARE(arr.property(quint32(i)).property("phase").toNumber(), dots.at(i).phase);
+
+    // With no Aim look the centre is centre stage (the grid's middle).
+    {
+        Scene *bare = new Scene(&doc);
+        foreach (quint32 fid, scene->fixtures())
+            bare->addFixture(fid);
+        doc.addFunction(bare);
+        EffectInstance plain(&doc, bare->id(), pal->id());
+        QPointF c;
+        bool hc = true;
+        plain.spreadPreview(&c, &hc);
+        QVERIFY(!hc);
+        const QVector3D cs = doc.monitorProperties()->stageCentre();
+        QCOMPARE(c, QPointF(cs.x(), cs.y()));
+    }
 
     // Moving the target moves the ripple's centre.
     st->setPosition(QVector3D(4, 0, 0));

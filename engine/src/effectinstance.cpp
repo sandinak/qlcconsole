@@ -885,9 +885,11 @@ QList<EffectInstance::SpreadDot> EffectInstance::spreadPreview(QPointF *centre, 
         p.pos = mp != nullptr ? mp->fixtureRigPosition(cells.at(i).fixtureId) : QVector3D();
         pts << p;
     }
-    QVector3D c;
+    QVector3D c = mp != nullptr ? mp->stageCentre() : QVector3D();
     const bool hc = SpreadLayer::needsCentre(spread.axis) && aimCentre(&c);
-    const QVector<double> ph = SpreadLayer::phases(pts, spread, hc ? &c : nullptr);
+    if (!hc && mp != nullptr)
+        c = mp->stageCentre();
+    const QVector<double> ph = SpreadLayer::phases(pts, spread, &c);
     for (int i = 0; i < pts.size(); ++i)
     {
         SpreadDot d;
@@ -1024,9 +1026,12 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
         const bool onStage = spread.axis >= SpreadLayer::StageX;
         /* Out from / around a target: the look's Aim target (the one Stage
            Shape centres on); without one, the middle of the heads. */
-        QVector3D centre;
+        // No Aim target: centre stage.
+        QVector3D centre = mp != nullptr ? mp->stageCentre() : QVector3D();
         const bool hasCentre = spread.isActive() && SpreadLayer::needsCentre(spread.axis)
                                && aimCentre(&centre);
+        if (!hasCentre && mp != nullptr)
+            centre = mp->stageCentre();
         const bool centreMoved = hasCentre != m_spreadHadCentre || centre != m_spreadCentre;
         if (rebuild || spread != m_spreadBuilt
             || (onStage && spread.isActive() && (moved || centreMoved)))
@@ -1042,7 +1047,7 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
                 p.pos = m_facts.value(cells.at(i).fixtureId).pos;
                 pts << p;
             }
-            const QVector<double> ph = SpreadLayer::phases(pts, spread, hasCentre ? &centre : nullptr);
+            const QVector<double> ph = SpreadLayer::phases(pts, spread, &centre);
             m_spreadCentre = centre;
             m_spreadHadCentre = hasCentre;
             for (int i = 0; i < m_cellObjects.size() && i < ph.size(); ++i)

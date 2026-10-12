@@ -1323,6 +1323,9 @@ void StructureStudioView::collectPointsFor(QList<QVector3D> &pts, Kind kind, qui
        a big show cost. collectPoints() adds the fixtures, once. */
 }
 
+/* Where centre stage stands in the angled view: this far down the window. */
+static const double kStageCentreDown = 0.6;
+
 void StructureStudioView::refit()
 {
     QList<QVector3D> pts;
@@ -1358,6 +1361,30 @@ void StructureStudioView::refit()
     m_originPx = QPointF(0, 0);
     m_originPx = QPointF(width() / 2.0, height() / 2.0)
                  - planeToScreenVec(QPointF(cA, cB));
+
+    /* The angled (3D) view stands on the floor at CENTRE STAGE ("we should
+       always start with centering on the floor and center stage"): that
+       point sits across the middle and a little below half way down -- a rig
+       stands on the floor, so the room above it is where the rig is -- and
+       stays there as the view turns, so the view swings about centre stage.
+       It used to centre the rig's bounding box, which floated the floor half
+       a truss-height below the middle and moved it with every turn. */
+    if (m_standOnCentreStage && m_plane == Angled && !first && m_doc != nullptr
+        && m_doc->monitorProperties() != nullptr && (m_rotation & 1) == 0)
+    {
+        const QPointF anchor = project(m_doc->monitorProperties()->stageCentre());
+        const QPointF at(width() / 2.0, height() * kStageCentreDown);
+        // Room on each side of the anchor, and how far the rig reaches into it.
+        const double left = qMax(1e-6, anchor.x() - minA), right = qMax(1e-6, maxA - anchor.x());
+        const double up = qMax(1e-6, maxB - anchor.y()), down = qMax(1e-6, anchor.y() - minB);
+        const double roomX = qMax(1.0, width() / 2.0 - margin);
+        const double roomUp = qMax(1.0, at.y() - margin);
+        const double roomDown = qMax(1.0, height() - margin - at.y());
+        m_scale = qBound(10.0, qMin(qMin(roomX / left, roomX / right),
+                                    qMin(roomUp / up, roomDown / down)), 320.0);
+        m_originPx = QPointF(0, 0);
+        m_originPx = at - planeToScreenVec(anchor);
+    }
 }
 
 /*********************************************************************
@@ -7391,6 +7418,8 @@ void StructureStudioView::drawOrientationLabels(QPainter &p) const
     case Side:                                 // a = Y, b = Z (screen-up)
         leftLbl  = tr("upstage");      rightLbl  = tr("downstage");
         topLbl   = tr("up");           bottomLbl = tr("floor");
+        break;
+    case Angled:                               // no flat axes to name
         break;
     }
 

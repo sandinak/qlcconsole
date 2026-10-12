@@ -108,8 +108,8 @@ outline:
   layout's **columns** or **rows**, or where they stand: **stage left to
   right**, **front to back**, **by height** — or round the look's **Aim
   target**: **out from the target** (nearest first, a ripple outward) or
-  **around the target** (from downstage of it, round towards stage right,
-  a sweep). Heads at the same place share a phase (a column, a bar seen
+  **around the target** (from straight downstage of it, round towards
+  stage right, a sweep). Heads at the same place share a phase (a column, a bar seen
   from the side). With no Aim look, the target axes use centre stage.
 - **Direction** — **forward**, **reverse**, **centre out**, **ends in**.
 - **Wings** — split the heads into mirrored parts, each running the

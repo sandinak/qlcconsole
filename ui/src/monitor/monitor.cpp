@@ -2311,6 +2311,8 @@ void Monitor::showStageOverview()
     StructureStudioView *view =
         new StructureStudioView(m_doc, StructureStudioView::StageKind, 0, &dlg);
     view->setPlane(StructureStudioView::Angled);
+    // Stand on the floor at centre stage and turn about it.
+    view->setStandOnCentreStage(true);
     view->setLocked(true);
     m_overviewView = view;
     view->setActiveScene(m_activeSceneId);

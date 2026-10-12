@@ -564,6 +564,7 @@ private slots:
      *  at a rig, so pin each one. */
     void moverAimFollowsPanAndTilt();
     void aRunningLookIsDrawnWhereItsHeadsAreSent();
+    void theAngledViewStandsOnCentreStage();
     /** Room light applies whether or not live output is shown, and takes the
      *  whole picture down toward a blackout. */
     void ambientLevelDimsTheWholeView();

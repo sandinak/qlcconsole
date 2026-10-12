@@ -2,9 +2,10 @@
 
 Open it: `build/main/qlcconsole -o test-workspaces/speed-spread-demo.qxw`
 
-The rig: **8 Cobra Wash movers** on the US Truss (6 m), **8 RGB pars**
-hanging on the DS Truss (5 m), an Aim target **Centre** at centre stage
-(1.5 m upstage of 0). Everything is in the Programming tab's tree under
+The rig, on a 14 m × 10 m stage with the rulers counting from centre
+stage: **8 Cobra Wash movers** on the US Truss (6 m, 2.5 m upstage),
+**8 RGB pars** hanging on the DS Truss (5 m, 3 m downstage), and an Aim
+target **Centre** on the floor at centre stage. Everything is in the Programming tab's tree under
 **Speed and Spread demo**.
 
 **Setup, once:** stay in **Design** mode, go to the **Programming** tab, and

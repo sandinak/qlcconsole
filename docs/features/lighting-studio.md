@@ -25,7 +25,9 @@ isn't really implemented until the model derives from it, the UI can set it,
   everything mounted on it.
 - **View → Rig Overview…** (Ctrl/⌘+Shift+R) opens a read-only,
   freely-rotatable 3D view of the *whole* rig at once — the fastest way to
-  sanity-check a build. It's a window of its own: opening it leaves you on
+  sanity-check a build. It stands on the floor at **centre stage** (the
+  middle of the stage grid): that point sits across the middle of the
+  window, a little below half way, and the view turns about it. It's a window of its own: opening it leaves you on
   whatever tab you were on, rather than bringing the Lighting Studio tab
   forward. The same shortcut **closes** it when it's the window in front (if
   it's open behind other windows, it's brought forward instead); **⌘W**

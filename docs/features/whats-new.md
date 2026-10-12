@@ -19,6 +19,10 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Lighting Studio
 
+- **The Rig Overview stands on centre stage** — on the floor, in the
+  middle of the stage grid — and turns about it, instead of centring
+  whatever the rig's bounding box was (which floated the floor half a
+  truss-height below the middle).
 - **The rig view shows a running position effect on an Aim look.** A head
   under a look with an Aim target was always drawn pointing at the target —
   so Stage Shape, or an orbit round a target, never showed. Selected, a
