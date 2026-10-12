@@ -139,7 +139,8 @@ void NetworkReportDialog_Test::saveCsvAsksWhereAndCanBeCancelled()
     QVERIFY(QDir(dir.path()).entryList(QDir::Files).isEmpty());
 
     // Chosen: written there.
-    const QString path = dir.filePath("chosen.csv");
+    // The suggested name: on Linux the dialog puts it back over a typed one.
+    const QString path = dir.filePath("network-report.csv");
     QStringList chosen;
     whenModal<QFileDialog>([path, &chosen](QFileDialog *fd) {
         fd->setDirectory(QFileInfo(path).absolutePath());
