@@ -383,4 +383,132 @@ void SpeedMasters_Test::aBeatChaseStepsOnItsMastersBeats()
         timer->timerTick();
 }
 
+/* PLAYBACK_TIMING_DESIGN.md, P1. A chase of four manual steps (held until a
+   GO), started; GOs asked for between beats. */
+static Chaser *manualChase(Doc *doc, QList<Scene *> *looks = nullptr)
+{
+    Chaser *chase = new Chaser(doc);
+    for (int i = 0; i < 4; ++i)
+    {
+        Scene *s = new Scene(doc);
+        doc->addFunction(s);
+        if (looks)
+            *looks << s;
+        chase->addStep(ChaserStep(s->id(), 0, Function::infiniteSpeed(), 0));
+    }
+    chase->setDurationMode(Chaser::PerStep);
+    doc->addFunction(chase);
+    return chase;
+}
+
+static void go(Chaser *chase)
+{
+    ChaserAction next;
+    next.m_action = ChaserNextStep;
+    next.m_masterIntensity = 1.0;
+    next.m_stepIntensity = 1.0;
+    next.m_fadeMode = Chaser::FromFunction;
+    next.m_stepIndex = -1;
+    chase->setAction(next);
+}
+
+void SpeedMasters_Test::aGoLandsOnTheNextBeat()
+{
+    MasterTimer *timer = m_doc->masterTimer();
+    timer->setBpm(60);                               // a beat a second
+    Chaser *chase = manualChase(m_doc);
+    chase->setGoQuantize(Chaser::GoOnBeat);
+    chase->start(timer, FunctionParent::master());
+    for (int i = 0; i < 3; ++i)
+        timer->timerTick();
+    QCOMPARE(chase->currentStepIndex(), 0);
+
+    // Just after a beat: the GO waits about a second.
+    timer->alignBeat(1.0);
+    QTest::qWait(150);
+    go(chase);
+    go(chase);                                       // twice in one beat: one step
+    QElapsedTimer t;
+    t.start();
+    while (chase->currentStepIndex() == 0 && t.elapsed() < 2000)
+    {
+        timer->timerTick();
+        QTest::qWait(10);
+    }
+    QCOMPARE(chase->currentStepIndex(), 1);
+    QVERIFY2(t.elapsed() > 650 && t.elapsed() < 1100,
+             qPrintable(QString("landed %1 ms after the GO, the beat was ~850 away").arg(t.elapsed())));
+    // ...and on the beat.
+    const double pos = timer->beatPosition();
+    QVERIFY2(pos - std::floor(pos) < 0.1, qPrintable(QString::number(pos)));
+    for (int i = 0; i < 20; ++i)
+        timer->timerTick();
+    QCOMPARE(chase->currentStepIndex(), 1);          // not two steps
+
+    // At once: as before.
+    chase->setGoQuantize(Chaser::GoNow);
+    go(chase);
+    timer->timerTick();
+    QCOMPARE(chase->currentStepIndex(), 2);
+
+    chase->stop(FunctionParent::master());
+    for (int i = 0; i < 5; ++i)
+        timer->timerTick();
+}
+
+void SpeedMasters_Test::aGoOnTheBarWaitsForTheBar()
+{
+    MasterTimer *timer = m_doc->masterTimer();
+    timer->setBpm(240);                              // a bar a second
+    Chaser *chase = manualChase(m_doc);
+    chase->setGoQuantize(Chaser::GoOnBar);
+    chase->start(timer, FunctionParent::master());
+    for (int i = 0; i < 3; ++i)
+        timer->timerTick();
+    QTest::qWait(30);
+    go(chase);
+    QElapsedTimer t;
+    t.start();
+    bool sawBeatsPass = false;
+    const double from = timer->beatPosition();
+    while (chase->currentStepIndex() == 0 && t.elapsed() < 2500)
+    {
+        timer->timerTick();
+        if (timer->beatPosition() - from > 1.0)
+            sawBeatsPass = true;
+        QTest::qWait(10);
+    }
+    QCOMPARE(chase->currentStepIndex(), 1);
+    // It landed on a bar line: a whole number of bars (4 beats).
+    const double bars = timer->beatPosition() / 4.0;
+    QVERIFY2(bars - std::floor(bars) < 0.1, qPrintable(QString::number(bars)));
+    Q_UNUSED(sawBeatsPass);
+    chase->stop(FunctionParent::master());
+    for (int i = 0; i < 5; ++i)
+        timer->timerTick();
+}
+
+void SpeedMasters_Test::goQuantizeIsSavedWithTheChase()
+{
+    Chaser *chase = manualChase(m_doc);
+    QByteArray xml;
+    {
+        QXmlStreamWriter w(&xml);
+        QVERIFY(chase->saveXML(&w));
+    }
+    QVERIFY(!xml.contains("GoQuantize"));            // at once: not written
+    chase->setGoQuantize(Chaser::GoOnBar);
+    xml.clear();
+    {
+        QXmlStreamWriter w(&xml);
+        QVERIFY(chase->saveXML(&w));
+    }
+    QVERIFY(xml.contains("GoQuantize=\"Bar\""));
+    Chaser back(m_doc);
+    QXmlStreamReader r(xml);
+    r.readNextStartElement();
+    QVERIFY(back.loadXML(r));
+    QCOMPARE(back.goQuantize(), Chaser::GoOnBar);
+}
+
 QTEST_MAIN(SpeedMasters_Test)

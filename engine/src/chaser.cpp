@@ -109,6 +109,7 @@ bool Chaser::copyFrom(const Function* function)
 
     // Copy chaser stuff
     m_steps = chaser->m_steps;
+    m_goQuantize = chaser->m_goQuantize;
     m_fadeInMode = chaser->m_fadeInMode;
     m_fadeOutMode = chaser->m_fadeOutMode;
     m_holdMode = chaser->m_holdMode;
@@ -357,6 +358,33 @@ Chaser::SpeedMode Chaser::stringToSpeedMode(const QString& str)
         return Default;
 }
 
+void Chaser::setGoQuantize(Chaser::GoQuantize q)
+{
+    if (q == m_goQuantize)
+        return;
+    m_goQuantize = q;
+    emit changed(this->id());
+}
+
+QString Chaser::goQuantizeToString(Chaser::GoQuantize q)
+{
+    switch (q)
+    {
+        case GoOnBeat: return QStringLiteral("Beat");
+        case GoOnBar:  return QStringLiteral("Bar");
+        default:       return QStringLiteral("Now");
+    }
+}
+
+Chaser::GoQuantize Chaser::stringToGoQuantize(const QString &str)
+{
+    if (str == QLatin1String("Beat"))
+        return GoOnBeat;
+    if (str == QLatin1String("Bar"))
+        return GoOnBar;
+    return GoNow;
+}
+
 /*****************************************************************************
  * Save & Load
  *****************************************************************************/
@@ -370,6 +398,8 @@ bool Chaser::saveXML(QXmlStreamWriter *doc) const
 
     /* Common attributes */
     saveXMLCommon(doc);
+    if (m_goQuantize != GoNow)
+        doc->writeAttribute(QStringLiteral("GoQuantize"), goQuantizeToString(m_goQuantize));
 
     /* Save Tempo type */
     saveXMLTempoType(doc);
@@ -432,6 +462,8 @@ bool Chaser::loadXML(QXmlStreamReader &root)
                    << "is not a Chaser";
         return false;
     }
+
+    m_goQuantize = stringToGoQuantize(root.attributes().value(QStringLiteral("GoQuantize")).toString());
 
     /* Load chaser contents */
     while (root.readNextStartElement())
@@ -598,6 +630,16 @@ uint Chaser::currentStepDuration() const
     if (m_runner == NULL)
         return 0;
     return m_runner->currentStepDuration();
+}
+
+bool Chaser::goHeld() const
+{
+#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
+    QMutexLocker runnerLocker(const_cast<QMutex*>(&m_runnerMutex));
+#else
+    QMutexLocker runnerLocker(const_cast<QRecursiveMutex*>(&m_runnerMutex));
+#endif
+    return m_runner != NULL && m_runner->goHeld();
 }
 
 ChaserRunnerStep Chaser::currentRunningStep() const

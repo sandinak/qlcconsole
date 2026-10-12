@@ -146,6 +146,13 @@ void SpeedMastersPanel_Test::aChaseAndItsStepsAreGivenAMaster()
     QCOMPARE(chase->steps().at(1).speedMaster, int(SpeedMasters::MainClock));
     QCOMPARE(chase->steps().at(0).speedMaster, int(SpeedMasters::Inherit));
     QCOMPARE(second->text(7), QString("Main clock"));
+
+    // When a GO lands.
+    QComboBox *goLands = ed.findChild<QComboBox *>("chaserGoQuantize");
+    QVERIFY(goLands != nullptr);
+    QCOMPARE(goLands->currentData().toInt(), int(Chaser::GoNow));
+    goLands->setCurrentIndex(goLands->findData(int(Chaser::GoOnBar)));
+    QCOMPARE(chase->goQuantize(), Chaser::GoOnBar);
 }
 
 void SpeedMastersPanel_Test::aCollectionIsGivenAMaster()

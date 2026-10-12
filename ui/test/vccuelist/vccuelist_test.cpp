@@ -635,6 +635,46 @@ void VCCueList_Test::saveXML()
     QCOMPARE(slidersMode, 1);
 }
 
+/* GO on the beat (PLAYBACK_TIMING_DESIGN.md, P1): a press that hasn't landed
+   yet shows on the Next button until it does. */
+void VCCueList_Test::aGoWaitingForItsBeatShowsOnNext()
+{
+    QWidget w;
+    VCCueList cl(&w, m_doc);
+    Chaser *c = createChaser(m_doc);
+    c->setDuration(Function::infiniteSpeed());
+    c->setGoQuantize(Chaser::GoOnBeat);
+    cl.setChaser(c->id());
+    m_doc->setMode(Doc::Operate);
+    MasterTimer *timer = m_doc->masterTimer();
+    timer->setBpm(30);                                  // two seconds a beat
+
+    cl.slotNextCue();                                   // start: lands on a beat too
+    timer->alignBeat(1.0);
+    QTest::qWait(50);
+    for (int i = 0; i < 3; ++i)
+        timer->timerTick();
+    QVERIFY(c->isRunning());
+    QVERIFY(c->goHeld());
+    cl.slotProgressTimeout();
+    QVERIFY(cl.m_nextButton->property("goHeld").toBool());
+    QVERIFY(!cl.m_nextButton->styleSheet().isEmpty());
+
+    // Once it lands, the button is itself again.
+    QElapsedTimer t;
+    t.start();
+    while (c->goHeld() && t.elapsed() < 3000)
+    {
+        timer->timerTick();
+        QTest::qWait(20);
+    }
+    QVERIFY(!c->goHeld());
+    cl.slotProgressTimeout();
+    QVERIFY(!cl.m_nextButton->property("goHeld").toBool());
+    QVERIFY(cl.m_nextButton->styleSheet().isEmpty());
+    m_doc->setMode(Doc::Design);
+}
+
 void VCCueList_Test::nextPrevious()
 {
     QWidget w;

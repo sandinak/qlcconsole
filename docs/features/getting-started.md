@@ -187,6 +187,17 @@ Steps, towers and booms usually come in sets that should all be the same:
   QLC+; the **Programming** tab's toolbar has Highlight / Flash / Park /
   Blind for working on a running show.
 
+### GO on the beat
+
+A chase (and the cue list that plays it) can hold its GO for the music:
+the chaser editor's **GO at once / GO on the beat / GO on the bar**. Press
+GO a little early and the next cue lands on the next beat (or bar — four
+beats) of the chase's speed master, or the main beat when it has none.
+While a GO is waiting, the cue list's **Next** button turns amber; two
+presses in one beat are still one cue. Starting a stopped chase waits for
+the beat too. A chase played by the Shows timeline goes when the timeline
+says, whatever this is set to.
+
 ## Keeping it quick
 
 - On a big show (hundreds of fixtures, many universes, pixel effects), run

@@ -210,6 +210,24 @@ public:
     static QString speedModeToString(SpeedMode mode);
     static SpeedMode stringToSpeedMode(const QString& str);
 
+    /*********************************************************************
+     * GO on the beat (PLAYBACK_TIMING_DESIGN.md, P1)
+     *********************************************************************/
+public:
+    /** When a step change asked for (a GO, Back, a jump to a step) lands:
+     *  at once, or held to the next whole beat or bar (4 beats) of the
+     *  chaser's clock -- its speed master's, else the main beat clock's. */
+    enum GoQuantize { GoNow = 0, GoOnBeat, GoOnBar };
+    GoQuantize goQuantize() const { return m_goQuantize; }
+    void setGoQuantize(GoQuantize q);
+    static QString goQuantizeToString(GoQuantize q);
+    static GoQuantize stringToGoQuantize(const QString &str);
+
+private:
+    GoQuantize m_goQuantize = GoNow;
+
+public:
+
 protected:
     SpeedMode m_fadeInMode;
     SpeedMode m_fadeOutMode;
@@ -271,6 +289,8 @@ public:
 
     /** Get the first step of the running list. If none is running this returns NULL */
     ChaserRunnerStep currentRunningStep() const;
+    /** A GO is waiting for its beat (goQuantize()). */
+    bool goHeld() const;
 
     /** Effective duration (ms) of the currently running step, honouring the
      *  Common/PerStep speed mode. 0 = holds until a manual GO. Used by the

@@ -76,6 +76,13 @@ The latest changes, newest first. Each links to the guide with the detail.
   span several structures.
   ([Patching](fixture-manager.md#patching-the-patch-dialog))
 
+### Playback
+
+- **GO on the beat.** A chase or cue list can hold a GO to the next beat
+  or bar — of its speed master, or the main beat — so a cue pressed a
+  little early lands on the music. The Next button shows a GO waiting.
+  ([GO on the beat](getting-started.md#go-on-the-beat))
+
 ### Effects
 
 - **Spread.** One Spread row for every chasing effect — amount in cycles,

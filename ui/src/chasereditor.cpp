@@ -96,6 +96,24 @@ ChaserEditor::ChaserEditor(QWidget* parent, Chaser* chaser, Doc* doc, bool liveM
     });
     horizontalLayout->addWidget(new QLabel(tr("Speed:"), this));
     horizontalLayout->addWidget(chaseSpeed);
+
+    /* When a GO lands (PLAYBACK_TIMING_DESIGN.md, P1): at once, or on the
+       next beat or bar of the chase's clock -- its speed master, else the
+       main beat. */
+    QComboBox *goLands = new QComboBox(this);
+    goLands->setObjectName(QStringLiteral("chaserGoQuantize"));
+    goLands->addItem(tr("GO at once"), int(Chaser::GoNow));
+    goLands->addItem(tr("GO on the beat"), int(Chaser::GoOnBeat));
+    goLands->addItem(tr("GO on the bar"), int(Chaser::GoOnBar));
+    goLands->setCurrentIndex(goLands->findData(int(m_chaser->goQuantize())));
+    goLands->setToolTip(tr("When a GO (next, back, a jump to a step) takes effect: at once, or "
+                           "held to the next beat or bar of the chase's speed master (or the main "
+                           "beat). Two GOs in one beat are one step."));
+    connect(goLands, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, goLands](int) {
+        m_chaser->setGoQuantize(Chaser::GoQuantize(goLands->currentData().toInt()));
+        m_doc->setModified();
+    });
+    horizontalLayout->addWidget(goLands);
     if (m_chaser->type() == Function::SequenceType)
         m_tree->header()->setSectionHidden(COL_NAME, true);
 

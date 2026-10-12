@@ -43,6 +43,7 @@ private slots:
     void saveXML();
 
     void nextPrevious();
+    void aGoWaitingForItsBeatShowsOnNext();
     void manualActivation();
     void keyboardNextPrevious();
 
