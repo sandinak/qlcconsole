@@ -46,6 +46,7 @@ private slots:
     void aBarsHeadsAreAlongItsLength();
     void aLanternIsBuiltOfItsLeds();
     void wledPortsRunAsWledDoes();
+    void everyWledPortRuns();
     void aWledLookRunsOnTheDeviceAndThePortElsewhere();
     void bothFiresAreOfferedAndEachComesBackAsItself();
     void anEffectArrivesByItsScenesTransition();

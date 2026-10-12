@@ -505,48 +505,120 @@ void EffectInstance_Test::wledPortsRunAsWledDoes()
         }
         return out;
     };
-    const QColor red(255, 0, 0), green(0, 255, 0), blue(0, 0, 255);
+    const QColor red(255, 0, 0), blue(0, 0, 255);
 
     EffectScript chase;
     QVERIFY(chase.load(dir + "wled-chase.js"));            // lib/wled.js came with it
     QCOMPARE(chase.wled(), QString("Chase"));
     QCOMPARE(chase.paramDefs().size(), 4);
 
-    // Sixteen LEDs, intensity 128: blocks 1 + (128 * 16 >> 10) = 3 wide. At
-    // the start the colour-3 block (blue) is at 0..2, colour 1 (red) behind
-    // it at 3..5, the palette (colour 1, red) the rest.
-    QList<QColor> px = run(chase, 16, 0.0, 0, 128, 0, { red, green, blue });
-    for (int i = 0; i < 16; ++i)
-        QCOMPARE(px.at(i), i < 3 ? blue : red);
-
-    // Speed 0 counts a millisecond a step: 8.192 s is an eighth of the way
-    // round, two LEDs on.
-    px = run(chase, 16, 8.192, 0, 128, 0, { red, green, blue });
-    for (int i = 0; i < 16; ++i)
-        QCOMPARE(px.at(i), (i >= 2 && i < 5) ? blue : red);
-
-    // Mirrored, it runs on half the string (8, blocks of 2) both ways out.
-    px = run(chase, 16, 0.0, 0, 128, 64, { red, green, blue });
-    for (int i = 0; i < 16; ++i)
-        QCOMPARE(px.at(i), (i < 2 || i > 13) ? blue : red);
-
-    // Reversed, from the other end.
-    px = run(chase, 16, 0.0, 0, 128, 128, { red, green, blue });
-    for (int i = 0; i < 16; ++i)
-        QCOMPARE(px.at(i), i > 12 ? blue : red);
+    /* Written from what WLED's Chase does (not its code): a block of colour 3
+       runs round over the palette (colour 1 with none), a block of colour 1
+       behind it -- so on the strip, one block of blue in the red. */
+    const QColor bg(0, 0, 40);
+    auto count = [](const QList<QColor> &px, const QColor &c) {
+        int n = 0;
+        for (const QColor &p : px) n += (p == c) ? 1 : 0;
+        return n;
+    };
+    QList<QColor> px = run(chase, 20, 0.3, 128, 128, 0, { red, bg, blue });
+    const int block = count(px, blue);
+    QVERIFY2(block >= 1, "a block of colour 3");
+    QCOMPARE(count(px, red), 20 - block);                  // the rest colour 1
+    // One block, all together (round the end, too).
+    int starts = 0;
+    for (int i = 0; i < 20; ++i)
+        if (px.at(i) == blue && px.at((i + 19) % 20) != blue)
+            starts++;
+    QCOMPARE(starts, 1);
+    // It moves.
+    QVERIFY(run(chase, 20, 0.6, 128, 128, 0, { red, bg, blue }) != px);
+    // Wider at a higher intensity.
+    QVERIFY(count(run(chase, 20, 0.3, 128, 255, 0, { red, bg, blue }), blue) > block);
+    // Mirrored: the same both sides of the middle.
+    px = run(chase, 20, 0.3, 128, 128, 64, { red, bg, blue });
+    for (int i = 0; i < 10; ++i)
+        QCOMPARE(px.at(i), px.at(19 - i));
+    // Reversed: the other way round.
+    const QList<QColor> fwd = run(chase, 20, 0.3, 128, 128, 0, { red, bg, blue });
+    const QList<QColor> rev = run(chase, 20, 0.3, 128, 128, 128, { red, bg, blue });
+    for (int i = 0; i < 20; ++i)
+        QCOMPARE(rev.at(i), fwd.at(19 - i));
 
     EffectScript breathe;
     QVERIFY(breathe.load(dir + "wled-breathe.js"));
     QCOMPARE(breathe.wled(), QString("Breathe"));
-
-    // At rest: 30/255 of colour 1 over colour 2 (black) -- (255 * 30) >> 8.
+    // A breath: dim at its start, the full colour at the top.
+    const double period = 9000.0 * std::pow(900.0 / 9000.0, 128.0 / 255.0) / 1000.0;   // speed 128
     px = run(breathe, 4, 0.0, 128, 128, 0, { red, QColor(Qt::black), QColor(Qt::black) });
     foreach (const QColor &c, px)
-        QCOMPARE(c, QColor(29, 0, 0));
-    // At the top of the breath, speed 128 (x26): 1.008 s is counter 26208,
-    // 8190 after WLED's folding -- sin16 / 103 = 224, so 254 of 255.
-    px = run(breathe, 4, 1.008, 128, 128, 0, { red, QColor(Qt::black), QColor(Qt::black) });
-    QCOMPARE(px.first(), QColor(253, 0, 0));
+        QVERIFY2(c.red() < 20, qPrintable(c.name()));
+    px = run(breathe, 4, period / 2, 128, 128, 0, { red, QColor(Qt::black), QColor(Qt::black) });
+    QVERIFY2(px.first().red() > 240, qPrintable(px.first().name()));
+}
+
+/* Every WLED effect written for qlcconsole loads, paints every pixel with a
+   real colour, gives the same frame for the same moment, and (all but Solid)
+   moves. The look's colours, thirty pixels, a few moments. */
+void EffectInstance_Test::everyWledPortRuns()
+{
+    const QString dir = QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/";
+    int ports = 0;
+    foreach (const QString &file, QDir(dir).entryList({ "wled-*.js" }, QDir::Files))
+    {
+        EffectScript es;
+        QVERIFY2(es.load(dir + file), qPrintable(file));
+        if (es.wled().isEmpty())
+            continue;                               // the device itself, not a port
+        QJSEngine *eng = es.engine();
+        auto frame = [&](double t) {
+            QJSValue fixtures = eng->newArray(30);
+            for (int i = 0; i < 30; ++i)
+            {
+                QJSValue o = eng->newObject();
+                o.setProperty("head", 0);
+                fixtures.setProperty(uint(i), o);
+            }
+            QJSValue inputs = eng->newObject();
+            inputs.setProperty("_time", t);
+            QJSValue colours = eng->newArray(3);
+            const int rgb[3][3] = { { 255, 0, 0 }, { 0, 0, 40 }, { 0, 255, 0 } };
+            for (int k = 0; k < 3; ++k)
+            {
+                QJSValue c = eng->newObject();
+                c.setProperty("r", rgb[k][0]); c.setProperty("g", rgb[k][1]); c.setProperty("b", rgb[k][2]);
+                colours.setProperty(uint(k), c);
+            }
+            QJSValue look = eng->newObject();
+            look.setProperty("colors", colours);
+            QJSValue palettes = eng->newObject();
+            palettes.setProperty("look", look);
+            QJSValue state = es.newState();
+            const QJSValue r = es.callTick(fixtures, inputs, palettes, eng->newObject(), state, eng->newObject());
+            QStringList px;
+            for (int i = 0; i < 30; ++i)
+            {
+                const QJSValue o = r.property(uint(i));
+                const int cr = o.property("r").toInt(), cg = o.property("g").toInt(), cb = o.property("b").toInt();
+                if (o.isUndefined() || cr < 0 || cr > 255 || cg < 0 || cg > 255 || cb < 0 || cb > 255)
+                    return QStringList();
+                px << QString("%1,%2,%3").arg(cr).arg(cg).arg(cb);
+            }
+            return px;
+        };
+        QSet<QString> seen;
+        for (double t : { 0.0, 0.41, 1.17, 2.3, 3.9 })
+        {
+            const QStringList f = frame(t);
+            QVERIFY2(f.size() == 30, qPrintable(file + ": not a colour on every pixel"));
+            seen.insert(f.join(QLatin1Char(' ')));
+        }
+        QCOMPARE(frame(1.17), frame(1.17));          // the same moment, the same frame
+        if (es.wled() != QLatin1String("Solid"))
+            QVERIFY2(seen.size() > 1, qPrintable(file + ": never moves"));
+        ports++;
+    }
+    QVERIFY2(ports >= 15, qPrintable(QString("only %1 WLED ports").arg(ports)));
 }
 
 /* "for WLED based fixtures we should be selecting WLED effects": a look set

@@ -1,17 +1,21 @@
 /*
   QLC+ Effect Script library: WLED
 
-  What a port of a WLED effect (WLED's FX.cpp) needs to read like the
-  original: a segment with WLED's own speed, intensity, palette and three
-  colours, setPixelColor()/fill(), color_from_palette(), and the FastLED
-  integer helpers WLED's effects are written in. A port says
+  What a WLED effect written for qlcconsole needs. The ports are written
+  from what each effect does on a device and WLED's description of it --
+  not from WLED's code (WLED is EUPL-licensed; these are the app's own).
+  Provided: a segment with WLED's own speed, intensity, palette and three
+  colours, setPixelColor()/fill(), colorFromPalette(), FastLED-style
+  integer helpers, and period()/hash()/noise()/hue() for timing, repeatable
+  randomness, smooth flicker and colour-wheel hues. A port says
       effect.requires = ["wled"];
-      effect.wled     = "Chase";        // WLED's name for it
-  and its tick() is WLED's mode function with SEGMENT/SEGLEN/strip.now
-  replaced by the segment this builds:
+      effect.wled     = "Chase";        // WLED's name for it, so a look
+                                        // with WLED's Chase runs this on
+                                        // the fixtures that aren't WLED
+  and its tick() paints the segment and returns it:
 
       var seg = WLED.segment(fixtures, inputs, palettes, params);
-      ...seg.setPixelColor(i, seg.colorFromPalette(i, true, seg.solidWrap, 0))...
+      ...seg.setPixelColor(i, seg.colorFromPalette(i, true, false, 0))...
       return seg.out();
 
   Colours are WLED's: 0xRRGGBB numbers. The three colours are the look's
@@ -175,6 +179,36 @@ var WLED = (function() {
             return out;
         };
         return seg;
+    };
+
+    /* ---- For ports written from what an effect DOES (not from WLED's code) ---- */
+
+    /** How long one cycle lasts at WLED speed @p speed (0..255): @p slowMs at
+     *  0 down to @p fastMs at 255, on a curve the ear and eye read as even. */
+    W.period = function(speed, slowMs, fastMs) {
+        var s = Math.max(0, Math.min(255, speed)) / 255;
+        return slowMs * Math.pow(fastMs / slowMs, s);
+    };
+    /** A repeatable "random" 0..1 for (a, b): the same inputs, the same value,
+     *  so an effect looks the same on every run and on every fixture that
+     *  shares the moment (scripts must not use Math.random). */
+    W.hash = function(a, b) {
+        var x = Math.sin(a * 12.9898 + (b || 0) * 78.233 + 0.5) * 43758.5453;
+        return x - Math.floor(x);
+    };
+    /** A hue 0..255 round the colour wheel, at saturation @p sat 0..255. */
+    W.hue = function(h, sat) {
+        var c = W.colorWheel(h & 0xFF);
+        return sat === undefined || sat >= 255 ? c : W.colorBlend(0xFFFFFF, c, sat);
+    };
+
+    /** Smooth repeatable noise 0..1 along @p x (one bump per unit), a
+     *  different curve for each @p seed: flicker, flames, drifting levels. */
+    W.noise = function(x, seed) {
+        var i = Math.floor(x), f = x - i;
+        var a = W.hash(i, seed || 0), b = W.hash(i + 1, seed || 0);
+        var u = f * f * (3 - 2 * f);
+        return a + (b - a) * u;
     };
 
     /** The parameters every port takes: WLED's own, 0..255 as the definitions

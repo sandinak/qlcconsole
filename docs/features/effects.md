@@ -187,7 +187,7 @@ times; only the effects in its looks follow the master.
 | Effect | What it does |
 |---|---|
 | **WLED device effect** | Any of the device's own effects, run on WLED fixtures themselves |
-| **WLED Breathe** / **WLED Chase** | WLED's effects, with a port that runs on the look's other fixtures too |
+| **WLED Blink, Bouncing Balls, Breathe, Candle, Chase, Colorloop, Dissolve, Dynamic, Fade, Fire 2012, Glitter, Heartbeat, Juggle, Lightning, Meteor, Palette, Rainbow, Random Colors, Ripple, Running, Saw, Scan, Scanner, Sinelon, Solid, Sparkle, Strobe Rainbow, Strobe, Sweep, Theater Rainbow, Theater, Twinkle, Two Dots, Wipe** | WLED's effects with a qlcconsole version that runs on the look's other fixtures too, at WLED's speed, intensity, palette and colours |
 
 See [WLED effects](programming-tab.md#wled-effects).
 
