@@ -5,6 +5,7 @@
   Licensed under the Apache License, Version 2.0 (the "License");
 */
 
+#include <QGuiApplication>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QSplitter>
@@ -476,8 +477,12 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     m_canvasLayout->addWidget(m_canvasPlaceholder, 1);
 
     /* Once, on a first run -- queued, so it lands after the window is up rather
-       than during construction. */
-    if (takeFirstRunGuideFlag())
+       than during construction. Never on the offscreen platform (tests, a
+       headless run): nobody can read or dismiss a dialog there, and it hung
+       a test on a fresh CI runner for five minutes waiting for a click. The
+       flag isn't consumed there, so the first real run still shows it. */
+    if (QGuiApplication::platformName() != QLatin1String("offscreen")
+        && takeFirstRunGuideFlag())
         QMetaObject::invokeMethod(this, [this]() { showProgrammingGuide(); },
                                   Qt::QueuedConnection);
     // Inline look editor pinned to the bottom of the center panel. It is NOT

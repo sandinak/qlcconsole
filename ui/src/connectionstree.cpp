@@ -540,7 +540,6 @@ QList<quint32> ConnectionsTree::universesOn(const QString &pluginName, quint32 l
     if (iomap == NULL)
         return list;
 
-    quint32 id = 0;
     foreach (Universe *uni, iomap->universes())
     {
         if (output)
@@ -566,7 +565,6 @@ QList<quint32> ConnectionsTree::universesOn(const QString &pluginName, quint32 l
                     && ip->plugin()->name() == pluginName && ip->input() == line)
                 list << uni->id();
         }
-        id++;
     }
     return list;
 }

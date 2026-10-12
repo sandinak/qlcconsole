@@ -369,10 +369,12 @@ void QLCFixtureDefCache_Test::ofTwoLocalCopiesTheNewestIsUsed()
     auto write = [&](const QString &name, const QByteArray &data, int ageSeconds) {
         const QString path = dir.filePath(name);
         QFile f(path);
-        f.open(QIODevice::WriteOnly);
+        if (!f.open(QIODevice::WriteOnly))
+            return path;
         f.write(data);
         f.close();
-        f.open(QIODevice::ReadWrite);
+        if (!f.open(QIODevice::ReadWrite))
+            return path;
         f.setFileTime(QDateTime::currentDateTime().addSecs(-ageSeconds), QFileDevice::FileModificationTime);
         f.close();
         return path;

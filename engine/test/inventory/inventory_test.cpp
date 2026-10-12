@@ -563,7 +563,7 @@ static Fixture *stagedTwoMode(Doc *doc, int nCh1, int nCh2, int heads2, QLCFixtu
 
 void Inventory_Test::modeCanChangeWhenNothingReferencesItsChannels()
 {
-    QLCFixtureMode *basic, *ext;
+    QLCFixtureMode *basic = nullptr, *ext = nullptr;
     Fixture *f = stagedTwoMode(g_doc, 4, 8, 1, &basic, &ext);
     QVERIFY(f != nullptr);
     QString why;
@@ -573,7 +573,7 @@ void Inventory_Test::modeCanChangeWhenNothingReferencesItsChannels()
 
 void Inventory_Test::aSceneThatSetsChannelsDirectlyLocksTheMode()
 {
-    QLCFixtureMode *basic, *ext;
+    QLCFixtureMode *basic = nullptr, *ext = nullptr;
     Fixture *f = stagedTwoMode(g_doc, 4, 8, 1, &basic, &ext);
     QVERIFY(f != nullptr);
 
@@ -589,7 +589,7 @@ void Inventory_Test::aSceneThatSetsChannelsDirectlyLocksTheMode()
 
 void Inventory_Test::aModeWithADifferentHeadCountIsRefused()
 {
-    QLCFixtureMode *basic, *ext;
+    QLCFixtureMode *basic = nullptr, *ext = nullptr;
     Fixture *f = stagedTwoMode(g_doc, 4, 8, 8, &basic, &ext);    // Extended has 8 heads, Basic 1
     QVERIFY(f != nullptr);
     QString why;
@@ -600,7 +600,7 @@ void Inventory_Test::aModeWithADifferentHeadCountIsRefused()
 void Inventory_Test::patchTimeModeChangeSetsTheFootprintBeforePatching()
 {
     makeDimmer(g_doc, 10, 0, 0);                       // 1-10 taken
-    QLCFixtureMode *basic, *ext;
+    QLCFixtureMode *basic = nullptr, *ext = nullptr;
     Fixture *f = stagedTwoMode(g_doc, 4, 8, 1, &basic, &ext);
     QVERIFY(f != nullptr);
     QCOMPARE(f->channels(), quint32(4));
@@ -642,7 +642,7 @@ void Inventory_Test::patchTimeDimmerChannelsCanChange()
 
 void Inventory_Test::aRefusedModeChangeLeavesTheFixtureUnpatched()
 {
-    QLCFixtureMode *basic, *ext;
+    QLCFixtureMode *basic = nullptr, *ext = nullptr;
     Fixture *f = stagedTwoMode(g_doc, 4, 8, 1, &basic, &ext);
     QVERIFY(f != nullptr);
     Scene *sc = new Scene(g_doc);

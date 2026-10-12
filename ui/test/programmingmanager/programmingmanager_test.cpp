@@ -1588,10 +1588,12 @@ void ProgrammingManager_Test::duplicateDefinitionsAreListedWithWhatIsUsed()
         "</FixtureDefinition>\n");
     auto write = [&](const QString &name, QByteArray data, int age) {
         QFile f(dir.filePath(name));
-        f.open(QIODevice::WriteOnly);
+        if (!f.open(QIODevice::WriteOnly))
+            return;
         f.write(data);
         f.close();
-        f.open(QIODevice::ReadWrite);
+        if (!f.open(QIODevice::ReadWrite))
+            return;
         f.setFileTime(QDateTime::currentDateTime().addSecs(-age), QFileDevice::FileModificationTime);
     };
     QByteArray newer = xml;
