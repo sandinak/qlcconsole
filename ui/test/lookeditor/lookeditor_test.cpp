@@ -654,6 +654,72 @@ void LookEditor_Test::theEffectPickerIsAWindowOfItsOwn()
     QCOMPARE(look->scriptPath() + look->wledEffect() + look->effectPreset(), kept);
 }
 
+/* "If they're not cross compatible I'd like to not show the effects that
+   won't work if a wled instance isn't in the targets .. and make sure it
+   does show it": a WLED effect with no port runs on a WLED device only. */
+void LookEditor_Test::wledOnlyEffectsNeedAWledTarget()
+{
+    Doc doc(this);
+    doc.effectScriptRunner()->cache()->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    // The WLED list comes from a WLED fixture in the show.
+    QLCFixtureDef *def = new QLCFixtureDef();
+    QCOMPARE(def->loadXML(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures/WLED/WLED-Lantern.qxf"),
+             QFile::NoError);
+    Fixture *lantern = new Fixture(&doc);
+    lantern->setFixtureDefinition(def, def->mode("Effect (15ch)"));
+    lantern->setConnection(Fixture::Network);
+    lantern->setIPAddress("172.18.2.60");
+    QVERIFY(doc.addFixture(lantern));
+    Fixture *par = new Fixture(&doc);
+    par->setName("Par");
+    par->setChannels(3);
+    par->setAddress(100);
+    QVERIFY(doc.addFixture(par));
+
+    Scene *scene = new Scene(&doc);
+    scene->addFixture(par->id());                  // a plain fixture only
+    doc.addFunction(scene);
+    QLCPalette *look = new QLCPalette(QLCPalette::Effect, &doc);
+    look->setName("Look");
+    QVERIFY(doc.addPalette(look));
+    scene->addPalette(look->id());
+
+    LookEditor ed(&doc);
+    ed.resize(1000, 640);
+    ed.show();
+    ed.setContextScene(scene);
+    ed.setPalette(look->id());
+    QTRY_VERIFY(ed.effectPickerOpen());
+    EffectBrowser *browser = ed.m_effectBrowser;
+    auto inWledTab = [browser]() {
+        QStringList names;
+        const int t = browser->tabNames().indexOf("WLED");
+        if (t < 0)
+            return names;
+        browser->tabs()->setCurrentIndex(t);
+        QApplication::processEvents();
+        for (int i = 0; i < browser->list()->count(); ++i)
+            names << browser->list()->item(i)->text();
+        return names;
+    };
+    QVERIFY(!browser->wledTargets());
+    // Only what runs here too: the ported ones.
+    const QStringList without = inWledTab();
+    QVERIFY2(!without.isEmpty(), "the ported WLED effects still run on the par");
+    for (const QString &n : without)
+        QVERIFY2(n.contains("Breathe") || n.contains("Chase"), qPrintable(n));
+    ed.closeEffectPicker(true);
+
+    // A WLED device among the targets: all of WLED's own.
+    scene->addFixture(lantern->id());
+    ed.openEffectPicker();
+    QVERIFY(browser->wledTargets());
+    const QStringList with = inWledTab();
+    QVERIFY2(with.size() > without.size() + 10,
+             qPrintable(QString("%1 with a WLED target, %2 without").arg(with.size()).arg(without.size())));
+    ed.closeEffectPicker(true);
+}
+
 void LookEditor_Test::theBrowsersListsAreAToZ()
 {
     Doc doc(this);

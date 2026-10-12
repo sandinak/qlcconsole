@@ -255,9 +255,12 @@ Picking an effect from the **WLED** tab has the WLED fixtures in the look
 run it **on the device itself**: they're sent the effect, its speed,
 intensity, palette and option, the look's three colours and the look's
 dimmer. Every other fixture in the look runs qlcconsole's own port of that
-effect where one exists (so far **Breathe** and **Chase**). A WLED effect
-with no port ("no preview yet" in the browser) leaves the other fixtures as
-the rest of the look sets them.
+effect where one exists (so far **Breathe** and **Chase**).
+
+A WLED effect with no port runs on a WLED device and nowhere else, so the
+browser only offers it when the look's targets include a WLED device;
+otherwise the WLED tab lists just the ported ones. (An effect the look
+already runs stays listed either way.)
 
 The WLED list comes from a WLED fixture in the show, or from the installed
 WLED fixture definition if there isn't one.

@@ -82,6 +82,9 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Programming
 
+- **WLED effects only where they can run.** A WLED effect that only runs on
+  a WLED device is offered only when the look's targets include one;
+  without, the WLED tab lists the ones that run on any fixture.
 - **A Programming toolbar that fits.** Highlight, Flash, Tap and Save
   Positions stay buttons; Park, Move in black, Beat (it reads the tempo)
   and More are drop-downs — one row, no scrolling.

@@ -272,6 +272,13 @@ void EffectBrowser::reload()
                     e.description = tr("Runs on WLED fixtures; others run its port");
             }
         }
+        /* A WLED effect with no port runs on a WLED device and nowhere else:
+           listed only when the look has one to run on ("not show the effects
+           that won't work if a wled instance isn't in the targets") -- or when
+           it is what the look already runs, so the list never loses it. */
+        if (kind == KindWled && e.scriptPath.isEmpty() && !m_wledTargets
+            && i != m_source->currentIndex())
+            continue;
         if (kind == KindScript && e.description.isEmpty() && cache != nullptr)
             e.description = cache->scriptMeta(name).description;
         if (kind == KindScript)
@@ -286,7 +293,15 @@ void EffectBrowser::reload()
         m_tabs->removeTab(0);
     m_tabs->addTab(tr("Recent"));
     foreach (const QString &c, categories)
-        m_tabs->addTab(c);
+    {
+        bool any = false;                   // a tab with nothing left to pick goes
+        for (const Entry &e : m_entries)
+            any = any || e.category == c;
+        if (any)
+            m_tabs->addTab(c);
+        else
+            categories.removeAll(c);
+    }
 
     // Open on the tab of what the look has now; else where it was; else the first.
     int open = -1;

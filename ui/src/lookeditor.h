@@ -258,6 +258,9 @@ public:
     bool effectPickerOpen() const;
     /** The "?" window: what the effect is and what each setting does. */
     void showEffectDetails();
+    /** The look's targets include a WLED device (or there's no scene to
+     *  tell: then true). */
+    bool lookHasWledTarget() const;
 private:
     void updateEffectHeader();
 protected:

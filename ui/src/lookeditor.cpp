@@ -84,6 +84,7 @@
 #include "qlceventpos.h"
 #include "speedmasters.h"
 #include "spreadlayer.h"
+#include "wledconfigcheck.h"
 #include "spreadpreview.h"
 
 // VC XY pad works in DMX space [0..256); palette pan/tilt are degrees.
@@ -830,6 +831,20 @@ QString LookEditor::trialNote() const
  * The effect picker
  *********************************************************************/
 
+bool LookEditor::lookHasWledTarget() const
+{
+    if (m_contextScene == nullptr)
+        return true;                        // nothing known: list everything
+    QList<quint32> fids = m_contextScene->fixtures();
+    foreach (quint32 gid, m_contextScene->fixtureGroups())
+        if (FixtureGroup *g = m_doc->fixtureGroup(gid))
+            fids << g->fixtureList();
+    foreach (quint32 fid, fids)
+        if (WledConfigCheck::isWled(m_doc->fixture(fid)))
+            return true;
+    return false;
+}
+
 bool LookEditor::effectPickerOpen() const
 {
     return m_effectPicker != nullptr && m_effectPicker->isVisible();
@@ -864,6 +879,8 @@ void LookEditor::openEffectPicker()
             at.setX(me.left() + 20);
         m_effectPicker->move(at.x(), qMax(0, at.y()));
     }
+    // WLED effects that run only on a WLED device: offered when there's one.
+    m_effectBrowser->setWledTargets(lookHasWledTarget());
     m_effectBrowser->reload();
     m_effectPicker->show();
     m_effectPicker->raise();

@@ -69,6 +69,18 @@ public:
      *  click or Enter picks. */
     void setPickWhileBrowsing(bool on) { m_pickWhileBrowsing = on; }
 
+    /** Whether the look has a WLED device to run on. Without one, a WLED
+     *  effect that has no port (it runs on the device only) isn't offered.
+     *  Default true: nothing known, everything listed. */
+    void setWledTargets(bool any)
+    {
+        if (any == m_wledTargets)
+            return;
+        m_wledTargets = any;
+        reload();
+    }
+    bool wledTargets() const { return m_wledTargets; }
+
 protected:
     void showEvent(QShowEvent *e) override;
     void hideEvent(QHideEvent *e) override;
@@ -91,6 +103,7 @@ private:
     };
 
     bool m_pickWhileBrowsing = false;
+    bool m_wledTargets = true;
     void refill();
     void pick(QListWidgetItem *item);
     void tickPreviews();

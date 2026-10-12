@@ -45,6 +45,7 @@ private slots:
     void theHostSpreadStandsInForTheEffectsOwn();
     void theSpreadIsPreviewed();
     void theEffectPickerIsAWindowOfItsOwn();
+    void wledOnlyEffectsNeedAWledTarget();
     void theBrowsersListsAreAToZ();
 };
 
