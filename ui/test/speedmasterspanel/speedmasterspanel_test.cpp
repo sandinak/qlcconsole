@@ -244,6 +244,16 @@ void SpeedMastersPanel_Test::theFooterShowsEachMastersTempo()
     QTRY_COMPARE(footer.button(1)->text(), QString("Speed 2 paused"));
     other->setSpeedMaster(SpeedMasters::Inherit);
     QTRY_VERIFY(!footer.button(1)->isVisible());      // taken off: gone again
+
+    // The blink is the beat; the green level only while the rate moves.
+    QTRY_VERIFY(footer.button(0)->isFired());
+    QTRY_VERIFY(!footer.button(0)->isFired());
+    QCOMPARE(footer.button(0)->levelWidth(), 0);
+    sm->setRate(0, 0.5);                             // 50 %: a quarter of the bar
+    QTRY_VERIFY(footer.button(0)->levelWidth() > 0);
+    QVERIFY(qAbs(footer.button(0)->levelWidth() - (footer.button(0)->width() - 4) / 4) <= 1);
+    QTRY_VERIFY_WITH_TIMEOUT(footer.button(0)->levelWidth() == 0
+                             || !footer.button(0)->isVisible(), 4000);
     QCOMPARE(SpeedMastersFooter::buttonText("A very long name", 90, false),
              QString("A very lo%1 90").arg(QChar(0x2026)));
 

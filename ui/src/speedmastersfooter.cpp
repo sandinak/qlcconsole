@@ -17,8 +17,9 @@
   limitations under the License.
 */
 
+#include <QStyleOptionToolButton>
+#include <QStylePainter>
 #include <QHBoxLayout>
-#include <QToolButton>
 #include <QTimer>
 #include <cmath>
 
@@ -26,6 +27,57 @@
 #include "speedmasterspanel.h"
 #include "speedmasters.h"
 #include "doc.h"
+
+/* How long the level bar stays after the rate stops moving, and its fade. */
+static const qint64 kLevelHoldMs = 1200;
+static const qint64 kLevelFadeMs = 500;
+
+SpeedMasterButton::SpeedMasterButton(QWidget *parent)
+    : QToolButton(parent)
+{
+    setAutoRaise(false);
+    setFocusPolicy(Qt::NoFocus);
+}
+
+void SpeedMasterButton::setState(bool fired, double level, double levelAlpha)
+{
+    level = qBound(0.0, level, 1.0);
+    const int alpha = qMin(qRound(qBound(0.0, levelAlpha, 1.0) * 8) * 32, 255);   // a few steps, not every frame
+    const bool sameLevel = alpha == 0 ? m_levelAlpha == 0
+                         : (alpha == m_levelAlpha && qRound(level * width()) == qRound(m_level * width()));
+    if (fired == m_fired && sameLevel)
+        return;
+    m_fired = fired;
+    m_level = level;
+    m_levelAlpha = alpha;
+    update();
+}
+
+int SpeedMasterButton::levelWidth() const
+{
+    // From the button's width now: the text (and so the width) changes
+    // with the tempo the rate is moving.
+    return m_levelAlpha > 0 ? qRound(m_level * (width() - 4)) : 0;
+}
+
+void SpeedMasterButton::paintEvent(QPaintEvent *)
+{
+    QStylePainter p(this);
+    QStyleOptionToolButton opt;
+    initStyleOption(&opt);
+    const QString text = opt.text;
+    opt.text.clear();
+    p.drawComplexControl(QStyle::CC_ToolButton, opt);
+
+    const QRect inner = rect().adjusted(2, 2, -2, -2);
+    if (m_fired)
+        p.fillRect(inner, QColor(0xf5, 0xa6, 0x23));                    // the beat
+    if (levelWidth() > 0)
+        p.fillRect(QRect(inner.left(), inner.top(), levelWidth(), inner.height()),
+                   QColor(0x43, 0xa0, 0x47, m_levelAlpha * 3 / 4));   // the level, while moved
+    p.setPen(m_fired ? QColor(Qt::black) : palette().color(QPalette::ButtonText));
+    p.drawText(rect(), Qt::AlignCenter, text);
+}
 
 SpeedMastersFooter::SpeedMastersFooter(Doc *doc, QWidget *parent)
     : QWidget(parent)
@@ -37,16 +89,16 @@ SpeedMastersFooter::SpeedMastersFooter(Doc *doc, QWidget *parent)
     lay->setSpacing(2);
     for (int i = 0; i < SpeedMasters::MaxCount; ++i)
     {
-        QToolButton *b = new QToolButton(this);
-        b->setAutoRaise(false);
-        b->setFocusPolicy(Qt::NoFocus);
-        b->setProperty("lit", false);
+        SpeedMasterButton *b = new SpeedMasterButton(this);
         connect(b, &QToolButton::clicked, this, [this, i]() {
             SpeedMastersPanel::open(m_doc, window(), i);
         });
         lay->addWidget(b);
         m_buttons << b;
+        m_lastRate << m_doc->speedMasters()->rate(i);
+        m_rateMovedAt << -1;
     }
+    m_clock.start();
     connect(m_doc->speedMasters(), &SpeedMasters::countChanged, this, [this](int) { applyCount(); });
     applyCount();
 
@@ -59,7 +111,7 @@ SpeedMastersFooter::SpeedMastersFooter(Doc *doc, QWidget *parent)
     tick();
 }
 
-QToolButton *SpeedMastersFooter::button(int index) const
+SpeedMasterButton *SpeedMastersFooter::button(int index) const
 {
     return m_buttons.value(index);
 }
@@ -96,30 +148,41 @@ void SpeedMastersFooter::tick()
     {
         if (!((m_used >> i) & 1u))
             continue;
-        QToolButton *b = m_buttons.at(i);
+        SpeedMasterButton *b = m_buttons.at(i);
         const bool paused = sm->isPaused(i);
         const double pos = sm->beatPosition(i);
-        // Many masters: short names, so the footer doesn't push the
-        // window's minimum width past the screen (the tooltip has it all).
         const bool compact = sm->count() > 8;
         QString name = sm->name(i);
         if (compact && name == tr("Speed %1").arg(i + 1))
             name = tr("S%1").arg(i + 1);            // unnamed: its number
         const QString text = buttonText(name, sm->bpm(i), paused, compact ? 4 : 10);
-        // Only on a change: a stylesheet re-polishes, and a label that
-        // changes width every frame would jiggle the footer.
+        // Only on a change: a label that changes width every frame would
+        // jiggle the footer.
         if (b->text() != text)
         {
             b->setText(text);
             b->setToolTip(tr("%1: %2 BPM. Click for the speed masters.")
                           .arg(sm->name(i)).arg(sm->bpm(i), 0, 'f', 1));
         }
-        const bool on = !paused && pos - std::floor(pos) < 0.15;
-        if (b->property("lit").toBool() != on || b->styleSheet().isEmpty())
+        // The level (the rate, 0..200 %) shows only while it's being moved,
+        // then fades: the blink is the beat.
+        const qint64 now = m_clock.elapsed();
+        const double rate = sm->rate(i);
+        if (rate != m_lastRate.at(i))
         {
-            b->setProperty("lit", on);
-            b->setStyleSheet(on ? QStringLiteral("QToolButton { background:#f5a623; color:black; padding:0 4px; }")
-                                : QStringLiteral("QToolButton { padding:0 4px; }"));
+            m_lastRate[i] = rate;
+            m_rateMovedAt[i] = now;
         }
+        double levelAlpha = 0;
+        if (m_rateMovedAt.at(i) >= 0)
+        {
+            const qint64 since = now - m_rateMovedAt.at(i);
+            levelAlpha = since < kLevelHoldMs ? 1.0
+                       : since < kLevelHoldMs + kLevelFadeMs ? 1.0 - double(since - kLevelHoldMs) / kLevelFadeMs
+                       : 0.0;
+            if (levelAlpha == 0)
+                m_rateMovedAt[i] = -1;
+        }
+        b->setState(!paused && pos - std::floor(pos) < 0.15, rate / 2.0, levelAlpha);
     }
 }

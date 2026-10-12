@@ -107,7 +107,8 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 - **Speed masters in the footer** — a button for each master something is
   on (an unused one neither shows nor flashes, there or in its window),
-  reading its tempo and lit on its beat; a click opens the Speed Masters window at it
+  reading its tempo and lit on its beat, with a green level bar while its
+  rate is moved; a click opens the Speed Masters window at it
   (**View → Show Speed Masters in Footer**). Each master's **Inputs…**
   maps its Tap, Rate and Pause to a MIDI controller.
   ([Speed masters](effects.md#speed-masters))

@@ -130,6 +130,15 @@ Doc::Doc(QObject* parent, int universes)
     m_speedMasters = new SpeedMasters(this, this);
     connect(m_ioMap, &InputOutputMap::inputValueChanged,
             m_speedMasters, &SpeedMasters::slotInputValue);
+    // Which masters are used changes only with an edit: let them know.
+    // (modified() can come from the DMX thread; marking is atomic.)
+    auto usage = [this]() { m_speedMasters->markUsageDirty(); };
+    connect(this, &Doc::modified, m_speedMasters, usage, Qt::DirectConnection);
+    connect(this, &Doc::functionAdded, m_speedMasters, usage);
+    connect(this, &Doc::functionRemoved, m_speedMasters, usage);
+    connect(this, &Doc::functionChanged, m_speedMasters, usage);
+    connect(this, &Doc::paletteAdded, m_speedMasters, usage);
+    connect(this, &Doc::paletteRemoved, m_speedMasters, usage);
 
     // Fixtures held to a maximum draw: kept in step with the show.
     m_powerLimiter = new PowerLimiter(this);

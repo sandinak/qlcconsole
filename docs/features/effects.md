@@ -161,8 +161,11 @@ collection is on it, when a controller input drives it, or when a used
 master follows it.
 
 The used masters also sit in the **footer**, beside the Grand Master: a
-button for each, reading its tempo ("Pars 120", or "paused") and lit on its
-beat — none at all until something is on a master;
+button for each, reading its tempo ("Pars 120", or "paused") and lit
+orange on its beat — none at all until something is on a master. While its
+**rate** is being moved (the fader, or a controller), a green bar fills the
+button left to right to the level (half way is 100 %, full is 200 %), then
+fades a second after you let go;
 click one to open this window at that master. **View → Show Speed Masters
 in Footer** turns them off. With more than eight in use the names are
 shortened (an unnamed one shows its number, "S9"); the tooltip has it all.

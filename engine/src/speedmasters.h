@@ -24,6 +24,7 @@
 #include <QObject>
 #include <QString>
 #include <QMutex>
+#include <QAtomicInt>
 #include <QList>
 #include <climits>
 
@@ -132,6 +133,9 @@ public:
      *  surface input drives it, or a used master follows it. One nothing
      *  uses has no business lighting up or taking footer room. */
     quint32 usedMask() const;
+    /** Something in the show changed: usedMask() looks again, once, the
+     *  next time it's asked (any thread). */
+    void markUsageDirty() { m_usageDirty.storeRelaxed(1); }
     bool isUsed(int index) const { return (usedMask() >> index) & 1u; }
 
     /** What a control surface can drive on a master: Tap (a button),
@@ -190,6 +194,9 @@ private:
     double m_timelinePos = 0, m_timelineBpm = 0;   //!< read before taking m_mutex
 
     Doc *m_doc;
+    mutable QAtomicInt m_usageDirty { 1 };
+    mutable quint32 m_usedCache = 0;
+    mutable int m_usedCount = 0;    //!< the count m_usedCache was made for
     mutable QMutex m_mutex;
     QElapsedTimer m_clock;
     Master m_masters[MaxCount];

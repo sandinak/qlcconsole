@@ -22,9 +22,37 @@
 
 #include <QWidget>
 
-class QToolButton;
+#include <QToolButton>
+#include <QElapsedTimer>
+
 class QTimer;
 class Doc;
+
+/** A master's footer button. Painted, not styled: a stylesheet change
+ *  re-polishes the widget, and at a blink a beat that slowed the whole UI. */
+class SpeedMasterButton final : public QToolButton
+{
+    Q_OBJECT
+
+public:
+    explicit SpeedMasterButton(QWidget *parent = nullptr);
+
+    /** On the beat: lit orange. @p level 0..1 (the rate, 0..200 %) and
+     *  @p levelAlpha 0..1: the green bar while the rate is being moved,
+     *  fading out after. Repaints only when what's drawn changes. */
+    void setState(bool fired, double level, double levelAlpha);
+    bool isFired() const { return m_fired; }
+    /** The green bar's width; 0 when it isn't showing. */
+    int levelWidth() const;
+
+protected:
+    void paintEvent(QPaintEvent *event) override;
+
+private:
+    bool m_fired = false;
+    double m_level = 0;     //!< 0..1; the width comes from the button's own at paint
+    int m_levelAlpha = 0;   //!< 0..255, in steps
+};
 
 /** @addtogroup ui UI
  * @{
@@ -43,7 +71,7 @@ class SpeedMastersFooter final : public QWidget
 public:
     explicit SpeedMastersFooter(Doc *doc, QWidget *parent = nullptr);
 
-    QToolButton *button(int index) const;
+    SpeedMasterButton *button(int index) const;
     /** What a master's button reads: its name, cut to @p maxName, and its
      *  tempo. */
     static QString buttonText(const QString &name, double bpm, bool paused, int maxName = 10);
@@ -53,7 +81,10 @@ private:
     void tick();
 
     Doc *m_doc;
-    QList<QToolButton *> m_buttons;
+    QList<SpeedMasterButton *> m_buttons;
+    QList<double> m_lastRate;
+    QList<qint64> m_rateMovedAt;    //!< ms on m_clock; -1 never
+    QElapsedTimer m_clock;
     QTimer *m_timer;
     quint32 m_used = 0;     //!< SpeedMasters::usedMask(), re-read twice a second
     int m_ticks = 0;

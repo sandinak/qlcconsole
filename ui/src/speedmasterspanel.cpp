@@ -30,6 +30,8 @@
 #include <QPointer>
 #include <QSlider>
 #include <QLabel>
+#include <QPainter>
+#include <QPixmap>
 #include <QTimer>
 
 #include <cmath>
@@ -365,6 +367,25 @@ void SpeedMastersPanel::applyCount()
     adjustSize();
 }
 
+/* The beat light: 0 unused (a ring), 1 between beats, 2 on the beat. */
+static QPixmap lightPixmap(int state)
+{
+    static QPixmap made[3];
+    if (made[state].isNull())
+    {
+        QPixmap pm(14, 14);
+        pm.fill(Qt::transparent);
+        QPainter p(&pm);
+        p.setRenderHint(QPainter::Antialiasing);
+        p.setPen(state == 0 ? QPen(QColor(0x44, 0x44, 0x44), 1) : Qt::NoPen);
+        p.setBrush(state == 2 ? QColor(0xf5, 0xa6, 0x23) : state == 1 ? QColor(0x44, 0x44, 0x44)
+                                                                      : QColor(Qt::transparent));
+        p.drawEllipse(QRectF(0.5, 0.5, 13, 13));
+        made[state] = pm;
+    }
+    return made[state];
+}
+
 void SpeedMastersPanel::tickLights()
 {
     SpeedMasters *sm = m_doc->speedMasters();
@@ -381,11 +402,10 @@ void SpeedMastersPanel::tickLights()
         if (m_rows[i].light->property("lit").toInt() != state
             || !m_rows[i].light->property("lit").isValid())
         {
-            // Only on a change: a stylesheet re-polishes the widget.
+            // Only on a change, and a picture rather than a stylesheet: a
+            // stylesheet re-polishes the widget, every blink.
             m_rows[i].light->setProperty("lit", state);
-            m_rows[i].light->setStyleSheet(state == 2 ? QStringLiteral("background:#f5a623;border-radius:7px;")
-                                         : state == 1 ? QStringLiteral("background:#444;border-radius:7px;")
-                                                      : QStringLiteral("border:1px solid #444;border-radius:7px;"));
+            m_rows[i].light->setPixmap(lightPixmap(state));
             m_rows[i].light->setToolTip(used ? QString() : tr("Nothing is on this master yet"));
         }
         // A follower's tempo moves with what it follows.

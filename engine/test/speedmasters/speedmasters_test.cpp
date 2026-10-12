@@ -691,6 +691,8 @@ void SpeedMasters_Test::onlyTheMastersSomethingIsOnAreUsed()
     QVERIFY(m_doc->addPalette(fx));                  // an effect on Speed 2
     QCOMPARE(sm->usedMask(), quint32(0x6));
     fx->setEffectParamValue(QStringLiteral("__speedMaster"), SpeedMasters::Inherit);
+    QCOMPARE(sm->usedMask(), quint32(0x6));          // cached: no edit was signalled...
+    m_doc->setModified();                            // ...as the look editor does
     QCOMPARE(sm->usedMask(), quint32(0x4));
 
     QVERIFY(sm->setFollow(2, 3, 2.0));               // Speed 3 follows Speed 4: both

@@ -47,6 +47,7 @@ SpeedMasters::SpeedMasters(Doc *doc, QObject *parent)
 {
     m_clock.start();
     reset();
+    connect(this, &SpeedMasters::changed, this, [this](int) { markUsageDirty(); });
 }
 
 int SpeedMasters::count() const
@@ -440,6 +441,11 @@ bool SpeedMasters::clockFor(int assignment, double *beatPos, double *bpm) const
 
 quint32 SpeedMasters::usedMask() const
 {
+    // A show of thousands of functions is too many to walk on every poll:
+    // only after something changed (Doc marks it dirty on every edit).
+    if (m_usageDirty.loadRelaxed() == 0 && m_usedCount == count())
+        return m_usedCache;
+    m_usageDirty.storeRelaxed(0);
     quint32 mask = 0;
     auto mark = [&mask](int assignment) {
         if (isMaster(assignment))
@@ -488,7 +494,9 @@ quint32 SpeedMasters::usedMask() const
             }
         }
     }
-    return m_count >= 32 ? mask : mask & ((1u << m_count) - 1);
+    m_usedCount = m_count;
+    m_usedCache = m_count >= 32 ? mask : mask & ((1u << m_count) - 1);
+    return m_usedCache;
 }
 
 /*********************************************************************
