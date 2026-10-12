@@ -41,11 +41,12 @@ under `~/.claude/.../memory/`.
 Effects and playback (from Branson, 2026-10-11, in this order; scope each
 before building):
 
-1. **The spread layer, with speed masters and Link** — scoped in
-   [SPEED_SPREAD_DESIGN.md](SPEED_SPREAD_DESIGN.md): S1 one beat clock
-   (fixes effects running out of phase), S2 four speed masters that can
-   follow each other, S3 the host-side spread layer, S4 control-surface
-   automapping (a Speed page). Ableton Link deferred (GPL licence).
+1. **The spread layer, with speed masters and Link** — S1 beat clock, S2
+   speed masters, S3 spread layer **done** (DONE.md 2026-10-11; demo in
+   test-workspaces/speed-spread-demo.qxw). Left: **S4** control-surface
+   automapping (a Speed page: masters on faders, taps, beat LEDs; PMJ
+   `Favorites` → Tap). **S5** Ableton Link deferred (GPL licence).
+   [SPEED_SPREAD_DESIGN.md](SPEED_SPREAD_DESIGN.md).
 2. **Field generators sampled at positions, plus fire** — generators that
    are a field over the stage, each fixture taking its value from where it
    stands on the plot; fire as one of them.
