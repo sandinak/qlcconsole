@@ -39,6 +39,7 @@ private slots:
     void aBarThatPansCanBeSetUprightAndTestsAsSuch();
     void fixturesAreStoodOnTheDeckUnderThem();
     void theNetworkIsUndoneWithTheRig();
+    void aModeChangedByThePatchIsUndone();
     void hangersAreOnThePlot();
     void aPatchCanBeUndone();
     void fixturesSitAlongAHorizontalPipe();

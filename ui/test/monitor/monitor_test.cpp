@@ -116,6 +116,7 @@
 #include "qlcphysical.h"
 #include "qlcchannel.h"
 #include "qlccapability.h"
+#include "patchplanner.h"
 #include "doc.h"
 #include "qlcfile.h"
 #include "qlcfixturedefcache.h"
@@ -19054,6 +19055,54 @@ void Monitor_Test::theNetworkIsUndoneWithTheRig()
         mon.restoreRig(before);
         QCOMPARE(doc->networkTopology()->nodes().size(), 1);
         QCOMPARE(doc->networkTopology()->nodes().first().name, QString("Stage left node"));
+    }
+    delete doc;
+}
+
+/* The Patch dialog can change a fixture's mode to fit it: one undo puts the
+   mode back with the address. */
+void Monitor_Test::aModeChangedByThePatchIsUndone()
+{
+    Doc *doc = new Doc(this);
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel("TwoMode");
+    QLCFixtureMode *big = new QLCFixtureMode(def);
+    big->setName("Big");
+    QLCFixtureMode *small = new QLCFixtureMode(def);
+    small->setName("Small");
+    for (int k = 0; k < 20; k++)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(QString("Ch %1").arg(k));
+        def->addChannel(ch);
+        big->insertChannel(ch, k);
+        if (k < 5)
+            small->insertChannel(ch, k);
+    }
+    def->addMode(big);
+    def->addMode(small);
+    Fixture *f = new Fixture(doc);
+    f->setFixtureDefinition(def, big);
+    QVERIFY(doc->addFixture(f));
+    QVERIFY(doc->patchFixtures({ { f->id(), 0, 10 } }));
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        const QByteArray before = mon.rigSnapshot();
+        PatchPlanner::Assignment a;
+        a.fixtureId = f->id();
+        a.universe = 0;
+        a.address = 100;
+        a.mode = small;
+        PatchPlanner pp(doc);
+        QCOMPARE(pp.apply({ a }), 1);
+        QCOMPARE(f->fixtureMode(), small);
+        mon.restoreRig(before);
+        QCOMPARE(f->fixtureMode(), big);
+        QCOMPARE(f->channels(), quint32(20));
+        QCOMPARE(f->address(), quint32(10));
+        QCOMPARE(doc->fixtureForAddress(29), f->id());   // its 20 channels claimed again
     }
     delete doc;
 }

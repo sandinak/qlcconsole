@@ -501,6 +501,232 @@ QList<PatchPlanner::Assignment> PatchPlanner::place(const QList<quint32> &fixtur
     return out;
 }
 
+QList<PatchPlanner::Assignment> PatchPlanner::fit(const QList<quint32> &fixtureIds,
+                                                  quint32 universe, quint32 address, bool carryOn,
+                                                  const QHash<quint32, quint32> &channelOverride,
+                                                  const QHash<quint32, QPair<quint32, quint32> > &elsewhere) const
+{
+    QList<Fixture *> fixtures;
+    QSet<quint32> moving;
+    foreach (quint32 fid, fixtureIds)
+    {
+        Fixture *fx = m_doc->fixture(fid);
+        if (fx != NULL && !moving.contains(fid))
+        {
+            fixtures << fx;
+            moving.insert(fid);
+        }
+    }
+    auto chans = [&channelOverride](Fixture *fx) {
+        return channelOverride.value(fx->id(), fx->channels());
+    };
+
+    // What stays put, and where the rest of the plan is going.
+    QHash<quint32, QBitArray> base;
+    auto usedIn = [&base](quint32 uni) -> QBitArray & {
+        if (!base.contains(uni))
+            base[uni] = QBitArray(UNI_SIZE);
+        return base[uni];
+    };
+    foreach (Fixture *fx, m_doc->fixtures())
+        if (fx != NULL && fx->isPatched() && !moving.contains(fx->id()) && !elsewhere.contains(fx->id()))
+            mark(usedIn(fx->universe()), fx->address(), fx->channels());
+    QHashIterator<quint32, QPair<quint32, quint32> > ew(elsewhere);
+    while (ew.hasNext())
+    {
+        ew.next();
+        if (!moving.contains(ew.key()))
+            mark(usedIn(ew.value().first >> 9), ew.value().first & 0x1FF, ew.value().second);
+    }
+
+    /* The ones already in the universe, from the address on, that fit where
+       they are: they stay. Moving what is fine is what made a mess. */
+    QHash<quint32, Assignment> planned;
+    QList<Fixture *> byAddress = fixtures;
+    std::sort(byAddress.begin(), byAddress.end(), [](Fixture *a, Fixture *b) {
+        return a->universeAddress() < b->universeAddress();
+    });
+    foreach (Fixture *fx, byAddress)
+    {
+        const quint32 n = chans(fx);
+        if (!fx->isPatched() || fx->universe() != universe || fx->address() < address
+            || n == 0 || fx->address() + n > UNI_SIZE)
+            continue;
+        bool clear = true;
+        for (quint32 i = fx->address(); i < fx->address() + n && clear; i++)
+            clear = !usedIn(universe).testBit(int(i));
+        if (!clear)
+            continue;
+        mark(usedIn(universe), fx->address(), n);
+        Assignment a;
+        a.fixtureId = fx->id();
+        a.universe = universe;
+        a.address = fx->address();
+        planned.insert(fx->id(), a);
+    }
+
+    // The rest, into the gaps -- in list order, or biggest first if that
+    // leaves fewer without room.
+    QList<Fixture *> rest;
+    foreach (Fixture *fx, fixtures)
+        if (!planned.contains(fx->id()))
+            rest << fx;
+    auto tryOrder = [&](const QList<Fixture *> &order, QHash<quint32, Assignment> &out,
+                        QBitArray &room) -> int {
+        int without = 0;
+        QBitArray probe = room;
+        for (quint32 i = 0; i < address && i < UNI_SIZE; i++)
+            probe.setBit(int(i));               // only from the address on
+        foreach (Fixture *fx, order)
+        {
+            const quint32 n = chans(fx);
+            Assignment a;
+            a.fixtureId = fx->id();
+            const int at = (n == 0 || n > UNI_SIZE) ? -1 : firstFree(probe, n);
+            if (at < 0)
+            {
+                without++;
+                a.unfitted = true;
+                out.insert(fx->id(), a);
+                continue;
+            }
+            a.universe = universe;
+            a.address = quint32(at);
+            mark(probe, a.address, n);
+            mark(room, a.address, n);
+            out.insert(fx->id(), a);
+        }
+        return without;
+    };
+    QHash<quint32, Assignment> inOrder, biggest;
+    QBitArray roomA = usedIn(universe), roomB = usedIn(universe);
+    const int missA = tryOrder(rest, inOrder, roomA);
+    if (missA > 0)
+    {
+        QList<Fixture *> big = rest;
+        std::stable_sort(big.begin(), big.end(), [&chans](Fixture *a, Fixture *b) {
+            return chans(a) > chans(b);
+        });
+        const int missB = tryOrder(big, biggest, roomB);
+        if (missB < missA)
+        {
+            inOrder = biggest;
+            roomA = roomB;
+        }
+    }
+    usedIn(universe) = roomA;
+
+    // Without room: on into the next universe(s), or left where they were.
+    const quint32 existing = m_doc->inputOutputMap()->universesCount();
+    QBitArray free = usedIn(universe);
+    int freeCount = 0, widest = 0, run = 0;
+    for (int i = int(address); i < UNI_SIZE; i++)
+    {
+        run = free.testBit(i) ? 0 : run + 1;
+        freeCount += free.testBit(i) ? 0 : 1;
+        widest = qMax(widest, run);
+    }
+    quint32 uni = universe + 1;
+    foreach (Fixture *fx, rest)
+    {
+        Assignment a = inOrder.value(fx->id());
+        const quint32 n = chans(fx);
+        if (a.unfitted && carryOn && n > 0 && n <= UNI_SIZE)
+        {
+            for (int guard = 0; guard < 4096; guard++, uni++)
+            {
+                const int at = firstFree(usedIn(uni), n);
+                if (at >= 0)
+                {
+                    a.unfitted = false;
+                    a.universe = uni;
+                    a.address = quint32(at);
+                    mark(usedIn(uni), a.address, n);
+                    break;
+                }
+            }
+        }
+        else if (a.unfitted)
+        {
+            a.universe = fx->isPatched() ? fx->universe() : 0;
+            a.address = fx->isPatched() ? fx->address() : 0;
+            a.note = QStringLiteral("no room in universe %1: needs %2 channels, the widest gap is %3 "
+                                    "(%4 free)").arg(universe + 1).arg(n).arg(widest).arg(freeCount);
+        }
+        planned.insert(fx->id(), a);
+    }
+
+    QList<Assignment> out;
+    foreach (Fixture *fx, fixtures)
+    {
+        Assignment a = planned.value(fx->id());
+        a.newUniverse = (a.universe >= existing);
+        out << a;
+    }
+    return out;
+}
+
+QHash<quint32, QLCFixtureMode *> PatchPlanner::modesToFit(const QList<quint32> &fixtureIds, quint32 universe,
+                                                          quint32 address,
+                                                          const QHash<quint32, QLCFixtureMode *> &current,
+                                                          const QHash<quint32, quint32> &channelOverride,
+                                                          const QHash<quint32, QPair<quint32, quint32> > &elsewhere,
+                                                          bool *allFit) const
+{
+    QHash<quint32, QLCFixtureMode *> chosen = current;
+    QHash<quint32, quint32> chans = channelOverride;
+    QHash<quint32, QLCFixtureMode *> changed;
+    for (int step = 0; step < 1000; step++)
+    {
+        int without = 0;
+        foreach (const Assignment &a, fit(fixtureIds, universe, address, false, chans, elsewhere))
+            without += a.unfitted ? 1 : 0;
+        if (without == 0)
+        {
+            if (allFit != NULL) *allFit = true;
+            return changed;
+        }
+        // The biggest that has a smaller mode it may take steps down one.
+        Fixture *pick = NULL;
+        QLCFixtureMode *next = NULL;
+        quint32 pickN = 0;
+        foreach (quint32 fid, fixtureIds)
+        {
+            Fixture *fx = m_doc->fixture(fid);
+            if (fx == NULL || fx->fixtureDef() == NULL)
+                continue;
+            QLCFixtureMode *now = chosen.value(fid, fx->fixtureMode());
+            const quint32 n = chans.value(fid, now != NULL ? quint32(now->channels().size()) : fx->channels());
+            QLCFixtureMode *smaller = NULL;
+            foreach (QLCFixtureMode *m, fx->fixtureDef()->modes())
+            {
+                const quint32 mn = quint32(m->channels().size());
+                if (mn == 0 || mn >= n || (smaller != NULL && mn <= quint32(smaller->channels().size())))
+                    continue;
+                if (m != fx->fixtureMode() && !m_doc->canChangeFixtureMode(fid, m))
+                    continue;
+                smaller = m;                    // the largest mode smaller than now
+            }
+            if (smaller != NULL && n > pickN)
+            {
+                pick = fx;
+                next = smaller;
+                pickN = n;
+            }
+        }
+        if (pick == NULL)
+            break;                              // nothing left to shrink
+        chosen.insert(pick->id(), next);
+        chans.insert(pick->id(), quint32(next->channels().size()));
+        if (next == pick->fixtureMode())
+            changed.remove(pick->id());
+        else
+            changed.insert(pick->id(), next);
+    }
+    if (allFit != NULL) *allFit = false;
+    return changed;
+}
+
 int PatchPlanner::apply(const QList<Assignment> &assignments, QStringList *problems)
 {
     InputOutputMap *io = m_doc->inputOutputMap();

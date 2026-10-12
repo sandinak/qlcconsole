@@ -65,6 +65,9 @@ private slots:
      *  universe each, counting up. */
     void placeCountingUpGivesEachTheNextUniverse();
     void universesArePickedByNameInNameOrder();
+    void fitKeepsWhatIsThereAndFillsTheGaps();
+    void whatHasNoRoomIsFlaggedAndCanCarryOn();
+    void fitByChangingModesShrinksTheBiggestFirst();
 
 private:
     Doc *m_doc;

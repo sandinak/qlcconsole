@@ -1374,14 +1374,29 @@ bool Doc::canChangeFixtureMode(quint32 id, const QLCFixtureMode *newMode, QStrin
         return false;
     }
 
+    /* Fixture groups lay out heads by number: a mode with fewer heads would
+       leave a group pointing at heads that are gone. Only then -- a fixture
+       in no group, or one whose groups use only heads the new mode keeps,
+       can change ("change the mode to accommodate where possible"). */
     if (newMode != NULL && fxi->fixtureMode() != NULL
         && newMode->heads().size() != fxi->fixtureMode()->heads().size())
     {
-        if (why != NULL)
-            *why = QStringLiteral("that mode has %1 head(s), this one has %2 -- fixture groups "
-                                  "lay out heads by number")
-                       .arg(newMode->heads().size()).arg(fxi->fixtureMode()->heads().size());
-        return false;
+        const int keeps = qMax(1, int(newMode->heads().size()));
+        foreach (FixtureGroup *grp, fixtureGroups())
+        {
+            foreach (const GroupHead &h, grp->headList())
+            {
+                if (h.fxi == id && h.head >= keeps)
+                {
+                    if (why != NULL)
+                        *why = QStringLiteral("that mode has %1 head(s), this one has %2, and group "
+                                              "\"%3\" lays out head %4")
+                                   .arg(newMode->heads().size()).arg(fxi->fixtureMode()->heads().size())
+                                   .arg(grp->name()).arg(h.head + 1);
+                    return false;
+                }
+            }
+        }
     }
 
     foreach (Function *f, functionsByType(Function::SceneType))

@@ -77,10 +77,13 @@ public:
         double  distanceMetres;  //!< fixture to the port's anchor, on the plan
         /** The port had no universe: apply() gives it this one. */
         bool    claimsPort;
+        /** fit() found no room for it (and wasn't to carry on into the next
+         *  universe): it stays where it was -- universe/address say where. */
+        bool    unfitted;
 
         Assignment() : fixtureId(0), universe(0), address(0), newUniverse(false),
                        mode(NULL), dimmerChannels(0), nodeIndex(-1), portIndex(-1),
-                       distanceMetres(0), claimsPort(false) {}
+                       distanceMetres(0), claimsPort(false), unfitted(false) {}
     };
 
     explicit PatchPlanner(Doc *doc);
@@ -120,6 +123,30 @@ public:
                             const QHash<quint32, quint32> &channelOverride = QHash<quint32, quint32>(),
                             const QHash<quint32, QPair<quint32, quint32> > &elsewhere
                                 = QHash<quint32, QPair<quint32, quint32> >()) const;
+
+    /** Arrange @p fixtureIds in @p universe from @p address, around what is
+     *  there: the ones already in it that clash with nothing stay put, the
+     *  rest fill the free gaps (in list order, or biggest first when that
+     *  fits more). What still has no room is flagged unfitted and left where
+     *  it was -- or, with @p carryOn, goes on into the next universe(s).
+     *  @p channelOverride and @p elsewhere as for place(). */
+    QList<Assignment> fit(const QList<quint32> &fixtureIds, quint32 universe, quint32 address,
+                          bool carryOn,
+                          const QHash<quint32, quint32> &channelOverride = QHash<quint32, quint32>(),
+                          const QHash<quint32, QPair<quint32, quint32> > &elsewhere
+                              = QHash<quint32, QPair<quint32, quint32> >()) const;
+
+    /** Smaller modes that would let fit() place them all in @p universe:
+     *  the biggest fixtures step down first, one mode at a time, only to
+     *  modes they may take (Doc::canChangeFixtureMode()). @p current: each
+     *  fixture's mode as chosen so far (else its own). Returns only the
+     *  changes; @p allFit says whether they are enough. */
+    QHash<quint32, QLCFixtureMode *> modesToFit(const QList<quint32> &fixtureIds, quint32 universe,
+                                                quint32 address,
+                                                const QHash<quint32, QLCFixtureMode *> &current,
+                                                const QHash<quint32, quint32> &channelOverride,
+                                                const QHash<quint32, QPair<quint32, quint32> > &elsewhere,
+                                                bool *allFit) const;
 
     /** Commit assignments through Doc::patchFixtures() -- all of them or
      *  none, so a block of patched fixtures can shift onto its own old

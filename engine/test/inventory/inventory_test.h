@@ -68,7 +68,7 @@ private slots:
 
     void modeCanChangeWhenNothingReferencesItsChannels();
     void aSceneThatSetsChannelsDirectlyLocksTheMode();
-    void aModeWithADifferentHeadCountIsRefused();
+    void aModeLosingHeadsAGroupUsesIsRefused();
     void patchTimeModeChangeSetsTheFootprintBeforePatching();
     void patchTimeDimmerChannelsCanChange();
     void aRefusedModeChangeLeavesTheFixtureUnpatched();

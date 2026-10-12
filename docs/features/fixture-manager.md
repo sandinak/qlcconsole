@@ -104,16 +104,30 @@ opens on a proposal, which you review and edit before anything changes:
   on contiguous addresses.
 - A **Network** fixture gets a universe of its own at its IP (unicast);
   fixtures behind one IP share it.
-- **"Place selected at universe / address"**, **keeping their spacing**
-  (move a block as is, gaps and all), **packed together** (first free
-  channels from there, spilling into the next universe) or **one universe
-  each, counting up** (the first row that universe, the next the one after,
-  each at that address — a row of lanterns, a node's ports), puts the
-  selected rows — or all of them — where you say.
-- Already-patched fixtures start where they are; their mode is read-only
-  here (change it in the fixture's properties). A fixture a scene sets
-  channel by channel keeps its mode, and a mode with a different head count
-  is refused — both shown disabled, with the reason.
+- **"Place selected at universe / address"** puts the selected rows — or
+  all of them — where you say:
+  - **into the free space** (the default) arranges them around what's
+    already in the universe: the ones there that clash with nothing **stay
+    put**, the rest fill the gaps from that address on (biggest first when
+    that fits more). Any with no room are **flagged** — "no room in U06:
+    needs 165 channels, the widest gap is 47" — and left where they were,
+    and a bar under the table offers two ways on: **Carry on into the next
+    universe** (the patch continues there, packed) or **Fit by changing
+    modes** (the biggest fixtures step down to a smaller mode, one at a
+    time, until everything fits — only to modes they can take; it says so
+    if even their smallest modes don't fit);
+  - **keeping their spacing** (move a block as is, gaps and all);
+  - **packed together** (first free channels from there, spilling into the
+    next universe);
+  - **one universe each, counting up** (the first row that universe, the
+    next the one after, each at that address — a row of lanterns, a node's
+    ports).
+- **Mode** can be changed for any row, patched or not — to fit a group into
+  a universe, say; Status reads **mode changes**, and Apply changes the
+  fixture. A mode is shown disabled, with why, when the fixture can't take
+  it: a scene sets its channels by number, or the mode has fewer heads than
+  a fixture group lays out (a fixture in no group can change its head
+  count).
 - **Patch the others like [structure] → Match** — offered when the
   fixtures in the dialog hang on more than one structure (four towers, four
   step trusses). Pick one as the pattern: every fixture on the others takes
@@ -132,8 +146,8 @@ opens on a proposal, which you review and edit before anything changes:
 
 Moving an already-patched fixture is Design mode only. **Apply is one undo
 step**: ⌘Z — on the Fixtures tab or in the Lighting Studio — puts every
-fixture it moved back where it was, and returns any it patched from the
-inventory to it.
+fixture it moved back where it was, with the mode it had, and returns any
+it patched from the inventory to it.
 
 **Dropping on a universe.** Drag fixtures, or a fixture group, onto a
 universe row: the Patch dialog opens with them packed into that universe,

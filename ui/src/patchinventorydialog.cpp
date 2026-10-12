@@ -124,10 +124,17 @@ PatchInventoryDialog::PatchInventoryDialog(Doc *doc, const QList<quint32> &fixtu
     m_placeAddr->setRange(1, 512);
     placeRow->addWidget(m_placeAddr);
     m_placeHow = new QComboBox(this);
+    m_placeHow->setObjectName(QStringLiteral("placeHow"));
+    m_placeHow->addItem(tr("into the free space"));
     m_placeHow->addItem(tr("keeping their spacing"));
     m_placeHow->addItem(tr("packed together"));
     m_placeHow->addItem(tr("one universe each, counting up"));
-    m_placeHow->setToolTip(tr("Keeping their spacing moves the patched fixtures as one block, "
+    m_placeHow->setToolTip(tr("Into the free space arranges them around what is already in the "
+                              "universe: the ones there that clash with nothing stay put, the rest "
+                              "fill the gaps; any that have no room are flagged and left where they "
+                              "were, with the choice to carry on into the next universe or fit by "
+                              "changing modes. "
+                              "Keeping their spacing moves the patched fixtures as one block, "
                               "gaps and all. Packed puts every fixture in the first free channels "
                               "from there on, around whatever else is in the universe, and "
                               "carries on into the next universe when one fills. One universe "
@@ -185,6 +192,38 @@ PatchInventoryDialog::PatchInventoryDialog(Doc *doc, const QList<quint32> &fixtu
 
     m_summary = new QLabel(this);
     root->addWidget(m_summary);
+    /* Fixtures a fit found no room for ("flag if it goes over 1 U .. tho I
+       want the option to continue that patch"). */
+    m_fitBar = new QWidget(this);
+    m_fitBar->setObjectName(QStringLiteral("fitBar"));
+    QHBoxLayout *fitLay = new QHBoxLayout(m_fitBar);
+    fitLay->setContentsMargins(0, 0, 0, 0);
+    m_fitText = new QLabel(m_fitBar);
+    m_fitText->setWordWrap(true);
+    m_fitText->setStyleSheet(QStringLiteral("QLabel { color: #d08a2a; }"));
+    fitLay->addWidget(m_fitText, 1);
+    QPushButton *carryOn = new QPushButton(tr("Carry on into the next universe"), m_fitBar);
+    carryOn->setObjectName(QStringLiteral("fitCarryOn"));
+    carryOn->setToolTip(tr("Put the ones without room in the next universe(s), packed"));
+    fitLay->addWidget(carryOn);
+    m_fitModes = new QPushButton(tr("Fit by changing modes"), m_fitBar);
+    m_fitModes->setObjectName(QStringLiteral("fitByModes"));
+    m_fitModes->setToolTip(tr("Step the biggest fixtures down to smaller modes, one at a time, "
+                              "until they all fit -- only to modes they can take. Apply changes "
+                              "their modes."));
+    fitLay->addWidget(m_fitModes);
+    m_fitBar->hide();
+    root->addWidget(m_fitBar);
+    connect(carryOn, &QPushButton::clicked, this, [this]() {
+        QList<int> rows;
+        for (int r = 0; r < m_table->rowCount(); r++)
+            if (QTableWidgetItem *name = m_table->item(r, COL_NAME))
+                if (m_fitIds.contains(name->data(Qt::UserRole).toUInt()))
+                    rows << r;
+        fitRows(m_fitUniverse, m_fitAddress, true, rows);
+    });
+    connect(m_fitModes, &QPushButton::clicked, this, [this]() { fitByChangingModes(); });
+
     m_matchProblems = new QLabel(this);
     m_matchProblems->setWordWrap(true);
     m_matchProblems->setStyleSheet(QStringLiteral("QLabel { color: #d08a2a; }"));
@@ -265,11 +304,100 @@ void PatchInventoryDialog::slotPlace()
     foreach (const QModelIndex &idx, m_table->selectionModel()->selectedRows())
         rows << idx.row();
     std::sort(rows.begin(), rows.end());
-    if (m_placeHow->currentIndex() == 2)
-        placeCountingUp(m_placeUni->universe(), quint32(m_placeAddr->value() - 1), rows);
-    else
-        placeRows(m_placeUni->universe(), quint32(m_placeAddr->value() - 1),
-                  m_placeHow->currentIndex() == 0, rows);
+    const quint32 uni = m_placeUni->universe(), addr = quint32(m_placeAddr->value() - 1);
+    switch (m_placeHow->currentIndex())
+    {
+        case 0: fitRows(uni, addr, false, rows); break;
+        case 1: placeRows(uni, addr, true, rows); break;
+        case 2: placeRows(uni, addr, false, rows); break;
+        default: placeCountingUp(uni, addr, rows); break;
+    }
+}
+
+int PatchInventoryDialog::fitRows(quint32 universe, quint32 address, bool carryOn, const QList<int> &rows)
+{
+    QList<int> which = rows;
+    if (which.isEmpty())
+        for (int r = 0; r < m_table->rowCount(); r++)
+            which << r;
+    QList<quint32> ids;
+    foreach (int r, which)
+        if (QTableWidgetItem *name = m_table->item(r, COL_NAME))
+            ids << name->data(Qt::UserRole).toUInt();
+
+    const QHash<quint32, quint32> overrides = channelOverrides();
+    QHash<quint32, QPair<quint32, quint32> > elsewhere;
+    foreach (const PatchPlanner::Assignment &a, currentPlan())
+        if (!ids.contains(a.fixtureId))
+            elsewhere.insert(a.fixtureId, qMakePair((a.universe << 9) | a.address,
+                                                    overrides.value(a.fixtureId)));
+    const QList<PatchPlanner::Assignment> plan =
+        planner().fit(ids, universe, address, carryOn, overrides, elsewhere);
+    setRowAddresses(plan);
+
+    // Without room: say so, and offer the ways on.
+    QStringList names;
+    quint32 short_ = 0;
+    foreach (const PatchPlanner::Assignment &a, plan)
+        if (a.unfitted)
+        {
+            if (Fixture *fx = m_doc->fixture(a.fixtureId))
+                names << fx->name();
+            short_ += overrides.value(a.fixtureId);
+        }
+    m_fitUniverse = universe;
+    m_fitAddress = address;
+    m_fitIds = ids;
+    if (names.isEmpty())
+    {
+        m_fitBar->hide();
+        return 0;
+    }
+    m_fitText->setText(tr("%n fixture(s) have no room in %1 (%2 more channels): %3. They stay where "
+                          "they were.", "", names.size())
+                           .arg(PatchPlanner::universeNameFor(m_doc, universe))
+                           .arg(short_).arg(names.join(QStringLiteral(", "))));
+    m_fitBar->show();
+    return names.size();
+}
+
+int PatchInventoryDialog::fitByChangingModes()
+{
+    // The modes as chosen so far, and the rows not being fitted, as they are.
+    QHash<quint32, QLCFixtureMode *> current;
+    foreach (const PatchPlanner::Assignment &a, currentPlan())
+        if (a.mode != NULL)
+            current.insert(a.fixtureId, a.mode);
+    const QHash<quint32, quint32> overrides = channelOverrides();
+    QHash<quint32, QPair<quint32, quint32> > elsewhere;
+    foreach (const PatchPlanner::Assignment &a, currentPlan())
+        if (!m_fitIds.contains(a.fixtureId))
+            elsewhere.insert(a.fixtureId, qMakePair((a.universe << 9) | a.address,
+                                                    overrides.value(a.fixtureId)));
+    bool allFit = false;
+    const QHash<quint32, QLCFixtureMode *> modes =
+        planner().modesToFit(m_fitIds, m_fitUniverse, m_fitAddress, current, overrides, elsewhere, &allFit);
+    for (int r = 0; r < m_table->rowCount(); r++)
+    {
+        QTableWidgetItem *name = m_table->item(r, COL_NAME);
+        QComboBox *cb = qobject_cast<QComboBox *>(m_table->cellWidget(r, COL_MODE));
+        if (name == NULL || cb == NULL || !modes.contains(name->data(Qt::UserRole).toUInt()))
+            continue;
+        QLCFixtureMode *want = modes.value(name->data(Qt::UserRole).toUInt());
+        for (int i = 0; i < cb->count(); i++)
+            if (cb->itemData(i, Qt::UserRole).value<void *>() == want)
+                cb->setCurrentIndex(i);     // slotModeChanged() sets the row's channels
+    }
+    QList<int> rows;
+    for (int r = 0; r < m_table->rowCount(); r++)
+        if (QTableWidgetItem *name = m_table->item(r, COL_NAME))
+            if (m_fitIds.contains(name->data(Qt::UserRole).toUInt()))
+                rows << r;
+    const int left = fitRows(m_fitUniverse, m_fitAddress, false, rows);
+    if (left > 0)
+        m_fitText->setText(m_fitText->text() + QLatin1Char(' ')
+                           + tr("Even their smallest modes don't fit."));
+    return left;
 }
 
 void PatchInventoryDialog::placeCountingUp(quint32 universe, quint32 address, const QList<int> &rows)
@@ -332,13 +460,16 @@ void PatchInventoryDialog::setRowAddresses(const QList<PatchPlanner::Assignment>
         if (name == NULL || !byId.contains(name->data(Qt::UserRole).toUInt()))
             continue;
         const PatchPlanner::Assignment a = byId.value(name->data(Qt::UserRole).toUInt());
-        if (UniverseCombo *uni = qobject_cast<UniverseCombo *>(m_table->cellWidget(r, COL_UNI)))
-            uni->setUniverse(a.universe);
-        if (QSpinBox *addr = qobject_cast<QSpinBox *>(m_table->cellWidget(r, COL_ADDR)))
-            addr->setValue(int(a.address) + 1);
-        // Placed by hand: the nearest-node proposal no longer applies.
-        if (QTableWidgetItem *via = m_table->item(r, COL_VIA))
-            via->setData(ROLE_NODE, -1);
+        if (!a.unfitted)            // no room: left as it was, only the note
+        {
+            if (UniverseCombo *uni = qobject_cast<UniverseCombo *>(m_table->cellWidget(r, COL_UNI)))
+                uni->setUniverse(a.universe);
+            if (QSpinBox *addr = qobject_cast<QSpinBox *>(m_table->cellWidget(r, COL_ADDR)))
+                addr->setValue(int(a.address) + 1);
+            // Placed by hand: the nearest-node proposal no longer applies.
+            if (QTableWidgetItem *via = m_table->item(r, COL_VIA))
+                via->setData(ROLE_NODE, -1);
+        }
         if (QTableWidgetItem *st = m_table->item(r, COL_STATUS))
             st->setData(Qt::UserRole + 1, a.note);
     }
@@ -472,18 +603,11 @@ void PatchInventoryDialog::fill(const QList<PatchPlanner::Assignment> &plan,
         // directly, or the head count differs) are shown but disabled, with why.
         quint32 chans = fx->channels();
         QString why;
-        if (fx->isPatched())
-        {
-            /* Re-addressing, not re-patching: its mode is part of what is
-               live, and is changed in its properties, where everything that
-               depends on it is looked after. */
-            QTableWidgetItem *mo = new QTableWidgetItem(fx->fixtureMode() ? fx->fixtureMode()->name()
-                                                                          : QString());
-            mo->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
-            mo->setToolTip(tr("Already patched: change its mode in the fixture's properties"));
-            m_table->setItem(r, COL_MODE, mo);
-        }
-        else if (isGenericDimmer(fx))
+        /* Patched or not, the mode is offered here: re-addressing a group
+           often means a smaller mode to fit ("I want to be able to change
+           the mode to accommodate"). Modes it can't take are shown disabled,
+           with why; Apply changes it, and one undo puts it back. */
+        if (isGenericDimmer(fx))
         {
             QSpinBox *sp = new QSpinBox(m_table);
             sp->setRange(1, 512);
@@ -665,14 +789,18 @@ void PatchInventoryDialog::refreshConflicts()
         Fixture *fx = m_doc->fixture(plan.at(r).fixtureId);
         const bool moved = fx != NULL && fx->isPatched()
                            && (fx->universe() != plan.at(r).universe || fx->address() != plan.at(r).address);
-        if (fx != NULL && (!fx->isPatched() || moved))
+        const bool remode = fx != NULL && fx->isPatched()
+                            && ((plan.at(r).mode != NULL && plan.at(r).mode != fx->fixtureMode())
+                                || (plan.at(r).dimmerChannels > 0 && plan.at(r).dimmerChannels != fx->channels()));
+        if (fx != NULL && (!fx->isPatched() || moved || remode))
             changes++;
         if (bad.contains(r))
             text = tr("CONFLICT");
         else if (fx != NULL && fx->isPatched() && !moved)
-            text = tr("unchanged");
+            text = remode ? tr("mode changes") : tr("unchanged");
         else if (moved)
-            text = tr("moves from %1.%2").arg(fx->universe() + 1).arg(fx->address() + 1);
+            text = remode ? tr("moves from %1.%2, mode changes").arg(fx->universe() + 1).arg(fx->address() + 1)
+                          : tr("moves from %1.%2").arg(fx->universe() + 1).arg(fx->address() + 1);
         else if (plan.at(r).newUniverse)
             text = tr("new universe");
         else

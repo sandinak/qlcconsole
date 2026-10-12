@@ -76,6 +76,16 @@ public:
     int matchStructures(const QString &pattern);
     void placeRows(quint32 universe, quint32 address, bool keepSpacing,
                    const QList<int> &rows = QList<int>());
+    /** Arrange @p rows (all, when empty) in @p universe from @p address
+     *  around what is there (PatchPlanner::fit()): what has no room is
+     *  flagged and left where it was -- unless @p carryOn -- and the bar
+     *  under the table offers to carry on or to fit by changing modes.
+     *  Returns how many have no room. */
+    int fitRows(quint32 universe, quint32 address, bool carryOn = false,
+                const QList<int> &rows = QList<int>());
+    /** Smaller modes for the last fitRows() so they all fit, then fit
+     *  again. Returns how many still have no room. */
+    int fitByChangingModes();
 
 public slots:
     void accept() override;
@@ -120,6 +130,13 @@ private:
     class QComboBox *m_placeHow;    //!< Place: keep spacing / pack
     class QComboBox *m_matchPattern = nullptr; //!< Match: the structure to copy
     QLabel *m_matchProblems = nullptr;
+    /** Under the table when a fit left fixtures without room. */
+    QWidget *m_fitBar = nullptr;
+    QLabel *m_fitText = nullptr;
+    class QPushButton *m_fitModes = nullptr;
+    /** The last fit, for its bar's buttons. */
+    quint32 m_fitUniverse = 0, m_fitAddress = 0;
+    QList<quint32> m_fitIds;
     bool m_filling;
 };
 
