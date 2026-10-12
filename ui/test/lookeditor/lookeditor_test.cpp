@@ -19,6 +19,9 @@
 
 #include <QtTest>
 #include <QScrollArea>
+#include <QToolButton>
+#include <QTextBrowser>
+#include <QDialog>
 #include <QPushButton>
 #include <QCheckBox>
 #include <QCollator>
@@ -535,11 +538,12 @@ void LookEditor_Test::theSpreadIsPreviewed()
     preview->grab();                                     // it paints
 }
 
-void LookEditor_Test::theEffectListAndItsSettingsSitSideBySide()
+/* "the effect search and listing with tabs is taking up too much space when
+   working WITH an effect .. we still need to be able to access it .. a
+   selection should apply immediately": the browser is a window of its own,
+   the settings have the width, and every pick plays at once. */
+void LookEditor_Test::theEffectPickerIsAWindowOfItsOwn()
 {
-    /* "on a regular sized screen we're running out of space in the bottom ..
-       move the effect list to the left side and options on the right": the
-       list keeps the height, the picked effect's settings sit beside it. */
     Doc doc(this);
     doc.effectScriptRunner()->cache()->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
     QLCPalette *look = new QLCPalette(QLCPalette::Effect, &doc);
@@ -548,33 +552,106 @@ void LookEditor_Test::theEffectListAndItsSettingsSitSideBySide()
     LookEditor ed(&doc);
     ed.resize(1000, 640);
     ed.show();
-    ed.setPalette(look->id());
-    EffectBrowser *browser = ed.m_effectBrowser;
-    QVERIFY(browser->list()->count() > 1);
-    // Pick one with settings, the way a click does.
-    QListWidgetItem *withParams = nullptr;
-    for (int i = 0; i < browser->list()->count() && withParams == nullptr; ++i)
-        if (browser->list()->item(i)->text() == QLatin1String("Fireworks"))
-            withParams = browser->list()->item(i);
-    if (withParams == nullptr)
-        withParams = browser->list()->item(1);
-    browser->pick(withParams);
-    QApplication::processEvents();
-    QVERIFY2(ed.m_effectDynWidget->findChildren<QSlider *>().size()
-                 + ed.m_effectDynWidget->findChildren<QAbstractSpinBox *>().size() > 0,
-             "the picked effect's settings should be shown beside the list");
+    auto pickNamed = [&](const QString &name) {
+        EffectBrowser *browser = ed.m_effectBrowser;
+        browser->search()->setText(name);
+        QApplication::processEvents();
+        for (int i = 0; i < browser->list()->count(); ++i)
+            if (browser->list()->item(i)->text() == name)
+            {
+                browser->pick(browser->list()->item(i));
+                QApplication::processEvents();
+                return true;
+            }
+        return false;
+    };
 
+    // A new effect look: the picker opens by itself -- choosing is the first thing.
+    ed.setPalette(look->id());
+    QTRY_VERIFY(ed.effectPickerOpen());
+    QVERIFY(!ed.isAncestorOf(ed.m_effectBrowser));      // its own window
+    QVERIFY(pickNamed("Dimmer Phaser"));
+    QVERIFY(look->scriptPath().endsWith("dimmer-phaser.js"));          // applied at once
+    QVERIFY(ed.m_effectDynWidget->findChildren<QSlider *>().size() > 0); // its settings shown
+    ed.m_effectPicker->findChild<QPushButton *>("effectPickerDone")->click();
+    QVERIFY(!ed.effectPickerOpen());
+
+    // The settings have the width; the header names the effect.
     QScrollArea *details = ed.findChild<QScrollArea *>("effectDetails");
     QVERIFY(details != nullptr);
     QVERIFY(details->isAncestorOf(ed.m_effectPersistentCb));
     QVERIFY(details->isAncestorOf(ed.m_saveAsEffectButton));
-    const QRect b = browser->geometry(), d = details->geometry();
-    QVERIFY2(b.right() < d.left(), "the list and its settings should be side by side");
-    QVERIFY2(qAbs(b.top() - d.top()) < 4, "side by side, from the same top");
-    // The list has the page's height, not what the settings leave of it.
-    QVERIFY2(b.height() > details->height() - 4, qPrintable(QString("%1 vs %2").arg(b.height()).arg(details->height())));
-    if (!qEnvironmentVariableIsEmpty("LOOKEDITOR_SHOT"))
-        ed.grab().save(qEnvironmentVariable("LOOKEDITOR_SHOT"));
+    QVERIFY2(details->width() > ed.width() * 0.8,
+             qPrintable(QString("settings %1 wide of %2").arg(details->width()).arg(ed.width())));
+    QCOMPARE(ed.m_effectPickedLabel->text(), QString("Dimmer Phaser"));
+    QCOMPARE(ed.m_effectChangeButton->text(), QString("Change effect…"));
+
+    // What it is lives behind "?" and in the picker, not over the settings.
+    QVERIFY(!details->isAncestorOf(ed.m_effectDescLabel) || !ed.m_effectDescLabel->isVisible());
+    QVERIFY(ed.m_effectInfoButton->isVisible());
+    QVERIFY(ed.m_effectInfoButton->toolTip().contains("Dimmer Phaser"));
+    QVERIFY(ed.m_effectInfoButton->toolTip().contains("Works with"));
+    ed.m_effectInfoButton->click();
+    QVERIFY(ed.m_effectDetails != nullptr && ed.m_effectDetails->isVisible());
+    const QString about = ed.m_effectDetails->findChild<QTextBrowser *>("effectDetailsText")->toPlainText();
+    QVERIFY2(about.contains("rate") && about.contains("Cycles per second"), qPrintable(about));
+    ed.m_effectDetails->hide();
+    QVERIFY(ed.m_effectPickerInfo->toPlainText().contains("Cycles per second"));
+
+    // The picker is wide enough for its tabs, whole.
+    ed.openEffectPicker();
+    QApplication::processEvents();
+    QTabBar *tabs = ed.m_effectBrowser->tabs();
+    QVERIFY(tabs->tabRect(tabs->count() - 1).right() <= tabs->width());
+    for (int i = 0; i < tabs->count(); ++i)
+        QVERIFY(!tabs->tabText(i).contains(QChar(0x2026)));
+    if (!qEnvironmentVariableIsEmpty("PICKER_SHOT"))
+        ed.m_effectPicker->grab().save(qEnvironmentVariable("PICKER_SHOT"));
+    ed.closeEffectPicker(true);
+
+    // Change, try two, Cancel: the phaser is back with its settings and name.
+    look->setEffectParamValue("rate", 3.5);
+    const QString name = look->name();
+    ed.m_effectChangeButton->click();
+    QVERIFY(ed.effectPickerOpen());
+    QVERIFY(pickNamed("Rainbow"));
+    QVERIFY(look->scriptPath().endsWith("rainbow.js"));
+    QCOMPARE(ed.m_effectPickedLabel->text(), QString("Rainbow"));
+    QVERIFY(pickNamed("Orbit"));
+    ed.m_effectPicker->findChild<QPushButton *>("effectPickerCancel")->click();
+    QVERIFY(!ed.effectPickerOpen());
+    QVERIFY(look->scriptPath().endsWith("dimmer-phaser.js"));
+    QCOMPARE(look->effectParamValues().value("rate"), 3.5);
+    QCOMPARE(look->name(), name);
+    QCOMPARE(ed.m_effectPickedLabel->text(), QString("Dimmer Phaser"));
+
+    // Esc is Cancel too.
+    ed.openEffectPicker();
+    QVERIFY(pickNamed("Rainbow"));
+    QTest::keyClick(ed.m_effectBrowser->search(), Qt::Key_Escape);
+    QVERIFY(!ed.effectPickerOpen());
+    QVERIFY(look->scriptPath().endsWith("dimmer-phaser.js"));
+
+    // Arrow keys pick as they go.
+    ed.openEffectPicker();
+    EffectBrowser *browser = ed.m_effectBrowser;
+    browser->search()->clear();
+    QApplication::processEvents();
+    QVERIFY(browser->list()->count() > 2);
+    browser->list()->setFocus();
+    browser->list()->setCurrentRow(0);
+    const QString before = look->scriptPath() + look->wledEffect() + look->effectPreset();
+    QTest::keyClick(browser->list(), Qt::Key_Down);
+    QApplication::processEvents();
+    QVERIFY2(look->scriptPath() + look->wledEffect() + look->effectPreset() != before,
+             "an arrow key should pick the next one");
+
+    // Closing the window keeps what's picked.
+    QTest::keyClick(browser->list(), Qt::Key_Down);
+    const QString kept = look->scriptPath() + look->wledEffect() + look->effectPreset();
+    ed.m_effectPicker->close();
+    QVERIFY(!ed.effectPickerOpen());
+    QCOMPARE(look->scriptPath() + look->wledEffect() + look->effectPreset(), kept);
 }
 
 void LookEditor_Test::theBrowsersListsAreAToZ()

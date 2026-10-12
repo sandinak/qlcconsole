@@ -24,6 +24,7 @@
 #include <QtMath>
 #include <cmath>
 
+#include "naturalcompare.h"
 #include "effectscriptrunner.h"
 #include "effectscriptcache.h"
 #include "effectbrowser.h"
@@ -152,6 +153,9 @@ EffectBrowser::EffectBrowser(Doc *doc, QComboBox *source, QWidget *parent)
     m_tabs = new QTabBar(this);
     m_tabs->setExpanding(false);
     m_tabs->setDrawBase(false);
+    // Whole names ("Position", not "Positi…"): scroll arrows if they don't fit.
+    m_tabs->setElideMode(Qt::ElideNone);
+    m_tabs->setUsesScrollButtons(true);
     v->addWidget(m_tabs);
 
     m_list = new QListWidget(this);
@@ -174,6 +178,13 @@ EffectBrowser::EffectBrowser(Doc *doc, QComboBox *source, QWidget *parent)
     });
     connect(m_list, &QListWidget::itemClicked, this, &EffectBrowser::pick);
     connect(m_list, &QListWidget::itemActivated, this, &EffectBrowser::pick);
+    // Moving the current row picks it (arrow keys). A refill moves it too,
+    // but pick() ignores those (m_filling); re-picking what is already
+    // picked changes nothing.
+    connect(m_list, &QListWidget::currentItemChanged, this, [this](QListWidgetItem *now, QListWidgetItem *) {
+        if (m_pickWhileBrowsing)
+            pick(now);
+    });
     // The combo changed by other means (the Browse dialog, a look loading).
     connect(m_source, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
         if (m_filling)
@@ -333,11 +344,8 @@ void EffectBrowser::refill()
        stays in the order it was used. */
     if (!recentTab || !q.isEmpty())
     {
-        QCollator collator;
-        collator.setNumericMode(true);
-        collator.setCaseSensitivity(Qt::CaseInsensitive);
-        std::stable_sort(shown.begin(), shown.end(), [this, &collator](int a, int b) {
-            return collator.compare(m_entries.at(a).sortName, m_entries.at(b).sortName) < 0;
+        std::stable_sort(shown.begin(), shown.end(), [this](int a, int b) {
+            return naturalCompare(m_entries.at(a).sortName, m_entries.at(b).sortName) < 0;
         });
     }
 

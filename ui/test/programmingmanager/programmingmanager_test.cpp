@@ -21,6 +21,8 @@
 #include "scenetransition.h"
 #include <QSpinBox>
 #include <QSlider>
+#include <QToolButton>
+#include <QMenu>
 #include <QDoubleSpinBox>
 #include <QComboBox>
 #include <QLineEdit>
@@ -1278,6 +1280,46 @@ void ProgrammingManager_Test::editingARunningEffectChangesItsOutput()
     QTRY_VERIFY2(levels().size() >= 3, "the spread never reached the running effect");
 
     m_doc->masterTimer()->stop();
+}
+
+/* "can we make this row more useful using a dropdown paradigm like we did for
+   the studio options? right now scrolling is a bit obnoxious" */
+void ProgrammingManager_Test::theToolbarFitsWithItsMenus()
+{
+    ProgrammingManager mgr(nullptr, m_doc);
+    mgr.resize(1200, 800);
+    mgr.show();
+    QApplication::processEvents();
+    QToolButton *park = mgr.findChild<QToolButton *>("parkMenu");
+    QToolButton *mark = mgr.findChild<QToolButton *>("markMenu");
+    QToolButton *beat = mgr.findChild<QToolButton *>("beatMenu");
+    QToolButton *more = mgr.findChild<QToolButton *>("programmingMoreMenu");
+    QVERIFY(park && mark && beat && more);
+    QVERIFY(mgr.m_highlightBtn->isVisible() && mgr.m_flashBtn->isVisible());
+    QVERIFY(!mgr.m_parkBtn->isVisible() && !mgr.m_snapshotBtn->isVisible());
+    // One row that fits a laptop's width without scrolling.
+    QWidget *row = mgr.m_highlightBtn->parentWidget();
+    QVERIFY2(row->sizeHint().width() < 1000, qPrintable(QString::number(row->sizeHint().width())));
+
+    // The Beat menu turns the beat on, and the button says the tempo.
+    QCOMPARE(beat->text(), QString("Beat off"));
+    QAction *on = nullptr;
+    foreach (QAction *a, beat->menu()->actions())
+        if (a->text() == QLatin1String("Internal beat on"))
+            on = a;
+    QVERIFY(on != nullptr);
+    on->trigger();
+    QVERIFY(mgr.m_bpmBtn->isChecked());
+    QCOMPARE(beat->text(), QString("Beat 120"));
+    mgr.m_bpmSpin->setValue(128);
+    QCOMPARE(beat->text(), QString("Beat 128"));
+    on->trigger();
+    QVERIFY(!mgr.m_bpmBtn->isChecked());
+
+    // Jog speed lives in More.
+    QVERIFY(more->menu()->isAncestorOf(mgr.m_speedSpin));
+    if (!qEnvironmentVariableIsEmpty("TOOLBAR_SHOT"))
+        row->grab().save(qEnvironmentVariable("TOOLBAR_SHOT"));
 }
 
 /* "not seeing output on farts .. we need a warning in programming view for

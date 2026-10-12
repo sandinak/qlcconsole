@@ -44,7 +44,7 @@ private slots:
     void anEffectIsPutOnASpeedMaster();
     void theHostSpreadStandsInForTheEffectsOwn();
     void theSpreadIsPreviewed();
-    void theEffectListAndItsSettingsSitSideBySide();
+    void theEffectPickerIsAWindowOfItsOwn();
     void theBrowsersListsAreAToZ();
 };
 

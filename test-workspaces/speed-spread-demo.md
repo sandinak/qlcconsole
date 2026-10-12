@@ -49,7 +49,7 @@ full); try the same settings as on the pars.
 
 ## Speed masters
 
-Open **Masters** on the Programming toolbar. **Pars** (Speed 1) is at 60 BPM;
+Open **Beat → Speed masters…** on the Programming toolbar. **Pars** (Speed 1) is at 60 BPM;
 **Movers x2** (Speed 2) follows it at ×2.
 
 | Look | Watch for | Then try |

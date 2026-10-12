@@ -26,6 +26,7 @@
 #include <QRegularExpression>
 #include <algorithm>
 
+#include "naturalcompare.h"
 #include "patchplanner.h"
 #include "qlcioplugin.h"
 #include "ioplugincache.h"
@@ -110,9 +111,6 @@ QList<PatchPlanner::Assignment> PatchPlanner::plan(const QList<quint32> &fixture
     // order they happened to be added, so identical fixtures land in contiguous
     // addresses and the plan reads the way the inventory tree does. Numbers in
     // names compare as numbers ("Pointe 2" before "Pointe 10").
-    QCollator collator;
-    collator.setNumericMode(true);
-    collator.setCaseSensitivity(Qt::CaseInsensitive);
     QList<Fixture *> ordered;
     foreach (quint32 fid, fixtureIds)
     {
@@ -120,12 +118,12 @@ QList<PatchPlanner::Assignment> PatchPlanner::plan(const QList<quint32> &fixture
         if (f != NULL && !f->isPatched())
             ordered << f;
     }
-    std::sort(ordered.begin(), ordered.end(), [&collator](Fixture *x, Fixture *y) {
-        int c = collator.compare(x->groupingManufacturer(), y->groupingManufacturer());
+    std::sort(ordered.begin(), ordered.end(), [](Fixture *x, Fixture *y) {
+        int c = naturalCompare(x->groupingManufacturer(), y->groupingManufacturer());
         if (c == 0)
-            c = collator.compare(x->groupingModel(), y->groupingModel());
+            c = naturalCompare(x->groupingModel(), y->groupingModel());
         if (c == 0)
-            c = collator.compare(x->name(), y->name());
+            c = naturalCompare(x->name(), y->name());
         return c != 0 ? c < 0 : x->id() < y->id();
     });
     /* A universe of its own -- for a lantern's IP, a free node port, a DMX
@@ -856,14 +854,12 @@ QList<quint32> PatchPlanner::fixturesOn(Doc *doc, const QString &key)
     foreach (Fixture *fx, doc->fixtures())
         if (fx != nullptr && mountKey(doc, fx->id()) == key)
             out << fx->id();
-    QCollator byName;
-    byName.setNumericMode(true);
-    std::sort(out.begin(), out.end(), [doc, &byName](quint32 a, quint32 b) {
+    std::sort(out.begin(), out.end(), [doc](quint32 a, quint32 b) {
         const QList<double> pa = placeOn(doc, a), pb = placeOn(doc, b);
         for (int i = 0; i < qMin(pa.size(), pb.size()); ++i)
             if (qAbs(pa.at(i) - pb.at(i)) > 0.005)
                 return pa.at(i) < pb.at(i);
-        return byName.compare(doc->fixture(a)->name(), doc->fixture(b)->name()) < 0;
+        return naturalCompare(doc->fixture(a)->name(), doc->fixture(b)->name()) < 0;
     });
     return out;
 }
@@ -905,10 +901,8 @@ QStringList PatchPlanner::likeStructures(Doc *doc, const QString &key)
         if (theirs == kinds)
             out << other;
     }
-    QCollator byName;
-    byName.setNumericMode(true);
-    std::sort(out.begin(), out.end(), [doc, &byName](const QString &a, const QString &b) {
-        return byName.compare(structureName(doc, a), structureName(doc, b)) < 0;
+    std::sort(out.begin(), out.end(), [doc](const QString &a, const QString &b) {
+        return naturalCompare(structureName(doc, a), structureName(doc, b)) < 0;
     });
     return out;
 }

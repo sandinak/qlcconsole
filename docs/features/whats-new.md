@@ -80,6 +80,17 @@ The latest changes, newest first. Each links to the guide with the detail.
   span several structures.
   ([Patching](fixture-manager.md#patching-the-patch-dialog))
 
+### Programming
+
+- **A Programming toolbar that fits.** Highlight, Flash, Tap and Save
+  Positions stay buttons; Park, Move in black, Beat (it reads the tempo)
+  and More are drop-downs — one row, no scrolling.
+- **The effect browser is a window of its own.** Once an effect is picked,
+  its settings have the look editor's full width; **Change effect…** opens
+  the browser, where every pick (and every arrow-key step) plays at once,
+  and **Cancel** or Esc puts back the effect you had.
+  ([The effect browser](programming-tab.md#the-effect-browser))
+
 ### Playback
 
 - **GO on the beat.** A chase or cue list can hold a GO to the next beat
@@ -98,7 +109,7 @@ The latest changes, newest first. Each links to the guide with the detail.
   head goes where on the line or shape.
   ([Spread](effects.md#spread))
 - **Speed masters.** Four tempo masters (Programming toolbar →
-  **Masters**): each its own tempo, tap, rate and pause, or following the
+  **Beat → Speed masters…**): each its own tempo, tap, rate and pause, or following the
   main clock or another master at ×¼ … ×4. Put an effect, a look, a chase
   step, a chase or a collection on one; on a master an effect's rate counts
   per beat; a chase counting in beats steps on its master's beats.

@@ -64,6 +64,11 @@ public:
     /** Most recently picked first; remembered between sessions. */
     static QStringList recent();
 
+    /** Moving through the list with the arrow keys picks as it goes (the
+     *  picker window: browse and watch each one on the rig). Off, only a
+     *  click or Enter picks. */
+    void setPickWhileBrowsing(bool on) { m_pickWhileBrowsing = on; }
+
 protected:
     void showEvent(QShowEvent *e) override;
     void hideEvent(QHideEvent *e) override;
@@ -85,6 +90,7 @@ private:
         QString key() const;    ///< for Recent: kind and name
     };
 
+    bool m_pickWhileBrowsing = false;
     void refill();
     void pick(QListWidgetItem *item);
     void tickPreviews();

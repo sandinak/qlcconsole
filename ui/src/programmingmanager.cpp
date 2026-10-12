@@ -6,6 +6,7 @@
 */
 
 #include <QGuiApplication>
+#include <QWidgetAction>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QSplitter>
@@ -201,12 +202,10 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
         m_parkBtn->setToolTip(tr("Hold the selected fixtures at their current values, out of cue "
                                  "output, until unparked (saved with the workspace)"));
         m_parkBtn->setEnabled(false);
-        toolbar->addWidget(m_parkBtn);
 
         m_unparkBtn = new QPushButton(tr("Unpark all"), this);
         m_unparkBtn->setToolTip(tr("Release every parked fixture"));
         m_unparkBtn->setEnabled(false);
-        toolbar->addWidget(m_unparkBtn);
 
         m_markBtn = new QPushButton(tr("Mark"), this);
         m_markBtn->setToolTip(tr("Move-in-black: pre-position the selected DARK fixtures "
@@ -214,12 +213,10 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
                                  "held out of cue output. Auto-releases when a cue lights them; "
                                  "saved with the workspace."));
         m_markBtn->setEnabled(false);
-        toolbar->addWidget(m_markBtn);
 
         m_unmarkBtn = new QPushButton(tr("Unmark all"), this);
         m_unmarkBtn->setToolTip(tr("Release every marked fixture"));
         m_unmarkBtn->setEnabled(false);
-        toolbar->addWidget(m_unmarkBtn);
 
         m_autoMibBtn = new QPushButton(tr("Auto MIB"), this);
         m_autoMibBtn->setCheckable(true);
@@ -227,7 +224,6 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
                                     "timeline runs, look ahead to the next cue and pre-position "
                                     "any dark mover it will reveal — as long as there's enough "
                                     "lead time. Releases each fixture as its cue lights it."));
-        toolbar->addWidget(m_autoMibBtn);
 
         m_mibGapSpin = new QDoubleSpinBox(this);
         m_mibGapSpin->setRange(0.1, 10.0);
@@ -237,25 +233,19 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
         m_mibGapSpin->setToolTip(tr("Move-in-black lead time: the next cue must be at least this "
                                     "far away for a dark mover to be pre-set. Below it there's no "
                                     "time to move in black, so it's skipped."));
-        toolbar->addWidget(m_mibGapSpin);
 
         m_snapshotBtn = new QPushButton(tr("Snapshot"), this);
         m_snapshotBtn->setToolTip(tr("Bake the current live DMX output into the open "
             "scene as static values — capture a look built on an external console."));
         connect(m_snapshotBtn, SIGNAL(clicked()), this, SLOT(slotSnapshotLive()));
-        toolbar->addWidget(m_snapshotBtn);
-
-        toolbar->addStretch(1);
 
         // BPM / internal beat generator
-        toolbar->addWidget(new QLabel(tr("BPM:"), this));
 
         m_bpmSpin = new QSpinBox(this);
         m_bpmSpin->setRange(20, 400);
         m_bpmSpin->setValue(120);
         m_bpmSpin->setToolTip(tr("Beats per minute for internal beat generator"));
         m_bpmSpin->setEnabled(false);
-        toolbar->addWidget(m_bpmSpin);
 
         m_tapBtn = new QPushButton(tr("Tap"), this);
         m_tapBtn->setToolTip(tr("Tap to set BPM from live tempo"));
@@ -265,7 +255,6 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
         m_bpmBtn = new QPushButton(tr("Beat On"), this);
         m_bpmBtn->setCheckable(true);
         m_bpmBtn->setToolTip(tr("Enable QLC+ internal beat generator (drives _beat/_bpm in generators)"));
-        toolbar->addWidget(m_bpmBtn);
 
         QPushButton *mastersBtn = new QPushButton(tr("Masters"), this);
         mastersBtn->setObjectName(QStringLiteral("speedMastersButton"));
@@ -274,9 +263,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
         connect(mastersBtn, &QPushButton::clicked, this, [this]() {
             SpeedMastersPanel::open(m_doc, this);
         });
-        toolbar->addWidget(mastersBtn);
 
-        toolbar->addWidget(new QLabel(tr("Jog:"), this));
 
         m_speedSpin = new QSpinBox(this);
         m_speedSpin->setRange(10, 500);
@@ -284,7 +271,6 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
         m_speedSpin->setValue(100);
         m_speedSpin->setSuffix(tr("%"));
         m_speedSpin->setToolTip(tr("Joystick speed for position editing (100% = 2 m/s at full deflection)"));
-        toolbar->addWidget(m_speedSpin);
 
         m_saveBtn = new QPushButton(tr("Save Positions"), this);
         m_saveBtn->setEnabled(false);
@@ -293,6 +279,96 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
             "Only these joystick edits need this button — every other look edit "
             "here (color, dimmer, gradient, …) is already live; the footer's "
             "● Unsaved changes indicator tracks those."));
+        toolbar->addWidget(m_saveBtn);
+
+        /* One row, no scrolling ("can we make this row more useful using a
+           dropdown paradigm like we did for the studio options? right now
+           scrolling is a bit obnoxious"): what is pressed all the time stays a
+           button -- Highlight, Flash, Tap, Save Positions -- and the rest sits
+           in drop-downs, as the Lighting Studio's footer does. The buttons
+           behind the menu items are kept (hidden): their state, slots and
+           enabling carry on exactly as before, and each item mirrors its
+           button when the menu opens. */
+        auto dropDown = [this](const QString &text, const QString &name) {
+            QToolButton *b = new QToolButton(this);
+            b->setObjectName(name);
+            b->setText(text);
+            b->setPopupMode(QToolButton::InstantPopup);
+            b->setToolButtonStyle(Qt::ToolButtonTextOnly);
+            QMenu *m = new QMenu(b);
+            m->setToolTipsVisible(true);
+            b->setMenu(m);
+            return b;
+        };
+        auto mirror = [](QMenu *m, QPushButton *btn, const QString &text) {
+            btn->hide();
+            QAction *a = m->addAction(text);
+            a->setToolTip(btn->toolTip());
+            a->setCheckable(btn->isCheckable());
+            QObject::connect(a, &QAction::triggered, btn, [btn]() { btn->click(); });
+            QObject::connect(m, &QMenu::aboutToShow, a, [a, btn]() {
+                a->setEnabled(btn->isEnabled());
+                a->setChecked(btn->isChecked());
+            });
+            return a;
+        };
+        auto fieldAction = [this](QMenu *m, const QString &label, QWidget *field) {
+            QWidget *row = new QWidget(this);
+            QHBoxLayout *rl = new QHBoxLayout(row);
+            rl->setContentsMargins(24, 2, 12, 2);
+            rl->addWidget(new QLabel(label, row));
+            rl->addStretch(1);
+            field->setParent(row);
+            rl->addWidget(field);
+            QWidgetAction *wa = new QWidgetAction(m);
+            wa->setDefaultWidget(row);
+            m->addAction(wa);
+        };
+
+        QToolButton *parkMenu = dropDown(tr("Park"), QStringLiteral("parkMenu"));
+        mirror(parkMenu->menu(), m_parkBtn, tr("Park selected fixtures"));
+        mirror(parkMenu->menu(), m_unparkBtn, tr("Unpark all"));
+
+        QToolButton *markMenu = dropDown(tr("Move in black"), QStringLiteral("markMenu"));
+        mirror(markMenu->menu(), m_markBtn, tr("Mark selected (pre-position in black)"));
+        mirror(markMenu->menu(), m_unmarkBtn, tr("Unmark all"));
+        markMenu->menu()->addSeparator();
+        mirror(markMenu->menu(), m_autoMibBtn, tr("Auto move-in-black"));
+        fieldAction(markMenu->menu(), tr("Lead time"), m_mibGapSpin);
+
+        QToolButton *beatMenu = dropDown(tr("Beat"), QStringLiteral("beatMenu"));
+        mirror(beatMenu->menu(), m_bpmBtn, tr("Internal beat on"));
+        fieldAction(beatMenu->menu(), tr("BPM"), m_bpmSpin);
+        beatMenu->menu()->addSeparator();
+        mastersBtn->hide();
+        QAction *mastersAct = beatMenu->menu()->addAction(tr("Speed masters…"));
+        mastersAct->setToolTip(mastersBtn->toolTip());
+        connect(mastersAct, &QAction::triggered, mastersBtn, &QPushButton::click);
+        // The button says the tempo, so it needn't be opened to read it.
+        auto beatText = [beatMenu, this]() {
+            beatMenu->setText(m_bpmBtn->isChecked() ? tr("Beat %1").arg(m_bpmSpin->value())
+                                                    : tr("Beat off"));
+        };
+        connect(m_bpmBtn, &QPushButton::toggled, beatMenu, [beatText](bool) { beatText(); });
+        connect(m_bpmSpin, QOverload<int>::of(&QSpinBox::valueChanged), beatMenu,
+                [beatText](int) { beatText(); });
+        beatText();
+
+        QToolButton *moreMenu = dropDown(tr("More"), QStringLiteral("programmingMoreMenu"));
+        mirror(moreMenu->menu(), m_snapshotBtn, tr("Snapshot live output into the scene"));
+        fieldAction(moreMenu->menu(), tr("Jog speed"), m_speedSpin);
+
+        // Highlight, Flash | Park, Move in black ... Beat, Tap | More, Save Positions
+        while (toolbar->count() > 0)
+            delete toolbar->takeAt(0);                 // the items, not the widgets
+        toolbar->addWidget(m_highlightBtn);
+        toolbar->addWidget(m_flashBtn);
+        toolbar->addWidget(parkMenu);
+        toolbar->addWidget(markMenu);
+        toolbar->addStretch(1);
+        toolbar->addWidget(beatMenu);
+        toolbar->addWidget(m_tapBtn);
+        toolbar->addWidget(moreMenu);
         toolbar->addWidget(m_saveBtn);
 
         // The row above packs ~15 controls (Highlight/Flash/Park/Unpark/Mark/

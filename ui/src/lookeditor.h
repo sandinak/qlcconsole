@@ -229,7 +229,40 @@ private:
 
     // Effect page
     int m_pageEffect;
-    class EffectBrowser *m_effectBrowser = nullptr;   ///< the visible picker over m_effectScriptCombo
+    class EffectBrowser *m_effectBrowser = nullptr;   ///< the picker over m_effectScriptCombo
+    /** The picker's own window: the browser lives there, out of the way of
+     *  the settings once an effect is picked ("taking up too much space when
+     *  working WITH an effect"). Every pick applies at once; Cancel puts back
+     *  what the look had when it opened. */
+    QWidget     *m_effectPicker = nullptr;
+    QLabel      *m_effectPickedLabel = nullptr;   ///< what the look runs, over its settings
+    QPushButton *m_effectChangeButton = nullptr;  ///< opens the picker
+    class QToolButton *m_effectInfoButton = nullptr; ///< "?": what it is, on hover; every setting on a click
+    class QTextBrowser *m_effectPickerInfo = nullptr; ///< the picker's account of the one picked
+    class QDialog *m_effectDetails = nullptr;     ///< the "?" window
+    QString      m_effectSummaryHtml;             ///< description, works with, notes
+    QString      m_effectDetailsHtml;             ///< ...and the generator and every setting
+    struct EffectSnapshot
+    {
+        quint32 paletteId = 0xFFFFFFFF;
+        QString name, path, script, preset, wled;
+        QMap<QString, double> params;
+        QMap<QString, QString> strings;
+        QMap<QString, QPair<quint32, quint32>> bindings;
+    } m_pickerSnapshot;
+public:
+    /** Open the effect picker over the look being edited. */
+    void openEffectPicker();
+    /** Close it: keep what was picked, or put back what was there. */
+    void closeEffectPicker(bool keep);
+    bool effectPickerOpen() const;
+    /** The "?" window: what the effect is and what each setting does. */
+    void showEffectDetails();
+private:
+    void updateEffectHeader();
+protected:
+    bool eventFilter(QObject *obj, QEvent *ev) override;
+private:
     QComboBox   *m_effectScriptCombo;
     QLabel      *m_effectDescLabel;   //!< one-line description below combo
     QLabel      *m_effectNotesLabel;  //!< longer paragraph in edit panel

@@ -85,8 +85,9 @@ stands on stage.
 
 Effects that follow the beat (a **Beat sync** setting, or a beat-made
 effect) all read **one beat clock**, so they're on the same beat however far
-apart they were started. Turn the clock on with the Programming toolbar's
-**BPM** button and set the tempo there, or **Tap** it: the tempo comes from
+apart they were started. Turn the clock on in the Programming toolbar's
+**Beat** menu (**Internal beat on**, and the **BPM**; the button then reads
+"Beat 120"), or **Tap** it: the tempo comes from
 your last four taps (pause two seconds to start over), and the beat lands
 on your last tap — every beat effect jumps onto it. A single tap just moves
 the beat. An external beat (MIDI clock, audio) pulls the clock onto its
@@ -130,8 +131,8 @@ the same point, which is a look in itself.
 ### Speed masters
 
 Four tempo masters for effects to run on, so one tap or one fader moves
-everything on a master together. Open them with the Programming toolbar's
-**Masters** button. Each row has:
+everything on a master together. Open them from the Programming toolbar's
+**Beat** menu → **Speed masters…**. Each row has:
 
 - **Follows** — **Its own tempo** (a BPM, **Tap**, a **Rate** fader from 0
   to 200 %), or the **Main clock** or another master at a **Ratio** (×¼ to

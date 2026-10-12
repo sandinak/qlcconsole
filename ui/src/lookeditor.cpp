@@ -34,6 +34,8 @@
 
 #include <QTreeWidget>
 #include <QDialogButtonBox>
+#include <QShortcut>
+#include <QTextBrowser>
 #include <QDialog>
 #include "lookeditor.h"
 #include "fadetimespin.h"
@@ -627,42 +629,99 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     browseBtn->hide();
     effectLabel->hide();
     efScriptRow->insertStretch(0, 1);
-    /* Side by side: the list on the left, the full height, and what the one
-       picked does and its settings on the right ("on a regular sized screen
-       we're running out of space .. move the effect list to the left side and
-       options on the right like the color picker"). Stacked, the parameters
-       pushed the list down to a few rows. */
-    QSplitter *effectSplit = new QSplitter(Qt::Horizontal, effectPage);
-    effectSplit->setObjectName(QStringLiteral("effectSplit"));
-    effectSplit->setChildrenCollapsible(false);
-    m_effectBrowser = new EffectBrowser(m_doc, m_effectScriptCombo, effectSplit);
-    m_effectBrowser->setMinimumWidth(260);
-    QScrollArea *detailScroll = new QScrollArea(effectSplit);
+    /* What the look runs, in one line over its settings, and a way to change
+       it. The browser itself lives in a window of its own: side by side it
+       took half the room while working WITH an effect ("can we windowshade
+       that ... but we still need to be able to access it"). */
+    QHBoxLayout *pickedRow = new QHBoxLayout();
+    m_effectPickedLabel = new QLabel(effectPage);
+    m_effectPickedLabel->setObjectName(QStringLiteral("effectPicked"));
+    m_effectPickedLabel->setStyleSheet(QStringLiteral("font-weight: bold;"));
+    pickedRow->addWidget(m_effectPickedLabel);
+    // What it is and how to program it: on hover, and a window on a click
+    // ("we can have a [?] button to mouse over or pop a window").
+    m_effectInfoButton = new QToolButton(effectPage);
+    m_effectInfoButton->setObjectName(QStringLiteral("effectInfo"));
+    m_effectInfoButton->setText(QStringLiteral("?"));
+    m_effectInfoButton->setAutoRaise(true);
+    connect(m_effectInfoButton, &QToolButton::clicked, this, &LookEditor::showEffectDetails);
+    pickedRow->addWidget(m_effectInfoButton);
+    pickedRow->addStretch(1);
+    m_effectChangeButton = new QPushButton(tr("Change effect…"), effectPage);
+    m_effectChangeButton->setObjectName(QStringLiteral("effectChange"));
+    m_effectChangeButton->setToolTip(tr("Open the effect picker: every one you pick plays at "
+                                        "once with its own settings; Cancel puts this one back."));
+    connect(m_effectChangeButton, &QPushButton::clicked, this, &LookEditor::openEffectPicker);
+    pickedRow->addWidget(m_effectChangeButton);
+    efv->addLayout(pickedRow);
+
+    QScrollArea *detailScroll = new QScrollArea(effectPage);
     detailScroll->setObjectName(QStringLiteral("effectDetails"));
     detailScroll->setWidgetResizable(true);
     detailScroll->setFrameShape(QFrame::NoFrame);
     detailScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);   // it fits the width
-    detailScroll->setMinimumWidth(240);
     QWidget *details = new QWidget(detailScroll);
     QVBoxLayout *detailCol = new QVBoxLayout(details);
     detailCol->setContentsMargins(6, 0, 6, 0);
     detailCol->setSpacing(4);
     detailScroll->setWidget(details);
-    effectSplit->addWidget(m_effectBrowser);
-    effectSplit->addWidget(detailScroll);
-    effectSplit->setStretchFactor(0, 3);
-    effectSplit->setStretchFactor(1, 2);
+    efv->addWidget(detailScroll, 1);
+
+    /* The picker: the browser (search, a tab per category, each effect
+       running on a strip of lights), Cancel and Done. */
+    /* A non-modal dialog: Esc is Cancel and Enter is Done from anywhere in
+       it, without depending on the window being the active one. */
+    QDialog *pickerDialog = new QDialog(this, Qt::Tool);
+    pickerDialog->setModal(false);
+    m_effectPicker = pickerDialog;
+    m_effectPicker->setObjectName(QStringLiteral("effectPicker"));
+    m_effectPicker->setWindowTitle(tr("Pick an effect"));
+    m_effectPicker->setAttribute(Qt::WA_DeleteOnClose, false);
     {
-        QSettings settings;
-        const QByteArray st = settings.value(QStringLiteral("lookeditor/effectSplit")).toByteArray();
-        if (!st.isEmpty())
-            effectSplit->restoreState(st);
+        QVBoxLayout *pv = new QVBoxLayout(m_effectPicker);
+        /* The list on the left, what the one picked is on the right -- its
+           description, what it works with, notes, every setting ("this
+           window can be bigger .. and the description on the right side"). */
+        QSplitter *ps = new QSplitter(Qt::Horizontal, m_effectPicker);
+        ps->setObjectName(QStringLiteral("effectPickerSplit"));
+        ps->setChildrenCollapsible(false);
+        m_effectBrowser = new EffectBrowser(m_doc, m_effectScriptCombo, ps);
+        m_effectBrowser->setPickWhileBrowsing(true);
+        m_effectBrowser->setMinimumWidth(380);
+        m_effectPickerInfo = new QTextBrowser(ps);
+        m_effectPickerInfo->setObjectName(QStringLiteral("effectPickerInfo"));
+        m_effectPickerInfo->setMinimumWidth(240);
+        m_effectPickerInfo->setFrameShape(QFrame::NoFrame);
+        ps->addWidget(m_effectBrowser);
+        ps->addWidget(m_effectPickerInfo);
+        ps->setStretchFactor(0, 3);
+        ps->setStretchFactor(1, 2);
+        pv->addWidget(ps, 1);
+        QLabel *hint = new QLabel(tr("Each one you pick plays now, with its own settings. "
+                                     "Arrow keys step through them."), m_effectPicker);
+        hint->setWordWrap(true);
+        hint->setStyleSheet(QStringLiteral("color: palette(mid);"));
+        pv->addWidget(hint);
+        QDialogButtonBox *pb = new QDialogButtonBox(m_effectPicker);
+        QPushButton *cancel = pb->addButton(QDialogButtonBox::Cancel);
+        cancel->setObjectName(QStringLiteral("effectPickerCancel"));
+        cancel->setToolTip(tr("Put back the effect the look had"));
+        QPushButton *done = pb->addButton(QDialogButtonBox::Ok);
+        done->setText(tr("Done"));
+        done->setObjectName(QStringLiteral("effectPickerDone"));
+        connect(cancel, &QPushButton::clicked, this, [this]() { closeEffectPicker(false); });
+        connect(done, &QPushButton::clicked, this, [this]() { closeEffectPicker(true); });
+        pv->addWidget(pb);
+        // Esc (QDialog::reject) puts the look's effect back.
+        connect(pickerDialog, &QDialog::rejected, this, [this]() { closeEffectPicker(false); });
+        m_effectPicker->resize(860, 600);
+        m_effectPicker->setMinimumSize(660, 420);
+        const QByteArray geo = QSettings().value(QStringLiteral("lookeditor/effectPickerWide")).toByteArray();
+        if (!geo.isEmpty())
+            m_effectPicker->restoreGeometry(geo);
+        // Closing the window keeps what is picked, like Done.
+        m_effectPicker->installEventFilter(this);
     }
-    connect(effectSplit, &QSplitter::splitterMoved, this, [effectSplit](int, int) {
-        QSettings settings;
-        settings.setValue(QStringLiteral("lookeditor/effectSplit"), effectSplit->saveState());
-    });
-    efv->addWidget(effectSplit, 1);
     // From here, the details column.
     QVBoxLayout *efvPage = efv;
     efv = detailCol;
@@ -674,20 +733,19 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     m_effectDescLabel->setWordWrap(true);
     m_effectDescLabel->setStyleSheet("color: palette(mid); font-style: italic;");
     m_effectDescLabel->hide();
-    efv->addWidget(m_effectDescLabel);
+    // Not in the settings column: what an effect IS shows in the picker and
+    // behind the header's "?" (effectInfoHtml()), not over its settings.
 
     // Notes label (longer paragraph, shown below description)
     m_effectNotesLabel = new QLabel(effectPage);
     m_effectNotesLabel->setWordWrap(true);
     m_effectNotesLabel->setTextFormat(Qt::PlainText);
     m_effectNotesLabel->hide();
-    efv->addWidget(m_effectNotesLabel);
 
     // Fixture-types label (e.g. "Works with: Moving Head, RGB/LED")
     m_effectTypesLabel = new QLabel(effectPage);
     m_effectTypesLabel->setWordWrap(false);
     m_effectTypesLabel->hide();
-    efv->addWidget(m_effectTypesLabel);
 
     // Dynamic area (params + palette/target bindings) — show in full, no scrolling.
     m_effectDynWidget = new QWidget(effectPage);
@@ -768,8 +826,143 @@ QString LookEditor::trialNote() const
     return m_trialNote->isHidden() ? QString() : m_trialNote->text();
 }
 
+/*********************************************************************
+ * The effect picker
+ *********************************************************************/
+
+bool LookEditor::effectPickerOpen() const
+{
+    return m_effectPicker != nullptr && m_effectPicker->isVisible();
+}
+
+void LookEditor::openEffectPicker()
+{
+    QLCPalette *p = m_doc->palette(m_paletteId);
+    if (m_effectPicker == nullptr || p == nullptr || p->type() != QLCPalette::Effect)
+        return;
+    // What to put back on Cancel: everything a pick changes.
+    if (!effectPickerOpen())
+    {
+        m_pickerSnapshot.paletteId = m_paletteId;
+        m_pickerSnapshot.name = p->name();
+        m_pickerSnapshot.path = p->path();
+        m_pickerSnapshot.script = p->scriptPath();
+        m_pickerSnapshot.preset = p->effectPreset();
+        m_pickerSnapshot.wled = p->wledEffect();
+        m_pickerSnapshot.params = p->effectParamValues();
+        m_pickerSnapshot.strings = p->effectStringParams();
+        m_pickerSnapshot.bindings = p->effectInputBindings();
+    }
+    m_effectPicker->setWindowTitle(tr("Pick an effect — %1").arg(p->name()));
+    if (!m_effectPicker->isVisible()
+        && QSettings().value(QStringLiteral("lookeditor/effectPickerWide")).toByteArray().isEmpty())
+    {
+        // First time: beside the look editor, to its left where there's room.
+        const QRect me(mapToGlobal(QPoint(0, 0)), size());
+        QPoint at(me.left() - m_effectPicker->width() - 12, me.top() - 200);
+        if (at.x() < 0)
+            at.setX(me.left() + 20);
+        m_effectPicker->move(at.x(), qMax(0, at.y()));
+    }
+    m_effectBrowser->reload();
+    m_effectPicker->show();
+    m_effectPicker->raise();
+    m_effectPicker->activateWindow();
+    m_effectBrowser->search()->setFocus();
+}
+
+void LookEditor::closeEffectPicker(bool keep)
+{
+    if (m_effectPicker == nullptr)
+        return;
+    QSettings().setValue(QStringLiteral("lookeditor/effectPickerWide"), m_effectPicker->saveGeometry());
+    m_effectPicker->removeEventFilter(this);       // hiding is not the user closing it
+    m_effectPicker->hide();
+    m_effectPicker->installEventFilter(this);
+
+    QLCPalette *p = m_doc->palette(m_pickerSnapshot.paletteId);
+    if (!keep && p != nullptr && p->type() == QLCPalette::Effect
+        && (p->scriptPath() != m_pickerSnapshot.script || p->effectPreset() != m_pickerSnapshot.preset
+            || p->wledEffect() != m_pickerSnapshot.wled || p->effectParamValues() != m_pickerSnapshot.params))
+    {
+        p->setName(m_pickerSnapshot.name);
+        p->setPath(m_pickerSnapshot.path);
+        p->setScriptPath(m_pickerSnapshot.script);
+        p->setEffectPreset(m_pickerSnapshot.preset);
+        p->setWledEffect(m_pickerSnapshot.wled);
+        p->setEffectParamValues(m_pickerSnapshot.params);   // clears the strings too
+        for (auto it = m_pickerSnapshot.strings.constBegin(); it != m_pickerSnapshot.strings.constEnd(); ++it)
+            p->setEffectStringParam(it.key(), it.value());
+        p->setEffectInputBindings(m_pickerSnapshot.bindings);
+        m_doc->setModified();
+        emit paletteChanged(p->id());
+        emit paletteRenamed(p->id());
+        if (p->id() == m_paletteId)
+            setPalette(m_paletteId);                // the editor shows it again
+    }
+    m_pickerSnapshot = EffectSnapshot();
+}
+
+void LookEditor::showEffectDetails()
+{
+    if (m_effectDetailsHtml.isEmpty())
+        return;
+    if (m_effectDetails == nullptr)
+    {
+        m_effectDetails = new QDialog(this, Qt::Tool);
+        m_effectDetails->setObjectName(QStringLiteral("effectDetailsWindow"));
+        m_effectDetails->setModal(false);
+        m_effectDetails->resize(480, 520);
+        QVBoxLayout *v = new QVBoxLayout(m_effectDetails);
+        QTextBrowser *text = new QTextBrowser(m_effectDetails);
+        text->setObjectName(QStringLiteral("effectDetailsText"));
+        text->setOpenExternalLinks(true);
+        v->addWidget(text);
+        QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Close, m_effectDetails);
+        connect(bb, &QDialogButtonBox::rejected, m_effectDetails, &QDialog::hide);
+        v->addWidget(bb);
+    }
+    m_effectDetails->setWindowTitle(tr("About %1").arg(m_effectScriptCombo->currentText().trimmed()));
+    m_effectDetails->findChild<QTextBrowser *>(QStringLiteral("effectDetailsText"))->setHtml(m_effectDetailsHtml);
+    m_effectDetails->show();
+    m_effectDetails->raise();
+}
+
+bool LookEditor::eventFilter(QObject *obj, QEvent *ev)
+{
+    // The picker's own close button: keep what is picked, as Done does.
+    if (obj == m_effectPicker && ev->type() == QEvent::Close)
+    {
+        closeEffectPicker(true);
+        return false;
+    }
+    return QWidget::eventFilter(obj, ev);
+}
+
+void LookEditor::updateEffectHeader()
+{
+    if (m_effectPickedLabel == nullptr)
+        return;
+    QLCPalette *p = m_doc->palette(m_paletteId);
+    const bool none = p == nullptr || p->type() != QLCPalette::Effect
+                      || (p->scriptPath().isEmpty() && p->wledEffect().isEmpty());
+    m_effectPickedLabel->setText(none ? tr("No effect yet")
+                                      : m_effectScriptCombo->currentText().trimmed());
+    m_effectChangeButton->setText(none ? tr("Pick an effect…") : tr("Change effect…"));
+    if (none)
+    {
+        m_effectInfoButton->setVisible(false);
+        m_effectDetailsHtml.clear();
+        if (m_effectPickerInfo != nullptr)
+            m_effectPickerInfo->clear();
+    }
+}
+
 void LookEditor::setPalette(quint32 paletteId)
 {
+    // Another look: the picker was for the one before -- it keeps its pick.
+    if (effectPickerOpen() && paletteId != m_pickerSnapshot.paletteId)
+        closeEffectPicker(true);
     m_paletteId = paletteId;
     QLCPalette *p = m_doc->palette(paletteId);
     if (p == NULL)
@@ -1019,6 +1212,19 @@ void LookEditor::setPalette(quint32 paletteId)
 
     m_loading = false;
     emit lookFocusChanged(paletteId);
+
+    /* A new effect look, nothing picked yet: picking is the first thing to
+       do, so the picker opens itself (queued: after the editor is shown). */
+    if (p != nullptr && p->type() == QLCPalette::Effect && p->scriptPath().isEmpty()
+        && p->wledEffect().isEmpty() && isVisible())
+    {
+        QPointer<LookEditor> me(this);
+        const quint32 id = paletteId;
+        QTimer::singleShot(0, this, [me, id]() {
+            if (me && me->paletteId() == id && !me->effectPickerOpen())
+                me->openEffectPicker();
+        });
+    }
 }
 
 void LookEditor::setContextScene(Scene *scene)
@@ -1654,6 +1860,7 @@ QString LookEditor::capabilityNameAt(const QLCChannel *ch, int v) const
 
 void LookEditor::rebuildEffectDynWidget()
 {
+    updateEffectHeader();
     // Skip a redundant rebuild for the SAME palette + script. Selecting a look
     // can emit lookSelected twice (selectionChanged + doubleClicked), which used
     // to build the param panel twice — the first set of sliders was torn down but
@@ -1769,63 +1976,69 @@ void LookEditor::rebuildEffectDynWidget()
         return;
     }
 
-    // Populate info labels
-    const QString desc  = tmpScript.description();
-    const QString notes = tmpScript.notes();
-    if (!desc.isEmpty())
+    /* What the effect IS -- its description, what it works with, its notes,
+       which generator does the work, and what each setting means. Shown in
+       the picker (where you choose) and behind the header's "?" (hover, or a
+       window on a click), not over the settings while working WITH it. */
     {
-        m_effectDescLabel->setText(desc);
-        m_effectDescLabel->show();
-    }
-    else
-    {
-        m_effectDescLabel->hide();
-    }
-    if (!notes.isEmpty())
-    {
-        m_effectNotesLabel->setText(notes);
-        m_effectNotesLabel->show();
-    }
-    else
-    {
-        m_effectNotesLabel->hide();
-    }
-
-    // Fixture types label
-    const QStringList ftypes = tmpScript.fixtureTypes();
-    if (!ftypes.isEmpty())
-    {
+        const QString desc  = tmpScript.description();
+        const QString notes = tmpScript.notes();
         QMap<QString, QString> ftLabels;
         ftLabels["moving"]  = tr("Moving Head");
         ftLabels["rgb"]     = tr("RGB/LED Wash");
         ftLabels["dimmer"]  = tr("Dimmer");
         ftLabels["shutter"] = tr("Strobe/Shutter");
         QStringList human;
-        for (const QString &t : ftypes)
+        for (const QString &t : tmpScript.fixtureTypes())
             human << ftLabels.value(t, t);
-        m_effectTypesLabel->setText(tr("<b>Works with:</b> %1").arg(human.join(", ")));
-        m_effectTypesLabel->setTextFormat(Qt::RichText);
-        m_effectTypesLabel->show();
-    }
-    else
-    {
-        m_effectTypesLabel->hide();
-    }
-
-    // Engine/preset banner — always show which script is doing the work.
-    {
         const QString engine = tmpScript.name().isEmpty()
             ? QFileInfo(scriptPath).completeBaseName() : tmpScript.name();
         const QString preset = p->effectPreset();
-        QLabel *eng = new QLabel(m_effectDynWidget);
-        eng->setTextFormat(Qt::RichText);
-        if (!preset.isEmpty())
-            eng->setText(tr("Effect <b>%1</b> &nbsp;·&nbsp; generator: <b>%2</b>")
-                         .arg(preset.toHtmlEscaped(), engine.toHtmlEscaped()));
-        else
-            eng->setText(tr("Generator: <b>%1</b>").arg(engine.toHtmlEscaped()));
-        eng->setStyleSheet("color: palette(mid);");
-        dv->addWidget(eng);
+
+        QString summary;
+        if (!desc.isEmpty())
+            summary += QStringLiteral("<p><i>%1</i></p>").arg(desc.toHtmlEscaped());
+        if (!human.isEmpty())
+            summary += tr("<p><b>Works with:</b> %1</p>").arg(human.join(", ").toHtmlEscaped());
+        const QString generator = preset.isEmpty()
+            ? tr("<p>Generator: <b>%1</b></p>").arg(engine.toHtmlEscaped())
+            : tr("<p>Effect <b>%1</b> &nbsp;·&nbsp; generator: <b>%2</b></p>")
+                  .arg(preset.toHtmlEscaped(), engine.toHtmlEscaped());
+        const QString notesHtml = notes.isEmpty() ? QString()
+            : QStringLiteral("<p>%1</p>").arg(notes.toHtmlEscaped().replace('\n', QLatin1String("<br>")));
+
+        QString settings;
+        for (const EffectScript::ParamDef &pd : tmpScript.paramDefs())
+        {
+            QString range;
+            if (!pd.enumValues.isEmpty())
+                range = pd.enumValues.join(QStringLiteral(" / "));
+            else if (pd.type == QLatin1String("text"))
+                range = tr("words (\"%1\")").arg(pd.defaultText);
+            else if (pd.type == QLatin1String("path"))
+                range = tr("a drawn path");
+            else
+                range = tr("%1 to %2, default %3").arg(pd.min).arg(pd.max).arg(pd.defaultValue);
+            settings += QStringLiteral("<tr><td><b>%1</b></td><td>%2</td><td>%3</td></tr>")
+                            .arg(pd.name.toHtmlEscaped(), pd.description.toHtmlEscaped(),
+                                 range.toHtmlEscaped());
+        }
+        if (!settings.isEmpty())
+            settings = tr("<p><b>Settings</b></p>") + QStringLiteral(
+                "<table cellspacing=\"0\" cellpadding=\"3\">%1</table>").arg(settings);
+
+        const QString name = m_effectScriptCombo->currentText().trimmed();
+        m_effectSummaryHtml = summary + notesHtml;
+        m_effectDetailsHtml = QStringLiteral("<h3>%1</h3>").arg(name.toHtmlEscaped())
+                              + summary + generator + notesHtml + settings;
+        m_effectInfoButton->setToolTip(QStringLiteral("<b>%1</b>").arg(name.toHtmlEscaped())
+                                       + summary + generator
+                                       + tr("<p><i>Click for every setting.</i></p>"));
+        m_effectInfoButton->setVisible(true);
+        if (m_effectPickerInfo != nullptr)
+            m_effectPickerInfo->setHtml(m_effectDetailsHtml);
+        if (m_effectDetails != nullptr && m_effectDetails->isVisible())
+            showEffectDetails();                  // follow a new pick
     }
 
     // --- Palette bindings ---

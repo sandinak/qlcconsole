@@ -50,7 +50,14 @@ QJsonObject WledState::decode(const QByteArray &universe, int address, int chann
         if (channels >= 4)
             bri = at(0);
         seg[QStringLiteral("fx")]  = 0;                    // solid
-        seg[QStringLiteral("col")] = QJsonArray{ colour(first) };
+        /* NOT QJsonArray{ colour(first) }: a brace list of ONE QJsonArray may
+           be taken as a copy of it (C++ prefers the copy constructor for a
+           single element of the same type, and compilers differ), sending
+           WLED col:[r,g,b] instead of col:[[r,g,b]] -- its first colour
+           missing. Seen on the macOS CI's compiler. */
+        QJsonArray cols;
+        cols.append(colour(first));
+        seg[QStringLiteral("col")] = cols;
     }
 
     QJsonObject state;

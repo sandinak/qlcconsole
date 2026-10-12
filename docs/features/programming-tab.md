@@ -30,8 +30,12 @@ Three panes:
 - **Left — Scenes / functions.** A filterable tree of every function
   (Scene/Chaser/Collection/EFX/RGB Matrix/Show) in folders. Single-click
   selects; double-click opens it in the canvas.
-- **Center — canvas.** A toolbar (Highlight/Flash/Park/Mark/Auto‑MIB, BPM,
-  Snapshot), then either an empty-state placeholder or the loaded editor. For
+- **Center — canvas.** A toolbar — **Highlight**, **Flash**, **Tap** and
+  **Save Positions** as buttons; **Park** (park selected, unpark all),
+  **Move in black** (mark, unmark, auto move-in-black and its lead time),
+  **Beat** (internal beat on, BPM, speed masters — the button reads the
+  tempo) and **More** (snapshot live output, jog speed) as drop-downs —
+  then either an empty-state placeholder or the loaded editor. For
   a Scene, that's the **Targets** panel (left half) and **Looks** panel
   (right half) shown above. Other function types (Chaser, Collection, EFX,
   RGB Matrix, Show) open their own stock editors here instead. Below the
@@ -152,10 +156,18 @@ palette onto the look to keep it. With no look open it says "Not in a look".
 ### The effect browser
 
 An Effect look picks its effect from a browser rather than a dropdown. The
-browser takes the editor's full height on the left and the picked effect's
-settings sit **beside it** on the right (as the colour picker's controls
-do), so a normal-sized screen shows the whole list and every setting at
-once:
+browser is a **window of its own**, so once an effect is picked its
+settings have the look editor's whole width. Over the settings, one line
+names the effect, with **Change effect…** to open the browser again:
+
+- **Every effect you pick plays at once**, with its own settings, so the
+  rig shows it while you browse; the **arrow keys** step through the list,
+  playing each as they go.
+- **Done** (or Enter, or closing the window) keeps what is picked;
+  **Cancel** (or Esc) puts back the effect the look had — its settings and
+  name too.
+- A new effect look, with nothing picked yet, opens the browser by itself.
+- The window remembers where you put it.
 
 - A **Search effects…** box searches every category at once, whichever tab
   is open.
