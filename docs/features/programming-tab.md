@@ -255,7 +255,7 @@ Picking an effect from the **WLED** tab has the WLED fixtures in the look
 run it **on the device itself**: they're sent the effect, its speed,
 intensity, palette and option, the look's three colours and the look's
 dimmer. Every other fixture in the look runs qlcconsole's own port of that
-effect where one exists — so far 34 of them: Blink, Bouncing Balls, Breathe, Candle, Chase, Colorloop, Dissolve, Dynamic, Fade, Fire 2012, Glitter, Heartbeat, Juggle, Lightning, Meteor, Palette, Rainbow, Random Colors, Ripple, Running, Saw, Scan, Scanner, Sinelon, Solid, Sparkle, Strobe Rainbow, Strobe, Sweep, Theater Rainbow, Theater, Twinkle, Two Dots, Wipe — written from what each does on a device (not from WLED's
+effect where one exists — so far 56 of them: Android, Blink, Bouncing Balls, Breathe, Candle, Chase, Colorful, Colorloop, Colorwaves, Dissolve, Drip, Dynamic, Fade, Fairy, Fire 2012, Fireworks 1D, Glitter, Halloween Eyes, Heartbeat, Juggle, Lake, Lightning, Meteor, Multi Comet, Noise Pal, Pacifica, Palette, Phased, Plasma, Popcorn, Pride 2015, Rain, Rainbow, Random Colors, Ripple, Running, Running Dual, Saw, Scan, Scanner, Sine, Sinelon, Solid, Sparkle, Strobe, Strobe Rainbow, Sweep, Theater, Theater Rainbow, Traffic Light, Tri Fade, Twinkle, Twinklecat, Twinklefox, Two Dots, Wipe — written from what each does on a device (not from WLED's
 code), so they look the same on the WLED fixtures and the rest.
 
 A WLED effect with no port runs on a WLED device and nowhere else, so the

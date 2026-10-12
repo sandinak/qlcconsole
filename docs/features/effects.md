@@ -187,7 +187,7 @@ times; only the effects in its looks follow the master.
 | Effect | What it does |
 |---|---|
 | **WLED device effect** | Any of the device's own effects, run on WLED fixtures themselves |
-| **WLED Blink, Bouncing Balls, Breathe, Candle, Chase, Colorloop, Dissolve, Dynamic, Fade, Fire 2012, Glitter, Heartbeat, Juggle, Lightning, Meteor, Palette, Rainbow, Random Colors, Ripple, Running, Saw, Scan, Scanner, Sinelon, Solid, Sparkle, Strobe Rainbow, Strobe, Sweep, Theater Rainbow, Theater, Twinkle, Two Dots, Wipe** | WLED's effects with a qlcconsole version that runs on the look's other fixtures too, at WLED's speed, intensity, palette and colours |
+| **WLED Android, Blink, Bouncing Balls, Breathe, Candle, Chase, Colorful, Colorloop, Colorwaves, Dissolve, Drip, Dynamic, Fade, Fairy, Fire 2012, Fireworks 1D, Glitter, Halloween Eyes, Heartbeat, Juggle, Lake, Lightning, Meteor, Multi Comet, Noise Pal, Pacifica, Palette, Phased, Plasma, Popcorn, Pride 2015, Rain, Rainbow, Random Colors, Ripple, Running, Running Dual, Saw, Scan, Scanner, Sine, Sinelon, Solid, Sparkle, Strobe, Strobe Rainbow, Sweep, Theater, Theater Rainbow, Traffic Light, Tri Fade, Twinkle, Twinklecat, Twinklefox, Two Dots, Wipe** | WLED's effects with a qlcconsole version that runs on the look's other fixtures too, at WLED's speed, intensity, palette and colours |
 
 See [WLED effects](programming-tab.md#wled-effects).
 

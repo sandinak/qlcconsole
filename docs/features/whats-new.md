@@ -82,7 +82,7 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Programming
 
-- **34 WLED effects run on any fixture** — Blink, Bouncing Balls, Breathe, Candle, Chase, Colorloop, Dissolve, Dynamic, Fade, Fire 2012, Glitter, Heartbeat, Juggle, Lightning, Meteor, Palette, Rainbow, Random Colors, Ripple, Running, Saw, Scan, Scanner, Sinelon, Solid, Sparkle, Strobe Rainbow, Strobe, Sweep, Theater Rainbow, Theater, Twinkle, Two Dots, Wipe — so a look with one runs it on its WLED
+- **56 WLED effects run on any fixture** — Android, Blink, Bouncing Balls, Breathe, Candle, Chase, Colorful, Colorloop, Colorwaves, Dissolve, Drip, Dynamic, Fade, Fairy, Fire 2012, Fireworks 1D, Glitter, Halloween Eyes, Heartbeat, Juggle, Lake, Lightning, Meteor, Multi Comet, Noise Pal, Pacifica, Palette, Phased, Plasma, Popcorn, Pride 2015, Rain, Rainbow, Random Colors, Ripple, Running, Running Dual, Saw, Scan, Scanner, Sine, Sinelon, Solid, Sparkle, Strobe, Strobe Rainbow, Sweep, Theater, Theater Rainbow, Traffic Light, Tri Fade, Twinkle, Twinklecat, Twinklefox, Two Dots, Wipe — so a look with one runs it on its WLED
   devices and its other fixtures alike.
 - **WLED effects only where they can run.** A WLED effect that only runs on
   a WLED device is offered only when the look's targets include one;
