@@ -1788,9 +1788,11 @@ void VirtualConsole::enableEdit()
     m_stackingActionGroup->setEnabled(true);
     m_functionWizardAction->setEnabled(true);
 
-    // Set action shortcuts for design mode
+    // Set action shortcuts for design mode. Button matrix and animation are
+    // not on M and R: those are the app's Lighting Studio and Rig Overview,
+    // and two shortcuts on one key fire neither.
     m_addButtonAction->setShortcut(QKeySequence("CTRL+SHIFT+B"));
-    m_addButtonMatrixAction->setShortcut(QKeySequence("CTRL+SHIFT+M"));
+    m_addButtonMatrixAction->setShortcut(QKeySequence("CTRL+SHIFT+G"));
     m_addSliderAction->setShortcut(QKeySequence("CTRL+SHIFT+S"));
     m_addSliderMatrixAction->setShortcut(QKeySequence("CTRL+SHIFT+I"));
     m_addKnobAction->setShortcut(QKeySequence("CTRL+SHIFT+K"));
@@ -1802,7 +1804,7 @@ void VirtualConsole::enableEdit()
     m_addLabelAction->setShortcut(QKeySequence("CTRL+SHIFT+L"));
     m_addAudioTriggersAction->setShortcut(QKeySequence("CTRL+SHIFT+A"));
     m_addClockAction->setShortcut(QKeySequence("CTRL+SHIFT+T"));
-    m_addAnimationAction->setShortcut(QKeySequence("CTRL+SHIFT+R"));
+    m_addAnimationAction->setShortcut(QKeySequence("CTRL+SHIFT+N"));
 
     m_editCutAction->setShortcut(QKeySequence("CTRL+X"));
     m_editCopyAction->setShortcut(QKeySequence("CTRL+C"));

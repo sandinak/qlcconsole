@@ -84,6 +84,14 @@ public:
      *  the default address into it. Call after construction, before exec(). */
     void preselectUniverse(quint32 universe);
 
+    /** Start from @p like's definition and mode -- adding more of a model
+     *  that is already in the show (right-click its Inventory folder). A
+     *  generic dimmer starts on Generic. Call after construction, before exec(). */
+    void preselectLike(const Fixture *like);
+
+    /** Start on @p manufacturer's models, none picked (its Inventory folder). */
+    void preselectManufacturer(const QString &manufacturer);
+
     /** Get the number of similar fixtures to add */
     int amount() const;
 
@@ -95,6 +103,22 @@ public:
 
     /** Get if the entered address is valid or not */
     bool invalidAddress();
+
+    /** Inventory mode: the fixture is being staged, not patched. Hides the
+     *  universe/address/gap controls and makes address validity moot -- the
+     *  fixture gets a real universe and address later, from the Patch view.
+     *  Call after construction, before exec(). */
+    void setInventoryMode(bool inventory);
+    bool inventoryMode() const { return m_inventoryMode; }
+
+    /** How the fixture is fed (DMX through a node, or natively over the
+     *  network) and, for a network fixture, its unicast IP. */
+    Fixture::Connection connection() const;
+    /** Art-Net or WLED -- for a Network fixture. */
+    Fixture::Transport transport() const;
+    /** The connection combo's data for @p c sent by @p t. */
+    static int connectionKey(Fixture::Connection c, Fixture::Transport t);
+    QString ipAddress() const;
 
 protected:
     const Doc* m_doc;
@@ -110,6 +134,11 @@ protected:
     quint32 m_gapValue;
     quint32 m_channelsValue;
     bool m_invalidAddressFlag;
+    bool m_inventoryMode;
+    class QComboBox *m_connectionCombo;
+    class QLineEdit *m_ipEdit;
+    class QLabel *m_ipRangeLabel = nullptr;     ///< "One each: .60 to .63"
+    void updateIpRange();
 
     /*********************************************************************
      * Fillers

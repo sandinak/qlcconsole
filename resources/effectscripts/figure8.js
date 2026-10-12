@@ -8,6 +8,8 @@
     var effect = new Object;
     effect.apiVersion   = 1;
     effect.name         = "Figure-8";
+    // Takes the host's spread (fixture.phase, inputs._spread) in place of its own.
+    effect.hostSpread = "phaseSpread";
     effect.description  = "Lissajous figure-8 or trefoil path on each fixture";
     effect.author       = "QLC+";
     effect.fixtureTypes = ["moving"];
@@ -68,8 +70,8 @@
         return fixtures.map(function(f, i) {
             if (!f.hasPanTilt) return {};
 
-            var fixturePhase = (n > 1)
-                ? (i / (n - 1)) * phaseSpread * 2 * Math.PI
+            var fixturePhase = inputs._spread ? f.phase * 2 * Math.PI
+                : (n > 1) ? (i / (n - 1)) * phaseSpread * 2 * Math.PI
                 : 0;
             var theta = baseTheta - fixturePhase;
 

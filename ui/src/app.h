@@ -171,6 +171,15 @@ public:
         re-patch. */
     void updateOutputReadiness();
 
+    /** Re-read @p file's physical properties into the loaded definitions
+     *  from it, whenever it changes on disk from now on -- a definition
+     *  opened from the footer's "declare no light output" to set its lumens
+     *  takes effect when it is saved, show still open. */
+    void watchDefinition(const QString &file);
+private:
+    class QFileSystemWatcher *m_definitionWatcher = nullptr;
+public:
+
     /** Busy dialog shown while a workspace is being read outside of boot
         (File > Open, a recent file, autosave recovery) -- the main window
         is already visible then, which is exactly when a large workspace
@@ -274,6 +283,9 @@ public slots:
     QFile::FileError slotFileSaveAs();
 
     void slotControlMonitor();
+    /** Open the rig overview (View menu). Delegates to the Monitor, which owns
+     *  the window, so the menu and the studio footer share one instance. */
+    void slotRigOverview();
     void slotAddressTool();
     void slotControlBlackout();
     /** Toggle global Blind (output inhibit) from the main toolbar. */
@@ -308,10 +320,45 @@ public slots:
     void slotCaptureUndo();
     void slotCapturePendingChanged();
     void slotCaptureUndoStackChanged();
+    /** Bring a view to the front by its tab label, wherever it lives: switch
+     *  to its tab if it is docked, or raise its own window if it has been
+     *  detached. */
+    void showContext(const QString &tabLabel);
+    /** The help topic for @p w ("lighting-studio.md#mounting-a-fixture"):
+     *  the nearest "helpTopic" property up its parents, else the tab on
+     *  screen's, else Getting Started. */
+    QString helpTopicFor(QWidget *w) const;
+    /** Take a view off the tab bar, there to open from the Window menu in a
+     *  window of its own (showContext()); closing that window puts it away
+     *  again. Functions lives this way. */
+    void parkContext(const QString &tabLabel);
+
+    /** The views broken out into their own windows, by tab label. */
+    QStringList detachedContexts() const;
+    /** Put the view @p tabLabel back in the main window, and show it. */
+    void reattachContext(const QString &tabLabel);
+    /** Put every broken-out view back in the main window. */
+    void reattachAllContexts();
+    /** The Window menu, as things are: which views are in their own windows. */
+    void updateWindowMenu();
+
     void slotDetachContext(int index);
+
+    /** Shift-click on a tab breaks the view out into its own window (Window
+     *  menu toggle, remembered). A plain double-click no longer does: it
+     *  tore views off the tab bar by accident. */
+    bool shiftClickBreaksOut() const;
+    void setShiftClickBreaksOut(bool on);
+private:
+    /** Show @p context in a window of its own, titled for @p tabLabel. */
+    void openContextWindow(QWidget *context, const QString &tabLabel);
+    QList<QWidget *> m_parkedContexts;      ///< views with no tab (parkContext())
+public slots:
     void slotReattachContext();
 
     void slotHelpIndex();
+    /** F1: the help on what is in front (helpTopicFor()). */
+    void slotHelpContext();
     void slotHelpAbout();
 
     void slotRecentFileClicked(QAction *recent);
@@ -328,6 +375,12 @@ private:
     QAction* m_modeToggleAction;
     QAction* m_controlMonitorAction;
     QAction* m_addressToolAction;
+    QAction* m_rigOverviewAction;
+    QList<QAction *> m_windowJumps;         ///< Window menu: a view each
+    QMenu *m_windowDockMenu = nullptr;      ///< Window > Put Back in Main Window
+    QAction *m_windowDockAll = nullptr;
+    QAction *m_windowBreakOut = nullptr;    ///< Window > Move <view> to Its Own Window
+    QAction *m_windowShiftClick = nullptr;  ///< Window > Shift-Click a Tab ... (toggle)
     QAction* m_controlBlackoutAction;
     QAction* m_controlBlindAction;
     QAction* m_showLockAction;
@@ -353,6 +406,7 @@ private:
     QAction* m_appSettingsAction;
 
     QAction* m_helpIndexAction;
+    QAction* m_helpContextAction = nullptr;
     QAction* m_helpAboutAction;
     QAction* m_quitAction;
     QMenu* m_fileOpenMenu;
@@ -416,6 +470,28 @@ public:
      * @return QFile::NoError if successful.
      */
     QFile::FileError saveXML(const QString& fileName, bool autosave = false);
+
+    /*********************************************************************
+     * Definitions a show needs, kept on this computer
+     *********************************************************************/
+public:
+    /** Before @p fileName loads: every fixture definition it names, from
+     *  the library, else the show cache, else fetched from cloud storage
+     *  (with a window that says what it waits on, and lets you skip). */
+    void prepareShowDefinitions(const QString &fileName);
+    /** Copy every definition the show uses into the show cache, so the next
+     *  run of it needs nothing remote. */
+    void cacheShowDefinitions();
+    /** Fixtures standing in as dimmers for a definition that was not here:
+     *  fetch what can be fetched and give them their own back. */
+    void recoverUnavailableDefinitions(QWidget *parent);
+    /** A save with fixtures standing in for missing definitions: say so
+     *  first. False when the user cancels. */
+    bool confirmSaveWithoutDefinitions();
+    /** Read @p paths (online-only files), which makes the cloud send them,
+     *  in a thread, under a window saying what it waits on; Skip stops.
+     *  The ones now on this computer. */
+    QStringList fetchFromCloud(const QStringList &paths, QWidget *parent);
 
 public slots:
     void slotLoadDocFromMemory(QString xmlData);

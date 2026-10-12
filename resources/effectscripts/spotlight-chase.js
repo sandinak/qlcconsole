@@ -8,6 +8,8 @@
     var effect = new Object;
     effect.apiVersion   = 1;
     effect.name         = "Spotlight Chase";
+    // Takes the host's spread (fixture.phase, inputs._spread) in place of its own.
+    effect.hostSpread = "";
     effect.description  = "Hot spot chases across the rig with a dimmer trail";
     effect.author       = "QLC+";
     effect.fixtureTypes = ["moving", "dimmer", "rgb"];
@@ -97,7 +99,9 @@
         // the scene base, and to colour on dimmerless fixtures), so the script no
         // longer multiplies by palettes.look.dimmer itself — that double-dimmed.
         return fixtures.map(function(f, i) {
-            var dist = Math.abs(i - hotPos);
+            // On the host spread the hot spot runs along the spread's order.
+            var at = inputs._spread ? f.phase / Math.max(inputs._spreadAmount, 1e-6) * n : i;
+            var dist = Math.abs(at - hotPos);
             var bright = dimForDistance(dist, trail, trailShape);
 
             var intent = {};

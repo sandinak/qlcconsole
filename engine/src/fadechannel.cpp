@@ -37,6 +37,7 @@ FadeChannel::FadeChannel()
     , m_target(0)
     , m_current(0)
     , m_ready(false)
+    , m_inert(false)
     , m_fadeTime(0)
     , m_elapsed(0)
 {
@@ -54,8 +55,10 @@ FadeChannel::FadeChannel(const FadeChannel& ch)
     , m_target(ch.m_target)
     , m_current(ch.m_current)
     , m_ready(ch.m_ready)
+    , m_inert(ch.m_inert)
     , m_fadeTime(ch.m_fadeTime)
     , m_elapsed(ch.m_elapsed)
+    , m_delay(ch.m_delay)
 {
     //qDebug() << Q_FUNC_INFO;
 }
@@ -68,6 +71,7 @@ FadeChannel::FadeChannel(const Doc *doc, quint32 fxi, quint32 channel)
     , m_target(0)
     , m_current(0)
     , m_ready(false)
+    , m_inert(false)
     , m_fadeTime(0)
     , m_elapsed(0)
 {
@@ -94,8 +98,10 @@ FadeChannel &FadeChannel::operator=(const FadeChannel &fc)
         m_target = fc.m_target;
         m_current = fc.m_current;
         m_ready = fc.m_ready;
+        m_inert = fc.m_inert;
         m_fadeTime = fc.m_fadeTime;
         m_elapsed = fc.m_elapsed;
+        m_delay = fc.m_delay;
     }
 
     return *this;
@@ -142,6 +148,7 @@ void FadeChannel::autoDetect(const Doc *doc)
     }
 
     Fixture *fixture = doc->fixture(m_fixture);
+    m_inert = (fixture != NULL && !fixture->isPatched());
     if (fixture == NULL)
     {
         m_universe = Universe::invalid();
@@ -199,6 +206,8 @@ quint32 FadeChannel::fixture() const
 
 quint32 FadeChannel::universe() const
 {
+    if (m_inert)
+        return Universe::invalid();
     if (m_universe == Universe::invalid())
         return address() / UNIVERSE_SIZE;
     return m_universe;
@@ -244,6 +253,9 @@ quint32 FadeChannel::primaryChannel() const
 
 quint32 FadeChannel::address() const
 {
+    if (m_inert)
+        return QLCChannel::invalid();
+
     if (m_address == QLCChannel::invalid())
         return channel();
 
@@ -351,6 +363,7 @@ bool FadeChannel::canFade() const
 void FadeChannel::setFadeTime(uint ms)
 {
     m_fadeTime = ms;
+    m_delay = 0;
 }
 
 uint FadeChannel::fadeTime() const
@@ -378,6 +391,19 @@ uchar FadeChannel::nextStep(uint ms)
 
 uchar FadeChannel::calculateCurrent(uint fadeTime, uint elapsedTime)
 {
+    /* Not reached yet: hold where it started. Before the "time consumed"
+       test, or a channel that cannot fade (time 0) would snap at once rather
+       than when the transition gets to it. */
+    if (m_delay > 0 && m_ready == false)
+    {
+        if (elapsedTime < m_delay)
+        {
+            m_current = m_start;
+            return uchar(m_current);
+        }
+        elapsedTime -= m_delay;
+    }
+
     if (elapsedTime >= fadeTime || m_ready == true)
     {
         // Return the target value if all time has been consumed

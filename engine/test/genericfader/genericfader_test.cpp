@@ -18,6 +18,8 @@
 */
 
 #include <QtTest>
+#include <QThread>
+#include <atomic>
 
 #include "genericfader_test.h"
 #include "qlcfixturemode.h"
@@ -203,6 +205,109 @@ void GenericFader_Test::adjustIntensity()
         actual = uchar(ua[0]->preGMValues()[10]);
         QVERIFY(actual == expected);
     }
+}
+
+/* The effect runner add()s/replace()s channels -- it never calls
+   getChannelFader() -- so it hands the fader the doc; an unpatched fixture's
+   value then goes to the fixture for the rig view, and nothing to DMX. */
+void GenericFader_Test::anUnpatchedFixturesValuesAreShownNotWritten()
+{
+    Fixture *staged = new Fixture(m_doc);
+    staged->setChannels(4);
+    staged->setPatched(false);
+    QVERIFY(m_doc->addFixture(staged));
+
+    QList<Universe*> ua = m_doc->inputOutputMap()->universes();
+    QSharedPointer<GenericFader> fader = ua[0]->requestFader(Universe::Override);
+    fader->setDoc(m_doc);
+    FadeChannel fc(m_doc, staged->id(), 2);
+    fc.setTarget(200);
+    fc.setCurrent(200);
+    fc.setFadeTime(0);
+    fader->replace(fc);
+    fader->write(ua[0]);
+
+    QCOMPARE(uchar(staged->channelValues().at(2)), uchar(200));
+    for (int a = 0; a < 8; ++a)
+        QCOMPARE(uchar(ua[0]->preGMValues()[a]), uchar(0));      // nothing sent
+
+    // Gone with the fader: the fixture is dark again.
+    fader->removeAll();
+    QCOMPARE(uchar(staged->channelValues().at(2)), uchar(0));
+}
+
+void GenericFader_Test::replaceAllSwapsTheWholeSet()
+{
+    Fixture *staged = new Fixture(m_doc);
+    staged->setChannels(4);
+    staged->setPatched(false);
+    QVERIFY(m_doc->addFixture(staged));
+
+    QList<Universe*> ua = m_doc->inputOutputMap()->universes();
+    QSharedPointer<GenericFader> fader = ua[0]->requestFader(Universe::Override);
+    fader->setDoc(m_doc);
+
+    QList<FadeChannel> first;
+    for (quint32 ch = 1; ch <= 2; ++ch)
+    {
+        FadeChannel fc(m_doc, staged->id(), ch);
+        fc.setTarget(150);
+        fc.setCurrent(150);
+        fc.setFadeTime(0);
+        first << fc;
+    }
+    fader->replaceAll(first);
+    QCOMPARE(fader->channelsCount(), 2);
+    fader->write(ua[0]);
+    QCOMPARE(uchar(staged->channelValues().at(1)), uchar(150));
+    QCOMPARE(uchar(staged->channelValues().at(2)), uchar(150));
+
+    // The next set keeps channel 2 lit and drops channel 1: only the dropped
+    // one goes dark, and nothing of the old set lingers.
+    QList<FadeChannel> second;
+    second << first.at(1);
+    fader->replaceAll(second);
+    QCOMPARE(fader->channelsCount(), 1);
+    QCOMPARE(uchar(staged->channelValues().at(1)), uchar(0));
+    QCOMPARE(uchar(staged->channelValues().at(2)), uchar(150));
+
+    fader->replaceAll(QList<FadeChannel>());
+    QCOMPARE(fader->channelsCount(), 0);
+    QCOMPARE(uchar(staged->channelValues().at(2)), uchar(0));
+}
+
+/* Universes process their faders on their own threads. A DMX source that
+   emptied its fader and then refilled it left a window in which a universe
+   could send a blank frame -- a static effect flashed in the rig view and on
+   the lights. Rebuilt with replaceAll(), the fader is never seen empty. */
+void GenericFader_Test::aFaderRebuiltEveryTickIsNeverSeenEmpty()
+{
+    QSharedPointer<GenericFader> fader(new GenericFader());
+    QList<FadeChannel> set;
+    for (quint32 ch = 0; ch < 64; ++ch)
+    {
+        FadeChannel fc(m_doc, Fixture::invalidId(), ch);
+        fc.setTarget(100);
+        fc.setCurrent(100);
+        set << fc;
+    }
+    fader->replaceAll(set);
+
+    std::atomic<bool> done(false);
+    std::atomic<int> emptySeen(0);
+    QThread *universe = QThread::create([&]() {
+        while (!done.load())
+            if (fader->channelsCount() == 0)
+                ++emptySeen;
+    });
+    universe->start();
+    for (int tick = 0; tick < 20000; ++tick)
+        fader->replaceAll(set);
+    done = true;
+    universe->wait();
+    delete universe;
+
+    QCOMPARE(emptySeen.load(), 0);
 }
 
 QTEST_APPLESS_MAIN(GenericFader_Test)

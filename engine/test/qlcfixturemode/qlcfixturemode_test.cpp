@@ -718,4 +718,41 @@ void QLCFixtureMode_Test::cleanupTestCase()
     delete m_fixtureDef;
 }
 
+void QLCFixtureMode_Test::aModesBlankPhysicalFieldsAreTheDefinitions()
+{
+    QLCFixtureDef def;
+    QLCPhysical general;
+    general.setBulbType("LED");
+    general.setBulbLumens(7000);
+    general.setLensDegreesMin(10);
+    general.setLensDegreesMax(50);
+    general.setFocusPanMax(540);
+    general.setLeds(36);
+    general.setLedLayout(QLCPhysical::FaceLeds);
+    def.setPhysical(general);
+
+    QLCFixtureMode *mode = new QLCFixtureMode(&def);
+    mode->setName("18 Channel");
+    QLCPhysical own;                       // an empty block, as an import leaves
+    own.setWidth(340);                     // ...but for one thing it does say
+    mode->setPhysical(own);
+    def.addMode(mode);
+
+    const QLCPhysical seen = mode->physical();
+    QCOMPARE(seen.bulbLumens(), 7000);
+    QCOMPARE(seen.bulbType(), QString("LED"));
+    QCOMPARE(seen.lensDegreesMax(), 50.0);
+    QCOMPARE(seen.focusPanMax(), 540);
+    QCOMPARE(seen.leds(), 36);
+    QCOMPARE(seen.ledLayout(), QLCPhysical::FaceLeds);
+    QCOMPARE(seen.width(), 340);           // what the mode says wins
+    QVERIFY(seen.declaresOutput());
+
+    // What it really has -- for the Fixture Editor, and what is saved.
+    QCOMPARE(mode->ownPhysical().bulbLumens(), 0);
+    own.setBulbLumens(500);
+    mode->setPhysical(own);
+    QCOMPARE(mode->physical().bulbLumens(), 500);
+}
+
 QTEST_APPLESS_MAIN(QLCFixtureMode_Test)

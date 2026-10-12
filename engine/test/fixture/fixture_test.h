@@ -32,6 +32,11 @@ private slots:
     void initTestCase();
     void cleanupTestCase();
 
+    /** A definition not on this computer: the fixture stands in as a dimmer
+     *  but saves as what it is; and the show cache keeps definitions here. */
+    void aMissingDefinitionIsKeptNotLostOnSave();
+    void theShowCacheKeepsDefinitionsOnThisComputer();
+
     void id();
     void name();
     void address();

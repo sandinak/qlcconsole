@@ -16,6 +16,7 @@
 #include <QFont>
 #include <QMenu>
 
+#include <QtMath>
 #include "powersourceitem.h"
 
 #define PSI_W 64.0
@@ -67,14 +68,26 @@ void PowerSourceItem::paint(QPainter *painter,
     painter->setBrush(QBrush(fill));
     painter->drawRoundedRect(QRectF(0, 0, PSI_W, PSI_H), 4, 4);
 
-    // ⚡ glyph + name
+    // ⚡ glyph + name. Counter-rotate so the text stays upright when the plot
+    // view is turned in quarter steps -- see MonitorGraphicsView::setViewRotation().
     painter->setPen(QPen(QColor(40, 30, 0)));
     QFont f("Arial", 9, QFont::Bold);
     painter->setFont(f);
+    const double viewTurn = qRadiansToDegrees(qAtan2(painter->transform().m12(),
+                                                     painter->transform().m11()));
+    painter->save();
+    if (qAbs(viewTurn) > 0.5)
+    {
+        const QPointF c(PSI_W / 2.0, PSI_H / 2.0);
+        painter->translate(c);
+        painter->rotate(-viewTurn);
+        painter->translate(-c);
+    }
     painter->drawText(QRectF(0, 0, PSI_H, PSI_H), Qt::AlignCenter,
                       QString::fromUtf8("⚡"));
     painter->drawText(QRectF(PSI_H, 0, PSI_W - PSI_H, PSI_H),
                       Qt::AlignVCenter | Qt::AlignLeft, m_name);
+    painter->restore();
 
     // Power view: a strip of this source's circuit colours along the bottom edge,
     // so the source and the fixtures on each of its circuits read as one colour.

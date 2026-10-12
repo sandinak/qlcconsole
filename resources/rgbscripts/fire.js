@@ -648,8 +648,10 @@
           out = (alpha > 0) ? blend(flame, coals, alpha) : flame;
 
           // Horizontal and vertical feathering
+          // A strip a few pixels wide is all edge: feathering it to its edges
+          // left a single column (a bar up a tower) black from top to bottom.
           var hDist = Math.min(x - left, right - x);
-          var hFade = (hDist < feather) ? (hDist / feather) : 1.0;
+          var hFade = (effW < 4 || hDist >= feather) ? 1.0 : (hDist / feather);
           var fade = hFade * vFade;
           if (fade < 0) fade = 0; if (fade > 1) fade = 1;
           out = scaleBrightness(out, fade);

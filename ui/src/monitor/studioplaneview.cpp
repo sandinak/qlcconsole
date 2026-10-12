@@ -178,9 +178,11 @@ void StudioPlaneView::refit()
         const float w = pl->width(), d = pl->depth(), h = pl->height();
         for (int i = 0; i < 8; ++i)
         {
-            const QVector3D corner(ox + ((i & 1) ? w : 0),
-                                   oy + ((i & 2) ? d : 0),
-                                   (i & 4) ? h : 0);
+            // Turned with the platform: the frame turns with it, so in the
+            // frame it is square again.
+            const QPointF xy = pl->toWorld(QPointF(double(ox + ((i & 1) ? w : 0)),
+                                                   double(oy + ((i & 2) ? d : 0))));
+            const QVector3D corner(float(xy.x()), float(xy.y()), (i & 4) ? h : 0);
             include(project(props->worldToGroupLocal(m_groupId, corner)));
         }
     }
@@ -218,7 +220,9 @@ static double distToSegSq(const QPointF &p, const QPointF &a, const QPointF &b)
 quint32 StudioPlaneView::hitTest(const QPointF &px) const
 {
     MonitorProperties *props = m_doc->monitorProperties();
-    quint32 best = 0;
+    // Fixture::invalidId(), not 0 -- fixture 0 is the first fixture in a
+    // workspace, so a 0 sentinel makes it permanently unclickable.
+    quint32 best = Fixture::invalidId();
     double bestD = (kDotRadius + 5) * (kDotRadius + 5);
     // Hit the whole LED bar, not just its centre, so wide fixtures (and the
     // horizontal bars drawn in the elevation views) are easy to grab.
@@ -381,7 +385,11 @@ void StudioPlaneView::drawStructure(QPainter &p) const
         }
         QPolygonF poly;
         foreach (const QVector3D &c, face)
-            poly << worldToScreen(project(props->worldToGroupLocal(m_groupId, c)));
+        {
+            const QPointF xy = pl->toWorld(QPointF(double(c.x()), double(c.y())));
+            const QVector3D w(float(xy.x()), float(xy.y()), c.z());
+            poly << worldToScreen(project(props->worldToGroupLocal(m_groupId, w)));
+        }
         p.drawPolygon(poly);
     }
     else if (g.anchorKind == QStringLiteral("truss"))
@@ -449,7 +457,7 @@ void StudioPlaneView::assignToFace(const QList<quint32> &ids)
     foreach (quint32 fid, ids)
     {
         FixtureRigProps rp = props->fixtureRigProps(fid);
-        rp.studioMount = mount;
+        rp.setStudioMount(mount);
         QVector3D lp = rp.groupLocal;               // keep its in-plane position
         if (pinComp == 0)      lp.setX(float(pinVal));
         else if (pinComp == 1) lp.setY(float(pinVal));
@@ -553,7 +561,7 @@ void StudioPlaneView::distributeEvenly(const QList<quint32> &sel)
             b = bOff + H * 0.5;                                   // centred vertically
         }
         FixtureRigProps rp = props->fixtureRigProps(ids.at(i));
-        rp.studioMount = mount;                                   // lay it on this face
+        rp.setStudioMount(mount);                                 // lay it on this face
         QVector3D local = unproject(QPointF(a, b), rp.groupLocal);
         if (pinComp == 0)      local.setX(float(pinVal));         // pin to the face surface
         else if (pinComp == 1) local.setY(float(pinVal));
@@ -572,7 +580,7 @@ void StudioPlaneView::mousePressEvent(QMouseEvent *e)
     if (e->button() != Qt::LeftButton)
         return;
     m_dragFid = hitTest(e->pos());
-    if (m_dragFid != 0)
+    if (m_dragFid != Fixture::invalidId())
     {
         update();
     }
@@ -587,7 +595,7 @@ void StudioPlaneView::mousePressEvent(QMouseEvent *e)
 
 void StudioPlaneView::mouseMoveEvent(QMouseEvent *e)
 {
-    if (m_dragFid != 0)
+    if (m_dragFid != Fixture::invalidId())
     {
         MonitorProperties *props = m_doc->monitorProperties();
         FixtureRigProps rp = props->fixtureRigProps(m_dragFid);
@@ -620,9 +628,9 @@ void StudioPlaneView::mouseMoveEvent(QMouseEvent *e)
 
 void StudioPlaneView::mouseReleaseEvent(QMouseEvent *)
 {
-    if (m_dragFid != 0 || m_panning)
+    if (m_dragFid != Fixture::invalidId() || m_panning)
     {
-        m_dragFid = 0;
+        m_dragFid = Fixture::invalidId();
         m_panning = false;
         unsetCursor();
         update();

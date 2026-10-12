@@ -27,6 +27,8 @@
 #include "effectscriptrunner.h"
 #include "aimsolver.h"
 #include "qlcpalette.h"
+#include "grouphead.h"
+#include "effectscriptcache.h"
 #include "qlcchannel.h"
 #include "qlccapability.h"
 #include "qlcfixturehead.h"
@@ -70,6 +72,7 @@ QLCPalette *QLCPalette::createCopy()
     copy->setScriptPath(this->scriptPath());
     copy->setPersistent(this->persistent());
     copy->setEffectPreset(this->effectPreset());
+    copy->setWledEffect(this->wledEffect());
     copy->setEffectInputBindings(this->effectInputBindings());
     for (auto it = m_effectPaletteBindings.constBegin();
          it != m_effectPaletteBindings.constEnd(); ++it)
@@ -308,23 +311,21 @@ void QLCPalette::resetValues()
  *  an Aim look in that scene track a subject rather than a static point. */
 static bool sceneHasFollowSpot(Doc *doc, const Scene *scene)
 {
-    if (doc == NULL || scene == NULL)
-        return false;
-
-    foreach (quint32 pid, scene->palettes())
-    {
-        QLCPalette *p = doc->palette(pid);
-        if (p != NULL && p->type() == QLCPalette::Effect &&
-            p->scriptPath().contains(QLatin1String("followspot"), Qt::CaseInsensitive))
-            return true;
-    }
-    return false;
+    return AimSolver::sceneFollowsSubject(doc, scene);
 }
 
 QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtures,
-                                                 const Scene *owner, int colorSetOffset)
+                                                 const Scene *owner, int colorSetOffset,
+                                                 const QHash<quint32, QSet<int> > *onlyHeads)
 {
     QList<SceneValue> list;
+    // Whether head @p h of fixture @p fid is one this is for (see onlyHeads).
+    auto headWanted = [onlyHeads](quint32 fid, int h) {
+        if (onlyHeads == nullptr)
+            return true;
+        auto it = onlyHeads->constFind(fid);
+        return it == onlyHeads->constEnd() || it->contains(h) || it->contains(-1);
+    };
 
     int fxCount = fixtures.count();
     // normalized progress in [ 0.0, 1.0 ] range
@@ -468,6 +469,8 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
 
                 for (int i = 0; i < fixture->heads(); i++)
                 {
+                    if (!headWanted(id, i))
+                        continue;           // not one of the group's heads
                     quint32 headDimmerChannel = fixture->channelNumber(QLCChannel::Intensity, QLCChannel::MSB, i);
                     if (headDimmerChannel != QLCChannel::invalid())
                     {
@@ -512,6 +515,11 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
 
                 for (int i = 0; i < fixture->heads(); i++)
                 {
+                    /* Only the group's own heads: a group of a bar's RGB pixels
+                       must not light its separate white pixels too ("lighting
+                       the white leds as well as the RGB"). */
+                    if (!headWanted(id, i))
+                        continue;
                     // White/Amber/UV emitter values: explicit wauv, else auto
                     // White = min(R,G,B) so RGBW fixtures light their white LED.
                     QColor emitters = wauv;
@@ -720,10 +728,11 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                     }
                 }
 
-                QVector3D tgtPos = tgt->position();
-                if (subjectMode)
-                    tgtPos.setZ(mProps->platformHeightAt(tgtPos.x(), tgtPos.y())
-                                + mProps->aimSubjectHeight());
+                /* One rule, in MonitorProperties, shared with the rig view.
+                   This used to be written out here AND again in the renderer,
+                   and the two disagreed: a follow-spot aimed at chest height in
+                   Edit while the rig view pointed at the target's own Z. */
+                const QVector3D tgtPos = AimSolver::aimPointFor(doc, id, tgt, subjectMode);
 
                 // Shared aim geometry — identical to the follow-spot effect's, so
                 // a fixture points the same way in Edit and Run.
@@ -889,7 +898,12 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
             break;
             case Gobo:
             {
-                quint32 goboCh = fixture->channelNumber(QLCChannel::Gobo, QLCChannel::MSB);
+                // Per FIXTURE, not per head: a head's channel map never lists
+                // gobo channels, so the head lookup found nothing and a gobo
+                // look wrote no value at all.
+                const quint32 goboCh = fixture->fixtureMode() != NULL
+                    ? fixture->fixtureMode()->channelNumber(QLCChannel::Gobo, QLCChannel::MSB)
+                    : QLCChannel::invalid();
                 if (goboCh != QLCChannel::invalid())
                     list << SceneValue(id, goboCh, uchar(value().toUInt()));
             }
@@ -995,6 +1009,7 @@ QList<SceneValue> QLCPalette::valuesFromFixtureGroups(Doc *doc, QList<quint32> g
                                                       const Scene *owner, int colorSetOffset)
 {
     QList<quint32> fixturesList;
+    QHash<quint32, QSet<int> > heads;       // each fixture's heads that are in a group
 
     foreach (quint32 id, groups)
     {
@@ -1002,10 +1017,14 @@ QList<SceneValue> QLCPalette::valuesFromFixtureGroups(Doc *doc, QList<quint32> g
         if (group == NULL)
             continue;
 
-        fixturesList.append(group->fixtureList());
+        foreach (quint32 fid, group->fixtureList())
+            if (!fixturesList.contains(fid))
+                fixturesList.append(fid);
+        foreach (const GroupHead &gh, group->headList())
+            heads[gh.fxi].insert(gh.head);
     }
 
-    return valuesFromFixtures(doc, fixturesList, owner, colorSetOffset);
+    return valuesFromFixtures(doc, fixturesList, owner, colorSetOffset, &heads);
 }
 
 qreal QLCPalette::valueFactor(qreal progress)
@@ -1413,6 +1432,8 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
                 m_scriptPath = doc.readElementText();
             else if (doc.name() == QLatin1String("EffectPreset"))
                 m_effectPreset = doc.readElementText();
+            else if (doc.name() == QLatin1String("WledEffect"))
+                m_wledEffect = doc.readElementText();
             else if (doc.name() == QLatin1String("EffectInputBinding"))
             {
                 QString slot   = doc.attributes().value("slot").toString();
@@ -1569,7 +1590,7 @@ bool QLCPalette::saveXML(QXmlStreamWriter *doc)
             // Store the portable script name (no directory, no extension) so
             // workspaces stay valid when moved between machines.
             doc->writeStartElement("EffectScript");
-            doc->writeCharacters(QFileInfo(m_scriptPath).completeBaseName());
+            doc->writeCharacters(EffectScriptCache::portableName(m_scriptPath));
             doc->writeEndElement();
         }
         if (!m_effectPreset.isEmpty())
@@ -1577,6 +1598,13 @@ bool QLCPalette::saveXML(QXmlStreamWriter *doc)
             // Preset identity (display only); script+params above are authoritative.
             doc->writeStartElement("EffectPreset");
             doc->writeCharacters(m_effectPreset);
+            doc->writeEndElement();
+        }
+        if (!m_wledEffect.isEmpty())
+        {
+            // Run ON WLED fixtures by the device (see wledEffect()).
+            doc->writeStartElement("WledEffect");
+            doc->writeCharacters(m_wledEffect);
             doc->writeEndElement();
         }
         for (auto it = m_effectInputBindings.constBegin();

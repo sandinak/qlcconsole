@@ -304,12 +304,18 @@ public:
     void setPhysical(const QLCPhysical& physical);
 
     /**
-     * Get physical properties for a mode. The returned properties is a
+     * Get physical properties for a mode: its own, any field it leaves
+     * blank (0, empty) the definition's. The returned properties is a
      * copy of the original, so any modifications won't end up in the mode.
      *
      * @return Mode's physical properties
      */
     QLCPhysical physical() const;
+
+    /** The mode's physical exactly as the definition gives it -- what the
+     *  Fixture Editor edits and saves -- without physical()'s filling of
+     *  blank fields from the definition's own. */
+    QLCPhysical ownPhysical() const;
 
     /** Reset the mode physical info and use the global ones */
     void resetPhysical();

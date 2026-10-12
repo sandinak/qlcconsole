@@ -382,12 +382,52 @@ bool QLCFixtureMode::useGlobalPhysical() const
     return m_useGlobalPhysical;
 }
 
+QLCPhysical QLCFixtureMode::ownPhysical() const
+{
+    if (m_useGlobalPhysical || fixtureDef() == NULL)
+        return fixtureDef() != NULL ? fixtureDef()->physical() : m_physical;
+    return m_physical;
+}
+
 QLCPhysical QLCFixtureMode::physical() const
 {
-    if (m_useGlobalPhysical)
-        return fixtureDef()->physical();
+    if (m_useGlobalPhysical || fixtureDef() == NULL)
+        return ownPhysical();
 
-    return m_physical;
+    /* A mode's own physical often fills in only what differs -- or nothing,
+       an empty block an import left behind -- so a blank field (0, empty)
+       is the definition's: "36 LED moving head reporting lumens not set when
+       it is" was a mode saying Lumens="0" over a definition saying 7000. A
+       value the mode does give still wins. */
+    QLCPhysical p = m_physical;
+    const QLCPhysical g = fixtureDef()->physical();
+    if (p.bulbType().isEmpty())               p.setBulbType(g.bulbType());
+    if (p.bulbLumens() <= 0)                  p.setBulbLumens(g.bulbLumens());
+    if (p.bulbColourTemperature() <= 0)       p.setBulbColourTemperature(g.bulbColourTemperature());
+    if (p.weight() <= 0)                      p.setWeight(g.weight());
+    if (p.width() <= 0)                       p.setWidth(g.width());
+    if (p.height() <= 0)                      p.setHeight(g.height());
+    if (p.depth() <= 0)                       p.setDepth(g.depth());
+    if (p.lensDegreesMin() <= 0 && p.lensDegreesMax() <= 0)
+    {
+        p.setLensName(g.lensName());
+        p.setLensDegreesMin(g.lensDegreesMin());
+        p.setLensDegreesMax(g.lensDegreesMax());
+    }
+    if (p.focusPanMax() <= 0)                 p.setFocusPanMax(g.focusPanMax());
+    if (p.focusTiltMax() <= 0)                p.setFocusTiltMax(g.focusTiltMax());
+    if (p.powerConsumption() <= 0)            p.setPowerConsumption(g.powerConsumption());
+    // Its look in the rig view, left at every default: the definition's.
+    if (p.bodyShape() == QLCPhysical::BoxBody && p.emission() == QLCPhysical::BeamEmission
+        && p.leds() == 0 && !p.clearGlass())
+    {
+        p.setBodyShape(g.bodyShape());
+        p.setEmission(g.emission());
+        p.setLeds(g.leds());
+        p.setLedLayout(g.ledLayout());
+        p.setClearGlass(g.clearGlass());
+    }
+    return p;
 }
 
 /****************************************************************************

@@ -15,8 +15,12 @@ don't merge speculative or in-progress work.
 ## Build & run
 
 CMake, out-of-tree in `build/` (Unix Makefiles, Debug). `find_package(QT NAMES
-Qt5 Qt6 ...)` auto-detects whichever is installed — this machine only has
-Qt6 (homebrew `qt`), no `qt@5`, so builds are against Qt6.
+Qt5 Qt6 ...)` auto-detects whichever it finds FIRST, and **both are installed
+here** (`/opt/homebrew/opt/qt6` and `/opt/homebrew/opt/qt@5`) — `check-all.sh`
+builds against both. A bare `cmake -S . -B <dir>` can therefore land on Qt5 and
+produce a wall of errors that look like rotten code; pass
+`-DCMAKE_PREFIX_PATH=/opt/homebrew/opt/qt6/lib/cmake` when you mean Qt6. (The
+tell: Qt3D's `QAttribute` lives in `Qt3DRender` on Qt5 and `Qt3DCore` on Qt6.)
 
 Before a release — and after any non-trivial change — run `./check-all.sh`.
 It builds and runs the full gate against **Qt5, Qt6 and Qt6-Release** in

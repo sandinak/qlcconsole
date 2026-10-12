@@ -1,0 +1,189 @@
+/*
+  Q Light Controller Plus
+  zraster.h
+
+  Copyright (C) Branson Matheson
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0.txt
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+*/
+
+#ifndef ZRASTER_H
+#define ZRASTER_H
+
+#include <QVector>
+#include <QImage>
+#include <climits>
+#include <QColor>
+#include <QPointF>
+#include <QSize>
+
+/** @addtogroup ui_monitor Monitor
+ * @{
+ */
+
+/**
+ * A depth-buffered software rasteriser for the rig view.
+ *
+ * WHY THIS EXISTS
+ *
+ * The rig view used to sort whole primitives by a single depth value and paint
+ * them back to front. One depth cannot describe a polygon whose depth varies
+ * across it, and every artefact in that view came from the same place: half of
+ * a step blanking off-axis, only the nearest fixture inside a step showing, an
+ * in-step unit painting over the tape outside it, truss webbing punching
+ * through a deck. Each was patched with a layering epsilon. There were four.
+ *
+ * A depth buffer makes the whole family impossible instead of individually
+ * fixable.
+ *
+ * WHY IT IS CHEAP
+ *
+ * Depth across a PLANAR polygon is an affine function of screen x,y: the rig
+ * view's projection is orthographic and its depth function is linear in world
+ * space, so there is no perspective divide anywhere. One plane fit per polygon
+ * is therefore EXACT rather than an approximation, and the inner loop is an add
+ * and a compare. Measured against the old queue at 1806 primitives: 0.248 ms
+ * against 0.513 ms, and correct where the old one dropped half the strip.
+ *
+ * PER-VERTEX ALPHA
+ *
+ * poly() will interpolate an alpha multiplier across a polygon the same way it
+ * interpolates depth, and for the same reason it is exact: it is an affine
+ * function of screen position. That turns a beam into ONE polygon that fades
+ * along its length, instead of a stack of constant-alpha slices whose seams
+ * read as rings drawn across the light.
+ *
+ * It is also the shape the volumetrics below want: integrating along a view ray
+ * is per-pixel work, and this is the first piece of it.
+ *
+ * WHAT IT DELIBERATELY LEAVES ROOM FOR
+ *
+ * Haze, gobos and shadows all need exactly this and cannot be done without it:
+ * screen-space volumetrics integrate along a view ray up to the scene depth at
+ * each pixel; a shadow map is this same rasteriser run from a light's point of
+ * view; a gobo is a texture projected through the transform that shadow map
+ * already establishes. Hence @ref depthAt() and the ability to rasterise
+ * depth-only from any projection -- they are the hooks those need.
+ */
+class ZRaster
+{
+public:
+    ZRaster();
+
+    /**
+     * Start a frame.
+     *
+     * @param size        final image size
+     * @param supersample 1 = none, 2 = render at double and scale down. A flat
+     *                    rasteriser has no antialiasing of its own; this buys
+     *                    it back for 4x the fill, measured at ~1.3 ms for a
+     *                    full rig frame.
+     * @param background  cleared colour
+     */
+    void begin(const QSize &size, int supersample, const QColor &background);
+
+    /**
+     * A filled convex polygon with per-vertex depth.
+     *
+     * @param depthWrite false for translucent surfaces: they must still be
+     *                   depth-TESTED against what is already there, but must
+     *                   not occlude each other, which is why they are drawn
+     *                   after the opaque pass and back to front among
+     *                   themselves. A depth buffer is order-independent only
+     *                   for opaque geometry.
+     */
+    /** @p pickable: a see-through surface that is still SOMETHING -- a deck
+     *  top, a sock -- recorded for depthAt() without writing depth, so what
+     *  is behind it still shows. Opaque surfaces are always there. */
+    void poly(const QPointF *pts, const double *zs, int n,
+              const QColor &fill, bool depthWrite = true,
+              const double *alphaScale = nullptr,
+              int rowFrom = 0, int rowTo = INT_MAX, bool pickable = false);
+
+    /**
+     * Light -- a beam in the air, a pool where it lands -- ADDED, not layered.
+     *
+     * Translucent layers of one colour converge on that colour, and white is
+     * the brightest one the screen has: fifty white beams became a solid white
+     * mass while fifty blue ones settled at a deep, readable blue. Light
+     * instead accumulates in its own buffer, depth-tested against everything
+     * opaque so walls and bodies still stop it, without writing depth and in
+     * any order. lightImage() rolls the total off toward a ceiling below white.
+     */
+    void light(const QPointF *pts, const double *zs, int n, const QColor &colour,
+               const double *alphaScale = nullptr,
+               int rowFrom = 0, int rowTo = INT_MAX, QRect *lit = nullptr);
+
+    /* BANDS, for filling a frame on several threads.
+     *
+     * Every fill writes only the buffer rows in [rowFrom, rowTo) -- SUPERSAMPLED
+     * rows for poly()/thickLine(), final-image rows for light(). Threads given
+     * disjoint bands never touch the same pixel, and within a band the ops run
+     * in the same order as they would on one thread, so the frame comes out
+     * identical. A band's light() reports where it lit through @p lit instead
+     * of recording it, and the caller hands the union to addLit() afterwards. */
+    void addLit(const QRect &lit);
+
+    /** The accumulated light, rolled off and downsampled, for adding over the
+     *  resolved frame (QPainter::CompositionMode_Screen) with its top-left at
+     *  @p topLeft. Only the part of the frame light actually reached, so a few
+     *  beams cost a few beams' worth. Null when no light was drawn. */
+    QImage lightImage(QPoint *topLeft) const;
+
+    /** A line of finite width, as a quad with depth down its length. */
+    void thickLine(const QPointF &a, const QPointF &b, double za, double zb,
+                   double width, const QColor &colour, bool depthWrite = true,
+                   int rowFrom = 0, int rowTo = INT_MAX);
+
+    /** Supersampled rows in the buffer (what poly() bands are counted in). */
+    int bufferHeight() const { return m_colour.height(); }
+    int supersample() const { return m_ss; }
+
+    /** The finished image, downsampled if supersampling was asked for. */
+    QImage resolve() const;
+
+    /** Scene depth at a final-image pixel, or -infinity where nothing was
+     *  drawn. Larger is nearer, matching the view's convention. This is what
+     *  makes pixel-accurate hit-testing possible, and what volumetrics would
+     *  integrate against. */
+    /** The depth of the nearest surface at final-resolution pixel @p p:
+     *  anything opaque, or a see-through surface drawn pickable. */
+    double depthAt(const QPoint &p) const;
+
+    bool isValid() const { return m_colour.isNull() == false; }
+
+private:
+    void scan(const QPointF *pts, const double *zs, int n, const QColor &fill,
+              bool depthWrite, const double *alphaScale, bool additive,
+              int rowFrom, int rowTo, QRect *lit, bool pickable = false);
+
+    QImage         m_colour;
+    QVector<float> m_depth;
+    QVector<float> m_light;          ///< RGB per pixel, parallel to m_depth
+    QVector<float> m_pick;           ///< final resolution: pickable see-through depth
+    bool           m_anyLight = false;
+    QRect          m_lit;            ///< buffer pixels light touched this frame
+    /* Raw pointers taken once per frame in begin(). Asking the containers for
+       them inside a fill would detach-check from several threads at once. */
+    uchar         *m_bits = nullptr;
+    qsizetype      m_bpl = 0;
+    float         *m_depthPtr = nullptr;
+    float         *m_lightPtr = nullptr;
+    float         *m_pickPtr = nullptr;
+    int            m_ss;
+    QSize          m_size;
+};
+
+/** @} */
+
+#endif

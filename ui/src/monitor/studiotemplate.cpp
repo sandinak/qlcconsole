@@ -213,7 +213,11 @@ StudioTemplate::Info StudioTemplate::info(const QString &filePath)
     out.path = filePath;
     out.name = root.value("name").toString(QFileInfo(filePath).completeBaseName());
     out.anchorKind = root.value("anchorKind").toString();
-    foreach (const QJsonValue &v, root.value("roles").toArray())
+    /* Range-for, not foreach: QJsonArray is not implicitly shared, so
+       Q_FOREACH copies the whole array to iterate it -- which is what Qt
+       deprecates it for here. */
+    const QJsonArray roleArray = root.value("roles").toArray();
+    for (const QJsonValue &v : roleArray)
     {
         const QJsonObject r = v.toObject();
         out.locals << QVector3D(float(r.value("x").toDouble()),
@@ -229,6 +233,11 @@ QList<StudioTemplate::Info> StudioTemplate::library()
     QDir dir(libraryPath());
     foreach (const QString &f, dir.entryList(QStringList() << "*.json", QDir::Files, QDir::Name))
     {
+        if (QLCFile::isOnlineOnly(dir.absoluteFilePath(f)))   // in cloud storage, not on this machine: do not wait for it
+        {
+            QLCFile::noteSkippedOnlineOnly(dir.absoluteFilePath(f));
+            continue;
+        }
         const Info i = info(dir.absoluteFilePath(f));
         if (i.isValid())
             out << i;

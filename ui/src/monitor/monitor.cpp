@@ -18,6 +18,7 @@
   limitations under the License.
 */
 
+#include <QDateTime>
 #include <QApplication>
 #include <QActionGroup>
 #include <QTabWidget>
@@ -36,6 +37,7 @@
 #include <QPainter>
 #include <QPolygonF>
 #include <QtMath>
+#include <cmath>
 #include <QFrame>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -47,7 +49,11 @@
 #include <QDoubleSpinBox>
 #include <QFontDialog>
 #include <QFormLayout>
+#include <QWidgetAction>
 #include <QInputDialog>
+#include <QXmlStreamWriter>
+#include <QXmlStreamReader>
+#include "studiotemplate.h"
 #include <QLineEdit>
 #include <QListWidget>
 #include <QTreeWidget>
@@ -84,8 +90,19 @@
 #include <memory>
 #include "monitorfixtureitem.h"
 #include "powerdistribution.h"
+#include "networktopology.h"
+#include "networkgearcatalog.h"
+#include "networktopologydialog.h"
+#include "networkreportdialog.h"
+#include "patchlistdialog.h"
+#include "fixturecreator.h"
+#include "monitorinventorypanel.h"
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
+#include "qlcphysical.h"
+#include "righeads.h"
+#include "lightcontrols.h"
+#include "fixturefields.h"
 #include "scenevalue.h"
 #include "scene.h"
 #include "mastertimer.h"
@@ -105,6 +122,8 @@
 #include "toweritem.h"
 #include "monitorimageitem.h"
 #include "feetinchesspinbox.h"
+#include "rigeditsession.h"
+#include "colourswatchbutton.h"
 #include "targetitem.h"
 #include "truss.h"
 #include "pipe.h"
@@ -126,6 +145,9 @@
 #include "outputpatch.h"
 #include "qlccapability.h"
 #include "monitor.h"
+#include "fountaindiagram.h"
+#include "fixturemanager.h"
+#include "patchinventorydialog.h"
 #include "createfixturegroup.h"
 #include "app.h"
 #include "apputil.h"
@@ -141,6 +163,10 @@
 #define SETTINGS_RULERS "monitor/rulers"
 #define SETTINGS_GRID   "monitor/grid"
 #define SETTINGS_CENTERLINES "monitor/centerlines"
+#define SETTINGS_MOUNTEDFIXTURES "monitor/mountedfixtures"
+#define SETTINGS_STUDIOROTATION "monitor/studiorotation"
+#define SETTINGS_PLOTROTATION "monitor/plotrotation"
+#define SETTINGS_STUDIOANGLE "monitor/studioangle"
 
 Monitor* Monitor::s_instance = NULL;
 
@@ -162,12 +188,14 @@ Monitor::Monitor(QWidget* parent, Doc* doc, Qt::WindowFlags f)
     , m_splitter(NULL)
     , m_graphicsView(NULL)
     , m_layersPanel(NULL)
+    , m_inventoryPanel(NULL)
     , m_gridWSpin(NULL)
     , m_gridHSpin(NULL)
     , m_unitsCombo(NULL)
     , m_povCombo(NULL)
     , m_labelsAction(NULL)
     , m_layersAction(NULL)
+    , m_inventoryAction(NULL)
     , m_groupAction(NULL)
     , m_ungroupAction(NULL)
     , m_pasteAction(NULL)
@@ -219,6 +247,8 @@ void Monitor::slotFunctionStarted(quint32 id)
 
 Monitor::~Monitor()
 {
+    cancelAllLocateSessions();
+
     while (m_monitorFixtures.isEmpty() == false)
         delete m_monitorFixtures.takeFirst();
 
@@ -288,6 +318,9 @@ void Monitor::populateDMXView()
     foreach (Fixture* fxi, m_doc->fixtures())
     {
         Q_ASSERT(fxi != NULL);
+        // A staged fixture has no place in a universe grid.
+        if (!fxi->isPatched())
+            continue;
         if (m_currentUniverse == Universe::invalid() ||
             m_currentUniverse == fxi->universe())
                 createMonitorFixture(fxi);
@@ -329,23 +362,17 @@ void Monitor::showDMXView()
             m_doc->inputOutputMap()->setUniverseMonitor(i, false);
     }
 
-    // Cmd/Ctrl+Q while this detached window has focus should quit the app with
-    // the SAME "save the workspace?" gutcheck as the main window — route to
-    // App::close() (→ App::closeEvent → saveModifiedDoc), not just close us.
-    QAction *quitAct = new QAction(this);
-    quitAct->setShortcut(QKeySequence::Quit);
-    quitAct->setShortcutContext(Qt::WindowShortcut);
-    addAction(quitAct);
-    connect(quitAct, &QAction::triggered, this, []() {
-        foreach (QWidget *w, QApplication::topLevelWidgets())
-        {
-            if (App *app = qobject_cast<App *>(w))
-            {
-                app->close();   // runs the save-before-quit gutcheck
-                return;
-            }
-        }
-    });
+    /* No local Quit action here any more. There used to be one, so Cmd+Q would
+       reach App::close() from this window -- but the main window's Quit has the
+       same shortcut, and two actions claiming one sequence in the same scope is
+       an ambiguous overload: Qt fires NEITHER and just warns. That is why Cmd+Q
+       did nothing here, and Cmd+S nothing at all, since it had no local action
+       to be ambiguous with in the first place.
+
+       Both are application-level operations on the one shared document, so
+       they are Qt::ApplicationShortcut on the App's own actions now (see
+       App::initActions) and fire from whichever window has focus, with the
+       save-before-quit gutcheck intact. */
 }
 
 void Monitor::initGraphicsView()
@@ -367,6 +394,14 @@ void Monitor::initGraphicsView()
     viewGrid->setSpacing(0);
 
     m_graphicsView = new MonitorGraphicsView(m_doc, this);
+    m_graphicsView->setRigRestorer([this](const QByteArray &snap) { restoreRig(snap); });
+    m_graphicsView->setRigSnapshotter([this]() { return rigSnapshot(); });
+    if (m_undoAction != nullptr)
+    {
+        connect(m_undoAction, &QAction::triggered, m_graphicsView, &MonitorGraphicsView::undoLastMove);
+        connect(m_graphicsView, &MonitorGraphicsView::undoChanged, m_undoAction,
+                [this]() { m_undoAction->setEnabled(m_graphicsView->canUndo()); });
+    }
     m_graphicsView->setRenderHint(QPainter::Antialiasing);
     m_graphicsView->setAcceptDrops(true);
     // No frame border so the rulers (aligned to the widget edge) line up
@@ -393,7 +428,53 @@ void Monitor::initGraphicsView()
         if (m_layersAction != NULL)
             m_layersAction->setChecked(false);
     });
+    // Inventory panel, docked on the RIGHT: fixtures staged but not yet placed,
+    // to drag onto the plot. Hidden until asked for (toolbar "Inventory").
+    m_inventoryPanel = new MonitorInventoryPanel(m_doc, m_graphicsView, this);
+    m_splitter->addWidget(m_inventoryPanel);
+    m_splitter->setStretchFactor(m_splitter->indexOf(m_inventoryPanel), 0);
+    m_inventoryPanel->setMinimumWidth(180);
+    {
+        const bool show = QSettings().value(QStringLiteral("monitor/showInventory"), false).toBool();
+        m_inventoryPanel->setVisible(show);
+        if (m_inventoryAction != NULL)
+        {
+            m_inventoryAction->blockSignals(true);
+            m_inventoryAction->setChecked(show);
+            m_inventoryAction->blockSignals(false);
+        }
+    }
+    connect(m_inventoryPanel, &MonitorInventoryPanel::closeRequested, this, [this]() {
+        if (m_inventoryAction != NULL)
+            m_inventoryAction->setChecked(false);
+    });
+    connect(m_inventoryPanel, &MonitorInventoryPanel::addRequested, this, &Monitor::slotAddToInventory);
+    connect(m_graphicsView, &MonitorGraphicsView::fixturesDropped, this, &Monitor::slotFixturesDropped);
+    // Keep the panel true to the show: fixtures come and go, get patched, or
+    // land on the plot from elsewhere.
+    connect(m_doc, &Doc::fixtureAdded, m_inventoryPanel, [this](quint32) { m_inventoryPanel->reload(); });
+    connect(m_doc, &Doc::fixtureRemoved, m_inventoryPanel, [this](quint32) { m_inventoryPanel->reload(); });
+    connect(m_doc, &Doc::fixtureChanged, m_inventoryPanel, [this](quint32) { m_inventoryPanel->reload(); });
+    // A repatch changes which port a fixture is on, so the cable runs follow.
+    connect(m_doc, &Doc::fixtureChanged, m_graphicsView, [this](quint32) { m_graphicsView->scheduleNetworkRuns(); });
+
     // Double-clicking a Fixture Group node in the panel opens its head-layout editor.
+    /* "Show in Layers" from the plot's menu: open the list if it is hidden,
+       then bring the row into view. */
+    connect(m_graphicsView, &MonitorGraphicsView::selectInLayersRequested, this,
+            [this](const QList<QPair<QString, quint32> > &objects) {
+        if (m_layersPanel != nullptr)
+            m_layersPanel->followMapSelection(objects);
+    });
+    connect(m_graphicsView, &MonitorGraphicsView::revealInLayersRequested, this,
+            [this](const QString &kind, quint32 id) {
+        if (m_layersPanel == nullptr)
+            return;
+        if (!m_layersPanel->isVisible())
+            m_layersPanel->setVisible(true);
+        m_layersPanel->reload();
+        m_layersPanel->revealItem(kind, id);
+    });
     connect(m_layersPanel, &MonitorLayersPanel::editFixtureGroupRequested,
             this, [this](quint32 fgId) { openGroupLayout(fgId); if (m_layersPanel) m_layersPanel->reload(); });
 
@@ -415,8 +496,16 @@ void Monitor::initGraphicsView()
             this, &Monitor::slotPlatformRemoveRequested);
     connect(m_graphicsView, &MonitorGraphicsView::pipeRemoveRequested,
             this, &Monitor::slotPipeRemoveRequested);
+    connect(m_graphicsView, &MonitorGraphicsView::hangerRemoveRequested,
+            this, &Monitor::slotHangerRemoveRequested);
+    connect(m_graphicsView, &MonitorGraphicsView::hangerDoubleClicked,
+            this, &Monitor::slotEditHanger);
     connect(m_graphicsView, &MonitorGraphicsView::standRemoveRequested,
             this, &Monitor::slotStandRemoveRequested);
+    connect(m_graphicsView, &MonitorGraphicsView::sceneryRemoveRequested,
+            this, &Monitor::slotSceneryRemoveRequested);
+    connect(m_graphicsView, &MonitorGraphicsView::sceneryDoubleClicked,
+            this, &Monitor::slotEditScenery);
     connect(m_graphicsView, &MonitorGraphicsView::towerRemoveRequested,
             this, &Monitor::slotTowerRemoveRequested);
     connect(m_graphicsView, &MonitorGraphicsView::imageDoubleClicked,
@@ -440,8 +529,21 @@ void Monitor::initGraphicsView()
         m_graphicsView->updatePowerSources();
         if (m_layersPanel) m_layersPanel->reload();
     });
+    connect(m_graphicsView, &MonitorGraphicsView::networkDoubleClicked,
+            this, &Monitor::slotEditNetworkNode);
+    connect(m_graphicsView, &MonitorGraphicsView::networkRemoveRequested,
+            this, &Monitor::slotNetworkNodeRemoveRequested);
     connect(m_graphicsView, &MonitorGraphicsView::targetDoubleClicked,
             this, &Monitor::slotTargetDoubleClicked);
+    connect(m_graphicsView, &MonitorGraphicsView::addItemRequested, this,
+            [this](const QString &what, QPointF scenePos) {
+        /* The menus ask, this places: one path for "add one of these here",
+           whether the click was on bare deck or on a platform. */
+        m_pendingAddScenePos = scenePos;
+        if (what == QLatin1String("fixture"))     slotAddFixture();
+        else if (what == QLatin1String("target")) slotAddTarget();
+        else if (what == QLatin1String("person")) slotAddPerson();
+    });
     connect(m_graphicsView, &MonitorGraphicsView::contextMenuRequested,
             this, &Monitor::slotCanvasContextMenu);
     connect(m_graphicsView, &MonitorGraphicsView::addFixtureToTrussRequested,
@@ -562,18 +664,21 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
 
     // ---- Size: [x] [y] [units] ----  (Overlay + View live on the RIGHT below)
     QVector3D gridSize = m_props->gridSize();
-    fl->addWidget(new QLabel(tr("Size:")));
+    /* One "Grid" control instead of six widgets. The button itself is the
+       show/hide toggle -- the thing actually reached for during a session --
+       and the SETUP behind it (stage size, units, subdivisions) lives in its
+       drop-down, because those are set once when a show is built and then left
+       alone. MenuButtonPopup keeps the toggle a single click; only the arrow
+       opens the menu. The widgets and their connections are unchanged, just
+       re-homed, so nothing about their behaviour moves with them. */
     m_gridWSpin = new QSpinBox();
     m_gridWSpin->setMinimum(1);
     m_gridWSpin->setValue(gridSize.x());
-    fl->addWidget(m_gridWSpin);
     connect(m_gridWSpin, SIGNAL(valueChanged(int)), this, SLOT(slotGridWidthChanged(int)));
 
-    fl->addWidget(new QLabel("x"));
     m_gridHSpin = new QSpinBox();
     m_gridHSpin->setMinimum(1);
     m_gridHSpin->setValue(gridSize.z());
-    fl->addWidget(m_gridHSpin);
     connect(m_gridHSpin, SIGNAL(valueChanged(int)), this, SLOT(slotGridHeightChanged(int)));
 
     m_unitsCombo = new QComboBox();
@@ -581,37 +686,56 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     m_unitsCombo->addItem(tr("Feet"), MonitorProperties::Feet);
     if (m_props->gridUnits() == MonitorProperties::Feet)
         m_unitsCombo->setCurrentIndex(1);
-    fl->addWidget(m_unitsCombo);
     connect(m_unitsCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(slotGridUnitsChanged(int)));
-    addSep();
 
-    // ---- (Grid) [Subdiv] ----  toggle + its modifier
-    QToolButton *gridBtn = new QToolButton(footer);
-    gridBtn->setText(tr("Grid"));
-    gridBtn->setCheckable(true);
-    gridBtn->setChecked(true);
-    gridBtn->setToolTip(tr("Show or hide the grid lines"));
-    fl->addWidget(gridBtn);
-    connect(gridBtn, &QToolButton::toggled, this, [this](bool on) {
-        m_graphicsView->setGridVisible(on);
-        QSettings().setValue(SETTINGS_GRID, on);
-    });
-    fl->addWidget(new QLabel(tr("Subdiv")));
     m_gridSubdivSpin = new QSpinBox();
     m_gridSubdivSpin->setMinimum(1);
     m_gridSubdivSpin->setMaximum(8);
     m_gridSubdivSpin->setValue(m_props->gridSubdivisions());
     m_gridSubdivSpin->setToolTip(tr("Number of sub-divisions drawn inside each grid cell"));
-    fl->addWidget(m_gridSubdivSpin);
     connect(m_gridSubdivSpin, SIGNAL(valueChanged(int)), this, SLOT(slotGridSubdivisionsChanged(int)));
-    addSep();
+
+    QToolButton *gridBtn = new QToolButton(footer);
+    gridBtn->setText(tr("Grid"));
+    gridBtn->setCheckable(true);
+    gridBtn->setChecked(true);
+    gridBtn->setToolTip(tr("Show or hide the grid lines — the arrow sets the "
+                           "stage size, units and subdivisions"));
+    gridBtn->setPopupMode(QToolButton::MenuButtonPopup);
+    {
+        QWidget *gw = new QWidget(footer);
+        QFormLayout *gfl = new QFormLayout(gw);
+        gfl->setContentsMargins(10, 8, 10, 8);
+        QWidget *sizeRow = new QWidget(gw);
+        QHBoxLayout *srl = new QHBoxLayout(sizeRow);
+        srl->setContentsMargins(0, 0, 0, 0);
+        srl->addWidget(m_gridWSpin);
+        srl->addWidget(new QLabel("x", sizeRow));
+        srl->addWidget(m_gridHSpin);
+        gfl->addRow(tr("Stage size:"), sizeRow);
+        gfl->addRow(tr("Units:"), m_unitsCombo);
+        gfl->addRow(tr("Subdivisions:"), m_gridSubdivSpin);
+
+        QMenu *gm = new QMenu(gridBtn);
+        QWidgetAction *wa = new QWidgetAction(gm);
+        wa->setDefaultWidget(gw);
+        gm->addAction(wa);
+        gridBtn->setMenu(gm);
+    }
+    fl->addWidget(gridBtn);
+    connect(gridBtn, &QToolButton::toggled, this, [this](bool on) {
+        m_graphicsView->setGridVisible(on);
+        QSettings().setValue(SETTINGS_GRID, on);
+    });
 
     // Snap: a dedicated on/off toggle, plus the division to snap to.
     m_snapToggle = new QToolButton(footer);
     m_snapToggle->setText(tr("Snap"));
     m_snapToggle->setCheckable(true);
     m_snapToggle->setChecked(m_props->snapDivisions() > 0);
-    m_snapToggle->setToolTip(tr("Snap fixtures to the grid while moving them"));
+    m_snapToggle->setToolTip(tr("Snap fixtures to the grid while moving them — "
+                                "the arrow picks the division"));
+    m_snapToggle->setPopupMode(QToolButton::MenuButtonPopup);
     fl->addWidget(m_snapToggle);
 
     m_snapCombo = new QComboBox();
@@ -626,7 +750,17 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     }
     m_snapCombo->setEnabled(m_snapToggle->isChecked());
     m_snapCombo->setToolTip(tr("Grid subdivision to snap to"));
-    fl->addWidget(m_snapCombo);
+    {
+        QWidget *sw = new QWidget(footer);
+        QFormLayout *sfl = new QFormLayout(sw);
+        sfl->setContentsMargins(10, 8, 10, 8);
+        sfl->addRow(tr("Snap to:"), m_snapCombo);
+        QMenu *sm = new QMenu(m_snapToggle);
+        QWidgetAction *wa = new QWidgetAction(sm);
+        wa->setDefaultWidget(sw);
+        sm->addAction(wa);
+        m_snapToggle->setMenu(sm);
+    }
 
     auto applySnap = [this]() {
         const int div = m_snapToggle->isChecked() ? m_snapCombo->currentData().toInt() : 0;
@@ -647,31 +781,78 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
         fl->addWidget(sep);
     }
 
-    // Rulers show/hide toggle.
-    QToolButton *rulerBtn = new QToolButton(footer);
-    rulerBtn->setText(tr("Rulers"));
+    /* One "Show" menu instead of four separate toggles. They are all the same
+       kind of thing -- what gets DRAWN on the plot -- so they read better as a
+       checklist than as four competing buttons, and the row gets three slots
+       back. QActions rather than QToolButtons: the restore code below sets them
+       with the same blockSignals()/setChecked() calls either way. */
+    QToolButton *showBtn = new QToolButton(footer);
+    showBtn->setText(tr("Show"));
+    showBtn->setPopupMode(QToolButton::InstantPopup);
+    showBtn->setToolTip(tr("Choose what is drawn on the plot"));
+    QMenu *showMenu = new QMenu(showBtn);
+    showBtn->setMenu(showMenu);
+    fl->addWidget(showBtn);
+
+    QAction *rulerBtn = showMenu->addAction(tr("Rulers"));
     rulerBtn->setCheckable(true);
     rulerBtn->setToolTip(tr("Show or hide the measurement rulers"));
-    fl->addWidget(rulerBtn);
-    connect(rulerBtn, &QToolButton::toggled, this, [this](bool on) { setRulersVisible(on); });
+    connect(rulerBtn, &QAction::toggled, this, [this](bool on) { setRulersVisible(on); });
 
-    // Fixture labels show/hide toggle (moved here from the "More" menu, beside
-    // Snap / Rulers).
-    QToolButton *labelsBtn = new QToolButton(footer);
-    labelsBtn->setText(tr("Labels"));
+    QAction *labelsBtn = showMenu->addAction(tr("Fixture labels"));
     labelsBtn->setCheckable(true);
     labelsBtn->setChecked(m_props->labelsVisible());
-    labelsBtn->setToolTip(tr("Show or hide fixture labels"));
-    fl->addWidget(labelsBtn);
-    connect(labelsBtn, &QToolButton::toggled, this, [this](bool on) { slotShowLabels(on); });
+    connect(labelsBtn, &QAction::toggled, this, [this](bool on) { slotShowLabels(on); });
 
-    // Stage centre axes (the teal crosshair) show/hide toggle.
-    QToolButton *centerBtn = new QToolButton(footer);
-    centerBtn->setText(tr("Center"));
+    /* Fixtures-on-structures. A truss or riser covered by its own fixtures is
+       hard to click in the top view; hiding them clears the plot while
+       structures are being placed. Free-standing fixtures are never hidden --
+       there is nothing under them to reach. */
+    QAction *mountedBtn = showMenu->addAction(tr("Fixtures on the rig"));
+    mountedBtn->setCheckable(true);
+    mountedBtn->setToolTip(tr("Show or hide the fixtures mounted on trusses, "
+                              "pipes, towers and platforms, so the structure "
+                              "underneath can be clicked"));
+    connect(mountedBtn, &QAction::toggled, this, [this](bool on) {
+        m_graphicsView->setMountedFixturesVisible(on);
+        QSettings().setValue(SETTINGS_MOUNTEDFIXTURES, on);
+    });
+
+    /* Where the selected moving heads cannot aim: a design aid for deciding
+       how to rig them (on top of a tower, or hung under a bar) before the
+       load-in, so not remembered between sessions. */
+    QAction *reachBtn = showMenu->addAction(tr("Where selected heads CANNOT reach"));
+    reachBtn->setCheckable(true);
+    reachBtn->setToolTip(tr("Shade, in the top view, where the selected moving "
+                            "heads cannot point at subject height"));
+    connect(reachBtn, &QAction::toggled, this, [this](bool on) {
+        m_graphicsView->setReachOverlayVisible(on);
+    });
+
+    /* Where the selected heads' light lands: the answer to "what is this
+       fixture covering", and what a count bubble shows when you double-click
+       it. Top view, and not remembered -- it is a question you ask, not a way
+       you leave the plot. */
+    QAction *projectionBtn = showMenu->addAction(tr("Light footprint: everywhere selected heads CAN light"));
+    projectionBtn->setCheckable(true);
+    projectionBtn->setToolTip(tr("Shade every part of the deck the selected heads "
+                                 "can put light on, with where each is pointed "
+                                 "now drawn on top"));
+    connect(projectionBtn, &QAction::toggled, this, [this](bool on) {
+        m_graphicsView->setProjectionOverlayVisible(on);
+    });
+    /* Asking for one head's footprint from its own menu switches the overlay
+       on; the tick here has to say so, or the next click on it turns them OFF
+       by "turning them on". */
+    connect(m_graphicsView, &MonitorGraphicsView::projectionOverlayChanged,
+            projectionBtn, [projectionBtn](bool on) {
+        QSignalBlocker block(projectionBtn);
+        projectionBtn->setChecked(on);
+    });
+
+    QAction *centerBtn = showMenu->addAction(tr("Stage centre lines"));
     centerBtn->setCheckable(true);
-    centerBtn->setToolTip(tr("Show or hide the stage centre lines"));
-    fl->addWidget(centerBtn);
-    connect(centerBtn, &QToolButton::toggled, this, [this](bool on) {
+    connect(centerBtn, &QAction::toggled, this, [this](bool on) {
         m_graphicsView->setCenterLinesVisible(on);
         QSettings().setValue(SETTINGS_CENTERLINES, on);
     });
@@ -720,6 +901,7 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     m_overlayCombo->setCurrentIndex(qMax(0, m_overlayCombo->findData(m_mapView)));
     m_overlayCombo->setToolTip(tr("Recolour / filter the plot — click to cycle, "
                                   "arrow for the full list"));
+    m_overlayCombo->setProperty("cycleOnClick", true);
     m_overlayCombo->installEventFilter(this);   // click the box to cycle
     fl->addWidget(m_overlayCombo);
     connect(m_overlayCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
@@ -729,8 +911,65 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     addSep();
     fl->addWidget(new QLabel(tr("View:")));
     m_povCombo->setToolTip(tr("Point of view — click to cycle, arrow for the full list"));
+    m_povCombo->setProperty("cycleOnClick", true);
     m_povCombo->installEventFilter(this);       // click the box to cycle
     fl->addWidget(m_povCombo);
+
+    /* Turn the plot in quarter steps -- beside the point-of-view control,
+       because it is the same kind of setting: how you are LOOKING at the rig,
+       not anything about the rig. Some designers read a plan with downstage at
+       the TOP; 180 degrees gives them that. Nothing in the workspace moves, and
+       quarter turns keep stage left/right truthful, with the edge labels
+       turning to match. */
+    QToolButton *plotRotBtn = new QToolButton(footer);
+    plotRotBtn->setToolTip(tr("Turn the plot 90° clockwise. A view setting "
+                              "only — nothing in the workspace moves."));
+    fl->addWidget(plotRotBtn);
+
+    /* No overview button here: it lives in the main View menu (View > Rig
+       Overview), because it is a window onto the whole show rather than a
+       Lighting Studio tool. */
+    auto applyPlotRotation = [this, plotRotBtn](int turns) {
+        m_graphicsView->setViewRotation(turns);
+        static const char *names[] = { "0°", "90°", "180°", "270°" };
+        plotRotBtn->setText(QString("⟳ %1").arg(names[m_graphicsView->viewRotation() & 3]));
+    };
+    connect(plotRotBtn, &QToolButton::clicked, this, [this, applyPlotRotation]() {
+        const int next = (m_graphicsView->viewRotation() + 1) & 3;
+        applyPlotRotation(next);
+        QSettings().setValue(SETTINGS_PLOTROTATION, next);
+    });
+    addSep();
+
+    /* "N off stage" -- hidden unless it is true.
+     *
+       stage-structures-demo.qxw carries two fixtures stranded 13.8 m upstage,
+       detached from a truss years ago and never seen since: absent from the
+       plan, absent from the rig as anything you would notice, and quietly
+       stretching the 3-D overview's framing around empty floor. Nothing in the
+       app said so. Clicking selects them and scrolls them into view, which is
+       only possible now the scene rect reaches that far. */
+    m_offStageBtn = new QToolButton(footer);
+    m_offStageBtn->setAutoRaise(true);
+    m_offStageBtn->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    m_offStageBtn->setVisible(false);
+    m_offStageBtn->setStyleSheet("QToolButton { color: #e0a030; }");
+    connect(m_offStageBtn, &QToolButton::clicked, this, [this]() {
+        if (m_graphicsView != NULL)
+            m_graphicsView->selectFixtures(m_graphicsView->fixturesOffGrid());
+    });
+    fl->addWidget(m_offStageBtn);
+    connect(m_graphicsView, &MonitorGraphicsView::offGridFixturesChanged,
+            this, [this](int n) {
+        if (m_offStageBtn == NULL)
+            return;
+        m_offStageBtn->setVisible(n > 0);
+        m_offStageBtn->setText(tr("%n fixture(s) off stage", "", n));
+        m_offStageBtn->setToolTip(tr("%n fixture(s) sit outside the stage grid, so "
+                                     "they are not where the plan normally shows "
+                                     "anything and they stretch the rig view's "
+                                     "framing. Click to select them.", "", n));
+    });
     addSep();
 
     // Live coordinate readout, right-aligned.
@@ -766,14 +1005,27 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     centerBtn->blockSignals(false);
     m_graphicsView->setCenterLinesVisible(showCenterLines);
 
+    // Restore the plot rotation (default upright).
+    applyPlotRotation(settings.value(SETTINGS_PLOTROTATION, 0).toInt());
+
+    // Restore fixtures-on-structures visibility (default on).
+    const bool showMounted = settings.value(SETTINGS_MOUNTEDFIXTURES, true).toBool();
+    mountedBtn->blockSignals(true);
+    mountedBtn->setChecked(showMounted);
+    mountedBtn->blockSignals(false);
+    m_graphicsView->setMountedFixturesVisible(showMounted);
+
     updateModeIndicator();
 }
 
 bool Monitor::eventFilter(QObject *watched, QEvent *event)
 {
-    // Overlay / View dropdowns: clicking the BOX cycles to the next item; the
-    // drop-down ARROW still opens the full list.
-    if ((watched == m_overlayCombo || watched == m_povCombo || watched == m_dmxViewCombo)
+    /* Clicking the BOX cycles to the next item; the drop-down ARROW still opens
+       the full list. Opted into with a "cycleOnClick" property rather than by
+       naming specific combos, so the feature editors and the rig overview get
+       the same behaviour as the plot -- the whole point being that a View combo
+       works the same wherever it appears. */
+    if (watched->property("cycleOnClick").toBool()
         && event->type() == QEvent::MouseButtonPress)
     {
         QComboBox *cb = static_cast<QComboBox *>(watched);
@@ -804,6 +1056,14 @@ bool Monitor::eventFilter(QObject *watched, QEvent *event)
             {
                 if (m_hRuler != NULL) m_hRuler->setItemRange(sr.left(), sr.right());
                 if (m_vRuler != NULL) m_vRuler->setItemRange(sr.top(), sr.bottom());
+                /* Dragging it, the mark is its middle, not wherever it was
+                   grabbed ("when moving the drape .. the mark on the ruler
+                   should be the center of the drape"). */
+                if (me->buttons() & Qt::LeftButton)
+                {
+                    if (m_hRuler != NULL) m_hRuler->setCursorPixel(sr.center().x());
+                    if (m_vRuler != NULL) m_vRuler->setCursorPixel(sr.center().y());
+                }
             }
             else
             {
@@ -855,7 +1115,7 @@ void Monitor::setRulersVisible(bool on)
     settings.setValue(SETTINGS_RULERS, on);
 }
 
-void Monitor::fillGraphicsView()
+void Monitor::fillGraphicsView(bool keepView)
 {
     m_graphicsView->clearFixtures();
 
@@ -890,6 +1150,11 @@ void Monitor::fillGraphicsView()
     m_graphicsView->setGridSubdivisions(m_props->gridSubdivisions());
     m_graphicsView->setSnapDivisions(m_props->snapDivisions());
     m_graphicsView->setGridSize(QSize(m_props->gridSize().x(), m_props->gridSize().z()));
+    /* This runs when a workspace's monitor settings are applied, which is
+       exactly the point a leftover zoom from the previous document stops
+       making sense. */
+    if (!keepView)
+        m_graphicsView->resetViewZoom();
     m_graphicsView->setBackgroundImage(m_props->commonBackgroundImage());
     m_graphicsView->setBackgroundColor(m_props->commonBackgroundColor());
 
@@ -919,6 +1184,119 @@ void Monitor::fillGraphicsView()
     m_graphicsView->ensureGroupRegistry();
     if (m_layersPanel != NULL)
         m_layersPanel->reload();
+}
+
+QByteArray Monitor::rigSnapshot() const
+{
+    QHash<quint32, QString> names;
+    QHash<quint32, QByteArray> power;     // what each draws, and its cap (undoable too)
+    foreach (Fixture *fx, m_doc->fixtures())
+    {
+        names.insert(fx->id(), fx->name());
+        QByteArray xml;
+        QXmlStreamWriter w(&xml);
+        fx->powerProfile().saveXML(&w);
+        power.insert(fx->id(), xml);
+    }
+    // The network too: its nodes, ports and receivers are edited like the rig.
+    QByteArray network;
+    {
+        QXmlStreamWriter w(&network);
+        m_doc->networkTopology()->saveXML(&w);
+    }
+    // And where each fixture is patched, so a re-address can be undone.
+    QHash<quint32, QList<quint32> > patch;
+    foreach (Fixture *fx, m_doc->fixtures())
+        patch.insert(fx->id(), { fx->isPatched() ? 1u : 0u, fx->universe(), fx->address() });
+    QByteArray out;
+    QDataStream ds(&out, QIODevice::WriteOnly);
+    ds << m_props->snapshot(m_doc) << names << power << network << patch;
+    return out;
+}
+
+void Monitor::restoreRig(const QByteArray &snap)
+{
+    QByteArray props;
+    QHash<quint32, QString> names;
+    QHash<quint32, QByteArray> power;
+    QByteArray network;
+    QDataStream ds(snap);
+    ds >> props >> names;
+    if (!ds.atEnd())
+        ds >> power;
+    if (!ds.atEnd())
+        ds >> network;
+    QHash<quint32, QList<quint32> > patch;
+    if (!ds.atEnd())
+        ds >> patch;
+    if (props.isEmpty())
+        return;
+    /* The patch: unpatch what wasn't, then put the rest back where it was --
+       as one step, so fixtures can swap or shift onto each other's channels. */
+    {
+        QList<Doc::FixturePatch> back;
+        for (auto it = patch.constBegin(); it != patch.constEnd(); ++it)
+        {
+            Fixture *fx = m_doc->fixture(it.key());
+            if (fx == nullptr || it.value().size() < 3)
+                continue;
+            const bool wasPatched = it.value().at(0) != 0;
+            if (!wasPatched && fx->isPatched())
+                m_doc->unpatchFixture(fx->id());
+            else if (wasPatched && (!fx->isPatched() || fx->universe() != it.value().at(1)
+                                    || fx->address() != it.value().at(2)))
+                back << Doc::FixturePatch{ fx->id(), it.value().at(1), it.value().at(2) };
+        }
+        if (!back.isEmpty())
+            m_doc->patchFixtures(back);
+    }
+    if (!network.isEmpty())
+    {
+        QXmlStreamReader r(network);
+        if (r.readNextStartElement())
+            m_doc->networkTopology()->loadXML(r, m_doc);
+    }
+    for (auto it = power.constBegin(); it != power.constEnd(); ++it)
+    {
+        Fixture *fx = m_doc->fixture(it.key());
+        if (fx == nullptr)
+            continue;
+        PowerProfile pp;
+        QXmlStreamReader r(it.value());
+        if (r.readNextStartElement())
+            pp.loadXML(r);
+        fx->setPowerProfile(pp);
+    }
+
+    m_props->restoreSnapshot(props, m_doc);
+    for (auto it = names.constBegin(); it != names.constEnd(); ++it)
+    {
+        Fixture *fx = m_doc->fixture(it.key());
+        if (fx != nullptr && fx->name() != it.value())
+            fx->setName(it.value());
+    }
+
+    if (m_graphicsView != nullptr)
+    {
+        fillGraphicsView(true);
+        m_graphicsView->updateNetworkNodes();
+        m_graphicsView->refreshAllItems();
+        m_graphicsView->refreshFixtureBindings();
+        m_graphicsView->refreshFixtureCountBadges();
+    }
+    m_doc->setModified();
+}
+
+void Monitor::undo()
+{
+    if (m_graphicsView != nullptr)
+        m_graphicsView->undoLastMove();
+}
+
+void Monitor::pushRigUndo(const QByteArray &before)
+{
+    if (m_graphicsView != nullptr && !before.isEmpty() && rigSnapshot() != before)
+        m_graphicsView->pushRigUndo(before);
 }
 
 void Monitor::showGraphicsView()
@@ -981,8 +1359,14 @@ void Monitor::highlightFixtures(const QList<quint32> &ids)
 
 void Monitor::setActiveScene(quint32 sceneId)
 {
+    m_activeSceneId = sceneId;
     if (m_graphicsView != NULL)
         m_graphicsView->setActiveScene(sceneId);
+    /* The overview shows the same aim, so it needs the same scene. Without
+       this you could set a target, watch the studio draw its dashed lines, and
+       find the rig view's heads still pointing wherever they were left. */
+    if (m_overviewView != NULL)
+        m_overviewView->setActiveScene(sceneId);
 }
 
 void Monitor::setFollowSpotPin(bool visible, float xMeters, float yMeters)
@@ -1042,6 +1426,16 @@ void Monitor::createAndShow(QWidget* parent, Doc* doc)
         }
         if (QMainWindow *mw = qobject_cast<QMainWindow *>(p))
         {
+            // Belt-and-suspenders recovery: a workspace opened on a different
+            // machine/monitor layout than it was saved on can leave this
+            // window off-screen or degenerate-tiny (see AppUtil::
+            // ensureWindowOnScreen's own comment) despite the load-time fix in
+            // App::loadXML(). Re-checking here means "View -> Lighting Studio"
+            // (or its Ctrl+Shift+M shortcut) doubles as a manual "pop it back
+            // onto this screen" recovery action any time it's invoked, with no
+            // separate UI needed -- including for a window already broken
+            // before this fix existed, on a workspace already loaded.
+            AppUtil::ensureWindowOnScreen(mw);
             mw->show();
             mw->raise();
             mw->activateWindow();
@@ -1143,6 +1537,7 @@ void Monitor::initDMXToolbar()
     m_dmxViewCombo->addItem(tr("2D \342\200\224 Side"),  int(MonitorGraphicsView::PovSide));
     m_dmxViewCombo->setToolTip(tr("Switch to the 2D map view — click to cycle, "
                                   "arrow for the full list"));
+    m_dmxViewCombo->setProperty("cycleOnClick", true);
     m_dmxViewCombo->installEventFilter(this);   // click the box to cycle
     m_DMXToolBar->addWidget(m_dmxViewCombo);
     connect(m_dmxViewCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -1222,6 +1617,23 @@ void Monitor::initGraphicsToolbar()
     updatePlotLockAppearance(m_props->layoutLocked());
     connect(m_lockAction, SIGNAL(toggled(bool)), this, SLOT(slotLockToggled(bool)));
 
+    m_inventoryAction = m_graphicsToolBar->addAction(QIcon(":/fixture.png"), tr("Inventory"));
+    m_inventoryAction->setCheckable(true);
+    m_inventoryAction->setToolTip(tr("Show the fixtures staged in the inventory, ready to drag onto the plot"));
+    connect(m_inventoryAction, &QAction::toggled, this, [this](bool on) {
+        if (m_inventoryPanel != NULL)
+            m_inventoryPanel->setVisible(on);
+        QSettings().setValue(QStringLiteral("monitor/showInventory"), on);
+    });
+
+    // One undo for the rig: moves, pastes, and every edit dialog's OK.
+    // (Connected to the view in initGraphicsView(), which comes after.)
+    m_undoAction = m_graphicsToolBar->addAction(QIcon(":/undo.png"), tr("Undo"));
+    m_undoAction->setToolTip(tr("Undo the last move, paste or edit on the rig (%1)")
+                             .arg(QKeySequence(QKeySequence::Undo).toString(QKeySequence::NativeText)));
+    m_undoAction->setObjectName(QStringLiteral("plotUndo"));
+    m_undoAction->setEnabled(false);
+
     m_graphicsToolBar->addSeparator();
     // Group/Ungroup, the Overlay selector, Copy/Paste, labels and background
     // live in the "More" popup (built after Add/Remove below), to keep this
@@ -1242,11 +1654,21 @@ void Monitor::initGraphicsToolbar()
                            this, SLOT(slotAddTruss()));
         addMenu->addAction(tr("Add Platform/Riser"),
                            this, SLOT(slotAddPlatform()));
+        addMenu->addAction(tr("Add Steps"),
+                           this, SLOT(slotAddSteps()));
+        QMenu *sceneryMenu = addMenu->addMenu(tr("Add Scenery"));
+        foreach (int kind, Scenery::kinds())
+            sceneryMenu->addAction(Scenery::kindName(kind), this, [this, kind]() { slotAddScenery(kind); });
+        addMenu->addAction(tr("Add Fountain…"), this, [this]() { slotAddFountain(); });
         addMenu->addAction(QIcon(":/image.png"), tr("Add Image"),
                            this, SLOT(slotAddImage()));
+        addMenu->addAction(tr("Add Network Node"),
+                           this, SLOT(slotAddNetworkNode()));
         addMenu->addSeparator();
         addMenu->addAction(tr("Add Target Position"),
                            this, SLOT(slotAddTarget()));
+        addMenu->addAction(tr("Add Person"),
+                           this, SLOT(slotAddPerson()));
         addBtn->setMenu(addMenu);
     }
     m_graphicsToolBar->addWidget(addBtn);
@@ -1287,6 +1709,11 @@ void Monitor::initGraphicsToolbar()
 
     moreMenu->addSeparator();
 
+    moreMenu->addAction(tr("Select All (Ctrl+A)"), this, [this]() {
+        if (m_graphicsView != NULL)
+            m_graphicsView->selectAllMapItems();
+    });
+
     // Copy / paste of stage features (trusses, platforms, targets). addAction()
     // keeps the Cmd/Ctrl+C/V shortcuts alive on the window even off the toolbar.
     QAction *copyAct = new QAction(QIcon(":/editcopy.png"), tr("Copy selected features"), this);
@@ -1308,8 +1735,14 @@ void Monitor::initGraphicsToolbar()
 
     // Background image is now a placeable object (Add ▸ Add Image) that lives in
     // a layer; flat background colour stays here.
-    moreMenu->addAction(QIcon(":/color.png"), tr("Set background color"),
+    moreMenu->addAction(QIcon(":/color.png"), tr("Set background colour"),
                         this, SLOT(slotSetBackgroundColor()));
+    moreMenu->addAction(tr("Network Topology…"), this, [this]() { slotEditNetworkNode(0); });
+    moreMenu->addAction(tr("Network Report…"), this, &Monitor::slotNetworkReport);
+    moreMenu->addAction(tr("Patch List…"), this, [this]() {
+        PatchListDialog dlg(m_doc, this);
+        dlg.exec();
+    });
 
     moreBtn->setMenu(moreMenu);
     m_graphicsToolBar->addWidget(moreBtn);
@@ -1519,24 +1952,40 @@ void Monitor::slotGridUnitsChanged(int index)
     if (var.isValid())
         units = MonitorProperties::GridUnits(var.toInt());
 
-    // Convert grid dimensions so the physical size stays the same.
-    // m_gridSize stores values in the current display unit, so we must
-    // re-express them in the new unit before changing the scale factor.
+    /* Re-express the stage in the new unit WITHOUT re-quantising it.
+     *
+     * This used to read the integer spin boxes, multiply, and qRound back into
+     * integers -- so the stored extent was rounded to a whole foot or metre on
+     * every toggle. A 10 m stage became 33 ft, which is 10.058 m: the stage
+     * physically grew, everything on it shifted relative to the grid, and
+     * toggling back did not undo it because the rounding had already thrown
+     * the original away. Switch units twice and the rig has moved.
+     *
+     * m_gridSize is a QVector3D of floats, so the exact converted value fits.
+     * Convert from the STORED extent rather than from the spin boxes -- the
+     * spin boxes are integers and reading them back is what lost the precision
+     * in the first place -- and round only for display. */
     if (units != m_props->gridUnits())
     {
         const double factor = (units == MonitorProperties::Feet) ? 3.28084 : (1.0 / 3.28084);
-        int newW = qMax(1, qRound(m_gridWSpin->value() * factor));
-        int newH = qMax(1, qRound(m_gridHSpin->value() * factor));
+        const QVector3D cur = m_props->gridSize();
+        const double exactW = qMax(0.001, double(cur.x()) * factor);
+        const double exactH = qMax(0.001, double(cur.z()) * factor);
+        const double exactY = double(cur.y()) * factor;
 
         m_gridWSpin->blockSignals(true);
         m_gridHSpin->blockSignals(true);
-        m_gridWSpin->setValue(newW);
-        m_gridHSpin->setValue(newH);
+        m_gridWSpin->setValue(qMax(1, qRound(exactW)));
+        m_gridHSpin->setValue(qMax(1, qRound(exactH)));
         m_gridWSpin->blockSignals(false);
         m_gridHSpin->blockSignals(false);
 
-        m_graphicsView->setGridSize(QSize(newW, newH));
-        m_props->setGridSize(QVector3D(newW, m_props->gridSize().y(), newH));
+        // The view draws whole grid cells, so it gets the rounded count --
+        // that only decides how many lines are painted. The DOCUMENT keeps the
+        // exact extent, which is what has to survive a round trip.
+        m_graphicsView->setGridSize(QSize(qMax(1, qRound(exactW)),
+                                          qMax(1, qRound(exactH))));
+        m_props->setGridSize(QVector3D(float(exactW), float(exactY), float(exactH)));
     }
 
     if (units == MonitorProperties::Meters)
@@ -1586,6 +2035,10 @@ void Monitor::applyMapView(int view)
     // "Stage only" hides fixtures/targets/power (handled in the view). It clears
     // colour overlays too (falls through to the ViewNormal branch below).
     m_graphicsView->setStageFeaturesOnly(view == ViewStage);
+
+    // The Network overlay also draws each port's cable run, node -> fixtures in
+    // address order, with its stats on hover.
+    m_graphicsView->setNetworkRunsVisible(view == ViewNet);
 
     if (view == ViewPower)
     {
@@ -1639,7 +2092,7 @@ void Monitor::applyMapView(int view)
         // universe (a DMX output/run), so cabling reads at a glance.
         QList<quint32> universes;
         foreach (Fixture *fx, fixtures)
-            if (fx != NULL && !universes.contains(fx->universe()))
+            if (fx != NULL && fx->isPatched() && !universes.contains(fx->universe()))
                 universes.append(fx->universe());
         std::sort(universes.begin(), universes.end());
         QHash<quint32, QColor> uniColor;
@@ -1659,12 +2112,12 @@ void Monitor::applyMapView(int view)
         for (int i = 0; i < fixtures.size(); i++)
         {
             Fixture *a = fixtures.at(i);
-            if (a == NULL) continue;
+            if (a == NULL || !a->isPatched()) continue;
             const quint32 aS = a->address(), aE = a->address() + a->channels();
             for (int j = i + 1; j < fixtures.size(); j++)
             {
                 Fixture *b = fixtures.at(j);
-                if (b == NULL || a->universe() != b->universe()) continue;
+                if (b == NULL || !b->isPatched() || a->universe() != b->universe()) continue;
                 const quint32 bS = b->address(), bE = b->address() + b->channels();
                 if (aS < bE && bS < aE)   // ranges overlap → address clash
                 {
@@ -1680,6 +2133,12 @@ void Monitor::applyMapView(int view)
             if (fx == NULL) continue;
             MonitorFixtureItem *it = m_graphicsView->fixtureItemForId(fx->id());
             if (it == NULL) continue;
+            if (!fx->isPatched())
+            {
+                it->setViewTint(QColor(70, 70, 70));
+                it->setToolTip(tr("Unpatched (inventory)"));
+                continue;
+            }
             const quint32 uni = fx->universe() + 1;        // 1-based for display
             const quint32 a0 = fx->address() + 1;
             const quint32 a1 = fx->address() + fx->channels();
@@ -1718,7 +2177,7 @@ void Monitor::applyMapView(int view)
         // Distinct hue per distinct transport name.
         QStringList transports;
         foreach (Fixture *fx, m_doc->fixtures())
-            if (fx != NULL)
+            if (fx != NULL && fx->isPatched())
             {
                 const QString t = transportOf(fx->universe());
                 if (!transports.contains(t)) transports.append(t);
@@ -1729,14 +2188,34 @@ void Monitor::applyMapView(int view)
             xportColor.insert(transports[i],
                 QColor::fromHsv(int(i * 360.0 / qMax(1, transports.size())) % 360, 190, 235));
 
+        // With a topology defined, a DMX fixture on a universe no port carries
+        // has no physical path to the console -- say so. (With no nodes at all
+        // every fixture would be flagged, which is noise, not information.)
+        const NetworkTopology *nt = m_doc->networkTopology();
+        const QList<quint32> unservedList = nt->nodes().isEmpty() ? QList<quint32>()
+                                                                  : nt->unservedFixtures(m_doc);
+        const QSet<quint32> unserved(unservedList.begin(), unservedList.end());
+
         foreach (Fixture *fx, m_doc->fixtures())
         {
             if (fx == NULL) continue;
             MonitorFixtureItem *it = m_graphicsView->fixtureItemForId(fx->id());
             if (it == NULL) continue;
+            if (!fx->isPatched())
+            {
+                it->setViewTint(QColor(70, 70, 70));
+                it->setToolTip(tr("Unpatched (inventory)"));
+                continue;
+            }
             const QString t = transportOf(fx->universe());
             it->setViewTint(xportColor.value(t, QColor(120, 120, 120)));
             it->setToolTip(tr("%1 · Universe %2").arg(t).arg(fx->universe() + 1));
+            if (unserved.contains(fx->id()))
+            {
+                it->setViewTint(QColor(230, 110, 60));
+                it->setToolTip(tr("%1 · Universe %2 · ⚠ no node port carries this universe -- "
+                                  "no cable run reaches it").arg(t).arg(fx->universe() + 1));
+            }
         }
         m_graphicsView->setPowerSourceColors(QHash<QString, QColor>());
     }
@@ -1782,6 +2261,208 @@ void Monitor::slotToggleLayersPanel(bool show)
     }
 }
 
+void Monitor::toggleStageOverview()
+{
+    if (m_overviewDlg != NULL && m_overviewDlg->isVisible() && m_overviewDlg->isActiveWindow())
+    {
+        m_overviewDlg->close();
+        return;
+    }
+    showStageOverview();
+}
+
+void Monitor::showStageOverview()
+{
+    /* A read-only angled look at the whole rig. StructureStudioView already
+       knows how to project and paint a structure and the fixtures on it;
+       StageKind points it at every structure instead of one, so there is a
+       single renderer to keep correct rather than two that drift apart. */
+    /* MODELESS, and remembered: it is a reference window you keep open beside
+       the work, not a question to answer. exec() made it modal, which locked
+       the rest of the app -- "when in the overview I can't go away from the
+       studio". Reusing the one instance also means a second click raises the
+       window you already have instead of stacking another. */
+    if (m_overviewDlg != NULL)
+    {
+        if (m_overviewView != NULL)
+            m_overviewView->setActiveScene(m_activeSceneId);
+        m_overviewDlg->show();
+        m_overviewDlg->raise();
+        m_overviewDlg->activateWindow();
+        return;
+    }
+
+    QDialog *dlgPtr = new QDialog(this);
+    QDialog &dlg = *dlgPtr;
+    m_overviewDlg = dlgPtr;
+    connect(dlgPtr, &QObject::destroyed, this, [this]() {
+        m_overviewDlg = NULL;
+        m_overviewView = NULL;
+    });
+    dlg.setAttribute(Qt::WA_DeleteOnClose);
+    dlg.setWindowTitle(tr("Rig Overview"));
+    dlg.setProperty("helpTopic", QStringLiteral("lighting-studio.md#angled--the-free-3d-view"));
+    // ⌘W closes it like any other window; ⇧⌘R (toggleStageOverview()) too.
+    QShortcut *closeKey = new QShortcut(QKeySequence::Close, dlgPtr);
+    connect(closeKey, &QShortcut::activated, dlgPtr, &QDialog::close);
+    dlg.resize(1100, 760);
+    QVBoxLayout *vl = new QVBoxLayout(&dlg);
+
+    StructureStudioView *view =
+        new StructureStudioView(m_doc, StructureStudioView::StageKind, 0, &dlg);
+    view->setPlane(StructureStudioView::Angled);
+    view->setLocked(true);
+    m_overviewView = view;
+    view->setActiveScene(m_activeSceneId);
+
+    QHBoxLayout *bar = new QHBoxLayout;
+    bar->addWidget(new QLabel(tr("View:"), &dlg));
+    QComboBox *planeCombo = new QComboBox(&dlg);
+    planeCombo->addItems({ tr("Top"), tr("Front"), tr("Side"), tr("45°") });
+    planeCombo->setCurrentIndex(int(StructureStudioView::Angled));
+    planeCombo->setProperty("cycleOnClick", true);   // same as the plot's View
+    planeCombo->installEventFilter(this);
+    planeCombo->setToolTip(tr("Click to cycle, arrow for the full list"));
+    bar->addWidget(planeCombo);
+    connect(planeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg,
+            [view](int i) { view->setPlane(StructureStudioView::Plane(i)); });
+    /* Live output: the whole point of watching a rig rather than reading a
+       plot. Default ON when the desk is running, so opening the window during a
+       show shows the show. */
+    /* Checked state has to be UNMISTAKABLE. A checkable QToolButton on macOS
+       renders its on state as a barely-different grey, and "why can't I see the
+       beams" turned out to be exactly that: beam brightness comes from DMX, so
+       with Live off there is nothing to draw, and nothing on screen said Live
+       was off. */
+    const QString toggleStyle =
+        "QToolButton { padding: 2px 8px; border: 1px solid #4a4f5a;"
+        " border-radius: 3px; }"
+        "QToolButton:checked { background: #2d6cdf; color: white;"
+        " border: 1px solid #5b8ee8; }";
+
+    QToolButton *liveBtn = new QToolButton(&dlg);
+    liveBtn->setText(tr("Live"));
+    liveBtn->setCheckable(true);
+    liveBtn->setStyleSheet(toggleStyle);
+    liveBtn->setToolTip(tr("Colour and brightness from the DMX being sent, "
+                           "instead of the fixtures' gel colours. Beams need "
+                           "this: how bright a beam is comes from the DMX."));
+    bar->addWidget(liveBtn);
+    connect(liveBtn, &QToolButton::toggled, view,
+            [view](bool on) { view->setLiveValues(on); });
+    /* On by default, not only in Operate. Opening the window while a scene is
+       up and seeing nothing change is the wrong first impression -- and with
+       the room level applied, an idle rig still reads perfectly well. */
+    liveBtn->setChecked(true);
+
+    /* Beams. Their own switch because they are the one thing here that draws
+       over the rig rather than in it: unmissable when you want to see what a
+       look is doing in the air, in the way when you are reading the plot. */
+    QToolButton *beamBtn = new QToolButton(&dlg);
+    beamBtn->setText(tr("Beams"));
+    beamBtn->setCheckable(true);
+    beamBtn->setStyleSheet(toggleStyle);
+    beamBtn->setToolTip(tr("Draw the light moving heads are throwing, out to "
+                           "whatever it lands on"));
+    bar->addWidget(beamBtn);
+    connect(beamBtn, &QToolButton::toggled, view,
+            [view](bool on) { view->setBeams(on); });
+    beamBtn->setChecked(true);
+
+    /* How much light is in the ROOM. Without it the rendered colours are as
+       vivid as a test card whatever the rig is doing, and a blackout still
+       shows bright scenery. */
+    bar->addWidget(new QLabel(tr("Room:"), &dlg));
+    QComboBox *ambientCombo = new QComboBox(&dlg);
+    ambientCombo->addItem(tr("Work light"), 1.00);
+    ambientCombo->addItem(tr("House"),      0.62);
+    ambientCombo->addItem(tr("Dim"),        0.30);
+    ambientCombo->addItem(tr("Blackout"),   0.00);
+    ambientCombo->setCurrentIndex(1);
+    ambientCombo->setProperty("cycleOnClick", true);
+    ambientCombo->installEventFilter(this);
+    ambientCombo->setToolTip(tr("Ambient light in the room, separate from what "
+                                "the rig is emitting — click to cycle"));
+    bar->addWidget(ambientCombo);
+    connect(ambientCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg,
+            [view, ambientCombo](int) {
+        view->setAmbient(ambientCombo->currentData().toDouble());
+    });
+    view->setAmbient(ambientCombo->currentData().toDouble());
+
+    /* Haze: whether the beams show IN THE AIR. Only the shafts -- where the
+       light lands and what it lights do not change with it. */
+    bar->addWidget(new QLabel(tr("Haze:"), &dlg));
+    QComboBox *hazeCombo = new QComboBox(&dlg);
+    hazeCombo->addItem(tr("None"),   0.0);
+    hazeCombo->addItem(tr("Light"),  0.4);
+    hazeCombo->addItem(tr("Medium"), 1.0);
+    hazeCombo->addItem(tr("Heavy"),  1.8);
+    hazeCombo->setCurrentIndex(2);
+    hazeCombo->setProperty("cycleOnClick", true);
+    hazeCombo->installEventFilter(this);
+    hazeCombo->setToolTip(tr("How much haze is in the air: how visible the "
+                             "beams are between the fixture and where they "
+                             "land — click to cycle"));
+    bar->addWidget(hazeCombo);
+    connect(hazeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg,
+            [view, hazeCombo](int) {
+        view->setHaze(hazeCombo->currentData().toDouble());
+    });
+    view->setHaze(hazeCombo->currentData().toDouble());
+
+    /* Fidelity against speed, for the machine this is running on: sharper
+       edges cost fill, and the rate is only a ceiling -- a frame that takes
+       longer than the rate allows still slows the view down on its own. Both
+       are remembered. */
+    bar->addWidget(new QLabel(tr("Quality:"), &dlg));
+    QComboBox *qualityCombo = new QComboBox(&dlg);
+    qualityCombo->addItem(tr("Fast"),     1);
+    qualityCombo->addItem(tr("Smooth"),   2);
+    qualityCombo->addItem(tr("Sharp"),    3);
+    qualityCombo->addItem(tr("Sharpest"), 4);
+    qualityCombo->setCurrentIndex(qMax(0, qualityCombo->findData(view->supersample())));
+    qualityCombo->setToolTip(tr("Edge smoothing: Fast draws at screen resolution, "
+                                "Sharpest at four times it in each direction"));
+    bar->addWidget(qualityCombo);
+    connect(qualityCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg,
+            [view, qualityCombo](int) {
+        view->setSupersample(qualityCombo->currentData().toInt());
+    });
+
+    QComboBox *rateCombo = new QComboBox(&dlg);
+    for (int fps : { 25, 30, 60, 120 })
+        rateCombo->addItem(tr("%1 fps").arg(fps), fps);
+    rateCombo->setCurrentIndex(qMax(0, rateCombo->findData(view->maxFrameRate())));
+    rateCombo->setToolTip(tr("Most live repaints per second. A heavy frame "
+                             "still slows the view below this on its own."));
+    bar->addWidget(rateCombo);
+    connect(rateCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg,
+            [view, rateCombo](int) {
+        view->setMaxFrameRate(rateCombo->currentData().toInt());
+    });
+
+    bar->addStretch();
+    bar->addWidget(new QLabel(tr("drag to swing · shift-drag to pan · "
+                                 "wheel to zoom · read-only"), &dlg));
+    vl->addLayout(bar);
+    vl->addWidget(view, 1);
+
+    QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Close, &dlg);
+    connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::close);
+    vl->addWidget(bb);
+
+    /* Follow the rig while it is open: structures and fixtures move under it as
+       the plot is edited, and a stale overview is worse than none. */
+    connect(m_graphicsView, &MonitorGraphicsView::mapSelectionChanged, view,
+            [view]() { view->reload(); });
+    // A layer hidden in the Studio is hidden here too.
+    connect(m_graphicsView, &MonitorGraphicsView::layerStateChanged, view,
+            &StructureStudioView::layersChanged);
+
+    dlg.show();
+}
+
 void Monitor::slotPOVChanged(int index)
 {
     if (m_graphicsView == NULL || m_povCombo == NULL)
@@ -1810,6 +2491,19 @@ void Monitor::slotGroupItems()
 {
     if (m_graphicsView != NULL)
         m_graphicsView->groupSelectedItems();
+}
+
+void Monitor::slotRotateSelection()
+{
+    if (m_graphicsView == NULL || m_graphicsView->scene()->selectedItems().isEmpty())
+        return;
+    bool ok = false;
+    const double deg = QInputDialog::getDouble(this, tr("Rotate"),
+                                               tr("Turn the selection clockwise (seen from above) by, degrees "
+                                                  "-- less than 0 turns it the other way:"),
+                                               15.0, -360.0, 360.0, 1, &ok);
+    if (ok)
+        m_graphicsView->rotateSelectedItems(deg);
 }
 
 void Monitor::slotUngroupItems()
@@ -1920,7 +2614,7 @@ void Monitor::slotSetBackgroundColor()
     if (!initial.isValid())
         initial = Qt::darkGray;
 
-    QColor c = QColorDialog::getColor(initial, this, tr("Set background color"),
+    QColor c = QColorDialog::getColor(initial, this, tr("Set background colour"),
                                       QColorDialog::ShowAlphaChannel);
     if (!c.isValid())
         return;
@@ -2051,6 +2745,7 @@ void Monitor::slotCopySelected()
             c.name = p->name();
             c.originX = p->originX(); c.originY = p->originY();
             c.width = p->width(); c.depth = p->depth(); c.height = p->height();
+            c.rotation = p->rotation(); c.frontCurve = p->frontCurve();
             c.color = p->color();
             platforms.append(c);
         }
@@ -2108,6 +2803,8 @@ void Monitor::pasteClipboard(float dxM, float dyM)
         p->setWidth(c.width);
         p->setDepth(c.depth);
         p->setHeight(c.height);
+        p->setRotation(c.rotation);
+        p->setFrontCurve(c.frontCurve);
         p->setColor(c.color);
         p->setLayerId(m_props->activeLayerId());
         newPlatformIds.append(p->id());
@@ -2157,11 +2854,38 @@ void Monitor::slotPasteFeatures()
     pasteClipboard(step, step);
 }
 
-void Monitor::slotFixtureDoubleClicked(quint32 /*fid*/)
+void Monitor::slotFixtureDoubleClicked(quint32 fid)
 {
     // Map double-click: edit whatever is selected (single OR the multi-selection
     // the map restored) — keeps multi-edit on the 2D plot.
+    /* ...unless that selection does not hold THIS fixture. "Edit Fixture…" on
+       a Layers row asks for one the plot cannot select at all -- a washer
+       inside a step, under its deck -- and with nothing selected the editor
+       quietly did nothing ("right click on US1t1 to edit fixture I get
+       nothing"). */
+    if (fid != Fixture::invalidId())
+    {
+        bool inSelection = false;
+        foreach (MonitorFixtureItem *it, m_graphicsView->selectedFixtureItems())
+            if (it != nullptr && it->fixtureID() == fid)
+                inSelection = true;
+        if (!inSelection)
+        {
+            editFixtureProperties(fid);
+            return;
+        }
+    }
     showFixtureItemEditor();
+}
+
+QString Monitor::centredPoseName(quint32 fid) const
+{
+    switch (m_props->fixtureRigProps(fid).mountingType)
+    {
+        case Truss::FloorMounted: return tr("Straight up");
+        case Truss::SideArm:      return tr("Straight out");
+        default:                  return tr("Straight down");
+    }
 }
 
 void Monitor::fillOrientationCombo(QComboBox *cb, const FixtureRigProps &rp) const
@@ -2226,12 +2950,31 @@ bool Monitor::isLinearFixture(Fixture *fx) const
     return false;
 }
 
+/* A studio tree row's fixture id. Folder rows never set Qt::UserRole, so a
+   plain toUInt() yields 0 -- which is a REAL fixture id (the first fixture in
+   any workspace), not a "no fixture" marker. Read it as Fixture::invalidId()
+   when the role is unset so fixture 0 behaves like every other fixture. */
+static quint32 studioRowFid(const QTreeWidgetItem *it)
+{
+    const QVariant v = it->data(0, Qt::UserRole);
+    return v.isValid() ? v.toUInt() : Fixture::invalidId();
+}
+
+/* A studio tree row's BAR (child truss) id, for a truss editor's "Fixtures
+   and bars on this object" tree -- see studioRowFid()'s note above for why
+   an unset role has to read back as invalid rather than 0. */
+static quint32 studioRowBarId(const QTreeWidgetItem *it)
+{
+    const QVariant v = it->data(0, Qt::UserRole + 2);
+    return v.isValid() ? v.toUInt() : Truss::invalidId();
+}
+
 void Monitor::editFixtureProperties(quint32 fid)
 {
-    // The studio's single-fixture path (inspector 'Full properties…', canvas
+    // The studio's single-fixture path (inspector 'Fixture Properties…', canvas
     // double-click, tree double-click): ALWAYS edit just this one fixture,
     // bypassing the map selection (and its group select-together).
-    if (fid != 0)
+    if (fid != Fixture::invalidId())
         showFixtureItemEditor(fid);
 }
 
@@ -2258,8 +3001,8 @@ protected:
         QByteArray b; QDataStream s(&b, QIODevice::WriteOnly);
         foreach (QTreeWidgetItem *it, items)
         {
-            const quint32 fid = it->data(0, Qt::UserRole).toUInt();
-            if (fid) s << fid;
+            const quint32 fid = studioRowFid(it);
+            if (fid != Fixture::invalidId()) s << fid;
         }
         m->setData(QStringLiteral("application/x-qlc-fid"), b);
         return m;
@@ -2293,9 +3036,19 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         connect(geoBox, &QGroupBox::toggled, geometryForm, &QWidget::setVisible);
         lv->addWidget(geoBox);
     }
-    lv->addWidget(new QLabel(tr("Fixtures on this object:"), left));
+    lv->addWidget(new QLabel(kind == 2 ? tr("Fixtures and bars on this object:")
+                                       : tr("Fixtures on this object:"), left));
     QTreeWidget *tree = new QTreeWidget(left);
     tree->setHeaderHidden(true);
+    // Sharing the column with the (often ten-plus-row) Geometry form above it,
+    // this tree had no floor: on a modestly sized window it could be squeezed
+    // down to one or two visible rows, silently scrolling anything past the
+    // first few fixtures -- including a truss's own "Bars" section -- out of
+    // view with no visual hint that there was more below the fold ("still no
+    // truss .. this time iterate until you can prove its on that screen": it
+    // was there, just scrolled off). A floor forces the SPLITTER/dialog to
+    // give up space instead of the list quietly disappearing.
+    tree->setMinimumHeight(160);
     tree->setSelectionMode(QAbstractItemView::ExtendedSelection);
     tree->setContextMenuPolicy(Qt::CustomContextMenu);
     // F2 renames a group folder (double-click is taken by open-head-layout).
@@ -2325,37 +3078,138 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     QHBoxLayout *bar = new QHBoxLayout;
     bar->addWidget(new QLabel(tr("View:"), center));
     QComboBox *planeCombo = new QComboBox(center);
-    planeCombo->addItems({ tr("Top"), tr("Front"), tr("Side") });
+    planeCombo->addItems({ tr("Top"), tr("Front"), tr("Side"), tr("45°") });
+    planeCombo->setItemData(3, tr("An angled look from above and to the side. "
+                                  "For viewing only — drag in Top / Front / Side "
+                                  "to move things."), Qt::ToolTipRole);
+    // Click-to-cycle, exactly as the plot's View combo behaves.
+    planeCombo->setProperty("cycleOnClick", true);
+    planeCombo->installEventFilter(this);
+    planeCombo->setToolTip(tr("Click to cycle, arrow for the full list"));
     bar->addWidget(planeCombo);
+    /* Turn the view in quarter steps. Some designers read a plan with downstage
+       at the TOP; 180 degrees gives them that. It is a view transform only --
+       nothing in the workspace moves -- and quarter turns keep the handedness
+       honest, so stage left/right stay truthful (the edge labels turn with it).
+       Remembered across sessions, since it is a personal reading preference. */
+    /* Camera angles for the 45-degree view, in the same drop-down shape as the
+       plot's Grid button: the numbers are there when wanted, and out of the way
+       otherwise. Only meaningful in the angled view, so it enables with it.
+       Dragging the empty canvas orbits too -- these are for setting an exact
+       angle, or reading back the one a drag arrived at. */
+    QToolButton *angleBtn = new QToolButton(center);
+    angleBtn->setText(tr("Angle"));
+    angleBtn->setPopupMode(QToolButton::InstantPopup);
+    angleBtn->setToolTip(tr("Camera angles for the 45° view — or just drag the "
+                            "empty canvas to swing it"));
+    QDoubleSpinBox *azSpin = new QDoubleSpinBox(center);
+    azSpin->setRange(0.0, 359.0); azSpin->setSuffix(QString::fromUtf8("°"));
+    QDoubleSpinBox *elSpin = new QDoubleSpinBox(center);
+    elSpin->setRange(0.0, 90.0); elSpin->setSuffix(QString::fromUtf8("°"));
+    {
+        QWidget *aw = new QWidget(center);
+        QFormLayout *afl = new QFormLayout(aw);
+        afl->setContentsMargins(10, 8, 10, 8);
+        afl->addRow(tr("Around the stage:"), azSpin);
+        afl->addRow(tr("Height of eye:"), elSpin);
+        QMenu *am = new QMenu(angleBtn);
+        QWidgetAction *wa = new QWidgetAction(am);
+        wa->setDefaultWidget(aw);
+        am->addAction(wa);
+        angleBtn->setMenu(am);
+    }
+    bar->addWidget(angleBtn);
+
+    QToolButton *rotBtn = new QToolButton(center);
+    rotBtn->setToolTip(tr("Turn the view 90° clockwise. A view setting only — "
+                          "nothing in the workspace moves."));
+    bar->addWidget(rotBtn);
+
     QPushButton *lockBtn = new QPushButton(tr("🔒 Locked"), center);
     lockBtn->setCheckable(true); lockBtn->setChecked(true);
     lockBtn->setToolTip(tr("Locked: click to select fixtures. Unlock to drag them."));
     bar->addWidget(lockBtn);
     bar->addStretch();
+    cv->addLayout(bar);
+    /* The actions on a row of their own: sharing one with the view controls,
+       they were squeezed below their text in an editor of ordinary width
+       ("t on Fa", "stribu", "dd Ba"). */
+    QHBoxLayout *actBar = new QHBoxLayout;
     QPushButton *faceBtn = new QPushButton(tr("Put on Face"), center);
     faceBtn->setToolTip(tr("Pin the selected fixtures (or all) to the current "
                            "view's face (Top / Front / Side)."));
-    bar->addWidget(faceBtn);
+    actBar->addWidget(faceBtn);
     QPushButton *distBtn = new QPushButton(tr("Distribute"), center);
-    distBtn->setToolTip(tr("Space the selected fixtures (or all on this object) "
-                           "evenly along the current face."));
-    bar->addWidget(distBtn);
+    distBtn->setToolTip(tr("Space the selected fixtures evenly, in a line: all of "
+                           "them (or none picked) along the whole object, a few "
+                           "of them between the outermost two. Their height and "
+                           "offset across it come from the middle one."));
+    actBar->addWidget(distBtn);
     QPushButton *addBarBtn = new QPushButton(tr("Add Bar"), center);
     addBarBtn->setVisible(kind == 0 || kind == 2 || kind == 4);
-    bar->addWidget(addBarBtn);
-    cv->addLayout(bar);
+    actBar->addWidget(addBarBtn);
+    const QList<QPushButton *> actBtns = { faceBtn, distBtn, addBarBtn };
+    foreach (QPushButton *b, actBtns)
+        b->setMinimumWidth(b->sizeHint().width());
+    actBar->addStretch();
+    cv->addLayout(actBar);
 
     StructureStudioView *view = new StructureStudioView(
         m_doc, StructureStudioView::Kind(kind), id, center);
     view->setMinimumSize(320, 300);
     planeCombo->setCurrentIndex(int(view->plane()));
+
+    auto pushAngle = [view, azSpin, elSpin]() {
+        view->setAngledView(azSpin->value(), elSpin->value());
+        QSettings().setValue(SETTINGS_STUDIOANGLE,
+                             QString("%1,%2").arg(azSpin->value()).arg(elSpin->value()));
+    };
+    QObject::connect(azSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+                     view, [pushAngle](double) { pushAngle(); });
+    QObject::connect(elSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+                     view, [pushAngle](double) { pushAngle(); });
+    // An orbit drag has to write back, or the numbers would go stale the moment
+    // the canvas is used.
+    QObject::connect(view, &StructureStudioView::angledViewChanged, azSpin,
+                     [azSpin, elSpin](double az, double el) {
+        azSpin->blockSignals(true); azSpin->setValue(az); azSpin->blockSignals(false);
+        elSpin->blockSignals(true); elSpin->setValue(el); elSpin->blockSignals(false);
+        QSettings().setValue(SETTINGS_STUDIOANGLE, QString("%1,%2").arg(az).arg(el));
+    });
+    {
+        const QStringList a = QSettings().value(SETTINGS_STUDIOANGLE).toString().split(',');
+        if (a.size() == 2)
+        {
+            azSpin->setValue(a.at(0).toDouble());
+            elSpin->setValue(a.at(1).toDouble());
+        }
+    }
+
+
+    auto applyRotation = [view, rotBtn](int turns) {
+        view->setRotation(turns);
+        static const char *names[] = { "0°", "90°", "180°", "270°" };
+        rotBtn->setText(QString("⟳ %1").arg(names[view->rotation() & 3]));
+    };
+    applyRotation(QSettings().value(SETTINGS_STUDIOROTATION, 0).toInt());
+    QObject::connect(rotBtn, &QToolButton::clicked, view, [view, applyRotation]() {
+        const int next = (view->rotation() + 1) & 3;
+        applyRotation(next);
+        QSettings().setValue(SETTINGS_STUDIOROTATION, next);
+    });
     cv->addWidget(view, 1);
-    QLabel *hint = new QLabel(tr("click a fixture to select · double-click to edit · "
-                                 "drag to reposition · wheel zoom · shift-drag pan"), center);
+    QLabel *hint = new QLabel(tr("click a fixture to select · ⌘- or ⇧-click to add more · "
+                                 "double-click to edit · drag to reposition (all "
+                                 "selected move together) · drag the background "
+                                 "to pan · wheel to zoom"), center);
+    hint->setWordWrap(true);
     hint->setStyleSheet("color:#8a8e99;");
     cv->addWidget(hint);
 
     // ---- RIGHT: inline fixture inspector -----------------------------------
+    /* The quick subset of Fixture Properties: the same rows (FixtureFields),
+       for every fixture selected -- what they differ on reads "mixed" -- each
+       change applied at once, and one Ctrl+Z step. */
     QWidget *insp = new QWidget(body);
     insp->setObjectName("studioInspector");
     QVBoxLayout *iv = new QVBoxLayout(insp);
@@ -2364,102 +3218,179 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     inspTitle->setWordWrap(true);
     iv->addWidget(inspTitle);
     QFormLayout *inspForm = new QFormLayout;
-    QPushButton *gelBtn = new QPushButton(insp);
-    QComboBox *faceCombo = new QComboBox(insp);
-    faceCombo->addItems({ tr("Top"), tr("Front"), tr("Side") });
-    QDoubleSpinBox *angleSpin = new QDoubleSpinBox(insp);
-    angleSpin->setRange(-180, 180); angleSpin->setDecimals(0); angleSpin->setSuffix(QStringLiteral("°"));
-    QComboBox *mountCombo = new QComboBox(insp);   // logical orientation — any fixture
-    mountCombo->addItem(tr("Upright (base down)"),     QVariant(int(Truss::FloorMounted)));
-    mountCombo->addItem(tr("Sideways (base on side)"), QVariant(int(Truss::SideArm)));
-    mountCombo->addItem(tr("Hung (base on top)"),      QVariant(int(Truss::TopHung)));
-    mountCombo->setToolTip(tr("Base direction relative to the stage floor (gravity), "
-                              "not the mounting face."));
-    inspForm->addRow(tr("Colour:"), gelBtn);
-    inspForm->addRow(tr("Orientation:"), mountCombo);
-    inspForm->addRow(tr("Face:"), faceCombo);
-    inspForm->addRow(tr("Angle:"), angleSpin);
+    FixtureFields *fields = new FixtureFields(this, inspForm, insp, view);
+
+    /* A bar's own rows: what it hangs from, and the one field worth editing
+     * inline (its position along the parent); everything else it has is one
+     * click away (Fixture Properties… opens the bar's editor). Range set once
+     * real bar data arrives (populateBar()). */
+    QLabel *barOnLbl = new QLabel(insp);
+    barOnLbl->setStyleSheet("color:#b0b4c0;");
+    inspForm->addRow(tr("Mounted on:"), barOnLbl);
+    QDoubleSpinBox *barAlongSpin = new FeetInchesSpinBox(m_props->gridUnits() == MonitorProperties::Feet, insp);
+    barAlongSpin->setDecimals(2);
+    inspForm->addRow(tr("Along truss:"), barAlongSpin);
+
     iv->addLayout(inspForm);
-    QPushButton *fullBtn = new QPushButton(tr("Full properties…"), insp);
+    QPushButton *fullBtn = new QPushButton(tr("Fixture Properties…"), insp);
+    fullBtn->setObjectName(QStringLiteral("inspectorFullProperties"));
     iv->addWidget(fullBtn);
     iv->addStretch();
     insp->setMinimumWidth(190);
 
-    auto curFid = QSharedPointer<quint32>::create(0u);
-    auto populate = [this, curFid, inspTitle, gelBtn, faceCombo, angleSpin, mountCombo, fullBtn, inspForm]() {
-        const quint32 fid = *curFid;
-        Fixture *fx = fid ? m_doc->fixture(fid) : nullptr;
-        const bool have = (fx != nullptr);
-        const bool frame = have && (m_props->fixtureFrameGroup(fid) != 0);
-        const bool linear = have && isLinearFixture(fx);   // strip / bar / tape
-        inspTitle->setText(have ? fx->name() : tr("(no fixture selected)"));
-        gelBtn->setEnabled(have); fullBtn->setEnabled(have);
-        // Show the RELEVANT controls per fixture type: Orientation for a body with
-        // a base (movers, pars); Face + Angle ("which way it runs") for a linear
-        // strip/bar, and for any frame-group member.
-        auto row = [inspForm](QWidget *w, bool vis) {
-            w->setVisible(vis);
-            if (QWidget *l = inspForm->labelForField(w)) l->setVisible(vis);
-        };
-        // A tower-shelf fixture is oriented ON the shelf (upright) or UNDER it
-        // (hung) — Orientation, not Face/Angle, regardless of head count.
-        const bool onTower = have && (m_props->fixtureRigProps(fid).towerId != Tower::invalidId());
-        row(mountCombo, have && (!linear || onTower));
-        row(faceCombo,  have && (linear || frame) && !onTower);
-        row(angleSpin,  have && (linear || frame) && !onTower);
-        mountCombo->setEnabled(have); faceCombo->setEnabled(have); angleSpin->setEnabled(have);
-        if (!have) { gelBtn->setStyleSheet(QString()); return; }
-        const FixtureRigProps rp = m_props->fixtureRigProps(fid);
-        const QColor gel = m_props->fixtureGelColor(fid, 0, 0);
-        gelBtn->setText(gel.isValid() ? gel.name() : tr("set…"));
-        gelBtn->setStyleSheet(gel.isValid()
-            ? QString("background:%1; color:%2").arg(gel.name())
-                .arg(gel.lightness() > 128 ? "#000" : "#fff") : QString());
-        faceCombo->blockSignals(true); faceCombo->setCurrentIndex(qBound(0, rp.studioMount, 2)); faceCombo->blockSignals(false);
-        angleSpin->blockSignals(true); angleSpin->setValue(double(rp.studioAngle)); angleSpin->blockSignals(false);
-        // Orientation options are constrained by the mount (shared helper).
-        fillOrientationCombo(mountCombo, rp);
+    /* Ctrl+Z here: the fixtures' rig and colours as they were before each
+       change -- a drag, an inspector field, a layout action. A run of steps
+       on one field (a spin box held down) is one undo. Restoring values, not
+       objects, so nothing the dialog around this holds is swapped out. */
+    struct StudioUndo
+    {
+        QMap<quint32, FixtureRigProps> rig;
+        QHash<quint32, QColor> gels;
+        QString field;
+        qint64 at = 0;
     };
+    auto undoStack = QSharedPointer<QList<StudioUndo>>::create();
+    auto pushUndoFor = [this, undoStack](const QString &field) {
+        const qint64 now = QDateTime::currentMSecsSinceEpoch();
+        if (!field.isEmpty() && !undoStack->isEmpty() && undoStack->last().field == field
+            && now - undoStack->last().at < 1500)
+        {
+            undoStack->last().at = now;     // the same run of steps
+            return;
+        }
+        StudioUndo u;
+        u.rig = m_props->fixtureRigPropsMap();
+        foreach (quint32 fid, m_props->fixtureItemsID())
+            u.gels.insert(fid, m_props->fixtureGelColor(fid, 0, 0));
+        u.field = field;
+        u.at = now;
+        undoStack->append(u);
+        while (undoStack->size() > 50) undoStack->removeFirst();
+    };
+    auto pushUndo = [pushUndoFor]() { pushUndoFor(QString()); };
+    connect(fields, &FixtureFields::aboutToEdit, insp, [pushUndoFor](const QString &field) {
+        pushUndoFor(field);
+    });
+
+    // Fixture::invalidId(), NOT 0: fixture 0 is the first fixture in any
+    // workspace, so a 0 "nothing selected" sentinel silently dropped every
+    // inspector edit made to it.
+    auto curFid = QSharedPointer<quint32>::create(Fixture::invalidId());
+    /* Every fixture selected, in the list or on the canvas; curFid is the one
+       whose kind decides the rows. An edit goes to all of them ("if I select
+       all the fixtures .. apply tilt/angle changes to all of them at same
+       time"). */
+    auto curFids = QSharedPointer<QList<quint32>>::create();
+    auto targets = [curFid, curFids]() {
+        if (*curFid == Fixture::invalidId())
+            return QList<quint32>();
+        return curFids->contains(*curFid) ? *curFids : QList<quint32>{ *curFid };
+    };
+    // Truss::invalidId() (UINT_MAX) — a bar is a Truss, not a Fixture, so it
+    // needs its own "nothing selected" slot alongside curFid, not to share it.
+    auto curBarId = QSharedPointer<quint32>::create(UINT_MAX);
+    auto row = [inspForm](QWidget *w, bool vis) {
+        w->setVisible(vis);
+        if (QWidget *l = inspForm->labelForField(w)) l->setVisible(vis);
+    };
+    auto populate = [this, curFid, curBarId, targets, inspTitle, fields, fullBtn]() {
+        const quint32 fid = *curFid;
+        Fixture *fx = (fid != Fixture::invalidId()) ? m_doc->fixture(fid) : nullptr;
+        const int many = targets().size();
+        inspTitle->setText(fx != nullptr ? (many > 1 ? tr("%1 fixtures selected").arg(many) : fx->name())
+                           : (*curBarId != UINT_MAX) ? QString()   // populateBar() sets it
+                           : tr("(no fixture selected)"));
+        fullBtn->setEnabled(fx != nullptr);
+        if (*curBarId != UINT_MAX || fx == nullptr)
+        {
+            fields->hideAll();
+            return;
+        }
+        fields->setFixtures(targets(), fid);
+    };
+    // The heading is the fixture's name: a rename elsewhere shows here too.
+    connect(m_doc, &Doc::fixtureChanged, inspTitle, [curFid, populate](quint32 fid) {
+        if (*curFid == fid)
+            populate();
+    });
     populate();
 
+    /* The bar half of the same panel: "when I select it .. it doesn't
+       hilight nor does the right side change to the bar data." */
+    auto populateBar = [this, curFid, curBarId, inspTitle, fullBtn, barOnLbl, barAlongSpin, row]() {
+        const quint32 barId = *curBarId;
+        Truss *bar = (barId != UINT_MAX) ? m_props->truss(barId) : nullptr;
+        const bool have = (bar != nullptr);
+        row(barAlongSpin, have);
+        row(barOnLbl, have);
+        if (!have)
+        {
+            // A FIXTURE is showing (or nothing is): its rows are FixtureFields'.
+            if (*curFid == Fixture::invalidId())
+            {
+                inspTitle->setText(tr("(no fixture selected)"));
+                fullBtn->setEnabled(false);
+            }
+            return;
+        }
+        fullBtn->setEnabled(true);
+        inspTitle->setText(bar->name());
+        Truss *parent = m_props->truss(bar->parentTrussId());
+        const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
+        const double toDisp = isFeet ? 3.28084 : 1.0;
+        barOnLbl->setText(parent ? tr("Truss %1").arg(parent->name()) : QString("—"));
+        barAlongSpin->blockSignals(true);
+        barAlongSpin->setRange(0.0, parent ? double(parent->length()) * toDisp : 100.0);
+        barAlongSpin->setValue(double(bar->parentOffset()) * toDisp);
+        // The bar's OWN lock only, same reasoning as dragBarTo() -- a bar is
+        // its own structural object, not a fixture attached to one.
+        barAlongSpin->setEnabled(!bar->locked());
+        barAlongSpin->blockSignals(false);
+    };
+    populateBar();
+
     connect(view, &StructureStudioView::fixtureSelected, insp,
-            [curFid, populate](quint32 fid){ *curFid = fid; populate(); });
-    connect(gelBtn, &QPushButton::clicked, insp, [this, curFid, view, populate]() {
-        if (*curFid == 0) return;
-        const QColor c = QColorDialog::getColor(m_props->fixtureGelColor(*curFid, 0, 0),
-                                                this, tr("Fixture Colour"));
-        if (!c.isValid()) return;
-        m_props->setFixtureGelColor(*curFid, 0, 0, c);
-        m_graphicsView->updateFixture(*curFid);
+            [curFid, curFids, curBarId, populate, populateBar](quint32 fid){
+                *curFid = fid; *curBarId = UINT_MAX;
+                if (!curFids->contains(fid))
+                    *curFids = (fid == Fixture::invalidId()) ? QList<quint32>() : QList<quint32>{ fid };
+                populate(); populateBar();
+            });
+    connect(view, &StructureStudioView::fixturesSelected, insp,
+            [curFid, curFids, populate](const QList<quint32> &fids){
+                *curFids = fids;
+                if (!fids.contains(*curFid))
+                    *curFid = fids.isEmpty() ? Fixture::invalidId() : fids.first();
+                populate();
+            });
+    connect(view, &StructureStudioView::barSelected, insp,
+            [curFid, curBarId, populate, populateBar](quint32 barId){
+                *curBarId = barId; *curFid = Fixture::invalidId(); populate(); populateBar();
+            });
+    connect(barAlongSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), insp,
+            [this, curBarId, view, pushUndoFor](double v) {
+        if (*curBarId == UINT_MAX) return;
+        Truss *bar = m_props->truss(*curBarId);
+        if (bar == nullptr) return;
+        Truss *parent = m_props->truss(bar->parentTrussId());
+        if (parent == nullptr || bar->locked()) return;
+        const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
+        const double fromDisp = isFeet ? (1.0 / 3.28084) : 1.0;
+        bar->setParentOffset(qBound(0.0f, float(v * fromDisp), parent->length()));
+        m_props->recomputeChildTrusses();
+        m_doc->setModified();
         if (view) view->reload();
-        populate();
-    });
-    connect(faceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), insp,
-            [this, curFid, view, populate](int i) {
-        if (*curFid == 0) return;
-        if (view) view->setFixtureFace(*curFid, i);
-        m_graphicsView->updateFixture(*curFid);
-        populate();
-    });
-    connect(angleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), insp,
-            [this, curFid, view](double v) {
-        if (*curFid == 0) return;
-        if (view) view->setFixtureAngle(*curFid, float(v));
-        m_graphicsView->updateFixture(*curFid);
-    });
-    connect(mountCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), insp,
-            [this, curFid, view, mountCombo](int) {
-        if (*curFid == 0) return;
-        FixtureRigProps rp = m_props->fixtureRigProps(*curFid);
-        rp.mountingType = static_cast<Truss::MountingType>(mountCombo->currentData(Qt::UserRole).toInt());
-        const int side = mountCombo->currentData(Qt::UserRole + 1).toInt();
-        if (side >= 0) rp.trussMountSide = side;   // on-top / under / centred on a bar
-        m_props->setFixtureRigProps(*curFid, rp);
-        m_graphicsView->updateFixture(*curFid);
-        if (view) view->reload();
+        m_graphicsView->updateTrusses();
     });
     connect(fullBtn, &QPushButton::clicked, insp,
-            [this, curFid]() { if (*curFid) editFixtureProperties(*curFid); });
+            [this, curFid, curBarId, targets]() {
+        if (*curBarId != UINT_MAX)
+            slotEditTruss(*curBarId);
+        else if (targets().size() > 1)
+            editFixturesProperties(targets());
+        else if (*curFid != Fixture::invalidId())
+            editFixtureProperties(*curFid);
+    });
 
     body->addWidget(left);
     body->addWidget(center);
@@ -2469,7 +3400,7 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     body->setStretchFactor(2, 0);
 
     // ---- Fixture tree: group folders → fixtures, with selection sync -------
-    auto rebuildTree = [this, tree, view]() {
+    auto rebuildTree = [this, tree, view, kind, id]() {
         tree->blockSignals(true);
         tree->clear();
         // The fixtures on THIS object — a fixture group counts as "local" only if
@@ -2518,50 +3449,180 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
             Fixture *fx = m_doc->fixture(fid);
             QTreeWidgetItem *it = new QTreeWidgetItem(parent, QStringList(fx ? fx->name() : QString::number(fid)));
             it->setData(0, Qt::UserRole, fid);
+            it->setFlags(it->flags() | Qt::ItemIsEditable);    // Return / F2 renames the fixture
+        }
+        /* A bar hung on THIS truss is a child Truss, not a fixture, so it never
+           shows up above -- mountedFixtures() only walks m_doc->fixtures(). Left
+           out entirely, a bar just added here had nowhere in this editor to
+           appear or be positioned ("truss on T1 is STILL not part of T1 .. it
+           should show up in the truss editor as something I can place"), even
+           though the data model already has it correctly parented. List it here
+           too, under its own heading, double-click opening its own editor
+           (slotEditTruss) where its face/along-truss/lock fields actually live. */
+        if (kind == 2)
+        {
+            QTreeWidgetItem *barsNode = nullptr;
+            foreach (Truss *t, m_props->trusses())
+            {
+                if (t == nullptr || t->parentTrussId() != id)
+                    continue;
+                if (!barsNode)
+                {
+                    barsNode = new QTreeWidgetItem(tree, QStringList(tr("Bars")));
+                    barsNode->setExpanded(true);
+                }
+                QTreeWidgetItem *it = new QTreeWidgetItem(barsNode, QStringList(t->name()));
+                it->setData(0, Qt::UserRole + 2, t->id());
+                it->setFlags(it->flags() | Qt::ItemIsEditable);   // ...and a bar
+            }
         }
         tree->blockSignals(false);
     };
     rebuildTree();
 
+    /* A fixture renamed anywhere (the edit dialog, Layers, the Fixture
+       Manager) shows its new name in this list and on the canvas. Deferred:
+       a rename made IN this list arrives mid-edit of its own row. */
+    {
+        auto pending = std::make_shared<bool>(false);
+        connect(m_doc, &Doc::fixtureChanged, tree, [tree, view, rebuildTree, pending](quint32) {
+            if (*pending)
+                return;
+            *pending = true;
+            QTimer::singleShot(0, tree, [view, rebuildTree, pending]() {
+                *pending = false;
+                rebuildTree();
+                view->update();
+            });
+        });
+    }
+
     auto rebuildSource = []() {};   // drag-source panel retired (right-click adds)
 
     // Tree selection → highlight on the canvas + populate the inspector.
-    connect(tree, &QTreeWidget::itemSelectionChanged, tree, [tree, view, curFid, populate]() {
+    connect(tree, &QTreeWidget::itemSelectionChanged, tree,
+            [tree, view, curFid, curFids, curBarId, populate, populateBar]() {
         QList<quint32> ids;
+        quint32 barId = UINT_MAX;
         foreach (QTreeWidgetItem *it, tree->selectedItems())
         {
-            const quint32 fid = it->data(0, Qt::UserRole).toUInt();
-            if (fid != 0) ids << fid;
+            const quint32 fid = studioRowFid(it);
+            if (fid != Fixture::invalidId()) { if (!ids.contains(fid)) ids << fid; continue; }
+            /* A folder row -- a fixture group, or "Ungrouped" -- stands for
+               the fixtures listed under it. Not keyed on the group id: 0 is a
+               real fixture group id, and "Ungrouped" has none. */
+            if (studioRowBarId(it) == Truss::invalidId() && it->childCount() > 0)
+            {
+                std::function<void(QTreeWidgetItem *)> addUnder = [&](QTreeWidgetItem *n) {
+                    for (int c = 0; c < n->childCount(); ++c)
+                    {
+                        const quint32 cf = studioRowFid(n->child(c));
+                        if (cf != Fixture::invalidId() && !ids.contains(cf)) ids << cf;
+                        addUnder(n->child(c));
+                    }
+                };
+                addUnder(it);
+                continue;
+            }
+            if (barId == UINT_MAX)   // first bar row wins; a bar has no multi-select drag
+                barId = studioRowBarId(it);
         }
+        *curFids = ids;
         view->setHighlight(ids);
-        *curFid = ids.isEmpty() ? 0u : ids.first();
+        view->setBarHighlight(ids.isEmpty() ? barId : UINT_MAX);
+        *curFid = ids.isEmpty() ? Fixture::invalidId() : ids.first();
+        *curBarId = ids.isEmpty() ? barId : UINT_MAX;
         populate();
+        populateBar();
     });
     // Canvas click → select the matching tree row.
     connect(view, &StructureStudioView::fixtureSelected, tree, [tree](quint32 fid) {
         tree->blockSignals(true);
         tree->clearSelection();
         QTreeWidgetItemIterator it(tree);
-        while (*it) { if ((*it)->data(0, Qt::UserRole).toUInt() == fid) { (*it)->setSelected(true); } ++it; }
+        while (*it) { if (studioRowFid(*it) == fid) { (*it)->setSelected(true); } ++it; }
+        tree->blockSignals(false);
+    });
+    // Cmd-click on the canvas: the tree selects all of them.
+    connect(view, &StructureStudioView::fixturesSelected, tree, [tree](const QList<quint32> &fids) {
+        tree->blockSignals(true);
+        tree->clearSelection();
+        QTreeWidgetItemIterator it(tree);
+        while (*it) { if (fids.contains(studioRowFid(*it))) { (*it)->setSelected(true); } ++it; }
+        tree->blockSignals(false);
+    });
+    // Same, for a bar clicked on the canvas.
+    connect(view, &StructureStudioView::barSelected, tree, [tree](quint32 barId) {
+        tree->blockSignals(true);
+        tree->clearSelection();
+        QTreeWidgetItemIterator it(tree);
+        while (*it) { if (studioRowBarId(*it) == barId) { (*it)->setSelected(true); } ++it; }
         tree->blockSignals(false);
     });
     // Rename a group folder (F2 or right-click Rename) → update the fixture group.
-    connect(tree, &QTreeWidget::itemChanged, tree, [this](QTreeWidgetItem *it, int col) {
+    connect(tree, &QTreeWidget::itemChanged, tree, [this, tree, view, curFid, populate](QTreeWidgetItem *it, int col) {
         if (col != 0) return;
+        const QString nm = it->text(0).trimmed();
+        // Put the stored name back without re-entering this handler.
+        auto restore = [tree, it](const QString &name) {
+            tree->blockSignals(true);
+            it->setText(0, name);
+            tree->blockSignals(false);
+        };
+
+        // A fixture row: rename the fixture itself, everywhere it is shown.
+        if (it->data(0, Qt::UserRole).isValid())
+        {
+            Fixture *fx = m_doc->fixture(it->data(0, Qt::UserRole).toUInt());
+            if (fx == nullptr) return;
+            if (nm.isEmpty()) { restore(fx->name()); return; }
+            if (fx->name() != nm)
+            {
+                fx->setName(nm);
+                m_doc->setModified();
+                m_graphicsView->updateFixture(fx->id());
+                if (m_layersPanel) m_layersPanel->reload();
+                if (view) view->reload();
+                if (*curFid == fx->id()) populate();         // the inspector's title
+            }
+            if (it->text(0) != nm) restore(nm);
+            return;
+        }
+        // A bar row.
+        if (studioRowBarId(it) != Truss::invalidId())
+        {
+            Truss *bar = m_props->truss(studioRowBarId(it));
+            if (bar == nullptr) return;
+            if (nm.isEmpty()) { restore(bar->name()); return; }
+            if (bar->name() != nm)
+            {
+                bar->setName(nm);
+                m_doc->setModified();
+                m_graphicsView->updateTrusses();
+                if (m_layersPanel) m_layersPanel->reload();
+                if (view) view->reload();
+            }
+            return;
+        }
+        // A group folder.
         const quint32 gid = it->data(0, Qt::UserRole + 1).toUInt();
         if (gid == 0) return;
         FixtureGroup *g = m_doc->fixtureGroup(gid);
-        const QString nm = it->text(0).trimmed();
-        if (g != nullptr && !nm.isEmpty() && g->name() != nm)
+        if (g != nullptr && nm.isEmpty()) { restore(g->name()); return; }
+        if (g != nullptr && g->name() != nm)
         {
             g->setName(nm);
             m_doc->setModified();
         }
     });
-    // Double-click a tree fixture → edit it; a GROUP folder → its head-layout grid.
+    // Double-click a tree fixture → edit it; a bar → its own truss editor
+    // (face/along-truss/lock live there, not in this one); a GROUP folder →
+    // its head-layout grid.
     connect(tree, &QTreeWidget::itemDoubleClicked, tree, [this](QTreeWidgetItem *it, int) {
-        const quint32 fid = it->data(0, Qt::UserRole).toUInt();
-        if (fid != 0) { editFixtureProperties(fid); return; }
+        const quint32 fid = studioRowFid(it);
+        if (fid != Fixture::invalidId()) { editFixtureProperties(fid); return; }
+        const quint32 barId = studioRowBarId(it);
+        if (barId != Truss::invalidId()) { slotEditTruss(barId); return; }
         const quint32 gid = it->data(0, Qt::UserRole + 1).toUInt();
         if (gid != 0) openGroupLayout(gid);
     });
@@ -2570,48 +3631,79 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         QList<quint32> ids;
         foreach (QTreeWidgetItem *it, tree->selectedItems())
         {
-            const quint32 fid = it->data(0, Qt::UserRole).toUInt();
-            if (fid != 0) ids << fid;
+            const quint32 fid = studioRowFid(it);
+            if (fid != Fixture::invalidId()) ids << fid;
         }
         return ids;
     };
 
-    // Undo stack: snapshots of the fixture rig-props map. Ctrl+Z restores the
-    // last snapshot. pushUndo() is called before each layout-mutating action.
-    auto undoStack = QSharedPointer<QList<QMap<quint32, FixtureRigProps>>>::create();
-    auto pushUndo = [this, undoStack]() {
-        undoStack->append(m_props->fixtureRigPropsMap());
-        while (undoStack->size() > 50) undoStack->removeFirst();
-    };
-    auto doUndo = [this, undoStack, view, rebuildTree]() {
+    auto doUndo = [this, undoStack, view, rebuildTree, populate]() {
         if (undoStack->isEmpty()) return;
-        const QMap<quint32, FixtureRigProps> snap = undoStack->takeLast();
-        for (auto it = snap.constBegin(); it != snap.constEnd(); ++it)
+        const StudioUndo snap = undoStack->takeLast();
+        for (auto it = snap.rig.constBegin(); it != snap.rig.constEnd(); ++it)
             m_props->setFixtureRigProps(it.key(), it.value());
+        for (auto it = snap.gels.constBegin(); it != snap.gels.constEnd(); ++it)
+        {
+            m_props->setFixtureGelColor(it.key(), 0, 0, it.value());
+            m_graphicsView->setFixtureGelColor(it.key(), it.value());
+        }
         foreach (Fixture *fx, m_doc->fixtures())
             if (fx) m_graphicsView->updateFixture(fx->id());
         m_graphicsView->updatePlatforms();
         m_doc->setModified();
         if (view) view->reload();
         rebuildTree();
+        populate();
     };
     QShortcut *undoSc = new QShortcut(QKeySequence::Undo, dlg);
     connect(undoSc, &QShortcut::activated, dlg, [doUndo]() { doUndo(); });
 
+    /* Take fixtures off THIS object, from the list as well as the canvas ("no
+       way to remove fixture from tower"). The full unmount for a stand, tower,
+       truss or boom -- out of its group too, or it stays listed under a
+       structure it is no longer on; a platform clears its riser/deck mount. */
+    const QString objectNoun = (kind == 1) ? tr("Tower") : (kind == 2) ? tr("Truss")
+                             : (kind == 3) ? tr("Platform") : (kind == 4) ? tr("Boom") : tr("Stand");
+    auto removeFromObject = [this, kind](const QList<quint32> &fids) {
+        foreach (quint32 fid, fids)
+        {
+            if (kind == 3)
+            {
+                FixtureRigProps rp = m_props->fixtureRigProps(fid);
+                rp.riserPlatformId = FixtureRigProps::invalidPlatformId();
+                rp.deckPlatformId  = FixtureRigProps::invalidPlatformId();
+                m_props->setFixtureRigProps(fid, rp);
+                m_graphicsView->updateFixture(fid);
+            }
+            else
+                m_graphicsView->unmountFixture(fid);
+        }
+        m_doc->setModified();
+    };
+
     // Right-click the tree → add fixtures / a group, or make a group from selection.
     connect(tree, &QTreeWidget::customContextMenuRequested, tree,
-            [this, tree, kind, id, view, rebuildTree, rebuildSource, selectedFids, pushUndo](const QPoint &pos) {
+            [this, tree, kind, id, view, rebuildTree, rebuildSource, selectedFids, pushUndo,
+             objectNoun, removeFromObject](const QPoint &pos) {
         QMenu m;
         QAction *aFix = m.addAction(tr("Add Fixtures…"));
         QAction *aGrp = m.addAction(tr("Add Existing Fixture Group…"));
         const QList<quint32> selNow = selectedFids();
         QAction *aNew = nullptr;
+        QAction *aRemove = nullptr;
+        if (!selNow.isEmpty())
+        {
+            m.addSeparator();
+            aRemove = m.addAction(selNow.size() > 1
+                                      ? tr("Remove %1 Fixtures from %2").arg(selNow.size()).arg(objectNoun)
+                                      : tr("Remove from %1").arg(objectNoun));
+        }
         if (!selNow.isEmpty())
         {
             m.addSeparator();
             aNew = m.addAction(tr("New Fixture Group from Selection…"));
         }
-        // Rename when a group folder is under the cursor.
+        // Rename whatever is under the cursor: a group folder, a fixture, a bar.
         QTreeWidgetItem *hit = tree->itemAt(pos);
         QAction *aRen = nullptr, *aLay = nullptr;
         if (hit != nullptr && hit->data(0, Qt::UserRole + 1).toUInt() != 0)
@@ -2620,10 +3712,22 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
             aRen = m.addAction(tr("Rename Group"));
             aLay = m.addAction(tr("Head Layout…"));
         }
+        else if (hit != nullptr && (hit->flags() & Qt::ItemIsEditable))
+        {
+            m.addSeparator();
+            aRen = m.addAction(studioRowBarId(hit) != Truss::invalidId() ? tr("Rename Bar")
+                                                                        : tr("Rename Fixture"));
+        }
         QAction *chosen = m.exec(tree->viewport()->mapToGlobal(pos));
         if (chosen == aFix) { pushUndo(); studioAddFixture(kind, id, view); rebuildTree(); rebuildSource(); }
         else if (chosen == aGrp) { pushUndo(); studioAddGroup(kind, id, view); rebuildTree(); rebuildSource(); }
         else if (aNew && chosen == aNew) { studioCreateGroup(selNow, view); rebuildTree(); rebuildSource(); }
+        else if (aRemove && chosen == aRemove)
+        {
+            pushUndo();
+            removeFromObject(selNow);
+            view->reload(); rebuildTree(); rebuildSource();
+        }
         else if (aRen && chosen == aRen) { tree->editItem(hit, 0); }
         else if (aLay && chosen == aLay) { openGroupLayout(hit->data(0, Qt::UserRole + 1).toUInt()); }
     });
@@ -2631,6 +3735,7 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         foreach (Fixture *fx, m_doc->fixtures())
             if (fx) m_graphicsView->updateFixture(fx->id());
     };
+
     connect(distBtn, &QPushButton::clicked, tree,
             [view, selectedFids, pushUndo, refreshMap]() {
         pushUndo(); view->distributeOnFace(selectedFids()); refreshMap();
@@ -2641,8 +3746,12 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     });
     connect(view, &StructureStudioView::editAboutToStart, tree, [pushUndo]() { pushUndo(); });
 
+    angleBtn->setEnabled(view->plane() == StructureStudioView::Angled);
     connect(planeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), body,
-            [view](int i){ view->setPlane(StructureStudioView::Plane(i)); });
+            [view, angleBtn](int i){
+        view->setPlane(StructureStudioView::Plane(i));
+        angleBtn->setEnabled(view->plane() == StructureStudioView::Angled);
+    });
     view->setLocked(true);
     connect(lockBtn, &QPushButton::toggled, view, [view, lockBtn](bool on) {
         view->setLocked(on);
@@ -2652,10 +3761,22 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
             [this](quint32 fid){ editFixtureProperties(fid); });
     connect(view, &StructureStudioView::fixtureMoved, body,
             [this](quint32 fid){ m_graphicsView->updateFixture(fid); });
+    // Double-click a bar on the canvas → its own editor (Along truss/Face/Lock
+    // live there, not in this one) — same target slotEditTruss() already
+    // reaches from the sidebar tree's own double-click.
+    connect(view, &StructureStudioView::barActivated, body,
+            [this](quint32 barId){ slotEditTruss(barId); });
+    // Double-click a hanger's bracket, arm or chain → the hanger editor.
+    connect(view, &StructureStudioView::hangerActivated, body,
+            [this, view](quint32 hid){ slotEditHanger(hid); view->reload(); });
+    // Dragged a bar on the canvas → sync the main 2D plot's truss item.
+    connect(view, &StructureStudioView::barMoved, body,
+            [this](quint32){ m_graphicsView->updateTrusses(); });
     connect(addBarBtn, &QPushButton::clicked, body,
             [this, kind, id, view, rebuildSource]() { studioAddBar(kind, id, view); rebuildSource(); });
     // Keep the trees in sync after canvas-side edits.
     connect(view, &StructureStudioView::fixtureMoved, body, [rebuildTree](quint32){ rebuildTree(); });
+    connect(view, &StructureStudioView::barMoved, body, [rebuildTree](quint32){ rebuildTree(); });
     // A boom resized on the canvas → redraw it (and its fixtures) on the 2D map.
     connect(view, &StructureStudioView::structureChanged, body,
             [this, refreshMap]() { m_graphicsView->updatePlatforms(); refreshMap(); });
@@ -2683,38 +3804,96 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     // Right-click the canvas → the SAME add options as the tree (the preferred
     // multi-select workflow), or edit/remove the fixture under the cursor.
     connect(view, &StructureStudioView::canvasContextMenu, body,
-            [this, kind, id, view, tree, selectedFids, rebuildTree, rebuildSource, pushUndo, refreshMap]
+            [this, kind, id, view, tree, selectedFids, rebuildTree, rebuildSource, pushUndo, refreshMap,
+             objectNoun, removeFromObject]
             (const QPoint &globalPos, quint32 fidUnder) {
         QMenu m;
-        if (fidUnder != 0)
+        /* "i can't add cross bar/truss on T2 .. that option is missing": the
+           toolbar's Add Bar in both menus -- over a fixture too, since a
+           fixture rigged inside a truss can cover most of it -- and on a
+           truss, where you clicked. */
+        float barAt = -1.0f;
+        auto addBarAction = [&]() -> QAction * {
+            if (kind == 2)
+            {
+                Truss *tr2 = m_props->truss(id);
+                if (tr2 == nullptr || tr2->isChildBar())
+                    return nullptr;             // a bar carries no bars
+                barAt = view->offsetAlongTrussAt(id, view->mapFromGlobal(globalPos));
+                m.addSeparator();
+                return m.addAction(barAt >= 0.0f ? tr("Add Bar Here") : tr("Add Bar"));
+            }
+            if (kind == 0 || kind == 4)
+            {
+                m.addSeparator();
+                return m.addAction(tr("Add Crossbar"));
+            }
+            return nullptr;
+        };
+        /* A hanger -- bracket, arm and chain, one fixture on its hook -- off a
+           truss (a tower truss too) or a Tower, where you clicked. */
+        auto addHangerAction = [&]() -> QAction * {
+            if (kind == 2)
+            {
+                Truss *tr2 = m_props->truss(id);
+                if (tr2 == nullptr)
+                    return nullptr;
+                if (barAt < 0.0f)
+                    barAt = view->offsetAlongTrussAt(id, view->mapFromGlobal(globalPos));
+                return m.addAction(barAt >= 0.0f ? tr("Add Hanger Here") : tr("Add Hanger"));
+            }
+            if (kind == 1)
+                return m.addAction(tr("Add Hanger"));
+            return nullptr;
+        };
+        /* Right-click a hanger (not the lantern on it): edit it, or take it off. */
+        const quint32 hangerUnder = (fidUnder == Fixture::invalidId())
+            ? view->hitTestHanger(view->mapFromGlobal(globalPos)) : UINT_MAX;
+        if (hangerUnder != UINT_MAX)
+        {
+            QAction *aEditH = m.addAction(tr("Edit Hanger…"));
+            QAction *aRemH  = m.addAction(tr("Remove Hanger"));
+            QAction *ch = m.exec(globalPos);
+            if (ch == aEditH)
+                slotEditHanger(hangerUnder);
+            else if (ch == aRemH)
+                slotHangerRemoveRequested(hangerUnder);
+            if (ch != nullptr)
+            {
+                view->reload(); rebuildTree(); rebuildSource();
+            }
+            return;
+        }
+        if (fidUnder != Fixture::invalidId())
         {
             QAction *aEdit = m.addAction(tr("Edit fixture…"));
-            QAction *aRem  = m.addAction(tr("Remove from object"));
+            QAction *aRem  = m.addAction(tr("Remove from %1").arg(objectNoun));
+            QAction *aBarF = addBarAction();
+            QAction *aHangF = addHangerAction();
             QAction *ch = m.exec(globalPos);
-            if (ch == aEdit) editFixtureProperties(fidUnder);
+            if (aHangF && ch == aHangF) { studioAddHanger(kind, id, view, barAt); rebuildTree(); rebuildSource(); }
+            else if (aBarF && ch == aBarF) { studioAddBar(kind, id, view, barAt); rebuildTree(); rebuildSource(); }
+            else if (ch == aEdit) editFixtureProperties(fidUnder);
             else if (ch == aRem)
             {
                 pushUndo();
-                FixtureRigProps rp = m_props->fixtureRigProps(fidUnder);
-                if (kind == 0 || kind == 4) rp.pipeId = Pipe::invalidId();
-                else if (kind == 1) rp.towerId = Tower::invalidId();
-                else if (kind == 2) rp.trussId = Truss::invalidId();
-                else if (kind == 3) { rp.riserPlatformId = FixtureRigProps::invalidPlatformId();
-                                      rp.deckPlatformId  = FixtureRigProps::invalidPlatformId(); }
-                m_props->setFixtureRigProps(fidUnder, rp);
-                m_graphicsView->updateFixture(fidUnder);
+                removeFromObject({ fidUnder });
                 view->reload(); rebuildTree(); rebuildSource(); refreshMap();
             }
             return;
         }
         QAction *aFix = m.addAction(tr("Add Fixtures…"));
         QAction *aGrp = m.addAction(tr("Add Existing Fixture Group…"));
+        QAction *aBar = addBarAction();
+        QAction *aHang = addHangerAction();
         const QList<quint32> selNow = selectedFids();
         QAction *aNew = selNow.isEmpty() ? nullptr
             : (m.addSeparator(), m.addAction(tr("New Fixture Group from Selection…")));
         QAction *ch = m.exec(globalPos);
         if (ch == aFix) { pushUndo(); studioAddFixture(kind, id, view); rebuildTree(); rebuildSource(); }
         else if (ch == aGrp) { pushUndo(); studioAddGroup(kind, id, view); rebuildTree(); rebuildSource(); }
+        else if (aBar && ch == aBar) { studioAddBar(kind, id, view, barAt); rebuildTree(); rebuildSource(); }
+        else if (aHang && ch == aHang) { studioAddHanger(kind, id, view, barAt); rebuildTree(); rebuildSource(); }
         else if (aNew && ch == aNew) { studioCreateGroup(selNow, view); rebuildTree(); rebuildSource(); }
         Q_UNUSED(tree)
     });
@@ -2742,14 +3921,17 @@ void Monitor::mountFixtureOnStructure(quint32 fid, int kind, quint32 id, quint32
         m_graphicsView->attachFixtureToPipe(fid, boomId);   // clears other mounts
         return;
     }
-    FixtureRigProps rp = m_props->fixtureRigProps(fid);
+    const FixtureRigProps was = m_props->fixtureRigProps(fid);
+    if (!(kind == 1 && was.onTower() && was.towerId == id))
+        m_graphicsView->leaveMountGroupsOf(fid);    // off its old tower/pipe
+    FixtureRigProps rp = was;
     rp.trussId = Truss::invalidId();
     rp.pipeId  = Pipe::invalidId();
     rp.towerId = Tower::invalidId();
     rp.riserPlatformId = FixtureRigProps::invalidPlatformId();
     rp.deckPlatformId  = FixtureRigProps::invalidPlatformId();
     if (kind == 1) { if (Tower *tw = m_props->tower(id)) {
-        rp.towerId = id; rp.towerShelf = 0;
+        rp.towerId = id; rp.towerMountSide = FixtureRigProps::TowerShelf; rp.towerShelf = 0;
         rp.towerU = tw->width() * 0.5f; rp.towerV = tw->depth() * 0.5f; } }
     else if (kind == 2) { if (Truss *t = m_props->truss(id)) {
         rp.trussId = id; rp.trussOffset = t->length() * 0.5f; } }
@@ -2757,7 +3939,30 @@ void Monitor::mountFixtureOnStructure(quint32 fid, int kind, quint32 id, quint32
         rp.riserPlatformId = id; rp.riserFace = FixtureRigProps::RiserTop;
         rp.riserU = pl->width() * 0.5f; rp.riserV = pl->depth() * 0.5f; } }
     m_props->setFixtureRigProps(fid, rp);
+
+    /* Join the structure's auto-group as well as its mount.
+     *
+       The Layers tree nests a fixture under a structure by GROUP, not by mount,
+       so a fixture attached here but left ungrouped is on the truss and absent
+       from the tree underneath it -- "the added fixtures aren't showing up in
+       the tree under the truss". The plot's own attachFixtureToTruss() has
+       always done this; dropping onto the structure canvas did not, so which
+       route you used decided whether the fixture appeared. */
+    quint32 gid = 0;
+    if (kind == 2)      { if (Truss *t = m_props->truss(id))          gid = t->groupId(); }
+    else if (kind == 3) { if (StagePlatform *pl = m_props->platform(id)) gid = pl->groupId(); }
+    if (gid != 0)
+        m_props->setFixtureGroup(fid, gid);
+
+    /* A fixture picked from the editor's list may never have been placed on
+       the plot: give it an icon where its new mount puts it, or it is rigged
+       and invisible -- and uncounted by the structure's bubble. */
+    m_graphicsView->ensureFixtureOnPlot(fid);
     m_graphicsView->updateFixture(fid);
+
+    // A tower gets its group formed on first mount (it has none until then).
+    if (kind == 1)
+        m_graphicsView->joinTowerGroup(fid, id);
 }
 
 void Monitor::studioCreateGroup(const QList<quint32> &fids, StructureStudioView *view)
@@ -2824,26 +4029,23 @@ void Monitor::studioDistribute(int kind, quint32 id, StructureStudioView *view,
 void Monitor::openGroupStudio(quint32 gid)
 {
     if (!m_props->hasGroup(gid)) return;
+    RigEditSession edit(this);
     MonitorProperties::MonitorGroup g = m_props->group(gid);
-    const QVector3D snapOrigin = g.origin;
-    const float snapRot = g.rotation;
-    const QString snapName = g.name;
 
     const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
-    const QString sfx = isFeet ? tr(" ft") : tr(" m");
     const double toDisp = isFeet ? 3.28084 : 1.0;
     const double fromDisp = isFeet ? (1.0 / 3.28084) : 1.0;
 
     QDialog dlg(this);
-    dlg.setWindowTitle(tr("Lighting Studio Editor — %1").arg(g.name));
+    dlg.setWindowTitle(tr("Lighting Studio Editor — Group %1").arg(g.name));
 
     QWidget *geomW = new QWidget(&dlg);
     QVBoxLayout *vl = new QVBoxLayout(geomW);
     QFormLayout *form = new QFormLayout;
     QLineEdit *nameEdit = new QLineEdit(g.name, geomW);
     form->addRow(tr("Name:"), nameEdit);
-    auto mk = [&](double v) { QDoubleSpinBox *s = new QDoubleSpinBox(geomW);
-        s->setRange(-200, 200); s->setDecimals(2); s->setSuffix(sfx); s->setValue(v * toDisp); return s; };
+    auto mk = [&](double v) { QDoubleSpinBox *s = new FeetInchesSpinBox(isFeet, geomW);
+        s->setRange(-200, 200); s->setDecimals(2); s->setValue(v * toDisp); return s; };
     QDoubleSpinBox *ox = mk(g.origin.x()), *oy = mk(g.origin.y()), *oz = mk(g.origin.z());
     QDoubleSpinBox *rot = new QDoubleSpinBox(geomW);
     rot->setRange(-180, 180); rot->setDecimals(0); rot->setSuffix(QStringLiteral("°")); rot->setValue(double(g.rotation));
@@ -2852,6 +4054,33 @@ void Monitor::openGroupStudio(quint32 gid)
     form->addRow(tr("Frame origin Z:"), oz);
     form->addRow(tr("Rotation:"), rot);
     vl->addLayout(form);
+    /* Saving the arrangement you have just built is the POINT of laying one
+       out -- lay a step out once, stamp it onto the other eleven -- and it was
+       two levels down, behind a button whose label does not even fit. Direct,
+       where the work happens. */
+    QPushButton *saveCompBtn = new QPushButton(tr("Save as Component…"), geomW);
+    saveCompBtn->setToolTip(tr("Store this arrangement in the component library, "
+                               "then stamp it onto another set of fixtures from "
+                               "the canvas (right-click → Studio Components)."));
+    vl->addWidget(saveCompBtn);
+    connect(saveCompBtn, &QPushButton::clicked, &dlg, [this, gid, nameEdit, &dlg]() {
+        bool ok = false;
+        const QString name = QInputDialog::getText(&dlg, tr("Save as Component"),
+            tr("Component name:"), QLineEdit::Normal, nameEdit->text(), &ok);
+        if (!ok || name.trimmed().isEmpty())
+            return;
+        QString err;
+        const QString path = StudioTemplate::saveToLibrary(m_doc, gid, name.trimmed(), &err);
+        if (path.isEmpty())
+            QMessageBox::warning(&dlg, tr("Save as Component"),
+                                 tr("Could not save component: %1").arg(err));
+        else
+            QMessageBox::information(&dlg, tr("Save as Component"),
+                tr("Saved “%1”.\n\nSelect another set of fixtures on the canvas, "
+                   "then right-click → Studio Components → Stamp onto selection.")
+                    .arg(name.trimmed()));
+    });
+
     QPushButton *setBtn = new QPushButton(tr("Group settings… (bind · seed · component)"), geomW);
     vl->addWidget(setBtn);
     vl->addStretch();
@@ -2895,14 +4124,13 @@ void Monitor::openGroupStudio(quint32 gid)
     dlg.resize(940, 560);
     if (dlg.exec() != QDialog::Accepted)
     {
-        m_props->setGroupName(gid, snapName);
-        m_props->setGroupOrigin(gid, snapOrigin);
-        m_props->setGroupRotation(gid, snapRot);
-        m_props->recomputeAnchoredFrames();
+        edit.cancel();
+        return;
     }
     m_graphicsView->updatePlatforms();
     refreshMembers();
     m_doc->setModified();
+    edit.accept();
 }
 
 void Monitor::openGroupLayout(quint32 groupId)
@@ -3022,7 +4250,12 @@ void Monitor::studioAddFixture(int kind, quint32 id, StructureStudioView *view)
     m_doc->setModified();
 }
 
-void Monitor::studioAddBar(int kind, quint32 id, StructureStudioView *view)
+QString Monitor::mountDescription(const FixtureRigProps &rp, quint32 fid) const
+{
+    return m_props->mountDescription(rp, fid);
+}
+
+void Monitor::studioAddBar(int kind, quint32 id, StructureStudioView *view, float offset)
 {
     if (kind == 1)   // tower
     {
@@ -3049,6 +4282,9 @@ void Monitor::studioAddBar(int kind, quint32 id, StructureStudioView *view)
         bar->setLength(1.0f);
         bar->setRunAngle(0.0f);
         bar->setBaseRadius(0.0f);
+        // Clear of the boom's own point in Top view -- see crossbarStandoff()'s
+        // own doc comment and WORKFLOW-SUBTLETIES.md #14.
+        bar->setCrossbarStandoff(0.15f);
         bar->setLayerId(pipe->layerId());
         m_props->recomputeChildTrusses();
         m_graphicsView->updatePlatforms();
@@ -3058,15 +4294,23 @@ void Monitor::studioAddBar(int kind, quint32 id, StructureStudioView *view)
         return;
     }
 
-    if (kind == 2)   // truss → a child bar at mid-span
+    if (kind == 2)   // truss → a child bar at @p offset (mid-span when -1)
     {
-        const quint32 barId = createBarOnTruss(id, -1.0f);
+        const quint32 barId = createBarOnTruss(id, offset);
         if (barId != Truss::invalidId())
         {
             m_graphicsView->updateTrusses();
             if (m_layersPanel) m_layersPanel->reload();
             m_doc->setModified();
             if (view) view->reload();
+            /* A bar is a child Truss, not a fixture -- this Structure Studio
+               editor's tree/canvas only knows about mounted fixtures
+               (StructureStudioView::mountedFixtures() walks m_doc->fixtures(),
+               never Truss::parentTrussId()), so a bar just added here has
+               nowhere in THIS editor to appear or be positioned. Open the
+               truss editor on it directly, exactly as slotAddBarToTruss()
+               already does for the tree's own "Add bar" action. */
+            slotEditTruss(barId);
         }
         return;
     }
@@ -3102,6 +4346,9 @@ void Monitor::studioAddBar(int kind, quint32 id, StructureStudioView *view)
         bar->setLength(1.0f);
         bar->setRunAngle(0.0f);
         bar->setBaseRadius(0.0f);
+        // Clear of the boom's own point in Top view -- see crossbarStandoff()'s
+        // own doc comment and WORKFLOW-SUBTLETIES.md #14.
+        bar->setCrossbarStandoff(0.15f);
     }
     m_props->recomputeChildTrusses();
     m_graphicsView->updatePlatforms();
@@ -3213,20 +4460,36 @@ quint32 Monitor::createBarOnTruss(quint32 parentId, float offset)
     // Truss-LOCAL mount defaults, per parent orientation:
     //  • Vertical tower  → a horizontal crossbar ACROSS the Downstage face
     //    (the "bar across the front" case).
-    //  • Overhead truss  → an under-hung bar running along it.
+    //  • Overhead truss  → a bar running ALONG it, offset slightly
+    //    downstage (not straight underneath -- see the comment below).
     bar->setParentTrussId(parentId);
     bar->setParentOffset(offset >= 0.0f ? offset : parent->length() / 2.0f);   // Along
     if (parent->type() == Truss::Vertical)
     {
         bar->setBarFace(Truss::FaceDownstage);
         bar->setBarRun(Truss::RunAcross);
+        bar->setBarStandoff(0.0f);
     }
     else
     {
-        bar->setBarFace(Truss::FaceBottom);
+        /* NOT FaceBottom: barFaceVector(FaceBottom) is a pure Z vector, so
+         * barStandoff -- "distance off that face" -- can never separate a
+         * RunAlong bar from its parent in Top view no matter how large it
+         * is set (recomputeChildTrusses()'s `base = attach + faceN *
+         * (half + barStandoff)` gets zero X/Y contribution from a Z-only
+         * faceN). The bar's line rendered EXACTLY on top of the truss's
+         * own line, with no pixel a click could mean "the bar" rather
+         * than "the truss" (WORKFLOW-SUBTLETIES.md #1). FaceDownstage
+         * gives a real Y offset instead -- the same face the Vertical
+         * case above already relies on for its own separation -- while
+         * RunAlong keeps the bar parallel to/under the truss, same as
+         * before. barStandoff on TOP of that is now meaningful, so it
+         * gets an explicit nonzero default too, not just the bare
+         * parent->width()/2 baseline every bar gets for free. */
+        bar->setBarFace(Truss::FaceDownstage);
         bar->setBarRun(Truss::RunAlong);
+        bar->setBarStandoff(0.15f);
     }
-    bar->setBarStandoff(0.0f);
     bar->setBarCrossShift(0.0f);
     bar->setLayerId(parent->layerId());
     m_props->recomputeChildTrusses();                  // derive world geometry
@@ -3261,6 +4524,9 @@ void Monitor::slotAddBarToPipe(quint32 parentPipeId)
     bar->setLength(qMin(1.0f, parent->length()));  // a short T-bar by default
     bar->setRunAngle(0.0f);                        // runs stage-right
     bar->setBaseRadius(0.0f);
+    // Clear of the boom's own point in Top view -- see crossbarStandoff()'s
+    // own doc comment and WORKFLOW-SUBTLETIES.md #14.
+    bar->setCrossbarStandoff(0.15f);
     bar->setColor(parent->color());
     bar->setLayerId(parent->layerId());
 
@@ -3313,6 +4579,228 @@ void Monitor::slotPipeRemoveRequested(quint32 pid)
     m_doc->setModified();
 }
 
+void Monitor::slotHangerRemoveRequested(quint32 hid)
+{
+    Hanger *h = m_props->hanger(hid);
+    if (h == nullptr)
+        return;
+    const quint32 hung = m_props->fixtureOnHanger(hid);
+    if (hung != UINT_MAX)
+    {
+        Fixture *fx = m_doc->fixture(hung);
+        if (QMessageBox::question(this, tr("Remove Hanger"),
+                tr("%1 hangs on %2. Remove the hanger? The fixture stays where it is, "
+                   "unmounted.").arg(fx ? fx->name() : tr("A fixture"), h->name()),
+                QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel) != QMessageBox::Yes)
+            return;
+        m_graphicsView->unmountFixture(hung);
+    }
+    m_props->removeHanger(hid);
+    m_graphicsView->updateHangers();
+    m_graphicsView->refreshFixtureBindings();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+}
+
+void Monitor::studioAddHanger(int kind, quint32 id, StructureStudioView *view, float offset)
+{
+    Hanger *h = nullptr;
+    if (kind == 2 && m_props->truss(id) != nullptr)
+    {
+        Truss *t = m_props->truss(id);
+        h = m_props->addHanger(Hanger::OnTruss, id);
+        // Where it was clicked; else three quarters of the way up (along).
+        h->setAlong(offset >= 0.0f ? offset : t->length() * 0.75f);
+    }
+    else if (kind == 1 && m_props->tower(id) != nullptr)
+    {
+        h = m_props->addHanger(Hanger::OnTower, id);
+        h->setAlong(m_props->tower(id)->height() * 0.75f);
+    }
+    if (h == nullptr)
+        return;
+    m_props->recomputeHangers();
+    m_graphicsView->updateHangers();
+    m_doc->setModified();
+    if (m_layersPanel) m_layersPanel->reload();
+    slotEditHanger(h->id());
+    if (view != nullptr)
+        view->reload();
+}
+
+int Monitor::copyHangerToEveryTower(quint32 hid)
+{
+    Hanger *src = m_props->hanger(hid);
+    if (src == nullptr)
+        return 0;
+    /* "Every tower": the trusses that stand up (not bars hung off others)
+       and the Tower structures -- each one that does not already carry the
+       same hanger at the same height and the same way. */
+    auto alreadyHas = [&](Hanger::ParentKind kind, quint32 pid) {
+        foreach (Hanger *h, m_props->hangersOn(kind, pid))
+            if (qAbs(h->along() - src->along()) < 0.01f && qAbs(h->angle() - src->angle()) < 0.5f)
+                return true;
+        return false;
+    };
+    auto copyOnto = [&](Hanger::ParentKind kind, quint32 pid) {
+        Hanger *h = m_props->addHanger(kind, pid);
+        h->setAlong(src->along());
+        h->setAngle(src->angle());
+        h->setArm(src->arm());
+        h->setDrop(src->drop());
+    };
+    int added = 0;
+    foreach (Truss *t, m_props->trusses())
+        if (t->type() == Truss::Vertical && !t->isChildBar()
+            && !alreadyHas(Hanger::OnTruss, t->id()))
+        {
+            copyOnto(Hanger::OnTruss, t->id());
+            ++added;
+        }
+    foreach (Tower *tw, m_props->towers())
+        if (!alreadyHas(Hanger::OnTower, tw->id()))
+        {
+            copyOnto(Hanger::OnTower, tw->id());
+            ++added;
+        }
+    m_props->recomputeHangers();
+    if (added > 0)
+    {
+        m_doc->setModified();
+        if (m_layersPanel) m_layersPanel->reload();
+    }
+    return added;
+}
+
+void Monitor::slotEditHanger(quint32 hid)
+{
+    Hanger *h = m_props->hanger(hid);
+    if (h == nullptr)
+        return;
+    RigEditSession edit(this);
+    const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
+    const double toDisp   = isFeet ? 3.28084 : 1.0;
+    const double fromDisp = isFeet ? (1.0 / 3.28084) : 1.0;
+
+    QString on;
+    bool vertical = true;
+    float maxAlong = 20.0f;
+    if (h->parentKind() == Hanger::OnTruss)
+    {
+        if (Truss *t = m_props->truss(h->parentId()))
+        {
+            on = t->name();
+            vertical = (t->type() == Truss::Vertical);
+            maxAlong = t->length();
+        }
+    }
+    else if (Tower *tw = m_props->tower(h->parentId()))
+    {
+        on = tw->name();
+        maxAlong = tw->height();
+    }
+
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("Hanger — %1").arg(h->name()));
+    QFormLayout *form = new QFormLayout(&dlg);
+    QLineEdit *nameEdit = new QLineEdit(h->name(), &dlg);
+    form->addRow(tr("Name:"), nameEdit);
+    form->addRow(tr("On:"), new QLabel(on.isEmpty() ? tr("(nothing -- its structure is gone)") : on, &dlg));
+    auto mkSpin = [&](double val, double hi) {
+        QDoubleSpinBox *sp = new FeetInchesSpinBox(isFeet, &dlg);
+        sp->setRange(0.0, hi * toDisp); sp->setDecimals(2);
+        sp->setValue(val * toDisp);
+        return sp;
+    };
+    QDoubleSpinBox *alongSpin = mkSpin(h->along(), qMax(0.1f, maxAlong));
+    form->addRow(vertical ? tr("Height:") : tr("Along:"), alongSpin);
+    QComboBox *dirCb = new QComboBox(&dlg);
+    const QList<QPair<QString, int> > dirs = {
+        { tr("Downstage"), 0 }, { tr("Downstage left"), 45 }, { tr("Stage left"), 90 },
+        { tr("Upstage left"), 135 }, { tr("Upstage"), 180 }, { tr("Upstage right"), 225 },
+        { tr("Stage right"), 270 }, { tr("Downstage right"), 315 } };
+    int best = 0;
+    double bestD = 1e9;
+    for (int i = 0; i < dirs.size(); ++i)
+    {
+        dirCb->addItem(dirs.at(i).first, dirs.at(i).second);
+        const double d = qAbs(std::fmod(double(h->angle()) - dirs.at(i).second + 540.0, 360.0) - 180.0);
+        if (d < bestD) { bestD = d; best = i; }
+    }
+    dirCb->setCurrentIndex(best);
+    const int initialDir = best;
+    dirCb->setToolTip(tr("Which way the arm reaches, seen from above"));
+    form->addRow(tr("Points:"), dirCb);
+    QDoubleSpinBox *armSpin = mkSpin(h->arm(), 5.0);
+    armSpin->setToolTip(tr("How far the arm reaches out from the face of the structure"));
+    form->addRow(tr("Arm:"), armSpin);
+    QDoubleSpinBox *dropSpin = mkSpin(h->drop(), 10.0);
+    dropSpin->setToolTip(tr("How far the hook hangs below the end of the arm"));
+    form->addRow(tr("Drop:"), dropSpin);
+
+    // What hangs on it: chosen here too, one hook.
+    QComboBox *hangCb = new QComboBox(&dlg);
+    hangCb->addItem(tr("(nothing)"), UINT_MAX);
+    const quint32 hungNow = m_props->fixtureOnHanger(hid);
+    foreach (Fixture *fx, m_doc->fixtures())
+        hangCb->addItem(fx->name(), fx->id());
+    hangCb->setCurrentIndex(qMax(0, hangCb->findData(hungNow)));
+    form->addRow(tr("Hangs:"), hangCb);
+
+    QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+    QPushButton *copyAll = bb->addButton(tr("Copy to Every Tower"), QDialogButtonBox::ActionRole);
+    copyAll->setToolTip(tr("The same hanger -- height, direction, arm, drop -- on every tower "
+                           "that does not already have one there"));
+    form->addRow(bb);
+    connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+    auto apply = [&]() {
+        h->setName(nameEdit->text().trimmed().isEmpty() ? h->name() : nameEdit->text().trimmed());
+        h->setAlong(float(alongSpin->value() * fromDisp));
+        if (dirCb->currentIndex() != initialDir)
+            h->setAngle(float(dirCb->currentData().toInt()));
+        h->setArm(float(armSpin->value() * fromDisp));
+        h->setDrop(float(dropSpin->value() * fromDisp));
+        m_props->recomputeHangers();
+        const quint32 hang = hangCb->currentData().toUInt();
+        const quint32 hung = m_props->fixtureOnHanger(hid);
+        if (hang != hung)
+        {
+            if (hang == UINT_MAX)
+                m_graphicsView->unmountFixture(hung);
+            else
+                m_graphicsView->attachFixtureToHanger(hang, hid);
+        }
+        m_graphicsView->updateTrusses();
+        m_graphicsView->updatePlatforms();
+        m_graphicsView->refreshFixtureBindings();
+    };
+    // Live: the hanger moves as its fields change; Cancel puts it back.
+    connect(nameEdit, &QLineEdit::textChanged, &dlg, [&](const QString &) { apply(); });
+    for (QDoubleSpinBox *sp : { alongSpin, armSpin, dropSpin })
+        connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg, [&](double) { apply(); });
+    for (QComboBox *cb : { dirCb, hangCb })
+        connect(cb, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg, [&](int) { apply(); });
+    connect(copyAll, &QPushButton::clicked, &dlg, [&]() {
+        apply();
+        const int n = copyHangerToEveryTower(hid);
+        QMessageBox::information(&dlg, tr("Copy to Every Tower"),
+            n == 0 ? tr("Every tower already has this hanger.")
+                   : tr("Added this hanger to %n more tower(s).", "", n));
+    });
+
+    if (dlg.exec() != QDialog::Accepted)
+    {
+        edit.cancel();
+        return;
+    }
+    apply();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+    edit.accept();
+}
+
 void Monitor::slotStandRemoveRequested(quint32 sid)
 {
     Stand *s = m_props->stand(sid);
@@ -3328,6 +4816,22 @@ void Monitor::slotStandRemoveRequested(quint32 sid)
     m_props->recomputeStandMounts();
     m_graphicsView->updatePlatforms();
     m_graphicsView->refreshFixtureBindings();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+}
+
+void Monitor::slotSceneryRemoveRequested(quint32 sid)
+{
+    Scenery *s = m_props->scenery(sid);
+    if (s == NULL)
+        return;
+    // Nothing is mounted on scenery, so there are no fixtures to offer.
+    const FeatureDeleteChoice choice = confirmFeatureDelete(Scenery::kindName(s->kind()), s->name(),
+                                                            QList<quint32>());
+    if (choice == DeleteCancel)
+        return;
+    m_props->removeScenery(sid);
+    m_graphicsView->updatePlatforms();
     if (m_layersPanel) m_layersPanel->reload();
     m_doc->setModified();
 }
@@ -3382,14 +4886,61 @@ void Monitor::slotAddImage()
     slotEditImage(id);
 }
 
+void Monitor::slotAddToInventory()
+{
+    const QList<quint32> made = FixtureCreator::addFromDialog(this, m_doc, true,
+                                                              InputOutputMap::invalidUniverse(), NULL);
+    if (!made.isEmpty() && m_inventoryPanel != NULL)
+    {
+        if (m_inventoryAction != NULL)
+            m_inventoryAction->setChecked(true);
+        m_inventoryPanel->reload();
+    }
+}
+
+void Monitor::slotFixturesDropped(const QList<quint32> &fixtureIds, QPointF scenePos)
+{
+    if (m_props->layoutLocked())
+    {
+        QMessageBox::information(this, tr("Plot locked"),
+            tr("Unlock the plot (Edit Plot) before placing fixtures -- a fixture "
+               "placed on a locked plot can't be positioned."));
+        return;
+    }
+
+    // Same placement as Add > Fixture, but at the drop point. Several at once
+    // fan out sideways so they don't land in a single stack; the release logic
+    // below then mounts each one on whatever truss/riser/tower it landed on.
+    const QPointF base = m_graphicsView->pixelsToRealPosition(scenePos.x(), scenePos.y());
+    int n = 0;
+    foreach (quint32 fid, fixtureIds)
+    {
+        Fixture *fx = m_doc->fixture(fid);
+        if (fx == NULL || m_graphicsView->fixturesID().contains(fid))
+            continue;
+        const QPointF mm(base.x() + n * 400.0, base.y());
+        m_graphicsView->addFixture(fid, mm);
+        m_props->setFixturePosition(fid, 0, 0, QVector3D(mm.x(), mm.y(), 0));
+        m_props->setFixtureFlags(fid, 0, 0, 0);
+        m_props->setFixtureLayer(fid, m_props->activeLayerId());
+        m_graphicsView->finishFixtureDrop(fid);
+        n++;
+    }
+    if (n > 0)
+        m_doc->setModified();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_graphicsView->refreshFixtureLabels();
+    if (m_inventoryPanel) m_inventoryPanel->reload();
+}
+
 void Monitor::slotEditImage(quint32 id)
 {
     if (!m_props->hasImage(id))
         return;
+    RigEditSession edit(this);
     MonitorProperties::MonitorImage img = m_props->image(id);
 
     const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
-    const QString us  = isFeet ? tr(" ft") : tr(" m");
     const double toD  = isFeet ? 3.28084 : 1.0;
     const double frD  = isFeet ? (1.0 / 3.28084) : 1.0;
 
@@ -3404,10 +4955,16 @@ void Monitor::slotEditImage(quint32 id)
     srcLabel->setToolTip(img.source);
     QPushButton *srcBtn = new QPushButton(tr("Change…"));
     QString chosenSource = img.source;
+    std::function<void()> applyImage;      // set below, once its fields exist
     connect(srcBtn, &QPushButton::clicked, this, [&]() {
         const QString f = QFileDialog::getOpenFileName(&dlg, tr("Choose Image"),
             QString(), tr("Images (*.png *.jpg *.jpeg *.bmp *.gif *.svg)"));
-        if (!f.isEmpty()) { chosenSource = f; srcLabel->setText(QFileInfo(f).fileName()); }
+        if (!f.isEmpty())
+        {
+            chosenSource = f;
+            srcLabel->setText(QFileInfo(f).fileName());
+            if (applyImage) applyImage();
+        }
     });
     {
         QWidget *row = new QWidget; QHBoxLayout *rl = new QHBoxLayout(row);
@@ -3426,8 +4983,8 @@ void Monitor::slotEditImage(quint32 id)
     form->addRow(tr("Plane:"), planeCb);
 
     auto mkSpin = [&](double val, double lo, double hi) {
-        QDoubleSpinBox *s = new QDoubleSpinBox;
-        s->setRange(lo, hi); s->setDecimals(2); s->setSuffix(us);
+        QDoubleSpinBox *s = new FeetInchesSpinBox(isFeet);
+        s->setRange(lo, hi); s->setDecimals(2);
         s->setValue(val * toD); return s;
     };
     QDoubleSpinBox *wSpin = mkSpin(img.width,  0.05, 200);
@@ -3443,8 +5000,8 @@ void Monitor::slotEditImage(quint32 id)
     form->addRow(tr("Width:"), wSpin);
     form->addRow(tr("Height:"), hSpin);
     form->addRow(tr("Rotation:"), rotSpin);
-    form->addRow(tr("X (stage right):"), xSpin);
-    form->addRow(tr("Y (upstage):"), ySpin);
+    form->addRow(tr("X (stage left):"), xSpin);
+    form->addRow(tr("Y (downstage):"), ySpin);
     form->addRow(tr("Z (bottom, elevation):"), zSpin);
 
     QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
@@ -3452,21 +5009,213 @@ void Monitor::slotEditImage(quint32 id)
     connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
     form->addRow(bb);
 
+    // Live: the image follows its fields; Cancel puts it back.
+    applyImage = [&]() {
+        MonitorProperties::MonitorImage now = img;
+        now.name    = nameEdit->text().trimmed().isEmpty() ? img.name : nameEdit->text().trimmed();
+        now.source  = chosenSource;
+        now.plane   = planeCb->currentData().toInt();
+        now.width   = float(wSpin->value() * frD);
+        now.height  = float(hSpin->value() * frD);
+        now.rotation = float(rotSpin->value());
+        now.originX = float(xSpin->value() * frD);
+        now.originY = float(ySpin->value() * frD);
+        now.originZ = float(zSpin->value() * frD);
+        m_props->setImage(now);
+        m_graphicsView->updateImages();
+    };
+    connect(nameEdit, &QLineEdit::textChanged, &dlg, [&](const QString &) { applyImage(); });
+    connect(planeCb, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg, [&](int) { applyImage(); });
+    for (QDoubleSpinBox *sp : { wSpin, hSpin, xSpin, ySpin, zSpin, rotSpin })
+        connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg, [&](double) { applyImage(); });
+
+    if (dlg.exec() != QDialog::Accepted)
+    {
+        edit.cancel();
+        return;
+    }
+    applyImage();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+    edit.accept();
+}
+
+void Monitor::slotAddNetworkNode()
+{
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("Add Network Node"));
+    QFormLayout *form = new QFormLayout(&dlg);
+
+    /* From a model: the gear's transport and ports filled in (the user's
+       own models first, then the built-in list), or Custom to set it up by
+       hand as before. */
+    const QList<NetworkGearModel> gear = NetworkGearCatalog::all();
+    QComboBox *modelCb = new QComboBox(&dlg);
+    modelCb->setObjectName("networkGearModel");
+    modelCb->addItem(tr("Custom — set up by hand"), -1);
+    for (int i = 0; i < gear.size(); ++i)
+    {
+        const NetworkGearModel &m = gear.at(i);
+        modelCb->addItem(tr("%1 — %2 %3, %4").arg(m.displayName())
+                             .arg(m.ports)
+                             .arg(m.transport == NetworkNode::WirelessDMX
+                                      ? (m.ports == 1 ? tr("universe") : tr("universes"))
+                                      : (m.ports == 1 ? tr("port") : tr("ports")))
+                             .arg(NetworkNode::transportName(m.transport))
+                             + (m.builtIn ? QString() : tr("  (yours)")),
+                         i);
+    }
+    modelCb->setToolTip(tr("Your own models live in %1 as JSON files; "
+                           "Save as Gear Model… on a node's menu adds one.")
+                        .arg(NetworkGearCatalog::userDirectory().absolutePath()));
+    form->addRow(tr("Model:"), modelCb);
+
+    QLineEdit *nameEdit = new QLineEdit(&dlg);
+    nameEdit->setPlaceholderText(tr("e.g. SR ArtNet Node"));
+    form->addRow(tr("Name:"), nameEdit);
+
+    QComboBox *transportCb = new QComboBox(&dlg);
+    transportCb->setObjectName("networkTransport");
+    transportCb->addItem(tr("ArtNet"), int(NetworkNode::ArtNet));
+    transportCb->addItem(tr("sACN"), int(NetworkNode::sACN));
+    transportCb->addItem(tr("Interface"), int(NetworkNode::Interface));
+    transportCb->addItem(tr("Wireless DMX"), int(NetworkNode::WirelessDMX));
+    form->addRow(tr("Transport:"), transportCb);
+
+    auto modelChosen = [&gear, modelCb, nameEdit, transportCb]() {
+        const int gi = modelCb->currentData().toInt();
+        const bool custom = gi < 0 || gi >= gear.size();
+        transportCb->setEnabled(custom);
+        if (custom)
+        {
+            nameEdit->setPlaceholderText(tr("e.g. SR ArtNet Node"));
+            return;
+        }
+        transportCb->setCurrentIndex(transportCb->findData(gear.at(gi).transport));
+        nameEdit->setPlaceholderText(gear.at(gi).model);
+    };
+    connect(modelCb, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg, modelChosen);
+
+    // Pre-fill position from the right-click point, like Add Truss/Add Image.
+    QPointF pendMm = m_pendingAddScenePos.isNull()
+                     ? QPointF(0, 0)
+                     : m_graphicsView->pixelsToRealPosition(
+                           m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
+    m_pendingAddScenePos = QPointF();
+
+    const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
+    const double toDisp   = isFeet ? 3.28084 : 1.0;
+    const double fromDisp = isFeet ? (1.0 / 3.28084) : 1.0;
+    const double posRange = isFeet ? 164.0 : 50.0;
+
+    QDoubleSpinBox *xSpin = new FeetInchesSpinBox(isFeet, &dlg);
+    xSpin->setRange(-posRange, posRange); xSpin->setDecimals(2);
+    xSpin->setValue(pendMm.x() / 1000.0 * toDisp);
+    form->addRow(tr("X (stage left):"), xSpin);
+
+    QDoubleSpinBox *ySpin = new FeetInchesSpinBox(isFeet, &dlg);
+    ySpin->setRange(-posRange, posRange); ySpin->setDecimals(2);
+    ySpin->setValue(pendMm.y() / 1000.0 * toDisp);
+    form->addRow(tr("Y (downstage):"), ySpin);
+
+    QDialogButtonBox *btns = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+    form->addRow(btns);
+    connect(btns, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(btns, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
     if (dlg.exec() != QDialog::Accepted)
         return;
 
-    img.name    = nameEdit->text().trimmed().isEmpty() ? img.name : nameEdit->text().trimmed();
-    img.source  = chosenSource;
-    img.plane   = planeCb->currentData().toInt();
-    img.width   = float(wSpin->value() * frD);
-    img.height  = float(hSpin->value() * frD);
-    img.rotation = float(rotSpin->value());
-    img.originX = float(xSpin->value() * frD);
-    img.originY = float(ySpin->value() * frD);
-    img.originZ = float(zSpin->value() * frD);
-    m_props->setImage(img);
+    NetworkTopology *nt = m_doc->networkTopology();
+    NetworkNode node;
+    const int gi = modelCb->currentData().toInt();
+    if (gi >= 0 && gi < gear.size())
+    {
+        // Named as typed, else after the model -- numbered when there are two.
+        QString name = nameEdit->text().trimmed();
+        if (name.isEmpty())
+        {
+            name = gear.at(gi).model;
+            int n = 1;
+            for (const NetworkNode &other : nt->nodes())
+                if (other.name == name || other.name.startsWith(name + " #"))
+                    ++n;
+            if (n > 1)
+                name = QString("%1 #%2").arg(gear.at(gi).model).arg(n);
+        }
+        node = NetworkGearCatalog::makeNode(gear.at(gi), name);
+    }
+    else
+    {
+        node.name = nameEdit->text().trimmed().isEmpty()
+                    ? tr("Node %1").arg(nt->nodes().size() + 1) : nameEdit->text().trimmed();
+        node.transport = transportCb->currentData().toInt();
+    }
+    node.placed = true;
+    node.posX = xSpin->value() * fromDisp;
+    node.posY = ySpin->value() * fromDisp;
+    node.layerId = m_props->activeLayerId();   // land on the selected layer
+    nt->nodes().append(node);
 
-    m_graphicsView->updateImages();
+    m_graphicsView->updateNetworkNodes();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+
+    // Straight on to its ports: giving a hand-built node some, or a model's
+    // their universes.
+    slotEditNetworkNode(quint32(nt->nodes().size() - 1));
+    // A wireless transmitter's receivers go where its fixtures are (or beside
+    // it), even if the ports were left for later.
+    m_graphicsView->placeWirelessReceivers();
+}
+
+void Monitor::slotEditNetworkNode(quint32 nodeIndex)
+{
+    /* Like every rig dialog: the plot follows the edits as they're made,
+       Cancel puts the network back, OK is one undo step. */
+    RigEditSession edit(this);
+    NetworkTopologyDialog dlg(m_doc, int(nodeIndex), this);
+    connect(&dlg, &NetworkTopologyDialog::changed, this, [this]() {
+        m_graphicsView->updateNetworkNodes();
+    });
+    if (dlg.exec() != QDialog::Accepted)
+    {
+        edit.cancel();
+        m_graphicsView->updateNetworkNodes();
+        return;
+    }
+    // Nodes are keyed to map items by index and the dialog may have added,
+    // removed or reordered them, so rebuild everything from the settled list.
+    m_graphicsView->updateNetworkNodes();
+    /* "If I add a wDMX transmitter .. shouldn't there be a wDMX receiver
+       somewhere for the fixtures?" Every wireless port has one; it just had
+       no place until someone typed it in. Now it is put near the fixtures
+       on its universe, and can be dragged from there. */
+    m_graphicsView->placeWirelessReceivers();
+    if (m_layersPanel) m_layersPanel->reload();
+}
+
+void Monitor::slotNetworkReport()
+{
+    NetworkReportDialog dlg(m_doc, this);
+    dlg.exec();
+}
+
+void Monitor::slotNetworkNodeRemoveRequested(quint32 nodeIndex)
+{
+    NetworkTopology *nt = m_doc->networkTopology();
+    if (int(nodeIndex) >= nt->nodes().size())
+        return;
+    if (QMessageBox::question(this, tr("Delete Network Node"),
+            tr("Delete network node '%1'?").arg(nt->nodes().at(int(nodeIndex)).name),
+            QMessageBox::Yes | QMessageBox::No) != QMessageBox::Yes)
+        return;
+    // Index-based, like PowerDistribution's sources() -- safe because every
+    // mutation here is immediately followed by a full rebuild (updateNetworkNodes()),
+    // so no later index reference outlives this removal.
+    nt->nodes().removeAt(int(nodeIndex));
+    m_graphicsView->updateNetworkNodes();
     if (m_layersPanel) m_layersPanel->reload();
     m_doc->setModified();
 }
@@ -3504,9 +5253,13 @@ void Monitor::slotAddTarget()
         m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
     t->setX(float(mm.x() / 1000.0));
     t->setY(float(mm.y() / 1000.0));
-    t->setZ(0.0f);
+    // Sit on whatever solid platform it was dropped over, not at deck level --
+    // same rule a drag follows, so placing and moving agree.
+    t->setZ(m_graphicsView->floorHeightAt(t->x(), t->y()));
+    t->setLayerId(m_props->activeLayerId());   // land on the selected layer
 
     m_graphicsView->updateTargets();
+    if (m_layersPanel) m_layersPanel->reload();
     m_doc->setModified();
 
     // Open the edit dialog; if confirmed, auto-create a linked PanTilt palette.
@@ -3518,29 +5271,63 @@ void Monitor::slotAddTarget()
     if (!updated)
         return;   // user may have removed it (shouldn't happen, but guard anyway)
 
-    // Auto-create a PanTilt palette linked to this target, unless one already exists.
+    /* Auto-create an AIM palette linked to this target, unless one already
+       exists. It was creating a PanTilt palette, which is the wrong thing in
+       two ways: a PanTilt palette carries fixed pan/tilt values, so it does
+       not follow the target when the target moves, and nothing that looks for
+       "what aims at this target" -- the canvas glow, the light-path lines --
+       recognises it. An Aim palette resolves per fixture from the rig geometry,
+       which is the whole reason StageTarget exists. */
     bool alreadyLinked = false;
     foreach (QLCPalette *p, m_doc->palettes())
     {
-        if (p && p->stageTargetId() == tid)
+        if (p && p->stageTargetId() == tid && p->type() == QLCPalette::Aim)
         { alreadyLinked = true; break; }
     }
     if (!alreadyLinked)
     {
-        QLCPalette *pal = new QLCPalette(QLCPalette::PanTilt);
+        QLCPalette *pal = new QLCPalette(QLCPalette::Aim);
         pal->setName(updated->name());
-        pal->setValue(0, 0);          // default: pan=0, tilt=0
+        // Aim carries no values of its own: the target IS the value, and each
+        // fixture solves its own pan/tilt from where it sits on the rig.
         pal->setStageTargetId(tid);
-        pal->setPath(QString("Palettes/%1/").arg(QLCPalette::typeToString(QLCPalette::PanTilt)));
+        pal->setPath(QString("Palettes/%1/").arg(QLCPalette::typeToString(QLCPalette::Aim)));
         m_doc->addPalette(pal);
         m_doc->setModified();
     }
+}
+
+void Monitor::slotAddPerson()
+{
+    StageTarget *t = m_props->addStageTarget();
+    t->setKind(StageTarget::Kind::Person);
+    t->setPersonHeight(StageTarget::defaultPersonHeight());   // drawn this tall, aimed at its chest
+
+    /* Numbered among the people, not among the targets: "Person 1" next to
+       "Target 4" is how a choir ends up impossible to read. */
+    int n = 0;
+    foreach (StageTarget *other, m_props->stageTargets())
+        if (other != nullptr && other->kind() == StageTarget::Kind::Person)
+            n++;
+    t->setName(tr("Person %1").arg(n));
+
+    QPointF mm = m_graphicsView->pixelsToRealPosition(
+        m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
+    t->setX(float(mm.x() / 1000.0));
+    t->setY(float(mm.y() / 1000.0));
+    t->setZ(m_graphicsView->floorHeightAt(t->x(), t->y()));   // stand on the deck
+    t->setLayerId(m_props->activeLayerId());
+
+    m_graphicsView->updateTargets();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
 }
 
 void Monitor::slotEditTarget(quint32 tid)
 {
     StageTarget *t = m_props->stageTarget(tid);
     if (!t) return;
+    RigEditSession edit(this);
 
     QDialog dlg(this);
     dlg.setWindowTitle(tr("Edit Target — %1").arg(t->name()));
@@ -3553,23 +5340,22 @@ void Monitor::slotEditTarget(quint32 tid)
     form->addRow(tr("Name:"), nameEdit);
 
     const bool isFeet_t = (m_props->gridUnits() == MonitorProperties::Feet);
-    const QString unitSfx_t = isFeet_t ? tr(" ft") : tr(" m");
     const double toDisp_t   = isFeet_t ? 3.28084 : 1.0;
     const double fromDisp_t = isFeet_t ? (1.0 / 3.28084) : 1.0;
     const double posRange_t = isFeet_t ? 164.0 : 50.0;   // ~50m in feet
 
-    QDoubleSpinBox *xSpin = new QDoubleSpinBox(&dlg);
-    xSpin->setRange(-posRange_t, posRange_t); xSpin->setSuffix(unitSfx_t); xSpin->setDecimals(2);
+    QDoubleSpinBox *xSpin = new FeetInchesSpinBox(isFeet_t, &dlg);
+    xSpin->setRange(-posRange_t, posRange_t); xSpin->setDecimals(2);
     xSpin->setValue(double(t->x()) * toDisp_t);
-    form->addRow(tr("X (stage right):"), xSpin);
+    form->addRow(tr("X (stage left):"), xSpin);
 
-    QDoubleSpinBox *ySpin = new QDoubleSpinBox(&dlg);
-    ySpin->setRange(-posRange_t, posRange_t); ySpin->setSuffix(unitSfx_t); ySpin->setDecimals(2);
+    QDoubleSpinBox *ySpin = new FeetInchesSpinBox(isFeet_t, &dlg);
+    ySpin->setRange(-posRange_t, posRange_t); ySpin->setDecimals(2);
     ySpin->setValue(double(t->y()) * toDisp_t);
-    form->addRow(tr("Y (upstage):"), ySpin);
+    form->addRow(tr("Y (downstage):"), ySpin);
 
-    QDoubleSpinBox *zSpin = new QDoubleSpinBox(&dlg);
-    zSpin->setRange(0, isFeet_t ? 65.6 : 20.0); zSpin->setSuffix(unitSfx_t); zSpin->setDecimals(2);
+    QDoubleSpinBox *zSpin = new FeetInchesSpinBox(isFeet_t, &dlg);
+    zSpin->setRange(0, isFeet_t ? 65.6 : 20.0); zSpin->setDecimals(2);
     zSpin->setValue(double(t->z()) * toDisp_t);
     zSpin->setToolTip(tr("ABSOLUTE aim height above the stage floor for this "
                          "target (used by Pan/Tilt aim palettes). 0 = floor."));
@@ -3578,26 +5364,135 @@ void Monitor::slotEditTarget(quint32 tid)
     // Follow-spot subject/user height — when a follow spot drives a fixture it
     // aims at this height above the platform the subject stands on, OVERRIDING
     // the target Z so the beam tracks the body across risers. Per-workspace.
-    QDoubleSpinBox *subjSpin = new QDoubleSpinBox(&dlg);
-    subjSpin->setRange(0, isFeet_t ? 32.8 : 10.0); subjSpin->setSuffix(unitSfx_t); subjSpin->setDecimals(2);
+    QDoubleSpinBox *subjSpin = new FeetInchesSpinBox(isFeet_t, &dlg);
+    subjSpin->setRange(0, isFeet_t ? 32.8 : 10.0); subjSpin->setDecimals(2);
     subjSpin->setValue(double(m_props->aimSubjectHeight()) * toDisp_t);
-    subjSpin->setToolTip(tr("Follow-spot subject height above the platform/deck "
-                            "(overrides the target Z when a follow spot drives the "
-                            "fixture). ~1.4 m hits the chest."));
-    form->addRow(tr("Follow-spot subject height:"), subjSpin);
+    subjSpin->setToolTip(tr("Where a follow spot aims above the platform/deck -- a "
+                            "chest, not how tall anyone is (overrides the target Z "
+                            "when a follow spot drives the fixture). ~1.4 m hits the "
+                            "chest. A Person is aimed at 80% of its own Height "
+                            "instead."));
+    form->addRow(tr("Follow-spot aim height (chest):"), subjSpin);
+
+    /* WHAT this target is. A kind changes where light is aimed and what is
+       drawn at the point -- a drum kit is not a vocalist, and neither is a
+       mark on the deck. */
+    QComboBox *kindCombo = new QComboBox(&dlg);
+    kindCombo->addItem(tr("None — a mark on the deck"),
+                       int(StageTarget::Kind::None));
+    kindCombo->addItem(tr("Person"),        int(StageTarget::Kind::Person));
+    kindCombo->addItem(tr("Drum kit"),      int(StageTarget::Kind::DrumKit));
+    kindCombo->addItem(tr("Bound to a structure"),
+                       int(StageTarget::Kind::Structure));
+    kindCombo->addItem(tr("Area"),          int(StageTarget::Kind::Area));
+    kindCombo->setCurrentIndex(kindCombo->findData(int(t->kind())));
+    kindCombo->setToolTip(tr("What is standing here. Decides the height light "
+                             "is aimed at and what is drawn in the rig view."));
+    form->addRow(tr("Subject:"), kindCombo);
+
+    /* How tall a Person is: drawn this tall, and aimed at the chest (80% of
+       it). */
+    QDoubleSpinBox *personSpin = new FeetInchesSpinBox(isFeet_t, &dlg);
+    personSpin->setObjectName(QStringLiteral("personHeight"));
+    personSpin->setRange(0.5 * toDisp_t, 3.0 * toDisp_t);
+    personSpin->setDecimals(2);
+    personSpin->setValue(double(t->effectivePersonHeight()) * toDisp_t);
+    personSpin->setToolTip(tr("How tall this person is. They are drawn this tall, and "
+                              "light is aimed at their chest -- 80% of it."));
+    form->addRow(tr("Height:"), personSpin);
+
+    /* What it FOLLOWS. A bound target takes its position from the structure
+       every time it is read, so moving or restacking the step takes the target
+       with it -- which is what actually happens between load-ins. */
+    QComboBox *boundCombo = new QComboBox(&dlg);
+    boundCombo->addItem(tr("(not bound)"), QString());
+    foreach (StagePlatform *pl, m_props->platforms())
+        if (pl != nullptr)
+            boundCombo->addItem(tr("Platform — %1").arg(pl->name()),
+                                QString("platform:%1").arg(pl->id()));
+    foreach (Truss *tr_ , m_props->trusses())
+        if (tr_ != nullptr)
+            boundCombo->addItem(tr("Truss — %1").arg(tr_->name()),
+                                QString("truss:%1").arg(tr_->id()));
+    foreach (Tower *tw, m_props->towers())
+        if (tw != nullptr)
+            boundCombo->addItem(tr("Tower — %1").arg(tw->name()),
+                                QString("tower:%1").arg(tw->id()));
+    if (t->isBound())
+    {
+        const int ix = boundCombo->findData(QString("%1:%2")
+                                            .arg(t->boundType()).arg(t->boundId()));
+        if (ix >= 0)
+            boundCombo->setCurrentIndex(ix);
+    }
+    form->addRow(tr("Follows:"), boundCombo);
+
+    /* Per-target aim height. One override is what stops the Subject list
+       needing a new entry for every one-off. */
+    QCheckBox *ovrChk = new QCheckBox(tr("Override aim height"), &dlg);
+    ovrChk->setChecked(t->hasAimHeightOverride());
+    QDoubleSpinBox *ovrSpin = new FeetInchesSpinBox(isFeet_t, &dlg);
+    ovrSpin->setRange(0, isFeet_t ? 32.8 : 10.0);
+    ovrSpin->setDecimals(2);
+    ovrSpin->setValue(double(m_props->targetAimHeight(t, true)) * toDisp_t);
+    ovrSpin->setEnabled(ovrChk->isChecked());
+    connect(ovrChk, &QCheckBox::toggled, ovrSpin, &QWidget::setEnabled);
+    ovrSpin->setToolTip(tr("How far above whatever it is standing on to aim. "
+                           "Unticked, the Subject decides."));
+    QHBoxLayout *ovrRow = new QHBoxLayout;
+    ovrRow->addWidget(ovrChk);
+    ovrRow->addWidget(ovrSpin);
+    form->addRow(tr("Aim height:"), ovrRow);
+
+    /* Footprint. A drum kit is not a point, and neither is an area: this is
+       what lets the view show whether a beam actually COVERS the thing. */
+    QDoubleSpinBox *wSpin = new FeetInchesSpinBox(isFeet_t, &dlg);
+    wSpin->setRange(0, isFeet_t ? 98.0 : 30.0);
+    wSpin->setDecimals(2);
+    wSpin->setValue(t->footprint().width() * toDisp_t);
+    QDoubleSpinBox *dSpin = new FeetInchesSpinBox(isFeet_t, &dlg);
+    dSpin->setRange(0, isFeet_t ? 98.0 : 30.0);
+    dSpin->setDecimals(2);
+    dSpin->setValue(t->footprint().height() * toDisp_t);
+    QHBoxLayout *sizeRow = new QHBoxLayout;
+    sizeRow->addWidget(wSpin);
+    sizeRow->addWidget(new QLabel(tr("x"), &dlg));
+    sizeRow->addWidget(dSpin);
+    form->addRow(tr("Size (W x D):"), sizeRow);
+
+    /* Only the rows that mean something for the chosen Subject. */
+    auto syncRows = [&]() {
+        const StageTarget::Kind k =
+            StageTarget::Kind(kindCombo->currentData().toInt());
+        boundCombo->setEnabled(k == StageTarget::Kind::Structure);
+        const bool sized = (k == StageTarget::Kind::DrumKit
+                            || k == StageTarget::Kind::Area);
+        wSpin->setEnabled(sized);
+        dSpin->setEnabled(sized);
+        personSpin->setEnabled(k == StageTarget::Kind::Person);
+        /* Unticked, show what the Subject gives -- which for a Person is the
+           chest of its height, or the follow-spot subject height above. */
+        if (ovrChk->isChecked() == false)
+            ovrSpin->setValue(k != StageTarget::Kind::Person
+                              ? double(StageTarget::defaultAimHeight(k)) * toDisp_t
+                              : personSpin->value() * double(StageTarget::chestShare()));
+    };
+    connect(kindCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            &dlg, [&](int) {
+        syncRows();
+    });
+    connect(personSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            &dlg, [&](double) { syncRows(); });
+    connect(subjSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            &dlg, [&](double) { syncRows(); });
+    syncRows();
 
     QColor curColor = t->color().isValid() ? t->color() : QColor(255, 180, 0);
-    QPushButton *colorBtn = new QPushButton(&dlg);
-    colorBtn->setStyleSheet(QString("background-color: %1").arg(curColor.name()));
+    ColourSwatchButton *colorBtn = new ColourSwatchButton(curColor, tr("Target colour"), &dlg);
+    colorBtn->setResetColour(QColor(255, 180, 0));
     QColor chosenColor = curColor;
-    connect(colorBtn, &QPushButton::clicked, [&](){
-        QColor c = QColorDialog::getColor(chosenColor, &dlg, tr("Target color"));
-        if (c.isValid()) {
-            chosenColor = c;
-            colorBtn->setStyleSheet(QString("background-color: %1").arg(c.name()));
-        }
-    });
-    form->addRow(tr("Color:"), colorBtn);
+    connect(colorBtn, &ColourSwatchButton::colourChanged, &dlg, [&](const QColor &c) { chosenColor = c; });
+    form->addRow(tr("Colour:"), colorBtn);
 
     vl->addLayout(form);
     QDialogButtonBox *bb = new QDialogButtonBox(
@@ -3606,19 +5501,54 @@ void Monitor::slotEditTarget(quint32 tid)
     connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
     connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
+    auto apply = [&]() {
+        QString newName = nameEdit->text().trimmed();
+        if (!newName.isEmpty()) t->setName(newName);
+        t->setX(float(xSpin->value() * fromDisp_t));
+        t->setY(float(ySpin->value() * fromDisp_t));
+        t->setZ(float(zSpin->value() * fromDisp_t));
+        t->setColor(chosenColor);
+        m_props->setAimSubjectHeight(float(subjSpin->value() * fromDisp_t));
+        // Position and subject height both change what a head can reach.
+        m_props->notifyStageTargetsChanged();
+
+        t->setKind(StageTarget::Kind(kindCombo->currentData().toInt()));
+        if (t->kind() == StageTarget::Kind::Person)
+            t->setPersonHeight(float(personSpin->value() * fromDisp_t));
+        const QString bound = boundCombo->currentData().toString();
+        if (t->kind() == StageTarget::Kind::Structure && bound.isEmpty() == false)
+        {
+            const QStringList parts = bound.split(QLatin1Char(':'));
+            if (parts.size() == 2)
+                t->setBinding(parts.at(0), parts.at(1).toUInt());
+        }
+        else
+        {
+            t->clearBinding();
+        }
+        t->setAimHeightOverride(ovrChk->isChecked()
+                                ? float(ovrSpin->value() * fromDisp_t) : -1.0f);
+        t->setFootprint(QSizeF(wSpin->value() * fromDisp_t,
+                               dSpin->value() * fromDisp_t));
+        m_graphicsView->updateTargets();
+    };
+    // Live: the target follows its fields; Cancel puts it back.
+    connect(nameEdit, &QLineEdit::textChanged, &dlg, [&](const QString &) { apply(); });
+    for (QDoubleSpinBox *sp : { xSpin, ySpin, zSpin, subjSpin, personSpin, ovrSpin, wSpin, dSpin })
+        connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg, [&](double) { apply(); });
+    for (QComboBox *cb : { kindCombo, boundCombo })
+        connect(cb, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg, [&](int) { apply(); });
+    connect(ovrChk, &QCheckBox::toggled, &dlg, [&](bool) { apply(); });
+    connect(colorBtn, &ColourSwatchButton::colourChanged, &dlg, [&](const QColor &) { apply(); });
+
     if (dlg.exec() != QDialog::Accepted)
+    {
+        edit.cancel();
         return;
-
-    QString newName = nameEdit->text().trimmed();
-    if (!newName.isEmpty()) t->setName(newName);
-    t->setX(float(xSpin->value() * fromDisp_t));
-    t->setY(float(ySpin->value() * fromDisp_t));
-    t->setZ(float(zSpin->value() * fromDisp_t));
-    t->setColor(chosenColor);
-    m_props->setAimSubjectHeight(float(subjSpin->value() * fromDisp_t));
-
-    m_graphicsView->updateTargets();
+    }
+    apply();
     m_doc->setModified();
+    edit.accept();
 }
 
 void Monitor::slotAddPipe()
@@ -3658,21 +5588,17 @@ void Monitor::slotEditStand(quint32 sid)
 {
     Stand *s = m_props->stand(sid);
     if (!s) return;
+    RigEditSession edit(this);
 
     const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
-    const QString sfx = isFeet ? tr(" ft") : tr(" m");
     const double toDisp   = isFeet ? 3.28084 : 1.0;
     const double fromDisp = isFeet ? (1.0 / 3.28084) : 1.0;
     const double posR = isFeet ? 164.0 : 50.0;
     const double hMax = isFeet ? 33.0 : 10.0;
 
-    // Snapshot for live-preview revert on Cancel.
-    const float snapOX = s->originX(), snapOY = s->originY(), snapH = s->height();
-    const float snapBR = s->baseRadius(), snapRot = s->rotation();
-    const QString snapName = s->name();
 
     QDialog dlg(this);
-    dlg.setWindowTitle(tr("Lighting Studio Editor — %1").arg(s->name()));
+    dlg.setWindowTitle(tr("Lighting Studio Editor — Stand %1").arg(s->name()));
     QWidget *geomW = new QWidget(&dlg);
     QVBoxLayout *vl = new QVBoxLayout(geomW);
     QFormLayout *form = new QFormLayout;
@@ -3680,8 +5606,8 @@ void Monitor::slotEditStand(quint32 sid)
     QLineEdit *nameEdit = new QLineEdit(s->name(), &dlg);
     form->addRow(tr("Name:"), nameEdit);
     auto mkSpin = [&](double val, double lo, double hi) {
-        QDoubleSpinBox *sp = new QDoubleSpinBox(&dlg);
-        sp->setRange(lo, hi); sp->setDecimals(2); sp->setSuffix(sfx);
+        QDoubleSpinBox *sp = new FeetInchesSpinBox(isFeet, &dlg);
+        sp->setRange(lo, hi); sp->setDecimals(2);
         sp->setValue(val * toDisp); return sp;
     };
     QDoubleSpinBox *oxSpin = mkSpin(s->originX(), -posR, posR);
@@ -3729,12 +5655,7 @@ void Monitor::slotEditStand(quint32 sid)
     dlg.resize(940, 560);
     if (dlg.exec() != QDialog::Accepted)
     {
-        // Revert the live preview.
-        s->setName(snapName); s->setOriginX(snapOX); s->setOriginY(snapOY);
-        s->setHeight(snapH); s->setBaseRadius(snapBR); s->setRotation(snapRot);
-        m_props->recomputeStandMounts();
-        m_graphicsView->updatePlatforms();
-        m_graphicsView->updateTrusses();
+        edit.cancel();
         return;
     }
 
@@ -3753,6 +5674,444 @@ void Monitor::slotEditStand(quint32 sid)
             m_graphicsView->updateFixture(fx->id());
     if (m_layersPanel) m_layersPanel->reload();
     m_doc->setModified();
+    edit.accept();
+}
+
+void Monitor::slotAddCyclorama()
+{
+    slotAddScenery(Scenery::Cyclorama);
+}
+
+void Monitor::slotAddScenery(int kind)
+{
+    const double mpu = (m_props->gridUnits() == MonitorProperties::Feet) ? 0.3048 : 1.0;
+    const double stageW = double(m_props->gridSize().x()) * mpu;
+    const double stageD = double(m_props->gridSize().z()) * mpu;
+    const bool atClick = !m_pendingAddScenePos.isNull();
+    QPointF click;
+    if (atClick)
+    {
+        const QPointF mm = m_graphicsView->pixelsToRealPosition(
+            m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
+        click = QPointF(mm.x() / 1000.0, mm.y() / 1000.0);
+        m_pendingAddScenePos = QPointF();
+    }
+    const float fullW = float(qMax(2.0, stageW - 1.0));
+
+    /* Where each usually goes: the cyc and back wall across the back, the
+       main drape across the front, a traveler mid-stage, legs and a border
+       two-thirds of the way down, a scrim just in front of the cyc. */
+    auto make = [&](double x, double y) {
+        Scenery *s = m_props->addScenery();
+        s->setKind(kind);
+        s->setColor(Scenery::defaultColor(kind));
+        s->setName(tr("%1 %2").arg(Scenery::kindName(kind)).arg(s->id() + 1));
+        s->setOriginX(float(atClick ? click.x() : x));
+        s->setOriginY(float(atClick ? click.y() : y));
+        s->setWidth(fullW);
+        s->setHeight(6.0f);
+        s->setLayerId(m_props->activeLayerId());
+        return s;
+    };
+    Scenery *s = nullptr;
+    switch (kind)
+    {
+        case Scenery::BackWall:
+            s = make(stageW / 2.0, 0.1);
+            s->setThickness(0.2f);
+            break;
+        case Scenery::MainDrape:
+            s = make(stageW / 2.0, qMax(1.0, stageD - 0.5));
+            break;
+        case Scenery::Proscenium:
+            // Framing the stage at its front: the opening the stage's width.
+            s = make(stageW / 2.0, qMax(1.0, stageD - 0.2));
+            s->setWidth(float(stageW + 2.0));
+            s->setHeight(7.0f);
+            s->setThickness(0.4f);
+            s->setOpeningWidth(float(qMax(2.0, stageW - 0.5)));
+            s->setOpeningHeight(5.5f);
+            break;
+        case Scenery::Traveler:
+            s = make(stageW / 2.0, stageD / 2.0);
+            break;
+        case Scenery::Leg:
+        {
+            // A pair, one each side, unless it was put somewhere by hand.
+            s = make(0.6, stageD * 0.66);
+            s->setWidth(1.2f);
+            if (!atClick)
+            {
+                Scenery *other = make(stageW - 0.6, stageD * 0.66);
+                other->setWidth(1.2f);
+            }
+            break;
+        }
+        case Scenery::Border:
+            s = make(stageW / 2.0, stageD * 0.66);
+            s->setHeight(1.2f);
+            s->setBottom(4.8f);
+            break;
+        case Scenery::Scrim:
+            s = make(stageW / 2.0, 1.0);
+            break;
+        case Scenery::Wall:
+            s = make(stageW / 2.0, stageD / 2.0);
+            s->setWidth(1.0f);
+            s->setHeight(0.5f);
+            s->setThickness(0.1f);
+            break;
+        case Scenery::Cyclorama:
+        default:
+            // Across the back: centred, at the upstage edge of the stage.
+            s = make(stageW / 2.0, 0.3);
+            s->setName(tr("Cyclorama %1").arg(s->id() + 1));
+            break;
+    }
+    m_graphicsView->updatePlatforms();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+    slotEditScenery(s->id());
+}
+
+void Monitor::slotAddFountain()
+{
+    const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
+    const double toDisp = isFeet ? 3.28084 : 1.0;
+    const double fromDisp = isFeet ? (1.0 / 3.28084) : 1.0;
+    const double mpu = isFeet ? 0.3048 : 1.0;
+    const double stageW = double(m_props->gridSize().x()) * mpu;
+    const double stageD = double(m_props->gridSize().z()) * mpu;
+    QPointF centre(stageW / 2.0, qMax(1.0, stageD - 1.5));
+    if (!m_pendingAddScenePos.isNull())
+    {
+        const QPointF mm = m_graphicsView->pixelsToRealPosition(
+            m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
+        centre = QPointF(mm.x() / 1000.0, mm.y() / 1000.0);
+        m_pendingAddScenePos = QPointF();
+    }
+
+    /* The sizes, as built: 3 ft across, 4 ft deep with a round front; a 5"
+       base; walls of 4" blocks, the outer 8" high and the inner 14". */
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("Add Fountain"));
+    QFormLayout *form = new QFormLayout;
+    auto mkSpin = [&](double metres, const char *name, const QString &tip) {
+        QDoubleSpinBox *sp = new FeetInchesSpinBox(isFeet, &dlg);
+        sp->setRange(0.01, isFeet ? 33.0 : 10.0);
+        sp->setDecimals(3);
+        sp->setValue(metres * toDisp);
+        sp->setObjectName(QString::fromLatin1(name));
+        sp->setToolTip(tip);
+        return sp;
+    };
+    QDoubleSpinBox *wSpin = mkSpin(0.9144, "fountainWidth", tr("Across, outside to outside"));
+    QDoubleSpinBox *dSpin = mkSpin(1.2192, "fountainDepth", tr("From the back to the front of the curve"));
+    QDoubleSpinBox *baseSpin = mkSpin(0.127, "fountainBase", tr("The base it stands on"));
+    QDoubleSpinBox *outerSpin = mkSpin(0.2032, "fountainOuter", tr("The outer wall, above the base"));
+    QDoubleSpinBox *innerSpin = mkSpin(0.3556, "fountainInner", tr("The inner wall, above the base"));
+    QDoubleSpinBox *thickSpin = mkSpin(0.1016, "fountainThickness", tr("How thick each wall is"));
+    QDoubleSpinBox *gapSpin = mkSpin(0.1016, "fountainGap", tr("Between the outer wall and the inner one"));
+    QCheckBox *flameChk = new QCheckBox(tr("A silk flame in the middle"), &dlg);
+    flameChk->setChecked(true);
+    flameChk->setObjectName("fountainFlame");
+    flameChk->setToolTip(tr("A Generic Silk Flame (relay), staged: patch it to the relay's channel"));
+    form->addRow(tr("Width:"), wSpin);
+    form->addRow(tr("Depth:"), dSpin);
+    form->addRow(tr("Base height:"), baseSpin);
+    form->addRow(tr("Outer wall:"), outerSpin);
+    form->addRow(tr("Inner wall:"), innerSpin);
+    form->addRow(tr("Wall thickness:"), thickSpin);
+    form->addRow(tr("Gap:"), gapSpin);
+    form->addRow(QString(), flameChk);
+    /* Beside the fields, what each one measures: the fountain from above and
+       cut through its front, every value where it is taken, the field being
+       edited picked out ("a side display showing what each measurement is"). */
+    FountainDiagram *diagram = new FountainDiagram(&dlg);
+    const QList<QPair<QString, QDoubleSpinBox *> > fields = {
+        { QStringLiteral("width"), wSpin }, { QStringLiteral("depth"), dSpin },
+        { QStringLiteral("base"), baseSpin }, { QStringLiteral("outer"), outerSpin },
+        { QStringLiteral("inner"), innerSpin }, { QStringLiteral("thickness"), thickSpin },
+        { QStringLiteral("gap"), gapSpin } };
+    for (const auto &fd : fields)
+    {
+        const QString key = fd.first;
+        QDoubleSpinBox *sp = fd.second;
+        auto show = [diagram, key, sp, fromDisp]() {
+            diagram->setValue(key, sp->value() * fromDisp, sp->text().trimmed());
+        };
+        show();
+        connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), diagram, [show](double) { show(); });
+    }
+    connect(flameChk, &QCheckBox::toggled, diagram, &FountainDiagram::setFlame);
+    connect(qApp, &QApplication::focusChanged, diagram, [diagram, fields](QWidget *, QWidget *now) {
+        QString key;
+        for (const auto &fd : fields)
+            if (now != nullptr && (now == fd.second || fd.second->isAncestorOf(now)))
+                key = fd.first;
+        diagram->setHighlight(key);
+    });
+
+    QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+    connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    QHBoxLayout *hl = new QHBoxLayout;
+    hl->addLayout(form);
+    hl->addWidget(diagram, 1);
+    QVBoxLayout *vl = new QVBoxLayout(&dlg);
+    vl->addLayout(hl);
+    vl->addWidget(bb);
+    if (dlg.exec() != QDialog::Accepted)
+        return;
+
+    const float W = float(wSpin->value() * fromDisp), D = float(dSpin->value() * fromDisp);
+    const float base = float(baseSpin->value() * fromDisp);
+    const float t = float(thickSpin->value() * fromDisp), gap = float(gapSpin->value() * fromDisp);
+    const float back = float(centre.y()) - D / 2.0f;
+    const quint32 layer = m_props->activeLayerId();
+    const quint32 gid = m_props->nextGroupId();
+    const int n = gid;
+    m_props->createGroup(gid, tr("Fountain %1").arg(n), layer, 0);
+
+    // The base: as wide and deep as the fountain, its front a half circle.
+    StagePlatform *pl = m_props->addPlatform();
+    pl->setName(tr("Fountain %1 base").arg(n));
+    pl->setOriginX(float(centre.x()) - W / 2.0f);
+    pl->setOriginY(back);
+    pl->setWidth(W);
+    pl->setDepth(D);
+    pl->setHeight(base);
+    pl->setFrontCurve(W / 2.0f);
+    pl->setColor(QColor(120, 116, 108));
+    pl->setLayerId(layer);
+    pl->setGroupId(gid);
+
+    /* The walls: Us on the base, open at the back. A wall's line is its
+       middle, so the outer one is half a block in from the edge and the
+       inner one a block, the gap and half a block more. */
+    auto wall = [&](const QString &name, float inset, float height) {
+        Scenery *s = m_props->addScenery();
+        s->setKind(Scenery::Wall);
+        s->setName(name);
+        s->setOutline(Scenery::RoundedU);
+        s->setOriginX(float(centre.x()));
+        s->setOriginY(back);
+        s->setWidth(qMax(0.1f, W - 2.0f * inset));
+        s->setDepth(qMax(0.05f, D - inset));
+        s->setThickness(t);
+        s->setHeight(height);
+        s->setBottom(base);
+        s->setColor(Scenery::defaultColor(Scenery::Wall));
+        s->setLayerId(layer);
+        s->setGroupId(gid);
+        return s;
+    };
+    wall(tr("Fountain %1 outer wall").arg(n), t / 2.0f, float(outerSpin->value() * fromDisp));
+    const float innerInset = t + gap + t / 2.0f;
+    wall(tr("Fountain %1 inner wall").arg(n), innerInset, float(innerSpin->value() * fromDisp));
+
+    // The flame, standing on the base in the middle of the inner wall.
+    if (flameChk->isChecked())
+    {
+        QLCFixtureDef *def = m_doc->fixtureDefCache()->fixtureDef(QStringLiteral("Generic"),
+                                                                   QStringLiteral("Silk Flame (relay)"));
+        if (def != nullptr && !def->modes().isEmpty())
+        {
+            Fixture *fx = new Fixture(m_doc);
+            fx->setFixtureDefinition(def, def->modes().first());
+            fx->setName(tr("Fountain %1 flame").arg(n));
+            fx->setPatched(false);
+            if (m_doc->addFixture(fx))
+            {
+                const QPointF at(centre.x(), double(back) + double(D - innerInset) * 0.5);
+                m_props->setFixturePosition(fx->id(), 0, 0,
+                                            QVector3D(float(at.x() * 1000.0), float(at.y() * 1000.0), 0.0f));
+                FixtureRigProps rp = m_props->fixtureRigProps(fx->id());
+                rp.deckPlatformId = pl->id();
+                rp.mountingType = Truss::FloorMounted;
+                m_props->setFixtureRigProps(fx->id(), rp);
+                m_props->setFixtureGroup(fx->id(), gid);
+                m_graphicsView->addFixture(fx->id(), QPointF(at.x() * 1000.0, at.y() * 1000.0));
+            }
+            else
+                delete fx;
+        }
+    }
+
+    m_graphicsView->updatePlatforms();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+}
+
+void Monitor::slotEditScenery(quint32 sid)
+{
+    Scenery *s = m_props->scenery(sid);
+    if (s == NULL)
+        return;
+    RigEditSession edit(this);
+    const QString oldName = s->name();
+
+    const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
+    const double toDisp   = isFeet ? 3.28084 : 1.0;
+    const double fromDisp = isFeet ? (1.0 / 3.28084) : 1.0;
+    const double posR = isFeet ? 164.0 : 50.0;
+
+    // Snapshot for reverting the live preview on Cancel.
+
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("%1 -- %2").arg(Scenery::kindName(s->kind()), s->name()));
+    QFormLayout *form = new QFormLayout;
+    QLineEdit *nameEdit = new QLineEdit(s->name(), &dlg);
+    form->addRow(tr("Name:"), nameEdit);
+    auto mkSpin = [&](double val, double lo, double hi) {
+        QDoubleSpinBox *sp = new FeetInchesSpinBox(isFeet, &dlg);
+        sp->setRange(lo, hi); sp->setDecimals(2);
+        sp->setValue(val * toDisp);
+        return sp;
+    };
+    QDoubleSpinBox *xSpin   = mkSpin(s->originX(), -posR, posR);
+    QDoubleSpinBox *ySpin   = mkSpin(s->originY(), -posR, posR);
+    QDoubleSpinBox *wSpin   = mkSpin(s->width(), 0.1, posR * 2);
+    QDoubleSpinBox *hSpin   = mkSpin(s->height(), 0.1, isFeet ? 100.0 : 30.0);
+    QDoubleSpinBox *bSpin   = mkSpin(s->bottom(), 0.0, isFeet ? 100.0 : 30.0);
+    QDoubleSpinBox *bowSpin = mkSpin(s->bow(), isFeet ? -33.0 : -10.0, isFeet ? 33.0 : 10.0);
+    QDoubleSpinBox *depthSpin = mkSpin(s->depth(), 0.05, posR);
+    QDoubleSpinBox *thickSpin = mkSpin(s->thickness(), 0.0, isFeet ? 10.0 : 3.0);
+    thickSpin->setDecimals(3);
+    // A curtain whose opening was never set shows the one it is drawn with.
+    const float openNow = (s->hasState() && s->openingWidth() >= s->width()) ? 0.68f * s->width()
+                                                                             : s->openingWidth();
+    QDoubleSpinBox *openWSpin = mkSpin(openNow, 0.1, posR * 2);
+    QDoubleSpinBox *openHSpin = mkSpin(s->openingHeight(), 0.1, isFeet ? 100.0 : 30.0);
+    openWSpin->setObjectName("sceneryOpeningWidth");
+    openHSpin->setObjectName("sceneryOpeningHeight");
+    openWSpin->setToolTip(tr("How wide the opening is, centred: a proscenium's piers, or an open "
+                             "curtain's halves gathered at its ends, are the rest of the width"));
+    openHSpin->setToolTip(tr("How high the opening is; the header is the rest of the height"));
+    QComboBox *kindCombo = new QComboBox(&dlg);
+    foreach (int k, Scenery::kinds())
+        kindCombo->addItem(Scenery::kindName(k), k);
+    kindCombo->setCurrentIndex(qMax(0, kindCombo->findData(s->kind())));
+    kindCombo->setObjectName("sceneryKind");
+    QComboBox *outlineCombo = new QComboBox(&dlg);
+    outlineCombo->addItem(tr("Straight or bowed"), int(Scenery::SheetOutline));
+    outlineCombo->addItem(tr("U, rounded front"), int(Scenery::RoundedU));
+    outlineCombo->setCurrentIndex(qMax(0, outlineCombo->findData(s->outline())));
+    outlineCombo->setObjectName("sceneryOutline");
+    outlineCombo->setToolTip(tr("A U has a half-round front as wide as it is, and straight sides "
+                                "running back to its Depth -- a fountain's rim, a planter"));
+    QComboBox *stateCombo = new QComboBox(&dlg);
+    for (int st : { int(Scenery::Closed), int(Scenery::Open), int(Scenery::Flown) })
+        stateCombo->addItem(Scenery::stateName(st), st);
+    stateCombo->setCurrentIndex(qMax(0, stateCombo->findData(s->state())));
+    stateCombo->setObjectName("sceneryState");
+    stateCombo->setToolTip(tr("Open: split, each half gathered at its end. Flown out: taken up, "
+                              "out of the way of the light"));
+    depthSpin->setToolTip(tr("From the open back to the front of the curve"));
+    thickSpin->setToolTip(tr("How thick it is; 0 for cloth"));
+    QDoubleSpinBox *rotSpin = new QDoubleSpinBox(&dlg);
+    rotSpin->setRange(-180, 180); rotSpin->setDecimals(0); rotSpin->setSuffix(QStringLiteral("°"));
+    rotSpin->setValue(double(s->rotation()));
+    xSpin->setToolTip(tr("The middle of the bottom edge, across the stage"));
+    ySpin->setToolTip(tr("The middle of the bottom edge, up/down stage"));
+    bSpin->setToolTip(tr("Height of the bottom edge above the floor (0 = to the deck)"));
+    bowSpin->setToolTip(tr("How far the middle curves away from the audience; 0 is flat, "
+                           "less than 0 curves toward them"));
+    rotSpin->setToolTip(tr("0 runs across the stage facing the audience"));
+    form->addRow(tr("Kind:"), kindCombo);
+    form->addRow(tr("Centre X:"), xSpin);
+    form->addRow(tr("Centre Y:"), ySpin);
+    form->addRow(tr("Shape:"), outlineCombo);
+    form->addRow(tr("Width:"), wSpin);
+    form->addRow(tr("Depth:"), depthSpin);
+    form->addRow(tr("Height:"), hSpin);
+    form->addRow(tr("Thickness:"), thickSpin);
+    form->addRow(tr("Bottom trim:"), bSpin);
+    form->addRow(tr("Bow:"), bowSpin);
+    form->addRow(tr("Facing:"), rotSpin);
+    form->addRow(tr("Curtain:"), stateCombo);
+    form->addRow(tr("Opening width:"), openWSpin);
+    form->addRow(tr("Opening height:"), openHSpin);
+    // Each row only where it means something for the kind.
+    auto showRow = [form](QWidget *field, bool on) {
+        field->setVisible(on);
+        if (QWidget *label = form->labelForField(field))
+            label->setVisible(on);
+    };
+    auto showRows = [&]() {
+        const int k = kindCombo->currentData().toInt();
+        const bool arch = (k == Scenery::Proscenium);
+        const bool built = (k == Scenery::Wall || k == Scenery::BackWall || arch);
+        const bool u = built && !arch && outlineCombo->currentData().toInt() == Scenery::RoundedU;
+        showRow(outlineCombo, built && !arch);
+        showRow(depthSpin, u);
+        showRow(bowSpin, !u && !arch);
+        showRow(thickSpin, built);
+        const bool curtain = (k == Scenery::MainDrape || k == Scenery::Traveler);
+        showRow(openWSpin, arch || (curtain && stateCombo->currentData().toInt() == Scenery::Open));
+        showRow(openHSpin, arch);
+        showRow(stateCombo, k == Scenery::MainDrape || k == Scenery::Traveler);
+        dlg.adjustSize();
+    };
+    QColor chosen = s->color();
+    ColourSwatchButton *colorBtn = new ColourSwatchButton(chosen, tr("Cloth colour"), &dlg);
+    colorBtn->setResetColour(Scenery::defaultColor(s->kind()));
+    form->addRow(tr("Colour:"), colorBtn);
+    showRows();
+
+    auto apply = [&]() {
+        s->setName(nameEdit->text().trimmed().isEmpty() ? oldName : nameEdit->text().trimmed());
+        s->setOriginX(float(xSpin->value() * fromDisp));
+        s->setOriginY(float(ySpin->value() * fromDisp));
+        s->setWidth(float(wSpin->value() * fromDisp));
+        s->setHeight(float(hSpin->value() * fromDisp));
+        s->setBottom(float(bSpin->value() * fromDisp));
+        s->setBow(float(bowSpin->value() * fromDisp));
+        s->setRotation(float(rotSpin->value()));
+        s->setKind(kindCombo->currentData().toInt());
+        const bool built = s->isBuilt();
+        s->setOutline(built && s->kind() != Scenery::Proscenium ? outlineCombo->currentData().toInt()
+                                                                : int(Scenery::SheetOutline));
+        if (s->kind() == Scenery::Proscenium)
+            s->setBow(0.0f);
+        s->setOpeningWidth(float(openWSpin->value() * fromDisp));
+        s->setOpeningHeight(float(openHSpin->value() * fromDisp));
+        s->setDepth(float(depthSpin->value() * fromDisp));
+        s->setThickness(built ? float(thickSpin->value() * fromDisp) : 0.0f);
+        s->setState(stateCombo->currentData().toInt());
+        s->setColor(chosen);
+        m_graphicsView->updatePlatforms();
+    };
+    for (QDoubleSpinBox *sp : { xSpin, ySpin, wSpin, hSpin, bSpin, bowSpin, rotSpin, depthSpin, thickSpin,
+                                openWSpin, openHSpin })
+        connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg, [&apply](double) { apply(); });
+    for (QComboBox *cb : { kindCombo, outlineCombo, stateCombo })
+        connect(cb, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg, [&](int) {
+            showRows();
+            apply();
+        });
+    connect(nameEdit, &QLineEdit::textChanged, &dlg, [&apply](const QString &) { apply(); });
+    connect(colorBtn, &ColourSwatchButton::colourChanged, &dlg, [&](const QColor &c) {
+        chosen = c;
+        apply();
+    });
+
+    QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+    connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    QVBoxLayout *vl = new QVBoxLayout(&dlg);
+    vl->addLayout(form);
+    vl->addWidget(bb);
+
+    if (dlg.exec() != QDialog::Accepted)
+    {
+        edit.cancel();
+        return;
+    }
+    apply();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+    edit.accept();
 }
 
 void Monitor::slotAddTower()
@@ -3772,10 +6131,67 @@ void Monitor::slotAddTower()
     slotEditTower(t->id());
 }
 
+/* An image to print on a face or a sock: "Pattern…" picks one, "×" takes
+   it off; the label says which. Calls @p changed after either. */
+static QWidget *makePatternPicker(QWidget *parent, QString *path, float *opacity,
+                                  const std::function<void()> &changed)
+{
+    QWidget *w = new QWidget(parent);
+    QHBoxLayout *lay = new QHBoxLayout(w);
+    lay->setContentsMargins(0, 0, 0, 0);
+    QPushButton *choose = new QPushButton(QObject::tr("Pattern…"), w);
+    choose->setToolTip(QObject::tr("An image printed over it, stretched to each face"));
+    QToolButton *clear = new QToolButton(w);
+    clear->setText(QStringLiteral("×"));
+    clear->setToolTip(QObject::tr("No pattern: plain colour"));
+    QLabel *name = new QLabel(w);
+    name->setStyleSheet("color:#b0b4c0;");
+    // How much of the print shows over the colour beneath it.
+    QSpinBox *opacitySpin = new QSpinBox(w);
+    opacitySpin->setRange(0, 100);
+    opacitySpin->setSuffix(QStringLiteral("%"));
+    opacitySpin->setValue(qRound(*opacity * 100.0f));
+    opacitySpin->setToolTip(QObject::tr("Opacity of the print: 100% the print as it is, "
+                                        "less and the colour beneath shows through"));
+    auto show = [path, name, clear, opacitySpin]() {
+        name->setText(path->isEmpty() ? QObject::tr("(plain)") : QFileInfo(*path).fileName());
+        name->setToolTip(*path);
+        clear->setEnabled(!path->isEmpty());
+        opacitySpin->setEnabled(!path->isEmpty());
+    };
+    QObject::connect(opacitySpin, QOverload<int>::of(&QSpinBox::valueChanged), w,
+                     [opacity, changed](int v) {
+        *opacity = float(v) / 100.0f;
+        changed();
+    });
+    show();
+    QObject::connect(choose, &QPushButton::clicked, w, [w, path, show, changed]() {
+        const QString f = QFileDialog::getOpenFileName(w, QObject::tr("Pattern image"),
+            path->isEmpty() ? QString() : QFileInfo(*path).absolutePath(),
+            QObject::tr("Images (*.png *.jpg *.jpeg *.bmp *.gif *.webp)"));
+        if (f.isEmpty())
+            return;
+        *path = f;
+        show();
+        changed();
+    });
+    QObject::connect(clear, &QToolButton::clicked, w, [path, show, changed]() {
+        path->clear();
+        show();
+        changed();
+    });
+    lay->addWidget(choose);
+    lay->addWidget(clear);
+    lay->addWidget(name, 1);
+    lay->addWidget(opacitySpin);
+    return w;
+}
+
 void Monitor::slotEditTower(quint32 tid)
 {
     Tower *t = m_props->tower(tid);
     if (!t) return;
+    RigEditSession edit(this);
 
     const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
     const QString sfx = isFeet ? tr(" ft") : tr(" m");
@@ -3784,15 +6200,9 @@ void Monitor::slotEditTower(quint32 tid)
     const double posR = isFeet ? 164.0 : 50.0;
     const double hMax = isFeet ? 40.0 : 12.0;
 
-    // Snapshot for revert on Cancel (geometry + shelves).
-    const QString snapName = t->name();
-    const float snapOX = t->originX(), snapOY = t->originY();
-    const float snapW = t->width(), snapD = t->depth(), snapH = t->height();
-    QList<float> snapShelves;
-    for (int i = 0; i < t->shelfCount(); ++i) snapShelves << t->shelfHeight(i);
 
     QDialog dlg(this);
-    dlg.setWindowTitle(tr("Lighting Studio Editor — %1").arg(t->name()));
+    dlg.setWindowTitle(tr("Lighting Studio Editor — Tower %1").arg(t->name()));
     QWidget *geomW = new QWidget(&dlg);
     QVBoxLayout *vl = new QVBoxLayout(geomW);
     QFormLayout *form = new QFormLayout;
@@ -3800,8 +6210,8 @@ void Monitor::slotEditTower(quint32 tid)
     QLineEdit *nameEdit = new QLineEdit(t->name(), &dlg);
     form->addRow(tr("Name:"), nameEdit);
     auto mkSpin = [&](double val, double lo, double hi) {
-        QDoubleSpinBox *sp = new QDoubleSpinBox(&dlg);
-        sp->setRange(lo, hi); sp->setDecimals(2); sp->setSuffix(sfx);
+        QDoubleSpinBox *sp = new FeetInchesSpinBox(isFeet, &dlg);
+        sp->setRange(lo, hi); sp->setDecimals(2);
         sp->setValue(val * toDisp); return sp;
     };
     QDoubleSpinBox *oxSpin = mkSpin(t->originX(), -posR, posR);
@@ -3814,11 +6224,67 @@ void Monitor::slotEditTower(quint32 tid)
     form->addRow(tr("Width:"), wSpin);
     form->addRow(tr("Depth:"), dSpin);
     form->addRow(tr("Height:"), hSpin);
+    QDoubleSpinBox *facingSpin = new QDoubleSpinBox(&dlg);
+    facingSpin->setRange(-180.0, 180.0);
+    facingSpin->setDecimals(1);
+    facingSpin->setSuffix(QStringLiteral("°"));
+    facingSpin->setValue(double(t->rotation()));
+    facingSpin->setObjectName("towerFacing");
+    facingSpin->setToolTip(tr("Turned about its middle; what is on its shelves turns with it"));
+    form->addRow(tr("Facing:"), facingSpin);
+
+    /* Faces: opaque panels on its sides -- a black facade, or a printed one --
+       on the sides ticked, over the stretch of its height given. */
+    QWidget *facesRow = new QWidget(&dlg);
+    QHBoxLayout *facesLay = new QHBoxLayout(facesRow);
+    facesLay->setContentsMargins(0, 0, 0, 0);
+    QCheckBox *facesCb = new QCheckBox(tr("Faces"), facesRow);
+    facesCb->setChecked(t->hasFaces());
+    facesCb->setToolTip(tr("Opaque panels over the tower's sides"));
+    QColor *facesColour = new QColor(t->facesColour());
+    ColourSwatchButton *facesColourBtn = new ColourSwatchButton(*facesColour, tr("Faces colour"), facesRow);
+    facesColourBtn->setResetColour(QColor(24, 24, 26));
+    facesColourBtn->setToolTip(tr("The panels' colour"));
+    QDoubleSpinBox *facesFromSpin = mkSpin(t->facesFrom(), 0.0, hMax);
+    QDoubleSpinBox *facesToSpin = mkSpin(t->facesTo(), 0.0, hMax);
+    facesFromSpin->setToolTip(tr("How high the panels start"));
+    facesToSpin->setToolTip(tr("How high they go -- its top covers the whole tower"));
+    facesLay->addWidget(facesCb);
+    facesLay->addWidget(facesColourBtn);
+    facesLay->addWidget(new QLabel(tr("from"), facesRow));
+    facesLay->addWidget(facesFromSpin);
+    facesLay->addWidget(new QLabel(tr("to"), facesRow));
+    facesLay->addWidget(facesToSpin);
+    form->addRow(tr("Faces:"), facesRow);
+    QWidget *sidesRow = new QWidget(&dlg);
+    QHBoxLayout *sidesLay = new QHBoxLayout(sidesRow);
+    sidesLay->setContentsMargins(0, 0, 0, 0);
+    QList<QPair<QCheckBox *, int> > sideCbs;
+    for (const auto &sd : { qMakePair(tr("Front"), int(Tower::FrontSide)),
+                            qMakePair(tr("Back"), int(Tower::BackSide)),
+                            qMakePair(tr("Stage left"), int(Tower::LeftSide)),
+                            qMakePair(tr("Stage right"), int(Tower::RightSide)) })
+    {
+        QCheckBox *cb = new QCheckBox(sd.first, sidesRow);
+        cb->setChecked(t->facesSides() & sd.second);
+        sidesLay->addWidget(cb);
+        sideCbs << qMakePair(cb, sd.second);
+    }
+    sidesLay->addStretch(1);
+    form->addRow(tr("On sides:"), sidesRow);
+    QString *facesPattern = new QString(t->facesPattern());
+    float *facesOpacity = new float(t->facesPatternOpacity());
+    std::function<void()> applyFaces;               // set below, once the canvas exists
+    QWidget *facesPatternRow = makePatternPicker(&dlg, facesPattern, facesOpacity, [&applyFaces]() {
+        if (applyFaces) applyFaces();
+    });
+    form->addRow(tr("Printed:"), facesPatternRow);
     vl->addLayout(form);
 
     // Shelves — a list of heights the user can add / remove.
     vl->addWidget(new QLabel(tr("Shelves (height above floor):"), &dlg));
     QListWidget *shelfList = new QListWidget(&dlg);
+    shelfList->setToolTip(tr("Double-click a shelf to edit its height."));
     auto reloadShelves = [&]() {
         shelfList->clear();
         for (int i = 0; i < t->shelfCount(); ++i)
@@ -3829,8 +6295,8 @@ void Monitor::slotEditTower(quint32 tid)
     vl->addWidget(shelfList);
 
     QHBoxLayout *shelfBtns = new QHBoxLayout;
-    QDoubleSpinBox *newShelf = new QDoubleSpinBox(&dlg);
-    newShelf->setRange(0.0, hMax); newShelf->setDecimals(2); newShelf->setSuffix(sfx);
+    QDoubleSpinBox *newShelf = new FeetInchesSpinBox(isFeet, &dlg);
+    newShelf->setRange(0.0, hMax); newShelf->setDecimals(2);
     newShelf->setValue(1.0 * toDisp);
     QPushButton *addShelfBtn = new QPushButton(tr("Add shelf"), &dlg);
     QPushButton *delShelfBtn = new QPushButton(tr("Remove selected"), &dlg);
@@ -3858,15 +6324,67 @@ void Monitor::slotEditTower(quint32 tid)
         t->setWidth(float(wSpin->value() * fromDisp));
         t->setDepth(float(dSpin->value() * fromDisp));
         t->setHeight(float(hSpin->value() * fromDisp));
+        m_props->turnTower(t->id(), float(facingSpin->value()));
         if (view) view->reload();
     };
-    for (QDoubleSpinBox *sp : { oxSpin, oySpin, wSpin, dSpin, hSpin })
+    for (QDoubleSpinBox *sp : { oxSpin, oySpin, wSpin, dSpin, hSpin, facingSpin })
         connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg,
                 [applyLive](double){ applyLive(); });
     connect(nameEdit, &QLineEdit::textChanged, &dlg, [applyLive](const QString &){ applyLive(); });
     // Shelf add/remove already mutate the tower live — also refresh the canvas.
     connect(addShelfBtn, &QPushButton::clicked, &dlg, [view]() { if (view) view->reload(); });
     connect(delShelfBtn, &QPushButton::clicked, &dlg, [view]() { if (view) view->reload(); });
+    // Double-click a shelf row to edit its height in place (Tower::
+    // setShelfHeight() -- doesn't reorder the list, so this can't reassign
+    // which shelf any already-mounted fixture is on, unlike remove+re-add).
+    connect(shelfList, &QListWidget::itemDoubleClicked, &dlg, [&, view](QListWidgetItem *) {
+        const int row = shelfList->currentRow();
+        if (row < 0) return;
+        bool ok = false;
+        const double z = QInputDialog::getDouble(&dlg, tr("Edit Shelf Height"),
+            tr("Height above floor:"), double(t->shelfHeight(row)) * toDisp,
+            0.0, hMax, 2, &ok);
+        if (!ok) return;
+        t->setShelfHeight(row, float(z * fromDisp));
+        reloadShelves();
+        if (view) view->reload();
+    });
+
+    // The faces apply live, so the canvas shows them as they are set.
+    applyFaces = [=]() {
+        t->setFaces(facesCb->isChecked());
+        int sides = 0;
+        for (const auto &sc : sideCbs)
+            if (sc.first->isChecked())
+                sides |= sc.second;
+        t->setFacesSides(sides);
+        t->setFacesColour(*facesColour);
+        const float to = float(facesToSpin->value() * fromDisp);
+        t->setFacesRange(float(facesFromSpin->value() * fromDisp),
+                         qAbs(to - t->height()) < 1e-3f ? -1.0f : to);     // its top: follows the height
+        t->setFacesPattern(*facesPattern);
+        t->setFacesPatternOpacity(*facesOpacity);
+        const bool on = facesCb->isChecked();
+        for (QWidget *w : { static_cast<QWidget *>(facesColourBtn), static_cast<QWidget *>(facesFromSpin),
+                            static_cast<QWidget *>(facesToSpin), sidesRow, facesPatternRow })
+            w->setEnabled(on);
+        if (view) view->reload();
+        m_graphicsView->updatePlatforms();
+    };
+    for (QWidget *w : { static_cast<QWidget *>(facesColourBtn), static_cast<QWidget *>(facesFromSpin),
+                        static_cast<QWidget *>(facesToSpin), sidesRow, facesPatternRow })
+        w->setEnabled(t->hasFaces());
+    connect(facesCb, &QCheckBox::toggled, &dlg, [&applyFaces](bool) { applyFaces(); });
+    for (QDoubleSpinBox *sp : { facesFromSpin, facesToSpin })
+        connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg,
+                [&applyFaces](double) { applyFaces(); });
+    for (const auto &sc : sideCbs)
+        connect(sc.first, &QCheckBox::toggled, &dlg, [&applyFaces](bool) { applyFaces(); });
+    connect(facesColourBtn, &ColourSwatchButton::colourChanged, &dlg,
+            [facesColour, &applyFaces](const QColor &c) {
+        *facesColour = c;
+        applyFaces();
+    });
 
     QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
     connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
@@ -3877,14 +6395,15 @@ void Monitor::slotEditTower(quint32 tid)
     dlg.resize(940, 560);
     if (dlg.exec() != QDialog::Accepted)
     {
-        // Revert geometry AND shelves (Cancel now truly cancels).
-        t->setName(snapName); t->setOriginX(snapOX); t->setOriginY(snapOY);
-        t->setWidth(snapW); t->setDepth(snapD); t->setHeight(snapH);
-        while (t->shelfCount()) t->removeShelf(0);
-        for (float z : snapShelves) t->addShelf(z);
-        m_graphicsView->updatePlatforms();
+        edit.cancel();
+        delete facesColour;
+        delete facesPattern;
+        delete facesOpacity;
         return;
     }
+    delete facesColour;
+    delete facesPattern;
+    delete facesOpacity;
 
     t->setName(nameEdit->text());
     t->setOriginX(float(oxSpin->value() * fromDisp));
@@ -3899,6 +6418,7 @@ void Monitor::slotEditTower(quint32 tid)
             m_graphicsView->updateFixture(fx->id());
     if (m_layersPanel) m_layersPanel->reload();
     m_doc->setModified();
+    edit.accept();
 }
 
 void Monitor::slotAddElectric()
@@ -3944,25 +6464,45 @@ void Monitor::slotAddPlatform()
     slotEditPlatform(p->id());
 }
 
+void Monitor::slotAddSteps()
+{
+    /* "Steps as a stage feature .. count, rise, run and width. Default 8"
+       rise with 8" run and 2 steps for a total 16" high and 3' wide." A
+       platform with a stepped shape, so it drags, locks, layers, carries
+       fixtures and catches light like any other deck. */
+    StagePlatform *p = m_props->addPlatform();
+    p->setName(tr("Steps %1").arg(p->id() + 1));
+    p->setSteps(2, 0.2032f, 0.2032f, 0.9144f, StagePlatform::ClimbUpstage);
+
+    QPointF mm = m_graphicsView->pixelsToRealPosition(
+        m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
+    p->setOriginX(float(mm.x() / 1000.0));
+    p->setOriginY(float(mm.y() / 1000.0));
+    p->setLayerId(m_props->activeLayerId());
+
+    m_graphicsView->updatePlatforms();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+
+    slotEditPlatform(p->id());
+}
+
 void Monitor::slotEditPipe(quint32 bid)
 {
     Pipe *b = m_props->pipe(bid);
     if (!b) return;
+    RigEditSession edit(this);
 
     const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
-    const QString sfx = isFeet ? tr(" ft") : tr(" m");
     const double toDisp   = isFeet ? 3.28084 : 1.0;
     const double fromDisp = isFeet ? (1.0 / 3.28084) : 1.0;
     const double posR = isFeet ? 164.0 : 50.0;
     const double hMax = isFeet ? 66.0 : 20.0;
 
-    // Snapshot core geometry for live-preview revert on Cancel.
-    const float snapOX = b->originX(), snapOY = b->originY();
-    const float snapLen = b->length(), snapBZ = b->baseZ(), snapRun = b->runAngle();
 
     QDialog dlg(this);
     const bool horiz = (b->orientation() == Pipe::Horizontal);
-    dlg.setWindowTitle(tr("Lighting Studio Editor — %1").arg(b->name()));
+    dlg.setWindowTitle(tr("Lighting Studio Editor — Boom %1").arg(b->name()));
     QWidget *geomW = new QWidget(&dlg);
     QVBoxLayout *vl = new QVBoxLayout(geomW);
     QFormLayout *form = new QFormLayout;
@@ -3971,8 +6511,8 @@ void Monitor::slotEditPipe(quint32 bid)
     form->addRow(tr("Name:"), nameEdit);
 
     auto mkSpin = [&](double val, double lo, double hi) {
-        QDoubleSpinBox *s = new QDoubleSpinBox(&dlg);
-        s->setRange(lo, hi); s->setDecimals(2); s->setSuffix(sfx);
+        QDoubleSpinBox *s = new FeetInchesSpinBox(isFeet, &dlg);
+        s->setRange(lo, hi); s->setDecimals(2);
         s->setValue(val * toDisp); return s;
     };
     QDoubleSpinBox *oxSpin = mkSpin(b->originX(), -posR, posR);
@@ -3994,12 +6534,23 @@ void Monitor::slotEditPipe(quint32 bid)
     // base position/stand/truss controls below are derived and don't apply.
     const bool barOnPipe = b->isBarOnPipe();
     QDoubleSpinBox *upBoomSpin = nullptr;
+    QDoubleSpinBox *crossbarStandoffSpin = nullptr;
     if (barOnPipe)
     {
         Pipe *pp = m_props->pipe(b->parentPipeId());
         const double maxUp = pp ? double(pp->length()) : hMax * fromDisp;
         upBoomSpin = mkSpin(b->parentPipeOffset(), 0.0, maxUp * toDisp);
         form->addRow(tr("Height up boom:"), upBoomSpin);
+
+        // Sideways clearance from the boom's own point in Top view (the
+        // Pipe analogue of a Truss bar's "standoff" field) -- without it, a
+        // crossbar renders exactly on top of its own boom with no way to
+        // tell them apart (WORKFLOW-SUBTLETIES.md #14).
+        crossbarStandoffSpin = mkSpin(b->crossbarStandoff(), 0.0, isFeet ? 6.6 : 2.0);
+        crossbarStandoffSpin->setToolTip(tr("How far this crossbar sits clear of its own "
+                                            "boom in the plan view. 0 puts it exactly on "
+                                            "the boom's own point, indistinguishable from it."));
+        form->addRow(tr("Standoff from boom:"), crossbarStandoffSpin);
     }
     form->addRow(tr("Base height (Z):"), bzSpin);
 
@@ -4059,9 +6610,15 @@ void Monitor::slotEditPipe(quint32 bid)
     QList<QDoubleSpinBox *> offSpins, angSpins;
     if (!mounted.isEmpty())
     {
-        vl->addWidget(new QLabel(tr("Fixtures on this pipe (height up the pipe · facing):"), &dlg));
+        /* Up a boom, along a house electric: each fixture at its own place on
+           it, no further than the pipe goes. */
+        const bool across = !b->isVertical();
+        vl->addWidget(new QLabel(across ? tr("Fixtures on this pipe (distance along the pipe · facing):")
+                                        : tr("Fixtures on this pipe (height up the pipe · facing):"), &dlg));
         QTableWidget *tbl = new QTableWidget(mounted.size(), 3, &dlg);
-        tbl->setHorizontalHeaderLabels(QStringList() << tr("Fixture") << tr("Height") << tr("Angle"));
+        tbl->setObjectName(QStringLiteral("pipeFixtures"));
+        tbl->setHorizontalHeaderLabels(QStringList() << tr("Fixture")
+                                       << (across ? tr("Along") : tr("Height")) << tr("Angle"));
         tbl->verticalHeader()->setVisible(false);
         tbl->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
         for (int i = 0; i < mounted.size(); ++i)
@@ -4071,8 +6628,8 @@ void Monitor::slotEditPipe(quint32 bid)
             QTableWidgetItem *ni = new QTableWidgetItem(fx ? fx->name() : QString::number(mounted[i]));
             ni->setFlags(ni->flags() & ~Qt::ItemIsEditable);
             tbl->setItem(i, 0, ni);
-            QDoubleSpinBox *os = new QDoubleSpinBox(tbl);
-            os->setRange(0.0, hMax); os->setDecimals(2); os->setSuffix(sfx);
+            QDoubleSpinBox *os = new FeetInchesSpinBox(isFeet, tbl);
+            os->setRange(0.0, qMax(0.1, double(b->length()) * toDisp)); os->setDecimals(2);
             os->setValue(double(rp.pipeOffset) * toDisp);
             tbl->setCellWidget(i, 1, os); offSpins << os;
             QDoubleSpinBox *as = new QDoubleSpinBox(tbl);
@@ -4113,10 +6670,7 @@ void Monitor::slotEditPipe(quint32 bid)
 
     if (dlg.exec() != QDialog::Accepted)
     {
-        b->setOriginX(snapOX); b->setOriginY(snapOY); b->setHeight(snapLen);
-        b->setBaseZ(snapBZ); b->setRunAngle(snapRun);
-        m_props->recomputeChildTrusses();
-        m_graphicsView->updatePlatforms();
+        edit.cancel();
         return;
     }
 
@@ -4144,6 +6698,8 @@ void Monitor::slotEditPipe(quint32 bid)
                           ? float(standHtSpin->value() * fromDisp) : -1.0f);
     if (barOnPipe && upBoomSpin != nullptr)
         b->setParentPipeOffset(float(upBoomSpin->value() * fromDisp));
+    if (barOnPipe && crossbarStandoffSpin != nullptr)
+        b->setCrossbarStandoff(float(crossbarStandoffSpin->value() * fromDisp));
     // Stands first, then truss-hung + bars-on-pipes derive from their parents.
     m_props->recomputeChildTrusses();
 
@@ -4160,21 +6716,19 @@ void Monitor::slotEditPipe(quint32 bid)
         m_graphicsView->updateFixture(fid);
     if (m_layersPanel) m_layersPanel->reload();
     m_doc->setModified();
+    edit.accept();
 }
 
 void Monitor::slotEditPlatform(quint32 pid)
 {
     StagePlatform *p = m_props->platform(pid);
     if (!p) return;
+    RigEditSession edit(this);
 
-    // Snapshot for live-preview revert on Cancel.
-    const QString snapName = p->name();
-    const float snapOX = p->originX(), snapOY = p->originY();
-    const float snapW = p->width(), snapD = p->depth(), snapH = p->height();
-    const QColor snapColor = p->color();
 
     QDialog dlg(this);
-    dlg.setWindowTitle(tr("Lighting Studio Editor — %1").arg(p->name()));
+    dlg.setWindowTitle(p->isSteps() ? tr("Lighting Studio Editor — Steps %1").arg(p->name())
+                                    : tr("Lighting Studio Editor — Riser %1").arg(p->name()));
 
     QWidget *geomW = new QWidget(&dlg);
     QVBoxLayout *vl   = new QVBoxLayout(geomW);
@@ -4184,20 +6738,19 @@ void Monitor::slotEditPlatform(quint32 pid)
     form->addRow(tr("Name:"), nameEdit);
 
     const bool isFeet_p = (m_props->gridUnits() == MonitorProperties::Feet);
-    const QString unitSfx_p = isFeet_p ? tr(" ft") : tr(" m");
     const double toDisp_p   = isFeet_p ? 3.28084 : 1.0;
     const double fromDisp_p = isFeet_p ? (1.0 / 3.28084) : 1.0;
     const double posRange_p = isFeet_p ? 164.0 : 50.0;
     const double sizeMax_p  = isFeet_p ? 328.0 : 100.0;
     const double hMax_p     = isFeet_p ? 32.8  : 10.0;
 
-    QDoubleSpinBox *oxSpin = new QDoubleSpinBox(&dlg);
-    oxSpin->setRange(-posRange_p, posRange_p); oxSpin->setSuffix(unitSfx_p); oxSpin->setDecimals(2);
+    QDoubleSpinBox *oxSpin = new FeetInchesSpinBox(isFeet_p, &dlg);
+    oxSpin->setRange(-posRange_p, posRange_p); oxSpin->setDecimals(2);
     oxSpin->setValue(double(p->originX()) * toDisp_p);
     form->addRow(tr("Origin X:"), oxSpin);
 
-    QDoubleSpinBox *oySpin = new QDoubleSpinBox(&dlg);
-    oySpin->setRange(-posRange_p, posRange_p); oySpin->setSuffix(unitSfx_p); oySpin->setDecimals(2);
+    QDoubleSpinBox *oySpin = new FeetInchesSpinBox(isFeet_p, &dlg);
+    oySpin->setRange(-posRange_p, posRange_p); oySpin->setDecimals(2);
     oySpin->setValue(double(p->originY()) * toDisp_p);
     form->addRow(tr("Origin Y:"), oySpin);
 
@@ -4217,30 +6770,127 @@ void Monitor::slotEditPlatform(quint32 pid)
     hSpin->setValue(double(p->height()) * toDisp_p);
     form->addRow(tr("Height:"), hSpin);
 
+    FeetInchesSpinBox *curveSpin = new FeetInchesSpinBox(isFeet_p, &dlg);
+    curveSpin->setRange(0.0, sizeMax_p / 2.0);
+    curveSpin->setValue(double(p->frontCurve()) * toDisp_p);
+    curveSpin->setObjectName("platformFrontCurve");
+    curveSpin->setToolTip(tr("A rounded front: how far the middle of the downstage edge reaches past "
+                             "its corners (0 is square; half the width is a half circle). The depth "
+                             "is measured at the middle."));
+    form->addRow(tr("Front curve:"), curveSpin);
+
+    QDoubleSpinBox *facingSpin = new QDoubleSpinBox(&dlg);
+    facingSpin->setRange(-180.0, 180.0);
+    facingSpin->setDecimals(1);
+    facingSpin->setSuffix(QStringLiteral("°"));
+    facingSpin->setValue(double(p->rotation()));
+    facingSpin->setObjectName("platformFacing");
+    facingSpin->setToolTip(tr("Turned about its middle; what stands on it and what is fixed "
+                              "to its faces turn with it"));
+    form->addRow(tr("Facing:"), facingSpin);
+
+    /* A flight of steps: count, rise, run and width say it all, and the box
+       above follows from them (read-only while it is steps). */
+    QComboBox *shapeCombo = new QComboBox(&dlg);
+    shapeCombo->addItem(tr("Platform"), int(StagePlatform::BoxShape));
+    shapeCombo->addItem(tr("Steps"), int(StagePlatform::StepsShape));
+    shapeCombo->setCurrentIndex(p->isSteps() ? 1 : 0);
+    form->insertRow(1, tr("Shape:"), shapeCombo);
+    QSpinBox *countSpin = new QSpinBox(&dlg);
+    countSpin->setRange(1, 60);
+    countSpin->setValue(p->stepCount());
+    form->addRow(tr("Steps:"), countSpin);
+    FeetInchesSpinBox *riseSpin = new FeetInchesSpinBox(isFeet_p, &dlg);
+    riseSpin->setRange(0.01, hMax_p);
+    riseSpin->setValue(double(p->stepRise()) * toDisp_p);
+    riseSpin->setToolTip(tr("Height of each step"));
+    form->addRow(tr("Rise:"), riseSpin);
+    FeetInchesSpinBox *runSpin = new FeetInchesSpinBox(isFeet_p, &dlg);
+    runSpin->setRange(0.01, sizeMax_p);
+    runSpin->setValue(double(p->stepRun()) * toDisp_p);
+    runSpin->setToolTip(tr("Depth of each tread"));
+    form->addRow(tr("Run:"), runSpin);
+    FeetInchesSpinBox *stepWSpin = new FeetInchesSpinBox(isFeet_p, &dlg);
+    stepWSpin->setRange(0.1, sizeMax_p);
+    stepWSpin->setValue(double(p->isSteps() ? p->stepWidth() : p->width()) * toDisp_p);
+    stepWSpin->setToolTip(tr("Across the treads"));
+    form->addRow(tr("Step width:"), stepWSpin);
+    QComboBox *climbCombo = new QComboBox(&dlg);
+    climbCombo->addItem(tr("Upstage (bottom step downstage)"), int(StagePlatform::ClimbUpstage));
+    climbCombo->addItem(tr("Downstage"), int(StagePlatform::ClimbDownstage));
+    climbCombo->addItem(tr("Stage left"), int(StagePlatform::ClimbStageLeft));
+    climbCombo->addItem(tr("Stage right"), int(StagePlatform::ClimbStageRight));
+    climbCombo->setCurrentIndex(climbCombo->findData(int(p->stepsClimb())));
+    climbCombo->setToolTip(tr("Which way you walk going up"));
+    form->addRow(tr("Climb toward:"), climbCombo);
+    auto showShape = [form, shapeCombo, countSpin, riseSpin, runSpin, stepWSpin, climbCombo,
+                      wSpin, dSpin, hSpin, curveSpin]() {
+        const bool steps = shapeCombo->currentIndex() == 1;
+        curveSpin->setVisible(!steps);
+        if (QWidget *l = form->labelForField(curveSpin)) l->setVisible(!steps);
+        for (QWidget *w : { (QWidget *)countSpin, (QWidget *)riseSpin, (QWidget *)runSpin,
+                            (QWidget *)stepWSpin, (QWidget *)climbCombo })
+        {
+            w->setVisible(steps);
+            if (QWidget *l = form->labelForField(w)) l->setVisible(steps);
+        }
+        for (QWidget *w : { (QWidget *)wSpin, (QWidget *)dSpin, (QWidget *)hSpin })
+            w->setEnabled(!steps);
+    };
+    showShape();
+
     // Color picker row
     QColor curColor = p->color().isValid() ? p->color() : QColor(80, 120, 200);
-    QPushButton *colorBtn = new QPushButton(&dlg);
-    colorBtn->setStyleSheet(QString("background-color: %1").arg(curColor.name()));
+    ColourSwatchButton *colorBtn = new ColourSwatchButton(curColor, tr("Platform colour"), &dlg);
+    colorBtn->setResetColour(QColor(80, 120, 200));
     QColor chosenColor = curColor;
-    connect(colorBtn, &QPushButton::clicked, [&](){
-        QColor c = QColorDialog::getColor(chosenColor, &dlg, tr("Platform color"));
-        if (c.isValid()) {
-            chosenColor = c;
-            colorBtn->setStyleSheet(QString("background-color: %1").arg(c.name()));
-        }
+    connect(colorBtn, &ColourSwatchButton::colourChanged, &dlg, [&](const QColor &c) {
+        chosenColor = c;
+        /* Applied straight away, like the size spin boxes and the two
+           checkboxes in this same dialog: the platform on the canvas shows it
+           while it can still be compared against the stage. Cancel puts it
+           back with the rest (RigEditSession). */
+        p->setColor(c);
+        m_graphicsView->updatePlatforms();
+        m_doc->setModified();
     });
-    form->addRow(tr("Color:"), colorBtn);
+    form->addRow(tr("Colour:"), colorBtn);
+
+    /* What the deck is made of. A clear top is why you would rig fixtures
+       INSIDE a step at all: they show through it and their light goes up. */
+    QComboBox *topCombo = new QComboBox(&dlg);
+    topCombo->addItem(tr("Solid"), int(StagePlatform::SolidTop));
+    topCombo->addItem(tr("Clear (lights inside show through)"), int(StagePlatform::ClearTop));
+    topCombo->addItem(tr("Open frame (no top)"), int(StagePlatform::OpenTop));
+    topCombo->setCurrentIndex(topCombo->findData(int(p->topMaterial())));
+    topCombo->setToolTip(tr("A clear or open top lets fixtures rigged inside the "
+                            "step be seen, and their light broadcast up. The "
+                            "fixtures also need their Placement set to "
+                            "\"Inside\" — otherwise they sit on the deck."));
+    form->addRow(tr("Top:"), topCombo);
+    connect(topCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg,
+            [p, this, topCombo](int) {
+        p->setTopMaterial(StagePlatform::TopMaterial(topCombo->currentData().toInt()));
+        m_doc->setModified();
+        m_graphicsView->updatePlatforms();
+    });
 
     // No-overlap collision properties.
     QCheckBox *solidChk = new QCheckBox(tr("Solid — can't overlap other solid platforms"), &dlg);
     solidChk->setChecked(p->solid());
+    /* Say what this is NOT: it reads like "is this thing solid or hollow", and
+       it is only about whether two platforms may be dragged through each other.
+       To rig a light inside a step you set the fixture's Placement, not this. */
+    solidChk->setToolTip(tr("A layout rule only: it stops two solid platforms "
+                            "being dragged through each other. It does not make "
+                            "the step hollow — to rig a fixture inside one, set "
+                            "that fixture's Placement to \"Inside\"."));
     form->addRow(tr("Collision:"), solidChk);
     QCheckBox *stackChk = new QCheckBox(tr("Stackable — may sit on top (step / riser)"), &dlg);
     stackChk->setChecked(p->stackable());
     stackChk->setToolTip(tr("A stackable platform is exempt from the no-overlap rule, "
                             "so it can be placed on top of a solid deck."));
     form->addRow(QString(), stackChk);
-    const bool snapSolid = p->solid(), snapStack = p->stackable();
     connect(solidChk, &QCheckBox::toggled, &dlg, [p, this](bool on) {
         p->setSolid(on); m_doc->setModified();
     });
@@ -4256,20 +6906,55 @@ void Monitor::slotEditPlatform(quint32 pid)
     // Canvas-centric object editor body; geometry form is its collapsible left.
     StructureStudioView *view = nullptr;
     QWidget *bodyPane = makeStudioPane(&dlg, 3 /*Platform*/, pid, geomW, &view);
+    bool applying = false;
     auto applyLive = [&]() {
+        if (applying) return;
+        applying = true;
         if (!nameEdit->text().trimmed().isEmpty()) p->setName(nameEdit->text().trimmed());
         p->setOriginX(float(oxSpin->value() * fromDisp_p));
         p->setOriginY(float(oySpin->value() * fromDisp_p));
-        p->setWidth(float(wSpin->value() * fromDisp_p));
-        p->setDepth(float(dSpin->value() * fromDisp_p));
-        p->setHeight(float(hSpin->value() * fromDisp_p));
+        if (shapeCombo->currentIndex() == 1)
+        {
+            p->setSteps(countSpin->value(), float(riseSpin->value() * fromDisp_p),
+                        float(runSpin->value() * fromDisp_p), float(stepWSpin->value() * fromDisp_p),
+                        StagePlatform::Climb(climbCombo->currentData().toInt()));
+            // The box follows the flight.
+            for (QDoubleSpinBox *sp : { (QDoubleSpinBox *)wSpin, (QDoubleSpinBox *)dSpin,
+                                        (QDoubleSpinBox *)hSpin })
+                sp->blockSignals(true);
+            wSpin->setValue(double(p->width()) * toDisp_p);
+            dSpin->setValue(double(p->depth()) * toDisp_p);
+            hSpin->setValue(double(p->height()) * toDisp_p);
+            for (QDoubleSpinBox *sp : { (QDoubleSpinBox *)wSpin, (QDoubleSpinBox *)dSpin,
+                                        (QDoubleSpinBox *)hSpin })
+                sp->blockSignals(false);
+        }
+        else
+        {
+            p->setBoxShape();
+            p->setWidth(float(wSpin->value() * fromDisp_p));
+            p->setDepth(float(dSpin->value() * fromDisp_p));
+            p->setHeight(float(hSpin->value() * fromDisp_p));
+            p->setFrontCurve(float(curveSpin->value() * fromDisp_p));
+        }
+        m_props->turnPlatform(p->id(), float(facingSpin->value()));
         m_props->recomputeAnchoredFrames();
+        m_graphicsView->updatePlatforms();
+        m_graphicsView->refreshRiserFixtures();
         if (view) view->reload();
+        applying = false;
     };
     for (QDoubleSpinBox *sp : { oxSpin, oySpin, (QDoubleSpinBox*)wSpin,
-                                (QDoubleSpinBox*)dSpin, (QDoubleSpinBox*)hSpin })
+                                (QDoubleSpinBox*)dSpin, (QDoubleSpinBox*)hSpin,
+                                (QDoubleSpinBox*)riseSpin, (QDoubleSpinBox*)runSpin,
+                                (QDoubleSpinBox*)stepWSpin, (QDoubleSpinBox*)curveSpin, facingSpin })
         connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg,
                 [applyLive](double){ applyLive(); });
+    connect(countSpin, QOverload<int>::of(&QSpinBox::valueChanged), &dlg, [applyLive](int){ applyLive(); });
+    connect(climbCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg,
+            [applyLive](int){ applyLive(); });
+    connect(shapeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg,
+            [applyLive, showShape](int){ showShape(); applyLive(); });
     connect(nameEdit, &QLineEdit::textChanged, &dlg, [applyLive](const QString &){ applyLive(); });
 
     QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
@@ -4282,21 +6967,11 @@ void Monitor::slotEditPlatform(quint32 pid)
 
     if (dlg.exec() != QDialog::Accepted)
     {
-        p->setName(snapName); p->setOriginX(snapOX); p->setOriginY(snapOY);
-        p->setWidth(snapW); p->setDepth(snapD); p->setHeight(snapH); p->setColor(snapColor);
-        p->setSolid(snapSolid); p->setStackable(snapStack);
-        m_props->recomputeAnchoredFrames();
-        m_graphicsView->updatePlatforms();
-        m_graphicsView->refreshRiserFixtures();
+        edit.cancel();
         return;
     }
 
-    p->setName(nameEdit->text().trimmed().isEmpty() ? p->name() : nameEdit->text().trimmed());
-    p->setOriginX(float(oxSpin->value() * fromDisp_p));
-    p->setOriginY(float(oySpin->value() * fromDisp_p));
-    p->setWidth(float(wSpin->value() * fromDisp_p));
-    p->setDepth(float(dSpin->value() * fromDisp_p));
-    p->setHeight(float(hSpin->value() * fromDisp_p));
+    applyLive();      // shape, steps and box, as the dialog last showed them
     p->setColor(chosenColor);
 
     m_props->recomputeAnchoredFrames();           // slaved studio frames follow the move/resize
@@ -4304,31 +6979,49 @@ void Monitor::slotEditPlatform(quint32 pid)
     m_graphicsView->refreshRiserFixtures();       // mounted + frame fixtures follow size/height
     if (m_layersPanel) m_layersPanel->reload();   // reflect the new name/colour in the tree
     m_doc->setModified();
+    edit.accept();
 }
 
 void Monitor::slotCanvasContextMenu(QPointF scenePos)
 {
     m_pendingAddScenePos = scenePos;
     QMenu menu(this);
-    menu.addAction(QIcon(":/fixture.png"), tr("Add Fixture here"),
-                   this, SLOT(slotAddFixture()));
-    menu.addAction(QIcon(":/group.png"), tr("Add Truss here"),
-                   this, SLOT(slotAddTruss()));
-    menu.addAction(tr("Add Platform/Riser here"),
-                   this, SLOT(slotAddPlatform()));
-    menu.addAction(tr("Add Boom here"),
-                   this, SLOT(slotAddPipe()));
-    menu.addAction(tr("Add Electric here"),
-                   this, SLOT(slotAddElectric()));
-    menu.addAction(tr("Add Stand here"),
-                   this, SLOT(slotAddStand()));
-    menu.addAction(tr("Add Tower here"),
-                   this, SLOT(slotAddTower()));
-    menu.addAction(QIcon(":/image.png"), tr("Add Image here"),
-                   this, SLOT(slotAddImage()));
-    menu.addSeparator();
-    menu.addAction(tr("Add Target Position here"),
-                   this, SLOT(slotAddTarget()));
+    /* Everything you can add, under one "Add here" -- the list had grown to
+       ten entries at the top level and buried the things you do to what is
+       already there. Grouped the way the plot is built: lights, then what
+       holds them, then what they point at. */
+    QMenu *addMenu = menu.addMenu(tr("Add Here"));
+    addMenu->addAction(QIcon(":/fixture.png"), tr("Fixture…"),
+                       this, SLOT(slotAddFixture()));
+    addMenu->addSeparator();
+    addMenu->addAction(QIcon(":/group.png"), tr("Truss"),
+                       this, SLOT(slotAddTruss()));
+    addMenu->addAction(tr("Platform/Riser"),
+                       this, SLOT(slotAddPlatform()));
+    addMenu->addAction(tr("Steps"),
+                       this, SLOT(slotAddSteps()));
+    addMenu->addAction(tr("Boom"),
+                       this, SLOT(slotAddPipe()));
+    addMenu->addAction(tr("Electric"),
+                       this, SLOT(slotAddElectric()));
+    addMenu->addAction(tr("Stand"),
+                       this, SLOT(slotAddStand()));
+    addMenu->addAction(tr("Tower"),
+                       this, SLOT(slotAddTower()));
+    QMenu *sceneryMenu = addMenu->addMenu(tr("Scenery"));
+    foreach (int kind, Scenery::kinds())
+        sceneryMenu->addAction(Scenery::kindName(kind), this, [this, kind]() { slotAddScenery(kind); });
+    addMenu->addAction(tr("Fountain…"), this, [this]() { slotAddFountain(); });
+    addMenu->addSeparator();
+    addMenu->addAction(tr("Target Position"),
+                       this, SLOT(slotAddTarget()));
+    addMenu->addAction(tr("Person"),
+                       this, SLOT(slotAddPerson()));
+    addMenu->addSeparator();
+    addMenu->addAction(QIcon(":/image.png"), tr("Image"),
+                       this, SLOT(slotAddImage()));
+    addMenu->addAction(tr("Network Node"),
+                       this, SLOT(slotAddNetworkNode()));
 
     menu.addSeparator();
     QAction *groupAct = menu.addAction(QIcon(":/group.png"), tr("Group selected (Ctrl+G)"),
@@ -4337,6 +7030,8 @@ void Monitor::slotCanvasContextMenu(QPointF scenePos)
     QAction *ungroupAct = menu.addAction(QIcon(":/ungroup.png"), tr("Ungroup (Ctrl+Shift+G)"),
                                          this, SLOT(slotUngroupItems()));
     ungroupAct->setEnabled(m_graphicsView != NULL && m_graphicsView->selectionHasGroup());
+    QAction *rotateAct = menu.addAction(tr("Rotate…  ([ / ])"), this, [this]() { slotRotateSelection(); });
+    rotateAct->setEnabled(m_graphicsView != NULL && !m_graphicsView->scene()->selectedItems().isEmpty());
 
     // Fixture Studio component library — browse/stamp saved components. Stamps
     // onto the current fixture selection (the browser disables stamp if none).
@@ -4567,14 +7262,34 @@ public:
 
     ~FixtureOrientationTest()
     {
+        /* Dismissing a fader only unhooks it (Universe::dismissFader takes it
+           out of the list and nothing else) -- it does not clear what the
+           fader last wrote. While a scene is running something else overwrites
+           those channels on the next tick and nobody notices. In Design mode
+           with nothing running, nothing does: the fixture stayed at the test
+           position with the lamp open until the app was restarted.
+
+           So zero the channels this test drove, before letting go of the
+           fader that is driving them. */
         QList<Universe*> ua = m_doc->inputOutputMap()->claimUniverses();
         for (auto it = m_faders.begin(); it != m_faders.end(); ++it)
         {
             int idx = it.key();
-            if (!it.value().isNull() && idx < ua.size())
-                ua[idx]->dismissFader(it.value());
+            if (it.value().isNull() || idx >= ua.size())
+                continue;
+
+            it.value()->removeAll();
+            ua[idx]->dismissFader(it.value());
         }
-        m_doc->inputOutputMap()->releaseUniverses(false);
+
+        /* Reset only the fixture's own address range. Universe::reset() with
+           no argument would blank the entire universe, which is a far bigger
+           hammer than "stop testing one light" and would knock out anything
+           else the operator had running. */
+        if (m_fixtureUniIdx >= 0 && m_fixtureUniIdx < ua.size() && m_fxi != nullptr)
+            ua[m_fixtureUniIdx]->reset(int(m_fxi->address()), int(m_fxi->channels()));
+
+        m_doc->inputOutputMap()->releaseUniverses(true);
     }
 
     void setDegrees(float panDeg, float tiltDeg)
@@ -4587,15 +7302,18 @@ public:
         svs << m_fxi->positionToValues(QLCChannel::Tilt, tiltDeg);
         appendFixtureOnValues(m_fxi, svs);
 
-        fader->removeAll();
+        // Swapped in whole: an emptied fader caught by its universe's thread
+        // went out as a blank frame -- the beam blinked while being dragged.
+        QList<FadeChannel> fcs;
         for (const SceneValue &sv : svs)
         {
             FadeChannel fc(m_doc, m_fxi->id(), sv.channel);
             fc.setTarget(sv.value);
             fc.setCurrent(sv.value);
             fc.setFadeTime(0);
-            fader->add(fc);
+            fcs << fc;
         }
+        fader->replaceAll(fcs);
     }
 
 private:
@@ -4605,6 +7323,107 @@ private:
     QHash<int, QSharedPointer<GenericFader>> m_faders;
     QHash<int, Universe*>                    m_universes;
 };
+
+/* ---- Locate appearance, operator-configurable ----------------------------
+ *
+ * Locate used to be three full-intensity white flashes, which is a lot of
+ * light for "which one is this" -- painful next to the fixture, and in a
+ * blacked-out house it lights the room. Colour, level and count are settings
+ * so it can be dialled down to something you can stand next to, or up when the
+ * rig is in daylight. Read at flash time rather than cached, so a change in
+ * Preferences applies to the very next Locate without a restart.
+ */
+#define SETTINGS_LOCATE_COLOR     "monitor/locate/color"
+#define SETTINGS_LOCATE_INTENSITY "monitor/locate/intensity"
+#define SETTINGS_LOCATE_FLASHES   "monitor/locate/flashes"
+
+QColor Monitor::locateColor()
+{
+    QSettings s;
+    const QVariant v = s.value(SETTINGS_LOCATE_COLOR);
+    QColor c = v.isValid() ? QColor(v.toString()) : QColor(Qt::white);
+    return c.isValid() ? c : QColor(Qt::white);
+}
+
+int Monitor::locateIntensity()
+{
+    QSettings s;
+    const int v = s.value(SETTINGS_LOCATE_INTENSITY, 255).toInt();
+    return qBound(1, v, 255);
+}
+
+int Monitor::locateFlashes()
+{
+    QSettings s;
+    const int v = s.value(SETTINGS_LOCATE_FLASHES, 3).toInt();
+    return qBound(1, v, 10);
+}
+
+/** Values that make a fixture visible for LOCATE, at the configured colour and
+ *  level -- as opposed to appendFixtureOnValues(), which is the flat
+ *  everything-to-255 the orientation TEST wants.
+ *
+ *  Colour is applied per emitter: an RGB(W/A/UV) fixture gets the picked
+ *  colour's components, and the white/amber/UV emitters are driven only by
+ *  how white the pick actually is, so choosing deep blue does not quietly come
+ *  out pale because the white emitter stayed at full. */
+static void appendFixtureLocateValues(Fixture *fxi, QList<SceneValue> &svs,
+                                      const QColor &colour, int level)
+{
+    if (!fxi->fixtureMode()) return;
+
+    quint32 mi = fxi->masterIntensityChannel();
+    if (mi == QLCChannel::invalid())
+    {
+        for (quint32 c = 0; c < fxi->channels(); ++c)
+        {
+            QLCChannel *ch = fxi->fixtureMode()->channel(c);
+            if (ch && ch->group() == QLCChannel::Intensity
+                && ch->controlByte() == QLCChannel::MSB
+                && ch->colour() == QLCChannel::NoColour)
+            { mi = c; break; }
+        }
+    }
+    if (mi != QLCChannel::invalid())
+        svs << SceneValue(fxi->id(), mi, uchar(level));
+
+    /* A fixture with no dimmer channel has to be dimmed through its emitters,
+       or "50% locate" would be full brightness on exactly the LED washes most
+       likely to be blinding. */
+    const bool scaleByLevel = (mi == QLCChannel::invalid());
+    const double k = scaleByLevel ? (level / 255.0) : 1.0;
+
+    for (quint32 c = 0; c < fxi->channels(); ++c)
+    {
+        QLCChannel *ch = fxi->fixtureMode()->channel(c);
+        if (!ch || ch->controlByte() != QLCChannel::MSB) continue;
+        const bool isColourGroup     = (ch->group() == QLCChannel::Colour);
+        const bool isIntensityColour = (ch->group() == QLCChannel::Intensity
+                                        && ch->colour() != QLCChannel::NoColour);
+        if (!(isColourGroup || isIntensityColour))
+            continue;
+
+        int v = 0;
+        switch (ch->colour())
+        {
+        case QLCChannel::Red:   v = colour.red();   break;
+        case QLCChannel::Green: v = colour.green(); break;
+        case QLCChannel::Blue:  v = colour.blue();  break;
+        // White/amber/UV follow the neutral part of the pick: full for white,
+        // nothing for a saturated colour.
+        case QLCChannel::White: v = qMin(qMin(colour.red(), colour.green()), colour.blue()); break;
+        case QLCChannel::Amber: v = qMin(colour.red(), colour.green()) / 2;                  break;
+        case QLCChannel::UV:    v = colour.blue() / 4;                                       break;
+        default: continue;
+        }
+        svs << SceneValue(fxi->id(), c, uchar(qBound(0.0, v * k, 255.0)));
+    }
+
+    uchar shutterVal = 0;
+    quint32 shutterCh = fixtureShutterChannel(fxi, shutterVal);
+    if (shutterCh != QLCChannel::invalid())
+        svs << SceneValue(fxi->id(), shutterCh, shutterVal);
+}
 
 /** Locate flash — no blackout; just overrides the fixture's intensity + shutter
  *  so it pops up over any running scene.  Call setOn(false/true) to strobe. */
@@ -4622,7 +7441,8 @@ public:
             m_fader->setName(QStringLiteral("FixtureLocate"));
         }
         m_doc->inputOutputMap()->releaseUniverses(false);
-        appendFixtureOnValues(m_fxi, m_onValues);
+        appendFixtureLocateValues(m_fxi, m_onValues,
+                                  Monitor::locateColor(), Monitor::locateIntensity());
         setOn(true);
     }
 
@@ -4635,16 +7455,18 @@ public:
     void setOn(bool on)
     {
         if (m_fader.isNull()) return;
-        m_fader->removeAll();
-        if (!on) return;
-        for (const SceneValue &sv : m_onValues)
-        {
-            FadeChannel fc(m_doc, sv.fxi, sv.channel);
-            fc.setTarget(sv.value);
-            fc.setCurrent(sv.value);
-            fc.setFadeTime(0);
-            m_fader->add(fc);
-        }
+        // Swapped in whole, never emptied first (see setDegrees).
+        QList<FadeChannel> fcs;
+        if (on)
+            for (const SceneValue &sv : m_onValues)
+            {
+                FadeChannel fc(m_doc, sv.fxi, sv.channel);
+                fc.setTarget(sv.value);
+                fc.setCurrent(sv.value);
+                fc.setFadeTime(0);
+                fcs << fc;
+            }
+        m_fader->replaceAll(fcs);
     }
 
 private:
@@ -4656,6 +7478,123 @@ private:
 };
 
 // ---------------------------------------------------------------------------
+
+struct Monitor::LocateSession
+{
+    std::shared_ptr<FixtureLocate> src;
+    QTimer *timer = nullptr;
+    int step = 0;
+};
+
+void Monitor::cancelAllLocateSessions()
+{
+    qDeleteAll(m_locateSessions);
+    m_locateSessions.clear();
+}
+
+void Monitor::locateFixture(quint32 fxId)
+{
+    // Re-triggering while already flashing cancels it early -- matches the
+    // rig editor's own Locate button, which stops on a second click too.
+    auto it = m_locateSessions.find(fxId);
+    if (it != m_locateSessions.end())
+    {
+        delete it.value();
+        m_locateSessions.erase(it);
+        return;
+    }
+
+    Fixture *fxi = m_doc->fixture(fxId);
+    if (fxi == nullptr)
+        return;
+    // No address, nothing to flash: it would light whatever real fixture
+    // happens to sit at the placeholder universe 1 / address 1.
+    if (!fxi->isPatched())
+        return;
+
+    LocateSession *session = new LocateSession;
+    session->src = std::make_shared<FixtureLocate>(fxi, m_doc);
+    session->src->setOn(true);
+    session->step = 1;
+    session->timer = new QTimer(this);
+    session->timer->setInterval(300);
+    connect(session->timer, &QTimer::timeout, this, [this, fxId]() {
+        auto sit = m_locateSessions.find(fxId);
+        if (sit == m_locateSessions.end())
+            return;
+        LocateSession *s = sit.value();
+        ++s->step;
+        /* Odd steps are on (300 ms), even are off (150 ms), so N flashes take
+           2N steps and the run ends on the step after the last off. The count
+           came from the rig editor's fixed three; it is a setting now, because
+           three full-intensity flashes is a lot of light to stand next to. */
+        if (s->step > 2 * Monitor::locateFlashes())
+        {
+            m_locateSessions.erase(sit);
+            delete s;
+            return;
+        }
+        const bool isOn = (s->step % 2 == 1);
+        s->src->setOn(isOn);
+        s->timer->setInterval(isOn ? 300 : 150);
+    });
+    m_locateSessions.insert(fxId, session);
+    session->timer->start();
+}
+
+void Monitor::locateFixtures(const QList<quint32> &ids)
+{
+    /* Sessions are keyed by fixture id, so a group Locate is just several of
+       them running side by side -- each fixture keeps its own flash timing and
+       its own fader, and re-triggering the group cancels exactly the ones that
+       were already flashing. */
+    foreach (quint32 id, ids)
+        locateFixture(id);
+}
+
+void Monitor::resetFixture(quint32 fxId)
+{
+    Fixture *fxi = m_doc->fixture(fxId);
+    if (fxi == nullptr || fxi->fixtureMode() == nullptr || !fxi->isPatched())
+        return;
+
+    // Same "reset" Maintenance-capability detection the Fixture Test
+    // quick-dialog uses (see slotTestFixture()'s dialog further down) --
+    // duplicated rather than shared since that dialog also handles Identify,
+    // which this right-click action doesn't.
+    int resetCh = -1;
+    uchar resetVal = 0;
+    for (int ci = 0; ci < fxi->fixtureMode()->channels().count(); ci++)
+    {
+        const QLCChannel *ch = fxi->fixtureMode()->channel(ci);
+        if (!ch || ch->group() != QLCChannel::Maintenance)
+            continue;
+        for (const QLCCapability *cap : ch->capabilities())
+        {
+            if (cap->name().toLower().contains("reset"))
+            {
+                resetCh = ci;
+                resetVal = uchar((cap->min() + cap->max()) / 2);
+                break;
+            }
+        }
+        if (resetCh >= 0)
+            break;
+    }
+    if (resetCh < 0)
+        return;
+
+    QList<Universe*> ua = m_doc->inputOutputMap()->claimUniverses();
+    const quint32 u = fxi->universe();
+    if (u < quint32(ua.size()))
+    {
+        Universe *uni = ua[int(u)];
+        uni->write(int(fxi->address()) + resetCh, resetVal);
+        const QByteArray pg = uni->postGMValues()->mid(0, uni->usedChannels());
+        uni->dumpOutput(pg, true);
+    }
+    m_doc->inputOutputMap()->releaseUniverses(false);
+}
 
 class TrussStripWidget : public QWidget
 {
@@ -5143,22 +8082,13 @@ void Monitor::slotEditTruss(quint32 tid)
 {
     Truss *t = m_props->truss(tid);
     if (!t) return;
+    RigEditSession edit(this);
 
-    // Snapshot for live-preview revert on Cancel (only meaningful for a bar).
-    const float  origAlong    = t->parentOffset();
-    const int    origFace     = t->barFace();
-    const float  origStandoff = t->barStandoff();
-    const int    origRun      = t->barRun();
-    const float  origLen      = t->length();
-    const bool   origIsBar    = t->isChildBar();
-    // Geometry snapshot for the live canvas preview of a FREE truss.
-    const QVector3D origOrigin = t->origin();
-    const QPointF   origDir    = t->direction();
-    const Truss::TrussType origType = t->type();
-    const float     origWidth  = t->width();
 
     QDialog editDlg(this);
-    editDlg.setWindowTitle(tr("Lighting Studio Editor — %1").arg(t->name()));
+    // Named by KIND: a truss and its auto-group share a name, and both used to
+    // open a window titled identically, with no way to tell which you had.
+    editDlg.setWindowTitle(tr("Lighting Studio Editor — Truss %1").arg(t->name()));
     editDlg.setMinimumWidth(420);
 
     QVBoxLayout *vl   = new QVBoxLayout(&editDlg);
@@ -5179,7 +8109,6 @@ void Monitor::slotEditTruss(quint32 tid)
     form->addRow(tr("Type:"), typeCb);
 
     const bool isFeet_e = (m_props->gridUnits() == MonitorProperties::Feet);
-    const QString unitSfx_e = isFeet_e ? tr(" ft") : tr(" m");
     const double toDisp_e   = isFeet_e ? 3.28084 : 1.0;
     const double fromDisp_e = isFeet_e ? (1.0 / 3.28084) : 1.0;
     const double posRange_e = isFeet_e ? 164.0 : 50.0;
@@ -5187,18 +8116,18 @@ void Monitor::slotEditTruss(quint32 tid)
     const double zMax_e     = isFeet_e ? 98.4  : 30.0;
     const double wMax_e     = isFeet_e ? 16.4  : 5.0;
 
-    QDoubleSpinBox *originX = new QDoubleSpinBox(&editDlg);
-    originX->setRange(-posRange_e, posRange_e); originX->setSuffix(unitSfx_e); originX->setDecimals(2);
+    QDoubleSpinBox *originX = new FeetInchesSpinBox(isFeet_e, &editDlg);
+    originX->setRange(-posRange_e, posRange_e); originX->setDecimals(2);
     originX->setValue(t->origin().x() * toDisp_e);
     form->addRow(tr("Origin X:"), originX);
 
-    QDoubleSpinBox *originY = new QDoubleSpinBox(&editDlg);
-    originY->setRange(-posRange_e, posRange_e); originY->setSuffix(unitSfx_e); originY->setDecimals(2);
+    QDoubleSpinBox *originY = new FeetInchesSpinBox(isFeet_e, &editDlg);
+    originY->setRange(-posRange_e, posRange_e); originY->setDecimals(2);
     originY->setValue(t->origin().y() * toDisp_e);
     form->addRow(tr("Origin Y:"), originY);
 
-    QDoubleSpinBox *originZ = new QDoubleSpinBox(&editDlg);
-    originZ->setRange(0, zMax_e); originZ->setSuffix(unitSfx_e); originZ->setDecimals(2);
+    QDoubleSpinBox *originZ = new FeetInchesSpinBox(isFeet_e, &editDlg);
+    originZ->setRange(0, zMax_e); originZ->setDecimals(2);
     originZ->setValue(t->origin().z() * toDisp_e);
     form->addRow(tr("Height Z:"), originZ);
 
@@ -5213,13 +8142,13 @@ void Monitor::slotEditTruss(quint32 tid)
                             "horizontal or vertical on the 2D map."));
     form->addRow(tr("Direction (°):"), dirAngle);
 
-    QDoubleSpinBox *lenSpin = new QDoubleSpinBox(&editDlg);
-    lenSpin->setRange(0.1, lenMax_e); lenSpin->setSuffix(unitSfx_e); lenSpin->setDecimals(2);
+    QDoubleSpinBox *lenSpin = new FeetInchesSpinBox(isFeet_e, &editDlg);
+    lenSpin->setRange(0.1, lenMax_e); lenSpin->setDecimals(2);
     lenSpin->setValue(t->length() * toDisp_e);
     form->addRow(tr("Length:"), lenSpin);
 
-    QDoubleSpinBox *widthSpin = new QDoubleSpinBox(&editDlg);
-    widthSpin->setRange(0.05, wMax_e); widthSpin->setSuffix(unitSfx_e); widthSpin->setDecimals(2);
+    QDoubleSpinBox *widthSpin = new FeetInchesSpinBox(isFeet_e, &editDlg);
+    widthSpin->setRange(0.05, wMax_e); widthSpin->setDecimals(2);
     widthSpin->setValue(t->width() * toDisp_e);
     form->addRow(tr("Width:"), widthSpin);
 
@@ -5229,7 +8158,6 @@ void Monitor::slotEditTruss(quint32 tid)
     profileCb->setCurrentIndex(profileCb->findData(int(t->profile())));
     profileCb->setToolTip(tr("Cross-section shape — drawn distinctly on the map."));
     form->addRow(tr("Profile:"), profileCb);
-    const Truss::Profile origProfile = t->profile();
 
     // --- Stand on a Stand: origin rides the stand top (Origin X/Y/Z ignored) ---
     QComboBox *standCb = new QComboBox(&editDlg);
@@ -5244,6 +8172,77 @@ void Monitor::slotEditTruss(quint32 tid)
                            "the stand top and follows it."));
     form->addRow(tr("On stand:"), standCb);
 
+    /* Its other end on a second stand: a horizontal truss between two stands
+       (a goal post), its run and length following them. */
+    QComboBox *endStandCb = new QComboBox(&editDlg);
+    endStandCb->setObjectName(QStringLiteral("trussEndStand"));
+    endStandCb->addItem(tr("(none — its own length and direction)"), quint32(Stand::invalidId()));
+    for (Stand *st : m_props->stands())
+    {
+        endStandCb->addItem(st->name().isEmpty() ? tr("Stand %1").arg(st->id()) : st->name(), st->id());
+        if (st->id() == t->endStandId())
+            endStandCb->setCurrentIndex(endStandCb->count() - 1);
+    }
+    endStandCb->setToolTip(tr("A horizontal truss between two stands: its other end rests on this "
+                              "one, and its direction and length follow the two stands."));
+    form->addRow(tr("Other end on stand:"), endStandCb);
+    auto spanState = [=]() {
+        const bool horizontal = typeCb->currentIndex() == int(Truss::Horizontal);
+        const bool onStand = standCb->currentData().toUInt() != Stand::invalidId();
+        endStandCb->setEnabled(horizontal && onStand);
+        const bool spans = endStandCb->isEnabled()
+                           && endStandCb->currentData().toUInt() != Stand::invalidId()
+                           && endStandCb->currentData().toUInt() != standCb->currentData().toUInt();
+        // The stands set them.
+        lenSpin->setEnabled(!spans);
+        dirAngle->setEnabled(!spans);
+    };
+    connect(typeCb, QOverload<int>::of(&QComboBox::currentIndexChanged), &editDlg, [=](int) { spanState(); });
+    connect(standCb, QOverload<int>::of(&QComboBox::currentIndexChanged), &editDlg, [=](int) { spanState(); });
+    connect(endStandCb, QOverload<int>::of(&QComboBox::currentIndexChanged), &editDlg, [=](int) { spanState(); });
+    spanState();
+
+    /* A sock: diffusing fabric over the truss, for LED bars rigged Inside it
+       to glow through. Its colour (white unless told otherwise) and the
+       stretch of the truss it covers. */
+    QWidget *sockRow = new QWidget(&editDlg);
+    QHBoxLayout *sockLay = new QHBoxLayout(sockRow);
+    sockLay->setContentsMargins(0, 0, 0, 0);
+    QCheckBox *sockCb = new QCheckBox(tr("Sock"), sockRow);
+    sockCb->setChecked(t->hasSock());
+    sockCb->setToolTip(tr("A diffusing fabric sleeve over the truss: LED bars rigged "
+                          "Inside it glow through it instead of throwing beams"));
+    QColor *sockColour = new QColor(t->sockColour());
+    ColourSwatchButton *sockColourBtn = new ColourSwatchButton(*sockColour, tr("Sock colour"), sockRow);
+    sockColourBtn->setResetColour(Qt::white);
+    sockColourBtn->setToolTip(tr("The sock's colour"));
+    QDoubleSpinBox *sockFromSpin = new FeetInchesSpinBox(isFeet_e, sockRow);
+    QDoubleSpinBox *sockToSpin = new FeetInchesSpinBox(isFeet_e, sockRow);
+    for (QDoubleSpinBox *sp : { sockFromSpin, sockToSpin })
+    {
+        sp->setRange(0.0, lenMax_e);
+        sp->setDecimals(2);
+    }
+    sockFromSpin->setValue(t->sockFrom() * toDisp_e);
+    sockToSpin->setValue(t->sockTo() * toDisp_e);
+    sockFromSpin->setToolTip(tr("Where along the truss the sock starts"));
+    sockToSpin->setToolTip(tr("Where along the truss it ends -- its far end covers the whole truss"));
+    sockLay->addWidget(sockCb);
+    sockLay->addWidget(sockColourBtn);
+    sockLay->addWidget(new QLabel(tr("from"), sockRow));
+    sockLay->addWidget(sockFromSpin);
+    sockLay->addWidget(new QLabel(tr("to"), sockRow));
+    sockLay->addWidget(sockToSpin);
+    form->addRow(tr("Sock:"), sockRow);
+    QString *sockPattern = new QString(t->sockPattern());
+    float *sockOpacity = new float(t->sockPatternOpacity());
+    std::function<void()> applySockFn;               // set below, once the canvas exists
+    QWidget *sockPatternRow = makePatternPicker(&editDlg, sockPattern, sockOpacity, [&applySockFn]() {
+        if (applySockFn) applySockFn();
+    });
+    sockPatternRow->setEnabled(t->hasSock());
+    form->addRow(tr("Sock printed:"), sockPatternRow);
+
     // --- Bar attachment: make this truss a "bar" hung on a parent truss ---
     QComboBox *parentCb = new QComboBox(&editDlg);
     parentCb->addItem(tr("(free — not a bar)"), Truss::invalidId());
@@ -5257,8 +8256,8 @@ void Monitor::slotEditTruss(quint32 tid)
     form->addRow(tr("Bar on truss:"), parentCb);
 
     // Along the parent truss (slides top↔bottom on a tower, left↔right overhead).
-    QDoubleSpinBox *alongSpin = new QDoubleSpinBox(&editDlg);
-    alongSpin->setRange(-lenMax_e, lenMax_e); alongSpin->setSuffix(unitSfx_e); alongSpin->setDecimals(2);
+    QDoubleSpinBox *alongSpin = new FeetInchesSpinBox(isFeet_e, &editDlg);
+    alongSpin->setRange(-lenMax_e, lenMax_e); alongSpin->setDecimals(2);
     alongSpin->setValue(t->parentOffset() * toDisp_e);
     alongSpin->setToolTip(tr("Position ALONG the parent truss"));
     QLabel *alongLbl = new QLabel(tr("Along truss:")); form->addRow(alongLbl, alongSpin);
@@ -5277,8 +8276,8 @@ void Monitor::slotEditTruss(quint32 tid)
     QLabel *faceLbl = new QLabel(tr("Face:")); form->addRow(faceLbl, faceCb);
 
     // Stand-off off that face (the drop / reach).
-    QDoubleSpinBox *standoffSpin = new QDoubleSpinBox(&editDlg);
-    standoffSpin->setRange(0, zMax_e); standoffSpin->setSuffix(unitSfx_e); standoffSpin->setDecimals(2);
+    QDoubleSpinBox *standoffSpin = new FeetInchesSpinBox(isFeet_e, &editDlg);
+    standoffSpin->setRange(0, zMax_e); standoffSpin->setDecimals(2);
     standoffSpin->setValue(t->barStandoff() * toDisp_e);
     standoffSpin->setToolTip(tr("Distance off that face (0 = on the truss)"));
     QLabel *standoffLbl = new QLabel(tr("Stand-off:")); form->addRow(standoffLbl, standoffSpin);
@@ -5444,13 +8443,50 @@ void Monitor::slotEditTruss(quint32 tid)
             [applyGeomLive](int){ applyGeomLive(); });
     connect(profileCb, QOverload<int>::of(&QComboBox::currentIndexChanged), &editDlg,
             [applyGeomLive](int){ applyGeomLive(); });
+    // The sock applies live too: tick it and the canvas wraps the truss.
+    auto applySock = [=]() {
+        t->setSock(sockCb->isChecked());
+        t->setSockColour(*sockColour);
+        const float to = float(sockToSpin->value() * fromDisp_e);
+        t->setSockRange(float(sockFromSpin->value() * fromDisp_e),
+                        qAbs(to - t->length()) < 1e-3f ? -1.0f : to);   // its end: follows the length
+        t->setSockPattern(*sockPattern);
+        t->setSockPatternOpacity(*sockOpacity);
+        sockColourBtn->setEnabled(sockCb->isChecked());
+        sockFromSpin->setEnabled(sockCb->isChecked());
+        sockToSpin->setEnabled(sockCb->isChecked());
+        sockPatternRow->setEnabled(sockCb->isChecked());
+        reloadStudio();
+    };
+    applySockFn = applySock;
+    sockColourBtn->setEnabled(t->hasSock());
+    sockFromSpin->setEnabled(t->hasSock());
+    sockToSpin->setEnabled(t->hasSock());
+    connect(sockCb, &QCheckBox::toggled, &editDlg, [applySock](bool) { applySock(); });
+    connect(sockFromSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &editDlg,
+            [applySock](double) { applySock(); });
+    connect(sockToSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &editDlg,
+            [applySock](double) { applySock(); });
+    connect(sockColourBtn, &ColourSwatchButton::colourChanged, &editDlg,
+            [sockColour, applySock](const QColor &c) {
+        *sockColour = c;
+        applySock();
+    });
+    QObject::connect(&editDlg, &QObject::destroyed, [sockColour, sockPattern, sockOpacity]() {
+        delete sockColour;
+        delete sockPattern;
+        delete sockOpacity;
+    });
+
     // The bar-preview hooks already recompute a child bar — mirror onto the canvas.
     connect(alongSpin,    QOverload<double>::of(&QDoubleSpinBox::valueChanged), &editDlg, [reloadStudio](double){ reloadStudio(); });
     connect(standoffSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &editDlg, [reloadStudio](double){ reloadStudio(); });
 
     Q_UNUSED(isVertical)
     vl->addWidget(bodyPane, 1);
-    editDlg.resize(960, 580);
+    // Tall enough that the Geometry form's ten-plus rows and the fixtures/bars
+    // list below it don't have to fight each other for space by default.
+    editDlg.resize(960, 700);
 
     QDialogButtonBox *btns = new QDialogButtonBox(
         QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &editDlg);
@@ -5460,32 +8496,7 @@ void Monitor::slotEditTruss(quint32 tid)
 
     if (editDlg.exec() != QDialog::Accepted)
     {
-        // Cancel: undo the live preview (restore the bar's original mount) and
-        // remove any bars created via the strip's "Add bar here".
-        if (origIsBar)
-        {
-            t->setParentOffset(origAlong);
-            t->setBarFace(origFace);
-            t->setBarStandoff(origStandoff);
-            t->setBarRun(origRun);
-            t->setLength(origLen);
-            m_props->recomputeChildTrusses();
-        }
-        else
-        {
-            // Undo the live free-truss geometry preview.
-            t->setType(origType);
-            t->setOrigin(origOrigin);
-            t->setDirection(origDir);
-            t->setLength(origLen);
-            t->setWidth(origWidth);
-        }
-        t->setProfile(origProfile);
-        m_graphicsView->updateTrusses();
-        for (quint32 barId : barsCreatedHere)
-            m_props->removeTruss(barId);
-        m_graphicsView->followParentTrusses();
-        if (m_layersPanel) m_layersPanel->reload();
+        edit.cancel();
         return;
     }
 
@@ -5519,30 +8530,34 @@ void Monitor::slotEditTruss(quint32 tid)
                                originZ->value() * fromDisp_e));
         const float radians = float(qDegreesToRadians(dirAngle->value()));
         t->setDirection(QPointF(qCos(radians), qSin(radians)));
-        // Stand this truss on a Stand (its origin then rides the stand top).
+        // Stand this truss on a Stand (its origin then rides the stand top),
+        // and its other end on another (it then spans them).
         t->setStandId(standCb->currentData().toUInt());
+        t->setEndStandId(endStandCb->isEnabled() ? endStandCb->currentData().toUInt()
+                                                 : quint32(Stand::invalidId()));
         m_props->recomputeStandMounts();
     }
 
-    // Child-bar positions (from any bars added via the canvas) still round-trip
-    // through the strip's slots; fixtures are placed in the canvas now, so we no
-    // longer write fixture offsets here (that would clobber a canvas drag).
-    for (const TrussStripWidget::Slot &s : strip->placements())
-    {
-        if (s.barTrussId != Truss::invalidId())
-            if (Truss *bar = m_props->truss(s.barTrussId))
-            {
-                bar->setParentOffset(s.offset);
-                bar->setBarCrossShift(s.barCross);
-            }
-    }
-    m_props->recomputeChildTrusses();   // bars re-derive origin
+    /* Child-bar positions used to round-trip through the strip's slots on OK
+       -- fine while the (now permanently hidden) strip was the only way to
+       move one. It is not anymore: a bar dragged on the canvas
+       (StructureStudioView::dragBarTo()) already writes straight to the live
+       Truss the moment you drag it, same as a fixture always has. Reading
+       strip->placements() here unconditionally OVERWROTE that with
+       whatever offset the bar had when this dialog first opened -- so a
+       canvas drag looked like it worked (it moved on screen immediately)
+       right up until OK silently put it back ("moving the bar to the top of
+       the truss didn't save its vertical position"). recomputeChildTrusses()
+       still runs, in case this dialog's OWN fields (Length/Width/Origin —
+       T-1's own geometry, which a bar's derived position depends on) changed. */
+    m_props->recomputeChildTrusses();   // bars re-derive origin from THIS truss's own edits
 
     // followParentTrusses() redraws trusses AND re-derives/repositions any child
     // bars (and their fixtures) — needed when the edited truss is a bar's parent.
     m_graphicsView->followParentTrusses();
     if (m_layersPanel) m_layersPanel->reload();   // reflect the new truss name in the tree
     m_doc->setModified();
+    edit.accept();
 }
 
 void Monitor::slotAddTruss()
@@ -5569,7 +8584,6 @@ void Monitor::slotAddTruss()
     m_pendingAddScenePos = QPointF();
 
     const bool isFeet_a = (m_props->gridUnits() == MonitorProperties::Feet);
-    const QString unitSfx_a = isFeet_a ? tr(" ft") : tr(" m");
     const double toDisp_a   = isFeet_a ? 3.28084 : 1.0;
     const double fromDisp_a = isFeet_a ? (1.0 / 3.28084) : 1.0;
     const double posRange_a = isFeet_a ? 164.0 : 50.0;
@@ -5577,18 +8591,18 @@ void Monitor::slotAddTruss()
     const double zMax_a     = isFeet_a ? 98.4  : 30.0;
     const double wMax_a     = isFeet_a ? 16.4  : 5.0;
 
-    QDoubleSpinBox *originX = new QDoubleSpinBox(&dlg);
-    originX->setRange(-posRange_a, posRange_a); originX->setSuffix(unitSfx_a); originX->setDecimals(2);
+    QDoubleSpinBox *originX = new FeetInchesSpinBox(isFeet_a, &dlg);
+    originX->setRange(-posRange_a, posRange_a); originX->setDecimals(2);
     originX->setValue(pendMm.x() / 1000.0 * toDisp_a);
-    form->addRow(tr("Origin X (stage right):"), originX);
+    form->addRow(tr("Origin X (stage left):"), originX);
 
-    QDoubleSpinBox *originY = new QDoubleSpinBox(&dlg);
-    originY->setRange(-posRange_a, posRange_a); originY->setSuffix(unitSfx_a); originY->setDecimals(2);
+    QDoubleSpinBox *originY = new FeetInchesSpinBox(isFeet_a, &dlg);
+    originY->setRange(-posRange_a, posRange_a); originY->setDecimals(2);
     originY->setValue(pendMm.y() / 1000.0 * toDisp_a);
-    form->addRow(tr("Origin Y (upstage):"), originY);
+    form->addRow(tr("Origin Y (downstage):"), originY);
 
-    QDoubleSpinBox *originZ = new QDoubleSpinBox(&dlg);
-    originZ->setRange(0, zMax_a); originZ->setSuffix(unitSfx_a); originZ->setDecimals(2);
+    QDoubleSpinBox *originZ = new FeetInchesSpinBox(isFeet_a, &dlg);
+    originZ->setRange(0, zMax_a); originZ->setDecimals(2);
     originZ->setValue(6.0 * toDisp_a);
     form->addRow(tr("Height Z:"), originZ);
 
@@ -5596,13 +8610,13 @@ void Monitor::slotAddTruss()
     dirAngle->setRange(0, 359); dirAngle->setSuffix(QString::fromUtf8("°")); dirAngle->setDecimals(1);
     form->addRow(tr("Direction (° from stage-right):"), dirAngle);
 
-    QDoubleSpinBox *length = new QDoubleSpinBox(&dlg);
-    length->setRange(0.1, lenMax_a); length->setSuffix(unitSfx_a); length->setDecimals(2);
+    QDoubleSpinBox *length = new FeetInchesSpinBox(isFeet_a, &dlg);
+    length->setRange(0.1, lenMax_a); length->setDecimals(2);
     length->setValue(6.0 * toDisp_a);
     form->addRow(tr("Length:"), length);
 
-    QDoubleSpinBox *width = new QDoubleSpinBox(&dlg);
-    width->setRange(0.05, wMax_a); width->setSuffix(unitSfx_a); width->setDecimals(2);
+    QDoubleSpinBox *width = new FeetInchesSpinBox(isFeet_a, &dlg);
+    width->setRange(0.05, wMax_a); width->setDecimals(2);
     width->setValue(0.29 * toDisp_a);
     form->addRow(tr("Width:"), width);
 
@@ -5721,6 +8735,9 @@ void Monitor::slotFixtureMoved(quint32 fid, QPointF pos)
     const float z = m_props->fixturePosition(fid, 0, 0).z();
     m_props->setFixturePosition(fid, 0, 0, QVector3D(pos.x(), pos.y(), z));
     m_doc->setModified();
+    // The position is only now what the tally should be counting -- the view
+    // emitted this before the store had it.
+    m_graphicsView->refreshOffGridTally();
 }
 
 void Monitor::slotViewClicked()
@@ -5777,6 +8794,8 @@ void Monitor::showFixturePropertiesById(quint32 fxId)
             .arg(int(fxi->universe()) + 1).arg(int(fxi->address()) + 1);
         if (fxi->channels() > 1)
             addrStr += tr("–%1").arg(int(fxi->address()) + int(fxi->channels()));
+        if (!fxi->isPatched())
+            addrStr = tr("Unpatched (inventory)");
         QLabel *addrLabel = new QLabel(addrStr, &dlg);
         addrLabel->setStyleSheet("color:#aaa; font-size:10px;");
         vl->addWidget(addrLabel);
@@ -5811,7 +8830,14 @@ void Monitor::showFixturePropertiesById(quint32 fxId)
                 QPushButton *btn = new QPushButton(label, &dlg);
                 btn->setToolTip(tip);
                 hl->addWidget(btn);
+                if (!fxi->isPatched())
+                {
+                    btn->setEnabled(false);
+                    btn->setToolTip(tr("Patch this fixture first: it is in the inventory and has no DMX address"));
+                }
                 connect(btn, &QPushButton::clicked, [=]() {
+                    if (!fxi->isPatched())
+                        return;
                     QList<Universe*> ua = m_doc->inputOutputMap()->claimUniverses();
                     quint32 u = fxi->universe();
                     if (u < quint32(ua.size()))
@@ -5964,53 +8990,117 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     // A specific fixture (studio single-fixture path) bypasses the map selection
     // — the group "select-together" would otherwise re-select all members and
     // force the multi editor.
-    QList<MonitorFixtureItem *> items;
-    if (onlyFid != 0)
-    {
-        if (MonitorFixtureItem *it = m_graphicsView->fixtureItemForId(onlyFid))
-            items << it;
-    }
+    QList<quint32> fids;
+    if (onlyFid != Fixture::invalidId())
+        fids << onlyFid;
     else
+        foreach (MonitorFixtureItem *it, m_graphicsView->selectedFixtureItems())
+            fids << it->fixtureID();
+    showFixtureItemEditor(fids);
+}
+
+void Monitor::editFixturesProperties(const QList<quint32> &fids)
+{
+    showFixtureItemEditor(fids);
+}
+
+void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
+{
+    QList<MonitorFixtureItem *> items;
+    QList<quint32> fids;
+    foreach (quint32 fid, fidList)
     {
-        items = m_graphicsView->selectedFixtureItems();
+        if (MonitorFixtureItem *it = m_graphicsView->fixtureItemForId(fid))
+        {
+            items << it;
+            fids << fid;
+        }
     }
     if (items.isEmpty())
         return;
+    // Live as it is edited; Cancel puts back whatever was tried; OK is one
+    // undo step.
+    RigEditSession edit(this);
 
-    // ---- Multi-selection: shared controls ----
+    // ---- Several fixtures: the same rows, "mixed" where they differ ----
     if (items.count() > 1)
     {
         QDialog dlg(this);
-        dlg.setWindowTitle(tr("Fixture Properties"));
+        dlg.setWindowTitle(tr("Fixture Properties — %n fixtures", "", fids.count()));
+        dlg.setProperty("helpTopic", QStringLiteral("lighting-studio.md#mounting-a-fixture"));
         QVBoxLayout *vl = new QVBoxLayout(&dlg);
+        QLabel *head = new QLabel(tr("<b>%1 fixtures.</b> A row they differ on reads "
+                                     "“mixed”; set it, and it is set on all of them.")
+                                  .arg(fids.count()), &dlg);
+        head->setWordWrap(true);
+        vl->addWidget(head);
 
-        vl->addWidget(new QLabel(
-            tr("<b>%1 fixtures selected</b>").arg(items.count())));
+        QGroupBox *box = new QGroupBox(tr("Fixture"), &dlg);
+        QFormLayout *form = new QFormLayout(box);
+        FixtureFields *fields = new FixtureFields(this, form, box);
+        fields->setFixtures(fids, fids.first());
 
-        QGroupBox *rigBox = new QGroupBox(tr("Rig Assignment"), &dlg);
-        QFormLayout *rigForm = new QFormLayout(rigBox);
-
-        QComboBox *mountCb = new QComboBox;
-        // Logical orientation of the device (base direction), not a rig context.
-        mountCb->addItem(tr("Upright (base down)"),     QVariant(int(Truss::FloorMounted)));
-        mountCb->addItem(tr("Sideways (base on side)"), QVariant(int(Truss::SideArm)));
-        mountCb->addItem(tr("Hung (base on top)"),      QVariant(int(Truss::TopHung)));
-        rigForm->addRow(tr("Orientation:"), mountCb);
-
-        QDoubleSpinBox *panZeroSpin = new QDoubleSpinBox;
-        panZeroSpin->setRange(0, 359);
+        QDoubleSpinBox *panZeroSpin = new QDoubleSpinBox(box);
+        panZeroSpin->setObjectName(QStringLiteral("fixtureAim"));
+        panZeroSpin->setMaximum(359);
         panZeroSpin->setSuffix(QString::fromUtf8("°"));
         panZeroSpin->setDecimals(1);
-        rigForm->addRow(tr("Aim — front of device (° from DS):"), panZeroSpin);
-        vl->addWidget(rigBox);
-
-        QGroupBox *transformBox = new QGroupBox(tr("Transform"), &dlg);
-        QFormLayout *transformForm = new QFormLayout(transformBox);
-        QSpinBox *rotSpin = new QSpinBox;
-        rotSpin->setRange(0, 359);
+        form->addRow(tr("Aim — front of device (° from DS):"), panZeroSpin);
+        QDoubleSpinBox *rotSpin = new QDoubleSpinBox(box);
+        rotSpin->setObjectName(QStringLiteral("fixtureIconRotation"));
+        rotSpin->setMaximum(359);
+        rotSpin->setDecimals(0);
         rotSpin->setSuffix(QString::fromUtf8("°"));
-        transformForm->addRow(tr("Icon rotation (visual):"), rotSpin);
-        vl->addWidget(transformBox);
+        form->addRow(tr("Icon rotation (visual):"), rotSpin);
+        vl->addWidget(box);
+
+        auto loadExtras = [this, fids, panZeroSpin, rotSpin]() {
+            const float aim = m_props->fixtureRigProps(fids.first()).panZeroDir;
+            const float rot = m_props->fixtureItem(fids.first(), 0, 0).m_rotation.y();
+            bool aimDiffers = false, rotDiffers = false;
+            foreach (quint32 fid, fids)
+            {
+                aimDiffers = aimDiffers || !qFuzzyCompare(1.0f + m_props->fixtureRigProps(fid).panZeroDir, 1.0f + aim);
+                rotDiffers = rotDiffers || !qFuzzyCompare(1.0f + m_props->fixtureItem(fid, 0, 0).m_rotation.y(), 1.0f + rot);
+            }
+            for (QDoubleSpinBox *sp : { panZeroSpin, rotSpin })
+                sp->blockSignals(true);
+            FixtureFields::spinMixed(panZeroSpin, aimDiffers, 0.0);
+            if (!aimDiffers)
+                panZeroSpin->setValue(double(aim));
+            FixtureFields::spinMixed(rotSpin, rotDiffers, 0.0);
+            if (!rotDiffers)
+                rotSpin->setValue(double(rot));
+            for (QDoubleSpinBox *sp : { panZeroSpin, rotSpin })
+                sp->blockSignals(false);
+        };
+        loadExtras();
+        connect(panZeroSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg,
+                [this, fids, panZeroSpin, loadExtras](double v) {
+            if (FixtureFields::spinIsMixed(panZeroSpin))
+                return;
+            foreach (quint32 fid, fids)
+            {
+                FixtureRigProps rp = m_props->fixtureRigProps(fid);
+                rp.panZeroDir = float(v);
+                m_props->setFixtureRigProps(fid, rp);
+                if (MonitorFixtureItem *fi = m_graphicsView->fixtureItemForId(fid))
+                    fi->setFacing(rp.panZeroDir);
+            }
+            loadExtras();
+        });
+        connect(rotSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg,
+                [this, fids, rotSpin, loadExtras](double v) {
+            if (FixtureFields::spinIsMixed(rotSpin))
+                return;
+            foreach (quint32 fid, fids)
+            {
+                m_props->setFixtureRotation(fid, 0, 0, QVector3D(0, float(v), 0));
+                if (MonitorFixtureItem *fi = m_graphicsView->fixtureItemForId(fid))
+                    fi->setRotation(int(v));
+            }
+            loadExtras();
+        });
 
         QDialogButtonBox *btns = new QDialogButtonBox(
             QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
@@ -6019,19 +9109,12 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
         vl->addWidget(btns);
 
         if (dlg.exec() != QDialog::Accepted)
-            return;
-
-        for (MonitorFixtureItem *fi : items)
         {
-            fi->setRotation(rotSpin->value());
-            m_props->setFixtureRotation(fi->fixtureID(), 0, 0,
-                                        QVector3D(0, rotSpin->value(), 0));
-            FixtureRigProps rp = m_props->fixtureRigProps(fi->fixtureID());
-            rp.mountingType = static_cast<Truss::MountingType>(mountCb->currentData().toInt());
-            rp.panZeroDir   = float(panZeroSpin->value());
-            m_props->setFixtureRigProps(fi->fixtureID(), rp);
+            edit.cancel();
+            return;
         }
         m_doc->setModified();
+        edit.accept();
         return;
     }
 
@@ -6041,13 +9124,23 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
 
     QDialog dlg(this);
     dlg.setWindowTitle(tr("Fixture Properties — %1").arg(fxItem->name()));
+    dlg.setProperty("helpTopic", QStringLiteral("lighting-studio.md#mounting-a-fixture"));
     QVBoxLayout *vl = new QVBoxLayout(&dlg);
+    QLineEdit *nameEdit = nullptr;
 
     // Header: "Name  [right-aligned type]" on one line
     {
         QHBoxLayout *headerRow = new QHBoxLayout;
-        QLabel *nameLabel = new QLabel(QString("<b>%1</b>").arg(fxItem->name()));
-        headerRow->addWidget(nameLabel, 1);
+        // The name is editable here: "when I edit a fixture from studio I
+        // should be able to change its name".
+        nameEdit = new QLineEdit(fxi != nullptr ? fxi->name() : fxItem->name());
+        nameEdit->setObjectName("fixtureNameEdit");
+        nameEdit->setPlaceholderText(tr("Fixture name"));
+        QFont nf = nameEdit->font();
+        nf.setBold(true);
+        nameEdit->setFont(nf);
+        headerRow->addWidget(new QLabel(tr("Name:")));
+        headerRow->addWidget(nameEdit, 2);
 
         if (fxi && fxi->fixtureDef())
         {
@@ -6069,16 +9162,6 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     {
         QFormLayout *infoForm = new QFormLayout;
         infoForm->setContentsMargins(0, 2, 0, 4);
-
-        // DMX address
-        QString addrStr = tr("Universe %1 • Ch %2")
-            .arg(fxi ? int(fxi->universe()) + 1 : 0)
-            .arg(fxi ? int(fxi->address()) + 1 : 0);
-        if (fxi && fxi->channels() > 1)
-            addrStr += tr("–%1").arg(int(fxi->address()) + int(fxi->channels()));
-        QLabel *addrLabel = new QLabel(addrStr, &dlg);
-        addrLabel->setStyleSheet("color: #aaa; font-size: 10px;");
-        infoForm->addRow(tr("Address:"), addrLabel);
 
         // Live Pan/Tilt readout — only for fixtures that have P/T channels
         QLabel *panLabel  = nullptr;
@@ -6157,107 +9240,30 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     sep2->setFrameShadow(QFrame::Sunken);
     vl->addWidget(sep2);
 
-    // Rig Assignment (at top, per user request)
-    QGroupBox *rigBox = new QGroupBox(tr("Rig Assignment"), &dlg);
+    /* What it is and how it sits: the studio inspector's rows (FixtureFields),
+       live like the rest of this dialog. */
+    QGroupBox *fixtureBox = new QGroupBox(tr("Fixture"), &dlg);
+    QFormLayout *fixtureForm = new QFormLayout(fixtureBox);
+    FixtureFields *fields = new FixtureFields(this, fixtureForm, fixtureBox);
+    fields->setFixtures({ fxItem->fixtureID() }, fxItem->fixtureID());
+    vl->addWidget(fixtureBox);
+
+    // Its mount's fine-tuning, its aim and calibration, testing it.
+    QGroupBox *rigBox = new QGroupBox(tr("Aim & Mount"), &dlg);
     QFormLayout *rigForm = new QFormLayout(rigBox);
 
-    QComboBox *trussCb = new QComboBox;
-    trussCb->addItem(tr("(none)"), QVariant(Truss::invalidId()));
-    for (Truss *t : m_props->trusses())
-        trussCb->addItem(t->name(), t->id());
-    QPushButton *detachTrussBtn = new QPushButton(tr("Remove from Truss"));
-    detachTrussBtn->setToolTip(tr("Detach this fixture from its truss"));
-    QWidget *trussRow = new QWidget;
-    {
-        QHBoxLayout *trussRowL = new QHBoxLayout(trussRow);
-        trussRowL->setContentsMargins(0, 0, 0, 0);
-        trussRowL->addWidget(trussCb, 1);
-        trussRowL->addWidget(detachTrussBtn);
-        rigForm->addRow(tr("Truss:"), trussRow);
-    }
-
     const bool isFeet_fx = (m_props->gridUnits() == MonitorProperties::Feet);
-    const QString unitSfx_fx = isFeet_fx ? tr(" ft") : tr(" m");
     const double toDisp_fx   = isFeet_fx ? 3.28084 : 1.0;
     const double fromDisp_fx = isFeet_fx ? (1.0 / 3.28084) : 1.0;
 
-    QDoubleSpinBox *offsetSpin = new QDoubleSpinBox;
-    offsetSpin->setRange(-100 * toDisp_fx, 100 * toDisp_fx);
-    offsetSpin->setSuffix(unitSfx_fx);
-    offsetSpin->setDecimals(2);
-    rigForm->addRow(tr("Offset along truss:"), offsetSpin);
-
-    // The "Remove from Truss" button (built above) just resets the combo/offset;
-    // the detach is committed on OK where the rig props are written.
-    connect(detachTrussBtn, &QPushButton::clicked, this, [trussCb, offsetSpin]() {
-        trussCb->setCurrentIndex(0);   // (none)
-        offsetSpin->setValue(0.0);
-    });
-
-    // Which side of the truss the fixture hangs on (affects Z in elevation).
-    QComboBox *trussSideCb = new QComboBox;
-    trussSideCb->addItem(tr("Under-hung (below)"), QVariant(int(FixtureRigProps::UnderHung)));
-    trussSideCb->addItem(tr("Top-mounted (above)"), QVariant(int(FixtureRigProps::TopMounted)));
-    trussSideCb->addItem(tr("Centered (on chord)"), QVariant(int(FixtureRigProps::Centered)));
-    trussSideCb->setToolTip(tr("Vertical side of the truss the fixture sits on "
-                               "(shown in Front/Side elevation views)"));
-    rigForm->addRow(tr("Truss side:"), trussSideCb);
-
-    // Horizontal position across the truss: Left / Centered / Right chord. Stays
-    // attached to the truss — only slides sideways across its width.
-    QComboBox *trussCrossCb = new QComboBox;
-    trussCrossCb->addItem(tr("Left"),     -1);
-    trussCrossCb->addItem(tr("Centered"),  0);
-    trussCrossCb->addItem(tr("Right"),    +1);
-    trussCrossCb->setToolTip(tr("Horizontal position across the truss width, "
-                                "perpendicular to its run — Left/Right chord or "
-                                "centred. The fixture stays attached to the truss."));
-    rigForm->addRow(tr("Across truss:"), trussCrossCb);
-
-    QComboBox *mountCb = new QComboBox;
-    // Logical orientation of the device (base direction), not a rig context.
-    mountCb->addItem(tr("Upright (base down)"),     QVariant(int(Truss::FloorMounted)));
-    mountCb->addItem(tr("Sideways (base on side)"), QVariant(int(Truss::SideArm)));
-    mountCb->addItem(tr("Hung (base on top)"),      QVariant(int(Truss::TopHung)));
-    mountCb->setToolTip(tr("Base direction relative to the STAGE floor (gravity), "
-                           "independent of which face it's mounted on. On a moving "
-                           "head, Hung vs Upright inverts pan/tilt."));
-    rigForm->addRow(tr("Orientation:"), mountCb);
-
     // Fine height nudge above/below a structural mount (truss/bar/tower).
-    QDoubleSpinBox *heightOffSpin = new QDoubleSpinBox;
+    QDoubleSpinBox *heightOffSpin = new FeetInchesSpinBox(isFeet_fx);
     heightOffSpin->setRange(-10 * toDisp_fx, 10 * toDisp_fx);
-    heightOffSpin->setSuffix(unitSfx_fx); heightOffSpin->setDecimals(2);
+    heightOffSpin->setDecimals(2);
     heightOffSpin->setToolTip(tr("Raise (+) or lower (−) the fixture relative to its "
                                  "mount — e.g. lift a followspot above the truss."));
     rigForm->addRow(tr("Height offset:"), heightOffSpin);
 
-    // Deck mount: a fixture standing on top of a platform ("floor mounted").
-    QComboBox *deckCb = new QComboBox;
-    deckCb->addItem(tr("(none)"), QVariant(FixtureRigProps::invalidPlatformId()));
-    for (StagePlatform *p : m_props->platforms())
-        deckCb->addItem(p->name(), p->id());
-    deckCb->setToolTip(tr("Stand this fixture on top of a platform; its height "
-                          "follows the platform's deck."));
-    rigForm->addRow(tr("On platform (deck):"), deckCb);
-
-    QDoubleSpinBox *deckHeightSpin = new QDoubleSpinBox;
-    deckHeightSpin->setRange(-20 * toDisp_fx, 20 * toDisp_fx);
-    deckHeightSpin->setSuffix(unitSfx_fx);
-    deckHeightSpin->setDecimals(2);
-    deckHeightSpin->setToolTip(tr("Height relative to the deck top (0 = sits on the "
-                                  "deck; negative drops it below / under the deck)"));
-    rigForm->addRow(tr("Height above deck:"), deckHeightSpin);
-
-    // Truss and deck mounts are mutually exclusive — picking one clears the other.
-    connect(trussCb, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [trussCb, deckCb](int) {
-        if (trussCb->currentData().toUInt() != Truss::invalidId())
-            deckCb->setCurrentIndex(0);
-    });
-    connect(deckCb, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [trussCb, deckCb](int) {
-        if (deckCb->currentData().toUInt() != FixtureRigProps::invalidPlatformId())
-            trussCb->setCurrentIndex(0);
-    });
 
     QDoubleSpinBox *panZeroSpin = new QDoubleSpinBox;
     panZeroSpin->setRange(0, 359);
@@ -6300,10 +9306,18 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     testRowLayout->setContentsMargins(0, 0, 0, 0);
     testRowLayout->setSpacing(4);
     QComboBox *testModeCb = new QComboBox;
-    testModeCb->addItem(tr("Straight down"),             QVariant(0));
+    testModeCb->setObjectName(QStringLiteral("testOrientation"));
+    testModeCb->addItem(centredPoseName(fxItem->fixtureID()), QVariant(0));
     testModeCb->addItem(tr("Aim at 0° (stage front)"),  QVariant(1));
     testModeCb->addItem(tr("Aim at target:"),            QVariant(2));
-    testModeCb->setToolTip(tr("Straight down: center pan+tilt — confirms physical position.\n"
+    /* The centred pose is straight down only for a hung fixture: say what it
+       is for this one, and follow its Orientation as it is changed here. */
+    connect(m_props, &MonitorProperties::rigPropsChanged, testModeCb, [this, testFid = fxItem->fixtureID(), testModeCb](quint32 f) {
+        if (f == testFid)
+            testModeCb->setItemText(0, centredPoseName(testFid));
+    });
+    testModeCb->setToolTip(tr("Centred: pan and tilt at their middle -- straight down for a hung fixture,\n"
+                              "straight up for an upright one -- confirms physical position.\n"
                               "Aim at 0° (stage front): pans the fixture to aim horizontally\n"
                               "toward downstage (0°) given the current panZeroDir setting.\n"
                               "Aim at target: aims at a stage target using rig geometry —\n"
@@ -6321,31 +9335,38 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     QPushButton *locateBtn = new QPushButton(tr("Locate"));
     locateBtn->setToolTip(tr("Flash this fixture at full intensity 3 times to identify it on the rig.\n"
                              "Works in any running scene without affecting other fixtures."));
+    // Both drive real DMX at the fixture's address, which a staged fixture
+    // does not have.
+    if (fxi && !fxi->isPatched())
+    {
+        const QString why = tr("Patch this fixture first: it is in the inventory and has no DMX address");
+        testBtn->setEnabled(false);
+        testBtn->setToolTip(why);
+        locateBtn->setEnabled(false);
+        locateBtn->setToolTip(why);
+    }
     testRowLayout->addWidget(testModeCb, 1);
     testRowLayout->addWidget(testTargetCb, 1);
     testRowLayout->addWidget(testBtn);
-    testRowLayout->addWidget(locateBtn);
     rigForm->addRow(tr("Test orientation:"), testRowWidget);
+
+    // Locate (flash-to-identify) is useful for ANY fixture, not just movers —
+    // an LED bar/wash has no orientation to test but still needs identifying
+    // on the rig. Kept as its own row, separate from Test Orientation (which
+    // is hidden entirely below for a non-mover, since Pan/Tilt-only controls
+    // mean nothing without them) so Locate stays visible regardless.
+    QWidget *locateRowWidget = new QWidget;
+    QHBoxLayout *locateRowLayout = new QHBoxLayout(locateRowWidget);
+    locateRowLayout->setContentsMargins(0, 0, 0, 0);
+    locateRowLayout->addWidget(locateBtn);
+    locateRowLayout->addStretch();
+    rigForm->addRow(tr("Identify:"), locateRowWidget);
 
     connect(testModeCb, QOverload<int>::of(&QComboBox::currentIndexChanged), [&](int) {
         testTargetCb->setVisible(testModeCb->currentData().toInt() == 2);
     });
 
-    FixtureRigProps rp = m_props->fixtureRigProps(fxItem->fixtureID());
-    for (int i = 0; i < trussCb->count(); ++i)
-    {
-        if (trussCb->itemData(i).toUInt() == rp.trussId)
-        { trussCb->setCurrentIndex(i); break; }
-    }
-    offsetSpin->setValue(double(rp.trussOffset) * toDisp_fx);
-    mountCb->setCurrentIndex(static_cast<int>(rp.mountingType));
-    trussSideCb->setCurrentIndex(trussSideCb->findData(int(rp.trussMountSide)));
-    trussCrossCb->setCurrentIndex(trussCrossCb->findData(
-        rp.trussCross < 0.0f ? -1 : (rp.trussCross > 0.0f ? +1 : 0)));
-    for (int i = 0; i < deckCb->count(); ++i)
-        if (deckCb->itemData(i).toUInt() == rp.deckPlatformId)
-        { deckCb->setCurrentIndex(i); break; }
-    deckHeightSpin->setValue(double(rp.deckHeightOffset) * toDisp_fx);
+    const FixtureRigProps rp = m_props->fixtureRigProps(fxItem->fixtureID());
     heightOffSpin->setValue(double(rp.mountZOffset) * toDisp_fx);
     panZeroSpin->setValue(double(rp.panZeroDir));
     panOffsetSpin->setValue(double(rp.panOffsetDeg));
@@ -6355,9 +9376,7 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
 
     // ---- Per-type: show only fields that make sense for THIS fixture ----------
     // Placement is done in the Lighting Studio (drag/drop onto a truss/platform/
-    // bar), so the manual mount selectors here are redundant → show the mount
-    // read-only. Orientation is base-vs-STAGE (gravity), only for a body with a
-    // base (movers/PARs). Pan/tilt cal + test only for movers.
+    // bar); "Mounted on" says where. Pan/tilt cal + test only for movers.
     const bool hasPanCh  = fxi && fxi->channelNumber(QLCChannel::Pan,  QLCChannel::MSB, 0) != QLCChannel::invalid();
     const bool hasTiltCh = fxi && fxi->channelNumber(QLCChannel::Tilt, QLCChannel::MSB, 0) != QLCChannel::invalid();
     const bool isMover = (hasPanCh || hasTiltCh);
@@ -6369,29 +9388,6 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
         if (QWidget *l = rigForm->labelForField(w)) l->setVisible(false);
     };
 
-    QString mountStr = tr("free / on the floor");
-    if (rp.trussId != Truss::invalidId())
-    { Truss *t = m_props->truss(rp.trussId);
-      mountStr = tr("Truss %1 · %2%3 along").arg(t ? t->name() : QString())
-                 .arg(double(rp.trussOffset) * toDisp_fx, 0, 'f', 1).arg(unitSfx_fx); }
-    else if (rp.pipeId != Pipe::invalidId())
-    { Pipe *p = m_props->pipe(rp.pipeId); mountStr = tr("Bar %1").arg(p ? p->name() : QString()); }
-    else if (rp.towerId != Tower::invalidId())
-    { Tower *t = m_props->tower(rp.towerId); mountStr = tr("Tower %1 · shelf %2").arg(t ? t->name() : QString()).arg(rp.towerShelf + 1); }
-    else if (rp.riserPlatformId != FixtureRigProps::invalidPlatformId())
-    { StagePlatform *pl = m_props->platform(rp.riserPlatformId); mountStr = tr("Riser %1").arg(pl ? pl->name() : QString()); }
-    else if (rp.deckPlatformId != FixtureRigProps::invalidPlatformId())
-    { StagePlatform *pl = m_props->platform(rp.deckPlatformId); mountStr = tr("On deck %1").arg(pl ? pl->name() : QString()); }
-    else if (m_props->fixtureFrameGroup(fxItem->fixtureID()) != 0)
-        mountStr = tr("Studio group");
-    QLabel *mountLbl = new QLabel(mountStr);
-    mountLbl->setStyleSheet("color:#b0b4c0;");
-    rigForm->insertRow(0, tr("Mounted on:"), mountLbl);
-
-    hideRow(trussRow); hideRow(offsetSpin); hideRow(trussSideCb); hideRow(trussCrossCb);
-    hideRow(deckCb); hideRow(deckHeightSpin);
-    fillOrientationCombo(mountCb, rp);             // constrain options to the mount
-    if (isStrip) hideRow(mountCb);                 // a strip has no base orientation
     // Height offset only makes sense on a truss / bar / tower mount.
     const bool structMount = rp.trussId != Truss::invalidId()
         || rp.pipeId != Pipe::invalidId() || rp.towerId != Tower::invalidId();
@@ -6546,6 +9542,10 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
 
     // Live-update: when rig orientation params change, write to MonitorProperties
     // immediately so running scenes recompute geometry on the next tick.
+    /* Declared ahead of liveRigUpdate so it can call it; the Position block that
+       defines it is built further down. */
+    std::function<void()> refreshStagePos;
+
     auto liveRigUpdate = [&]() {
         FixtureRigProps live = m_props->fixtureRigProps(fxId_dlg);
         live.panZeroDir    = float(panZeroSpin->value());
@@ -6559,6 +9559,7 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
             fi->setFacing(live.panZeroDir);
         flushSceneCaches();
         refreshTest();
+        if (refreshStagePos) refreshStagePos();   // a mount change moves it
     };
     connect(testModeCb,   QOverload<int>::of(&QComboBox::currentIndexChanged),  [&](int)   { refreshTest(); });
     connect(testTargetCb, QOverload<int>::of(&QComboBox::currentIndexChanged),  [&](int)   { refreshTest(); });
@@ -6576,17 +9577,20 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     posRow->addLayout(posForm, 1);
     const QString unit = isFeet_fx ? tr("ft") : tr("m");
 
-    QDoubleSpinBox *xSpin = new QDoubleSpinBox;
+    // X / Y on the plot, as every length is entered (the show's units).
+    QDoubleSpinBox *xSpin = new FeetInchesSpinBox(isFeet_fx);
+    xSpin->setObjectName(QStringLiteral("fixtureX"));
     xSpin->setMaximum(m_graphicsView->gridSize().width());
-    xSpin->setSingleStep(0.1); xSpin->setDecimals(3); xSpin->setSuffix(unit);
+    xSpin->setSingleStep(0.1); xSpin->setDecimals(2);
     xSpin->setValue(fxItem->realPosition().x() * toDisp_fx / 1000.0);
-    posForm->addRow(tr("Horizontal:"), xSpin);
+    posForm->addRow(tr("X:"), xSpin);
 
-    QDoubleSpinBox *ySpin = new QDoubleSpinBox;
+    QDoubleSpinBox *ySpin = new FeetInchesSpinBox(isFeet_fx);
+    ySpin->setObjectName(QStringLiteral("fixtureY"));
     ySpin->setMaximum(m_graphicsView->gridSize().height());
-    ySpin->setSingleStep(0.1); ySpin->setDecimals(3); ySpin->setSuffix(unit);
+    ySpin->setSingleStep(0.1); ySpin->setDecimals(2);
     ySpin->setValue(fxItem->realPosition().y() * toDisp_fx / 1000.0);
-    posForm->addRow(tr("Vertical:"), ySpin);
+    posForm->addRow(tr("Y:"), ySpin);
 
     QSpinBox *rotSpin = new QSpinBox;
     rotSpin->setRange(0, 359);
@@ -6594,24 +9598,35 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     rotSpin->setValue(int(fxItem->rotation()));
     posForm->addRow(tr("Icon rotation (visual):"), rotSpin);
 
-    // A linear fixture (strip / bar / tape) is oriented by its FACE (which surface
-    // it lies on) and run ANGLE — not an icon rotation. Show those instead.
-    QComboBox *faceCbDetail = nullptr;
-    QSpinBox  *angleSpinDetail = nullptr;
+    /* Where the fixture actually ENDS UP, in stage coordinates.
+     *
+       X / Y above are the fixture's own plot XY, which for a
+       MOUNTED fixture is not where it is: the position is derived from the
+       structure, and the only hint of the height was "10.0 ft along" buried in
+       the Rig Assignment text -- an offset along a tower, not a height you
+       could read. Nothing in this dialog answered "so where is it?".
+
+       Read-only on purpose: for a mounted fixture the answer belongs to the
+       mount, and editing it here would just be overwritten. */
+    QLabel *stagePosLbl = new QLabel(&dlg);
+    stagePosLbl->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    refreshStagePos = [this, stagePosLbl, fxId_dlg, toDisp_fx, unit]() {
+        const QVector3D w = fixtureWorldCentre(m_doc, fxId_dlg);
+        stagePosLbl->setText(tr("X %1%4   Y %2%4   Z %3%4")
+                             .arg(double(w.x()) * toDisp_fx, 0, 'f', 2)
+                             .arg(double(w.y()) * toDisp_fx, 0, 'f', 2)
+                             .arg(double(w.z()) * toDisp_fx, 0, 'f', 2)
+                             .arg(unit));
+    };
+    refreshStagePos();
+    posForm->addRow(tr("Stage position:"), stagePosLbl);
+
+    // A linear fixture (strip / bar / tape) is oriented by its Face and Angle
+    // (the Fixture rows above) — not an icon rotation.
     if (isStrip)
     {
         rotSpin->setVisible(false);
         if (QWidget *l = posForm->labelForField(rotSpin)) l->setVisible(false);
-        faceCbDetail = new QComboBox;
-        faceCbDetail->addItems({ tr("Top surface"), tr("Front / downstage"), tr("Side") });
-        faceCbDetail->setCurrentIndex(qBound(0, rp.studioMount, 2));
-        posForm->addRow(tr("Face:"), faceCbDetail);
-        angleSpinDetail = new QSpinBox;
-        angleSpinDetail->setRange(-180, 180); angleSpinDetail->setSuffix(QString::fromUtf8("°"));
-        angleSpinDetail->setValue(int(rp.studioAngle));
-        angleSpinDetail->setToolTip(tr("Run direction ON that face: 0° = along the "
-                                       "face's horizontal axis (flat/level); 90° = vertical."));
-        posForm->addRow(tr("Angle (run):"), angleSpinDetail);
     }
 
     // Live facing preview: how this fixture's orientation reads on the 2D stage
@@ -6630,12 +9645,10 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
         preview->setFace(rp.studioMount);   // fixed fixtures face by their mount face
         preview->setFacing(panZeroSpin->value());
         preview->setIconRotation(rotSpin->value());
-        if (angleSpinDetail)
-            connect(angleSpinDetail, QOverload<int>::of(&QSpinBox::valueChanged),
-                    [preview](int) { preview->update(); });
-        if (faceCbDetail)
-            connect(faceCbDetail, QOverload<int>::of(&QComboBox::currentIndexChanged),
-                    [preview](int f) { preview->setFace(f); });
+        connect(fields, &FixtureFields::edited, preview, [this, preview, fxId_dlg]() {
+            preview->setFace(m_props->fixtureRigProps(fxId_dlg).studioMount);
+            preview->update();
+        });
         posRow->addWidget(preview, 0, Qt::AlignTop);
 
         // The pan-zero control lives in the Rig Assignment block below; keep the
@@ -6650,47 +9663,50 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
     const int rigIdx = vl->indexOf(rigBox);
     vl->insertWidget(rigIdx >= 0 ? rigIdx : vl->count(), posBox);
 
-    // Gel color
-    // For an RGB fixture, "gel" is meaningless (it makes its own colour); this
-    // swatch is only its UNLIT map colour — label it so.
-    const bool hasRGB = fxi && fxi->channelNumber(QLCChannel::Red, QLCChannel::MSB, 0) != QLCChannel::invalid();
-    QGroupBox *gelBox = new QGroupBox(hasRGB ? tr("Map colour (2D display)") : tr("Gel Color"), &dlg);
-    if (hasRGB)
-        gelBox->setToolTip(tr("Only how this RGB fixture is drawn on the 2D map when "
-                              "unlit — it makes its own colour from DMX."));
-    QHBoxLayout *gelHl = new QHBoxLayout(gelBox);
-    QToolButton *gelBtn = new QToolButton;
-    gelBtn->setIconSize(QSize(28, 28));
-    gelBtn->setToolTip(tr("Pick gel color"));
-    QToolButton *gelResetBtn = new QToolButton;
-    gelResetBtn->setIcon(QIcon(QStringLiteral(":/fileclose.png")));
-    gelResetBtn->setIconSize(QSize(28, 28));
-    gelResetBtn->setToolTip(tr("Reset gel color"));
-    QColor gelColor = fxItem->getColor();
-    if (gelColor.isValid())
-    {
-        QPixmap pm(28, 28); pm.fill(gelColor);
-        gelBtn->setIcon(QIcon(pm));
-    }
-    gelHl->addWidget(new QLabel(tr("Color:")));
-    gelHl->addWidget(gelBtn);
-    gelHl->addWidget(gelResetBtn);
-    gelHl->addStretch();
-    vl->addWidget(gelBox);
+    // A Fixture-row edit: running scenes recompute, the stage position and a
+    // running test follow.
+    connect(fields, &FixtureFields::edited, &dlg, [&]() {
+        flushSceneCaches();
+        refreshTest();
+        refreshStagePos();
+    });
 
-    connect(gelBtn, &QToolButton::clicked, [&]() {
-        QColor c = QColorDialog::getColor(gelColor, &dlg);
-        if (c.isValid())
+    // Live, like every rig dialog: position, icon rotation, height offset.
+    auto applyPosition = [&]() {
+        const QPointF newPos(xSpin->value() * fromDisp_fx * 1000.0, ySpin->value() * fromDisp_fx * 1000.0);
+        fxItem->setPos(m_graphicsView->realPositionToPixels(newPos.x(), newPos.y()));
+        fxItem->setRealPosition(newPos);
+        m_props->setFixturePosition(fxId_dlg, 0, 0, QVector3D(newPos.x(), newPos.y(), 0));
+        refreshStagePos();
+    };
+    for (QDoubleSpinBox *sp : { xSpin, ySpin })
+        connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg, [&](double) { applyPosition(); });
+    connect(rotSpin, QOverload<int>::of(&QSpinBox::valueChanged), &dlg, [&](int v) {
+        fxItem->setRotation(v);
+        m_props->setFixtureRotation(fxId_dlg, 0, 0, QVector3D(0, v, 0));
+    });
+    connect(heightOffSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg, [&](double v) {
+        FixtureRigProps live = m_props->fixtureRigProps(fxId_dlg);
+        live.mountZOffset = float(v * fromDisp_fx);
+        m_props->setFixtureRigProps(fxId_dlg, live);
+        m_graphicsView->updateFixture(fxId_dlg);
+        flushSceneCaches();
+        refreshStagePos();
+    });
+    /* The name when it is left, not at every key: another fixture's name is
+       refused, said once. */
+    auto applyName = [&]() {
+        if (fxi == nullptr || nameEdit == nullptr)
+            return;
+        const QString newName = nameEdit->text().trimmed();
+        if (!newName.isEmpty() && newName != fxi->name()
+            && !AppUtil::refuseTakenFixtureName(this, m_doc, fxi->id(), newName))
         {
-            gelColor = c;
-            QPixmap pm(28, 28); pm.fill(c);
-            gelBtn->setIcon(QIcon(pm));
+            fxi->setName(newName);
+            m_doc->setModified();
         }
-    });
-    connect(gelResetBtn, &QToolButton::clicked, [&]() {
-        gelColor = QColor();
-        gelBtn->setIcon(QIcon());
-    });
+    };
+    connect(nameEdit, &QLineEdit::editingFinished, &dlg, [&]() { applyName(); });
 
     // DMX Controls: Reset button (sends the fixture's Reset capability value)
     if (fxi && fxi->fixtureMode())
@@ -6787,124 +9803,39 @@ void Monitor::showFixtureItemEditor(quint32 onlyFid)
         QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
     connect(btns, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
     connect(btns, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    /* Its definition and mode -- the one thing this does not change -- in
+       the stock dialog, from here: Fixture Properties is THE fixture dialog
+       (CONSOLIDATION_REVIEW #3). The name it may change is shown again. */
+    if (fxi != nullptr)
+    {
+        QPushButton *defBtn = btns->addButton(tr("Definition && Mode…"), QDialogButtonBox::ActionRole);
+        defBtn->setObjectName(QStringLiteral("definitionAndModeButton"));
+        defBtn->setToolTip(tr("Change this fixture's definition or mode (and its name, "
+                              "connection and address) in the fixture dialog"));
+        const quint32 defFid = fxi->id();
+        connect(defBtn, &QPushButton::clicked, &dlg, [this, &dlg, defFid, nameEdit]() {
+            if (FixtureManager::editDefinitionAndMode(&dlg, m_doc, defFid))
+                if (Fixture *f = m_doc->fixture(defFid))
+                    if (nameEdit != nullptr)
+                        nameEdit->setText(f->name());
+        });
+    }
     vl->addWidget(btns);
 
     if (dlg.exec() != QDialog::Accepted)
     {
         testSrc.reset(); // ensure DMX source is stopped on cancel
-        // Restore original rig props (live edits may have written new values)
-        m_props->setFixtureRigProps(fxId_dlg, rp);
+        // Put back what live edits wrote (the plot items are rebuilt: fxItem
+        // is not to be touched after this).
+        edit.cancel();
         flushSceneCaches();
         return;
     }
 
-    // Commit position
-    QPointF newPos(xSpin->value() * fromDisp_fx * 1000.0, ySpin->value() * fromDisp_fx * 1000.0);
-    fxItem->setPos(m_graphicsView->realPositionToPixels(newPos.x(), newPos.y()));
-    fxItem->setRealPosition(newPos);
-    m_props->setFixturePosition(fxItem->fixtureID(), 0, 0,
-                                QVector3D(newPos.x(), newPos.y(), 0));
-
-    // Commit rotation
-    fxItem->setRotation(rotSpin->value());
-    m_props->setFixtureRotation(fxItem->fixtureID(), 0, 0,
-                                QVector3D(0, rotSpin->value(), 0));
-
-    // Commit gel color
-    fxItem->setGelColor(gelColor);
-    m_props->setFixtureGelColor(fxItem->fixtureID(), 0, 0, gelColor);
-    fxItem->slotUpdateValues();
-
-    // Stop the test source before committing (ensure clean DMX handoff)
+    // Everything is applied already; the name may still be in its field.
     testSrc.reset();
-
-    // Commit rig props — START from the EXISTING rig so studio-managed mounts
-    // (pipe / tower / riser / studio-frame + studioMount/Angle/groupLocal) are
-    // PRESERVED; this editor only overwrites the truss/deck + calibration fields.
-    FixtureRigProps newRp = m_props->fixtureRigProps(fxItem->fixtureID());
-    newRp.trussId       = trussCb->currentData().toUInt();
-    newRp.trussOffset   = float(offsetSpin->value() * fromDisp_fx);
-    newRp.mountingType  = static_cast<Truss::MountingType>(mountCb->currentData(Qt::UserRole).toInt());
-    newRp.trussMountSide = trussSideCb->currentData().toInt();
-    // The mount-constrained Orientation also sets the bar side (on-top/under/side).
-    { const int side = mountCb->currentData(Qt::UserRole + 1).toInt();
-      if (side >= 0) newRp.trussMountSide = side; }
-    // Across-truss position: Left/Right map to ± half the selected truss width
-    // (onto a chord); Centered = 0.
-    {
-        const int crossSel = trussCrossCb->currentData().toInt();
-        float halfW = 0.15f;   // fallback ≈ half a 12" truss
-        if (Truss *ct = m_props->truss(newRp.trussId))
-            halfW = ct->width() * 0.5f;
-        newRp.trussCross = float(crossSel) * halfW;
-    }
-    newRp.deckPlatformId = deckCb->currentData().toUInt();
-    newRp.deckHeightOffset = float(deckHeightSpin->value() * fromDisp_fx);
-    newRp.mountZOffset = float(heightOffSpin->value() * fromDisp_fx);
-    newRp.panZeroDir    = float(panZeroSpin->value());
-    newRp.panOffsetDeg  = float(panOffsetSpin->value());
-    newRp.tiltOffsetDeg = float(tiltOffsetSpin->value());
-    newRp.panInvert     = panInvertCb->isChecked();
-    newRp.tiltInvert    = tiltInvertCb->isChecked();
-    if (faceCbDetail)    newRp.studioMount = faceCbDetail->currentIndex();
-    if (angleSpinDetail) newRp.studioAngle = float(angleSpinDetail->value());
-    // Deck-mounting: default the fixture's Z to the platform top on first
-    // assignment so it "sits on" the deck (the editor height is an offset above).
-    m_props->setFixtureRigProps(fxItem->fixtureID(), newRp);
-    if (newRp.onDeck())
-        m_graphicsView->updateFixture(fxItem->fixtureID());
-
-    // Flush fader cache in any running scene that contains this fixture
-    // (either as a fixed target or inside a fixture group) so target-geometry
-    // recomputes with the new rig props on the next tick.
-    const quint32 fxId = fxItem->fixtureID();
-    foreach (Function *fn, m_doc->functions())
-    {
-        Scene *sc = qobject_cast<Scene *>(fn);
-        if (!sc || !sc->isRunning()) continue;
-
-        // Fixed channel values
-        for (const SceneValue &sv : sc->values())
-        {
-            if (sv.fxi == fxId) { sc->resetRuntime(); goto nextScene; }
-        }
-        // Fixed fixture targets (no baked values but fixture-level membership)
-        if (sc->fixtures().contains(fxId)) { sc->resetRuntime(); goto nextScene; }
-        // Dynamic group targets
-        {
-        foreach (quint32 gid, sc->fixtureGroups())
-        {
-            FixtureGroup *grp = m_doc->fixtureGroup(gid);
-            if (grp && grp->fixtureList().contains(fxId))
-            { sc->resetRuntime(); goto nextScene; }
-        }
-        }
-        nextScene:;
-    }
-
-    // Update bound state and snap to truss if binding changed
-    bool nowBound = newRp.trussId != Truss::invalidId();
-    fxItem->setBoundToTruss(nowBound);
-    if (nowBound && (rp.trussId != newRp.trussId || rp.trussOffset != newRp.trussOffset))
-    {
-        Truss *t = m_props->truss(newRp.trussId);
-        if (t)
-        {
-            QVector3D wp = t->positionAt(newRp.trussOffset);
-            QPointF tp(wp.x() * 1000.0, wp.y() * 1000.0);
-            // Centre the icon on the truss line (see MonitorGraphicsView::halfIcon).
-            const QPointF tpPx = m_graphicsView->realPositionToPixels(tp.x(), tp.y());
-            fxItem->setPos(tpPx.x() - fxItem->cellSize().width() / 2.0,
-                           tpPx.y() - fxItem->cellSize().height() / 2.0);
-            fxItem->setRealPosition(tp);
-            m_props->setFixturePosition(fxItem->fixtureID(), 0, 0,
-                                        QVector3D(tp.x(), tp.y(), 0));
-        }
-    }
-    else if (!nowBound)
-    {
-        fxItem->setEscapeMode(false);
-    }
-
+    applyName();
+    flushSceneCaches();
     m_doc->setModified();
+    edit.accept();
 }

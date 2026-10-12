@@ -44,6 +44,9 @@ Fixture::Fixture(QObject* parent)
     : QObject(parent)
     , m_id(Fixture::invalidId())
     , m_address(0)
+    , m_patched(true)
+    , m_addressClash(false)
+    , m_connection(Dmx)
     , m_crossUniverse(false)
     , m_channels(0)
     , m_fixtureDef(NULL)
@@ -621,6 +624,19 @@ ChannelModifier *Fixture::channelModifier(quint32 idx)
  * Channel info
  *********************************************************************/
 
+void Fixture::setPreviewValue(quint32 channel, uchar value)
+{
+    if (isPatched())
+        return;
+    {
+        QMutexLocker locker(&m_channelsInfoMutex);
+        if (int(channel) >= m_values.size() || uchar(m_values.at(int(channel))) == value)
+            return;
+        m_values[int(channel)] = char(value);
+    }
+    emit valuesChanged();
+}
+
 bool Fixture::setChannelValues(const QByteArray &values)
 {
     const int addr = address();
@@ -714,6 +730,11 @@ void Fixture::checkAlias(int chIndex, uchar value)
 void Fixture::setFixtureDefinition(QLCFixtureDef* fixtureDef,
                                    QLCFixtureMode* fixtureMode)
 {
+    // Given a definition: it is no longer standing in for a missing one.
+    m_unavailableManufacturer.clear();
+    m_unavailableModel.clear();
+    m_unavailableMode.clear();
+
     if (fixtureDef != NULL && fixtureMode != NULL)
     {
         int i, chNum;
@@ -821,6 +842,22 @@ QString Fixture::iconResource(bool svg) const
     }
 
     return QString("%1:/other.%2").arg(prefix).arg(ext);
+}
+
+QString Fixture::groupingManufacturer() const
+{
+    if (m_fixtureDef == NULL || m_fixtureDef->manufacturer().isEmpty())
+        return KXMLFixtureGeneric;
+    return m_fixtureDef->manufacturer();
+}
+
+QString Fixture::groupingModel() const
+{
+    if (m_fixtureDef == NULL || m_fixtureDef->model() == KXMLFixtureGeneric)
+        return QStringLiteral("Dimmer, %1 ch").arg(channels());
+    if (m_fixtureDef->model() == KXMLFixtureRGBPanel)
+        return QStringLiteral("RGB panel");
+    return m_fixtureDef->model();
 }
 
 QIcon Fixture::getIconFromType() const
@@ -1152,6 +1189,20 @@ bool Fixture::loader(QXmlStreamReader &root, Doc* doc)
             /* Success */
             result = true;
         }
+        else if (fxi->isPatched() && doc->fixture(fxi->id()) == NULL)
+        {
+            /* Its id is free, so what was refused is its ADDRESS: it overlaps
+               a fixture loaded before it. Deleting it took it out of every
+               group, scene and cue that used it, with nothing on screen to
+               say so. Keep it, unpatched, and say what it wanted. */
+            qWarning() << Q_FUNC_INFO << "Fixture" << fxi->name()
+                       << "overlaps another fixture's address; loaded unpatched";
+            fxi->setPatched(false);
+            fxi->setAddressClash(true);
+            result = doc->addFixture(fxi, fxi->id(), fxi->crossUniverse());
+            if (!result)
+                delete fxi;
+        }
         else
         {
             /* Doc is full */
@@ -1181,6 +1232,10 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
     quint32 id = Fixture::invalidId();
     quint32 universe = 0;
     quint32 address = 0;
+    bool patched = true;
+    Connection connection = Dmx;
+    QString ipAddress;
+    Transport transport = ArtNetTransport;
     quint32 channels = 0;
     quint32 width = 0, height = 0;
     QList<int> excludeList;
@@ -1228,6 +1283,28 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
         else if (xmlDoc.name() == KXMLFixtureUniverse)
         {
             universe = xmlDoc.readElementText().toInt();
+        }
+        else if (xmlDoc.name() == KXMLFixturePatched)
+        {
+            patched = (xmlDoc.readElementText() != KXMLQLCFalse);
+        }
+        else if (xmlDoc.name() == KXMLFixtureConnection)
+        {
+            connection = xmlDoc.readElementText() == QLatin1String("Network") ? Network : Dmx;
+        }
+        else if (xmlDoc.name() == KXMLFixtureIPAddress)
+        {
+            ipAddress = xmlDoc.readElementText();
+        }
+        else if (xmlDoc.name() == KXMLFixturePower)
+        {
+            PowerProfile pp;
+            pp.loadXML(xmlDoc);
+            m_powerProfile = pp;
+        }
+        else if (xmlDoc.name() == KXMLFixtureTransport)
+        {
+            transport = xmlDoc.readElementText() == QLatin1String("WLED") ? WledTransport : ArtNetTransport;
         }
         else if (xmlDoc.name() == KXMLFixtureCrossUniverse)
         {
@@ -1385,8 +1462,22 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
         setChannels(channels);
     }
 
+    /* Standing in for a definition that could not be found: remember what it
+       really is, so a save writes that back rather than "Generic". */
+    if (model != KXMLFixtureGeneric && model != KXMLFixtureRGBPanel
+        && (fixtureDef == NULL || fixtureMode == NULL || fixtureDef->model() == KXMLFixtureGeneric))
+    {
+        m_unavailableManufacturer = manufacturer;
+        m_unavailableModel = model;
+        m_unavailableMode = modeName;
+    }
+
     setAddress(address);
     setUniverse(universe);
+    setPatched(patched);
+    setConnection(connection);
+    setIPAddress(ipAddress);
+    setTransport(transport);
     setName(name);
     setExcludeFadeChannels(excludeList);
     setForcedHTPChannels(forcedHTP);
@@ -1405,6 +1496,16 @@ bool Fixture::saveXML(QXmlStreamWriter *doc) const
     /* Fixture Instance entry */
     doc->writeStartElement(KXMLFixture);
 
+    if (definitionUnavailable())
+    {
+        /* What it really is, though its definition was not to hand: the
+           generic dimmer standing in for it is never written over it. */
+        doc->writeTextElement(KXMLQLCFixtureDefManufacturer, m_unavailableManufacturer);
+        doc->writeTextElement(KXMLQLCFixtureDefModel, m_unavailableModel);
+        doc->writeTextElement(KXMLQLCFixtureMode, m_unavailableMode);
+    }
+    else
+    {
     /* Manufacturer */
     if (m_fixtureDef != NULL)
         doc->writeTextElement(KXMLQLCFixtureDefManufacturer, m_fixtureDef->manufacturer());
@@ -1422,6 +1523,7 @@ bool Fixture::saveXML(QXmlStreamWriter *doc) const
         doc->writeTextElement(KXMLQLCFixtureMode, m_fixtureMode->name());
     else
         doc->writeTextElement(KXMLQLCFixtureMode, KXMLFixtureGeneric);
+    }
 
     /* RGB Panel physical dimensions */
     if (m_fixtureDef != NULL && m_fixtureDef->model() == KXMLFixtureRGBPanel && m_fixtureMode != NULL)
@@ -1443,6 +1545,16 @@ bool Fixture::saveXML(QXmlStreamWriter *doc) const
         doc->writeTextElement(KXMLFixtureCrossUniverse, KXMLQLCTrue);
     /* Address */
     doc->writeTextElement(KXMLFixtureAddress, QString::number(address()));
+    /* Only what differs from the default is written, so a file with no
+       inventory fixtures and no network fixtures is byte-identical. */
+    if (!m_patched && !m_addressClash)   // a clash still wants its address
+        doc->writeTextElement(KXMLFixturePatched, KXMLQLCFalse);
+    if (m_connection == Network)
+        doc->writeTextElement(KXMLFixtureConnection, QStringLiteral("Network"));
+    if (!m_ipAddress.isEmpty())
+        doc->writeTextElement(KXMLFixtureIPAddress, m_ipAddress);
+    if (m_transport == WledTransport)
+        doc->writeTextElement(KXMLFixtureTransport, QStringLiteral("WLED"));
     /* Channel count */
     doc->writeTextElement(KXMLFixtureChannels, QString::number(channels()));
 
@@ -1499,8 +1611,19 @@ bool Fixture::saveXML(QXmlStreamWriter *doc) const
         }
     }
 
+    /* What it draws, and the most it may */
+    m_powerProfile.saveXML(doc);
+
     /* End the <Fixture> tag */
     doc->writeEndElement();
 
     return true;
+}
+
+void Fixture::setPowerProfile(const PowerProfile &profile)
+{
+    if (profile == m_powerProfile)
+        return;
+    m_powerProfile = profile;
+    emit changed(m_id);
 }

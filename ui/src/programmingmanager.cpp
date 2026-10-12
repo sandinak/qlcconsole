@@ -34,7 +34,9 @@
 #include <algorithm>
 
 #include <QDebug>
+#include "speedmasterspanel.h"
 #include "programmingmanager.h"
+#include "helpbrowser.h"
 #include "programmercontroller.h"
 #include "functionstreewidget.h"
 #include "fixturegroupsource.h"
@@ -88,6 +90,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     , m_currentScene(Function::invalidId())
     , m_canvasFunction(Function::invalidId())
     , m_previewFunction(Function::invalidId())
+    , m_trialScene(Function::invalidId())
     , m_operateFunction(Function::invalidId())
     , m_clipboardFunction(Function::invalidId())
     , m_clipboardPalette(QLCPalette::invalidId())
@@ -263,6 +266,15 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
         m_bpmBtn->setToolTip(tr("Enable QLC+ internal beat generator (drives _beat/_bpm in generators)"));
         toolbar->addWidget(m_bpmBtn);
 
+        QPushButton *mastersBtn = new QPushButton(tr("Masters"), this);
+        mastersBtn->setObjectName(QStringLiteral("speedMastersButton"));
+        mastersBtn->setToolTip(tr("The four speed masters: a tempo, tap, rate and pause each, "
+                                  "for effects, looks and chases to run on"));
+        connect(mastersBtn, &QPushButton::clicked, this, [this]() {
+            SpeedMastersPanel::open(m_doc, this);
+        });
+        toolbar->addWidget(mastersBtn);
+
         toolbar->addWidget(new QLabel(tr("Jog:"), this));
 
         m_speedSpin = new QSpinBox(this);
@@ -421,15 +433,53 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     m_canvasTitle = new QLabel(this);
     m_canvasTitle->setStyleSheet("font-weight: bold;");
     m_canvasTitle->setWordWrap(true);
-    m_canvasLayout->addWidget(m_canvasTitle);
-    m_canvasPlaceholder = new QLabel(
-        tr("Select or create a scene on the left, then drag palettes, "
-           "fixture groups and fixtures from the right onto it. No "
-           "palettes yet? Right-click the Palettes tab on the right to "
-           "create your first one."), this);
-    m_canvasPlaceholder->setWordWrap(true);
-    m_canvasPlaceholder->setAlignment(Qt::AlignCenter);
+    {
+        QHBoxLayout *titleRow = new QHBoxLayout();
+        titleRow->addWidget(m_canvasTitle, 1);
+        m_groupBackButton = new QPushButton(this);
+        m_groupBackButton->setToolTip(tr("Back to the scene that was open before this group"));
+        m_groupBackButton->hide();
+        connect(m_groupBackButton, &QPushButton::clicked, this, [this]() {
+            const quint32 sid = m_groupReturnScene;
+            if (m_doc->function(sid) != NULL)
+                loadCanvas(sid);
+        });
+        titleRow->addWidget(m_groupBackButton);
+        m_canvasLayout->addLayout(titleRow);
+    }
+    /* The empty state says ONE line. The full explanation lives behind the
+       button beside it, and shows itself once on a first run.
+     *
+       It used to be the whole paragraph, permanently, stretched across the
+       canvas -- four lines of text that a user reads once and then looks past
+       forever, in the middle of the panel they actually work in. Instructions
+       that have been read are just furniture. */
+    m_canvasPlaceholder = new QWidget(this);
+    QVBoxLayout *phl = new QVBoxLayout(m_canvasPlaceholder);
+    phl->addStretch();
+    m_canvasHint = new QLabel(tr("Select or create a scene on the left to begin."),
+                              m_canvasPlaceholder);
+    m_canvasHint->setWordWrap(true);
+    m_canvasHint->setAlignment(Qt::AlignCenter);
+    phl->addWidget(m_canvasHint);
+    QPushButton *guideBtn = new QPushButton(tr("How this works"), m_canvasPlaceholder);
+    guideBtn->setFlat(true);
+    guideBtn->setCursor(Qt::PointingHandCursor);
+    connect(guideBtn, &QPushButton::clicked,
+            this, [this]() { showProgrammingGuide(); });
+    QHBoxLayout *bl = new QHBoxLayout;
+    bl->addStretch();
+    bl->addWidget(guideBtn);
+    bl->addStretch();
+    phl->addLayout(bl);
+    phl->addStretch();
     m_canvasLayout->addWidget(m_canvasPlaceholder, 1);
+
+    /* Once, on a first run -- queued, so it lands after the window is up rather
+       than during construction. */
+    if (takeFirstRunGuideFlag())
+        QMetaObject::invokeMethod(this, [this]() { showProgrammingGuide(); },
+                                  Qt::QueuedConnection);
     // Inline look editor pinned to the bottom of the center panel. It is NOT
     // scrolled: it always renders fully at its preferred height (Fixed
     // vertical), and the canvas above (stretch) shrinks to make room.
@@ -537,8 +587,16 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     srcCol->addWidget(sourceTab, 3);
 
     srcCol->addWidget(new QLabel(tr("Fixtures & groups"), sourcePanel));
+    // Find a group or fixture by name in a long list (as Layers does).
+    QLineEdit *fixGroupFilter = new QLineEdit(sourcePanel);
+    fixGroupFilter->setObjectName(QStringLiteral("fixGroupFilter"));
+    fixGroupFilter->setPlaceholderText(tr("Search fixtures & groups…"));
+    fixGroupFilter->setClearButtonEnabled(true);
+    srcCol->addWidget(fixGroupFilter);
     m_fixGroupSource = new FixtureGroupSource(m_doc, sourcePanel);
     srcCol->addWidget(m_fixGroupSource, 2);
+    connect(fixGroupFilter, &QLineEdit::textChanged,
+            m_fixGroupSource, &FixtureGroupSource::setFilterText);
     connect(m_fixGroupSource, &QTreeWidget::itemSelectionChanged,
             this, &ProgrammingManager::slotFixGroupSourceSelectionChanged);
     // Double-click a group in the source tree -> visualize/edit its head layout
@@ -608,6 +666,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     connect(m_doc, &Doc::cleared, this, [this]() {
         m_currentScene   = Function::invalidId();
         m_canvasFunction = Function::invalidId();
+        m_trialScene     = Function::invalidId();   // ids are reused by the next show
         clearEditors();
         m_funcTree->updateTree();
         m_memberContainer = Function::invalidId();
@@ -623,9 +682,11 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
 
     connect(m_doc, SIGNAL(modeChanged(Doc::Mode)), this, SLOT(slotModeChanged()));
     connect(m_lookEditor, SIGNAL(paletteChanged(quint32)),
-            this, SLOT(slotLookEdited()));
+            this, SLOT(slotLookEdited(quint32)));
     connect(m_lookEditor, &LookEditor::lookFocusChanged,
             this, &ProgrammingManager::currentPaletteIdChanged);
+    connect(m_lookEditor, &LookEditor::lookFocusChanged,
+            this, &ProgrammingManager::updateTrialPalette);
     // Lightweight live-value change (effect params, etc.) — only refresh the
     // DMX preview, do NOT rebuild the look list or palette tree.  This avoids
     // a reload() → lookSelected → setPalette → rebuildEffectDynWidget cycle
@@ -703,6 +764,7 @@ void ProgrammingManager::loadCanvas(quint32 sceneId)
     if (sceneId == m_currentScene && m_canvas != NULL)
         return;
 
+    m_groupBackButton->hide();
     stopPreview();
     m_currentScene = sceneId;
     m_canvasFunction = sceneId;
@@ -724,11 +786,7 @@ void ProgrammingManager::loadCanvas(quint32 sceneId)
         m_doc->setFocusedScene(Function::invalidId());
         if (ProgrammerController *pc = m_doc->programmer())
             pc->seedStageAimFromScene(Function::invalidId());
-        m_canvasPlaceholder->setText(
-            tr("Select or create a scene on the left, then drag palettes, "
-               "fixture groups and fixtures from the right onto it. No "
-               "palettes yet? Right-click the Palettes tab on the right to "
-               "create your first one."));
+        m_canvasHint->setText(tr("Select or create a scene on the left to begin."));
         m_canvasPlaceholder->show();
         updateTitle();
         return;
@@ -800,6 +858,7 @@ void ProgrammingManager::loadFunctionEditor(Function *f)
     if (f == NULL)
         return;
 
+    m_groupBackButton->hide();
     stopPreview();
     m_currentScene = Function::invalidId();
     resetUndoFor(Function::invalidId());  // scene undo doesn't apply to func editors
@@ -853,7 +912,7 @@ void ProgrammingManager::loadFunctionEditor(Function *f)
 
     if (ed == NULL)
     {
-        m_canvasPlaceholder->setText(
+        m_canvasHint->setText(
             tr("\"%1\" (%2) — open it in the Functions tab to edit.")
             .arg(f->name()).arg(Function::typeToString(f->type())));
         m_canvasPlaceholder->show();
@@ -877,6 +936,11 @@ void ProgrammingManager::loadGroupEditor(quint32 groupId)
     FixtureGroup *grp = m_doc->fixtureGroup(groupId);
     if (grp == NULL)
         return;
+
+    // Remember the scene to go back to (not another group: the scene before).
+    if (m_currentScene != Function::invalidId())
+        m_groupReturnScene = m_currentScene;
+    Function *back = m_doc->function(m_groupReturnScene);
 
     stopPreview();
     m_currentScene = Function::invalidId();
@@ -904,6 +968,13 @@ void ProgrammingManager::loadGroupEditor(quint32 groupId)
 
     m_canvasTitle->setText(tr("Fixture group: %1   —   %n head(s)", "", grp->headList().count())
                            .arg(grp->name()));
+    if (back != NULL)
+    {
+        m_groupBackButton->setText(tr("← Back to %1").arg(back->name()));
+        m_groupBackButton->show();
+    }
+    else
+        m_groupBackButton->hide();
 }
 
 void ProgrammingManager::updateTitle()
@@ -963,7 +1034,7 @@ bool ProgrammingManager::containerHas(quint32 containerId, quint32 fid,
     return false;
 }
 
-void ProgrammingManager::slotLookEdited()
+void ProgrammingManager::slotLookEdited(quint32 paletteId)
 {
     // A look's value changed (including name edits) in the editor:
     // refresh the preview and update any tree/canvas items that show the name.
@@ -973,6 +1044,63 @@ void ProgrammingManager::slotLookEdited()
     // Update the canvas's looks list (tiles show palette name).
     if (m_canvas)
         m_canvas->reload();
+
+    /* "Didn't change colour when colour was changed in program from white to
+       blue." This refreshed the Programming tab's OWN preview, but nothing
+       here ever told the rest of the app the SCENE changed -- a palette is
+       not a Function, so editing one is invisible to anything listening for
+       Doc::functionChanged(), which is exactly what the rig view (and
+       anything else caching a resolved look, e.g. StructureStudioView) waits
+       for. Every scene that actually uses this palette gets told, since one
+       palette can be shared across several looks. */
+    foreach (Function *f, m_doc->functions())
+    {
+        Scene *s = qobject_cast<Scene*>(f);
+        if (s != nullptr && (s->palettes().contains(paletteId)
+                             || s->trialPalette() == paletteId))
+            m_doc->notifyFunctionChanged(s->id());
+    }
+}
+
+void ProgrammingManager::updateTrialPalette(quint32 paletteId)
+{
+    /* "I just tried a new pan/tilt ... moved it around and the rig isn't
+       following." A palette only reaches the rig through a look that plays
+       it, and a new one is in none -- so the pad moved a value nothing sent.
+       While it is being edited, it is tried on the look on the canvas: played
+       after the look's own palettes, never saved into it. */
+    Scene *old = qobject_cast<Scene*>(m_doc->function(m_trialScene));
+    if (old != nullptr)
+    {
+        old->setTrialPalette(QLCPalette::invalidId());
+        m_doc->notifyFunctionChanged(old->id());
+    }
+    m_trialScene = Function::invalidId();
+
+    QLCPalette *p = m_doc->palette(paletteId);
+    Scene *scene = qobject_cast<Scene*>(m_doc->function(m_currentScene));
+    QString note;
+    if (p != nullptr && p->type() != QLCPalette::Effect)
+    {
+        if (scene == nullptr)
+            note = tr("Not in a look — open one and drag this onto it to see it on the rig.");
+        else if (!scene->palettes().contains(paletteId))
+        {
+            scene->setTrialPalette(paletteId);
+            m_trialScene = scene->id();
+            m_doc->notifyFunctionChanged(scene->id());
+            note = tr("Trying it on “%1” — not saved into it. Drag it onto the look to keep it.")
+                       .arg(scene->name());
+        }
+    }
+    m_lookEditor->setTrialNote(note);
+    // Re-play only the look on the canvas: a look the canvas has left was
+    // already stopped, and refreshPreview() STARTS whatever is on the canvas
+    // (never wanted for, say, a Show that was just opened).
+    const bool touchesCanvas = (old != nullptr && old->id() == m_currentScene)
+                               || m_trialScene != Function::invalidId();
+    if (touchesCanvas && m_currentScene == m_canvasFunction)
+        refreshPreview();
 }
 
 bool ProgrammingManager::organizeEffectPalettes()
@@ -994,10 +1122,15 @@ bool ProgrammingManager::organizeEffectPalettes()
         if (!(norm.isEmpty() || norm == QLatin1String("Palettes/Effect")))
             continue;
 
-        const QString base = scache->nameFromPath(p->scriptPath());
+        const QString base = EffectScriptCache::portableName(p->scriptPath());
         const EffectScriptCache::ScriptMeta meta = scache->scriptMeta(base);
-        const QString engine = meta.displayName.isEmpty() ? base : meta.displayName;
-        const QString cat    = EffectScriptCache::categoryForTypes(meta.fixtureTypes);
+        // A WLED look files under WLED, by WLED's name for it -- as the
+        // effect browser lists it -- not under its port's (or stand-in's).
+        const bool wled = !p->wledEffect().isEmpty();
+        const QString engine = wled ? p->wledEffect()
+                                    : meta.displayName.isEmpty() ? base : meta.displayName;
+        const QString cat    = wled ? QStringLiteral("WLED")
+                                    : EffectScriptCache::categoryForTypes(meta.fixtureTypes);
         if (engine.isEmpty() || cat.isEmpty())
             continue;
 
@@ -1077,6 +1210,12 @@ void ProgrammingManager::slotPaletteDoubleClicked(QTreeWidgetItem *item)
     const quint32 pid = m_paletteTree->itemPaletteId(item);
     if (pid != QLCPalette::invalidId())
     {
+        /* From a fixture group's layout view: that view fills the canvas, and
+           the look editor opened under it had no room ("clicked back on an
+           effect .. I can't get back to the effect"). Go back to the scene
+           first, then open the look on it. */
+        if (!m_groupBackButton->isHidden() && m_doc->function(m_groupReturnScene) != NULL)
+            loadCanvas(m_groupReturnScene);
         m_lookEditor->setPalette(pid);
         showLookEditorPanel(); // pivot from the DMX console if it's showing
     }
@@ -1116,7 +1255,16 @@ void ProgrammingManager::slotFixGroupSourceSelectionChanged()
 
 void ProgrammingManager::slotFixturesSelected(const QList<quint32> &fixtureIds)
 {
+    /* A look is being edited and this is the same selection, re-announced by
+       the canvas rebuilding after that very edit (every colour slider tick
+       reloads it): keep the look editor. Swapping in the fixtures' faders
+       here threw the user out of the colour picker on every click ("it drops
+       out of the color picker"). A real change of selection still swaps. */
+    if (!m_lookEditor->isHidden() && fixtureIds == m_selectedFixtures
+        && m_currentScene == m_selectedFixturesScene)
+        return;
     m_selectedFixtures = fixtureIds;
+    m_selectedFixturesScene = m_currentScene;
     // Feed selection to ProgrammerController so Highlight/Followspot effects
     // know which fixtures to steer.
     if (ProgrammerController *pc = m_doc->programmer())
@@ -1467,6 +1615,9 @@ void ProgrammingManager::refreshPreview()
 
 void ProgrammingManager::slotCanvasModified()
 {
+    // Dropping the palette being tried on INTO the look ends the trial.
+    if (m_trialScene != Function::invalidId() || !m_lookEditor->trialNote().isEmpty())
+        updateTrialPalette(m_lookEditor->paletteId());
     // Record the pre-edit state for Ctrl+Z (the baseline still holds the state
     // from before this edit; push it and re-capture).
     pushUndoSnapshot();
@@ -2569,7 +2720,7 @@ void ProgrammingManager::slotSnapshotLive()
         QList<Universe*> universes = m_doc->inputOutputMap()->claimUniverses();
         foreach (Fixture *fxi, m_doc->fixtures())
         {
-            if (fxi == NULL)
+            if (fxi == NULL || !fxi->isPatched())
                 continue;
             const quint32 uni = fxi->universe();
             if (uni >= quint32(universes.size()))
@@ -2796,7 +2947,6 @@ void ProgrammingManager::slotBpmToggled(bool on)
         ioMap->setBeatGeneratorType(InputOutputMap::Disabled);
         m_bpmSpin->setEnabled(false);
         m_tapBtn->setEnabled(false);
-        m_tapActive = false;
     }
 }
 
@@ -2809,27 +2959,78 @@ void ProgrammingManager::slotBpmChanged(int bpm)
 
 void ProgrammingManager::slotTapBeat()
 {
-    if (!m_tapActive)
-    {
-        // First tap — just start the clock
-        m_tapTimer.start();
-        m_tapActive = true;
+    // The tempo from the last few taps, and the beat on this one -- every
+    // effect on the clock lands on it (MasterTimer::tap()).
+    InputOutputMap *ioMap = m_doc->inputOutputMap();
+    if (!ioMap || !m_bpmBtn->isChecked())
         return;
-    }
+    const double bpm = ioMap->tapBeat();
+    const QSignalBlocker block(m_bpmSpin);
+    m_bpmSpin->setValue(qRound(bpm));
+}
 
-    qint64 elapsed = m_tapTimer.elapsed();
-    m_tapTimer.restart();
+/* True exactly once, ever: the first time anybody asks. Consuming the flag as
+ * it answers is the whole point -- a first-run hint that forgets to record
+ * itself is a hint that nags on every launch, and that failure is invisible to
+ * whoever wrote it because their own flag is already set. */
+bool ProgrammingManager::takeFirstRunGuideFlag()
+{
+    static const QString key = QStringLiteral("programming/guideSeen");
+    QSettings s;
+    if (s.value(key, false).toBool())
+        return false;
+    s.setValue(key, true);
+    return true;
+}
 
-    if (elapsed < 200 || elapsed > 3000)
-    {
-        // Outside 20–300 BPM range; treat as a fresh first tap
-        m_tapActive = false;
-        return;
-    }
+/* The full explanation, on demand.
+ *
+ * Shown once on a first run and thereafter only when asked for, so the panel is
+ * not permanently carrying text nobody is reading any more. */
+void ProgrammingManager::showProgrammingGuide()
+{
+    showGuide(this);
+}
 
-    int bpm = qRound(60000.0 / (double)elapsed);
-    bpm = qBound(20, bpm, 400);
-    m_bpmSpin->setValue(bpm);  // triggers slotBpmChanged via valueChanged
+void ProgrammingManager::showGuide(QWidget *parent)
+{
+    QMessageBox box(parent);
+    box.setWindowTitle(tr("Building a look"));
+    box.setIcon(QMessageBox::NoIcon);
+    box.setTextFormat(Qt::RichText);
+    box.setText(tr(
+        "<b>Scenes hold looks. Looks are made of palettes.</b>"
+        "<ul>"
+        "<li>Pick or create a <b>scene</b> on the left.</li>"
+        "<li>Drag <b>palettes</b> from the right onto it to build the look — "
+        "a colour, a dimmer level, a position, an effect.</li>"
+        "<li>Drag <b>fixture groups</b> on as targets to follow their "
+        "membership, or individual <b>fixtures</b> to fix them in place.</li>"
+        "<li>No palettes yet? Right-click the <b>Palettes</b> tab on the right "
+        "to create your first one.</li>"
+        "<li>Long list? <b>Search fixtures &amp; groups</b> above it narrows to "
+        "what matches.</li>"
+        "</ul>"
+        "<p><b>Looks and Targets.</b> Every look in a scene applies to every "
+        "target. Drop <b>palettes</b> into Looks; drop <b>fixture groups</b> "
+        "into Targets to follow their membership as it changes, or individual "
+        "<b>fixtures</b> to pin them.</p>"
+        "<p><b>Effects.</b> In an effect look, pick from the <b>browser</b>: "
+        "search, or a category tab, each effect running on a strip of lights "
+        "beside its name. The <b>WLED</b> tab is WLED's own effects: WLED "
+        "fixtures run them themselves; other fixtures run the console's version "
+        "where there is one.</p>"
+        "<p><b>Transitions.</b> <i>In</i> and <i>Out</i> at the top of the scene "
+        "set how the whole look arrives and leaves — a wipe across the stage, "
+        "from the centre, a dissolve, along each bar — instead of the scene's "
+        "fade. <i>Edge</i> is how soft the line is.</p>"
+        "<p>Reopen this any time from <i>How this works</i>, or press F1 for "
+        "the whole guide.</p>"));
+    QPushButton *more = box.addButton(tr("Open the Full Guide"), QMessageBox::HelpRole);
+    box.addButton(QMessageBox::Ok);
+    box.exec();
+    if (box.clickedButton() == more)
+        HelpBrowser::open(QStringLiteral("programming-tab.md"));
 }
 
 void ProgrammingManager::slotButtonAction(const QString &action)

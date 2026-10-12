@@ -74,12 +74,19 @@ protected:
     void dragEnterEvent(QDragEnterEvent *event) override;
     void dragMoveEvent(QDragMoveEvent *event) override;
     void dropEvent(QDropEvent *event) override;
+    /** Place just-dropped looks where they were aimed -- and, failing that,
+     *  as a BASE look rather than inside whatever effect happens to be
+     *  last. Order decides nesting here, so appending is not neutral. */
+    void placeDroppedLooks(const QList<quint32> &pids, const QPoint &dropPos);
     /** Catch the look-list's internal drag-drop drop so we can sync the palette
      *  order afterwards — QTreeWidget's internal move emits rowsRemoved/Inserted,
      *  not rowsMoved, so we can't rely on a model signal for this. */
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private slots:
+    /** Re-check what the Aim looks can reach after the rig or a target moved;
+     *  coalesced, and rebuilds only if the answer changed. */
+    void scheduleReachCheck();
     void slotRemoveTarget();
     void slotRemoveLook();
     void slotMoveLookUp();
@@ -120,11 +127,19 @@ private:
     void reconcileAfterPaletteApply();
 
 private:
+    /** Heads the scene's Aim looks point at a target they cannot reach:
+     *  fixture id -> the names of those targets. */
+    QHash<quint32, QStringList> headsThatCannotReach() const;
+
     Scene *m_scene;
     Doc *m_doc;
     bool m_includeFixtureTargets;
+    QHash<quint32, QStringList> m_cannotReach;   //!< as shown by the last reload()
+    bool m_reachCheckPending = false;
+    bool m_nameReloadPending = false;   ///< a fixed target was renamed
 
     QLabel *m_targetsLabel;     //!< "Targets (N fixtures)"
+    QLabel *m_unpatchedNote;    //!< some targets are in the inventory: no DMX
     QComboBox *m_scopeCombo;    //!< declared look scope — see Scene::LookScope
     QTreeWidget *m_targetList;  //!< groups + fixtures grouped by type
     QTreeWidget *m_lookList;    //!< Look | In | Out (In/Out editable per look)

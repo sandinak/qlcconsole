@@ -54,7 +54,7 @@ HighlightEffect::buildEntries(const QList<quint32>& fixtureIds) const
     for (quint32 fid : fixtureIds)
     {
         Fixture *fxi = m_doc->fixture(fid);
-        if (!fxi || !fxi->fixtureMode())
+        if (!fxi || !fxi->fixtureMode() || !fxi->isPatched())
             continue;
 
         FixEntry entry;

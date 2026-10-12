@@ -36,6 +36,9 @@ private slots:
     void cueStack();
     void resetUniverse();
     void xml();
+    /** "selecting different WLED isn't changing the fixtures" -- what the
+     *  desk holds is said in the footer, and Release lets it go. */
+    void heldChannelsAreInTheFooterUntilReleased();
 
 private:
     Doc* m_doc;

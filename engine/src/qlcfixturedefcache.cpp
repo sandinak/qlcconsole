@@ -30,6 +30,11 @@
 #endif
 
 #include "qlcfixturedefcache.h"
+#include <QFileInfo>
+#include <QRegularExpression>
+#include <QStandardPaths>
+#include "qlcfixturemode.h"
+#include "qlccapability.h"
 #include "avolitesd4parser.h"
 #include "qlcfixturedef.h"
 #include "qlcconfig.h"
@@ -126,8 +131,41 @@ bool QLCFixtureDefCache::addFixtureDef(QLCFixtureDef* fixtureDef)
     }
     else
     {
-        qWarning() << Q_FUNC_INFO << "Cache already contains"
-                   << fixtureDef->name();
+        /* The user's folder is read first, so an included definition of the
+           same fixture arrives second and is set aside -- say so on the one
+           that is used. */
+        foreach (QLCFixtureDef *existing, m_defs)
+        {
+            if (existing->manufacturer() != fixtureDef->manufacturer()
+                || existing->model() != fixtureDef->model())
+                continue;
+            if (fixtureDef->source() == QLCFixtureDef::Included
+                && existing->source() == QLCFixtureDef::Local)
+                existing->setOverridesIncluded(true);
+
+            Duplicate d;
+            d.kept = existing->definitionSourceFile();
+            d.ignored = fixtureDef->definitionSourceFile();
+            d.keptIsLocal = existing->source() == QLCFixtureDef::Local;
+            d.ignoredIsLocal = fixtureDef->source() == QLCFixtureDef::Local;
+            if (d.keptIsLocal && d.ignoredIsLocal)
+            {
+                QFile a(d.kept), b(d.ignored);
+                d.identical = a.open(QIODevice::ReadOnly) && b.open(QIODevice::ReadOnly)
+                              && a.readAll() == b.readAll();
+            }
+            m_duplicates << d;
+
+            /* A local definition replacing an included one is how the library
+               is customised: not worth a warning. Two local files for one
+               fixture are, and the footer lists them. */
+            if (d.keptIsLocal && d.ignoredIsLocal)
+                qWarning() << Q_FUNC_INFO << "Two local definitions of" << fixtureDef->name()
+                           << "- using" << d.kept << "not" << d.ignored;
+            else
+                qDebug() << Q_FUNC_INFO << fixtureDef->name() << "- using" << d.kept;
+            break;
+        }
         return false;
     }
 }
@@ -173,6 +211,25 @@ bool QLCFixtureDefCache::reloadFixtureDef(QLCFixtureDef *fixtureDef)
     return true;
 }
 
+bool QLCFixtureDefCache::reloadPhysical(QLCFixtureDef *fixtureDef)
+{
+    if (fixtureDef == NULL || fixtureDef->definitionSourceFile().isEmpty())
+        return false;
+
+    QLCFixtureDef reloaded;
+    if (reloaded.loadXML(fixtureDef->definitionSourceFile()) != QFile::NoError)
+        return false;
+
+    fixtureDef->setPhysical(reloaded.physical());
+    foreach (QLCFixtureMode *mode, fixtureDef->modes())
+    {
+        QLCFixtureMode *fresh = reloaded.mode(mode->name());
+        if (fresh != NULL)
+            mode->setPhysical(fresh->physical());
+    }
+    return true;
+}
+
 bool QLCFixtureDefCache::reloadOrAddFixtureDef(QLCFixtureDef *fixtureDef)
 {
     // check upon bundled definitions
@@ -203,11 +260,19 @@ bool QLCFixtureDefCache::load(const QDir& dir)
     if (dir.exists() == false || dir.isReadable() == false)
         return false;
 
-    /* Attempt to read all specified files from the given directory */
-    QStringListIterator it(dir.entryList());
+    /* Attempt to read all specified files from the given directory --
+       newest first, so of two files for the same fixture the one edited
+       last is the one used (it was alphabetical: "X 2.qxf" beat "X.qxf"
+       whichever was current). */
+    QStringListIterator it(dir.entryList(QDir::Files | QDir::Readable, QDir::Time));
     while (it.hasNext() == true)
     {
         QString path(dir.absoluteFilePath(it.next()));
+        if (QLCFile::isOnlineOnly(path))   // in cloud storage, not on this machine: do not wait for it
+        {
+            QLCFile::noteSkippedOnlineOnly(path);
+            continue;
+        }
 
         if (path.toLower().endsWith(KExtFixture) == true)
             loadQXF(path, true);
@@ -363,6 +428,11 @@ bool QLCFixtureDefCache::loadMap(const QDir &dir)
     while (it.hasNext() == true)
     {
         QString path(dir.absoluteFilePath(it.next()));
+        if (QLCFile::isOnlineOnly(path))   // in cloud storage, not on this machine: do not wait for it
+        {
+            QLCFile::noteSkippedOnlineOnly(path);
+            continue;
+        }
         if (definitionPaths.contains(path))
             continue;
 
@@ -399,6 +469,66 @@ QDir QLCFixtureDefCache::userDefinitionDirectory()
     return QLCFile::userDirectory(QString(USERFIXTUREDIR), QString(FIXTUREDIR), filters);
 }
 
+QDir QLCFixtureDefCache::showCacheDirectory()
+{
+    /* Beside the user folders -- unless they are in cloud storage, which is
+       the very thing this is for not depending on: then the system cache. */
+    QDir dir(userDefinitionDirectory());
+    dir.cdUp();
+    QString base = dir.absolutePath();
+    const QString real = QFileInfo(base).canonicalFilePath();
+    if (real.isEmpty() || real.contains(QLatin1String("/CloudStorage/")))
+        base = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+    QDir cache(base + QStringLiteral("/ShowCache/Fixtures"));
+    if (!cache.exists())
+        cache.mkpath(QStringLiteral("."));
+    return cache;
+}
+
+QString QLCFixtureDefCache::showCacheFile(const QString &manufacturer, const QString &model)
+{
+    QString name = manufacturer + QLatin1Char('-') + model;
+    static const QRegularExpression unsafe(QStringLiteral("[^A-Za-z0-9._+-]+"));
+    name.replace(unsafe, QStringLiteral("-"));
+    return showCacheDirectory().absoluteFilePath(name + QString(KExtFixture));
+}
+
+bool QLCFixtureDefCache::cacheForShows(const QLCFixtureDef *def) const
+{
+    if (def == nullptr || def->source() == QLCFixtureDef::Included
+        || def->model() == QLatin1String("Generic"))
+        return false;
+    const QString from = def->definitionSourceFile();
+    const QString to = showCacheFile(def->manufacturer(), def->model());
+    if (from.isEmpty() || QFileInfo(from).absoluteFilePath() == QFileInfo(to).absoluteFilePath())
+        return QFile::exists(to);
+    if (QLCFile::isOnlineOnly(from))
+        return QFile::exists(to);           // not here to copy: keep what the cache has
+    QFile src(from);
+    if (!src.open(QIODevice::ReadOnly))
+        return QFile::exists(to);
+    const QByteArray bytes = src.readAll();
+    QFile old(to);
+    if (old.open(QIODevice::ReadOnly) && old.readAll() == bytes)
+        return true;                        // already the same
+    old.close();
+    QFile dst(to + QStringLiteral(".part"));
+    if (!dst.open(QIODevice::WriteOnly) || dst.write(bytes) != bytes.size())
+        return QFile::exists(to);
+    dst.close();
+    QFile::remove(to);
+    return QFile::rename(to + QStringLiteral(".part"), to);
+}
+
+bool QLCFixtureDefCache::loadFromShowCache(const QString &manufacturer, const QString &model)
+{
+    const QString path = showCacheFile(manufacturer, model);
+    if (!QFile::exists(path))
+        return false;
+    loadQXF(path, true);
+    return fixtureDef(manufacturer, model) != nullptr;
+}
+
 bool QLCFixtureDefCache::loadQXF(const QString& path, bool isUser)
 {
     QLCFixtureDef *fxi = new QLCFixtureDef();
@@ -407,6 +537,14 @@ bool QLCFixtureDefCache::loadQXF(const QString& path, bool isUser)
     QFile::FileError error = fxi->loadXML(path);
     if (error == QFile::NoError)
     {
+        m_failedDefinitions.remove(path);
+        int unnamed = 0;
+        foreach (const QLCChannel *ch, fxi->channels())
+            foreach (const QLCCapability *cap, ch->capabilities())
+                if (cap->name().trimmed().isEmpty())
+                    ++unnamed;
+        if (unnamed > 0)
+            qWarning() << path << ":" << unnamed << "capabilities have no description";
         fxi->setIsUser(isUser);
         fxi->setDefinitionSourceFile(path);
         fxi->setLoaded(true);
@@ -420,6 +558,7 @@ bool QLCFixtureDefCache::loadQXF(const QString& path, bool isUser)
     {
         qWarning() << Q_FUNC_INFO << "Fixture definition loading from"
                    << path << "failed:" << QLCFile::errorString(error);
+        m_failedDefinitions.insert(path, QLCFile::errorString(error));
         delete fxi;
         fxi = NULL;
         return false;

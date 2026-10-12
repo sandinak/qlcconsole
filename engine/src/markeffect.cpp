@@ -86,7 +86,7 @@ void MarkEffect::rebuild()
          it != m_marked.constEnd(); ++it)
     {
         Fixture *fxi = m_doc->fixture(it.key());
-        if (fxi == NULL)
+        if (fxi == NULL || !fxi->isPatched())
             continue;
 
         FixEntry entry;

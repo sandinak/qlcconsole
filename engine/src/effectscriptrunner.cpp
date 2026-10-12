@@ -196,9 +196,17 @@ void EffectScriptRunner::createInstancesForScene(quint32 sceneId)
         if (!inst->isValid())
         {
             qWarning() << "[EffectScriptRunner] instance invalid for palette" << pid;
+            const QString why = inst->error();
             delete inst;
+            if (m_failures.value(pid) != why)
+            {
+                m_failures.insert(pid, why);
+                emit failuresChanged();
+            }
             continue;
         }
+        if (m_failures.remove(pid) > 0)
+            emit failuresChanged();
 
         {
             QMutexLocker locker(&m_instanceMutex);
@@ -264,7 +272,13 @@ void EffectScriptRunner::destroyInstancesForScene(quint32 sceneId)
             // fade completes. Persistence takes precedence (parked mid-flight).
             int fadeOutMs = -1;
             if (Scene *sc = qobject_cast<Scene*>(m_doc->function(sceneId)))
+            {
                 fadeOutMs = sc->paletteFadeOut(inst->effectPaletteId());
+                // Leaving by a transition: the effect leaves by it too, cell
+                // by cell (EffectInstance::envelopeFor()), so it runs on for it.
+                if (sc->transitionOut().isActive() && sc->tempoType() != Function::Beats)
+                    fadeOutMs = qMax(fadeOutMs, int(sc->transitionOut().time));
+            }
             const bool persistent = (pal != nullptr && pal->persistent());
             if (!persistent && fadeOutMs > 0 && !inst->isFadingOut())
             {
@@ -673,10 +687,14 @@ void EffectScriptRunner::writeDMX(MasterTimer *timer, QList<Universe*> universes
     // Effect scripts write in both modes — live in Operate, and on the previewed
     // scene in Edit (so the joystick can fly the beam while building).
 
-    // Clear all faders so channels from the previous tick don't linger when
-    // the effect stops writing them (e.g. fixture removed from scene).
-    for (auto &fader : m_faders)
-        if (!fader.isNull()) fader->removeAll();
+    // Each tick's channels REPLACE the last tick's, so a channel the effect
+    // stops writing (e.g. fixture removed from scene) doesn't linger. Built per
+    // universe here and swapped in whole below: universes run processFaders()
+    // on their own threads, and emptying the fader first left a window where
+    // one could send a blank frame -- the rig flashed under a static look.
+    QHash<int, QList<FadeChannel> > next;
+    for (auto it = m_faders.constBegin(); it != m_faders.constEnd(); ++it)
+        next[it.key()];
 
     // Take a copy of the last published tick and release immediately. This mutex
     // is NEVER held across script evaluation (that is the whole reason it exists
@@ -714,6 +732,7 @@ void EffectScriptRunner::writeDMX(MasterTimer *timer, QList<Universe*> universes
         {
             fader = uni->requestFader(Universe::Override);
             fader->setName(QStringLiteral("EffectScript"));
+            fader->setDoc(m_doc);        // unpatched fixtures: shown, not sent
         }
 
         FadeChannel fc(m_doc, w.fixtureId, w.channel);
@@ -725,12 +744,23 @@ void EffectScriptRunner::writeDMX(MasterTimer *timer, QList<Universe*> universes
         // scene's level (e.g. a candle dimmer flicker under a lit base).
         if (w.replace)
             fc.addFlag(FadeChannel::Override);
-        // replace(), not add(): removeAll() above has already emptied the
-        // fader, so add()'s HTP-merge branch could never fire anyway — but
-        // its insert branch logs a qDebug() line per channel. At 50 Hz over
-        // a rig's worth of channels that is thousands of formatted stderr
-        // writes per second on the MasterTimer thread, which on its own can
-        // blow the tick budget. replace() is the same insert without the log.
-        fader->replace(fc);
+        // Not add(): the set is rebuilt from scratch, so add()'s HTP-merge
+        // branch could never fire anyway -- but its insert branch logs a
+        // qDebug() line per channel. At 50 Hz over a rig's worth of channels
+        // that is thousands of formatted stderr writes per second on the
+        // MasterTimer thread, which on its own can blow the tick budget.
+        next[w.universeId].append(fc);
     }
+
+    for (auto it = next.constBegin(); it != next.constEnd(); ++it)
+    {
+        QSharedPointer<GenericFader> fader = m_faders.value(it.key());
+        if (!fader.isNull())
+            fader->replaceAll(it.value());
+    }
+}
+
+QHash<quint32, QString> EffectScriptRunner::failures() const
+{
+    return m_failures;
 }

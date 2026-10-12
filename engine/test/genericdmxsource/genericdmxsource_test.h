@@ -35,6 +35,7 @@ private slots:
 
     void setUnset();
     void unsetAll();
+    void aStagedFixtureNeverReachesAFader();
 
 private:
     Doc* m_doc;

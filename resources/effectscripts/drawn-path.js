@@ -21,6 +21,8 @@
     var effect = new Object;
     effect.apiVersion   = 1;
     effect.name         = "Drawn Path";
+    // Takes the host's spread (fixture.phase, inputs._spread) in place of its own.
+    effect.hostSpread = "spread";
     effect.description  = "Fixtures follow a path drawn in the look editor";
     effect.notes        = "Click on the path canvas below to add control points, "
                         + "drag to reposition them, right-click to remove them. "
@@ -89,7 +91,7 @@
             if (!f.hasPanTilt) return {};
 
             // Fractional position on the path for this fixture
-            var phase = (t * speed + (i * spread) / N) % 1.0;
+            var phase = (t * speed + (inputs._spread ? f.phase : (i * spread) / N)) % 1.0;
             if (phase < 0) phase += 1.0;
 
             var rawIdx = phase * nSeg;

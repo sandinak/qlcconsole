@@ -1,0 +1,657 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE Workspace>
+<Workspace xmlns="http://www.qlcplus.org/Workspace" CurrentWindow="ProgrammingManager">
+    <Creator>
+        <Name>qlcconsole</Name>
+        <Version>speed-spread demo generator</Version>
+        <Author>demo</Author>
+    </Creator>
+    <Engine>
+        <InputOutputMap>
+            <BeatGenerator BeatType="Disabled" BPM="0"/>
+            <Universe Name="Universe 1" ID="0"/>
+            <Universe Name="Universe 2" ID="1"/>
+            <Universe Name="Universe 3" ID="2"/>
+            <Universe Name="Universe 4" ID="3"/>
+        </InputOutputMap>
+        <Fixture>
+            <Manufacturer>AVE</Manufacturer>
+            <Model>Cobra Wash 200</Model>
+            <Mode>13 Channel</Mode>
+            <ID>0</ID>
+            <Name>Mover 1</Name>
+            <Universe>0</Universe>
+            <Address>0</Address>
+            <Channels>13</Channels>
+        </Fixture>
+        <Fixture>
+            <Manufacturer>AVE</Manufacturer>
+            <Model>Cobra Wash 200</Model>
+            <Mode>13 Channel</Mode>
+            <ID>1</ID>
+            <Name>Mover 2</Name>
+            <Universe>0</Universe>
+            <Address>13</Address>
+            <Channels>13</Channels>
+        </Fixture>
+        <Fixture>
+            <Manufacturer>AVE</Manufacturer>
+            <Model>Cobra Wash 200</Model>
+            <Mode>13 Channel</Mode>
+            <ID>2</ID>
+            <Name>Mover 3</Name>
+            <Universe>0</Universe>
+            <Address>26</Address>
+            <Channels>13</Channels>
+        </Fixture>
+        <Fixture>
+            <Manufacturer>AVE</Manufacturer>
+            <Model>Cobra Wash 200</Model>
+            <Mode>13 Channel</Mode>
+            <ID>3</ID>
+            <Name>Mover 4</Name>
+            <Universe>0</Universe>
+            <Address>39</Address>
+            <Channels>13</Channels>
+        </Fixture>
+        <Fixture>
+            <Manufacturer>AVE</Manufacturer>
+            <Model>Cobra Wash 200</Model>
+            <Mode>13 Channel</Mode>
+            <ID>4</ID>
+            <Name>Mover 5</Name>
+            <Universe>0</Universe>
+            <Address>52</Address>
+            <Channels>13</Channels>
+        </Fixture>
+        <Fixture>
+            <Manufacturer>AVE</Manufacturer>
+            <Model>Cobra Wash 200</Model>
+            <Mode>13 Channel</Mode>
+            <ID>5</ID>
+            <Name>Mover 6</Name>
+            <Universe>0</Universe>
+            <Address>65</Address>
+            <Channels>13</Channels>
+        </Fixture>
+        <Fixture>
+            <Manufacturer>AVE</Manufacturer>
+            <Model>Cobra Wash 200</Model>
+            <Mode>13 Channel</Mode>
+            <ID>6</ID>
+            <Name>Mover 7</Name>
+            <Universe>0</Universe>
+            <Address>78</Address>
+            <Channels>13</Channels>
+        </Fixture>
+        <Fixture>
+            <Manufacturer>AVE</Manufacturer>
+            <Model>Cobra Wash 200</Model>
+            <Mode>13 Channel</Mode>
+            <ID>7</ID>
+            <Name>Mover 8</Name>
+            <Universe>0</Universe>
+            <Address>91</Address>
+            <Channels>13</Channels>
+        </Fixture>
+        <Fixture>
+            <Manufacturer>Generic</Manufacturer>
+            <Model>Generic RGB</Model>
+            <Mode>RGB Dimmer</Mode>
+            <ID>8</ID>
+            <Name>Par 1</Name>
+            <Universe>0</Universe>
+            <Address>104</Address>
+            <Channels>4</Channels>
+        </Fixture>
+        <Fixture>
+            <Manufacturer>Generic</Manufacturer>
+            <Model>Generic RGB</Model>
+            <Mode>RGB Dimmer</Mode>
+            <ID>9</ID>
+            <Name>Par 2</Name>
+            <Universe>0</Universe>
+            <Address>108</Address>
+            <Channels>4</Channels>
+        </Fixture>
+        <Fixture>
+            <Manufacturer>Generic</Manufacturer>
+            <Model>Generic RGB</Model>
+            <Mode>RGB Dimmer</Mode>
+            <ID>10</ID>
+            <Name>Par 3</Name>
+            <Universe>0</Universe>
+            <Address>112</Address>
+            <Channels>4</Channels>
+        </Fixture>
+        <Fixture>
+            <Manufacturer>Generic</Manufacturer>
+            <Model>Generic RGB</Model>
+            <Mode>RGB Dimmer</Mode>
+            <ID>11</ID>
+            <Name>Par 4</Name>
+            <Universe>0</Universe>
+            <Address>116</Address>
+            <Channels>4</Channels>
+        </Fixture>
+        <Fixture>
+            <Manufacturer>Generic</Manufacturer>
+            <Model>Generic RGB</Model>
+            <Mode>RGB Dimmer</Mode>
+            <ID>12</ID>
+            <Name>Par 5</Name>
+            <Universe>0</Universe>
+            <Address>120</Address>
+            <Channels>4</Channels>
+        </Fixture>
+        <Fixture>
+            <Manufacturer>Generic</Manufacturer>
+            <Model>Generic RGB</Model>
+            <Mode>RGB Dimmer</Mode>
+            <ID>13</ID>
+            <Name>Par 6</Name>
+            <Universe>0</Universe>
+            <Address>124</Address>
+            <Channels>4</Channels>
+        </Fixture>
+        <Fixture>
+            <Manufacturer>Generic</Manufacturer>
+            <Model>Generic RGB</Model>
+            <Mode>RGB Dimmer</Mode>
+            <ID>14</ID>
+            <Name>Par 7</Name>
+            <Universe>0</Universe>
+            <Address>128</Address>
+            <Channels>4</Channels>
+        </Fixture>
+        <Fixture>
+            <Manufacturer>Generic</Manufacturer>
+            <Model>Generic RGB</Model>
+            <Mode>RGB Dimmer</Mode>
+            <ID>15</ID>
+            <Name>Par 8</Name>
+            <Universe>0</Universe>
+            <Address>132</Address>
+            <Channels>4</Channels>
+        </Fixture>
+        <Palette ID="0" Type="Aim" Name="Aim: Centre" StageTarget="0"/>
+        <Palette ID="1" Type="Color" Name="Cyan" Value="#00dcff"/>
+        <Palette ID="2" Type="Color" Name="Amber" Value="#ff9600"/>
+        <Palette ID="3" Type="Color" Name="White" Value="#ffffff"/>
+        <Palette ID="4" Type="Dimmer" Name="Full" Value="255"/>
+        <Palette ID="5" Type="Effect" Name="Wave L-R">
+            <EffectScript>dimmer-phaser</EffectScript>
+            <EffectParam name="__spreadAmount" value="1"/>
+            <EffectParam name="__spreadAxis" value="3"/>
+            <EffectParam name="__spreadDirection" value="0"/>
+            <EffectParam name="__spreadWings" value="1"/>
+            <EffectParam name="rate" value="0.5"/>
+        </Palette>
+        <Palette ID="6" Type="Effect" Name="Centre out">
+            <EffectScript>dimmer-phaser</EffectScript>
+            <EffectParam name="__spreadAmount" value="1"/>
+            <EffectParam name="__spreadAxis" value="3"/>
+            <EffectParam name="__spreadDirection" value="2"/>
+            <EffectParam name="__spreadWings" value="1"/>
+            <EffectParam name="rate" value="0.5"/>
+            <EffectParam name="waveform" value="2"/>
+        </Palette>
+        <Palette ID="7" Type="Effect" Name="Ripple">
+            <EffectScript>rainbow</EffectScript>
+            <EffectParam name="__spreadAmount" value="1"/>
+            <EffectParam name="__spreadAxis" value="6"/>
+            <EffectParam name="__spreadDirection" value="0"/>
+            <EffectParam name="__spreadWings" value="1"/>
+            <EffectParam name="speed" value="4"/>
+        </Palette>
+        <Palette ID="8" Type="Effect" Name="Sweep">
+            <EffectScript>rainbow</EffectScript>
+            <EffectParam name="__spreadAmount" value="1"/>
+            <EffectParam name="__spreadAxis" value="7"/>
+            <EffectParam name="__spreadDirection" value="0"/>
+            <EffectParam name="__spreadWings" value="1"/>
+            <EffectParam name="speed" value="4"/>
+        </Palette>
+        <Palette ID="9" Type="Effect" Name="Line">
+            <EffectScript>stage-shape</EffectScript>
+            <EffectParam name="__spreadAmount" value="1"/>
+            <EffectParam name="__spreadAxis" value="3"/>
+            <EffectParam name="__spreadDirection" value="0"/>
+            <EffectParam name="__spreadWings" value="1"/>
+            <EffectParam name="shape" value="6"/>
+            <EffectParam name="size" value="3"/>
+        </Palette>
+        <Palette ID="10" Type="Effect" Name="Circle">
+            <EffectScript>stage-shape</EffectScript>
+            <EffectParam name="__spreadAmount" value="1"/>
+            <EffectParam name="__spreadAxis" value="7"/>
+            <EffectParam name="__spreadDirection" value="0"/>
+            <EffectParam name="__spreadWings" value="1"/>
+            <EffectParam name="shape" value="0"/>
+            <EffectParam name="size" value="2"/>
+            <EffectParam name="spin" value="0.1"/>
+        </Palette>
+        <Palette ID="11" Type="Effect" Name="Phaser per beat">
+            <EffectScript>dimmer-phaser</EffectScript>
+            <EffectParam name="__spreadAmount" value="1"/>
+            <EffectParam name="__spreadAxis" value="3"/>
+            <EffectParam name="__spreadDirection" value="0"/>
+            <EffectParam name="__spreadWings" value="1"/>
+            <EffectParam name="rate" value="1"/>
+        </Palette>
+        <Palette ID="12" Type="Effect" Name="Flash per beat">
+            <EffectScript>dimmer-phaser</EffectScript>
+            <EffectParam name="__spreadAmount" value="0"/>
+            <EffectParam name="__spreadAxis" value="0"/>
+            <EffectParam name="__spreadDirection" value="0"/>
+            <EffectParam name="__spreadWings" value="1"/>
+            <EffectParam name="rate" value="1"/>
+            <EffectParam name="waveform" value="2"/>
+        </Palette>
+        <Palette ID="13" Type="Color" Name="Chase Red" Value="#ff0000"/>
+        <Palette ID="14" Type="Color" Name="Chase Green" Value="#00ff00"/>
+        <Palette ID="15" Type="Color" Name="Chase Blue" Value="#0000ff"/>
+        <Palette ID="16" Type="Color" Name="Chase White" Value="#ffffff"/>
+        <Palette ID="17" Type="Effect" Name="Movement - pan-tilt circles, wave left to right">
+            <EffectScript>pantilt-phaser</EffectScript>
+            <EffectParam name="__spreadAmount" value="1"/>
+            <EffectParam name="__spreadAxis" value="3"/>
+            <EffectParam name="__spreadDirection" value="0"/>
+            <EffectParam name="__spreadWings" value="1"/>
+            <EffectParam name="panSize" value="0.12"/>
+            <EffectParam name="tiltSize" value="0.08"/>
+        </Palette>
+        <Palette ID="18" Type="Effect" Name="Movement - orbit, a ring of beams">
+            <EffectScript>orbit</EffectScript>
+            <EffectParam name="__spreadAmount" value="1"/>
+            <EffectParam name="__spreadAxis" value="0"/>
+            <EffectParam name="__spreadDirection" value="0"/>
+            <EffectParam name="__spreadWings" value="1"/>
+            <EffectParam name="panRadius" value="0.12"/>
+            <EffectParam name="tiltRadius" value="0.08"/>
+        </Palette>
+        <Palette ID="19" Type="Effect" Name="Movement - figure 8, centre out">
+            <EffectScript>figure8</EffectScript>
+            <EffectParam name="__spreadAmount" value="0.5"/>
+            <EffectParam name="__spreadAxis" value="3"/>
+            <EffectParam name="__spreadDirection" value="2"/>
+            <EffectParam name="__spreadWings" value="1"/>
+            <EffectParam name="panRadius" value="0.15"/>
+            <EffectParam name="tiltRadius" value="0.1"/>
+        </Palette>
+        <Palette ID="20" Type="Effect" Name="Movement - ballyhoo on Speed 2">
+            <EffectScript>ballyhoo</EffectScript>
+            <EffectParam name="__spreadAmount" value="1"/>
+            <EffectParam name="__spreadAxis" value="3"/>
+            <EffectParam name="__spreadDirection" value="0"/>
+            <EffectParam name="__spreadWings" value="1"/>
+            <EffectParam name="panSize" value="0.25"/>
+            <EffectParam name="speed" value="0.5"/>
+            <EffectParam name="tiltSize" value="0.15"/>
+        </Palette>
+        <Palette ID="21" Type="Effect" Name="Movement - wave, round the target">
+            <EffectScript>wave</EffectScript>
+            <EffectParam name="__spreadAmount" value="1"/>
+            <EffectParam name="__spreadAxis" value="7"/>
+            <EffectParam name="__spreadDirection" value="0"/>
+            <EffectParam name="__spreadWings" value="1"/>
+            <EffectParam name="panAmp" value="0.1"/>
+            <EffectParam name="tiltAmp" value="0.08"/>
+        </Palette>
+        <Palette ID="22" Type="Effect" Name="Movement - fan, left to right">
+            <EffectScript>fan</EffectScript>
+            <EffectParam name="__spreadAmount" value="1"/>
+            <EffectParam name="__spreadAxis" value="3"/>
+            <EffectParam name="__spreadDirection" value="0"/>
+            <EffectParam name="__spreadWings" value="1"/>
+            <EffectParam name="spread" value="120"/>
+        </Palette>
+        <Palette ID="23" Type="Effect" Name="Movement - spotlight chase along the truss">
+            <EffectScript>spotlight-chase</EffectScript>
+            <EffectParam name="__spreadAmount" value="1"/>
+            <EffectParam name="__spreadAxis" value="3"/>
+            <EffectParam name="__spreadDirection" value="0"/>
+            <EffectParam name="__spreadWings" value="1"/>
+            <EffectParam name="speed" value="0.5"/>
+        </Palette>
+        <Function ID="0" Type="Scene" Name="01 Spread - wave stage left to right" Path="Speed and Spread demo">
+            <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+            <FixtureVal ID="8"/>
+            <FixtureVal ID="9"/>
+            <FixtureVal ID="10"/>
+            <FixtureVal ID="11"/>
+            <FixtureVal ID="12"/>
+            <FixtureVal ID="13"/>
+            <FixtureVal ID="14"/>
+            <FixtureVal ID="15"/>
+            <Palette ID="1"/>
+            <Palette ID="5"/>
+        </Function>
+        <Function ID="1" Type="Scene" Name="02 Spread - centre out" Path="Speed and Spread demo">
+            <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+            <FixtureVal ID="8"/>
+            <FixtureVal ID="9"/>
+            <FixtureVal ID="10"/>
+            <FixtureVal ID="11"/>
+            <FixtureVal ID="12"/>
+            <FixtureVal ID="13"/>
+            <FixtureVal ID="14"/>
+            <FixtureVal ID="15"/>
+            <Palette ID="2"/>
+            <Palette ID="6"/>
+        </Function>
+        <Function ID="2" Type="Scene" Name="03 Spread - ripple out from the target" Path="Speed and Spread demo">
+            <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+            <FixtureVal ID="0"/>
+            <FixtureVal ID="1"/>
+            <FixtureVal ID="2"/>
+            <FixtureVal ID="3"/>
+            <FixtureVal ID="4"/>
+            <FixtureVal ID="5"/>
+            <FixtureVal ID="6"/>
+            <FixtureVal ID="7"/>
+            <FixtureVal ID="8"/>
+            <FixtureVal ID="9"/>
+            <FixtureVal ID="10"/>
+            <FixtureVal ID="11"/>
+            <FixtureVal ID="12"/>
+            <FixtureVal ID="13"/>
+            <FixtureVal ID="14"/>
+            <FixtureVal ID="15"/>
+            <Palette ID="0"/>
+            <Palette ID="7"/>
+        </Function>
+        <Function ID="3" Type="Scene" Name="04 Spread - sweep around the target" Path="Speed and Spread demo">
+            <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+            <FixtureVal ID="0"/>
+            <FixtureVal ID="1"/>
+            <FixtureVal ID="2"/>
+            <FixtureVal ID="3"/>
+            <FixtureVal ID="4"/>
+            <FixtureVal ID="5"/>
+            <FixtureVal ID="6"/>
+            <FixtureVal ID="7"/>
+            <FixtureVal ID="8"/>
+            <FixtureVal ID="9"/>
+            <FixtureVal ID="10"/>
+            <FixtureVal ID="11"/>
+            <FixtureVal ID="12"/>
+            <FixtureVal ID="13"/>
+            <FixtureVal ID="14"/>
+            <FixtureVal ID="15"/>
+            <Palette ID="0"/>
+            <Palette ID="8"/>
+        </Function>
+        <Function ID="4" Type="Scene" Name="05 Stage Shape - line, left heads on the left" Path="Speed and Spread demo">
+            <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+            <FixtureVal ID="0"/>
+            <FixtureVal ID="1"/>
+            <FixtureVal ID="2"/>
+            <FixtureVal ID="3"/>
+            <FixtureVal ID="4"/>
+            <FixtureVal ID="5"/>
+            <FixtureVal ID="6"/>
+            <FixtureVal ID="7"/>
+            <Palette ID="0"/>
+            <Palette ID="3"/>
+            <Palette ID="4"/>
+            <Palette ID="9"/>
+        </Function>
+        <Function ID="5" Type="Scene" Name="06 Stage Shape - circle, no crossed beams" Path="Speed and Spread demo">
+            <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+            <FixtureVal ID="0"/>
+            <FixtureVal ID="1"/>
+            <FixtureVal ID="2"/>
+            <FixtureVal ID="3"/>
+            <FixtureVal ID="4"/>
+            <FixtureVal ID="5"/>
+            <FixtureVal ID="6"/>
+            <FixtureVal ID="7"/>
+            <Palette ID="0"/>
+            <Palette ID="3"/>
+            <Palette ID="4"/>
+            <Palette ID="10"/>
+        </Function>
+        <Function ID="6" Type="Scene" Name="07 Speed - pars on Speed 1" Path="Speed and Spread demo" SpeedMaster="1">
+            <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+            <FixtureVal ID="8"/>
+            <FixtureVal ID="9"/>
+            <FixtureVal ID="10"/>
+            <FixtureVal ID="11"/>
+            <FixtureVal ID="12"/>
+            <FixtureVal ID="13"/>
+            <FixtureVal ID="14"/>
+            <FixtureVal ID="15"/>
+            <Palette ID="1"/>
+            <Palette ID="11"/>
+        </Function>
+        <Function ID="7" Type="Scene" Name="08 Speed - movers on Speed 2 (x2)" Path="Speed and Spread demo" SpeedMaster="2">
+            <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+            <FixtureVal ID="0"/>
+            <FixtureVal ID="1"/>
+            <FixtureVal ID="2"/>
+            <FixtureVal ID="3"/>
+            <FixtureVal ID="4"/>
+            <FixtureVal ID="5"/>
+            <FixtureVal ID="6"/>
+            <FixtureVal ID="7"/>
+            <Palette ID="0"/>
+            <Palette ID="2"/>
+            <Palette ID="12"/>
+        </Function>
+        <Function ID="8" Type="Collection" Name="09 Speed - both together" Path="Speed and Spread demo">
+            <Step Number="0">6</Step>
+            <Step Number="1">7</Step>
+        </Function>
+        <Function ID="9" Type="Chaser" Name="10 Speed - colour chase on Speed 1" Path="Speed and Spread demo" SpeedMaster="1">
+            <Tempo>Beats</Tempo>
+            <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+            <Direction>Forward</Direction>
+            <RunOrder>Loop</RunOrder>
+            <SpeedModes FadeIn="Default" FadeOut="Default" Duration="PerStep"/>
+            <Step Number="0" FadeIn="0" Hold="1000" FadeOut="0">10</Step>
+            <Step Number="1" FadeIn="0" Hold="1000" FadeOut="0">11</Step>
+            <Step Number="2" FadeIn="0" Hold="1000" FadeOut="0">12</Step>
+            <Step Number="3" FadeIn="0" Hold="1000" FadeOut="0">13</Step>
+        </Function>
+        <Function ID="10" Type="Scene" Name="10.1 Chase step - Red" Path="Speed and Spread demo">
+            <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+            <FixtureVal ID="8"/>
+            <FixtureVal ID="9"/>
+            <FixtureVal ID="10"/>
+            <FixtureVal ID="11"/>
+            <FixtureVal ID="12"/>
+            <FixtureVal ID="13"/>
+            <FixtureVal ID="14"/>
+            <FixtureVal ID="15"/>
+            <Palette ID="13"/>
+            <Palette ID="4"/>
+        </Function>
+        <Function ID="11" Type="Scene" Name="10.2 Chase step - Green" Path="Speed and Spread demo">
+            <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+            <FixtureVal ID="8"/>
+            <FixtureVal ID="9"/>
+            <FixtureVal ID="10"/>
+            <FixtureVal ID="11"/>
+            <FixtureVal ID="12"/>
+            <FixtureVal ID="13"/>
+            <FixtureVal ID="14"/>
+            <FixtureVal ID="15"/>
+            <Palette ID="14"/>
+            <Palette ID="4"/>
+        </Function>
+        <Function ID="12" Type="Scene" Name="10.3 Chase step - Blue" Path="Speed and Spread demo">
+            <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+            <FixtureVal ID="8"/>
+            <FixtureVal ID="9"/>
+            <FixtureVal ID="10"/>
+            <FixtureVal ID="11"/>
+            <FixtureVal ID="12"/>
+            <FixtureVal ID="13"/>
+            <FixtureVal ID="14"/>
+            <FixtureVal ID="15"/>
+            <Palette ID="15"/>
+            <Palette ID="4"/>
+        </Function>
+        <Function ID="13" Type="Scene" Name="10.4 Chase step - White" Path="Speed and Spread demo">
+            <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+            <FixtureVal ID="8"/>
+            <FixtureVal ID="9"/>
+            <FixtureVal ID="10"/>
+            <FixtureVal ID="11"/>
+            <FixtureVal ID="12"/>
+            <FixtureVal ID="13"/>
+            <FixtureVal ID="14"/>
+            <FixtureVal ID="15"/>
+            <Palette ID="16"/>
+            <Palette ID="4"/>
+        </Function>
+        <Function ID="14" Type="Scene" Name="11 Movement - pan-tilt circles, wave left to right" Path="Speed and Spread demo">
+            <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+            <FixtureVal ID="0"/>
+            <FixtureVal ID="1"/>
+            <FixtureVal ID="2"/>
+            <FixtureVal ID="3"/>
+            <FixtureVal ID="4"/>
+            <FixtureVal ID="5"/>
+            <FixtureVal ID="6"/>
+            <FixtureVal ID="7"/>
+            <Palette ID="3"/>
+            <Palette ID="4"/>
+            <Palette ID="17"/>
+        </Function>
+        <Function ID="15" Type="Scene" Name="12 Movement - orbit, a ring of beams" Path="Speed and Spread demo">
+            <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+            <FixtureVal ID="0"/>
+            <FixtureVal ID="1"/>
+            <FixtureVal ID="2"/>
+            <FixtureVal ID="3"/>
+            <FixtureVal ID="4"/>
+            <FixtureVal ID="5"/>
+            <FixtureVal ID="6"/>
+            <FixtureVal ID="7"/>
+            <Palette ID="3"/>
+            <Palette ID="4"/>
+            <Palette ID="18"/>
+        </Function>
+        <Function ID="16" Type="Scene" Name="13 Movement - figure 8, centre out" Path="Speed and Spread demo">
+            <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+            <FixtureVal ID="0"/>
+            <FixtureVal ID="1"/>
+            <FixtureVal ID="2"/>
+            <FixtureVal ID="3"/>
+            <FixtureVal ID="4"/>
+            <FixtureVal ID="5"/>
+            <FixtureVal ID="6"/>
+            <FixtureVal ID="7"/>
+            <Palette ID="3"/>
+            <Palette ID="4"/>
+            <Palette ID="19"/>
+        </Function>
+        <Function ID="17" Type="Scene" Name="14 Movement - ballyhoo on Speed 2" Path="Speed and Spread demo" SpeedMaster="2">
+            <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+            <FixtureVal ID="0"/>
+            <FixtureVal ID="1"/>
+            <FixtureVal ID="2"/>
+            <FixtureVal ID="3"/>
+            <FixtureVal ID="4"/>
+            <FixtureVal ID="5"/>
+            <FixtureVal ID="6"/>
+            <FixtureVal ID="7"/>
+            <Palette ID="3"/>
+            <Palette ID="4"/>
+            <Palette ID="20"/>
+        </Function>
+        <Function ID="18" Type="Scene" Name="15 Movement - wave, round the target" Path="Speed and Spread demo">
+            <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+            <FixtureVal ID="0"/>
+            <FixtureVal ID="1"/>
+            <FixtureVal ID="2"/>
+            <FixtureVal ID="3"/>
+            <FixtureVal ID="4"/>
+            <FixtureVal ID="5"/>
+            <FixtureVal ID="6"/>
+            <FixtureVal ID="7"/>
+            <Palette ID="3"/>
+            <Palette ID="4"/>
+            <Palette ID="21"/>
+            <Palette ID="0"/>
+        </Function>
+        <Function ID="19" Type="Scene" Name="16 Movement - fan, left to right" Path="Speed and Spread demo">
+            <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+            <FixtureVal ID="0"/>
+            <FixtureVal ID="1"/>
+            <FixtureVal ID="2"/>
+            <FixtureVal ID="3"/>
+            <FixtureVal ID="4"/>
+            <FixtureVal ID="5"/>
+            <FixtureVal ID="6"/>
+            <FixtureVal ID="7"/>
+            <Palette ID="3"/>
+            <Palette ID="4"/>
+            <Palette ID="22"/>
+        </Function>
+        <Function ID="20" Type="Scene" Name="17 Movement - spotlight chase along the truss" Path="Speed and Spread demo">
+            <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+            <FixtureVal ID="0"/>
+            <FixtureVal ID="1"/>
+            <FixtureVal ID="2"/>
+            <FixtureVal ID="3"/>
+            <FixtureVal ID="4"/>
+            <FixtureVal ID="5"/>
+            <FixtureVal ID="6"/>
+            <FixtureVal ID="7"/>
+            <Palette ID="3"/>
+            <Palette ID="4"/>
+            <Palette ID="23"/>
+        </Function>
+        <SpeedMasters>
+            <Master Index="0" Name="Pars" Mode="Own" BPM="60"/>
+            <Master Index="1" Name="Movers x2" Mode="Follow" Follows="1" Ratio="2" BPM="120"/>
+            <Master Index="2" Mode="Own" BPM="120"/>
+            <Master Index="3" Mode="Own" BPM="120"/>
+        </SpeedMasters>
+        <MoveInBlack Auto="0" DarkGapMs="800"/>
+        <Monitor DisplayMode="0" ShowLabels="1" AimSubjectHeight="1.4">
+            <Font>Arial,12,-1,5,400,0,0,0,0,0,0,0,0,0,0,1,,0,0</Font>
+            <ChannelStyle>0</ChannelStyle>
+            <ValueStyle>0</ValueStyle>
+            <Grid Width="5" Height="3" Depth="5" Units="0"/>
+            <FxItem ID="0" Hidden="True" XPos="-4200" YPos="4000" ZPos="5.855" FixedZoom="2490580"/>
+            <FxItem ID="1" Hidden="True" XPos="-3000" YPos="4000" ZPos="5.855" FixedZoom="2490580"/>
+            <FxItem ID="2" Hidden="True" XPos="-1800" YPos="4000" ZPos="5.855" FixedZoom="2490580"/>
+            <FxItem ID="3" Hidden="True" XPos="-600" YPos="4000" ZPos="5.855" FixedZoom="2490580"/>
+            <FxItem ID="4" Hidden="True" XPos="600" YPos="4000" ZPos="5.855" FixedZoom="2490580"/>
+            <FxItem ID="5" Hidden="True" XPos="1800" YPos="4000" ZPos="5.855" FixedZoom="2490580"/>
+            <FxItem ID="6" Hidden="True" XPos="3000" YPos="4000" ZPos="5.855" FixedZoom="2490580"/>
+            <FxItem ID="7" Hidden="True" XPos="4200" YPos="4000" ZPos="5.855" FixedZoom="2490580"/>
+            <FxItem ID="8" Hidden="True" XPos="-4200" YPos="-1000" ZPos="4.855" FixedZoom="2490580"/>
+            <FxItem ID="9" Hidden="True" XPos="-3000" YPos="-1000" ZPos="4.855" FixedZoom="2490580"/>
+            <FxItem ID="10" Hidden="True" XPos="-1800" YPos="-1000" ZPos="4.855" FixedZoom="2490580"/>
+            <FxItem ID="11" Hidden="True" XPos="-600" YPos="-1000" ZPos="4.855" FixedZoom="2490580"/>
+            <FxItem ID="12" Hidden="True" XPos="600" YPos="-1000" ZPos="4.855" FixedZoom="2490580"/>
+            <FxItem ID="13" Hidden="True" XPos="1800" YPos="-1000" ZPos="4.855" FixedZoom="2490580"/>
+            <FxItem ID="14" Hidden="True" XPos="3000" YPos="-1000" ZPos="4.855" FixedZoom="2490580"/>
+            <FxItem ID="15" Hidden="True" XPos="4200" YPos="-1000" ZPos="4.855" FixedZoom="2490580"/>
+            <Truss ID="0" Name="US Truss" Type="Horizontal" Profile="Square" Length="10.000" Width="0.290" OriginX="-5.000" OriginY="4.000" OriginZ="6.000" DirX="1.000000" DirY="0.000000"/>
+            <Truss ID="1" Name="DS Truss" Type="Horizontal" Profile="Square" Length="10.000" Width="0.290" OriginX="-5.000" OriginY="-1.000" OriginZ="5.000" DirX="1.000000" DirY="0.000000"/>
+            <StageTarget ID="0" Name="Centre" X="0.000" Y="1.500" Z="0.000" Color="#ffb400"/>
+            <FixtureRig FID="0" Truss="0" Offset="0.800" Mounting="TopHung" PanZero="0.0"/>
+            <FixtureRig FID="1" Truss="0" Offset="2.000" Mounting="TopHung" PanZero="0.0"/>
+            <FixtureRig FID="2" Truss="0" Offset="3.200" Mounting="TopHung" PanZero="0.0"/>
+            <FixtureRig FID="3" Truss="0" Offset="4.400" Mounting="TopHung" PanZero="0.0"/>
+            <FixtureRig FID="4" Truss="0" Offset="5.600" Mounting="TopHung" PanZero="0.0"/>
+            <FixtureRig FID="5" Truss="0" Offset="6.800" Mounting="TopHung" PanZero="0.0"/>
+            <FixtureRig FID="6" Truss="0" Offset="8.000" Mounting="TopHung" PanZero="0.0"/>
+            <FixtureRig FID="7" Truss="0" Offset="9.200" Mounting="TopHung" PanZero="0.0"/>
+            <FixtureRig FID="8" Truss="1" Offset="0.800" Mounting="TopHung" PanZero="0.0"/>
+            <FixtureRig FID="9" Truss="1" Offset="2.000" Mounting="TopHung" PanZero="0.0"/>
+            <FixtureRig FID="10" Truss="1" Offset="3.200" Mounting="TopHung" PanZero="0.0"/>
+            <FixtureRig FID="11" Truss="1" Offset="4.400" Mounting="TopHung" PanZero="0.0"/>
+            <FixtureRig FID="12" Truss="1" Offset="5.600" Mounting="TopHung" PanZero="0.0"/>
+            <FixtureRig FID="13" Truss="1" Offset="6.800" Mounting="TopHung" PanZero="0.0"/>
+            <FixtureRig FID="14" Truss="1" Offset="8.000" Mounting="TopHung" PanZero="0.0"/>
+            <FixtureRig FID="15" Truss="1" Offset="9.200" Mounting="TopHung" PanZero="0.0"/>
+        </Monitor>
+    </Engine>
+</Workspace>

@@ -730,7 +730,13 @@ void FunctionsTreeWidget::slotItemChanged(QTreeWidgetItem *item)
             return;
         }
 
-        const quint32 fid = item->data(COL_NAME, Qt::UserRole).toUInt();
+        /* Only a row that really carries a function id. A folder row fires
+           itemChanged from its first setText(), before folderItem() has given
+           it any id or path -- and an unset id reads as 0, so creating a
+           palette or function in a NEW folder renamed function 0 (the
+           workspace's first look) to the folder's name. */
+        const QVariant idData = item->data(COL_NAME, Qt::UserRole);
+        const quint32 fid = idData.isValid() ? idData.toUInt() : Function::invalidId();
         if (fid != Function::invalidId())
         {
             Function *fn = m_doc->function(fid);

@@ -22,8 +22,13 @@
 
 #include <QStyledItemDelegate>
 #include <QColor>
+#include <QSize>
 
+#include <QHash>
 class QWidget;
+class QTreeWidgetItem;
+class QLCFixtureDef;
+class QLCFixtureDefCache;
 class Doc;
 class Scene;
 
@@ -45,6 +50,33 @@ namespace AppUtil
      * @param widget The widget to expose
      */
     void ensureWidgetIsVisible(QWidget* widget);
+
+    /**
+     * Make sure a top-level window's geometry actually corresponds to a
+     * currently-connected screen, with a usable size. Two distinct failure
+     * modes this guards against, both real on a workspace that travels
+     * between machines:
+     *   - Saved geometry from a completely different screen layout (a
+     *     different machine's monitors, or this one with a display since
+     *     unplugged) can restore to coordinates off every current screen.
+     *   - QWidget::restoreGeometry() can silently fail outright (a Qt
+     *     version/format mismatch between the machine that saved it and
+     *     this one, or plain corruption) and leave the widget at whatever
+     *     tiny default size it had right after construction — present,
+     *     on-screen even, but too small to see or use.
+     * Finds the screen under the window's centre (falling back to the
+     * primary screen if none), then clamps size to fit that screen's
+     * available area AND enforces a sane minimum, then repositions so the
+     * whole rect fits inside it. Safe to call unconditionally, including on
+     * a window that's already fine (a no-op in that case) — e.g. every time
+     * a "go to this window" menu action raises an already-detached window,
+     * so that action doubles as a recovery path with no separate UI needed.
+     *
+     * @param window The top-level window to fix up.
+     * @param minSize Floor below which the window is treated as unusably
+     *                small regardless of what it claims its size is.
+     */
+    void ensureWindowOnScreen(QWidget *window, QSize minSize = QSize(400, 300));
 
     /*********************************************************************
      * Sane style
@@ -85,6 +117,85 @@ namespace AppUtil
      * inventing a color.
      */
     QColor sceneSwatchColor(Doc *doc, Scene *scene);
+
+    /*********************************************************************
+     * Fixture Editor launcher
+     *********************************************************************/
+    /**
+     * Launch the standalone Fixture Editor (qlcconsole-fixtureeditor) as a
+     * detached process — it has its own window/event loop, entirely separate
+     * from the main app's Doc. If @p fixtureFilePath is non-empty, it's
+     * opened directly (-o <path>), landing straight in that fixture's
+     * definition rather than the editor's blank/new-fixture state.
+     *
+     * @param fixtureFilePath Absolute path to a .qxf file to open, or empty
+     *                        to just launch the editor.
+     * @param parentForError  Parent for the "editor not found" QMessageBox,
+     *                        shown if the binary can't be located.
+     * @return true if the process was started.
+     */
+    bool launchFixtureEditor(const QString &fixtureFilePath = QString(),
+                             QWidget *parentForError = nullptr);
+
+    /*********************************************************************
+     * Fixture names
+     *********************************************************************/
+    /**
+     * Fixture names are unique (Doc::fixtureNameTaken()). True -- and a note
+     * saying which name is taken -- when fixture @p fid may NOT be renamed to
+     * @p name because another fixture has it; the caller keeps the old name.
+     */
+    bool refuseTakenFixtureName(QWidget *parent, Doc *doc, quint32 fid, const QString &name);
+
+    /*********************************************************************
+     * Fixture readiness
+     *********************************************************************/
+    /**
+     * Declare (or clear) the footer's rig problems in ShowStatus, each
+     * item carrying what it is for the entry's fix (App sets the actions):
+     * "fixtures.unpatched" -- fixtures that send no DMX (fixture ids);
+     * "fixtures.output" -- fixture types whose definition declares no light
+     * output (QLCPhysical::declaresOutput()), drawn at a guess (files);
+     * "fixtures.clash" -- fixtures that loaded unpatched because their
+     * address was taken (fixture ids); "fixtures.duplicates" -- names more
+     * than one fixture has (names); "definitions.failed" -- definition files
+     * that could not be read (files); "universes.nooutput" -- universes
+     * fixtures are patched on with no output (universe indexes).
+     */
+    void updateFixtureReadiness(Doc *doc);
+
+    /** The one name for giving fixtures a universe and address, or moving
+     *  them to another: "Patch…" for one, "Patch 4 Fixtures…" for several --
+     *  in the Fixture Manager, on the plot and in the studio alike. */
+    QString patchActionText(int count);
+
+    /** Whether Patch is offered for @p fixtureIds: always when none of them
+     *  has an address yet (giving one is harmless); moving patched fixtures
+     *  is Design mode's, as moving them in a running show is not. */
+    bool patchAllowed(Doc *doc, const QList<quint32> &fixtureIds);
+
+    /** The footer's "show.load" entry from a load's @p errorLog (Doc's
+     *  "<br>"-separated HTML): one item per problem, missing definitions left
+     *  out (the footer lists those fixtures already). Cleared when there are
+     *  none. Effect looks that cannot run are "effects.failed", kept by
+     *  updateFixtureReadiness(). */
+    void updateLoadProblems(const QString &errorLog);
+
+    /** The address @p n after IPv4 @p ip (n = 0: @p ip itself), the last
+     *  octet carrying into the one before it -- one each for a batch of
+     *  network fixtures. Empty when @p ip is not an IPv4 address or the run
+     *  would leave its /16. */
+    QString nthAddress(const QString &ip, int n);
+
+    /*********************************************************************
+     * Definition sources
+     *********************************************************************/
+    /** The cache's definitions by "manufacturer\nmodel", unloaded ones too. */
+    QHash<QString, QLCFixtureDef *> definitionsByName(QLCFixtureDefCache *cache);
+    /** Show where @p def comes from in @p item's @p column: Included in grey,
+     *  Local (and "replaces the included one") in blue, Downloadable in
+     *  italics -- the same everywhere a definition is picked. */
+    void showDefinitionSource(QTreeWidgetItem *item, int column, const QLCFixtureDef *def);
 };
 
 /*****************************************************************************

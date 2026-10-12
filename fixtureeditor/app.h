@@ -56,7 +56,16 @@ public:
      */
     void loadFixtureDefinition(const QString& path);
 
+    /** Opened by qlcconsole for one file (--close-when-done): quit once no
+     *  fixture is open any more -- its window closed, or its repair
+     *  cancelled -- rather than leave an empty editor behind. */
+    void setCloseWhenDone(bool on);
+    /** Quit now if closing when done and nothing is open. */
+    void quitIfDone();
+
 private:
+    bool m_closeWhenDone = false;
+
     /**
      * Load a native QLC fixture definition from $path.
      *
@@ -111,7 +120,6 @@ protected:
     QAction* m_fileQuitAction;
 
     QAction* m_helpIndexAction;
-    QAction* m_helpAboutAction;
     QAction* m_helpAboutQtAction;
 
 protected:
@@ -127,7 +135,6 @@ protected slots:
     void slotFileQuit();
 
     void slotHelpIndex();
-    void slotHelpAbout();
     void slotHelpAboutQt();
 };
 

@@ -52,6 +52,12 @@ public:
     void showLabel(bool visible);
 
     QRectF boundingRect() const override;
+    /** The tower itself, without the base plate drawn round it in Top: what
+     *  its fixtures can cover (MonitorGraphicsView's count bubble). */
+    QRectF footprintRect() const
+    {
+        return m_elevation ? QRectF(0, -m_pxH, m_pxW, m_pxH) : QRectF(0, 0, m_pxW, m_pxH);
+    }
     void   paint(QPainter *painter, const QStyleOptionGraphicsItem *option,
                  QWidget *widget) override;
 

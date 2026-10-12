@@ -30,6 +30,7 @@ class QLCFixtureDefCache;
 class FixtureGroupEditor;
 class FixtureTreeWidget;
 class QTreeWidgetItem;
+class QLineEdit;
 class QTextBrowser;
 class QTreeWidget;
 class QTabWidget;
@@ -66,6 +67,12 @@ public:
     /** Match the main window's icon/text display preference
      *  (workspace/tabLabelMode) — mirrors Monitor::applyToolbarLabelMode(). */
     void applyToolbarLabelMode();
+
+    /** Append the document-wide fixture actions (Import/Export/Remap/Fade
+     *  Configuration) to @p menu — used by App to build its "Fixtures" menu
+     *  bar entry. These aren't tied to any tree row, so they live in the
+     *  menu bar rather than a right-click context menu or the toolbar. */
+    void populateFixturesMenu(QMenu *menu);
 
 private:
     /** The singleton FixtureManager instance */
@@ -116,11 +123,32 @@ private:
     /** Open a fixture selector to add new fixtures */
     void addFixture();
 
+    /** Stage a fixture in the inventory: no universe, no address. */
+    void addToInventory();
+    void addFixtureImpl(bool inventory, quint32 likeFixture = UINT_MAX,
+                        const QString &manufacturer = QString());
+
+    /** Release these fixtures' universe/address, sending them back to the inventory. */
+    void returnToInventory(const QList<quint32> &fixtureIds);
+
+    /** Open the Patch view for @p fixtureIds (empty = every staged fixture). */
+    void patchInventory(const QList<quint32> &fixtureIds = QList<quint32>());
+    /** Patch / re-address @p fixtureIds -- patched or not -- in the Patch
+     *  dialog. With a valid @p universe they start packed into it, first free
+     *  channels first (a drop onto that universe's row). */
+    void patchOrReaddress(const QList<quint32> &fixtureIds,
+                          quint32 universe = UINT_MAX);
+
     /** Open a channels selector to add new channels group */
     void addChannelsGroup();
 
     /** Remove a previously created fixture */
     void removeFixture();
+
+    /** Delete a universe outright (only the last one can go -- see the
+     *  implementation). Reached from the Universe row's context menu;
+     *  renaming that same row is inline (Enter/F2/double-click) instead. */
+    void deleteUniverse(quint32 universe);
 
     /** Remove a previously created channels group */
     void removeChannelsGroup();
@@ -133,6 +161,10 @@ private:
 
     /** Handle fixture group selection */
     void fixtureGroupSelected(FixtureGroup* grp);
+
+    /** Never leave the right pane collapsed after swapping its contents --
+     *  an editor restored to 0 px wide looks like nothing happened. */
+    void ensureRightPaneVisible();
 
     /** Copy the given fixtures (whole, all heads) and whole fixture groups
      *  (as sub-group blocks, preserving their relative layout) into $target,
@@ -176,6 +208,11 @@ private slots:
 
     void slotDisplayFixtureInfo(QString &info);
 
+    /** Filter the fixtures tree as the search box's text changes
+     *  (FixtureTreeWidget::setTextFilter): a folder stays visible whenever
+     *  something inside it matches. */
+    void slotFixturesSearchChanged(const QString &text);
+
 private:
     /** Select a fixture group */
     void selectGroup(quint32 id);
@@ -207,6 +244,7 @@ private:
 
     QSplitter* m_splitter;
     FixtureTreeWidget* m_fixtures_tree;
+    QLineEdit* m_fixturesSearch;
     QTreeWidget* m_channel_groups_tree;
     QWidget* m_rdmManager;
 
@@ -233,22 +271,29 @@ private:
     /** Edit properties for the selected fixture */
     void editFixtureProperties();
 
+public:
+    /** A fixture's definition and mode (and name, connection, address) in the
+     *  stock dialog -- reached from Fixture Properties' "Definition & Mode…"
+     *  and the Fixture Manager's menu. True when something changed. */
+    static bool editDefinitionAndMode(QWidget *parent, Doc *doc, quint32 fid);
+
+private:
+
     /** Edit properties for the selected channels group */
     void editChannelGroupProperties();
-
-    /** Count the number of heads in the list of fixture items */
-    int headCount(const QList <QTreeWidgetItem*>& items) const;
 
     QString createDialog(bool import);
 
 private slots:
-    void slotAdd();
     void slotAddRGBPanel();
     void slotRemove();
     void slotProperties();
     void slotTestFixture();
+    void slotLocateFixture();
+    void slotResetFixture();
     void slotFadeConfig();
     void slotRemap();
+    void slotPatchList();
     void slotUnGroup();
     void slotGroupSelected(QAction* action);
     void slotMoveGroupUp();
@@ -258,6 +303,9 @@ private slots:
 
     /** Callback for right mouse button clicks over a fixture item */
     void slotContextMenuRequested(const QPoint& pos);
+
+    /** Callback for right mouse button clicks over a channel group item */
+    void slotChannelGroupContextMenuRequested(const QPoint& pos);
 
     /** Move the dropped fixture groups into folder $destPath ("" = root). */
     void slotGroupsDroppedOnFolder(const QList<quint32>& groupIds, const QString& destPath);
@@ -269,15 +317,35 @@ private slots:
     /** Assign the dropped fixtures to a power circuit (dragged onto it in the
      *  Power section of the tree). */
     void slotFixturesDroppedOnCircuit(const QList<quint32>& fixtureIds, int sourceIdx, int circuitIdx);
+    void slotFixturesDroppedOnUniverse(const QList<quint32>& fixtureIds, quint32 universe);
 
 private:
     QAction* m_addAction;
+    QAction* m_addInventoryAction;
+    QAction* m_patchInventoryAction;
     QAction* m_addRGBAction;
+    /** Toolbar-only container action for the "Add" dropdown button (Add
+     *  Fixture.../Add RGB Panel...) — toggled visible/hidden per active tab
+     *  in slotTabChanged(), separately from m_addAction/m_addRGBAction
+     *  themselves, which stay usable from the fixture context menu on
+     *  either state. */
+    QAction* m_addFixtureButtonAction;
+    /** "Add Channel Group..." — the Channel Groups tab's own creation
+     *  action, split out from m_addAction so its toolbar label is never
+     *  wrong (previously m_addAction did double duty, dispatching by tab in
+     *  slotAdd() with only a tooltip hinting at the swap). */
+    QAction* m_addChannelsGroupAction;
     QAction* m_removeAction;
     QAction* m_propertiesAction;
     QAction* m_testAction;
+    /** Flash-to-identify and send-reset, reachable directly from the context
+     *  menu instead of only via the "Test Fixture..." dialog's own buttons —
+     *  same single-fixture gating as m_testAction (see slotModeChanged()). */
+    QAction* m_locateAction;
+    QAction* m_resetAction;
     QAction* m_fadeConfigAction;
     QAction* m_remapAction;
+    QAction* m_patchListAction;
     QAction* m_groupAction;
     QAction* m_unGroupAction;
     QAction* m_newGroupAction;
@@ -287,6 +355,8 @@ private:
 
     QAction* m_importAction;
     QAction* m_exportAction;
+    QAction* m_expandAllAction;
+    QAction* m_collapseAllAction;
     QMenu* m_groupMenu;
 };
 

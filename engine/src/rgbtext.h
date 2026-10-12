@@ -66,7 +66,9 @@ private:
      * Animation
      ************************************************************************/
 public:
-    enum AnimationStyle { StaticLetters, Horizontal, Vertical };
+    /** Centered: the whole text, still, in the middle of the matrix (the
+     *  offsets nudge it from there) -- a name or a word held, not scrolled. */
+    enum AnimationStyle { StaticLetters, Horizontal, Vertical, Centered };
 
     void setAnimationStyle(AnimationStyle ani);
     AnimationStyle animationStyle() const;
@@ -85,6 +87,7 @@ private:
     int scrollingTextStepCount() const;
     void renderScrollingText(const QSize& size, uint rgb, int step, RGBMap &map) const;
     void renderStaticLetters(const QSize& size, uint rgb, int step, RGBMap &map) const;
+    void renderCentered(const QSize& size, uint rgb, RGBMap &map) const;
 
 private:
     AnimationStyle m_animationStyle;

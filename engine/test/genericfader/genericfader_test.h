@@ -34,6 +34,9 @@ private slots:
 
     void addRemove();
     void writeZeroFade();
+    void anUnpatchedFixturesValuesAreShownNotWritten();
+    void replaceAllSwapsTheWholeSet();
+    void aFaderRebuiltEveryTickIsNeverSeenEmpty();
     void writeLoop();
     void adjustIntensity();
 

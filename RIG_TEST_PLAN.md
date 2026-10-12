@@ -11,6 +11,11 @@ a phone photo or screenshot.
 - A **MIDI keyboard** on an input (for the note-effect tests) and, if you have
   one, a **second MIDI controller** (Launchpad/APC) on another input.
 - An **audio input** (line-in or mic) for the audio tests.
+- For section H: the **PMJ (OpenDeck)** control surface patched as an input.
+- For section I: at least one **truss** in the plot with **2+ fixtures bound**
+  to it (some centered, some off-axis), plus a platform/pipe/stand/tower/image
+  so a genuinely mixed multi-select drag (§I12-13) has more than one kind to
+  test.
 - Run with: `build/main/qlcconsole -o <your show>.qxw`.
 - To capture effect internals on a failure, relaunch with
   `QLC_EFFECT_DEBUG=/tmp/effect.log build/main/qlcconsole -o <show>.qxw` and attach
@@ -111,9 +116,75 @@ Run your show as you normally would (chaser **or** show timeline).
 
 ---
 
+## H · Control surface (PMJ)
+Board connected and patched as a MIDI input for the whole section.
+
+| # | Step | Expect | ✅/❌ |
+|---|------|--------|------|
+| H1 | Launch with the PMJ connected | Blackout (`O`)/Blind (`Set`) LEDs dim when idle; everything else that doesn't do anything yet stays dark (not lit-for-no-reason) | |
+| H2 | Press `O` | Output blacks out; `O` LED goes bright | |
+| H3 | Press `Set` | Blind engages; `Set` LED lights bright (was a hardware LED-channel wiring bug, since rewritten to the board — confirm it actually lights now, not just toggles) | |
+| H4 | Turn the Master fader | Grand Master follows | |
+| H5 | Focus a Look with a **PanTilt** palette; turn Enc 1 clockwise | On-screen XY pad dot moves **right**, live output pans with it | |
+| H6 | Turn Enc 2 (tilt) clockwise | Dot moves down/up consistently — same "clockwise = increase" rule as pan | |
+| H7 | Focus a **Color** palette; move faders 1-6 | Labelled "1 R".."6 UV"; each drives the matching channel live, in sync with the on-screen color dialog | |
+| H8 | Focus a **Dimmer** palette; move fader 1 | Drives intensity live; faders 2-10 stay inert | |
+| H9 | Focus nothing (no palette open in the Look Editor) | All faders 1-10 stay dark/inert — no stray submaster fallback | |
+| H10 | Press an "N-Up" button while its fader is in use | Zeroes that channel; the button's own LED lights only when its fader is actually in use | |
+| H11 | Switch which Look is focused while the board stays connected | Fader LED highlighting updates immediately — no stale highlight from the previous Look | |
+| H12 | (Selection mode) Open a Scene with several fixtures in the Programming tab; press `Select` 1-10 | Toggles that target fixture into the programmer selection; LED brightens once it's actually selected | |
+| H13 | Press `Load` on a strip | Replaces the whole selection with just that one target fixture | |
+| H14 | With a fixture selected via Select/Load, move faders 1-6 | Drives that fixture's intensity live — first-time-tested write path for this mode, worth watching closely rather than a quick glance | |
+| H15 | Unplug/replug (or unpatch/repatch) the PMJ mid-session | LEDs re-sync to the board without an app restart | |
+
+---
+
+## I · Lighting Studio: truss / rig geometry
+Needs a truss with 2+ bound fixtures (see prerequisites). Almost none of this
+section has ever been confirmed with a real click-drag on an actual canvas —
+it all shipped on code review, so treat every ❌ here as genuinely new
+information, not a regression check.
+
+| # | Step | Expect | ✅/❌ |
+|---|------|--------|------|
+| I1 | Fresh launch of a show that reopens directly into Lighting Studio | Trusses, layers, and every fixture render immediately — the canvas is never briefly/silently empty | |
+| I2 | Drag a free fixture onto a truss, touching but not centered | Attaches on drop, stays exactly where you dropped it (not forced onto the centerline) | |
+| I3 | Drag that fixture further away, off the truss's edge | A red "detaching" border appears as a warning before it actually lets go | |
+| I4 | Drag the truss itself | Every bound fixture moves with it, keeping its own offset from the truss | |
+| I5 | Click directly on one bound fixture (not the truss) | Only that fixture selects/moves — the truss does **not** come along | |
+| I6 | Click the truss itself | Truss + all its bound fixtures highlight together as a group | |
+| I7 | With the truss selected (previous step), click one of its own fixtures | Selection narrows to **just** that fixture — doesn't stay stuck moving the whole group | |
+| I8 | Look at a fixture sitting right on the truss body | No tether line drawn (only an off-truss fixture gets one) | |
+| I9 | Drag a fixture off the truss surface, still touching | A dashed tether line appears back to its anchor point, roughly perpendicular to the truss | |
+| I10 | Select the truss while an off-center fixture is tethered to it | The tether line **and** that fixture's own outline both turn amber together | |
+| I11 | Right-click a bound fixture → **Detach**, then click it alone afterward | The truss no longer gets pulled into the selection (this was a real saved-data corruption bug — the fix only prevents it going forward; an **already-corrupted older file** needs a fresh truss+fixture setup, not this same file, to test cleanly) | |
+| I12 | Unlock the plot, select everything (Ctrl+A), drag to recenter, then reload the file | Every item kind — fixtures, trusses, platforms, pipes, stands, towers, images, targets — keeps its new position | |
+| I13 | Drag a genuinely **mixed** selection (some fixtures + some trusses/platforms together) | All of them keep their new position, not just whichever one you happened to grab | |
+
+---
+
+## J · Hardware tab: power + universe usage
+| # | Step | Expect | ✅/❌ |
+|---|------|--------|------|
+| J1 | Hardware tab → select a universe | Right pane shows the 512-cell address grid, colour-coded per fixture, with a legend | |
+| J2 | Hardware tab → Power folder → **Add power source…**, then **Add circuit…** | New source/circuit appear nested under Power | |
+| J3 | Drag a fixture from anywhere in the tree onto a circuit | Assigns it; the footer Power chip (⚡) updates | |
+| J4 | Click the footer Power chip | Opens the Circuits dialog | |
+
+---
+
 ## Known rig-verify focus (tell the dev)
 1. **F5 — Auto-MIB dark-gap timing** is the #1 unknown: the "how soon does the
    next cue fire" figure was never tested against a running chaser/timeline.
 2. **E2 / F3 — mark auto-handoff** release point (does it let go exactly as
    intensity comes up, no flash or late snap?).
 3. Anything in **A3–A5** if the note-range mapping still feels off on your panel.
+4. **Section H (PMJ)** — individual pieces were each confirmed once, in
+   isolation, across many separate rounds; the whole set has never been run
+   through together end-to-end on one board in one sitting.
+5. **Section I (truss geometry)** — a long chain of canvas-interaction fixes,
+   almost none of them confirmed with a real click-drag on the actual canvas.
+6. **Save/reload round-trip** — after working through H/I, close and reopen
+   the file. Nothing should silently move, disappear, or reinterpret channel
+   values (ties to the fixture-mode-change data-corruption risk already
+   flagged elsewhere).

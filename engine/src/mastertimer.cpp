@@ -22,6 +22,7 @@
 #include <QSettings>
 #include <time.h>
 #include <QMutexLocker>
+#include <cmath>
 
 #if defined(WIN32) || defined(Q_OS_WIN)
 #   include "mastertimer-win32.h"
@@ -117,8 +118,8 @@ MasterTimer::MasterTimer(Doc* doc)
     , m_currentBPM(120)
     , m_beatTimeDuration(500)
     , m_beatRequested(false)
-    , m_lastBeatOffset(0)
 {
+    m_clock.start();
     Q_ASSERT(doc != NULL);
     Q_ASSERT(d_ptr != NULL);
 
@@ -170,20 +171,24 @@ void MasterTimer::timerTick()
     {
         case Internal:
         {
-            int elapsedTime = qRound((double)m_beatTimer.nsecsElapsed() / 1000000) + m_lastBeatOffset;
-            //qDebug() << "Elapsed beat:" << elapsedTime;
-            if (elapsedTime >= m_beatTimeDuration)
+            /* A beat each time the clock crosses a whole beat -- the same
+               clock the effects read, so the beat() listeners and the
+               effects agree on where the beat is. (It used to be a timer of
+               its own, restarted on every tempo change.) A clock pulled
+               back by a tap doesn't fire the same beat twice. */
+            bool fire = false;
             {
-                // it's time to fire a beat
+                QMutexLocker locker(&m_clockMutex);
+                const qint64 index = qint64(std::floor(positionAtLocked(m_clock.nsecsElapsed())));
+                if (index > m_lastBeatIndex)
+                {
+                    m_lastBeatIndex = index;
+                    fire = true;
+                }
+            }
+            if (fire)
+            {
                 m_beatRequested = true;
-
-                // restart the time for the next beat, starting at a delta
-                // milliseconds, otherwise it will generate an unpleasant drift
-                //qDebug() << "Elapsed:" << elapsedTime << ", delta:" << elapsedTime - m_beatTimeDuration;
-                m_lastBeatOffset = elapsedTime - m_beatTimeDuration;
-                m_beatTimer.restart();
-
-                // inform the listening classes that a beat is happening
                 emit beat();
             }
         }
@@ -311,9 +316,30 @@ void MasterTimer::removeFunction(Function* function)
     // iterates m_functionList, so once this returns the timer thread is
     // guaranteed not to be ticking this function: the caller (Doc) can then
     // delete it safely, on its own thread (preserving QObject thread affinity).
-    QMutexLocker locker(&m_functionListMutex);
-    m_startQueue.removeAll(function);
-    m_functionList.removeAll(function);
+    /* A running one is STOPPED first, the way a tick stops it: postRun() lets
+       go of what it drives -- its faders, a chaser's steps. Taken out of the
+       list without it, its faders stayed in the universes with nothing left to
+       dismiss them, and the last thing it sent hung on the fixtures ("every
+       time I run a function and then remove it .. the last thing sent hangs").
+       The universes are claimed before the list lock, in the tick's own order. */
+    Doc *doc = qobject_cast<Doc *>(parent());
+    QList<Universe *> universes;
+    if (doc != nullptr)
+        universes = doc->inputOutputMap()->claimUniverses();
+    {
+        QMutexLocker locker(&m_functionListMutex);
+        const bool ticking = m_functionList.contains(function);
+        m_startQueue.removeAll(function);
+        m_functionList.removeAll(function);
+        if (ticking && function->isRunning())
+        {
+            function->stop(FunctionParent::master());
+            function->postRun(this, universes);
+            emit functionStopped(function->id());
+        }
+    }
+    if (doc != nullptr)
+        doc->inputOutputMap()->releaseUniverses();
 }
 
 void MasterTimer::stopAllFunctions()
@@ -498,11 +524,12 @@ void MasterTimer::setBeatSourceType(MasterTimer::BeatsSourceType type)
     if (type == m_beatSourceType)
         return;
 
-    // alright, this causes a time drift of maximum 1ms per beat
-    // but at the moment I am not looking for a better solution
-    m_beatTimeDuration = 60000 / m_currentBPM;
-    m_beatTimer.restart();
-
+    // Count beats from here: switching Internal on mid-beat fires the next
+    // whole beat, not a burst of every beat since the clock started.
+    {
+        QMutexLocker locker(&m_clockMutex);
+        m_lastBeatIndex = qint64(std::floor(positionAtLocked(m_clock.nsecsElapsed())));
+    }
     m_beatSourceType = type;
 }
 
@@ -513,14 +540,9 @@ MasterTimer::BeatsSourceType MasterTimer::beatSourceType() const
 
 void MasterTimer::requestBpmNumber(int bpm)
 {
-    if (bpm == m_currentBPM)
+    if (bpm <= 0 || double(bpm) == this->bpm())
         return;
-
-    m_currentBPM = bpm;
-    m_beatTimeDuration = 60000 / m_currentBPM;
-    m_beatTimer.restart();
-
-    emit bpmNumberChanged(bpm);
+    setBpm(bpm);
 }
 
 int MasterTimer::bpmNumber() const
@@ -535,7 +557,11 @@ int MasterTimer::beatTimeDuration() const
 
 int MasterTimer::timeToNextBeat() const
 {
-    return m_beatTimeDuration - m_beatTimer.elapsed();
+    const double pos = beatPosition();
+    double toNext = std::ceil(pos) - pos;
+    if (toNext <= 0)
+        toNext = 1.0;               // on the beat: the next one is a beat away
+    return qRound(toNext * 60000.0 / bpm());
 }
 
 int MasterTimer::nextBeatTimeOffset() const
@@ -566,4 +592,77 @@ void MasterTimer::requestBeat()
     // forceful request of a beat, processed at
     // the next timerTick call
     m_beatRequested = true;
+    // An external source says the beat is now: pull the clock towards it.
+    alignBeat(0.5);
+}
+
+/*************************************************************************
+ * The beat clock
+ *************************************************************************/
+
+double MasterTimer::positionAtLocked(qint64 ns) const
+{
+    return m_anchorBeats + double(ns - m_anchorNs) / 1e9 * m_bpm / 60.0;
+}
+
+double MasterTimer::beatPosition() const
+{
+    QMutexLocker locker(&m_clockMutex);
+    return positionAtLocked(m_clock.nsecsElapsed());
+}
+
+double MasterTimer::bpm() const
+{
+    QMutexLocker locker(&m_clockMutex);
+    return m_bpm;
+}
+
+void MasterTimer::setBpm(double bpm)
+{
+    if (!(bpm >= 1.0 && bpm <= 999.0))
+        return;
+    int rounded;
+    {
+        QMutexLocker locker(&m_clockMutex);
+        if (bpm == m_bpm)
+            return;
+        const qint64 now = m_clock.nsecsElapsed();
+        m_anchorBeats = positionAtLocked(now);
+        m_anchorNs = now;
+        m_bpm = bpm;
+        rounded = qRound(bpm);
+    }
+    m_beatTimeDuration = qRound(60000.0 / bpm);
+    if (rounded != m_currentBPM)
+    {
+        m_currentBPM = rounded;
+        emit bpmNumberChanged(rounded);
+    }
+}
+
+void MasterTimer::alignBeat(double pull)
+{
+    QMutexLocker locker(&m_clockMutex);
+    const qint64 now = m_clock.nsecsElapsed();
+    const double pos = positionAtLocked(now);
+    m_anchorBeats = pos + (std::round(pos) - pos) * qBound(0.0, pull, 1.0);
+    m_anchorNs = now;
+}
+
+double MasterTimer::tap()
+{
+    const qint64 now = m_clock.nsecsElapsed();
+    if (!m_taps.isEmpty() && now - m_taps.last() > 2000000000LL)
+        m_taps.clear();
+    m_taps << now;
+    while (m_taps.size() > 5)       // four intervals
+        m_taps.removeFirst();
+
+    if (m_taps.size() >= 2)
+    {
+        const double avgNs = double(m_taps.last() - m_taps.first()) / (m_taps.size() - 1);
+        setBpm(60e9 / avgNs);
+    }
+    alignBeat(1.0);
+    return bpm();
 }

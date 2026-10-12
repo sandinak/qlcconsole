@@ -446,7 +446,7 @@ void UniversePatchGrid::populateRow(int row, int uniIndex)
         int n = 0, lastCh = 0;
         foreach (Fixture *fx, m_doc->fixtures())
         {
-            if (fx == NULL || fx->universe() != uniID)
+            if (fx == NULL || !fx->isPatched() || fx->universe() != uniID)
                 continue;
             n++;
             lastCh = qMax(lastCh, int(fx->address() + fx->channels()));
@@ -995,7 +995,7 @@ int UniversePatchGrid::fixturesOnUniverse(int uniIndex) const
         return 0;
     int n = 0;
     foreach (Fixture *fx, m_doc->fixtures())
-        if (fx != NULL && fx->universe() == uniID)
+        if (fx != NULL && fx->isPatched() && fx->universe() == uniID)
             n++;
     return n;
 }

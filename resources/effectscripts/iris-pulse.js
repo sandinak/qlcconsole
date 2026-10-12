@@ -7,6 +7,8 @@
 (function() {
     var effect = new Object;
     effect.name        = "Iris Pulse";
+    // Takes the host's spread (fixture.phase, inputs._spread) in place of its own.
+    effect.hostSpread = "spread";
     effect.description = "Iris / aperture pulse / chase — closed to open";
     effect.apiVersion  = 1;
     effect.version     = 1;
@@ -41,7 +43,7 @@
         var t    = inputs._time    !== undefined ? inputs._time    : 0;
 
         return fixtures.map(function(f, i) {
-            var phase = (t * rate + i * sprd / Math.max(n, 1)) % 1;
+            var phase = (t * rate + (inputs._spread ? f.phase : i * sprd / Math.max(n, 1))) % 1;
             return { iris: minI + wave(wf, phase) * (maxI - minI) };
         });
     };

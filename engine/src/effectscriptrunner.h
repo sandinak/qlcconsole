@@ -44,6 +44,11 @@ public:
     /** Script discovery cache (also used by the UI for listing scripts). */
     EffectScriptCache *cache() { return &m_cache; }
 
+    /** Effect looks that would not start when their scene ran, and why --
+     *  for the readiness footer; an effect look that cannot run otherwise
+     *  just does nothing. */
+    QHash<quint32, QString> failures() const;
+
     /** Preset discovery cache (named configs over the scripts; UI listing). */
     EffectPresetCache *presetCache() { return &m_presetCache; }
 
@@ -90,6 +95,10 @@ private slots:
      *  Qt's object-destruction cascade.  Connected to QCoreApplication::
      *  aboutToQuit; prevents a multi-second hang from QJSEngine teardown. */
     void slotPrepareQuit();
+
+signals:
+    /** failures() changed. */
+    void failuresChanged();
 
 private:
     void createInstancesForScene(quint32 sceneId);
@@ -158,6 +167,7 @@ private:
      * is a different effect and always starts clean. Main thread only.
      */
     QHash<quint32, EffectInstance*> m_parked;
+    QHash<quint32, QString> m_failures;     ///< effect look -> why it would not start
 
     bool m_registered = false;
 

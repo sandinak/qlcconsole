@@ -181,6 +181,12 @@ public:
      *  colour and move sub-groups as a unit. */
     void setHeadSubGroup(const QLCPoint& pt, quint32 subGroupId);
 
+    /** The tag for a block pasted from fixture group $groupId: its ID + 1,
+     *  as 0 means "none" and group 0 is a real group. Tags are only compared,
+     *  never read back as IDs, so older shows tagged with the bare ID still
+     *  keep their blocks. */
+    static quint32 subGroupTagFor(quint32 groupId) { return groupId + 1; }
+
     /** Sub-group tag for the head at $pt (0 if none). */
     quint32 headSubGroup(const QLCPoint& pt) const;
 

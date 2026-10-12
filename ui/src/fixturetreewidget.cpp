@@ -17,6 +17,7 @@
   limitations under the License.
 */
 
+#include <QTimer>
 #include <QDebug>
 #include <QHeaderView>
 #include <QMimeData>
@@ -27,7 +28,9 @@
 #include <QKeyEvent>
 #include <QTreeWidgetItemIterator>
 
+#include <QMap>
 #include "fixturetreewidget.h"
+#include "apputil.h"
 #include "qlcfixturedef.h"
 #include "fixturegroup.h"
 #include "qlcchannel.h"
@@ -71,6 +74,7 @@ static QString universeDestination(Doc *doc, quint32 uniID)
 
 static const char* FIXTURE_DRAG_MIME_TYPE = "application/x-qlcplus-fixtures";
 static const char* GROUP_DRAG_MIME_TYPE = "application/x-qlcplus-fixturegroups";
+static const char* HEAD_DRAG_MIME_TYPE = "application/x-qlcplus-fixtureheads";
 
 const char* FixtureTreeWidget::fixtureDragMimeType()
 {
@@ -82,12 +86,22 @@ const char* FixtureTreeWidget::groupDragMimeType()
     return GROUP_DRAG_MIME_TYPE;
 }
 
+const char* FixtureTreeWidget::headDragMimeType()
+{
+    return HEAD_DRAG_MIME_TYPE;
+}
+
 QTreeWidgetItem* FixtureTreeWidget::groupFolderItem(const QString& path)
 {
-    if (path.isEmpty())
-        return invisibleRootItem();
+    // updateTree() seeds m_groupFolders[QString()] with the "Fixture Groups"
+    // root when groups are shown, so the empty-path case normally resolves
+    // there, not to the tree's own invisible root -- falling back to that
+    // only covers contexts where no such root was ever seeded (m_showGroups
+    // false, e.g. a plain fixture-selection dialog).
     if (m_groupFolders.contains(path))
         return m_groupFolders[path];
+    if (path.isEmpty())
+        return invisibleRootItem();
 
     const int slash = path.lastIndexOf('/');
     const QString parentPath = (slash < 0) ? QString() : path.left(slash);
@@ -104,10 +118,11 @@ QTreeWidgetItem* FixtureTreeWidget::groupFolderItem(const QString& path)
 
 QMimeData* FixtureTreeWidget::buildMimeData(const QList<QTreeWidgetItem*> &items) const
 {
-    QByteArray fxData, grpData;
+    QByteArray fxData, grpData, headData;
     QDataStream fxStream(&fxData, QIODevice::WriteOnly);
     QDataStream grpStream(&grpData, QIODevice::WriteOnly);
-    int fxCount = 0, grpCount = 0;
+    QDataStream headStream(&headData, QIODevice::WriteOnly);
+    int fxCount = 0, grpCount = 0, headCount = 0;
     foreach (QTreeWidgetItem *item, items)
     {
         // A group item carries its layout as a whole; drag it to move folders.
@@ -118,6 +133,25 @@ QMimeData* FixtureTreeWidget::buildMimeData(const QList<QTreeWidgetItem*> &items
             grpCount++;
             continue;
         }
+        // A HEAD row (ShowHeads mode): carries no PROP_ID of its own -- its
+        // fixture id comes from its parent row. Encoded separately so a drop
+        // target (the Fixture Group editor's grid) can place just this head
+        // instead of the whole fixture's worth.
+        QVariant h = item->data(KColumnName, PROP_HEAD);
+        if (h.isValid())
+        {
+            QTreeWidgetItem *parentItem = item->parent();
+            QVariant pv = (parentItem != nullptr)
+                ? parentItem->data(KColumnName, PROP_ID) : QVariant();
+            bool pok = false;
+            const quint32 pfid = pv.toString().toUInt(&pok);
+            if (pok)
+            {
+                headStream << pfid << quint32(h.toInt());
+                headCount++;
+            }
+            continue;
+        }
         QVariant v = item->data(KColumnName, PROP_ID); // fixture id (string)
         if (v.isValid() == false)
             continue;
@@ -125,7 +159,7 @@ QMimeData* FixtureTreeWidget::buildMimeData(const QList<QTreeWidgetItem*> &items
         quint32 fid = v.toString().toUInt(&ok);
         if (ok) { fxStream << fid; fxCount++; }
     }
-    if (fxCount == 0 && grpCount == 0)
+    if (fxCount == 0 && grpCount == 0 && headCount == 0)
         return QTreeWidget::mimeData(items);
 
     QMimeData *mime = new QMimeData();
@@ -133,6 +167,8 @@ QMimeData* FixtureTreeWidget::buildMimeData(const QList<QTreeWidgetItem*> &items
         mime->setData(FIXTURE_DRAG_MIME_TYPE, fxData);
     if (grpCount > 0)
         mime->setData(GROUP_DRAG_MIME_TYPE, grpData);
+    if (headCount > 0)
+        mime->setData(HEAD_DRAG_MIME_TYPE, headData);
     return mime;
 }
 
@@ -145,6 +181,22 @@ void FixtureTreeWidget::keyPressEvent(QKeyEvent* event)
         QTreeWidgetItem *it = currentItem();
         if (it && it->data(KColumnName, PROP_FOLDER).isValid())
         {
+            editItem(it, KColumnName);
+            return;
+        }
+        // Rename a universe folder in place ("Universe N" under Universes).
+        // A universe row carries PROP_UNIVERSE and nothing else identifying;
+        // fixtures never set it, so this alone is enough to pick it out.
+        if (it && it->data(KColumnName, PROP_UNIVERSE).isValid())
+        {
+            const quint32 uni = it->data(KColumnName, PROP_UNIVERSE).toUInt();
+            blockSignals(true);
+            it->setFlags(it->flags() | Qt::ItemIsEditable);
+            // Show the plain name for editing -- the displayed label can
+            // carry a "  —  destination" suffix (see universeDestination())
+            // that must not round-trip into the stored name.
+            it->setText(KColumnName, m_doc->inputOutputMap()->getUniverseNameByID(uni));
+            blockSignals(false);
             editItem(it, KColumnName);
             return;
         }
@@ -174,6 +226,35 @@ void FixtureTreeWidget::slotItemChanged(QTreeWidgetItem* item, int column)
     if (column != KColumnName || !item)
         return;
 
+    // Commit an in-place universe rename (armed in keyPressEvent()).
+    if ((item->flags() & Qt::ItemIsEditable) && item->data(KColumnName, PROP_UNIVERSE).isValid())
+    {
+        item->setFlags(item->flags() & ~Qt::ItemIsEditable);
+
+        const quint32 uni = item->data(KColumnName, PROP_UNIVERSE).toUInt();
+        InputOutputMap *iomap = m_doc->inputOutputMap();
+        const QString oldName = iomap ? iomap->getUniverseNameByID(uni) : QString();
+        const QString newName = item->text(KColumnName).trimmed();
+        // Universe::nameChanged() has no UI-side listener that would refresh
+        // this row on its own, unlike a fixture rename (which some other
+        // Doc signal already redraws elsewhere) -- so both the applied and
+        // the rejected case set the row's text back explicitly, rather than
+        // leaving the bare plain name shown in keyPressEvent() behind.
+        QString shownName = oldName;
+        if (iomap != NULL && newName.isEmpty() == false && newName != oldName)
+        {
+            iomap->setUniverseName(int(uni), newName);
+            m_doc->setModified();
+            shownName = newName;
+        }
+        QString uniLabel = shownName;
+        const QString dest = universeDestination(m_doc, uni);
+        if (!dest.isEmpty())
+            uniLabel += QString("   —   %1").arg(dest);
+        item->setText(KColumnName, uniLabel);
+        return;
+    }
+
     // In-place fixture rename (Return / F2 on a fixture row). We only act when
     // the row is ARMED (ItemIsEditable set in keyPressEvent) — fixture items are
     // not otherwise editable, so this cleanly ignores the itemChanged storm that
@@ -192,7 +273,8 @@ void FixtureTreeWidget::slotItemChanged(QTreeWidgetItem* item, int column)
         if (fxi != NULL)
         {
             const QString newName = item->text(KColumnName).trimmed();
-            if (newName.isEmpty() == false && newName != fxi->name())
+            if (newName.isEmpty() == false && newName != fxi->name()
+                && AppUtil::refuseTakenFixtureName(this, m_doc, fid, newName) == false)
             {
                 fxi->setName(newName);
                 m_doc->setModified();
@@ -232,7 +314,7 @@ void FixtureTreeWidget::dragEnterEvent(QDragEnterEvent* event)
     // circuits are shown — fixture-onto-circuit drops. Fixture drags are
     // otherwise for external targets (the group editor grid), not this tree.
     if (event->mimeData()->hasFormat(GROUP_DRAG_MIME_TYPE) ||
-        (m_showPower && event->mimeData()->hasFormat(FIXTURE_DRAG_MIME_TYPE)))
+        ((m_showPower || m_showGroups) && event->mimeData()->hasFormat(FIXTURE_DRAG_MIME_TYPE)))
         event->acceptProposedAction();
     else
         event->ignore();
@@ -245,6 +327,15 @@ void FixtureTreeWidget::dragMoveEvent(QDragMoveEvent* event)
 #else
     QTreeWidgetItem *target = itemAt(event->position().toPoint());
 #endif
+
+    // Fixtures (or a group's fixtures) onto a universe: patch them into it.
+    if (m_showGroups && dropUniverse(target).isValid()
+        && (event->mimeData()->hasFormat(FIXTURE_DRAG_MIME_TYPE)
+            || event->mimeData()->hasFormat(GROUP_DRAG_MIME_TYPE)))
+    {
+        event->acceptProposedAction();
+        return;
+    }
 
     if (event->mimeData()->hasFormat(GROUP_DRAG_MIME_TYPE))
     {
@@ -287,6 +378,18 @@ void FixtureTreeWidget::dropEvent(QDropEvent* event)
 #else
     QTreeWidgetItem *target = itemAt(event->position().toPoint());
 #endif
+
+    const QVariant dropUni = m_showGroups ? dropUniverse(target) : QVariant();
+    if (dropUni.isValid()
+        && (event->mimeData()->hasFormat(FIXTURE_DRAG_MIME_TYPE)
+            || event->mimeData()->hasFormat(GROUP_DRAG_MIME_TYPE)))
+    {
+        const QList<quint32> ids = droppedFixtures(event->mimeData());
+        if (!ids.isEmpty())
+            emit fixturesDroppedOnUniverse(ids, dropUni.toUInt());
+        event->acceptProposedAction();
+        return;
+    }
 
     const QVariant dropSrcVar = (target != NULL) ? target->data(KColumnName, PROP_SOURCE) : QVariant();
     const bool validPowerTarget = target != NULL &&
@@ -358,6 +461,59 @@ void FixtureTreeWidget::dropEvent(QDropEvent* event)
     if (ids.isEmpty() == false)
         emit groupsDroppedOnFolder(ids, destPath);
     event->acceptProposedAction();
+}
+
+QVariant FixtureTreeWidget::dropUniverse(QTreeWidgetItem *target) const
+{
+    if (target == NULL)
+        return QVariant();
+    const QVariant own = target->data(KColumnName, PROP_UNIVERSE);
+    if (own.isValid())
+        return own;
+    // A fixture row (not a head) listed under a universe row.
+    if (target->data(KColumnName, PROP_ID).isValid() && !target->data(KColumnName, PROP_HEAD).isValid()
+        && target->parent() != NULL)
+        return target->parent()->data(KColumnName, PROP_UNIVERSE);
+    return QVariant();
+}
+
+QList<quint32> FixtureTreeWidget::droppedFixtures(const QMimeData *mime) const
+{
+    QList<quint32> ids;
+    if (mime->hasFormat(FIXTURE_DRAG_MIME_TYPE))
+    {
+        QByteArray data = mime->data(FIXTURE_DRAG_MIME_TYPE);
+        QDataStream stream(&data, QIODevice::ReadOnly);
+        while (stream.atEnd() == false)
+        {
+            quint32 fid = 0;
+            stream >> fid;
+            if (!ids.contains(fid))
+                ids << fid;
+        }
+    }
+    else if (mime->hasFormat(GROUP_DRAG_MIME_TYPE))
+    {
+        // A group stands for its fixtures, in its own head order.
+        QByteArray data = mime->data(GROUP_DRAG_MIME_TYPE);
+        QDataStream stream(&data, QIODevice::ReadOnly);
+        while (stream.atEnd() == false)
+        {
+            quint32 gid = 0;
+            stream >> gid;
+            FixtureGroup *grp = m_doc->fixtureGroup(gid);
+            if (grp == NULL)
+                continue;
+            // Braces: foreach expands to an if/else, so a braceless if
+            // around one is a dangling else.
+            foreach (quint32 fid, grp->fixtureList())
+            {
+                if (!ids.contains(fid))
+                    ids << fid;
+            }
+        }
+    }
+    return ids;
 }
 
 FixtureTreeWidget::FixtureTreeWidget(Doc *doc, quint32 flags, QWidget *parent)
@@ -487,6 +643,56 @@ QTreeWidgetItem *FixtureTreeWidget::fixtureItem(quint32 id) const
     return NULL;
 }
 
+void FixtureTreeWidget::refreshFixtureName(quint32 id)
+{
+    Fixture *fxi = m_doc->fixture(id);
+    if (fxi == NULL)
+        return;
+    const bool was = blockSignals(true);      // not an edit: no itemChanged
+    for (QTreeWidgetItemIterator it(this); *it != NULL; ++it)
+    {
+        QTreeWidgetItem *item = *it;
+        const QVariant var = item->data(KColumnName, PROP_ID);
+        if (var.isValid() && var.toUInt() == id
+            && item->data(KColumnName, PROP_HEAD).isValid() == false
+            && item->text(KColumnName) != fxi->name())
+            item->setText(KColumnName, fxi->name());
+    }
+    blockSignals(was);
+}
+
+namespace
+{
+    bool filterRow(QTreeWidgetItem *item, const QString &needle, int *fixtures)
+    {
+        bool anyChild = false;
+        for (int i = 0; i < item->childCount(); ++i)
+            if (filterRow(item->child(i), needle, fixtures))
+                anyChild = true;
+
+        bool self = needle.isEmpty();
+        for (int c = 0; !self && c < item->columnCount(); ++c)
+            self = item->text(c).contains(needle, Qt::CaseInsensitive);
+        const bool visible = self || anyChild;
+        item->setHidden(!visible);
+        if (!needle.isEmpty() && anyChild)
+            item->setExpanded(true);   // reveal a match inside a collapsed folder
+        if (visible && self && item->data(KColumnName, PROP_ID).isValid()
+            && !item->data(KColumnName, PROP_HEAD).isValid())
+            ++*fixtures;
+        return visible;
+    }
+}
+
+int FixtureTreeWidget::setTextFilter(const QString &text)
+{
+    const QString needle = text.trimmed();
+    int fixtures = 0;
+    for (int i = 0; i < topLevelItemCount(); ++i)
+        filterRow(topLevelItem(i), needle, &fixtures);
+    return fixtures;
+}
+
 QTreeWidgetItem *FixtureTreeWidget::groupItem(quint32 id) const
 {
     // Groups are nested under their folder path, so search recursively.
@@ -525,11 +731,33 @@ void FixtureTreeWidget::updateFixtureItem(QTreeWidgetItem* item, Fixture* fixtur
 
     if (m_uniColumn > 0)
     {
-        item->setText(m_uniColumn, QString("%1").arg(fixture->universe() + 1));
+        // An inventory fixture's universe is a placeholder, not a fact.
+        item->setText(m_uniColumn, fixture->isPatched() ? QString("%1").arg(fixture->universe() + 1)
+                                                        : QString::fromUtf8("\xE2\x80\x94"));
         item->setTextAlignment(m_uniColumn, Qt::AlignHCenter | Qt::AlignVCenter);
     }
 
-    if (m_addressColumn)
+    if (m_addressColumn && fixture->addressClash())
+    {
+        item->setText(m_addressColumn, tr("clashes at %1.%2").arg(fixture->universe() + 1)
+                                                              .arg(fixture->address() + 1));
+        item->setForeground(m_addressColumn, QBrush(QColor(220, 70, 70)));
+        Fixture *owner = m_doc->fixture(m_doc->fixtureForAddress(fixture->universeAddress()));
+        item->setToolTip(m_addressColumn,
+            tr("The show file patches it at universe %1, address %2, which %3 already uses. "
+               "It is loaded unpatched so it cannot write over it -- give it a home with "
+               "Patch…, or drag it onto a universe.")
+                .arg(fixture->universe() + 1).arg(fixture->address() + 1)
+                .arg(owner != NULL ? owner->name() : tr("another fixture")));
+    }
+    else if (m_addressColumn && !fixture->isPatched())
+    {
+        item->setText(m_addressColumn, fixture->connection() == Fixture::Network
+                          ? (fixture->ipAddress().isEmpty() ? tr("unpatched (network)")
+                                                            : tr("unpatched (%1)").arg(fixture->ipAddress()))
+                          : tr("unpatched"));
+    }
+    else if (m_addressColumn)
     {
         QString s;
         if (fixture->channels() > 1)
@@ -757,8 +985,104 @@ void FixtureTreeWidget::slotItemExpanded()
     header()->resizeSections(QHeaderView::ResizeToContents);
 }
 
+void FixtureTreeWidget::setShowHeads(bool on)
+{
+    if (m_showHeads == on)
+        return;
+    m_showHeads = on;
+    // updateTree() clears and repopulates the whole tree, which emits
+    // itemSelectionChanged() (nothing selected) partway through. This is
+    // always called from within FixtureManager::fixtureGroupSelected() or
+    // clearRightPane(), which are ALREADY mid-flight handling that exact
+    // signal for the fixture tree -- an unblocked emission here reenters
+    // FixtureManager::slotSelectionChanged() while the group editor is
+    // still being wired up, which falls through to its "nothing selected"
+    // branch and tears the brand-new editor right back down (regression:
+    // a fixture group's layout editor would flash open and immediately
+    // disappear). Block signals for just this rebuild -- callers already
+    // own the selection-driven state change and don't need it echoed back.
+    /* DEFERRED, not immediate.
+     *
+       updateTree() destroys and rebuilds every row. Both callers reach here
+       from inside FixtureManager::slotSelectionChanged(), i.e. from inside
+       QTreeWidget's own itemSelectionChanged emission -- so the item the user
+       just clicked is deleted while Qt is still part-way through handling that
+       click. Qt does not crash, it simply carries on with a current-item that
+       no longer exists and reassigns selection to whatever now sits in that
+       position: "when I click on a fixture group it's not displaying the
+       layout .. just jumping around in the tree."
+
+       Running it on the next turn of the event loop lets the click finish
+       first. updateTree() restores the selection by id afterwards (see
+       currentSelection()/restoreSelection()), so the group stays selected and
+       its editor stays open. Signals stay blocked for the rebuild itself for
+       the reason described above. */
+    QTimer::singleShot(0, this, [this]() {
+        const bool wasBlocked = blockSignals(true);
+        updateTree();
+        blockSignals(wasBlocked);
+    });
+}
+
+/* Which item is selected, in terms that survive the tree being thrown away and
+   rebuilt. Pointers do not; a group id or a fixture id does. */
+FixtureTreeWidget::Selection FixtureTreeWidget::currentSelection() const
+{
+    Selection sel;
+    const QList<QTreeWidgetItem *> items = selectedItems();
+    if (items.isEmpty())
+        return sel;
+    QTreeWidgetItem *it = items.first();
+    const QVariant grp = it->data(KColumnName, PROP_GROUP);
+    const QVariant uni = it->data(KColumnName, PROP_UNIVERSE);
+    const QVariant fid = it->data(KColumnName, PROP_ID);
+    if (grp.isValid())      { sel.kind = Selection::Group;    sel.id = grp.toUInt(); }
+    else if (uni.isValid()) { sel.kind = Selection::Universe; sel.id = uni.toUInt(); }
+    else if (fid.isValid() && it->data(KColumnName, PROP_HEAD).isValid() == false)
+                            { sel.kind = Selection::Fixture;  sel.id = fid.toUInt(); }
+    return sel;
+}
+
+/* Put the selection back after a rebuild, WITHOUT telling anyone.
+ *
+ * updateTree() throws the whole tree away, so whatever was selected is gone and
+ * the widget comes back with nothing selected. Callers that rebuild for their
+ * own reasons -- setShowHeads() opening a group's layout editor, say -- then sit
+ * on a tree whose selection contradicts the pane they just opened, and the next
+ * selection signal from ANY source tears that pane down. Blocking the signal
+ * during the rebuild (which this file already does) only defers that: it hides
+ * the reentry, it does not fix the state. Restoring the selection does.
+ */
+void FixtureTreeWidget::restoreSelection(const Selection &sel)
+{
+    if (sel.kind == Selection::None)
+        return;
+
+    const int role = (sel.kind == Selection::Group)    ? PROP_GROUP
+                   : (sel.kind == Selection::Universe) ? PROP_UNIVERSE
+                                                       : PROP_ID;
+    QTreeWidgetItemIterator it(this);
+    while (*it != nullptr)
+    {
+        QTreeWidgetItem *item = *it;
+        const QVariant v = item->data(KColumnName, role);
+        const bool isHead = item->data(KColumnName, PROP_HEAD).isValid();
+        if (v.isValid() && v.toUInt() == sel.id
+            && (sel.kind != Selection::Fixture || isHead == false))
+        {
+            const bool was = blockSignals(true);
+            setCurrentItem(item);
+            item->setSelected(true);
+            blockSignals(was);
+            return;
+        }
+        ++it;
+    }
+}
+
 void FixtureTreeWidget::updateTree()
 {
+    const Selection keep = currentSelection();
     clear();
     m_groupFolders.clear();
     m_universesCount = 0;
@@ -767,13 +1091,83 @@ void FixtureTreeWidget::updateTree()
 
     if (m_showGroups == true)
     {
+        // A dedicated "Fixture Groups" root, peer to "Power" and
+        // "Universes" below -- always present (even with zero groups yet)
+        // so group CREATION has a right-clickable home of its own
+        // (FixtureManager::slotContextMenuRequested()'s "New Group..."),
+        // instead of a toolbar/menu-bar action. Drop-enabled and tagged with
+        // an empty PROP_FOLDER so dragging a group onto it un-files it from
+        // any sub-folder, same as dropping onto any other folder node.
+        //
+        // setData()/setFlags() emit itemChanged() SYNCHRONOUSLY (see the
+        // keyPressEvent()/slotItemChanged() comments above for the other
+        // place this file already works around it). Every ordinary folder
+        // item is immune -- slotItemChanged() only treats a PROP_FOLDER item
+        // as user-renamed when its display text differs from its path's
+        // last segment, which is never true for a freshly-created folder
+        // (both come from the same string). This root breaks that
+        // invariant on purpose (text "Fixture Groups", path "") -- without
+        // blockSignals, that mismatch fooled slotItemChanged() into treating
+        // construction as a rename, which emitted groupFolderRenamed("",
+        // "Fixture Groups") into FixtureManager::slotGroupFolderRenamed(),
+        // which re-entered updateTree() (via updateView()) *while this very
+        // call was still building it* -- clear() there deleted the
+        // groupsRoot this call still held a pointer to, and everything after
+        // used it dangling. Crashed intermittently (classic use-after-free:
+        // heap-state dependent), reported twice with an identical
+        // EXC_BAD_ACCESS in FixtureTreeWidget::updateTree() -> ...
+        // setFlags() -> QTreeWidgetPrivate::dataChanged().
+        blockSignals(true);
+        QTreeWidgetItem *groupsRoot = new QTreeWidgetItem(this);
+        groupsRoot->setText(KColumnName, tr("Fixture Groups"));
+        groupsRoot->setIcon(KColumnName, QIcon(":/folder.png"));
+        groupsRoot->setData(KColumnName, PROP_FOLDER, QString());
+        groupsRoot->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDropEnabled);
+        blockSignals(false);
+        groupsRoot->setExpanded(true);
+        m_groupFolders[QString()] = groupsRoot;
+
         foreach (FixtureGroup* grp, m_doc->fixtureGroups())
         {
-            // Nest the group under its folder path (if any).
+            // Nest the group under its folder path (if any), under the root.
             QTreeWidgetItem* grpItem = new QTreeWidgetItem(groupFolderItem(grp->path()));
             updateGroupItem(grpItem, grp);
         }
     }
+
+    // The Inventory: fixtures staged in the show but not yet given a universe
+    // and address. A peer of Fixture Groups / Power / Universes, always
+    // present in the manager so it has a right-clickable home of its own.
+    QTreeWidgetItem *inventoryRoot = NULL;
+    QTreeWidgetItem *clashRoot = NULL;
+    QMap<QString, QTreeWidgetItem *> invManuf;    // manufacturer -> folder
+    QMap<QString, QTreeWidgetItem *> invModel;    // manufacturer\x1fmodel -> folder
+    auto newInventoryFolder = [this](QTreeWidgetItem *parent, const QString &name) {
+        QTreeWidgetItem *f = new QTreeWidgetItem(parent);
+        f->setText(KColumnName, name);
+        f->setIcon(KColumnName, QIcon(":/folder.png"));
+        f->setData(KColumnName, PROP_INVENTORY, 2);
+        f->setData(KColumnName, PROP_INVENTORY_NAME, name);
+        f->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+        f->setExpanded(true);
+        return f;
+    };
+    auto ensureInventoryRoot = [&]() {
+        if (inventoryRoot == NULL)
+        {
+            blockSignals(true);
+            inventoryRoot = new QTreeWidgetItem(this);
+            inventoryRoot->setText(KColumnName, tr("Inventory"));
+            inventoryRoot->setIcon(KColumnName, QIcon(":/folder.png"));
+            inventoryRoot->setData(KColumnName, PROP_INVENTORY, 1);
+            inventoryRoot->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+            blockSignals(false);
+            inventoryRoot->setExpanded(true);
+        }
+        return inventoryRoot;
+    };
+    if (m_showGroups == true)
+        ensureInventoryRoot();
 
     // Power sources/circuits, peer to the fixture-group folders and the
     // Universes folder below. A source with 0 or 1 circuits feeds fixtures
@@ -844,20 +1238,100 @@ void FixtureTreeWidget::updateTree()
     }
 
     // In the Fixture Manager (groups shown) keep all universes tidily under a
-    // single "Universes" folder, separate from the fixture-group folders.
+    // single "Universes" folder, separate from the fixture-group folders --
+    // always present (even with zero fixtures patched into it yet), same
+    // "always present" convention as Fixture Groups/Power above, so a
+    // universe added via the Connections/Devices editor shows up here
+    // immediately with a right-clickable row to patch the first fixture
+    // into. Previously this whole folder (and every universe row in it) was
+    // only ever created by iterating m_doc->fixtures() below, so a universe
+    // with no fixture patched into it yet -- exactly the state right after
+    // adding one in Connections -- had no row here at all: real bug, not a
+    // display gap.
     QTreeWidgetItem *universesRoot = NULL;
+
+    if (m_showGroups == true)
+    {
+        universesRoot = new QTreeWidgetItem(this);
+        universesRoot->setText(KColumnName, tr("Universes"));
+        universesRoot->setIcon(KColumnName, QIcon(":/folder.png"));
+        universesRoot->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+        universesRoot->setExpanded(true);
+
+        for (quint32 uni = 0; uni < m_doc->inputOutputMap()->universesCount(); uni++)
+        {
+            QTreeWidgetItem *topItem = new QTreeWidgetItem(universesRoot);
+            QString uniLabel = m_doc->inputOutputMap()->getUniverseNameByID(uni);
+            const QString dest = universeDestination(m_doc, uni);
+            if (!dest.isEmpty())
+                uniLabel += QString("   —   %1").arg(dest);
+            topItem->setText(KColumnName, uniLabel);
+            topItem->setIcon(KColumnName, QIcon(":/folder.png"));
+            topItem->setData(KColumnName, PROP_UNIVERSE, uni);
+            topItem->setExpanded(true);
+            if (m_channelSelection)
+            {
+                topItem->setFlags(topItem->flags() | Qt::ItemIsUserCheckable | Qt::ItemIsAutoTristate);
+                topItem->setCheckState(KColumnName, Qt::Unchecked);
+            }
+            m_universesCount++;
+        }
+    }
 
     foreach (Fixture* fixture, m_doc->fixtures())
     {
         Q_ASSERT(fixture != NULL);
 
-        if (m_showGroups && universesRoot == NULL)
+        // Staged fixtures live under the Inventory, never under a universe --
+        // a placeholder 0/0 must not make one look like it sits in universe 1.
+        // Channel selection has no use for them: they have no address.
+        /* An address clash: patched by the file onto channels another fixture
+           holds (see Fixture::addressClash()). Listed on its own, at the top,
+           rather than among the inventory -- it is a problem with the show,
+           not a fixture waiting to be rigged. */
+        if (fixture->addressClash() && m_showGroups && !m_channelSelection)
         {
-            universesRoot = new QTreeWidgetItem(this);
-            universesRoot->setText(KColumnName, tr("Universes"));
-            universesRoot->setIcon(KColumnName, QIcon(":/folder.png"));
-            universesRoot->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
-            universesRoot->setExpanded(true);
+            if (clashRoot == NULL)
+            {
+                blockSignals(true);
+                clashRoot = new QTreeWidgetItem;
+                insertTopLevelItem(0, clashRoot);
+                clashRoot->setIcon(KColumnName, QIcon(":/folder.png"));
+                clashRoot->setData(KColumnName, PROP_CLASHES, true);
+                clashRoot->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+                clashRoot->setForeground(KColumnName, QBrush(QColor(220, 70, 70)));
+                clashRoot->setToolTip(KColumnName,
+                    tr("Fixtures the show file patches onto channels another fixture already "
+                       "uses. They are loaded unpatched (they send no DMX) and saved as they "
+                       "were, until they are given a home."));
+                blockSignals(false);
+                clashRoot->setExpanded(true);
+            }
+            QTreeWidgetItem *cItem = new QTreeWidgetItem(clashRoot);
+            updateFixtureItem(cItem, fixture);
+            clashRoot->setText(KColumnName, tr("Address clashes (%1)").arg(clashRoot->childCount()));
+            m_fixturesCount++;
+            continue;
+        }
+
+        if (!fixture->isPatched())
+        {
+            if (m_channelSelection)
+                continue;
+            // Manufacturer -> model -> fixture, so a big inventory reads like the
+            // bill of materials it is.
+            const QString manuf = fixture->groupingManufacturer();
+            const QString model = fixture->groupingModel();
+            QTreeWidgetItem *&mNode = invManuf[manuf];
+            if (mNode == NULL)
+                mNode = newInventoryFolder(ensureInventoryRoot(), manuf);
+            QTreeWidgetItem *&modelNode = invModel[manuf + QLatin1Char('\x1f') + model];
+            if (modelNode == NULL)
+                modelNode = newInventoryFolder(mNode, model);
+            QTreeWidgetItem *iItem = new QTreeWidgetItem(modelNode);
+            updateFixtureItem(iItem, fixture);
+            m_fixturesCount++;
+            continue;
         }
 
         // The universe nodes live under universesRoot (or at top level when
@@ -880,7 +1354,8 @@ void FixtureTreeWidget::updateTree()
                 }
             }
         }
-        // Haven't found this universe node ? Create it.
+        // Not pre-seeded above (m_showGroups == false, e.g. a fixture-
+        // selection dialog) ? Create it lazily, same as before.
         if (topItem == NULL)
         {
             topItem = new QTreeWidgetItem(uniParent);
@@ -906,7 +1381,107 @@ void FixtureTreeWidget::updateTree()
         m_channelsCount += fixture->channels();
     }
 
+    if (inventoryRoot != NULL)
+    {
+        // Alphabetical at every level, sorted on the bare names before the
+        // counts go on.
+        inventoryRoot->sortChildren(KColumnName, Qt::AscendingOrder);
+        for (int m = 0; m < inventoryRoot->childCount(); m++)
+        {
+            QTreeWidgetItem *mNode = inventoryRoot->child(m);
+            mNode->sortChildren(KColumnName, Qt::AscendingOrder);
+            for (int d = 0; d < mNode->childCount(); d++)
+                mNode->child(d)->sortChildren(KColumnName, Qt::AscendingOrder);
+        }
+        refreshInventoryCounts();
+    }
+
+    /* Names more than one fixture has -- a show from before names were
+       unique, or merged with another ("two AT1-3z lights .. one in the upper
+       left corner"). Listed at the top, a row per name, to be numbered apart
+       from the Fixture Manager's menu. The fixtures stay where they are. */
+    if (m_showGroups && !m_channelSelection)
+    {
+        const QMap<QString, QList<quint32> > dups = m_doc->duplicateFixtureNames();
+        if (!dups.isEmpty())
+        {
+            blockSignals(true);
+            QTreeWidgetItem *dupRoot = new QTreeWidgetItem;
+            insertTopLevelItem(0, dupRoot);
+            dupRoot->setText(KColumnName, tr("Duplicate names (%1)").arg(dups.size()));
+            dupRoot->setIcon(KColumnName, QIcon(":/folder.png"));
+            dupRoot->setData(KColumnName, PROP_DUPLICATES, true);
+            dupRoot->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+            dupRoot->setForeground(KColumnName, QBrush(QColor(224, 160, 48)));
+            dupRoot->setToolTip(KColumnName,
+                tr("More than one fixture has each of these names. Right-click to number "
+                   "them apart: the patched one keeps the name."));
+            for (auto it = dups.constBegin(); it != dups.constEnd(); ++it)
+            {
+                QTreeWidgetItem *row = new QTreeWidgetItem(dupRoot);
+                row->setText(KColumnName, tr("%1 — %2 fixtures").arg(it.key()).arg(it.value().size()));
+                row->setData(KColumnName, PROP_DUPLICATES, true);
+                row->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+                QStringList where;
+                foreach (quint32 fid, it.value())
+                {
+                    Fixture *f = m_doc->fixture(fid);
+                    if (f == NULL)
+                        continue;
+                    where << (f->isPatched() ? tr("ID %1: universe %2, address %3").arg(fid)
+                                                   .arg(f->universe() + 1).arg(f->address() + 1)
+                                             : tr("ID %1: in the inventory").arg(fid));
+                }
+                row->setToolTip(KColumnName, where.join(QStringLiteral("\n")));
+            }
+            blockSignals(false);
+            dupRoot->setExpanded(true);
+        }
+    }
+
     header()->resizeSections(QHeaderView::ResizeToContents);
+
+    restoreSelection(keep);
+}
+
+void FixtureTreeWidget::refreshInventoryCounts()
+{
+    QTreeWidgetItem *root = NULL;
+    for (int i = 0; i < topLevelItemCount() && root == NULL; i++)
+        if (topLevelItem(i)->data(KColumnName, PROP_INVENTORY).toInt() == 1)
+            root = topLevelItem(i);
+    if (root == NULL)
+        return;
+
+    int total = 0;
+    for (int m = root->childCount() - 1; m >= 0; m--)
+    {
+        QTreeWidgetItem *mNode = root->child(m);
+        int manufTotal = 0;
+        for (int d = mNode->childCount() - 1; d >= 0; d--)
+        {
+            QTreeWidgetItem *dNode = mNode->child(d);
+            if (dNode->childCount() == 0)
+            {
+                delete dNode;
+                continue;
+            }
+            dNode->setText(KColumnName, QStringLiteral("%1 (%2)")
+                               .arg(dNode->data(KColumnName, PROP_INVENTORY_NAME).toString())
+                               .arg(dNode->childCount()));
+            manufTotal += dNode->childCount();
+        }
+        if (manufTotal == 0)
+        {
+            delete mNode;
+            continue;
+        }
+        mNode->setText(KColumnName, QStringLiteral("%1 (%2)")
+                           .arg(mNode->data(KColumnName, PROP_INVENTORY_NAME).toString()).arg(manufTotal));
+        total += manufTotal;
+    }
+    // The root stays, empty or not: it is where Add to inventory lives.
+    root->setText(KColumnName, total > 0 ? tr("Inventory (%1)").arg(total) : tr("Inventory"));
 }
 
 

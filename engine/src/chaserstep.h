@@ -91,6 +91,9 @@ public:
     uint duration;               //! Duration
     QList <SceneValue> values;   //! specific DMX values for this step (chaser in sequence mode)
     QString note;
+    /** What the step's function runs on (a SpeedMasters::Assignment):
+     *  Inherit (-1, the default) takes the chaser's. */
+    int speedMaster = -1;
 };
 
 /** @} */

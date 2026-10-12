@@ -1235,7 +1235,7 @@ void ProgrammerController::parkFixtures(const QList<quint32> &fixtureIds)
     for (quint32 fid : fixtureIds)
     {
         Fixture *fxi = m_doc->fixture(fid);
-        if (fxi == NULL || fxi->fixtureMode() == NULL)
+        if (fxi == NULL || fxi->fixtureMode() == NULL || !fxi->isPatched())
             continue;
 
         const int uni = (int)fxi->universe();
@@ -1346,7 +1346,7 @@ void ProgrammerController::markFixtures(const QList<quint32> &fixtureIds)
     for (quint32 fid : fixtureIds)
     {
         Fixture *fxi = m_doc->fixture(fid);
-        if (fxi == NULL || fxi->fixtureMode() == NULL)
+        if (fxi == NULL || fxi->fixtureMode() == NULL || !fxi->isPatched())
             continue;
 
         const int uni = (int)fxi->universe();
@@ -2177,7 +2177,7 @@ void ProgrammerController::setDesignDimmerValue(quint32 paletteId, uchar value)
 void ProgrammerController::writeChannelLive(quint32 fixtureId, quint32 channel, uchar value)
 {
     Fixture *fxi = m_doc->fixture(fixtureId);
-    if (fxi == NULL)
+    if (fxi == NULL || !fxi->isPatched())
         return;
 
     Universe *universe = m_doc->inputOutputMap()->universe(fxi->universe());

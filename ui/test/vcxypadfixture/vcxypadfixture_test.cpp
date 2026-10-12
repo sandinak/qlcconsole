@@ -702,6 +702,34 @@ void VCXYPadFixture_Test::arm16bit()
     m_doc->deleteFixture(fxi->id());
 }
 
+void VCXYPadFixture_Test::armStagedFixture()
+{
+    // A staged mover reports universe 1 / address 1 but owns no address:
+    // arm it like a missing one so the pad writes nothing.
+    Fixture *fxi = new Fixture(m_doc);
+    QLCFixtureDef *def = m_doc->fixtureDefCache()->fixtureDef("Futurelight", "DJScan250");
+    QVERIFY(def != NULL);
+    fxi->setFixtureDefinition(def, def->modes().first());
+    fxi->setPatched(false);
+    QVERIFY(m_doc->addFixture(fxi));
+
+    VCXYPadFixture xy(m_doc);
+    xy.setHead(GroupHead(fxi->id(), 0));
+    xy.arm();
+    QCOMPARE(xy.m_universe, Universe::invalid());
+    QCOMPARE(xy.m_fixtureAddress, QLCChannel::invalid());
+    QCOMPARE(xy.m_xMSB, QLCChannel::invalid());
+    QCOMPARE(xy.m_yMSB, QLCChannel::invalid());
+
+    // Patched, the same pad arms normally.
+    QVERIFY(m_doc->patchFixture(fxi->id(), 0, 50));
+    xy.arm();
+    QCOMPARE(xy.m_fixtureAddress, quint32(50));
+    QCOMPARE(xy.m_xMSB, quint32(0));
+
+    m_doc->deleteFixture(fxi->id());
+}
+
 void VCXYPadFixture_Test::disarm()
 {
     VCXYPadFixture xy(m_doc);

@@ -8,6 +8,8 @@
     var effect = new Object;
     effect.apiVersion   = 1;
     effect.name         = "Sweep";
+    // Takes the host's spread (fixture.phase, inputs._spread) in place of its own.
+    effect.hostSpread = "cascade";
     effect.description  = "Synchronized pan or tilt scanner sweep with cascade";
     effect.author       = "QLC+";
     effect.fixtureTypes = ["moving"];
@@ -66,7 +68,7 @@
             if (!f.hasPanTilt) return {};
 
             // Cascade: each fixture is staggered forward in time
-            var stagger = (n > 1) ? (i / (n - 1)) * cascade : 0;
+            var stagger = inputs._spread ? f.phase : (n > 1) ? (i / (n - 1)) * cascade : 0;
             var phase = basePhase - stagger;
 
             var wave = (mode === 1) ? sawtooth(phase) : triangle(phase);

@@ -366,7 +366,7 @@ void StudioGroupEditor::applySelection()
     foreach (quint32 fid, ids)
     {
         FixtureRigProps rp = props->fixtureRigProps(fid);
-        rp.studioMount = mount;
+        rp.setStudioMount(mount);
         rp.studioAngle = angle;
         // For a single selection, set the exact local; for many, only the face/
         // angle apply (leaving each where it sits) — moving them all to one XYZ

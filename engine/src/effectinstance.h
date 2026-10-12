@@ -16,17 +16,25 @@
 #ifndef EFFECTINSTANCE_H
 #define EFFECTINSTANCE_H
 
+#include "spreadlayer.h"
 #include <QMutex>
 #include <QJSValue>
+#include <QColor>
 #include <QHash>
 #include <QList>
 #include <QPointF>
 #include <QElapsedTimer>
 #include <QVariantMap>
+#include <QVector3D>
+#include <QVector>
 
 #include "effectscript.h"
+#include "scenetransition.h"
 
 class Doc;
+class Fixture;
+class QLCPalette;
+class StageTarget;
 
 class EffectInstance
 {
@@ -44,6 +52,9 @@ public:
     EffectInstance(Doc *doc, quint32 sceneId, quint32 effectPaletteId);
 
     bool isValid() const { return m_script.isValid(); }
+    /** Why it is not valid, in a few words: the look is gone, no effect is
+     *  chosen, or the script's own lastError(). */
+    QString error() const;
 
     quint32 sceneId()         const { return m_sceneId; }
     quint32 effectPaletteId() const { return m_effectPaletteId; }
@@ -134,12 +145,33 @@ public:
         int     head;
         int     col;
         int     row;
+        bool operator==(const EffectCell &o) const
+        {
+            return fixtureId == o.fixtureId && head == o.head && col == o.col && row == o.row;
+        }
     };
     /** Build the per-head cell list + grid size the effect draws on. Sourced from
      *  the scene's fixture-group head layouts (concatenated left→right), filtered
      *  by the script's fixtureTypes; falls back to a 1-D strip of every head of
      *  the loose fixtures when no group layout applies. */
     QList<EffectCell> effectiveCells(int &gridCols, int &gridRows) const;
+
+    /** A head as the spread preview draws it: where it stands (metres, on
+     *  the floor plan; its head-layout cell when nothing is placed) and its
+     *  phase in cycles. */
+    struct SpreadDot
+    {
+        QPointF plan;
+        int col = 0, row = 0;
+        double phase = 0;
+    };
+    /** Each head's spread, as the effect would get it now (the look
+     *  editor's preview). @p centre / @p hasCentre: the target it spreads
+     *  from, for the target axes. */
+    QList<SpreadDot> spreadPreview(QPointF *centre = nullptr, bool *hasCentre = nullptr) const;
+    /** The look's Aim target, the centre for spreading out from or round
+     *  it. False when the look has none. */
+    bool aimCentre(QVector3D *centre) const;
 
     /** Host scene's actuation level [0..1]: ramps 0→1 over the scene's fade-in,
      *  then holds at 1. Applied to the effect's intensity/colour output so the
@@ -158,13 +190,60 @@ public:
 
 private:
     QJSValue buildFixturesArray(const QList<EffectCell> &cells, int gridCols, int gridRows);
+    struct FixtureFacts;
+    void readFixtureFacts(const Fixture *fxi, FixtureFacts &f) const;
+    QJSValue aimAtObject(quint32 fid, const QVector3D &pos, QLCPalette *effectPal);
+    QJSValue sceneTargetObject(quint32 fid, StageTarget *st);
     QJSValue buildInputsObject() const;
+    /** What it runs on (a SpeedMasters::Assignment): its own "__speedMaster"
+     *  param, else its look's effective speed master. */
+    int speedAssignment() const;
     QJSValue buildPalettesObject() const;
+    /** The look's colours, in its order (those after this effect, else all),
+     *  and its master dimmer (1 when it has none) -- what the effect's colour
+     *  slots and palettes.look are filled from. */
+    void lookColours(QList<QColor> &colours, double &dimmer, bool *haveDimmer = nullptr) const;
+    /** The fixtures and groups the look is on, before any type filter. */
+    QList<quint32> lookFixtureIds() const;
+    /** A WLED look (QLCPalette::wledEffect()): what WLED fixtures in it are
+     *  sent -- the effect, its controls and the look's colours, on their own
+     *  channels. They run it; the script never sees them. */
+    QList<DmxWrite> wledDeviceWrites() const;
     QJSValue buildParamsObject() const;
     QJSValue buildDataChannelsObject() const;
 
     QList<DmxWrite> parseIntents(const QJSValue &intents,
                                  const QList<EffectCell> &cells) const;
+
+    /* What the script is handed is kept from tick to tick: building a JS
+       object for every head of every fixture, every tick, was most of what
+       an effect on a big rig cost -- the script itself next to nothing. A
+       fixture's facts (its name, heads, what it can do) are read again only
+       when it changes, its place on the rig each tick but once a fixture,
+       not once a head; the cells are rebuilt when the cells or a fixture
+       change. A fresh array holds them each tick, so a script that sorts
+       the list it is given does not sort the next one. */
+    struct FixtureFacts
+    {
+        const Fixture *fixture = nullptr;
+        const void *mode = nullptr;     //!< its mode, to see it change
+        QString name;
+        int heads = 0;
+        float panRange = 360.0f, tiltRange = 270.0f;
+        float lensMin = 0.0f, lensMax = 0.0f;
+        bool hasPanTilt = false, hasRGB = false, hasColorWheel = false;
+        bool hasDimmer = false, hasGobo = false, hasShutter = false, hasZoom = false;
+        QVector3D pos;
+        QJSValue posObj;                //!< shared by its cells
+        quint64 seen = 0;               //!< the tick it was last looked at
+        bool sceneTargetSet = false;    //!< on its cells now
+        bool lastSpotSet = false;
+    };
+    QHash<quint32, FixtureFacts> m_facts;
+    QVector<QJSValue> m_cellObjects;
+    QList<EffectCell> m_cellsBuilt;
+    int m_cellsBuiltCols = -1, m_cellsBuiltRows = -1;
+    quint64 m_factsTick = 0;
 
     Doc    *m_doc;
     quint32 m_sceneId;
@@ -173,6 +252,21 @@ private:
     EffectScript     m_script;
     QJSValue         m_state;
     QElapsedTimer    m_elapsed;
+    /** The clock it reads and the whole beat _beatCount counts from --
+     *  set on the first tick, and again when its speed master changes. */
+    mutable int      m_clockAssignment = -2;
+    SpreadLayer::Settings m_spreadBuilt;    //!< what the cells' "phase" was worked out for
+    QVector3D        m_spreadCentre;        //!< ...and round which target
+    bool             m_spreadHadCentre = false;
+    mutable double   m_startBeat = 0;
+
+    /** The stage-laid grid of a multi-group look (effectiveCells()): placing
+     *  every head on the stage is milliseconds a tick, so it is kept for up to
+     *  a second, or until the look's groups or fixtures change. */
+    mutable QList<EffectCell> m_stageCells;
+    mutable int               m_stageCols = 0, m_stageRows = 0;
+    mutable QList<quint32>    m_stageKey;
+    mutable QElapsedTimer     m_stageAge;
 
     QHash<QString, float>      m_inputValues;
     QHash<QString, double>     m_paramValues;
@@ -201,6 +295,16 @@ private:
     qint64           m_fadeOutStartMs = 0;  //!< m_elapsed.elapsed() when the fade began
 
     float m_envelope = 1.0f; //!< host-scene actuation level, applied per tick
+    QString m_wledEffect;    //!< QLCPalette::wledEffect(), at construction
+
+    /* The scene's transitions, for each cell: a look arriving by a wipe brings
+       its effect in by the same wipe (envelopeFor()). */
+    float envelopeFor(quint32 fid, int head) const;
+    SceneTransition m_transitionIn, m_transitionOut;   //!< the scene's, this tick
+    TransitionMap m_transitionMapIn, m_transitionMapOut;
+    bool m_transitionMapInBuilt = false, m_transitionMapOutBuilt = false;
+    uint m_sceneElapsed = 0;                           //!< ms since the scene started
+    bool m_sceneRunning = false;
 
     //!< look's master Dimmer (0..1, 1.0 if none), rebuilt each runTick(). Applied
     //!< host-side to effect colour output on fixtures WITHOUT a master intensity

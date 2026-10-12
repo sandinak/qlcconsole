@@ -21,6 +21,7 @@
 #define MONITORPROPERTIES_H
 
 #include <QObject>
+#include <functional>
 #include <QVector3D>
 #include <QPointF>
 #include <QColor>
@@ -29,8 +30,11 @@
 #include <QMap>
 
 #include "truss.h"
+#include "headlayout.h"
 #include "stageplatform.h"
 #include "pipe.h"
+#include "hanger.h"
+#include "scenery.h"
 #include "stand.h"
 #include "tower.h"
 #include "stagetarget.h"
@@ -72,7 +76,7 @@ class MonitorProperties final : public QObject
 
 public:
     MonitorProperties();
-    ~MonitorProperties() {}
+    ~MonitorProperties();
 
     enum DisplayMode { DMX, Graphics };
     enum ChannelStyle { DMXChannels, RelativeChannels };
@@ -96,6 +100,23 @@ public:
 
     /** Reset all the Monitor properties */
     void reset();
+
+    /** The whole rig as XML (what saveXML() writes), for undo and Cancel. */
+    QByteArray snapshot(const Doc *mainDocument) const;
+
+    /** Put the rig back as a snapshot() had it. The structures it replaces
+     *  are not deleted at once but retired for a while: the DMX thread looks
+     *  stage targets and rig props up while a show runs, and an object it
+     *  just found must not vanish under it. Emits rigPropsChanged() for every
+     *  fixture and stageTargetsChanged(). */
+    bool restoreSnapshot(const QByteArray &snap, const Doc *mainDocument);
+
+private:
+    /** Retired by restoreSnapshot(): deleters, and when each was retired. */
+    QList<QPair<qint64, std::function<void()> > > m_retired;
+    void freeRetired(bool all);
+
+public:
 
 private:
     QFont m_font;
@@ -328,6 +349,17 @@ public:
      *  an item referencing a deleted layer still renders (as Default). */
     MonitorLayer layer(quint32 id) const;
 
+    /** Locking is by LAYER: an object is locked exactly when its layer is.
+     *  Shows saved before that carried per-object locks; each object locked on
+     *  an unlocked layer is moved onto a locked "Locked" layer (made if there
+     *  is none), so nothing that was pinned becomes movable by surprise.
+     *  Returns how many were moved. Called once a workspace has loaded. */
+    int foldItemLocksIntoLayers(class PowerDistribution *pd, class NetworkTopology *nt);
+    /** Set every object's own lock flag from its layer's lock -- the one
+     *  source of truth -- so the views that read an object's lock (drag,
+     *  red outline) follow the layer. */
+    void syncItemLocksToLayers(class PowerDistribution *pd, class NetworkTopology *nt);
+
     /** True if a layer with this id currently exists. */
     bool hasLayer(quint32 id) const { return m_layers.contains(id); }
 
@@ -496,6 +528,51 @@ public:
      *  move/resize and once after load. See recomputeAnchoredFrames impl. */
     void recomputeAnchoredFrames();
 
+    /** Turn a fixture about the vertical by @p deltaDeg: the face it is on
+     *  (studioYaw) and, for a moving head, where its pan counts from. Its
+     *  position is the caller's business. */
+    void turnFixtureFacing(quint32 fid, float deltaDeg);
+    /** Turn platform @p id to face @p deg, and what is on it with it: what
+     *  stands on its deck goes round its centre, and everything on its faces
+     *  or in its studio frame turns to match. */
+    void turnPlatform(quint32 id, float deg);
+    /** Turn tower @p id to face @p deg, with what is on its shelves and the
+     *  hangers on its sides. */
+    void turnTower(quint32 id, float deg);
+
+    /** Rebuild the plot item for any fixture that is rigged on a structure but
+     *  has no FxItem -- removeFixture() drops the item and leaves the rig
+     *  props, stranding the fixture out of everything driven by
+     *  fixtureItemsID() (Layers tree, 2D plot) while the studio editor still
+     *  lists it on its structure. Also collapses any fixture carrying more than
+     *  one structural mount down to its primaryMount(). Called once after
+     *  load. */
+    void repairOrphanedMounts();
+
+    /** Put back the agreement between a riser-mounted fixture's face and the
+     *  plane it is drawn on. See FixtureRigProps::setStudioMount(): the two are
+     *  one fact stored twice, numbered in opposite directions, and until that
+     *  setter existed any UI that offered a "Face" control could set the plane
+     *  and leave the face behind. Files written in that window are still out
+     *  there, so they are corrected on the way in rather than left to render as
+     *  a step that does not match its neighbours. */
+    void repairMountPlanes();
+
+    /** The single-fixture correction repairMountPlanes() applies to every
+     *  entry in m_rigProps on load, exposed so a dialog committing a fresh
+     *  mount/orientation choice for ONE fixture (no reload in between) can
+     *  apply the same fix immediately instead of waiting for the next file
+     *  load to catch it. */
+    void repairMountPlane(FixtureRigProps &rp) const;
+
+    /** Put a fixture on @p face: its plane and which way it faces
+     *  (studioMount + studioFlip). Mounted on the OUTSIDE of a truss, it also
+     *  goes to that side of it -- the face of a tower it is clamped to, or for
+     *  a horizontal run on top, underneath, or the downstage/upstage (stage
+     *  left/right) chord -- which is what "on the back" means for a fixture on
+     *  a truss. Inside one, or not on a truss, only the facing changes. */
+    void setFixtureFace(FixtureRigProps &rp, FixtureRigProps::Face face) const;
+
 private:
     QMap<quint32, Truss*> m_trusses;
 
@@ -521,6 +598,47 @@ public:
     /** Return the platform height (metres) at floor position (xMetres, yMetres).
      *  Returns 0 if the point is not on any platform. */
     float platformHeightAt(float xMetres, float yMetres) const;
+
+    /** Where a target actually IS, and where light aimed at it should land.
+     *
+     *  One rule, in one place, because there are now two views drawing it and a
+     *  palette resolving it -- and every time that logic has been written twice
+     *  the two copies have disagreed (the rig view pointed at a target's own Z
+     *  while QLCPalette pointed at chest height above it).
+     *
+     *  Resolves, in order:
+     *    - a BOUND target takes its position from the structure it follows, so
+     *      moving or restacking the step moves the target with it;
+     *    - a target with an aim height is raised that far above whatever it is
+     *      standing on -- a deck if there is one under it, else the floor;
+     *    - anything else is exactly where it says it is.
+     *
+     *  @param subjectMode  the caller knows this is a follow-spot aim. A target
+     *                      with its own Kind no longer needs telling, but a
+     *                      plain one still takes the global aimSubjectHeight()
+     *                      this way, which is how every existing show behaves.
+     */
+    QVector3D targetAimPoint(const class StageTarget *t, bool subjectMode = false) const;
+
+    /** The point a head at @p from with a beam @p beamDeg wide should aim at,
+     *  for target @p t. A follow spot on a Person: the chest while the beam is
+     *  narrow; as it widens, lower -- so its top edge stays just over the
+     *  head, covering more of them without washing the wall above -- down to
+     *  the waist at most. Anything else: targetAimPoint(). */
+    QVector3D targetAimPointFor(const class StageTarget *t, bool subjectMode,
+                                const QVector3D &from, double beamDeg) const;
+
+    /** How far above its footing @p t is aimed. A per-target override wins;
+     *  otherwise a Person is aimed at the follow-spot subject height -- the
+     *  one setting that says how high a subject's chest is, so changing it
+     *  moves every person with it -- and a plain mark takes that height only
+     *  for a follow-spot aim (@p subjectMode). Other kinds use their own. */
+    float targetAimHeight(const class StageTarget *t, bool subjectMode = false) const;
+
+    /** How tall the figure drawn for @p t is, in metres; 0 when it is not a
+     *  Person. The aim height is a chest, about four fifths of the way up a
+     *  standing person, so the figure grows and shrinks with it. */
+    float targetFigureHeight(const class StageTarget *t) const;
 
     /** Base (bottom) height of a platform: the deck height of the tallest LOWER
      *  platform whose footprint it sits within (0 = on the floor). Lets steps
@@ -574,11 +692,41 @@ public:
     void removeTower(quint32 id);
     quint32 nextTowerId() const;
 
+    /********************************************************************
+     * Hangers (a bracket and chain on a truss or tower, one fixture each)
+     ********************************************************************/
+public:
+    QList<Hanger*> hangers() const { return m_hangers.values(); }
+    Hanger *hanger(quint32 id) const { return m_hangers.value(id, nullptr); }
+    /** A new hanger on @p kind @p parentId, named "Hanger N". */
+    Hanger *addHanger(Hanger::ParentKind kind, quint32 parentId);
+    /** Remove it; a fixture hung on it comes off (keeps its place). */
+    void removeHanger(quint32 id);
+    quint32 nextHangerId() const;
+    /** Hangers on @p kind @p parentId. */
+    QList<Hanger*> hangersOn(Hanger::ParentKind kind, quint32 parentId) const;
+    /** The fixture on hanger @p id, or UINT_MAX. */
+    quint32 fixtureOnHanger(quint32 id) const;
+    /** Re-derive every hanger's fastening point from its parent. */
+    void recomputeHangers();
+
+    /********************************************************************
+     * Scenery (cyc, back wall, drapes -- surfaces light lands on)
+     ********************************************************************/
+public:
+    QList<Scenery*> sceneries() const { return m_sceneries.values(); }
+    Scenery *scenery(quint32 id) const { return m_sceneries.value(id, nullptr); }
+    Scenery *addScenery();
+    void removeScenery(quint32 id);
+    quint32 nextSceneryId() const;
+
 private:
+    QMap<quint32, Scenery*> m_sceneries;
     QMap<quint32, StagePlatform*> m_platforms;
     QMap<quint32, Pipe*> m_pipes;
     QMap<quint32, Stand*> m_stands;
     QMap<quint32, Tower*> m_towers;
+    QMap<quint32, Hanger*> m_hangers;
 
     /********************************************************************
      * Background / scenic images (placeable objects)
@@ -658,11 +806,27 @@ public:
     void setFixtureRigProps(quint32 fid, const FixtureRigProps &props);
     void removeFixtureRigProps(quint32 fid) { m_rigProps.remove(fid); }
 
+    /** What fixture $fid is mounted ON, in words ("Truss T1 · 2.5 m along",
+     *  "Tower T2 · shelf 3", "free / on the floor"). One wording for the
+     *  plot's inspector, Fixture Properties and the patch list. */
+    QString mountDescription(quint32 fid) const;
+    QString mountDescription(const FixtureRigProps &rp, quint32 fid) const;
+
 signals:
     /** Emitted when a fixture's rig assignment changes (mounting, pan-zero
      *  facing, truss, offset) so live Aim looks can re-resolve immediately
      *  instead of only after the scene is restarted. */
     void rigPropsChanged(quint32 fid);
+
+    /** Emitted when a stage target is added, removed, moved or edited, so
+     *  whatever aims at targets (the look panel's "can't reach" check) can
+     *  re-evaluate. StageTarget's own setters are signal-less (they are also
+     *  written from the DMX thread), so the UI that edits them calls
+     *  notifyStageTargetsChanged(). */
+    void stageTargetsChanged();
+
+public:
+    void notifyStageTargetsChanged() { emit stageTargetsChanged(); }
 
 public:
     bool hasFixtureRigProps(quint32 fid) const { return m_rigProps.contains(fid); }
@@ -674,9 +838,53 @@ public:
      *  used as a fallback for free-placed fixtures.
      *  Returns QVector3D(0,0,0) if the fixture is unknown. */
     QVector3D fixtureRigPosition(quint32 fid) const;
+private:
+    /** Where its structural mount puts it (fixtureRigPosition() without a
+     *  hanger). */
+    QVector3D fixtureBasePosition(quint32 fid) const;
+public:
 
 private:
     QMap<quint32, FixtureRigProps> m_rigProps;
+
+    /********************************************************************
+     * Gobo swaps
+     *
+     * A gobo slot of ONE fixture fitted with different glass -- a logo, a
+     * show's custom gobo -- the way a tech swaps it in the unit, leaving the
+     * shared fixture definition alone. Keyed by the gobo wheel's channel
+     * index and the slot's first DMX value (its capability's min). The image
+     * is as GoboLibrary::import() stored it (see GoboLibrary::resolve()).
+     * Survives taking the fixture off the plot; Doc drops it with the fixture.
+     ********************************************************************/
+public:
+    /** Fit @p image in that slot; an empty @p image restores the original. */
+    void setGoboSwap(quint32 fid, quint32 channel, uchar slotMin, const QString &image);
+    QString goboSwap(quint32 fid, quint32 channel, uchar slotMin) const;
+    /** Every swap on @p fid: (channel, slotMin) -> image. */
+    QMap<QPair<quint32, int>, QString> goboSwaps(quint32 fid) const;
+    void clearGoboSwaps(quint32 fid) { m_goboSwaps.remove(fid); }
+
+private:
+    QMap<quint32, QMap<QPair<quint32, int>, QString> > m_goboSwaps;
+
+    /********************************************************************
+     * LED maps (HeadLayout): which head of a model sits in which cell.
+     * The show's own copy of each it uses, so it travels with the file;
+     * the operator's library (HeadLayoutLibrary) holds the master.
+     ********************************************************************/
+public:
+    /** @p fx's map: the show's copy, else the library's, else head order. */
+    HeadLayout headLayoutFor(const Fixture *fx) const;
+    /** True when the show or the library has a map for @p fx -- i.e. head
+     *  order is not merely assumed. */
+    bool hasHeadLayout(const Fixture *fx) const;
+    /** Keep @p layout in the show (replacing any for its key). */
+    void setHeadLayout(const HeadLayout &layout);
+    QList<HeadLayout> headLayouts() const { return m_headLayouts.values(); }
+
+private:
+    QHash<QString, HeadLayout> m_headLayouts;
 
     /********************************************************************
      * 2D view background

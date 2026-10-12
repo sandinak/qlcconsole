@@ -27,6 +27,7 @@ class ConnectionsTree_Test final : public QObject
     Q_OBJECT
 
 private slots:
+    void theListTakesTheHeightNotTheHeader();
     void initTestCase();
     void cleanupTestCase();
     void init();
@@ -77,7 +78,14 @@ private slots:
     /* Bulk retarget across a selection */
     void selectedUniversesRejectsAMixedPluginSelection();
     void selectedUniversesDeduplicatesFannedOutUniverses();
+    void onlyTheNameIsEditedAndASelectedUniverseShowsWhatItSends();
+    /** "why does the connections set jump every time I select a universe ..
+     *  I cant select and patch cause it jumps" */
+    void aRefreshKeepsTheSelectionAndThePlace();
+    void noRefreshUnderAnOpenMenu();
     void bulkRetargetNumbersPortsUpwardAndIsOneUndoStep();
+    /** Two universes may share a NIC, but not a node port. */
+    void twoUniversesCannotTargetTheSameNodePort();
 
     /* Reachability probing */
     void rescanProbesUnheardTargetsOnly();
@@ -93,6 +101,9 @@ private slots:
     /* Tooltip rendering */
     void propertyTooltipRendersPairs();
     void deviceRowCarriesItsPropertiesAsATooltip();
+    /** "why is there no patched folder in the connections view?" -- By
+     *  universe: all of them, in order, each saying where it goes. */
+    void byUniverseListsEveryUniverseWithWhereItGoes();
 
 private:
     Doc *m_doc;

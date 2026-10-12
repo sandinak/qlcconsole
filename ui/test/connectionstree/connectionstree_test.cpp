@@ -16,16 +16,21 @@
 */
 
 #include <QTreeWidget>
+#include <QLineEdit>
 #include <QCheckBox>
 #include <QLabel>
 #include <QTimer>
 #include <QtTest>
+#include <QScrollBar>
+#include <QMenu>
 
 #define protected public
 #define private public
 
 #include "connectionstree_test.h"
 #include "connectionstree.h"
+#include "universeoutputview.h"
+#include "fixture.h"
 #include "iopluginstub.h"
 #include "ioplugincache.h"
 #include "inputoutputmap.h"
@@ -690,6 +695,122 @@ void ConnectionsTree_Test::selectedUniversesRejectsAMixedPluginSelection()
     QVERIFY(plug.isEmpty());
 }
 
+/* The five-second rebuild dropped the selection and scrolled back to the top:
+   the universe you had just clicked was gone and the list jumped. */
+void ConnectionsTree_Test::aRefreshKeepsTheSelectionAndThePlace()
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    for (int i = 0; i < 40; ++i)
+        QVERIFY(iom->addUniverse());
+    ConnectionsTree tree(m_doc);
+    tree.resize(900, 300);                       // short: the list scrolls
+    tree.show();
+    tree.refresh();
+    tree.m_tree->expandAll();
+    QApplication::processEvents();
+
+    QTreeWidgetItem *row = nullptr;
+    foreach (QTreeWidgetItem *it, allItems(tree.m_tree))
+        if (it->data(COL_NAME, ROLE_UNIVERSE).isValid() && it->data(COL_NAME, ROLE_UNIVERSE).toUInt() == 30)
+            row = it;
+    QVERIFY(row != nullptr);
+    tree.m_tree->setCurrentItem(row);
+    QVERIFY(tree.m_tree->verticalScrollBar()->maximum() > 0);
+    const int scroll = tree.m_tree->verticalScrollBar()->value();
+    QVERIFY(scroll > 0);                         // scrolled down to it
+
+    tree.refresh();
+    QApplication::processEvents();
+    QTreeWidgetItem *cur = tree.m_tree->currentItem();
+    QVERIFY(cur != nullptr);
+    QCOMPARE(cur->data(COL_NAME, ROLE_UNIVERSE).toUInt(), quint32(30));
+    QVERIFY(cur->isSelected());
+    QCOMPARE(tree.m_tree->selectedItems().size(), 1);
+    QCOMPARE(tree.m_tree->verticalScrollBar()->value(), scroll);
+    QCOMPARE(tree.m_output->universe(), quint32(30));   // still showing it
+}
+
+/* A right-click menu holds the row it opened on; a rebuild under it tore that
+   row down, so Patch... acted on nothing. */
+void ConnectionsTree_Test::noRefreshUnderAnOpenMenu()
+{
+    ConnectionsTree tree(m_doc);
+    tree.resize(900, 500);
+    tree.show();
+    tree.refresh();
+    QVERIFY(tree.m_tree->topLevelItemCount() > 0);
+    QTreeWidgetItem *first = tree.m_tree->topLevelItem(0);
+
+    QMenu menu;
+    menu.addAction("Patch...");
+    menu.popup(tree.mapToGlobal(QPoint(10, 10)));
+    QTRY_VERIFY(QApplication::activePopupWidget() != nullptr);
+    tree.refresh();
+    QCOMPARE(tree.m_tree->topLevelItem(0), first);      // not rebuilt
+    menu.close();
+    QTRY_VERIFY(QApplication::activePopupWidget() == nullptr);
+    tree.refresh();
+    QVERIFY(tree.m_tree->topLevelItemCount() > 0);
+}
+
+void ConnectionsTree_Test::onlyTheNameIsEditedAndASelectedUniverseShowsWhatItSends()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setOutputPatch(1, stub->name(), "", 1, false, 0) == true);
+    Fixture *fx = new Fixture(m_doc);
+    fx->setName("Front Par");
+    fx->setUniverse(1);
+    fx->setAddress(10);
+    fx->setChannels(3);
+    QVERIFY(m_doc->addFixture(fx));
+
+    ConnectionsTree tree(m_doc);
+    tree.resize(1200, 700);
+    tree.show();
+    tree.refresh();
+    QTreeWidgetItem *row = nullptr;
+    foreach (QTreeWidgetItem *it, allItems(tree.m_tree))
+        if (it->data(COL_NAME, ROLE_UNIVERSE).isValid() && it->data(COL_NAME, ROLE_UNIVERSE).toUInt() == 1
+            && it->data(COL_NAME, ROLE_OUTPUT).toBool())
+            row = it;
+    QVERIFY(row != nullptr);
+
+    // "clicking to edit the text should only work on the device .. not on
+    // detail or carries"
+    auto editors = [&tree]() {
+        QApplication::processEvents();
+        return tree.m_tree->viewport()->findChildren<QLineEdit *>().size();
+    };
+    tree.m_tree->editItem(row, COL_DETAIL);
+    QCOMPARE(editors(), 0);
+    tree.m_tree->editItem(row, COL_CARRIES);
+    QCOMPARE(editors(), 0);
+    if (row->flags() & Qt::ItemIsEditable)
+    {
+        tree.m_tree->editItem(row, COL_NAME);
+        QCOMPARE(editors(), 1);
+        tree.m_tree->closePersistentEditor(row, COL_NAME);
+        QApplication::processEvents();
+    }
+
+    // Selected, its output is shown on the right: what it sends, as it sends it.
+    QCOMPARE(tree.m_output->universe(), Universe::invalid());
+    tree.m_tree->setCurrentItem(row);
+    QCOMPARE(tree.m_output->universe(), quint32(1));
+    QByteArray out(16, char(0));
+    out[10] = char(200);
+    out[12] = char(17);
+    emit iom->universeWritten(1, out);
+    emit iom->universeWritten(2, QByteArray(16, char(99)));     // another universe: not this one
+    QCOMPARE(int(uchar(tree.m_output->values().at(10))), 200);
+    QCOMPARE(int(uchar(tree.m_output->values().at(12))), 17);
+    QCOMPARE(int(uchar(tree.m_output->values().at(0))), 0);
+    QCOMPARE(tree.m_output->values().size(), 512);
+    // Drawn without trouble, a fixture's span named.
+    QVERIFY(!tree.m_output->grab().isNull());
+}
+
 void ConnectionsTree_Test::selectedUniversesDeduplicatesFannedOutUniverses()
 {
     IOPluginStub *stub = stubOf(m_doc);
@@ -720,6 +841,48 @@ void ConnectionsTree_Test::selectedUniversesDeduplicatesFannedOutUniverses()
     QList<quint32> lines;
     QCOMPARE(tree.selectedUniverses(plug, lines).count(), 1);
     QCOMPARE(lines.count(), 1);
+}
+
+/* Two universes pointed at the same node AND port both write it every tick, so
+   the fixture shows whichever arrived last: a patch that reads as correct on
+   every screen and is wrong on the floor. Nothing stopped it.
+
+   The rule is keyed on the destination, not the plugin line -- for Art-Net a
+   line is a network interface and sharing one is normal, which is what the
+   first half of this test pins down. */
+void ConnectionsTree_Test::twoUniversesCannotTargetTheSameNodePort()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    for (quint32 u = 0; u < 3; u++)
+        QVERIFY(iom->setOutputPatch(u, stub->name(), "", 0, false, 0) == true);
+
+    ConnectionsTree tree(m_doc);
+
+    // Universe 0 takes 172.18.2.10 port 0x011.
+    QVERIFY(tree.applyTarget(0, stub->name(), 0, "172.18.2.10", 0x011) == true);
+
+    // Same NIC, DIFFERENT port: ordinary Art-Net, and it must keep working.
+    QVERIFY(tree.applyTarget(1, stub->name(), 0, "172.18.2.10", 0x012) == true);
+
+    // Same NIC, same node, SAME port: refused.
+    QVERIFY(tree.applyTarget(2, stub->name(), 0, "172.18.2.10", 0x011) == false);
+
+    // ...and the refusal left universe 2 alone rather than half-applying it.
+    QString a;
+    quint32 p = 0;
+    if (tree.patchTarget(2, stub->name(), 0, a, p) == true)
+        QVERIFY2(!(a == QString("172.18.2.10") && p == 0x011),
+                 "the refused target was written anyway");
+
+    // A different NODE on the same port address is a different destination.
+    QVERIFY(tree.applyTarget(2, stub->name(), 0, "172.18.2.99", 0x011) == true);
+
+    // Re-applying a universe's OWN target is not a self-collision.
+    QVERIFY(tree.applyTarget(0, stub->name(), 0, "172.18.2.10", 0x011) == true);
+
+    // And the owner is reported for the message the UI shows.
+    QCOMPARE(tree.universeOnTarget(stub->name(), 0, "172.18.2.10", 0x011, 2), quint32(0));
 }
 
 void ConnectionsTree_Test::bulkRetargetNumbersPortsUpwardAndIsOneUndoStep()
@@ -957,4 +1120,55 @@ void ConnectionsTree_Test::deviceRowCarriesItsPropertiesAsATooltip()
     }
 }
 
+/* "wasting a lot of space in the connections view with the top panel": the
+   explanation is one line beside the controls (the rest on hover), and the
+   list and output take the height. */
+void ConnectionsTree_Test::theListTakesTheHeightNotTheHeader()
+{
+    ConnectionsTree tree(m_doc);
+    tree.resize(1200, 900);
+    tree.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&tree));
+    QLabel *hint = tree.findChild<QLabel *>("connectionsHint");
+    QVERIFY(hint != nullptr);
+    QVERIFY(!hint->wordWrap());
+    QVERIFY2(hint->toolTip().contains("following the signal outward"), "the full explanation on hover");
+    QVERIFY2(hint->height() < 40, qPrintable(QString("hint is %1 px tall").arg(hint->height())));
+    QVERIFY2(tree.m_tree->height() > 900 - 120,
+             qPrintable(QString("the list is %1 px of 900").arg(tree.m_tree->height())));
+}
+
 QTEST_MAIN(ConnectionsTree_Test)
+
+void ConnectionsTree_Test::byUniverseListsEveryUniverseWithWhereItGoes()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setOutputPatch(0, stub->name(), "", 0, false, 0) == true);
+    iom->setUniverseName(0, "U01-CS1");
+    iom->setTargetAlias("172.18.2.211", "CS1");
+
+    ConnectionsTree tree(m_doc);
+    QVERIFY(tree.applyTarget(0, stub->name(), 0, "172.18.2.211", 0) == true);
+    tree.m_byUniverse->setChecked(true);
+
+    // Every universe, in number order -- patched or not.
+    QCOMPARE(tree.m_tree->topLevelItemCount(), int(iom->universesCount()));
+    QTreeWidgetItem *first = tree.m_tree->topLevelItem(0);
+    QCOMPARE(first->text(COL_NAME), QString("1: U01-CS1"));
+    QVERIFY2(first->text(COL_DETAIL).contains("CS1 (172.18.2.211)"), qPrintable(first->text(COL_DETAIL)));
+    QCOMPARE(first->data(COL_NAME, ROLE_KIND).toInt(), KIND_UNIVERSE);   // the wiring view's actions
+    QCOMPARE(first->data(COL_NAME, ROLE_PLUGIN).toString(), stub->name());
+    QTreeWidgetItem *second = tree.m_tree->topLevelItem(1);
+    QCOMPARE(second->text(COL_DETAIL), QString("not patched"));
+    QCOMPARE(second->data(COL_NAME, ROLE_KIND).toInt(), 6);              // KIND_UNPATCHED_UNIVERSE
+
+    // Renamed inline, as in the wiring view.
+    second->setText(COL_NAME, "2: Spare");
+    QCOMPARE(iom->getUniverseNameByID(1), QString("Spare"));
+
+    // Back to the wiring: a tree again.
+    tree.m_byUniverse->setChecked(false);
+    QVERIFY(tree.m_tree->rootIsDecorated());
+    QVERIFY(!itemsOfKind(tree.m_tree, KIND_PLUGIN).isEmpty());
+}

@@ -22,6 +22,7 @@
 #include <QDebug>
 
 #include "powerdistribution.h"
+#include "fixturepower.h"
 #include "qlcfixturemode.h"
 #include "qlcfixturedef.h"
 #include "qlcphysical.h"
@@ -370,12 +371,48 @@ double PowerEstimator::intensityFraction(const Fixture *fx, const PreGMReader &r
     return masterFrac * colourFrac;
 }
 
+/* The voltage a fixture runs at: its circuit's, else its source's, else
+   120 V. */
+static double fixtureVoltage(const Fixture *fx)
+{
+    Doc *doc = (fx != NULL) ? qobject_cast<Doc *>(fx->parent()) : NULL;
+    if (doc != NULL)
+    {
+        const PowerDistribution *pd = doc->powerDistribution();
+        int s = -1, c = -1;
+        pd->circuitOf(fx->id(), s, c);
+        if (s >= 0 && c >= 0)
+        {
+            const double v = pd->sources().at(s).circuits.at(c).effectiveVoltage(pd->sources().at(s).voltage);
+            if (v > 0.0)
+                return v;
+        }
+    }
+    return 120.0;
+}
+
+/* A measured fixture's amps at what it is sent, held to its maximum as its
+   universe holds it; -1 when it has not been measured. */
+static double measuredAmps(const Fixture *fx, const std::function<uchar(int)> &value)
+{
+    const PowerModel m = PowerModel::build(fx, fx->powerProfile());
+    if (!m.isValid())
+        return -1.0;
+    const double asks = m.amps(value);
+    return (m.limitFactor(asks) < 1.0) ? qMax(m.maxAmps, m.standby) : asks;
+}
+
 // Full-on draw of a fixture: its rated power, or a channel-count estimate when
 // the definition declares none.
 double PowerEstimator::fixtureFullWatts(const Fixture *fx)
 {
     if (fx == NULL || fx->fixtureMode() == NULL)
         return 0.0;
+
+    // Measured: everything at full, held to its maximum.
+    const double measured = measuredAmps(fx, [](int) { return uchar(255); });
+    if (measured >= 0.0)
+        return measured * fixtureVoltage(fx);
 
     double rated = fx->fixtureMode()->physical().powerConsumption();
     if (rated <= 0.0)
@@ -395,6 +432,16 @@ double PowerEstimator::fixtureFullWatts(const Fixture *fx)
 
 double PowerEstimator::fixtureWatts(const Fixture *fx, const PreGMReader &read)
 {
+    if (fx != NULL)
+    {
+        // Measured: its own readings and curve, and its cap.
+        const double a = measuredAmps(fx, [fx, &read](int offset) {
+            return read(fx->universe(), fx->address() + quint32(offset));
+        });
+        if (a >= 0.0)
+            return a * fixtureVoltage(fx);
+    }
+
     const double rated = fixtureFullWatts(fx);
     if (rated <= 0.0)
         return 0.0;

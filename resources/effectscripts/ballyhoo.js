@@ -10,6 +10,8 @@
     var effect = new Object;
     effect.apiVersion  = 1;
     effect.name        = "Ballyhoo";
+    // Takes the host's spread (fixture.phase, inputs._spread) in place of its own.
+    effect.hostSpread = "spread";
     effect.description = "Wide pseudo-random audience-scan pan/tilt sweeps";
     effect.author      = "QLC+";
     effect.fixtureTypes = ["moving"];
@@ -60,7 +62,7 @@
             if (!f.hasPanTilt) return {};
 
             // Each fixture gets its own phase offset so the group scatters.
-            var ph = spread * i * TAU / n;
+            var ph = (inputs._spread ? f.phase : spread * i / n) * TAU;
 
             // Two layers per axis: a slow base sweep + a faster off-ratio wobble.
             var panW  = (Math.sin(w * t + ph)

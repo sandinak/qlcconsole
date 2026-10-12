@@ -1,5 +1,14 @@
 #!/bin/bash
 
+# Never put a test's windows on the real screen. On macOS the UI tests ran on
+# the desktop: every dialog a test drives, and every widget one shows, popped
+# up in front of whatever was being worked on (CI's Linux job has xvfb, so it
+# never showed). Offscreen unless the caller asked for a platform -- set
+# QT_QPA_PLATFORM=cocoa to watch them on purpose.
+if [ "$(uname)" = "Darwin" ] && [ -z "$QT_QPA_PLATFORM" ]; then
+  export QT_QPA_PLATFORM=offscreen
+fi
+
 # Define the source and destination directories
 SOURCE_DIR="."
 DEST_DIR="./build"

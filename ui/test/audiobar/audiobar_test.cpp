@@ -104,6 +104,26 @@ void AudioBar_Test::attachDmxChannels()
     QCOMPARE(bar.m_absDmxChannels.at(0), int(fxi->universeAddress() + 1));
 }
 
+void AudioBar_Test::attachDmxChannelsSkipsStagedFixtures()
+{
+    Fixture *real = new Fixture(m_doc);
+    real->setChannels(3);
+    QVERIFY(m_doc->addFixture(real));
+    Fixture *staged = new Fixture(m_doc);          // also "at" 1/1, but owns no address
+    staged->setChannels(3);
+    staged->setPatched(false);
+    QVERIFY(m_doc->addFixture(staged));
+
+    QList<SceneValue> list;
+    list << SceneValue(staged->id(), 0, 0) << SceneValue(real->id(), 2, 0);
+
+    AudioBar bar;
+    bar.attachDmxChannels(m_doc, list);
+    QCOMPARE(bar.m_dmxChannels.count(), 2);           // remembered, so patching later is enough
+    QCOMPARE(bar.m_absDmxChannels.count(), 1);        // ...but only the real one is driven
+    QCOMPARE(bar.m_absDmxChannels.at(0), int(real->universeAddress() + 2));
+}
+
 void AudioBar_Test::attachFunction()
 {
     Chaser* ch = new Chaser(m_doc);

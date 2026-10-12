@@ -28,6 +28,7 @@
 #include "inputoutputmap.h"
 #include "qlcchannel.h"
 #include "fixture.h"
+#include "universe.h"
 #include "doc.h"
 
 #define KCols 32
@@ -44,9 +45,28 @@ UniverseUsageWidget::UniverseUsageWidget(Doc *doc, quint32 universe, QWidget *pa
 {
     QVBoxLayout *top = new QVBoxLayout(this);
 
+    const QString titleFormat = tr("<H2>%1 — Address Usage</H2>");
     const QString uniName = doc->inputOutputMap()->getUniverseNameByID(universe);
-    QLabel *title = new QLabel(tr("<H2>%1 — Address Usage</H2>").arg(uniName), this);
+    QLabel *title = new QLabel(titleFormat.arg(uniName), this);
+    title->setObjectName(QStringLiteral("universeUsageTitle"));
     top->addWidget(title);
+
+    /* This pane is built fresh whenever the universe SELECTION changes (see
+       FixtureManager), but a rename doesn't reselect anything, so the title
+       above was a one-shot snapshot that went stale the moment the name
+       changed underneath it. Universe::nameChanged() has no other listener
+       that would catch this, so it's wired directly to the label here --
+       title is the connection's context object, so this drops itself if
+       the pane is torn down (a different universe selected) before the
+       Universe object itself ever would. */
+    InputOutputMap *iomap = doc->inputOutputMap();
+    Universe *uni = iomap != NULL ? iomap->universe(universe) : NULL;
+    if (uni != NULL)
+    {
+        connect(uni, &Universe::nameChanged, title, [title, titleFormat, iomap, universe]() {
+            title->setText(titleFormat.arg(iomap->getUniverseNameByID(universe)));
+        });
+    }
 
     // 512-address grid, 16 rows x 32 columns, one cell per DMX channel.
     QFrame *gridFrame = new QFrame(this);

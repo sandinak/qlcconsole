@@ -22,6 +22,11 @@
 #include <QString>
 #include <QMap>
 #include <QList>
+#include <QPair>
+#include <QVariant>
+#include <functional>
+
+class QWidget;
 
 /**
  * A small registry that lets independent parts of the app declare whether
@@ -65,14 +70,41 @@ public:
                              //!< thing (a universe, a device, ...), rendered
                              //!< as an actual list in that dialog rather than
                              //!< everything folded into one paragraph
+        QVariantList itemData; //!< optional, parallel to @a items: what each
+                                //!< one IS (a fixture id, a file), handed to
+                                //!< the entry's action (setAction())
+        QStringList itemGroups; //!< optional, parallel to @a items: a heading
+                                 //!< each sits under in the detail dialog
+                                 //!< ("Local", "Included"); empty = none
     };
+
+    /** Fixes a problem: runs on the items the user picked in the detail
+     *  dialog (their @a itemData), with @p parent for any dialog it opens. */
+    typedef std::function<void(QWidget *parent, const QVariantList &items)> Action;
 
     static ShowStatus *instance();
 
     /** Register (or replace) the status entry under @p key. Call again with
      *  the same key to update it -- there is no separate "update". */
     void setStatus(const QString &key, Severity severity, const QString &summary,
-                   const QString &detail = QString(), const QStringList &items = QStringList());
+                   const QString &detail = QString(), const QStringList &items = QStringList(),
+                   const QVariantList &itemData = QVariantList(),
+                   const QStringList &itemGroups = QStringList());
+
+    /** What the detail dialog offers for entry @p key's items: a button
+     *  labelled @p label (and a double-click) that runs @p action on the
+     *  selected ones. Set once by whoever can fix the problem; it outlives
+     *  the entry coming and going. */
+    void setAction(const QString &key, const QString &label, const Action &action);
+    /** A further fix for @p key's items, offered beside the first (a
+     *  broken file: repair it, or delete it). */
+    void addAction(const QString &key, const QString &label, const Action &action);
+    /** The first action's label for @p key, empty when it has none. */
+    QString actionLabel(const QString &key) const;
+    /** Every action's label for @p key, in order. */
+    QStringList actionLabels(const QString &key) const;
+    /** Run @p key's action number @p index on @p items. False when it has none. */
+    bool runAction(const QString &key, QWidget *parent, const QVariantList &items, int index = 0) const;
     /** Remove the entry under @p key: that source is no longer a problem.
      *  A no-op if @p key was not registered. */
     void clearStatus(const QString &key);
@@ -93,6 +125,7 @@ private:
     ShowStatus();
 
     QMap<QString, Entry> m_entries;
+    QMap<QString, QList<QPair<QString, Action> > > m_actions;
 };
 
 #endif

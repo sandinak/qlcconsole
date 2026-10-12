@@ -25,6 +25,7 @@
 #include "createfixturegroup.h"
 #include "fixturegroupsource.h"
 #include "inputoutputmap.h"
+#include "universe.h"
 #include "fixturegroup.h"
 #include "fixture.h"
 #include "doc.h"
@@ -157,9 +158,16 @@ void FixtureGroupSource::reload()
     // it, fixtures nested by their universe (so all fixtures are reachable
     // even without a group).
     QMap<quint32, QList<Fixture*> > byUniverse;
+    QList<Fixture*> inventory;   // staged, not patched: never filed under a universe
     foreach (Fixture *f, m_doc->fixtures())
-        if (f != NULL)
+    {
+        if (f == NULL)
+            continue;
+        if (f->isPatched())
             byUniverse[f->universe()].append(f);
+        else
+            inventory.append(f);
+    }
 
     if (byUniverse.isEmpty() == false)
     {
@@ -179,8 +187,9 @@ void FixtureGroupSource::reload()
             QTreeWidgetItem *uNode = new QTreeWidgetItem(uRoot);
             uNode->setText(0, uname);
             uNode->setIcon(0, QIcon(":/folder.png"));
-            uNode->setData(0, KindRole, CategoryNode);
-            uNode->setFlags(Qt::ItemIsEnabled);
+            uNode->setData(0, KindRole, UniverseNode);
+            uNode->setData(0, IdRole, it.key());
+            uNode->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
 
             QList<Fixture*> fl = it.value();
             std::sort(fl.begin(), fl.end(),
@@ -192,8 +201,54 @@ void FixtureGroupSource::reload()
         }
     }
 
+    if (!inventory.isEmpty())
+    {
+        QTreeWidgetItem *iRoot = new QTreeWidgetItem(this);
+        iRoot->setText(0, tr("Inventory"));
+        iRoot->setIcon(0, QIcon(":/folder.png"));
+        iRoot->setData(0, KindRole, CategoryNode);
+        iRoot->setFlags(Qt::ItemIsEnabled);
+        std::sort(inventory.begin(), inventory.end(),
+                  [](Fixture *a, Fixture *b) {
+                      return a->name().compare(b->name(), Qt::CaseInsensitive) < 0;
+                  });
+        foreach (Fixture *f, inventory)
+            addFixtureLeaf(iRoot, f);
+    }
+
     // Start collapsed — expand a group/universe to reach its fixtures.
     collapseAll();
+    if (!m_filter.isEmpty())
+        setFilterText(m_filter);
+}
+
+namespace
+{
+/** Show @p node when it or anything under it holds @p t; a node that holds
+ *  it keeps all it contains. Returns whether @p node is shown. */
+bool applyFilter(QTreeWidgetItem *node, const QString &t, bool parentMatched)
+{
+    const bool self = t.isEmpty() || parentMatched || node->text(0).contains(t, Qt::CaseInsensitive);
+    bool child = false;
+    for (int i = 0; i < node->childCount(); ++i)
+        child = applyFilter(node->child(i), t, self && !t.isEmpty()) || child;
+    const bool visible = self || child;
+    node->setHidden(!visible);
+    if (!t.isEmpty() && child)
+        node->setExpanded(true);    // open the way down to what matched
+    return visible;
+}
+}
+
+void FixtureGroupSource::setFilterText(const QString &text)
+{
+    const QString t = text.trimmed();
+    const bool cleared = !m_filter.isEmpty() && t.isEmpty();
+    m_filter = t;
+    for (int i = 0; i < topLevelItemCount(); ++i)
+        applyFilter(topLevelItem(i), t, false);
+    if (cleared)
+        collapseAll();              // back as it opens: collapsed
 }
 
 void FixtureGroupSource::addFixtureLeaf(QTreeWidgetItem *parent, Fixture *f)
@@ -208,6 +263,20 @@ void FixtureGroupSource::addFixtureLeaf(QTreeWidgetItem *parent, Fixture *f)
 
 void FixtureGroupSource::slotContextMenu(const QPoint &pos)
 {
+    // A universe row is a single-item, non-draggable category rather than
+    // something that mixes into a fixture/group selection, so it gets its
+    // own short menu rather than folding into the collection below.
+    QTreeWidgetItem *hovered = itemAt(pos);
+    if (hovered != NULL && hovered->data(0, KindRole).toInt() == UniverseNode)
+    {
+        QMenu uMenu(this);
+        QAction *uRename = uMenu.addAction(tr("Rename universe…"));
+        QAction *uChosen = uMenu.exec(viewport()->mapToGlobal(pos));
+        if (uChosen == uRename)
+            beginRename(hovered);
+        return;
+    }
+
     // Collect the selection, split by kind. A right-click doesn't change the
     // selection, so also fold in the row under the cursor.
     QList<quint32> groupIds;
@@ -331,14 +400,21 @@ QTreeWidgetItem *FixtureGroupSource::groupItemById(quint32 id) const
 
 void FixtureGroupSource::beginRename(QTreeWidgetItem *item)
 {
-    if (item == NULL || item->data(0, KindRole).toInt() != GroupNode)
+    if (item == NULL)
         return;
-    // Arm the row editable and show the PLAIN name (drop the "(N fixtures)"
-    // suffix) for editing. blockSignals so arming/relabelling doesn't fire the
-    // itemChanged commit path (it only acts on an armed row — see slotItemChanged).
+    const int kind = item->data(0, KindRole).toInt();
+    if (kind != GroupNode && kind != UniverseNode)
+        return;
+    // Arm the row editable. A group's displayed text carries a "(N fixtures)"
+    // suffix that must not end up saved as part of the name, so it is dropped
+    // back to the plain NameRole text for editing; a universe row has no such
+    // suffix, so its own text is already the plain name. blockSignals so
+    // arming/relabelling doesn't fire the itemChanged commit path (it only
+    // acts on an armed row — see slotItemChanged).
     blockSignals(true);
     item->setFlags(item->flags() | Qt::ItemIsEditable);
-    item->setText(0, item->data(0, NameRole).toString());
+    if (kind == GroupNode)
+        item->setText(0, item->data(0, NameRole).toString());
     blockSignals(false);
     editItem(item, 0);
 }
@@ -352,12 +428,33 @@ void FixtureGroupSource::slotItemChanged(QTreeWidgetItem *item, int column)
     // Disarm first so the changes below can't re-enter this handler.
     item->setFlags(item->flags() & ~Qt::ItemIsEditable);
 
-    const quint32 gid = item->data(0, IdRole).toUInt();
+    const int kind = item->data(0, KindRole).toInt();
+    const quint32 id = item->data(0, IdRole).toUInt();
     const QString newName = item->text(0).trimmed();
     // Defer: applying the name reloads the tree (which deletes this very item),
     // so must not happen synchronously inside itemChanged.
-    QTimer::singleShot(0, this, [this, gid, newName]() {
-        FixtureGroup *g = m_doc->fixtureGroup(gid);
+    if (kind == UniverseNode)
+    {
+        InputOutputMap *iomap = m_doc->inputOutputMap();
+        QTimer::singleShot(0, this, [this, iomap, id, newName]() {
+            Universe *uni = iomap ? iomap->universe(id) : NULL;
+            if (uni == NULL)
+                return;
+            if (newName.isEmpty() == false && newName != uni->name())
+            {
+                iomap->setUniverseName(int(id), newName);
+                m_doc->setModified();
+            }
+            else
+            {
+                reload();   // no-op/empty edit: restore the previous display
+            }
+        });
+        return;
+    }
+
+    QTimer::singleShot(0, this, [this, id, newName]() {
+        FixtureGroup *g = m_doc->fixtureGroup(id);
         if (g == NULL)
             return;
         if (newName.isEmpty() == false && newName != g->name())
@@ -374,14 +471,16 @@ void FixtureGroupSource::slotItemChanged(QTreeWidgetItem *item, int column)
 
 void FixtureGroupSource::keyPressEvent(QKeyEvent *event)
 {
-    // Enter/Return/F2 on a single selected group row → inline rename (matches the
-    // Fixture Manager / Layers trees). Anything else keeps the default behaviour.
+    // Enter/Return/F2 on a single selected group or universe row → inline
+    // rename (matches the Fixture Manager / Layers trees). Anything else
+    // keeps the default behaviour.
     if ((event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter
          || event->key() == Qt::Key_F2)
         && state() != QAbstractItemView::EditingState)
     {
         QTreeWidgetItem *item = currentItem();
-        if (item != NULL && item->data(0, KindRole).toInt() == GroupNode
+        const int kind = item != NULL ? item->data(0, KindRole).toInt() : -1;
+        if (item != NULL && (kind == GroupNode || kind == UniverseNode)
             && selectedItems().size() <= 1)
         {
             beginRename(item);

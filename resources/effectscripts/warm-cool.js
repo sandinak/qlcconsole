@@ -7,6 +7,8 @@
 (function() {
     var effect = new Object;
     effect.name        = "Warm Cool";
+    // Takes the host's spread (fixture.phase, inputs._spread) in place of its own.
+    effect.hostSpread = "spread";
     effect.description = "Colour-temperature oscillator — alternates W (warm) and B (cool) across fixtures";
     effect.apiVersion  = 1;
     effect.version     = 1;
@@ -45,7 +47,7 @@
         var t      = inputs._time    !== undefined ? inputs._time    : 0;
 
         return fixtures.map(function(f, i) {
-            var phase = (t * rate + i * spread / Math.max(n, 1)) % 1;
+            var phase = (t * rate + (inputs._spread ? f.phase : i * spread / Math.max(n, 1))) % 1;
             var v     = wave(wf, phase);
             return { w: Math.round(minW + v * (maxW - minW)),
                      b: Math.round(minC + (1 - v) * (maxC - minC)) };

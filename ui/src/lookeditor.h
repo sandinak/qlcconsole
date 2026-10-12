@@ -62,6 +62,12 @@ public:
      *  id itself. */
     quint32 paletteId() const { return m_paletteId; }
 
+    /** A line under the title saying where this palette is being shown, e.g.
+     *  "trying it on <look>" when it isn't in the look on the canvas. Empty
+     *  hides it. Set by the Programming tab, which owns the preview. */
+    void setTrialNote(const QString &text);
+    QString trialNote() const;
+
 public slots:
     /** Edit the given palette; invalidId() shows the empty page. */
     void setPalette(quint32 paletteId);
@@ -96,6 +102,8 @@ private slots:
     void slotAimTargetChanged(int index);
     void slotSingleValueChanged(int v);
     void slotSingleCapabilityPicked(int index);
+    /** "Wheel of" changed: list that fixture type's gobos/shutter states. */
+    void slotSingleSourcePicked(int index);
     void slotBeamChanged(int);
     /** Per-look fade override (checkbox + seconds spin) changed. */
     void slotFadeTimeChanged();
@@ -109,12 +117,52 @@ private:
      *  Used to surface capability (gobo/shutter/strobe) names. */
     const QLCChannel *representativeChannel(int group) const;
 
+public:
+    /** One fixture TYPE whose channel of a group can name a gobo/shutter
+     *  value: what the "Wheel of" chooser lists. */
+    struct ChannelSource
+    {
+        QString key;                //!< manufacturer/model/mode, for dedup + memory
+        QString label;              //!< shown in the chooser
+        const QLCChannel *channel;  //!< the channel the palette's value lands on
+        quint32 channelIndex = 0;   //!< its index in the fixture
+        QList<quint32> fixtures;    //!< the fixtures of this type considered
+    };
+    /** The fixture types that can show a @p group value: the look's own
+     *  targets when it has any that can, otherwise every fixture in the
+     *  workspace -- a gobo made from the palette list has no look yet, and
+     *  still needs a wheel to pick from. One entry per fixture type, most
+     *  numerous first. Uses the same channel the palette writes to
+     *  (QLCPalette: the mode's first MSB channel of the group). */
+    QList<ChannelSource> singleChannelSources(int group) const;
+
+private:
+    /** Fill the named-capability picker from m_singleChannel for value @p v. */
+    void fillSingleCapabilities(int v);
+    /** The picture in that slot: a unit's swapped glass (the first fixture
+     *  of the browsed type that has one, its name in @p swapName), else the
+     *  definition's. */
+    QString slotPicture(class QLCCapability *cap, QString *swapName = nullptr) const;
+
     /** True if any target fixture has the given QLCChannel::PrimaryColour
      *  emitter channel (White/Amber/UV). */
     bool targetsHaveColour(int primaryColour) const;
 
     /** Store the Color palette from the picker + White/Amber/UV sliders. */
     void commitColor();
+    /** Show or hide the "this colour is nearly dark" line for the current
+     *  slider values (see darkColourWarning()). */
+    void updateColorWarning();
+
+public:
+    /** What to tell the user about a colour look this dark, or an empty
+     *  string when it is bright enough to need no comment. A colour look is a
+     *  LEVEL on every fixture that mixes colour -- the dimmer scales it, it
+     *  cannot raise it -- so "red" at 4% leaves RGB heads dark while a
+     *  colour-wheel head, which only takes the hue, still shines. */
+    static QString darkColourWarning(const QColor &rgb, const QColor &wauv);
+
+private:
 
     /** Capability name covering value v on the channel, or empty. */
     QString capabilityNameAt(const QLCChannel *ch, int v) const;
@@ -136,14 +184,17 @@ private:
     QLineEdit *m_nameEdit;   //!< editable palette name
     QLabel    *m_title;      //!< "used by N scene(s)" info line
     QLabel    *m_warning;
+    QLabel    *m_trialNote;   //!< see setTrialNote()
 
     // Per-look fade override row (per scene+palette; hidden when no context
     // scene or for Effect palettes, which the script runner fades itself).
     // Each spin's minimum is a special "step" value meaning "fall back to the
     // chaser step / scene fade" (independent in vs out — a pulse = 0 in, slow out).
     QWidget        *m_fadeRow = nullptr;
-    QDoubleSpinBox *m_fadeInSpin = nullptr;
-    QDoubleSpinBox *m_fadeOutSpin = nullptr;
+    class FadeTimeSpin *m_fadeInSpin = nullptr;
+    class FadeTimeSpin *m_fadeOutSpin = nullptr;
+    QLabel *m_fadeInLabel = nullptr;
+    QLabel *m_fadeOutLabel = nullptr;
     QStackedWidget *m_stack;
     int m_pageEmpty, m_pageColor, m_pageDimmer, m_pagePanTilt, m_pageAim, m_pageBeam, m_pageSingle, m_pageStrobe;
 
@@ -155,6 +206,7 @@ private:
     QSlider *m_whiteSlider, *m_amberSlider, *m_uvSlider; //!< 4, 5, 6 — extra colour emitters
     QWidget *m_whiteRow, *m_amberRow, *m_uvRow;          //!< hidden when absent
     CapabilityBar *m_dimmerBar; //!< gradient + strobe region marks
+    QLabel *m_colorWarning;    //!< "nearly dark" note under the colour page
     QLabel *m_dimmerValue;
     QLabel *m_dimmerCap;       //!< capability name at current intensity (strobe etc.)
     VCXYPadArea *m_xyPad;
@@ -166,6 +218,10 @@ private:
     QComboBox *m_singleCombo;  //!< named gobo/shutter capabilities
     QLabel *m_singlePreview;   //!< gobo/shutter image for the current value
     const QLCChannel *m_singleChannel; //!< representative chan for the single page
+    QLabel *m_singleSourceLabel;       //!< "Wheel of"
+    QComboBox *m_singleSourceCombo;    //!< which fixture type's wheel to browse
+    QList<ChannelSource> m_singleSources;
+    QString m_singleSourceKey;         //!< last type chosen, kept across palettes
 
     // Strobe page
     QSlider *m_strobeSlider;   //!< 0-100 → rate 0.0-1.0
@@ -173,6 +229,7 @@ private:
 
     // Effect page
     int m_pageEffect;
+    class EffectBrowser *m_effectBrowser = nullptr;   ///< the visible picker over m_effectScriptCombo
     QComboBox   *m_effectScriptCombo;
     QLabel      *m_effectDescLabel;   //!< one-line description below combo
     QLabel      *m_effectNotesLabel;  //!< longer paragraph in edit panel
@@ -214,6 +271,8 @@ private slots:
     void slotImportEffect();
     /** Create a new effect script from a template and open it in the editor. */
     void slotNewEffectScript();
+    /** Pick an effect from a filterable tree rather than a screen-tall list. */
+    void slotBrowseEffects();
     /** Open the current Generator's .js in the editor. */
     void slotEditEffectScript();
     void slotEffectParamChanged(int value);
@@ -232,6 +291,9 @@ private:
 
     /** Fill the effect picker combo with presets + raw scripts grouped by
      *  category, and select the entry matching palette @p p. */
+    /** WLED's effects by name: a WLED fixture's in the show (its firmware's
+     *  list), else the installed WLED definition's. Empty when neither. */
+    QStringList wledEffectNames() const;
     void populateEffectPicker(QLCPalette *p);
 
     /** Auto-set palette name from its value when it still has the factory

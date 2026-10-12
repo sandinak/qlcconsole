@@ -32,15 +32,26 @@
 #include <algorithm>
 #include <functional>
 
+#include "programmingmanager.h"
+#include "speedmasterspanel.h"
+#include "speedmasters.h"
 #include "scenegrouplooks.h"
+#include "fadetimespin.h"
+#include "scenetransition.h"
+#include <QSpinBox>
 #include "functionstreewidget.h"   // palette MIME type
+#include "effectscriptrunner.h"
+#include "effectscriptcache.h"
 #include "fixturegroupsource.h"    // fixture-group / fixture MIME types
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
 #include "qlcchannel.h"
 #include "qlccapability.h"
+#include "monitorproperties.h"
 #include "fixturegroup.h"
+#include "stagetarget.h"
 #include "qlcpalette.h"
+#include "aimsolver.h"
 #include "fixture.h"
 #include "scene.h"
 #include "doc.h"
@@ -60,16 +71,23 @@ enum { LookColName = 0, LookColIn = 1, LookColOut = 2, LookColCount = 3 };
 // gradient — a value, not a painted look — so it has no fade of its own).
 static const int LookFadeInertRole = Qt::UserRole + 3;
 
-/** Human "1.5 s" / "step" text for a fade override in ms (-1 = step). */
-static QString fadeCellText(int ms)
+/* What a fade's default (-1) means for this look: "scene" -- follow the
+   scene's fade (or a chaser step's) -- or, for an effect's release, "snap".
+   Kept on the cell so the editor and the text agree (LookFades). */
+static const int LookFadeDefaultRole = Qt::UserRole + 4;
+
+/** A fade cell's text: "1.5 s", its default's name, or "—" where the look has
+ *  no such fade. */
+static QString fadeCellText(const QTreeWidgetItem *it, int column)
 {
-    if (ms < 0)
-        return QObject::tr("step");
-    return QString::number(ms / 1000.0, 'g', 3) + QObject::tr(" s");
+    if (it->data(column, LookFadeInertRole).toBool())
+        return QStringLiteral("—");
+    return FadeTimeSpin::text(it->data(column, Qt::UserRole).toInt(),
+                              it->data(column, LookFadeDefaultRole).toString());
 }
 
-/** Editable fade-time cell: a QDoubleSpinBox in seconds whose minimum reads
- *  "step" (fall back to the step/scene fade). Only the In/Out columns edit. */
+/** Editable fade-time cell: the one fade-time control (FadeTimeSpin), its
+ *  lowest value the look's default. Only the In/Out columns edit. */
 class FadeSpinDelegate final : public QStyledItemDelegate
 {
 public:
@@ -84,31 +102,23 @@ public:
         // effect) are read-only.
         if (index.data(LookFadeInertRole).toBool())
             return nullptr;
-        QDoubleSpinBox *sp = new QDoubleSpinBox(parent);
-        sp->setDecimals(2);
-        sp->setSingleStep(0.1);
-        sp->setRange(-0.1, 600.0);              // -0.1 == the "step" value
-        sp->setSpecialValueText(QObject::tr("step"));
-        sp->setSuffix(QObject::tr(" s"));
-        return sp;
+        return new FadeTimeSpin(parent, index.data(LookFadeDefaultRole).toString());
     }
 
     void setEditorData(QWidget *editor, const QModelIndex &index) const override
     {
-        QDoubleSpinBox *sp = qobject_cast<QDoubleSpinBox*>(editor);
-        if (sp == nullptr) return;
-        const int ms = index.data(Qt::UserRole).toInt();
-        sp->setValue(ms >= 0 ? ms / 1000.0 : sp->minimum());
+        if (FadeTimeSpin *sp = qobject_cast<FadeTimeSpin *>(editor))
+            sp->setMs(index.data(Qt::UserRole).toInt());
     }
 
     void setModelData(QWidget *editor, QAbstractItemModel *model,
                       const QModelIndex &index) const override
     {
-        QDoubleSpinBox *sp = qobject_cast<QDoubleSpinBox*>(editor);
+        FadeTimeSpin *sp = qobject_cast<FadeTimeSpin *>(editor);
         if (sp == nullptr) return;
-        const int ms = sp->value() < 0 ? -1 : int(sp->value() * 1000.0 + 0.5);
-        model->setData(index, ms, Qt::UserRole);
-        model->setData(index, fadeCellText(ms), Qt::DisplayRole);
+        model->setData(index, sp->ms(), Qt::UserRole);
+        model->setData(index, FadeTimeSpin::text(sp->ms(), index.data(LookFadeDefaultRole).toString()),
+                       Qt::DisplayRole);
     }
 };
 
@@ -135,14 +145,191 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
     QVBoxLayout *root = new QVBoxLayout(this);
     root->setContentsMargins(0, 6, 0, 0);
 
-    QLabel *header = new QLabel(
-        tr("<b>Looks</b> (palettes) are applied to this look's <b>Targets</b>. "
-           "Every look applies to every target.<br>"
-           "Drag here to add: <b>palettes</b> &rarr; looks; "
-           "<b>fixture groups</b> &rarr; Targets (dynamic — follow membership); "
-           "individual <b>fixtures</b> &rarr; Targets (fixed)."), this);
-    header->setWordWrap(true);
-    root->addWidget(header);
+    /* One button, not three lines of prose.
+     *
+       This paragraph explained Looks and Targets permanently, at the top of the
+       panel, every time a scene was opened -- read once on the first day and
+       looked past forever after. Its content now lives in the Programming
+       guide, which this reaches; the explanation is still one click away
+       without standing in front of the work. */
+    QHBoxLayout *helpRow = new QHBoxLayout();
+
+    /* How the whole look arrives and leaves: each fixture at its own moment
+       -- a wipe across the stage, from the centre, a dissolve, along each
+       bar -- instead of all fading together ("transitions .. fade in ..
+       wipe .. from center"). Effects in the look follow it too. */
+    if (m_scene != nullptr)
+    {
+        auto makeShape = [this](const SceneTransition &t) {
+            QComboBox *cb = new QComboBox(this);
+            cb->addItems(SceneTransition::shapeLabels());
+            cb->setCurrentIndex(int(t.shape));
+            return cb;
+        };
+        auto makeTime = [this](const SceneTransition &t) {
+            FadeTimeSpin *sp = new FadeTimeSpin(this);
+            sp->setMs(int(t.time));
+            return sp;
+        };
+        const SceneTransition tin = m_scene->transitionIn(), tout = m_scene->transitionOut();
+        QComboBox *inShape = makeShape(tin);
+        FadeTimeSpin *inTime = makeTime(tin);
+        QComboBox *outShape = makeShape(tout);
+        FadeTimeSpin *outTime = makeTime(tout);
+        QSpinBox *edge = new QSpinBox(this);
+        edge->setRange(5, 100);
+        edge->setSuffix(QStringLiteral("%"));
+        edge->setValue(qRound((tin.isActive() ? tin.softness : tout.softness) * 100.0));
+        edge->setKeyboardTracking(false);
+        inShape->setToolTip(tr("How this look arrives when the scene starts: each fixture when "
+                               "the transition reaches it, in place of the scene's fade. "
+                               "Effects in the look follow it too."));
+        outShape->setToolTip(tr("How it leaves when the scene stops"));
+        inTime->setToolTip(tr("How long the transition in takes, start to finish"));
+        outTime->setToolTip(tr("How long the transition out takes"));
+        edge->setToolTip(tr("How soft its edge is: each fixture's own fade, as a share of "
+                            "the time -- 100% all together, low a sharp line"));
+        /* The scene's own fade, here where looks fall back to it ("step" /
+           "scene") -- it lived only in the Scene Editor's speed dial. A
+           transition, when set, stands in for it. */
+        auto speedMs = [](uint speed) {
+            return (speed == Function::defaultSpeed() || speed == Function::infiniteSpeed())
+                ? 0 : int(speed);
+        };
+        FadeTimeSpin *fadeIn = new FadeTimeSpin(this);
+        FadeTimeSpin *fadeOut = new FadeTimeSpin(this);
+        fadeIn->setMs(speedMs(m_scene->fadeInSpeed()));
+        fadeOut->setMs(speedMs(m_scene->fadeOutSpeed()));
+        fadeIn->setObjectName(QStringLiteral("sceneFadeIn"));
+        fadeOut->setObjectName(QStringLiteral("sceneFadeOut"));
+        fadeIn->setToolTip(tr("The scene's fade in: every look's \"scene\" fade follows it"));
+        fadeOut->setToolTip(tr("The scene's fade out"));
+        connect(fadeIn, &FadeTimeSpin::msChanged, this, [this](int ms) {
+            if (m_scene == nullptr || m_scene->fadeInSpeed() == uint(ms))
+                return;
+            m_scene->setFadeInSpeed(uint(ms));
+            if (m_doc != nullptr)
+                m_doc->setModified();
+            emit sceneModified();
+        });
+        connect(fadeOut, &FadeTimeSpin::msChanged, this, [this](int ms) {
+            if (m_scene == nullptr || m_scene->fadeOutSpeed() == uint(ms))
+                return;
+            m_scene->setFadeOutSpeed(uint(ms));
+            if (m_doc != nullptr)
+                m_doc->setModified();
+            emit sceneModified();
+        });
+
+        auto apply = [this, inShape, inTime, outShape, outTime, edge, fadeIn, fadeOut]() {
+            if (m_scene == nullptr)
+                return;
+            SceneTransition tin, tout;
+            tin.shape = SceneTransition::Shape(inShape->currentIndex());
+            tin.time = uint(inTime->ms());
+            tin.softness = edge->value() / 100.0;
+            tout.shape = SceneTransition::Shape(outShape->currentIndex());
+            tout.time = uint(outTime->ms());
+            tout.softness = edge->value() / 100.0;
+            inTime->setEnabled(tin.shape != SceneTransition::None);
+            outTime->setEnabled(tout.shape != SceneTransition::None);
+            edge->setEnabled(tin.isActive() || tout.isActive());
+            // A transition's time takes the place of the fade.
+            fadeIn->setEnabled(!tin.isActive());
+            fadeOut->setEnabled(!tout.isActive());
+            if (tin == m_scene->transitionIn() && tout == m_scene->transitionOut())
+                return;
+            m_scene->setTransitionIn(tin);
+            m_scene->setTransitionOut(tout);
+            if (m_doc != nullptr)
+                m_doc->setModified();
+            emit sceneModified();
+        };
+        inTime->setEnabled(tin.shape != SceneTransition::None);
+        outTime->setEnabled(tout.shape != SceneTransition::None);
+        edge->setEnabled(tin.isActive() || tout.isActive());
+        fadeIn->setEnabled(!tin.isActive());
+        fadeOut->setEnabled(!tout.isActive());
+        connect(inShape, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [apply](int) { apply(); });
+        connect(outShape, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [apply](int) { apply(); });
+        connect(inTime, &FadeTimeSpin::msChanged, this, [apply](int) { apply(); });
+        connect(outTime, &FadeTimeSpin::msChanged, this, [apply](int) { apply(); });
+        connect(edge, QOverload<int>::of(&QSpinBox::valueChanged), this, [apply](int) { apply(); });
+        inShape->setObjectName(QStringLiteral("transitionInShape"));
+        outShape->setObjectName(QStringLiteral("transitionOutShape"));
+        inTime->setObjectName(QStringLiteral("transitionInTime"));
+        edge->setObjectName(QStringLiteral("transitionEdge"));
+        helpRow->addWidget(new QLabel(tr("Fade in"), this));
+        helpRow->addWidget(fadeIn);
+        helpRow->addWidget(new QLabel(tr("out"), this));
+        helpRow->addWidget(fadeOut);
+        helpRow->addSpacing(12);
+        helpRow->addWidget(new QLabel(tr("Transition in:"), this));
+        helpRow->addWidget(inShape);
+        helpRow->addWidget(inTime);
+        helpRow->addSpacing(8);
+        helpRow->addWidget(new QLabel(tr("out:"), this));
+        helpRow->addWidget(outShape);
+        helpRow->addWidget(outTime);
+        helpRow->addSpacing(8);
+        helpRow->addWidget(new QLabel(tr("Edge:"), this));
+        helpRow->addWidget(edge);
+
+        /* What this look's effects run on (SPEED_SPREAD_DESIGN.md, S2): a
+           speed master, the main clock, their own speed -- or whatever the
+           chase step, chase or collection playing it says. */
+        QComboBox *speed = new QComboBox(this);
+        speed->setObjectName(QStringLiteral("sceneSpeedMaster"));
+        SpeedMastersPanel::fillCombo(speed, m_doc, tr("As played"), m_scene->speedMaster());
+        speed->setToolTip(tr("What this look's effects keep time with. \"As played\": whatever "
+                             "the chase step, chase or collection playing it says (else their own "
+                             "speed). An effect can still choose for itself in the look editor."));
+        connect(speed, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, speed](int) {
+            if (m_scene == nullptr)
+                return;
+            m_scene->setSpeedMaster(speed->currentData().toInt());
+            if (m_doc != nullptr)
+                m_doc->setModified();
+            emit sceneModified();
+        });
+        helpRow->addSpacing(8);
+        helpRow->addWidget(new QLabel(tr("Speed:"), this));
+        helpRow->addWidget(speed);
+    }
+    helpRow->addStretch();
+    QPushButton *guideBtn = new QPushButton(tr("How this works"), this);
+    guideBtn->setFlat(true);
+    guideBtn->setCursor(Qt::PointingHandCursor);
+    connect(guideBtn, &QPushButton::clicked, this,
+            [this]() { ProgrammingManager::showGuide(this); });
+    helpRow->addWidget(guideBtn);
+    root->addLayout(helpRow);
+
+    /* Re-rigging a head changes what it can reach. Re-check when the rig
+       changes, but rebuild only if the answer did: this panel is where looks
+       are edited, and a rebuild for nothing would pull the rug out. */
+    if (m_doc != nullptr && m_doc->monitorProperties() != nullptr)
+    {
+        connect(m_doc->monitorProperties(), &MonitorProperties::rigPropsChanged, this,
+                [this](quint32) { scheduleReachCheck(); });
+        // Moving a target is the other half: the same heads, somewhere else.
+        connect(m_doc->monitorProperties(), &MonitorProperties::stageTargetsChanged,
+                this, &SceneGroupLooks::scheduleReachCheck);
+    }
+
+    /* A fixed target renamed anywhere shows its new name here. Deferred, and
+       only when the renamed fixture is one of this look's fixed targets. */
+    if (m_doc != nullptr)
+        connect(m_doc, &Doc::fixtureChanged, this, [this](quint32 fid) {
+            if (m_scene == nullptr || !m_includeFixtureTargets
+                || !m_scene->fixtures().contains(fid) || m_nameReloadPending)
+                return;
+            m_nameReloadPending = true;
+            QTimer::singleShot(0, this, [this]() {
+                m_nameReloadPending = false;
+                reload();
+            });
+        });
 
     QHBoxLayout *cols = new QHBoxLayout();
     root->addLayout(cols);
@@ -151,19 +338,34 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
     QVBoxLayout *targetCol = new QVBoxLayout();
     m_targetsLabel = new QLabel(tr("Targets"), this);
     targetCol->addWidget(m_targetsLabel);
+    /* Targets in the inventory -- not patched -- send nothing ("not seeing
+       output on farts .. we need a warning in programming view for unpatched
+       fixtures"): a group of them looked like any other target. */
+    m_unpatchedNote = new QLabel(this);
+    m_unpatchedNote->setWordWrap(true);
+    m_unpatchedNote->setStyleSheet(QStringLiteral("color: rgb(230,160,40);"));
+    m_unpatchedNote->hide();
+    targetCol->addWidget(m_unpatchedNote);
 
     // Declared SCOPE (Scene::LookScope) — what this look is FOR, as a
     // statement of intent. Distinct from the Targets list below it (what it
     // actually paints): a look can be scoped to "SR Truss" while its targets
     // happen to be a superset/subset, e.g. mid-build. Purely organisational
     // metadata today — doesn't affect playback.
+    /* Not shown. Sitting right above Targets, it read as a second place to
+       say which fixtures the look is on ("what is scope in this context.. I
+       set the group and that should be sufficient") while changing nothing
+       that lights. Kept, hidden, so a show's saved scope survives. */
     QHBoxLayout *scopeRow = new QHBoxLayout();
-    scopeRow->addWidget(new QLabel(tr("Scope:"), this));
+    QLabel *scopeLabel = new QLabel(tr("Scope:"), this);
+    scopeRow->addWidget(scopeLabel);
     m_scopeCombo = new QComboBox(this);
     m_scopeCombo->setToolTip(tr("What this look is FOR (a statement of intent) — "
         "not what it paints. Whole Stage, or a specific fixture group/zone."));
     scopeRow->addWidget(m_scopeCombo, 1);
     targetCol->addLayout(scopeRow);
+    scopeLabel->hide();
+    m_scopeCombo->hide();
     connect(m_scopeCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(slotScopeChanged(int)));
 
     m_targetList = new QTreeWidget(this);
@@ -362,6 +564,34 @@ static QString capCoverageHint(Fixture *fxi, const QSet<QLCPalette::PaletteType>
 }
 
 
+void SceneGroupLooks::scheduleReachCheck()
+{
+    if (m_reachCheckPending)
+        return;
+    m_reachCheckPending = true;
+    QTimer::singleShot(0, this, [this]() {
+        m_reachCheckPending = false;
+        if (m_scene != nullptr && headsThatCannotReach() != m_cannotReach)
+            reload();
+    });
+}
+
+QHash<quint32, QStringList> SceneGroupLooks::headsThatCannotReach() const
+{
+    QHash<quint32, QStringList> out;
+    MonitorProperties *props = m_doc ? m_doc->monitorProperties() : nullptr;
+    if (props == nullptr || m_scene == nullptr)
+        return out;
+    foreach (const AimSolver::SceneAim &a, AimSolver::sceneAims(m_doc, m_scene))
+    {
+        if (a.solution.reachable())
+            continue;
+        if (StageTarget *t = props->stageTarget(a.targetId))
+            out[a.fixtureId] << t->name();
+    }
+    return out;
+}
+
 void SceneGroupLooks::reload()
 {
     // Preserve the effective selection across the rebuild (a type folder is
@@ -383,12 +613,43 @@ void SceneGroupLooks::reload()
     m_targetList->blockSignals(true);
     m_targetList->clear();
 
+    /* Aimed at something they cannot reach. Worse than a missing look: the
+       head is not idle, it is stuck at its limit pointing somewhere else. So it
+       is red, where the missing-look hint is amber, and it wins the colour. */
+    m_cannotReach = headsThatCannotReach();
+    const QColor cannotReachColour(220, 60, 50);
+
     // Which palette types does the current look cover?
     QSet<QLCPalette::PaletteType> coveredTypes;
     foreach (quint32 pid, m_scene->palettes())
     {
         QLCPalette *p = m_doc->palette(pid);
-        if (p) coveredTypes.insert(p->type());
+        if (p == NULL)
+            continue;
+        coveredTypes.insert(p->type());
+        /* An effect covers what it drives: its category -- the folder it is
+           filed under, else the script's own -- so a colour effect is a look
+           for colour ("Effect/Color/sinewave" was flagged "no look for:
+           color"). */
+        if (p->type() == QLCPalette::Effect)
+        {
+            QString cat;
+            const QString prefix = QStringLiteral("Palettes/Effect/");
+            if (p->path().startsWith(prefix))
+                cat = p->path().mid(prefix.length()).section('/', 0, 0);
+            if (cat.isEmpty() && m_doc->effectScriptRunner() != NULL && !p->scriptPath().isEmpty())
+            {
+                EffectScriptCache *cache = m_doc->effectScriptRunner()->cache();
+                cat = EffectScriptCache::categoryForTypes(
+                          cache->scriptMeta(cache->nameFromPath(p->scriptPath())).fixtureTypes);
+            }
+            if (cat == QLatin1String("Color"))
+                coveredTypes.insert(QLCPalette::Color);
+            else if (cat == QLatin1String("Dimmer"))
+                coveredTypes.insert(QLCPalette::Dimmer);
+            else if (cat == QLatin1String("Position"))
+                coveredTypes.insert(QLCPalette::PanTilt);
+        }
     }
 
     // Groups = dynamic targets (top level).
@@ -429,6 +690,15 @@ void SceneGroupLooks::reload()
             label += tr("  ⚠ no look for: %1").arg(ml.join(", "));
             it->setForeground(0, QColor(200, 130, 0));
         }
+        int groupShort = 0;
+        foreach (quint32 fid, g->fixtureList())
+            if (m_cannotReach.contains(fid))
+                ++groupShort;
+        if (groupShort > 0)
+        {
+            label += tr("  ⚠ %n can't reach their aim target", "", groupShort);
+            it->setForeground(0, cannotReachColour);
+        }
         it->setText(0, label);
         it->setData(0, Qt::UserRole, g->id());
         it->setData(0, TARGET_KIND_ROLE, TargetGroup);
@@ -464,9 +734,24 @@ void SceneGroupLooks::reload()
             {
                 QTreeWidgetItem *it = new QTreeWidgetItem(folder);
                 const QString hint = capCoverageHint(f, coveredTypes);
-                it->setText(0, hint.isEmpty() ? f->name() : f->name() + hint);
+                QString text = hint.isEmpty() ? f->name() : f->name() + hint;
                 if (!hint.isEmpty())
                     it->setForeground(0, QColor(200, 130, 0));
+                if (m_cannotReach.contains(f->id()))
+                {
+                    QStringList names = m_cannotReach.value(f->id());
+                    names.removeDuplicates();
+                    text += tr("  ⚠ can't reach: %1").arg(names.join(", "));
+                    it->setForeground(0, cannotReachColour);
+                }
+                // A staged fixture can be designed against but sends no DMX yet.
+                if (!f->isPatched())
+                {
+                    text += tr("  (unpatched)");
+                    it->setToolTip(0, tr("In the inventory: the look is built, but nothing "
+                                         "is sent until the fixture is patched"));
+                }
+                it->setText(0, text);
                 it->setData(0, Qt::UserRole, f->id());
                 it->setData(0, TARGET_KIND_ROLE, TargetFixture);
             }
@@ -503,7 +788,26 @@ void SceneGroupLooks::reload()
     foreach (FixtureGroup *g, groups)
         foreach (quint32 fid, g->fixtureList())
             allFixtures.insert(fid);
-    m_targetsLabel->setText(tr("Targets (%n fixture(s))", "", allFixtures.count()));
+    QString targetsText = tr("Targets (%n fixture(s))", "", allFixtures.count());
+    if (!m_cannotReach.isEmpty())
+        targetsText += tr("  —  ⚠ %n can't reach their aim target", "", m_cannotReach.size());
+    m_targetsLabel->setText(targetsText);
+    m_targetsLabel->setStyleSheet(m_cannotReach.isEmpty()
+                                  ? QString() : QStringLiteral("color: rgb(220,60,50);"));
+
+    int unpatched = 0;
+    foreach (quint32 fid, allFixtures)
+        if (Fixture *f = m_doc->fixture(fid))
+            if (!f->isPatched())
+                ++unpatched;
+    m_unpatchedNote->setVisible(unpatched > 0);
+    if (unpatched > 0)
+        m_unpatchedNote->setText(unpatched == allFixtures.count()
+            ? tr("⚠ None of these fixtures is patched: they send no DMX. The look shows in the "
+                 "rig view only. Patch them in the Fixture Manager.")
+            : tr("⚠ %1 of these %2 fixtures are not patched: they send no DMX. They show in "
+                 "the rig view only. Patch them in the Fixture Manager.")
+                  .arg(unpatched).arg(allFixtures.count()));
 
     // Declared scope: (re)populate from every group in the doc (not just this
     // scene's own targets — scope is a statement of intent, independent of
@@ -574,22 +878,26 @@ void SceneGroupLooks::reload()
         //  • Colour/Dimmer feeding an effect: BOTH inert — it's a value the effect
         //    reads, not a painted look, so it has no fade of its own.
         //  • Top-level base look: both live.
-        const bool inInert  = isEffect || feedsEffect;
-        const bool outInert = feedsEffect;
-        const int inMs  = isEffect ? -1 : m_scene->paletteFadeIn(pid);
+        // The one rule, shared with the look editor (LookFades).
+        const bool inInert  = !LookFades::hasFadeIn(m_doc, m_scene, pid);
+        const bool outInert = !LookFades::hasFadeOut(m_doc, m_scene, pid);
+        const int inMs  = inInert ? -1 : m_scene->paletteFadeIn(pid);
         const int outMs = m_scene->paletteFadeOut(pid);
+        const QString dflt = LookFades::defaultLabel(m_doc, pid);
         it->setData(LookColIn,  Qt::UserRole, inMs);
         it->setData(LookColOut, Qt::UserRole, outMs);
         it->setData(LookColIn,  LookFadeInertRole, inInert);
         it->setData(LookColOut, LookFadeInertRole, outInert);
-        it->setText(LookColIn,  inInert  ? QStringLiteral("—") : fadeCellText(inMs));
-        it->setText(LookColOut, outInert ? QStringLiteral("—") : fadeCellText(outMs));
+        it->setData(LookColIn,  LookFadeDefaultRole, tr("scene"));
+        it->setData(LookColOut, LookFadeDefaultRole, dflt);
+        it->setText(LookColIn,  fadeCellText(it, LookColIn));
+        it->setText(LookColOut, fadeCellText(it, LookColOut));
         it->setTextAlignment(LookColIn,  Qt::AlignRight | Qt::AlignVCenter);
         it->setTextAlignment(LookColOut, Qt::AlignRight | Qt::AlignVCenter);
         if (isEffect)
             it->setToolTip(LookColOut,
                 tr("Release fade: when this look stops, the effect fades out over "
-                   "this time instead of snapping off. \"step\" = snap.\n"
+                   "this time instead of snapping off. \"snap\" = stop at once.\n"
                    "Per-key attack/decay comes from the effect's own parameters "
                    "(e.g. Glow / Release), not this column."));
         else if (feedsEffect)
@@ -639,6 +947,77 @@ void SceneGroupLooks::dragMoveEvent(QDragMoveEvent *event)
 {
     if (hasAcceptedFormat(event->mimeData()))
         event->acceptProposedAction();
+}
+
+/* Where a dropped look actually lands.
+ *
+ * Scene::addPalette() APPENDS, and in this model the palette ORDER is what
+ * decides nesting: a Colour or Dimmer listed after an Effect belongs to that
+ * effect rather than painting the scene. So every drop landed at the end, which
+ * is after any effect, which means inside it -- whatever the user did, and
+ * wherever they aimed. Dropping a colour above the effect in the list put it
+ * under the effect anyway.
+ *
+ * Two rules, in order:
+ *   - dropped ON a row, it goes where it was dropped;
+ *   - dropped anywhere else, it becomes a BASE look -- before the first effect
+ *     -- because "I dragged a colour onto this scene" means colour the scene.
+ *     Feeding an effect is the deliberate act, and it has its own gesture
+ *     (drop onto the effect), so it should not also be the accident.
+ */
+void SceneGroupLooks::placeDroppedLooks(const QList<quint32> &pids,
+                                        const QPoint &dropPos)
+{
+    if (m_scene == NULL || pids.isEmpty())
+        return;
+
+    QList<quint32> order = m_scene->palettes();
+
+    // Where the user aimed, if they aimed at a row.
+    int at = -1;
+    const QPoint lp = m_lookList->viewport()->mapFrom(this, dropPos);
+    if (QTreeWidgetItem *it = m_lookList->itemAt(lp))
+    {
+        const quint32 pid = it->data(LookColName, Qt::UserRole).toUInt();
+        const int ix = order.indexOf(pid);
+        if (ix >= 0)
+            at = ix;
+    }
+
+    if (at < 0)
+    {
+        // Before the first effect: a base look.
+        at = order.size();
+        for (int i = 0; i < order.size(); ++i)
+        {
+            QLCPalette *p = m_doc->palette(order.at(i));
+            if (p != NULL && p->type() == QLCPalette::Effect)
+            {
+                at = i;
+                break;
+            }
+        }
+    }
+
+    // Lift the new ones out and reinsert them together at the chosen point.
+    foreach (quint32 pid, pids)
+    {
+        const int cur = order.indexOf(pid);
+        if (cur >= 0)
+        {
+            order.removeAt(cur);
+            if (cur < at)
+                --at;
+        }
+    }
+    at = qBound(0, at, order.size());
+    for (int i = 0; i < pids.size(); ++i)
+        order.insert(at + i, pids.at(i));
+
+    m_scene->reorderPalettes(order);
+    m_doc->setModified();
+    reload();
+    emit sceneModified();
 }
 
 void SceneGroupLooks::dropEvent(QDropEvent *event)
@@ -812,6 +1191,10 @@ void SceneGroupLooks::dropEvent(QDropEvent *event)
     const bool nested = (dropEffectPid != QLCPalette::invalidId() && !addedPalettePids.isEmpty());
     if (nested)
         moveLooksToTarget(addedPalettePids, dropEffectPid);
+    else if (addedPalettePids.isEmpty() == false)
+    {
+        placeDroppedLooks(addedPalettePids, dropPos);
+    }
     else if (changed)
     {
         m_doc->setModified();
@@ -1011,12 +1394,21 @@ void SceneGroupLooks::moveLooksToTarget(const QList<quint32> &pids, quint32 effe
     for (int i = 0; i < block.size(); ++i)
         order.insert(pos + i, block.at(i));
 
+    // reload() unconditionally, even when reorderPalettes() finds the computed
+    // order identical to the current one (its own no-op guard): a freshly
+    // dropped palette was just appended by addPalette() and has never been
+    // RENDERED in the tree at all yet. When "nest right after this effect"
+    // happens to land at the same index addPalette()'s append already put it
+    // -- the ordinary case of dropping onto your only/last effect -- the
+    // reorder is a genuine no-op on the DATA, but the tree still needs its
+    // first render showing the palette nested as a child, not floating at
+    // the top level where it was drawn before this call ran at all.
     if (m_scene->reorderPalettes(order))
     {
         m_doc->setModified();
         emit sceneModified();
-        reload();
     }
+    reload();
 }
 
 void SceneGroupLooks::slotLookContextMenu(const QPoint &pos)
@@ -1100,8 +1492,8 @@ void SceneGroupLooks::slotLookContextMenu(const QPoint &pos)
         if (resetOut) outMs = -1;
         it->setData(LookColIn,  Qt::UserRole, inMs);
         it->setData(LookColOut, Qt::UserRole, outMs);
-        it->setText(LookColIn,  fadeCellText(inMs));
-        it->setText(LookColOut, fadeCellText(outMs));
+        it->setText(LookColIn,  fadeCellText(it, LookColIn));
+        it->setText(LookColOut, fadeCellText(it, LookColOut));
         m_scene->setPaletteFade(pid, inMs, outMs);
     }
     m_lookList->blockSignals(false);

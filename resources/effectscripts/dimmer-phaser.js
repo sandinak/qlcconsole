@@ -13,6 +13,8 @@
     var effect = new Object;
     effect.apiVersion  = 1;
     effect.name        = "Dimmer Phaser";
+    // Takes the host's spread (fixture.phase, inputs._spread) in place of its own.
+    effect.hostSpread = "spread,reverse";
     effect.description = "Waveform intensity FX with phase-spread chase";
     effect.author      = "QLC+";
     effect.fixtureTypes = ["dimmer", "rgb", "moving"];
@@ -75,7 +77,7 @@
         var dir = (rev > 0.5) ? -1.0 : 1.0;
 
         return fixtures.map(function(f, i) {
-            var phaseFull = t * rate + dir * (spread * i / n);
+            var phaseFull = t * rate + (inputs._spread ? f.phase : dir * (spread * i / n));
             var w = shape(type, phaseFull, i, width);
             var dimmer = (mn + w * (mx - mn)) * level;
 

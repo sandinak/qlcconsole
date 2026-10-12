@@ -982,6 +982,12 @@ void InputOutputMap::loadProfiles(const QDir& dir)
         QString path;
 
         path = dir.absoluteFilePath(it.next());
+        if (QLCFile::isOnlineOnly(path))   // in cloud storage, not on this machine: do not wait for it
+        {
+            QLCFile::noteSkippedOnlineOnly(path);
+            continue;
+        }
+
         prof = QLCInputProfile::loader(path);
         if (prof != NULL)
         {
@@ -1270,6 +1276,20 @@ void InputOutputMap::setBpmNumber(int bpm)
         m_doc->masterTimer()->requestBpmNumber(bpm);
 
     emit bpmNumberChanged(m_currentBPM);
+}
+
+double InputOutputMap::tapBeat()
+{
+    MasterTimer *mt = m_doc->masterTimer();
+    if (m_beatGeneratorType == Disabled)
+        return mt->bpm();
+    const double bpm = mt->tap();
+    if (qRound(bpm) != m_currentBPM)
+    {
+        m_currentBPM = qRound(bpm);
+        emit bpmNumberChanged(m_currentBPM);
+    }
+    return bpm;
 }
 
 int InputOutputMap::bpmNumber() const

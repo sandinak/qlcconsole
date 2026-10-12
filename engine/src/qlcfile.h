@@ -149,7 +149,9 @@ public:
      *        root, so the USERDATADIR rename doesn't orphan existing user
      *        content. A file already present under the new root by name
      *        always wins; no-op once both roots are the same or the old
-     *        root doesn't exist.
+     *        root doesn't exist. What it links is remembered (a ".legacy-
+     *        linked" list in the new root), so a link removed afterwards is
+     *        not put back; files new to the old root still are linked.
      */
     static void mergeLegacyUserData();
 
@@ -161,6 +163,23 @@ public:
      * @brief getQtVersion get the runtime Qt version as number. E.g. 50602
      */
     static quint32 getQtRuntimeVersion();
+
+    /**
+     * Whether @p path is a cloud-storage placeholder: listed like any file,
+     * its contents not on this machine (macOS "dataless" -- Synology Drive,
+     * iCloud Drive, OneDrive, Dropbox on demand; Windows' recall-on-access).
+     * READING one waits for the cloud to send it, and with the cloud out of
+     * reach that wait is the whole startup. This only looks at its flags --
+     * it never fetches it. Follows symlinks.
+     */
+    static bool isOnlineOnly(const QString &path);
+
+    /** A file a loader skipped for being online-only (isOnlineOnly()), and
+     *  every one skipped so far -- for the readiness footer. Thread-safe. */
+    static void noteSkippedOnlineOnly(const QString &path);
+    static QStringList skippedOnlineOnly();
+    /** Forget @p path (it is on this machine now), or all of them. */
+    static void forgetSkippedOnlineOnly(const QString &path = QString());
 
 private:
     static bool m_hasWindowManager;

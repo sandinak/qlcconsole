@@ -25,6 +25,8 @@ add_library(${module_name} SHARED
     efxfixture.cpp efxfixture.h
     fadechannel.cpp fadechannel.h
     fixture.cpp fixture.h
+    fixturepower.cpp fixturepower.h
+    powerlimiter.cpp powerlimiter.h
     fixturegroup.cpp fixturegroup.h
     function.cpp function.h
     genericdmxsource.cpp genericdmxsource.h
@@ -39,16 +41,31 @@ add_library(${module_name} SHARED
     keypadparser.cpp keypadparser.h
     mastertimer.cpp mastertimer.h
     monitorproperties.cpp monitorproperties.h
+    networkreport.cpp networkreport.h
+    patchlist.cpp patchlist.h
+    speedmasters.cpp speedmasters.h
+    spreadlayer.cpp spreadlayer.h
+    networktopology.cpp networktopology.h
     powerdistribution.cpp powerdistribution.h
     venue.cpp venue.h
     aimsolver.cpp aimsolver.h
     stageplatform.cpp stageplatform.h
     pipe.cpp pipe.h
+    scenery.cpp scenery.h
+    gobolibrary.cpp gobolibrary.h
+    headlayout.cpp headlayout.h
+    righeads.cpp righeads.h
+    hanger.cpp hanger.h
+    wledfixture.cpp wledfixture.h
+    scenetransition.cpp scenetransition.h
+    fixturedefcheck.cpp fixturedefcheck.h
+    networkgearcatalog.cpp networkgearcatalog.h
     stand.cpp stand.h
     tower.cpp tower.h
     stagetarget.cpp stagetarget.h
     truss.cpp truss.h
     outputpatch.cpp outputpatch.h
+    patchplanner.cpp patchplanner.h
     qlccapability.cpp qlccapability.h
     qlcchannel.cpp qlcchannel.h
     qlcclipboard.cpp qlcclipboard.h

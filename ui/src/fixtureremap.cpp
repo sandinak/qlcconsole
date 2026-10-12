@@ -188,6 +188,8 @@ void FixtureRemap::fillFixturesTree(Doc *doc, QTreeWidget *tree)
 {
     foreach (Fixture *fxi, doc->fixtures())
     {
+        if (!fxi->isPatched())
+            continue;           // nothing to remap: it has no address
         quint32 uni = fxi->universe();
         QTreeWidgetItem *topItem = getUniverseItem(doc, uni, tree);
 
@@ -524,6 +526,10 @@ void FixtureRemap::slotCloneSourceFixture()
     /* Add the first fixture without gap, at the given address */
     tgtFix->setAddress(srcFix->address());
     tgtFix->setUniverse(srcFix->universe());
+    tgtFix->setPatched(srcFix->isPatched());
+    tgtFix->setConnection(srcFix->connection());
+    tgtFix->setIPAddress(srcFix->ipAddress());
+    tgtFix->setTransport(srcFix->transport());
     tgtFix->setName(srcFix->name());
 
     /* Set a fixture definition & mode if they were selected.

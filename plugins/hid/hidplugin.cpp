@@ -64,6 +64,11 @@ void HIDPlugin::loadProfiles(const QDir &dir)
                                              QDir::Files | QDir::Readable);
     for (const QString &f : files)
     {
+        if (QLCFile::isOnlineOnly(dir.absoluteFilePath(f)))   // in cloud storage, not here: do not wait for it
+        {
+            QLCFile::noteSkippedOnlineOnly(dir.absoluteFilePath(f));
+            continue;
+        }
         HIDProfile *p = HIDProfile::load(dir.absoluteFilePath(f));
         if (p)
             m_profiles.append(p);

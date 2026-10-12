@@ -20,7 +20,12 @@
 #ifndef MONITORGRAPHICSVIEW_H
 #define MONITORGRAPHICSVIEW_H
 
+#include <QElapsedTimer>
 #include <QGraphicsView>
+#include <QDragEnterEvent>
+#include <QDragMoveEvent>
+#include <QDropEvent>
+#include <functional>
 #include <QHash>
 #include <QList>
 #include <QSet>
@@ -35,8 +40,13 @@ class TrussItem;
 class PlatformItem;
 class PipeItem;
 class StandItem;
+class SceneryItem;
 class TowerItem;
 class PowerSourceItem;
+class NetworkNodeItem;
+class NetworkReceiverItem;
+class NetworkRunItem;
+class QTimer;
 class TargetItem;
 class MonitorImageItem;
 class Doc;
@@ -66,6 +76,25 @@ public:
     /** True when the view is an elevation (Front/Side) — editing is disabled. */
     bool isElevation() const { return m_pov != PovTop; }
 
+    /** Turn the plot in 90-degree steps (0..3, clockwise). A VIEW transform
+     *  only: scene coordinates -- and so everything in the workspace -- are
+     *  untouched, and Qt maps mouse events through the inverse so dragging and
+     *  hit-testing keep working. Quarter turns preserve handedness, so a
+     *  rotated plan still tells the truth about stage left/right. */
+    void setViewRotation(int quarterTurns);
+    int  viewRotation() const { return m_viewRotation; }
+
+    /** The uniform zoom, independent of the rotation. Use this rather than
+     *  transform().m11(), which stops being the scale once the view is turned. */
+    double viewScale() const;
+
+    /** Stage-direction labels (upstage/downstage/stage left/right) around the
+     *  edge of the plot. On by default; the Rulers-style toggles can turn them
+     *  off for a clean plot. */
+    bool orientationLabelsVisible() const { return m_showOrientationLabels; }
+    void setOrientationLabelsVisible(bool on)
+    { m_showOrientationLabels = on; viewport()->update(); }
+
     /** True if @p t is a bar we allow the user to DRAG in the current elevation
      *  view (WYSIWYG placement). Scope: a tower crossbar (Across) shown broadside
      *  in the Front view → drag = height (Along) + horizontal (cross-shift). */
@@ -74,6 +103,41 @@ public:
     /** True if the truss-bound fixture @p fid can be dragged in the current
      *  elevation view — it slides ALONG its truss/bar (Front view only). */
     bool elevationFixtureDraggable(quint32 fid) const;
+
+    /** The truss a fixture is currently over, judged on screen, or nullptr.
+     *
+     *  Screen space on purpose: it works in every view without knowing which
+     *  plane the view represents, because the truss item's own transform
+     *  already carries the projection. Distance is measured perpendicular to
+     *  the truss's drawn run (radially for a tower), against the same
+     *  two-widths threshold the detach rule uses -- so "far enough to detach"
+     *  and "close enough to attach" are the same line seen from either side,
+     *  and a fixture can never be in both states at once. */
+    /* Attach and detach use different radii ON PURPOSE (hysteresis): to
+       attach you must drop essentially ON the bar (1 width); once bound you
+       are not lost until you pull clearly away (2 widths). The band between
+       is where a fixture can live NEAR a truss without the drop grabbing it
+       -- without a gap, "close to but not on" was unrepresentable. forAttach
+       also skips LOCKED trusses: locking a structure means "do not change
+       it", and hanging a new light on it changes it; bound fixtures on a
+       locked truss stay bound (the detach test never skips). */
+    class TrussItem *trussUnderFixture(class MonitorFixtureItem *mfi,
+                                       float widths = 2.0f,
+                                       bool forAttach = false) const;
+
+    /** Bind @p fid to @p trussItem, taking its along-position from where it
+     *  was dropped. */
+    void attachFixtureToTrussAt(quint32 fid, class TrussItem *trussItem,
+                                class MonitorFixtureItem *mfi);
+
+    /** Same idea as trussUnderFixture(), for a Pipe (boom or crossbar) --
+     *  the main plot's own attach path for one, which previously did not
+     *  exist at all (only the context-menu "Mount on > Boom" action or
+     *  dropping on the Stand's own Structure Studio canvas could mount a
+     *  fixture on a boom). */
+    class PipeItem *pipeUnderFixture(class MonitorFixtureItem *mfi,
+                                     float widths = 2.0f,
+                                     bool forAttach = false) const;
 
     /** "Stage view": hide everything except the scenic/structural features
      *  (trusses, platforms, images) so the bare stage can be seen. Fixtures,
@@ -165,6 +229,14 @@ public:
     /** Clear the scene selection and select just this fixture. */
     void selectFixtureExclusive(quint32 fxId);
 
+    /** Select exactly these fixtures and scroll the first into view. */
+    void selectFixtures(const QList<quint32> &ids);
+
+    /** Select every object on the plot that can be selected right now --
+     *  visible, on an unlocked layer -- fixtures, structures, scenery, targets
+     *  and all. Returns how many. (Cmd/Ctrl+A on the plot.) */
+    int selectAllMapItems();
+
     /** Set the gel color of the fixture with the given ID */
     void setFixtureGelColor(quint32 id, QColor col);
 
@@ -178,10 +250,14 @@ public:
      *  labels flag. Call after a layer's labels toggle changes. */
     void refreshFixtureLabels();
 
-    /** Bounding rect (viewport pixels) of the currently selected fixtures, or an
-     *  invalid QRect if none. Used to band the rulers with the selection's
+    /** Bounding rect (viewport pixels) of what is selected -- fixtures,
+     *  structures, scenery -- or an invalid QRect if nothing is. Used to band the rulers with the selection's
      *  extent while it is moved. */
     QRect selectionViewportRect() const;
+
+    /** The Patch view on structure @p key ("truss:1") and its @p like ones,
+     *  matched to it (PatchPlanner::matchLike()). */
+    void patchOthersLike(const QString &key, const QStringList &like);
 
     /** Return the gel color of the fixture with the given ID */
     QColor fixtureGelColor(quint32 id);
@@ -200,7 +276,7 @@ public:
 
     /** Support function to convert a position in millimeters
      *  to a position in pixels */
-    QPointF realPositionToPixels(qreal xpos, qreal ypos);
+    QPointF realPositionToPixels(qreal xpos, qreal ypos) const;
 
     /** Project a world point (millimetres, X=stage-right, Y=upstage, Z=height)
      *  to scene pixels for the current POV. Top: (X,Y); Front: (X,Z↑);
@@ -215,6 +291,58 @@ public:
      *  the given ID
      */
     void updateFixture(quint32 id);
+
+    /** Widen the scene rect to cover every item, never narrower than the
+     *  viewport. A QGraphicsView cannot scroll past its scene rect, so without
+     *  this anything placed off the grid is not merely off-screen but
+     *  unreachable -- unselectable, undraggable, editable only in the file. */
+    void growSceneRectToItems();
+
+    /** Whether a fixture's item should be on screen right now.
+     *
+     *  ONE answer, because there were three: the layer refresh, item creation
+     *  and the "Fixtures on the rig" toggle each decided it separately, and the
+     *  two that did not know about the toggle put hidden fixtures straight back
+     *  on the next refresh. */
+    bool fixtureItemShouldBeVisible(quint32 fid) const;
+
+    /** Hide a structure's own fixtures when they bury it, and say how many.
+     *
+     *  A vertical truss seen from ABOVE is a small square, and the fixtures on
+     *  it cover the thing you are trying to click; the same truss from the
+     *  front is tall and they cover almost none of it. So the decision is per
+     *  STRUCTURE, per VIEW, and all-or-nothing: measure what fraction of the
+     *  structure its own fixtures cover on screen, and above the threshold
+     *  replace them with a count. All-or-nothing matters -- deciding fixture by
+     *  fixture would make them blink in and out as things move.
+     *
+     *  With "Fixtures on the rig" unchecked the badge always appears on any
+     *  structure carrying fixtures, so the rig never silently loses them. */
+    void refreshFixtureCountBadges();
+
+    /** Fraction of @p kind / @p id covered on screen by its own fixtures, 0..1.
+     *  Unioned, so overlapping fixtures are not counted twice. */
+    double structureCoverageByItsFixtures(const QString &kind, quint32 id,
+                                          QList<quint32> *fixturesOut = nullptr,
+                                          double *stackFactorOut = nullptr) const;
+
+    /** Fixtures whose stored position lies outside the stage grid.
+     *
+     *  Off the grid is not off by a little: it means the fixture is nowhere the
+     *  plan normally shows, contributes nothing to the show, and -- because the
+     *  rig view frames itself around every fixture -- silently shrinks the
+     *  whole 3-D view around empty space. Worth being told about rather than
+     *  discovering in an overview that looks inexplicably zoomed out. */
+    QList<quint32> fixturesOffGrid() const;
+
+    /** Recount off-grid fixtures and emit offGridFixturesChanged() if it moved.
+     *
+     *  Must be called AFTER a move is persisted, which is not always where the
+     *  move happens: a plan drag emits fixtureMoved and it is
+     *  Monitor::slotFixtureMoved() that writes the new position, so recounting
+     *  inside the view's own drag handling reads the OLD one and the warning
+     *  never clears. */
+    void refreshOffGridTally();
 
     /** Reposition every riser-mounted fixture from its platform geometry. Call
      *  after a platform is moved/resized so its mounted fixtures follow. */
@@ -239,7 +367,23 @@ public:
     void followParentTrusses();
 
     /** Rebuild the truss overlay items from MonitorProperties. */
+    /** Rebuild every item class from the model at the current scale.
+     *
+     *  updateGrid()/setGridSize()/setGridMetrics() historically re-placed only
+     *  the FIXTURES, so anything else on the stage -- trusses, platforms,
+     *  targets, power sources, images -- kept the pixel positions it had at the
+     *  old scale until something happened to rebuild it. Changing units left
+     *  the stage visibly torn, and resizing the window "fixed" it only because
+     *  a resize eventually rebuilds the lot. */
+    void refreshAllItems();
+
+    /** Drop any wheel/pinch zoom back to 1:1. */
+    void resetViewZoom();
+
     void updateTrusses();
+    /** The hangers on the plot, from the trusses and towers they hang off
+     *  (updateTrusses() and updatePlatforms() call it). */
+    void updateHangers();
 
     /** Rebuild the platform overlay items from MonitorProperties. */
     void updatePlatforms();
@@ -251,12 +395,54 @@ public:
      *  "sourceIdx:circuitIdx"). Empty map restores the plain markers. */
     void setPowerSourceColors(const QHash<QString, QColor> &circuitColors);
 
+    /** Rebuild the network-node markers (and wireless receiver markers with
+     *  their dashed links) from the network-topology model. */
+    void updateNetworkNodes();
+
+    /** Show/hide the cable runs (one polyline per port, in address order) --
+     *  on while the Network overlay is selected. */
+    void setNetworkRunsVisible(bool on);
+    bool networkRunsVisible() const { return m_showNetworkRuns; }
+
+    /** Rebuild the run polylines now / soon (debounced: fixtures moving fire it
+     *  many times a second). No-ops while the runs are hidden. */
+    void updateNetworkRuns();
+    void scheduleNetworkRuns();
+
+    /** Re-aim every transmitter->receiver link at where its ends are now.
+     *  Cheap, and safe mid-event, unlike a full rebuild. */
+    void updateNetworkLinks();
+
     /** Rebuild the placeable image items from MonitorProperties (only those on
      *  the plane matching the current POV are shown). */
     void updateImages();
 
+    /** Inverse of projectMm() for the CURRENT point of view.
+     *
+     *  A drag gives back two screen numbers; which two stage axes they mean
+     *  depends entirely on which way the stage is being looked at, and the
+     *  third axis is not represented on screen at all -- so it is passed in
+     *  unchanged rather than invented. Without this, a drop was always read as
+     *  a Top-view X/Y move while the redraw projected for the actual view, so
+     *  in Front or Side the marker landed somewhere other than where it was
+     *  dropped and looked like it had snapped back. */
+    QVector3D unprojectMm(const QPointF &px, const QVector3D &currentMm) const;
+
+    /** Height (metres) of the top surface of the tallest SOLID platform under
+     *  this stage position, or 0 for bare floor.
+     *
+     *  A target is a point in the room that lights are aimed at, and a person
+     *  standing on a riser is a metre higher than one on the deck -- so a
+     *  target dropped over a riser belongs on top of it, not buried inside it.
+     *  Only solid platforms count: a stackable step is something you put ON a
+     *  deck, and treating it as ground would stack heights twice. */
+    float floorHeightAt(float xMetres, float yMetres) const;
+
     /** Rebuild the target marker items from MonitorProperties. */
-    void updateTargets();
+    /* Q_INVOKABLE so a TargetItem can ask for a rebuild by queued call after
+       deleting itself -- tearing down the item from inside its own context
+       menu handler is not survivable. */
+    Q_INVOKABLE void updateTargets();
 
     /** Reposition existing TargetItems in place from their StageTarget data
      *  (no recreate) — used when the joystick moves an aim target live so the
@@ -309,6 +495,15 @@ public:
      *  number of items ungrouped. */
     int ungroupSelectedItems();
 
+    /** Turn the selection about the vertical by @p deg (+X toward +Y, the
+     *  way everything on the plot turns), about the middle of what is
+     *  selected: every item's place and its own facing, and everything
+     *  mounted on what turns -- its fixtures, its hangers, what stands on a
+     *  deck. One undo step. Returns how many items turned. */
+    int rotateSelectedItems(double deg);
+    /** The middle that rotateSelectedItems() turns about (world metres). */
+    QPointF selectionPivot() const;
+
     /** Dissolve a specific group by one level: its child groups and items are
      *  promoted to the group's parent. Used by the Layers-tree context menu. */
     void ungroupById(quint32 groupId);
@@ -333,6 +528,38 @@ public:
      *  that are still ungrouped. Leaves manually-grouped items alone. */
     void ensureTrussGroup(quint32 trussId);
 
+    /** Ensure a tower and the fixtures mounted on it share a map group: the
+     *  tower's own group if it is in one (a manual "Towers" folder, say --
+     *  the Layers list then nests the fixtures under the tower's row), else a
+     *  new one named after the tower and anchored to it. Pulls in mounted
+     *  fixtures that are still ungrouped; leaves manually-grouped ones alone. */
+    void ensureTowerGroup(quint32 towerId);
+
+    /** The same for any structure whose mounted fixtures form its group --
+     *  "tower" or "pipe" (a boom is a pipe on a stand): ensureTowerGroup() is
+     *  this for a tower. */
+    void ensureMountGroup(const QString &kind, quint32 id);
+    /** Mount-time: ensureMountGroup(), then put @p fid in that group whatever
+     *  group it was in (an explicit mount, like attachFixtureToTruss()). */
+    void joinMountGroup(quint32 fid, const QString &kind, quint32 id);
+    /** Take @p fid out of the structure's group if it is still that
+     *  structure's OWN group (anchored to it); a manual group is left alone. */
+    void leaveMountGroup(quint32 fid, const QString &kind, quint32 id);
+    /** leaveMountGroup() for whatever tower or pipe @p fid is mounted on now:
+     *  call it before a mount is cleared or moved. */
+    void leaveMountGroupsOf(quint32 fid);
+
+    /** Place every unplaced wireless receiver (NetworkTopology::
+     *  placeReceivers()) -- near its universe's fixtures, else beside its
+     *  transmitter -- and redraw. Returns how many it placed. */
+    int placeWirelessReceivers();
+
+    /** Take @p fids out of the structure @p kind / @p id ("truss", "tower",
+     *  "pipe"): one MOUNTED on it is unmounted; one only filed under it -- in
+     *  its group while really mounted somewhere else -- leaves its group and
+     *  goes back under the structure it is actually on. */
+    void takeOutOfStructure(const QList<quint32> &fids, const QString &kind, quint32 id);
+
     /** Symmetric to ensureTrussGroup(): if @p fid is currently a member of a
      *  group that's dedicated to @p trussId (anchorKind == "truss", anchorId
      *  == trussId — i.e. still just "the truss's own group", not something
@@ -340,6 +567,11 @@ public:
      *  fixture's truss binding is cleared, so an unbound fixture doesn't keep
      *  select/move-together with a truss it's no longer on. */
     void leaveDedicatedTrussGroup(quint32 fid, quint32 trussId);
+    /** The tower counterpart: take @p fid out of a group anchored to
+     *  @p towerId when it comes off that tower. */
+    void leaveDedicatedTowerGroup(quint32 fid, quint32 towerId);
+    /** An explicit tower mount: join the tower's group (ensureTowerGroup()). */
+    void joinTowerGroup(quint32 fid, quint32 towerId);
 
     /** Select on the canvas every item under group @p gid (recursively through
      *  nested sub-groups). Used by the Layers tree when a group folder is
@@ -357,6 +589,91 @@ public:
     /** Open the editor for a map item (emits the matching *DoubleClicked signal
      *  the Monitor already handles). Used by a Layers-tree double-click. */
     void requestEditItem(const QString &kind, quint32 id);
+
+    /** Everything you can do to one item, built in ONE place.
+     *
+     *  The plot's right-click and the Layers list both fill their menus here,
+     *  so an action on a feature cannot exist in one and be missing from the
+     *  other. Every kind is laid out the same way: edit; what to build on it;
+     *  how it is mounted or positioned; its grouping; removing it last.
+     *  @p scenePos, when known, puts "here" actions at the click. */
+    void populateItemMenu(class QMenu *menu, const QString &kind, quint32 id,
+                          const QPointF &scenePos = QPointF(), bool withRemoval = true);
+    /** The item's removing action on its own ("Delete Truss", "Remove from
+     *  View"), for a menu that has more to add before it: removing always
+     *  comes last. */
+    void addItemRemoval(class QMenu *menu, const QString &kind, quint32 id);
+
+    /** Where a menu was opened: the plot or the Layers list. The menu is the
+     *  same in both; only these differ. */
+    /** What is selected where the menu being built was opened (the plot's
+     *  selection, or the Layers list's), for actions on "these fixtures". Set
+     *  by buildItemMenu() around populateItemMenu(). */
+    QList<QPair<QString, quint32> > m_menuSelection;
+
+    struct MenuPlace
+    {
+        bool inList = false;                            ///< opened in the Layers list
+        QList<QPair<QString, quint32> > selection;      ///< what is selected THERE
+        std::function<void()> renameInPlace;            ///< the list edits its row; unset = ask
+    };
+
+    /** The WHOLE right-click menu for one item, identical in the plot and in
+     *  the Layers list apart from the one action that says where it is:
+     *    1. the thing (populateItemMenu);
+     *    2. where it is and its name -- Show in Layers / Show on Map, Rename,
+     *       and a truss or riser's fixture layout;
+     *    3. organising the selection -- folders, fixture groups, layers;
+     *    4. removing it, last. */
+    void buildItemMenu(class QMenu *menu, const QString &kind, quint32 id,
+                       const MenuPlace &place, const QPointF &scenePos = QPointF());
+
+    /** Section 3 on its own, for rows with no single item (a folder, a layer). */
+    void populateOrganiseMenu(class QMenu *menu, const QList<QPair<QString, quint32> > &objects);
+
+    /** What is selected on the plot, as kind/id pairs. */
+    QList<QPair<QString, quint32> > selectedMapObjects() const;
+
+    /** False when the rename was refused (a fixture name another fixture has). */
+    bool renameItem(const QString &kind, quint32 id, const QString &name);
+    /** Save network node @p nodeIndex's transport and port count as a gear
+     *  model of the operator's (NetworkGearCatalog), and record it on the
+     *  node. Returns the file written, or empty if it could not be. */
+    QString saveNetworkNodeAsModel(quint32 nodeIndex, const QString &manufacturer,
+                                   const QString &model);
+    /** Take objects out of the folder they are in, leaving them where they are. */
+    void removeFromFolder(const QList<QPair<QString, quint32> > &objects);
+
+    /** The layer an object is on (fixture included); @p found says whether
+     *  the object exists at all (an unknown one reports layer 0). */
+    quint32 objectLayerId(const QString &kind, quint32 id, bool *found = nullptr) const;
+    /** Whether @p kind / @p id is held in place: its LAYER is locked. */
+    bool itemLocked(const QString &kind, quint32 id) const;
+    void setItemLocked(const QString &kind, quint32 id, bool locked);
+
+    /** Delete an item the way its own menu does, asking first where it asks. */
+    void requestDeleteItem(const QString &kind, quint32 id);
+
+    /** Mount a fixture on a tower's top, bottom, or one of its shelves
+     *  (FixtureRigProps::TowerTop / TowerBottom / TowerShelf). */
+    void mountFixtureOnTower(quint32 fid, quint32 towerId, int side, int shelf = 0);
+    /** Stand @p fids on the deck of @p platformId -- or, invalid, the deck
+     *  under each (the nearest within half a metre when one is on or just off
+     *  an edge) -- upright, any other mount cleared, moved just inside the
+     *  deck when it sat on its edge. Returns how many it stood. */
+    int standOnDeck(const QList<quint32> &fids, quint32 platformId);
+    /** Take a fixture off whatever truss, boom or tower it is mounted on. */
+    void unmountFixture(quint32 fid);
+
+    /** Give a fixture an icon on the plot if it has none, placed where its
+     *  mount puts it.
+     *
+     *  A fixture patched in the Fixture Manager and never dragged onto the plot
+     *  has no item here. Mounting it from a structure editor only updated the
+     *  item it did not have, so it was on the truss and nowhere on the plot --
+     *  and the truss's count bubble, which counts the fixtures it can see,
+     *  never changed. */
+    void ensureFixtureOnPlot(quint32 fid);
 
     /** Reparent a set of (kind,id) items to a layer (loose, ungrouped). */
     void reparentToLayer(const QList<QPair<QString, quint32> > &items, quint32 layerId);
@@ -376,6 +693,15 @@ public:
      *  was removed so assignment is now always explicit). */
     void attachFixtureToTruss(quint32 fid, quint32 trussId);
     void attachFixtureToPipe(quint32 fid, quint32 pipeId);
+    /** Hang @p fid on hanger @p hangerId's hook. One hook: a fixture already
+     *  on it comes off, staying where it was. */
+    void attachFixtureToHanger(quint32 fid, quint32 hangerId);
+    /** Same idea for a tower: mounts on its first shelf (or the shelf it's
+     *  already on, if reattaching), centred on that shelf's footprint. No
+     *  natural "along the run" position to snap to from a plain drop the way
+     *  truss/pipe have, so shelf 0 / centred is the sane default -- the
+     *  per-shelf right-click menu remains the way to pick a specific shelf. */
+    void attachFixtureToTower(quint32 fid, quint32 towerId);
 
     /** Unbind fixture @p fid from its truss (leaves it where it sits). */
     void detachFixtureFromTruss(quint32 fid);
@@ -439,6 +765,42 @@ protected:
 
     /** Event caught when the GraphicsView is resized */
     void resizeEvent(QResizeEvent *event) override;
+    /** Re-fit once the widget actually has its laid-out size.
+     *
+     *  updateGrid() derives m_cellPixels from this->width()/height(), and
+     *  before the first layout pass those are the widget's DEFAULT size, not
+     *  the size it will occupy -- so the first draw used a scale unrelated to
+     *  the window and the stage came up zoomed in. Resizing "fixed" it only
+     *  because that finally ran updateGrid() against real dimensions. */
+    void showEvent(QShowEvent *event) override;
+
+private:
+    /** Viewport size the grid was last fitted to. The scale is derived from
+     *  the widget's dimensions, so any size we have NOT fitted to is a scale
+     *  that does not match the window -- which is what "opens zoomed in" was.
+     *  Compared on every paint, because paint is the first and only moment the
+     *  real, laid-out size is guaranteed to be known. */
+    QSize m_fittedSize;
+    /** Grid extent and unit the fit was computed FROM. The scale depends on
+     *  all three -- widget size, grid size, mm-per-cell -- and the workspace
+     *  supplies the last two AFTER the view first appears, so watching the
+     *  widget size alone missed the case that actually happens: fitted at the
+     *  default 5x5 grid, then handed the real 40x24 while the widget was still
+     *  a few pixels tall, and never corrected because the size never changed
+     *  again. */
+    QSize m_fittedGrid;
+    float m_fittedUnit = -1.0f;
+    /** True once setGridSize() has supplied the document's own grid. Until
+     *  then the view still holds its default, and painting it shows the stage
+     *  at a scale that is about to change -- the visible flash at startup,
+     *  because Monitor shows the view before it fills it. */
+    bool m_gridAuthoritative = false;
+    /** Fail-safe: if the document's grid never arrives, render anyway rather
+     *  than leave the operator looking at nothing. */
+    bool m_paintDeadlinePassed = false;
+
+protected:
+    void paintEvent(QPaintEvent *event) override;
 
     /** Scroll wheel zooms the view around the cursor. */
     void wheelEvent(QWheelEvent *event) override;
@@ -454,9 +816,17 @@ protected:
 
     /** During fixture drags, highlights any truss under the cursor. */
     void mouseMoveEvent(QMouseEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;
+    void keyReleaseEvent(QKeyEvent *event) override;
 
     /** Right-click on empty canvas emits contextMenuRequested; on items routes to them. */
     void contextMenuEvent(QContextMenuEvent *event) override;
+
+    /** Accept fixtures dragged in from the Inventory panel
+     *  ("application/x-qlc-fid": a run of quint32 fixture ids). */
+    void dragEnterEvent(QDragEnterEvent *event) override;
+    void dragMoveEvent(QDragMoveEvent *event) override;
+    void dropEvent(QDropEvent *event) override;
 
     /** Push the current snap configuration to a single fixture item */
     void applySnapToItem(MonitorFixtureItem *item);
@@ -476,9 +846,24 @@ public:
                             const QList<quint32> &targetIds,
                             const QList<quint32> &paletteIds);
 
+    /** Record the rig as it was before an edit (a dialog's, a studio's) so
+     *  one Ctrl+Z puts it back. @p before is a Monitor::rigSnapshot(). */
+    void pushRigUndo(const QByteArray &before);
+    /** Who puts a rig snapshot back: the Monitor, which owns the rebuild. */
+    void setRigRestorer(std::function<void(const QByteArray &)> fn) { m_rigRestorer = fn; }
+    /** Who takes one (Monitor::rigSnapshot()), for edits made here. */
+    void setRigSnapshotter(std::function<QByteArray()> fn) { m_rigSnapshotter = fn; }
+    /** Is there anything for Ctrl+Z to undo? */
+    bool canUndo() const { return !m_moveUndo.isEmpty(); }
+
     /** Update a fixture item's real position (mm) and reposition it on the canvas.
      *  Call this after programmatically changing a fixture's truss offset. */
     void moveFixtureTo(quint32 fid, QPointF mmPos);
+
+    /** Run the same release logic a dragged fixture gets (attach to the truss,
+     *  riser or tower under it, snap), for a fixture that has just been placed
+     *  by a drop rather than dragged. */
+    void finishFixtureDrop(quint32 fid);
 
 public slots:
     void mouseReleaseEvent(QMouseEvent *e) override;
@@ -494,11 +879,16 @@ protected slots:
     void slotPlatformMoved(PlatformItem *item);
     void slotPipeMoved(PipeItem *item);
     void slotStandMoved(StandItem *item);
+    void slotSceneryMoved(SceneryItem *item);
     void slotTowerMoved(TowerItem *item);
 
     /** Slot called when a PowerSourceItem is dropped after a drag */
     void slotPowerSourceMoved(PowerSourceItem *item);
     void slotPowerSourceLockToggled(int sourceIndex);
+
+    /** Slot called when a NetworkNodeItem is dropped after a drag */
+    void slotNetworkNodeMoved(NetworkNodeItem *item);
+    void slotNetworkNodeLockToggled(int nodeIndex);
 
     /** Slot called when a TargetItem is dropped after a drag */
     void slotTargetMoved(TargetItem *item);
@@ -542,7 +932,7 @@ private:
     /** Next unused map-group id (registry-authoritative once migrated). */
     quint32 nextMapGroupId() const;
 
-    /** Count of structural items (trusses + platforms) in a group — used to
+    /** Count of structural items (trusses, platforms, towers) in a group — used to
      *  decide whether an auto-group is dedicated (anchorable) or a manual mix. */
     int structuralMembersOf(quint32 gid) const;
 
@@ -560,6 +950,14 @@ private:
     void captureMoveUndo();
 
 signals:
+    /** A layer was shown, hidden or locked: what the plot shows changed. */
+    void layerStateChanged();
+
+    /** Something was pushed onto, or undone from, the undo stack. */
+    void undoChanged();
+    /** How many fixtures are sitting outside the stage grid (0 = none). */
+    void offGridFixturesChanged(int count);
+
     /** Signal emitted after fixture point -> metrics conversion */
     void fixtureMoved(quint32 id, QPointF pos);
 
@@ -583,6 +981,11 @@ signals:
 
     /** Emitted from the truss context menu — Monitor confirms + removes it. */
     void trussRemoveRequested(quint32 tid);
+    /** "Show in Layers": select and reveal this item's row in the Layers list. */
+    void revealInLayersRequested(const QString &kind, quint32 id);
+    /** Select these rows in the Layers list -- fixtures the plot hides (a
+     *  pile on a truss shown as a count) can be selected only there. */
+    void selectInLayersRequested(const QList<QPair<QString, quint32> > &objects);
 
     /** Emitted from the truss context menu / strip — add a bar hung on this
      *  truss. @p offset < 0 means "use a sensible default (mid-span)". */
@@ -602,24 +1005,44 @@ signals:
     /** Signal emitted when the user double-clicks a platform item */
     void platformDoubleClicked(quint32 pid);
     void pipeDoubleClicked(quint32 pipeId);
+    void hangerDoubleClicked(quint32 hangerId);
     void standDoubleClicked(quint32 standId);
+    void sceneryDoubleClicked(quint32 sceneryId);
     void towerDoubleClicked(quint32 towerId);
     /** A power source was double-clicked (host opens the Power Distribution editor). */
     void powerDoubleClicked(quint32 sourceIndex);
+    /** A network node was double-clicked (host opens its edit dialog). */
+    void networkDoubleClicked(quint32 nodeIndex);
+    /** Emitted from the network-node context menu — Monitor confirms + removes it. */
+    void networkRemoveRequested(quint32 nodeIndex);
     /** Delete requests for the structural features that lacked a right-click
      *  Delete (truss/platform/image already have theirs above). */
     void pipeRemoveRequested(quint32 pipeId);
+    void hangerRemoveRequested(quint32 hangerId);
     void standRemoveRequested(quint32 standId);
+    void sceneryRemoveRequested(quint32 sceneryId);
     void towerRemoveRequested(quint32 towerId);
     /** Open the unified studio editor for a studio (frame) group. */
     void studioGroupEditRequested(quint32 groupId);
 
     /** Signal emitted when the user right-clicks empty canvas space */
     void contextMenuRequested(QPointF scenePos);
+    /** "Add one of these, here": what ("fixture", "target", "person") and the
+     *  scene point it was asked for. The menus live here, the adding lives in
+     *  Monitor, and this is the seam. */
+    void addItemRequested(const QString &what, QPointF scenePos);
+    /** The footprint overlay went on or off from somewhere other than the Show
+     *  menu -- a per-fixture "Show Light Footprint", say -- so the menu's own
+     *  tick can follow it. */
+    void projectionOverlayChanged(bool on);
 
     /** Emitted whenever the canvas selection changes, so the toolbar can update
      *  the enabled state of the Group / Ungroup actions. */
     void mapSelectionChanged();
+
+    /** Fixtures were dropped on the plot from the Inventory panel, at this
+     *  scene position. The host places them (it owns layers and undo). */
+    void fixturesDropped(const QList<quint32> &fixtureIds, QPointF scenePos);
 
     /** Emitted when the group structure changes (group / ungroup), so the
      *  Layers tree can rebuild its folders. */
@@ -698,10 +1121,25 @@ private:
     QHash <quint32, PlatformItem*> m_platformItems;
     QHash <quint32, PipeItem*> m_pipeItems;
     QHash <quint32, StandItem*> m_standItems;
+    QHash <quint32, SceneryItem*> m_sceneryItems;
     QHash <quint32, TowerItem*> m_towerItems;
+    QHash <quint32, class HangerItem*> m_hangerItems;
 
     /** Power-source markers, indexed positionally to PowerDistribution::sources(). */
     QList <PowerSourceItem*> m_powerSourceItems;
+
+    /** Network-node markers, indexed positionally to NetworkTopology::nodes(). */
+    QList <NetworkNodeItem*> m_networkNodeItems;
+
+    /** Wireless receiver markers, and (same index) the dashed line each one
+     *  has back to its transmitter. */
+    QList <NetworkReceiverItem*> m_networkReceiverItems;
+    QList <QGraphicsLineItem*> m_networkLinks;
+
+    /** Cable-run polylines, shown in the Network overlay. */
+    QList <NetworkRunItem*> m_networkRunItems;
+    bool m_showNetworkRuns = false;
+    QTimer *m_runsTimer = nullptr;
 
     /** Interactive target marker items keyed by target ID. */
     QHash <quint32, TargetItem*> m_targetItems;
@@ -735,12 +1173,32 @@ private:
      *  them onto — more reliable than comparing fixture-centre geometry. */
     QSet<quint32> m_droppedOnTrussIds;
 
+    /** View-coordinate mouse position at the start of the current press,
+     *  recorded unconditionally in mousePressEvent. mouseReleaseEvent
+     *  compares this against the release position to tell an actual drag
+     *  from a bare click/select before running its cross-kind persistence
+     *  sweep — otherwise every plain click would re-persist (and dirty) the
+     *  current selection's positions for no reason. */
+    QPoint m_pressViewPos;
+
     /** Tagged undo entry — covers fixture moves, truss moves and stage-feature
      *  pastes so that Ctrl+Z replays operations in the order they were
      *  performed. */
     struct UndoEntry {
         enum Type { FixtureMove, TrussMove, PlatformMove, TargetMove,
-                    FeaturePaste } type;
+                    FeaturePaste,
+                    /** Towers, stands, booms, scenery, power sources and
+                     *  network nodes: (kind, id) -> old origin, metres. */
+                    ItemMove,
+                    /** Anything else -- a dialog, a studio edit: the whole
+                     *  rig as it was (rigBefore), put back by the Monitor. */
+                    RigEdit } type;
+        /** Entries recorded by ONE drag share a batch (0 = on its own), and
+         *  one Ctrl+Z undoes the whole batch -- a Select All drag records one
+         *  entry per kind it moved. */
+        int batch = 0;
+        QList<QPair<QString, quint32> > itemKeys;     ///< type == ItemMove
+        QList<QPointF>                  itemOrigins;  ///< type == ItemMove, parallel
         QHash<quint32, QPointF>   fixturePositions; ///< type == FixtureMove
         QHash<quint32, QVector3D> trussOrigins;     ///< type == TrussMove
         QHash<quint32, QPointF>   platformOrigins;  ///< type == PlatformMove (metres)
@@ -750,8 +1208,17 @@ private:
         QList<quint32> pastedPlatformIds;
         QList<quint32> pastedTargetIds;
         QList<quint32> pastedPaletteIds;
+        QByteArray rigBefore;                       ///< type == RigEdit
     };
+    std::function<void(const QByteArray &)> m_rigRestorer;
+    std::function<QByteArray()> m_rigSnapshotter;
     QList<UndoEntry> m_moveUndo;
+    int m_undoBatch = 0;          ///< last batch number handed out
+    int m_openUndoBatch = 0;      ///< the drag in progress's batch, 0 = none
+    /** Record an undo entry (in the open batch, if any), keeping the last 50. */
+    void pushUndo(UndoEntry e);
+    /** Put back what one entry recorded. */
+    void undoOne(const UndoEntry &entry);
 
     /** Set by mouseDoubleClickEvent; suppresses the viewClicked emission on
      *  the paired mouseReleaseEvent so it doesn't immediately close the editor
@@ -770,14 +1237,164 @@ private:
     /** Guards extendSelectionToGroups() against the re-entrant selectionChanged
      *  it triggers while adding group-mates to the selection. */
     bool m_extendingSelection = false;
+    /** "Click again": the member of a selected group a press landed on, and
+     *  where -- picked out on a release that did not drag. */
+    QGraphicsItem *m_clickAgainItem = nullptr;
+    QPoint m_clickAgainPos;
+    void clickAgainToPickOut(QGraphicsItem *item);
 
     /** Current point of view (Top = editable default). */
     ViewPOV m_pov = PovTop;
+    bool    m_showOrientationLabels = true;   ///< edge stage-direction labels
+
+    /** Paint the edge stage-direction labels on the viewport. */
+    void drawOrientationLabels();
+
+public:
+    /** Show or hide the fixtures that are MOUNTED on a structure, so a truss or
+     *  riser covered by its own fixtures can still be clicked. Free-standing
+     *  fixtures always stay visible. Hidden fixtures are only undrawn, not
+     *  changed. */
+    void setMountedFixturesVisible(bool on);
+    bool mountedFixturesVisible() const { return m_showMountedFixtures; }
+
+    /** A fixture is hung on the truss or pipe, or stood on the deck, it is
+     *  dropped over only when Shift is held as it is dropped ("this gets
+     *  really complicated with features at different levels .. use a shift
+     *  drag/drop"); a plain drag only moves it. attachHeld() says whether
+     *  this drop attaches; setAttachOnDrop(true) makes every drop attach, as
+     *  if Shift were held (tests, which cannot hold a key over a call). */
+    void setAttachOnDrop(bool on) { m_attachOnDrop = on; }
+    bool attachHeld() const;
+    /** The attach (green) / escape (red) borders of the fixtures being
+     *  dragged, as a drop now would leave them. */
+    void updateDragBorders();
+    /** In the top view, mark the fixtures with a structure above them as
+     *  underneath it (MonitorFixtureItem::setBeneath()). */
+    void refreshBeneath();
+
+    /** Shade, in the top view, where the SELECTED moving heads cannot aim.
+     *
+     *  Measured at subject height -- aimSubjectHeight() above whatever deck is
+     *  there -- because that is where a follow-spot is pointed. With several
+     *  heads selected, only what NONE of them can reach is shaded: the gap in
+     *  coverage, not the union of every blind spot. Rebuilt whenever the
+     *  selection, a mount or the stage changes, so re-rigging a head (standing
+     *  on a tower vs hung under a bar) shows its effect immediately. */
+    void setReachOverlayVisible(bool on);
+    bool reachOverlayVisible() const { return m_reachVisible; }
+
+    /** Draw where the SELECTED heads' beams land -- the cone cut by the floor
+     *  or the deck under it, in the head's own colour. Top view only: it is a
+     *  question about ground you are looking down on. */
+    void setProjectionOverlayVisible(bool on);
+    bool projectionOverlayVisible() const { return m_projectionVisible; }
+
+    /** Show what a structure's count bubble stands for: draw the fixtures it
+     *  hides, and stand a named tag beside the stack for each one. The
+     *  fixtures themselves sit on top of each other -- "I can't select which
+     *  one I want" -- so the TAG is the thing you click. Cleared by the next
+     *  selection. */
+    void revealBuriedFixtures(const QString &kind, quint32 id);
+
+    /** Pick one of the fixtures a bubble revealed: it alone is selected, and
+     *  it alone keeps its footprint drawn. */
+    void focusRevealedFixture(quint32 fid);
+
+    /** The fixtures a bubble is currently showing, in the order their tags are
+     *  drawn, and which one is picked (-1 = none yet). */
+    QList<quint32> revealedFixtures() const;
+
+    /** Where one revealed fixture's tag sits, in scene coordinates: the click
+     *  target that stands in for a fixture buried under the others. Empty when
+     *  that fixture has no tag on show. */
+    QRectF revealTagRect(quint32 fid) const;
+    qint64 revealedFocus() const { return m_revealFocus; }
+
+    /** Draw where ONE fixture's light lands, independently of the selection --
+     *  the per-fixture entry behind "Show Light Footprint". */
+    void setFixtureFootprintShown(quint32 fid, bool on);
+    bool fixtureFootprintShown(quint32 fid) const { return m_footprintFixtures.contains(fid); }
+
+    /** The same, for every fixture a structure carries. */
+    void setStructureFootprintsShown(const QString &kind, quint32 id, bool on);
+    bool structureFootprintsShown(const QString &kind, quint32 id) const;
+
+    /** And for any set of heads at all -- a folder in the Layers list, a
+     *  selection, whatever asked. */
+    void setFootprintsShown(const QList<quint32> &fids, bool on);
+    bool footprintsShown(const QList<quint32> &fids) const;
+
+    /** The fixtures filed under a Layers folder or studio group. */
+    QList<quint32> fixturesInGroup(quint32 gid) const;
+
+    /** Where a fixture's beam lands RIGHT NOW, in scene pixels (top view): its
+     *  cone's edge rays followed down to the floor or the deck they meet. Empty
+     *  when nothing lands -- a head pointed level or up, or a fixture with no
+     *  declared beam at all. */
+    QPolygonF fixtureProjection(quint32 fid) const;
+
+    /** Every part of the stage this head can put light on: the deck and the
+     *  platform tops, sampled, keeping the points its pan and tilt can actually
+     *  reach. This is what "show me its footprint" means for a head that moves
+     *  -- the instantaneous cone answers "where is it pointed", which is a
+     *  different question and a much smaller shape. Null when the fixture
+     *  cannot move (its cone IS its coverage) or cannot reach anything.
+     *
+     *  @param cellMetres  size of one sample square, for scaling the image. */
+    QImage fixtureCoverage(quint32 fid, double *cellMetres) const;
+
+private:
+    void scheduleReachOverlay();
+    void rebuildReachOverlay();
+    void rebuildProjectionOverlay();
+    void rebuildRevealTags();
+    void clearRevealState();
+    bool m_projectionVisible = false;
+    QSet<quint32> m_revealedFixtures;      ///< shown despite being buried
+    QList<quint32> m_revealOrder;          ///< the same, in tag order
+    QString m_revealKind;                  ///< the structure whose bubble did it
+    quint32 m_revealId = 0;
+    qint64 m_revealFocus = -1;             ///< picked fixture, -1 = none (id 0 is real)
+    QSet<quint32> m_footprintFixtures;     ///< asked for by name, not by selection
+    bool m_settingRevealSelection = false;
+    QList<class QGraphicsItem *> m_revealTags;
+    QList<class QGraphicsPathItem *> m_projectionItems;
+    QList<class QGraphicsPixmapItem *> m_coverageItems;
+    class QGraphicsPixmapItem *m_reachItem = nullptr;
+    bool m_reachVisible = false;
+    bool m_reachUpdatePending = false;
+
+    bool m_showMountedFixtures = true;
+    bool m_attachOnDrop = false;        ///< setAttachOnDrop()
+    int  m_viewRotation = 0;   ///< plot turn, 0..3 quarter turns clockwise
+
+    /** Counter-rotate every text item so labels stay upright while turned. */
+    void refreshLabelRotations();
 
     /** True while an update*() method is deleting+recreating items. Guards
      *  extendSelectionToGroups from dynamic_cast-ing half-deleted items when
      *  QGraphicsScene::removeItem fires selectionChanged mid-teardown. */
     bool m_itemsRebuilding = false;
+    int  m_offGridCount = -1;      ///< last emitted off-grid tally (-1 = never)
+
+    /** Fixtures hidden because they bury the structure they are mounted on.
+     *  Consulted by fixtureItemShouldBeVisible(); rebuilt per view change. */
+    QSet<quint32> m_buriedByOwnFixtures;
+    /** Count badges, keyed "kind:id". */
+    QHash<QString, class QGraphicsItemGroup *> m_countBadges;
+    /** Whether @p viewPos (viewport pixels) is on @p badge's disc as drawn. */
+    bool countBadgeHit(class QGraphicsItemGroup *badge, const QPoint &viewPos) const;
+
+    /** Above this fraction, a structure's fixtures are replaced by a count. */
+    static constexpr double kBuryThreshold = 0.40;
+
+    /** ...or this many fixtures deep on the same footprint. Eight strips up a
+     *  step's face land on ONE spot from above: their union is a single strip,
+     *  so coverage alone can never speak for them, while their summed area is
+     *  13x that. Piled up they are unreadable individually anyway, which is the
+     *  same reason for replacing them with a count. */
+    static constexpr double kStackFactor = 2.0;
 
     /** True while a "click to place 0,0" pick is armed (beginPickOrigin). */
     bool m_pickingOrigin = false;

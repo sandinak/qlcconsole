@@ -24,6 +24,8 @@
 #include <QAbstractGraphicsShapeItem>
 #include <QFont>
 
+#include "fixturevisualtraits.h"
+
 class Doc;
 
 /** \addtogroup ui_mon DMX Monitor
@@ -111,6 +113,8 @@ public:
 
     /** Get the fixture name as displayed on the label */
     QString name() const { return m_name; }
+    /** Re-read the fixture's name (label and tooltip) after a rename. */
+    void refreshName();
 
     /** Set the position of this fixture using the monitor measure units */
     void setRealPosition(QPointF pos) { m_realPos = pos; }
@@ -163,18 +167,37 @@ public:
     void setTrussGroupSelected(bool on) { if (m_trussGroupSelected != on) { m_trussGroupSelected = on; update(); } }
     bool isTrussGroupSelected() const   { return m_trussGroupSelected; }
 
-    /** "Ghost" the fixture: drawn faint and made click-through (declines
-     *  mouse buttons) so whatever's beneath it is reachable. Used for a
-     *  fixture on a locked layer — a locked fixture is already
-     *  unselectable/click-through; this just makes that visible instead of
-     *  a silent trap. */
+    /** A fixture on a locked layer: outlined red, the same as every other
+     *  locked object on the plot, and click-through (declines mouse buttons)
+     *  so whatever is beneath it stays reachable. It used to be drawn faint
+     *  instead -- a second way of saying "locked" that matched nothing else. */
     void setGhosted(bool g)
     {
+        if (m_ghosted == g)
+            return;
         m_ghosted = g;
-        setOpacity(g ? 0.28 : 1.0);
         setAcceptedMouseButtons(g ? Qt::NoButton : Qt::AllButtons);
+        update();
     }
     bool isGhosted() const { return m_ghosted; }
+
+    /** The icon's own rectangle in ITEM coordinates -- the body, without the
+     *  name label or the selection halo that boundingRect() has to include.
+     *  What actually covers something underneath is this, not the text. */
+    QRectF iconRect() const { return QRectF(0, 0, m_width, m_height); }
+
+    /** Where the icon body (not the label) actually sits, in SCENE
+     *  coordinates -- the one "where is this fixture drawn" a truss/pipe
+     *  hit-test or attach should read. sceneBoundingRect().center() used to
+     *  serve this in some call sites: it is NOT the same point, because
+     *  boundingRect() also reserves space for the name label, so its centre
+     *  shifts depending on whether labels happen to be showing on this
+     *  fixture's layer (a cosmetic view setting, not model state) -- two
+     *  call sites reading "the same" fixture's centre could disagree, and
+     *  one COULD disagree with itself before/after a label toggle. This is
+     *  mapToScene(), so it is also correct under rotation, unlike a plain
+     *  pos() + cellSize()/2 offset. */
+    QPointF iconCentreScene() const { return mapToScene(iconRect().center()); }
 
     /** "Isolated" = drilled into its group to select this ONE fixture (double-
      *  click). Draws a distinct bright dashed border so it's obvious the sub-
@@ -183,8 +206,29 @@ public:
     bool isIsolated() const   { return m_isolated; }
 
     /** Show a red escape-from-truss indicator while dragging far off the truss. */
-    void setEscapeMode(bool e) { m_escapeMode = e; update(); }
+    void setEscapeMode(bool e) { if (m_escapeMode != e) { m_escapeMode = e; update(); } }
     bool escapeMode() const    { return m_escapeMode; }
+
+    /** "Release here and it will ATTACH to the truss under it."
+     *
+     *  The mirror of escape mode: red says releasing will break the binding,
+     *  green says releasing will make one. Both are only ever true mid-drag,
+     *  so the fixture answers "what happens if I let go" before you commit
+     *  rather than after. */
+    void setAttachMode(bool a) { if (m_attachMode != a) { m_attachMode = a; update(); } }
+    bool attachMode() const    { return m_attachMode; }
+
+    /** Under a structure that is over it on the plan (the top view draws
+     *  every fixture on top, to keep it clickable): faded, outlined dashed. */
+    void setBeneath(bool b)
+    {
+        if (m_beneath == b)
+            return;
+        m_beneath = b;
+        setOpacity(b ? 0.45 : 1.0);
+        update();
+    }
+    bool beneath() const { return m_beneath; }
 
     /** Highlight from an external source (e.g. Programming tab selection). */
     void setHighlighted(bool h) { m_highlighted = h; update(); }
@@ -202,6 +246,14 @@ public:
      *  @param xOffset horizontal grid origin offset in pixels
      *  @param yOffset vertical grid origin offset in pixels */
     void setSnap(int divisions, qreal cellPixels, qreal xOffset, qreal yOffset);
+
+    /** Tell this item which way the canvas is currently looking at it, so a
+     *  Mover can draw the matching silhouette: Top (plan) = round head with
+     *  a flat lens edge in a square base footprint; Front/Side (elevation)
+     *  = base + yoke arms + head. Mirrors MonitorGraphicsView::isElevation();
+     *  updated whenever the view's POV changes. No effect on any other
+     *  silhouette (Par/Bar/Generic look the same from every POV). */
+    void setElevationView(bool on) { if (m_elevationView != on) { m_elevationView = on; update(); } }
 
 public slots:
     /** Update the fixture values for rendering, passing the
@@ -233,6 +285,14 @@ private:
     QColor computeColor(const FixtureHead *head, const QByteArray & values);
     uchar computeAlpha(const FixtureHead *head, const QByteArray & values);
     FixtureHead::ShutterState computeShutter(const FixtureHead *head, const QByteArray & values);
+
+    /** Draw the fixture's outer body outline/fill into $r, shaped by
+     *  m_traits.kind (Mover = ellipse "puck", Par = rounded can, Bar/Generic =
+     *  sharp rect) so the same silhouette classifier used by the Structure
+     *  Studio elevation editor also reads on the 2D plan view. Shared by the
+     *  background fill, selection halo, truss-bind ring and marked outline,
+     *  which all otherwise independently drew the same plain rect. */
+    void drawBody(QPainter *painter, const QRectF &r) const;
 
 signals:
     void itemDropped(MonitorFixtureItem *);
@@ -289,13 +349,23 @@ private:
     bool m_boundToTruss  = false;
     bool m_trussGroupSelected = false;
     bool m_escapeMode    = false;
+    bool m_attachMode    = false;
+    bool m_beneath       = false;   ///< setBeneath()
     bool m_isolated      = false;   ///< drilled-in single selection within a group
-    bool m_ghosted       = false;   ///< locked-layer indicator: faint + click-through
+    bool m_ghosted       = false;   ///< locked-layer indicator: red + click-through
     bool m_highlighted   = false;
 
     /** True if any head has a Pan channel (i.e. a moving head): only these
      *  show a facing arrow and accept Alt-drag rotation. */
     bool m_hasPan        = false;
+
+    /** Shape-family classification (Mover/Par/Bar/Generic) shared with the
+     *  Structure Studio elevation editor, computed once at construction. */
+    FixtureVisualTraits m_traits;
+
+    /** True when the canvas's current POV is Front/Side (an elevation), set
+     *  via setElevationView(); see there. */
+    bool m_elevationView = false;
 
     /** Pan-zero facing in degrees clockwise from downstage (FixtureRigProps
      *  panZeroDir). 0 = faces downstage. */

@@ -43,6 +43,9 @@ private slots:
     void loadWrongRoot();
     void save();
     void paletteFadeTime();
+    /** A palette tried on a look (Scene::setTrialPalette) plays after the
+     *  look's own, but is never saved, copied or listed as the look's. */
+    void aTriedOnPalettePlaysButIsNotKept();
     void lookScope();
     void copyFrom();
     void createCopy();
@@ -52,7 +55,14 @@ private slots:
     void flashUnflash();
 
     void writeHTPZeroTicks();
+    void aSceneWithAnUnpatchedFixturePlaysWithoutCrashing();
     void writeHTPTwoTicks();
+
+    /** "an effect on top of the existing effects that allow transitions ..
+     *  fade in .. wipe .. from center": a look arriving and leaving by a
+     *  transition, each fixture at its own moment. */
+    void transitionTimingAndPlaces();
+    void aLookWipesInAndOutAcrossTheStage();
     void writeHTPTwoTicksIntensity();
     void writeLTPReady();
 

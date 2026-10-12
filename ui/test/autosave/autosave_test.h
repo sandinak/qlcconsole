@@ -37,6 +37,8 @@ private slots:
     void intervalSettings();
     void autosaveFilePath();
     void autosaveFilePathWithFileName();
+    void aQlccShowSavesAndOpensAgain();
+    void aMissingShowFileIsAnErrorNotAnEmptyShow();
 
 private:
     App *m_app;

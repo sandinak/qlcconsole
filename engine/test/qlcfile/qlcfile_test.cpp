@@ -18,6 +18,9 @@
 */
 
 #include <QtTest>
+#include <QDir>
+#include <QFileInfo>
+#include <QTemporaryDir>
 
 #if defined(WIN32) || defined(Q_OS_WIN)
 #else
@@ -161,6 +164,76 @@ void QLCFile_Test::windowManager()
 
     QLCFile::setHasWindowManager(false);
     QVERIFY(QLCFile::hasWindowManager() == false);
+}
+
+void QLCFile_Test::onlineOnlyFilesAreNotedNotWaitedOn()
+{
+    // An ordinary file, and one that is not there: neither is online-only.
+    QTemporaryDir dir;
+    const QString here = dir.filePath("here.qxf");
+    QFile f(here);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write("<FixtureDefinition/>");
+    f.close();
+    QVERIFY(!QLCFile::isOnlineOnly(here));
+    QVERIFY(!QLCFile::isOnlineOnly(dir.filePath("not-there.qxf")));
+
+    // What a loader skipped is listed once, and forgotten when fetched.
+    QLCFile::forgetSkippedOnlineOnly();
+    QLCFile::noteSkippedOnlineOnly("/cloud/Fixtures/a.qxf");
+    QLCFile::noteSkippedOnlineOnly("/cloud/RGBScripts/fire.js");
+    QLCFile::noteSkippedOnlineOnly("/cloud/Fixtures/a.qxf");
+    QCOMPARE(QLCFile::skippedOnlineOnly(), QStringList() << "/cloud/Fixtures/a.qxf" << "/cloud/RGBScripts/fire.js");
+    QLCFile::forgetSkippedOnlineOnly("/cloud/Fixtures/a.qxf");
+    QCOMPARE(QLCFile::skippedOnlineOnly(), QStringList() << "/cloud/RGBScripts/fire.js");
+    QLCFile::forgetSkippedOnlineOnly();
+    QVERIFY(QLCFile::skippedOnlineOnly().isEmpty());
+
+    /* Where this machine has a real online-only file (a cloud folder not
+       pinned), it is seen as one -- by its flags, without reading it. */
+    const QString probe = qEnvironmentVariable("QLC_ONLINE_ONLY_PROBE");
+    if (!probe.isEmpty())
+        QVERIFY2(QLCFile::isOnlineOnly(probe), qPrintable(probe));
+}
+
+/* The old QLC+ folder's files are linked into qlcconsole's at every start
+   -- but one removed here stays removed (four malformed definitions came
+   back after being deleted). New files there still come across. */
+void QLCFile_Test::aRemovedLegacyLinkStaysRemoved()
+{
+#if defined(__APPLE__) || defined(Q_OS_MAC)
+    QTemporaryDir home;
+    const QByteArray realHome = qgetenv("HOME");
+    qputenv("HOME", home.path().toUtf8());
+    const QString oldFixtures = home.filePath("Library/Application Support/QLC+/Fixtures");
+    const QString newFixtures = home.filePath(QString(USERQLCPLUSDIR) + "/Fixtures");
+    QVERIFY(QDir().mkpath(oldFixtures));
+    auto write = [](const QString &path) {
+        QFile f(path);
+        return f.open(QIODevice::WriteOnly) && f.write("<x/>") > 0;
+    };
+    QVERIFY(write(oldFixtures + "/Keep.qxf"));
+    QVERIFY(write(oldFixtures + "/Broken.qxf"));
+
+    QLCFile::mergeLegacyUserData();
+    QVERIFY(QFileInfo(newFixtures + "/Keep.qxf").isSymLink());
+    QVERIFY(QFileInfo(newFixtures + "/Broken.qxf").isSymLink());
+
+    // Removed here: not put back next start.
+    QVERIFY(QFile::remove(newFixtures + "/Broken.qxf"));
+    QLCFile::mergeLegacyUserData();
+    QVERIFY2(!QFileInfo(newFixtures + "/Broken.qxf").exists()
+             && !QFileInfo(newFixtures + "/Broken.qxf").isSymLink(), "a removed link came back");
+    QVERIFY(QFileInfo(newFixtures + "/Keep.qxf").isSymLink());
+
+    // A file new to the old folder still comes across.
+    QVERIFY(write(oldFixtures + "/New.qxf"));
+    QLCFile::mergeLegacyUserData();
+    QVERIFY(QFileInfo(newFixtures + "/New.qxf").isSymLink());
+    qputenv("HOME", realHome);
+#else
+    QSKIP("the legacy folder layout this checks is the macOS one");
+#endif
 }
 
 QTEST_APPLESS_MAIN(QLCFile_Test)

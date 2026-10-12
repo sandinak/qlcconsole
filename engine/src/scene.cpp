@@ -113,6 +113,8 @@ bool Scene::copyFrom(const Function* function)
     const QList<quint32> srcPalettes = scene->palettes();
     const QHash<quint32, PaletteFade> srcPaletteFades = scene->paletteFades();
     const LookScope srcScope = scene->lookScope();
+    m_transitionIn = scene->m_transitionIn;
+    m_transitionOut = scene->m_transitionOut;
     const quint32 srcScopeGroupId = scene->lookScopeGroupId();
 
     {
@@ -457,17 +459,31 @@ void Scene::slotFixtureRemoved(quint32 fxi_id)
         emit changed(this->id());
 }
 
+/* What a scene targets and which looks it plays decide what it paints, as
+   much as its channel values do -- so changing them says so, the way
+   setValue() does. A look swapped on a scene ("changed to red .. no red on
+   the person") left the rig view drawing the old one: nothing told it. Only
+   on a real change, and outside the lock. */
 void Scene::addFixture(quint32 fixtureId)
 {
-    QMutexLocker locker(&m_bindingsMutex);
-    if (m_fixtures.contains(fixtureId) == false)
+    {
+        QMutexLocker locker(&m_bindingsMutex);
+        if (m_fixtures.contains(fixtureId))
+            return;
         m_fixtures.append(fixtureId);
+    }
+    emit changed(this->id());
 }
 
 bool Scene::removeFixture(quint32 fixtureId)
 {
-    QMutexLocker locker(&m_bindingsMutex);
-    return m_fixtures.removeOne(fixtureId);
+    {
+        QMutexLocker locker(&m_bindingsMutex);
+        if (!m_fixtures.removeOne(fixtureId))
+            return false;
+    }
+    emit changed(this->id());
+    return true;
 }
 
 QList<quint32> Scene::fixtures() const
@@ -482,15 +498,24 @@ QList<quint32> Scene::fixtures() const
 
 void Scene::addFixtureGroup(quint32 id)
 {
-    QMutexLocker locker(&m_bindingsMutex);
-    if (m_fixtureGroups.contains(id) == false)
+    {
+        QMutexLocker locker(&m_bindingsMutex);
+        if (m_fixtureGroups.contains(id))
+            return;
         m_fixtureGroups.append(id);
+    }
+    emit changed(this->id());
 }
 
 bool Scene::removeFixtureGroup(quint32 id)
 {
-    QMutexLocker locker(&m_bindingsMutex);
-    return m_fixtureGroups.removeOne(id);
+    {
+        QMutexLocker locker(&m_bindingsMutex);
+        if (!m_fixtureGroups.removeOne(id))
+            return false;
+    }
+    emit changed(this->id());
+    return true;
 }
 
 QList<quint32> Scene::fixtureGroups() const
@@ -528,22 +553,61 @@ quint32 Scene::lookScopeGroupId() const
 
 void Scene::addPalette(quint32 id)
 {
-    QMutexLocker locker(&m_bindingsMutex);
-    if (m_palettes.contains(id) == false)
+    {
+        QMutexLocker locker(&m_bindingsMutex);
+        if (m_palettes.contains(id))
+            return;
         m_palettes.append(id);
+    }
+    emit changed(this->id());
 }
 
 bool Scene::removePalette(quint32 id)
 {
-    QMutexLocker locker(&m_bindingsMutex);
-    m_paletteFade.remove(id);
-    return m_palettes.removeOne(id);
+    {
+        QMutexLocker locker(&m_bindingsMutex);
+        m_paletteFade.remove(id);
+        if (!m_palettes.removeOne(id))
+            return false;
+    }
+    emit changed(this->id());
+    return true;
 }
 
 QList<quint32> Scene::palettes() const
 {
     QMutexLocker locker(&m_bindingsMutex);
     return m_palettes;
+}
+
+void Scene::setTrialPalette(quint32 id)
+{
+    {
+        QMutexLocker locker(&m_bindingsMutex);
+        if (m_trialPalette == id)
+            return;
+        m_trialPalette = id;
+    }
+    emit changed(this->id());
+}
+
+quint32 Scene::trialPalette() const
+{
+    QMutexLocker locker(&m_bindingsMutex);
+    return m_trialPalette;
+}
+
+QList<quint32> Scene::runtimePalettes() const
+{
+    QMutexLocker locker(&m_bindingsMutex);
+    QList<quint32> out = m_palettes;
+    if (m_trialPalette != QLCPalette::invalidId() && !out.contains(m_trialPalette))
+    {
+        QLCPalette *p = doc() != NULL ? doc()->palette(m_trialPalette) : NULL;
+        if (p != NULL && p->type() != QLCPalette::Effect)
+            out.append(m_trialPalette);
+    }
+    return out;
 }
 
 bool Scene::reorderPalettes(const QList<quint32> &orderedIds)
@@ -651,6 +715,10 @@ bool Scene::saveXML(QXmlStreamWriter *doc) const
 
     /* Speed */
     saveXMLSpeed(doc);
+
+    /* Transitions in and out (only when set) */
+    m_transitionIn.saveXML(doc, QStringLiteral("In"));
+    m_transitionOut.saveXML(doc, QStringLiteral("Out"));
 
     /* Channel groups */
     if (m_channelGroups.count() > 0)
@@ -866,6 +934,16 @@ bool Scene::loadXML(QXmlStreamReader &root)
                 setPaletteFade(id, fadeIn, fadeOut);
             root.skipCurrentElement();
         }
+        else if (root.name() == QLatin1String("Transition"))
+        {
+            SceneTransition t;
+            QString kind;
+            t.loadXML(root, kind);
+            if (kind == QLatin1String("Out"))
+                m_transitionOut = t;
+            else
+                m_transitionIn = t;
+        }
         else
         {
             qWarning() << Q_FUNC_INFO << "Unknown scene tag:" << root.name();
@@ -1058,6 +1136,36 @@ void Scene::processValue(MasterTimer *timer, QList<Universe*> ua, uint fadeIn, S
             fc->setFadeTime(fadeIn);
         }
     }
+
+    /* Arriving by a transition: this head when the transition reaches it,
+       over its share of the time -- in place of the fade. */
+    if (m_applyTransitionIn)
+    {
+        uint delay = 0, fade = 0;
+        m_transitionIn.timing(m_transitionMapIn.placeForChannel(fixture, scv.channel), delay, fade);
+        fc->setFadeTime(fc->canFade() ? fade : 0);
+        fc->setDelay(delay);
+    }
+}
+
+QList<quint32> Scene::transitionFixtures() const
+{
+    QList<quint32> ids;
+    foreach (quint32 gid, fixtureGroups())
+    {
+        if (FixtureGroup *grp = doc()->fixtureGroup(gid))
+        {
+            foreach (quint32 fid, grp->fixtureList())
+            {
+                if (!ids.contains(fid))
+                    ids << fid;
+            }
+        }
+    }
+    foreach (quint32 fid, fixtures())
+        if (!ids.contains(fid))
+            ids << fid;
+    return ids;
 }
 
 void Scene::handleFadersEnd(MasterTimer *timer)
@@ -1104,7 +1212,25 @@ void Scene::handleFadersEnd(MasterTimer *timer)
     // thread. Lock scope ends before setBlendFunctionID() below, which re-locks.
     {
         QMutexLocker locker(&m_valueListMutex);
-        if (fadeout == 0 && anyPositiveOverride == false)
+        if (m_transitionOut.isActive() && tempoType() != Beats)
+        {
+            /* Leaving by a transition: every channel fades out, each head
+               when the transition reaches it, over its share of the time. */
+            const TransitionMap map(doc(), transitionFixtures(), m_transitionOut.shape);
+            const SceneTransition out = m_transitionOut;
+            Doc *d = doc();
+            foreach (QSharedPointer<GenericFader> fader, m_fadersMap)
+            {
+                if (fader.isNull())
+                    continue;
+                fader->setFadeOut(true, out.time);
+                fader->setChannelTimings([&map, &out, d](const FadeChannel &fc, uint &fade, uint &delay) {
+                    out.timing(map.placeForChannel(d->fixture(fc.fixture()), fc.channel()), delay, fade);
+                    return true;
+                });
+            }
+        }
+        else if (fadeout == 0 && anyPositiveOverride == false)
         {
             dismissAllFaders();
         }
@@ -1144,7 +1270,8 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
         const bool noValues = m_values.isEmpty();
         vLocker.unlock();
         QMutexLocker bLocker(&m_bindingsMutex);
-        empty = noValues && m_palettes.isEmpty();
+        empty = noValues && m_palettes.isEmpty()
+                && m_trialPalette == QLCPalette::invalidId();
     }
 
     if (empty)
@@ -1167,6 +1294,10 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
             m_reaimRequested = false;
             m_repaletteRequested = false;
             uint fadeIn = overrideFadeInSpeed() == defaultSpeed() ? fadeInSpeed() : overrideFadeInSpeed();
+            // Arriving by a transition: where each head falls in it.
+            m_applyTransitionIn = m_transitionIn.isActive() && tempoType() != Beats;
+            m_transitionMapIn = m_applyTransitionIn
+                ? TransitionMap(doc(), transitionFixtures(), m_transitionIn.shape) : TransitionMap();
 
             // Baked values first, then palettes — so an applied look (palette)
             // is PARAMOUNT and overrides any leftover baked value on the same
@@ -1184,8 +1315,10 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
             // uses it for its channels only; the rest fall back to the step/scene
             // fadeIn. Lets colour snap while movers glide within one cue.
             const QHash<quint32, PaletteFade> paletteFadeMap = paletteFades();
+            // The look's palettes plus one being tried on (setTrialPalette).
+            const QList<quint32> pals = runtimePalettes();
 
-            foreach (quint32 paletteID, palettes())
+            foreach (quint32 paletteID, pals)
             {
                 QLCPalette *palette = doc()->palette(paletteID);
                 if (palette == NULL)
@@ -1195,12 +1328,12 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
                 // A Colour/Dimmer palette AFTER an Effect in the list belongs to
                 // the effect (feeds its colours), so it is NOT painted as a static
                 // base — see QLCPalette::isEffectScoped.
-                if (QLCPalette::isEffectScoped(doc(), palettes(), paletteID))
+                if (QLCPalette::isEffectScoped(doc(), pals, paletteID))
                     continue;
 
                 const int inOverride = paletteFadeMap.value(paletteID).fadeInMs;
                 const uint pFade = inOverride >= 0 ? uint(inOverride) : fadeIn;
-                const int cOff = QLCPalette::colorSetOffset(doc(), palettes(), paletteID);
+                const int cOff = QLCPalette::colorSetOffset(doc(), pals, paletteID);
 
                 foreach (SceneValue scv, palette->valuesFromFixtureGroups(doc(), fixtureGroups(), this, cOff))
                     processValue(timer, ua, pFade, scv);
@@ -1208,6 +1341,7 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
                 foreach (SceneValue scv, palette->valuesFromFixtures(doc(), fixtures(), this, cOff))
                     processValue(timer, ua, pFade, scv);
             }
+            m_applyTransitionIn = false;   // the start only, not a later re-aim
         }
         else if (m_reaimRequested || m_repaletteRequested)
         {
@@ -1238,19 +1372,20 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
                 m_fadersMap[universe]->replace(fc);
             };
 
-            foreach (quint32 paletteID, palettes())
+            const QList<quint32> pals = runtimePalettes();
+            foreach (quint32 paletteID, pals)
             {
                 QLCPalette *palette = doc()->palette(paletteID);
                 if (palette == NULL) continue;
                 if (palette->type() == QLCPalette::Effect)
                     continue;  // EffectScriptRunner owns these
-                if (QLCPalette::isEffectScoped(doc(), palettes(), paletteID))
+                if (QLCPalette::isEffectScoped(doc(), pals, paletteID))
                     continue;  // effect-scoped colour, not a static base
                 if (positionsOnly &&
                     palette->type() != QLCPalette::Aim &&
                     palette->type() != QLCPalette::PanTilt) continue;
 
-                const int cOff = QLCPalette::colorSetOffset(doc(), palettes(), paletteID);
+                const int cOff = QLCPalette::colorSetOffset(doc(), pals, paletteID);
                 foreach (SceneValue scv, palette->valuesFromFixtureGroups(doc(), fixtureGroups(), this, cOff))
                     replaceOne(scv);
                 foreach (SceneValue scv, palette->valuesFromFixtures(doc(), fixtures(), this, cOff))

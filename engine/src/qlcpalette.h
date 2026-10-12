@@ -23,6 +23,8 @@
 #include <QColor>
 #include <QObject>
 #include <QVariant>
+#include <QHash>
+#include <QSet>
 
 class QXmlStreamReader;
 class QXmlStreamWriter;
@@ -162,8 +164,12 @@ public:
      * look's colour[k] lands on set[colorSetOffset + k]; sets past the fixture's
      * count are ignored. 0 = normal (primary) for a single colour look.
      */
+    /** @p onlyHeads, when given, limits what is set per head to those heads
+     *  of each fixture it names (a fixture group's own heads); a fixture it
+     *  does not name keeps all of them. */
     QList<SceneValue> valuesFromFixtures(Doc *doc, QList<quint32>fixtures,
-                                         const Scene *owner = nullptr, int colorSetOffset = 0);
+                                         const Scene *owner = nullptr, int colorSetOffset = 0,
+                                         const QHash<quint32, QSet<int> > *onlyHeads = nullptr);
     QList<SceneValue> valuesFromFixtureGroups(Doc *doc, QList<quint32>groups,
                                               const Scene *owner = nullptr, int colorSetOffset = 0);
 
@@ -329,6 +335,14 @@ public:
     QString effectPreset() const { return m_effectPreset; }
     void setEffectPreset(const QString &name) { m_effectPreset = name; }
 
+    /** The WLED effect this look runs ON WLED fixtures ("Chase", WLED's own
+     *  name; empty for none). Those fixtures are sent the effect, and the
+     *  look's speed/intensity/palette/option and colours, on their own
+     *  channels -- the device runs it. Every other fixture runs the script
+     *  above: the port of that effect where there is one. */
+    QString wledEffect() const { return m_wledEffect; }
+    void setWledEffect(const QString &name) { m_wledEffect = name; }
+
     /** Input slot bindings: slot name → (universe, channel).
      *  The EffectScriptRunner maps incoming input events to slot values. */
     QMap<QString, QPair<quint32,quint32>> effectInputBindings() const
@@ -383,6 +397,7 @@ private:
     QString m_scriptPath;
     bool m_persistent = false;
     QString m_effectPreset;
+    QString m_wledEffect;
     QMap<QString, QPair<quint32,quint32>> m_effectInputBindings;
     QMap<QString, quint32>               m_effectPaletteBindings;
     QMap<QString, quint32>               m_effectTargetBindings;

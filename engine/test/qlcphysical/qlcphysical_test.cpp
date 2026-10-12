@@ -97,6 +97,17 @@ void QLCPhysical_Test::lensDegreesMax()
     QVERIFY(p.lensDegreesMax() == 40.5);
 }
 
+void QLCPhysical_Test::lensBeamsPerHead()
+{
+    QCOMPARE(p.lensBeamsPerHead(), 1);
+    p.setLensBeamsPerHead(3);
+    QCOMPARE(p.lensBeamsPerHead(), 3);
+    // A head throws at least the one beam it is.
+    p.setLensBeamsPerHead(0);
+    QCOMPARE(p.lensBeamsPerHead(), 1);
+    p.setLensBeamsPerHead(3);
+}
+
 void QLCPhysical_Test::focusType()
 {
     QVERIFY(p.focusType() == "Fixed");
@@ -151,6 +162,7 @@ void QLCPhysical_Test::copy()
     QVERIFY(c.lensName() == p.lensName());
     QVERIFY(c.lensDegreesMin() == p.lensDegreesMin());
     QVERIFY(c.lensDegreesMax() == p.lensDegreesMax());
+    QCOMPARE(c.lensBeamsPerHead(), 3);
     QVERIFY(c.focusType() == p.focusType());
     QVERIFY(c.focusPanMax() == p.focusPanMax());
     QVERIFY(c.focusTiltMax() == p.focusTiltMax());
@@ -226,6 +238,8 @@ void QLCPhysical_Test::load()
     QVERIFY(p.lensName() == "Fresnel");
     QVERIFY(p.lensDegreesMin() == 8);
     QVERIFY(p.lensDegreesMax() == 38);
+    // No BeamsPerHead attribute, as in every stock definition: back to one.
+    QCOMPARE(p.lensBeamsPerHead(), 1);
     QVERIFY(p.focusType() == "Head");
     QVERIFY(p.focusPanMax() == 520);
     QVERIFY(p.focusTiltMax() == 270);
@@ -330,6 +344,8 @@ void QLCPhysical_Test::save()
             QVERIFY(xmlReader.attributes().value("Name").toString() == "Fresnel");
             QVERIFY(xmlReader.attributes().value("DegreesMin").toString() == "8");
             QVERIFY(xmlReader.attributes().value("DegreesMax").toString() == "38");
+            // One beam per head is the default and is never written.
+            QVERIFY(xmlReader.attributes().hasAttribute("BeamsPerHead") == false);
         }
         else if (xmlReader.name().toString() == "Focus")
         {
@@ -364,6 +380,94 @@ void QLCPhysical_Test::save()
     QVERIFY(focus == true);
     QVERIFY(layout == true);
     QVERIFY(technical == true);
+}
+
+void QLCPhysical_Test::beamsPerHeadRoundTrip()
+{
+    /* A two-arm beam fixture: each arm is one head carrying three emitters. */
+    QLCPhysical out;
+    out.setLensDegreesMin(8);
+    out.setLensDegreesMax(8);
+    out.setLensBeamsPerHead(3);
+
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter xmlWriter(&buffer);
+    QVERIFY(out.saveXML(&xmlWriter) == true);
+    xmlWriter.setDevice(NULL);
+    buffer.close();
+    QVERIFY(buffer.data().contains("BeamsPerHead=\"3\""));
+
+    buffer.open(QIODevice::ReadOnly | QIODevice::Text);
+    QXmlStreamReader xmlReader(&buffer);
+    xmlReader.readNextStartElement();
+    QLCPhysical in;
+    QVERIFY(in.loadXML(xmlReader) == true);
+    QCOMPARE(in.lensBeamsPerHead(), 3);
+    QCOMPARE(in.lensDegreesMax(), 8.0);
+}
+
+/* A lantern: drawn as a cage round a glowing core, its light leaving all
+   round. Written only when it is not a plain box with a beam, and read
+   back the same; a box writes no <Body> at all. */
+void QLCPhysical_Test::aLanternBodyRoundTrips()
+{
+    QLCPhysical lantern;
+    QCOMPARE(lantern.bodyShape(), QLCPhysical::BoxBody);
+    QCOMPARE(lantern.emission(), QLCPhysical::BeamEmission);
+    lantern.setBodyShape(QLCPhysical::LanternBody);
+    lantern.setEmission(QLCPhysical::OmniEmission);
+    QLCPhysical copy = lantern;
+    QCOMPARE(copy.bodyShape(), QLCPhysical::LanternBody);
+
+    auto roundTrip = [](const QLCPhysical &in, QByteArray *xml) {
+        QBuffer buffer;
+        buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+        QXmlStreamWriter writer(&buffer);
+        in.saveXML(&writer);
+        writer.writeEndDocument();
+        buffer.close();
+        *xml = buffer.data();
+        buffer.open(QIODevice::ReadOnly | QIODevice::Text);
+        QXmlStreamReader reader(&buffer);
+        reader.readNextStartElement();
+        QLCPhysical out;
+        out.loadXML(reader);
+        return out;
+    };
+    QByteArray xml;
+    const QLCPhysical back = roundTrip(lantern, &xml);
+    QVERIFY(xml.contains("<Body Shape=\"Lantern\" Emission=\"Omni\"/>"));
+    QCOMPARE(back.bodyShape(), QLCPhysical::LanternBody);
+    QCOMPARE(back.emission(), QLCPhysical::OmniEmission);
+
+    roundTrip(QLCPhysical(), &xml);
+    QVERIFY(!xml.contains("<Body"));
+
+    // Built of LEDs: how many and how they sit, written only when it is.
+    QCOMPARE(lantern.leds(), 0);
+    lantern.setLeds(16);
+    lantern.setLedLayout(QLCPhysical::TapeLeds);
+    QCOMPARE(QLCPhysical(lantern).leds(), 16);
+    QLCPhysical leds = roundTrip(lantern, &xml);
+    QVERIFY(xml.contains("LEDs=\"16\" Layout=\"Tape\""));
+    QVERIFY(!xml.contains("Glass"));                     // diffusing: the default
+    QCOMPARE(leds.leds(), 16);
+    QCOMPARE(leds.ledLayout(), QLCPhysical::TapeLeds);
+    QVERIFY(!leds.clearGlass());
+
+    // Clear glass says so.
+    lantern.setClearGlass(true);
+    QVERIFY(QLCPhysical(lantern).clearGlass());
+    leds = roundTrip(lantern, &xml);
+    QVERIFY(xml.contains("Glass=\"Clear\""));
+    QVERIFY(leds.clearGlass());
+
+    // A box built of LEDs says so too.
+    QLCPhysical box;
+    box.setLeds(8);
+    QCOMPARE(roundTrip(box, &xml).leds(), 8);
+    QVERIFY(xml.contains("<Body Shape=\"Box\" Emission=\"Beam\" LEDs=\"8\" Layout=\"Cluster\"/>"));
 }
 
 QTEST_MAIN(QLCPhysical_Test)

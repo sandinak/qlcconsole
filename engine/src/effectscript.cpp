@@ -7,8 +7,22 @@
 
 #include "effectscript.h"
 
+namespace
+{
+/* A script's optional text: empty when it does not say. QJSValue's own
+   toString() gives "undefined" for a missing property -- shown as the
+   effect's notes, and taken for a lifecycle nobody chose. */
+QString jsText(const QJSValue &v)
+{
+    return (v.isUndefined() || v.isNull()) ? QString() : v.toString();
+}
+}
+#include "effectscriptcache.h"
+
+#include <QRegularExpression>
 #include <QFile>
 #include <QFileInfo>
+#include <QDir>
 #include <QMap>
 #include <QDebug>
 
@@ -99,11 +113,14 @@ bool EffectScript::load(const QString &path)
     m_description.clear();
     m_notes.clear();
     m_author.clear();
+    m_wled.clear();
     m_apiVersion = 0;
     m_lifecycle = QStringLiteral("loop");
     m_syncTo    = QStringLiteral("span");
     m_onFinish  = QStringLiteral("hold");
     m_naturalDurationMs = 2000;
+    m_takesHostSpread = false;
+    m_hostSpreadParam.clear();
     m_inputs.clear();
     m_palettes.clear();
     m_targets.clear();
@@ -112,15 +129,47 @@ bool EffectScript::load(const QString &path)
     m_dataChannelKeys.clear();
     m_script = QJSValue();
     m_tickFn  = QJSValue();
+    m_error.clear();
 
     QFile f(path);
     if (!f.open(QIODevice::ReadOnly | QIODevice::Text))
     {
         qWarning() << "[EffectScript] Cannot open" << path;
+        m_error = QStringLiteral("its script cannot be opened");
         return false;
     }
     const QString contents = QString::fromUtf8(f.readAll());
     f.close();
+
+    // Its helper libraries first (effect.requires), into the same engine.
+    const QRegularExpressionMatch req =
+        QRegularExpression(QStringLiteral("effect\\.requires\\s*=\\s*\\[([^\\]]*)\\]")).match(contents);
+    if (req.hasMatch())
+    {
+        QRegularExpressionMatchIterator items =
+            QRegularExpression(QStringLiteral("[\"']([A-Za-z0-9_-]+)[\"']")).globalMatch(req.captured(1));
+        while (items.hasNext())
+        {
+            const QString lib = items.next().captured(1) + QStringLiteral(".js");
+            QString libPath = QFileInfo(path).dir().filePath(QStringLiteral("lib/") + lib);
+            if (!QFileInfo::exists(libPath))
+                libPath = EffectScriptCache::systemScriptsDirectory().filePath(QStringLiteral("lib/") + lib);
+            QFile lf(libPath);
+            if (!lf.open(QIODevice::ReadOnly | QIODevice::Text))
+            {
+                qWarning() << "[EffectScript]" << path << "needs" << lib << "-- not found";
+                m_error = QStringLiteral("it needs %1, which is not installed").arg(lib);
+                return false;
+            }
+            const QJSValue done = m_engine.evaluate(QString::fromUtf8(lf.readAll()), libPath);
+            if (done.isError())
+            {
+                qWarning() << "[EffectScript]" << libPath << "evaluate error:" << done.toString();
+                m_error = QStringLiteral("%1 has an error: %2").arg(lib, done.toString());
+                return false;
+            }
+        }
+    }
 
     m_script = m_engine.evaluate(contents, path);
     qDebug() << "[ES-DIAG] evaluate: isError=" << m_script.isError()
@@ -131,12 +180,14 @@ bool EffectScript::load(const QString &path)
     {
         qWarning() << "[EffectScript]" << path << "evaluate error:"
                    << m_script.toString();
+        m_error = QStringLiteral("its script has an error: %1").arg(m_script.toString());
         return false;
     }
     if (!m_script.isObject())
     {
         qWarning() << "[EffectScript]" << path
                    << "script must return an object (use an IIFE)";
+        m_error = QStringLiteral("its script does not return an effect");
         return false;
     }
 
@@ -152,12 +203,15 @@ bool EffectScript::load(const QString &path)
     if (!m_tickFn.isCallable())
     {
         qWarning() << "[EffectScript]" << path << "missing tick() function";
+        m_error = QStringLiteral("its script has no tick()");
         return false;
     }
 
     if (!parseMeta())
     {
         qWarning() << "[EffectScript]" << path << "parseMeta() failed";
+        if (m_error.isEmpty())
+            m_error = QStringLiteral("its script does not say what it is");
         return false;
     }
 
@@ -176,22 +230,28 @@ bool EffectScript::parseMeta()
         return false;
     }
 
-    m_name        = m_script.property("name").toString();
-    m_description = m_script.property("description").toString();
-    m_notes       = m_script.property("notes").toString();
-    m_author      = m_script.property("author").toString();
+    m_name        = jsText(m_script.property("name"));
+    m_description = jsText(m_script.property("description"));
+    m_notes       = jsText(m_script.property("notes"));
+    m_author      = jsText(m_script.property("author"));
+    m_wled        = jsText(m_script.property("wled"));
     m_version     = m_script.property("version").toInt();
     if (m_version < 1)
         m_version = 1;   // default for Generators that don't declare one
 
     // Lifecycle (see EFFECT_LIFECYCLE_DESIGN.md). Absent → loop (today's default).
-    m_lifecycle = m_script.property("lifecycle").toString().toLower();
+    m_lifecycle = jsText(m_script.property("lifecycle")).toLower();
     if (m_lifecycle.isEmpty())
         m_lifecycle = QStringLiteral("loop");
-    m_syncTo = m_script.property("syncTo").toString().toLower();
+    m_syncTo = jsText(m_script.property("syncTo")).toLower();
     if (m_syncTo.isEmpty())
         m_syncTo = QStringLiteral("span");
-    m_onFinish = m_script.property("onFinish").toString().toLower();
+    {
+        const QJSValue hs = m_script.property("hostSpread");
+        m_takesHostSpread = !hs.isUndefined() && !hs.isNull();
+        m_hostSpreadParam = m_takesHostSpread ? hs.toString() : QString();
+    }
+    m_onFinish = jsText(m_script.property("onFinish")).toLower();
     if (m_onFinish.isEmpty())
         m_onFinish = QStringLiteral("hold");
     m_naturalDurationMs = m_script.property("naturalDurationMs").toInt();
@@ -213,8 +273,8 @@ bool EffectScript::parseMeta()
         {
             QJSValue item = inArr.property(i);
             InputDef def;
-            def.name         = item.property("name").toString();
-            def.description  = item.property("description").toString();
+            def.name         = jsText(item.property("name"));
+            def.description  = jsText(item.property("description"));
             def.defaultValue = (float)item.property("defaultValue").toNumber();
             if (!def.name.isEmpty())
                 m_inputs.append(def);
@@ -230,9 +290,9 @@ bool EffectScript::parseMeta()
         {
             QJSValue item = palArr.property(i);
             PaletteDef def;
-            def.name        = item.property("name").toString();
-            def.description = item.property("description").toString();
-            def.type        = item.property("type").toString();
+            def.name        = jsText(item.property("name"));
+            def.description = jsText(item.property("description"));
+            def.type        = jsText(item.property("type"));
             def.optional    = item.property("optional").toBool();
             if (!def.name.isEmpty())
                 m_palettes.append(def);
@@ -248,8 +308,8 @@ bool EffectScript::parseMeta()
         {
             QJSValue item = tgtArr.property(i);
             TargetDef def;
-            def.name        = item.property("name").toString();
-            def.description = item.property("description").toString();
+            def.name        = jsText(item.property("name"));
+            def.description = jsText(item.property("description"));
             def.optional    = item.property("optional").toBool();
             if (!def.name.isEmpty())
                 m_targets.append(def);
@@ -265,12 +325,14 @@ bool EffectScript::parseMeta()
         {
             QJSValue item = prArr.property(i);
             ParamDef def;
-            def.name         = item.property("name").toString();
-            def.description  = item.property("description").toString();
-            def.type         = item.property("type").toString();
+            def.name         = jsText(item.property("name"));
+            def.description  = jsText(item.property("description"));
+            def.type         = jsText(item.property("type"));
             def.min          = (float)item.property("min").toNumber();
             def.max          = (float)item.property("max").toNumber();
             def.defaultValue = (float)item.property("defaultValue").toNumber();
+            if (item.property("defaultValue").isString())
+                def.defaultText = item.property("defaultValue").toString();
             QJSValue vals = item.property("values");
             if (vals.isArray())
             {
@@ -323,10 +385,10 @@ bool EffectScript::loadRGBScript()
 {
     QJSValue algo = m_script;   // the RGBScript's algo object (from the IIFE)
 
-    m_name   = algo.property("name").toString();
+    m_name   = jsText(algo.property("name"));
     if (m_name.isEmpty())
         m_name = QFileInfo(m_filePath).baseName();
-    m_author       = algo.property("author").toString();
+    m_author       = jsText(algo.property("author"));
     m_apiVersion   = 1;
     m_version      = 1;
     m_fixtureTypes = QStringList() << "rgb" << "dimmer";

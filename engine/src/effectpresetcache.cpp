@@ -102,6 +102,11 @@ void EffectPresetCache::scanDir(const QDir &dir)
                                             QDir::Files | QDir::Readable);
     for (const QString &file : files)
     {
+        if (QLCFile::isOnlineOnly(dir.absoluteFilePath(file)))   // in cloud storage, not on this machine: do not wait for it
+        {
+            QLCFile::noteSkippedOnlineOnly(dir.absoluteFilePath(file));
+            continue;
+        }
         const Preset p = parsePreset(dir.absoluteFilePath(file));
         // First found wins (system before user); skip invalid / duplicate names.
         if (p.isValid() && !m_presets.contains(p.name))

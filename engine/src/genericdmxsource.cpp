@@ -115,7 +115,7 @@ void GenericDMXSource::writeDMX(MasterTimer* timer, QList<Universe *> ua)
         {
             it.next();
             Fixture *fixture = m_doc->fixture(it.key().first);
-            if (fixture == NULL)
+            if (fixture == NULL || !fixture->isPatched())
                 continue;
 
             quint32 channelIndex = it.key().second;

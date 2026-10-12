@@ -22,6 +22,8 @@
 #include <QXmlStreamWriter>
 #include <QCoreApplication>
 #include <QFile>
+#include <QFileInfo>
+#include <QSet>
 
 #ifdef QT_XML_LIB
 #   include <QtXml>
@@ -34,9 +36,13 @@
 #   include <lmcons.h>
 #else
 #   include <sys/types.h>
+#   include <sys/stat.h>
 #   include <unistd.h>
 #   include <pwd.h>
 #endif
+#include <QMutex>
+#include <QMutexLocker>
+#include <QStringList>
 
 #include "qlcconfig.h"
 #include "qlcfile.h"
@@ -271,6 +277,20 @@ void QLCFile::mergeLegacyUserData()
         "EffectScripts", "EffectPresets" };
 #endif
 
+    /* What has been linked before, so a link removed on purpose stays
+       removed: this runs at every start, and used to put back whatever was
+       taken out (a malformed definition deleted here came back next time). */
+    const QString ledgerPath = QString("%1/.legacy-linked").arg(newRoot);
+    QSet<QString> linked;
+    {
+        QFile ledger(ledgerPath);
+        if (ledger.open(QIODevice::ReadOnly | QIODevice::Text))
+            for (const QByteArray &line : ledger.readAll().split('\n'))
+                if (!line.trimmed().isEmpty())
+                    linked.insert(QString::fromUtf8(line.trimmed()));
+    }
+    const int before = linked.size();
+
     foreach (const QString &sub, subdirs)
     {
         QDir oldSub(oldDir.filePath(sub));
@@ -282,11 +302,33 @@ void QLCFile::mergeLegacyUserData()
 
         foreach (const QString &fileName, oldSub.entryList(QDir::Files))
         {
+            const QString key = sub + QLatin1Char('/') + fileName;
             QString newFile = newSub.filePath(fileName);
-            if (QFile::exists(newFile) == true)
-                continue; // a file already placed under the new root wins
+            QFileInfo there(newFile);
+            if (there.exists() || there.isSymLink())
+            {
+                // a file already placed under the new root wins -- and a
+                // link this made earlier is now on the ledger
+                if (there.isSymLink() && there.symLinkTarget() == QFileInfo(oldSub.filePath(fileName)).absoluteFilePath())
+                    linked.insert(key);
+                continue;
+            }
+            if (linked.contains(key))
+                continue; // linked once, removed since: leave it removed
 
-            QFile::link(oldSub.filePath(fileName), newFile);
+            if (QFile::link(oldSub.filePath(fileName), newFile))
+                linked.insert(key);
+        }
+    }
+
+    if (linked.size() != before)
+    {
+        QFile ledger(ledgerPath);
+        if (ledger.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
+        {
+            QStringList keys = linked.values();
+            keys.sort();
+            ledger.write(keys.join(QLatin1Char('\n')).toUtf8() + '\n');
         }
     }
 }
@@ -309,4 +351,83 @@ quint32 QLCFile::getQtRuntimeVersion()
     QStringList digits = ver.split(".");
 
     return digits.at(0).toInt() * 10000 + digits.at(1).toInt() * 100 + digits.at(2).toInt();
+}
+
+/*****************************************************************************
+ * Cloud storage: online-only files
+ *****************************************************************************/
+
+bool QLCFile::isOnlineOnly(const QString &path)
+{
+#if defined(WIN32) || defined(Q_OS_WIN)
+    const DWORD attrs = GetFileAttributesW(reinterpret_cast<LPCWSTR>(path.utf16()));
+    if (attrs == INVALID_FILE_ATTRIBUTES)
+        return false;
+    // FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS, _RECALL_ON_OPEN, _OFFLINE
+    return (attrs & (0x00400000 | 0x00040000 | FILE_ATTRIBUTE_OFFLINE)) != 0;
+#elif defined(__APPLE__) || defined(Q_OS_MAC)
+#   ifndef SF_DATALESS
+#       define SF_DATALESS 0x40000000
+#   endif
+    struct stat st;
+    if (stat(QFile::encodeName(path).constData(), &st) != 0)
+        return false;
+    return (st.st_flags & SF_DATALESS) != 0;
+#else
+    Q_UNUSED(path)
+    return false;
+#endif
+}
+
+namespace
+{
+/* Kept on the application object, not in a static here: plugins build their
+   own copy of this file, and what a plugin skips (a MIDI template, an HID
+   profile) belongs in the same list as the rest. */
+const char *const kOnlineOnlyProperty = "qlcSkippedOnlineOnly";
+QMutex s_onlineOnlyMutex;
+QStringList s_onlineOnly;                   // no application object (some tests)
+
+QStringList readOnlineOnly()
+{
+    if (QCoreApplication *app = QCoreApplication::instance())
+        return app->property(kOnlineOnlyProperty).toStringList();
+    return s_onlineOnly;
+}
+
+void writeOnlineOnly(const QStringList &list)
+{
+    if (QCoreApplication *app = QCoreApplication::instance())
+        app->setProperty(kOnlineOnlyProperty, list);
+    else
+        s_onlineOnly = list;
+}
+}
+
+void QLCFile::noteSkippedOnlineOnly(const QString &path)
+{
+    QMutexLocker locker(&s_onlineOnlyMutex);
+    QStringList list = readOnlineOnly();
+    if (!list.contains(path))
+    {
+        list << path;
+        writeOnlineOnly(list);
+    }
+}
+
+QStringList QLCFile::skippedOnlineOnly()
+{
+    QMutexLocker locker(&s_onlineOnlyMutex);
+    return readOnlineOnly();
+}
+
+void QLCFile::forgetSkippedOnlineOnly(const QString &path)
+{
+    QMutexLocker locker(&s_onlineOnlyMutex);
+    QStringList list = readOnlineOnly();
+    if (path.isEmpty())
+        list.clear();
+    else
+        list.removeAll(path);
+    writeOnlineOnly(list);
 }

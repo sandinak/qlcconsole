@@ -38,6 +38,10 @@ private slots:
 	void load();
     void defDirectories();
     void storeDef();
+    void reloadPhysicalKeepsTheModes();
+    void aDefinitionThatFailsIsRemembered();
+    void aLocalDefinitionSaysItReplacesTheIncludedOne();
+    void ofTwoLocalCopiesTheNewestIsUsed();
 
 private:
     QLCFixtureDefCache cache;

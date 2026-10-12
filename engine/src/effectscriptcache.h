@@ -34,6 +34,9 @@ public:
         QString description;    //!< effect.description (one-liner)
         QString notes;          //!< effect.notes (longer paragraph)
         QStringList fixtureTypes; //!< effect.fixtureTypes array
+        QString wled;           //!< effect.wled: the WLED effect it ports
+        bool hidden = false;    //!< effect.hidden = true: resolvable, never listed
+        bool rgb = false;       //!< from the RGB Matrix library
     };
 
     explicit EffectScriptCache(QObject *parent = nullptr);
@@ -41,8 +44,9 @@ public:
     /** Scan all default directories and rebuild the cache. */
     void rescan();
 
-    /** Add a project-local directory to the search set and rescan. */
-    void addDirectory(const QDir &dir);
+    /** Add a project-local directory to the search set and rescan; @p rgb
+     *  for a folder of RGB Matrix scripts. */
+    void addDirectory(const QDir &dir, bool rgb = false);
 
     /** Display names of all discovered scripts (sorted, from effect.name). */
     QStringList scriptNames() const;
@@ -52,6 +56,18 @@ public:
 
     /** Full metadata for display @p name, or empty struct if not found. */
     ScriptMeta scriptMeta(const QString &name) const;
+
+    /** The script porting WLED's effect @p wledName ("Chase", any case), or
+     *  an empty string when none does. */
+    QString scriptPathForWled(const QString &wledName) const;
+
+    /** Whether @p path is an RGB Matrix library script. A look saves one as
+     *  "rgb:<file name>", because a file name alone can be an effect
+     *  script's too (both libraries have a fire.js). */
+    static bool isRgbScriptPath(const QString &path);
+    /** The name a look saves @p path under: its file name, or for an RGB
+     *  Matrix script "rgb:" and its file name. scriptPath() resolves both. */
+    static QString portableName(const QString &path);
 
     /** Infer a script name from its file basename (strips .js). */
     static QString nameFromPath(const QString &path);
@@ -68,7 +84,7 @@ public:
     static QDir userRgbScriptsDirectory();
 
 private:
-    void scanDir(const QDir &dir);
+    void scanDir(const QDir &dir, bool rgb = false);
     /** Scan an RGBScript directory and its immediate subdirs (the dev build
      *  symlinks the source dir one level down; production has .js directly). */
     void scanRgbDir(const QDir &dir);
@@ -82,6 +98,7 @@ private:
     // filename aliases (scriptNames() returns these, sorted).
     QStringList               m_displayNames;
     QList<QDir>               m_extraDirs;
+    QList<QDir>               m_extraRgbDirs;
 };
 
 #endif // EFFECTSCRIPTCACHE_H

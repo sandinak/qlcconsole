@@ -77,6 +77,9 @@ public:
     int flags() const;
     void setFlags(int flags);
 
+    /** See m_inert: an inert channel writes nothing, ever. */
+    bool isInert() const { return m_inert; }
+
     /** Add/Remove a single flag */
     void addFlag(int flag);
     void removeFlag(int flag);
@@ -175,6 +178,12 @@ public:
     /** Get the fade time in milliseconds. */
     uint fadeTime() const;
 
+    /** Hold the start value this long (ms) before the fade begins: a
+     *  transition reaching this channel later than others (a wipe across the
+     *  stage). setFadeTime() clears it -- set it after. */
+    void setDelay(uint ms) { m_delay = ms; }
+    uint delay() const { return m_delay; }
+
     /** Set the elapsed time for this channel. */
     void setElapsed(uint time);
 
@@ -207,8 +216,15 @@ private:
     quint32 m_current;
     bool m_ready;
 
+    /** True when the fixture is an unpatched inventory fixture: the channel
+     *  exists (a scene can hold values for it) but has NO real address, so it
+     *  must never reach a universe. Kept apart from m_flags because callers
+     *  overwrite the flags wholesale. */
+    bool m_inert;
+
     uint m_fadeTime;
     uint m_elapsed;
+    uint m_delay = 0;
 };
 
 /** @} */

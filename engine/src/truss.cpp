@@ -177,6 +177,18 @@ bool Truss::loadXML(QXmlStreamReader &root)
     }
     if (attrs.hasAttribute(QStringLiteral("Stand")))
         m_standId = attrs.value(QStringLiteral("Stand")).toUInt();
+    if (attrs.hasAttribute(QStringLiteral("EndStand")))
+        m_endStandId = attrs.value(QStringLiteral("EndStand")).toUInt();
+    m_sock = attrs.value(QStringLiteral("Sock")) == QLatin1String("1");
+    if (attrs.hasAttribute(QStringLiteral("SockColour")))
+        setSockColour(QColor(attrs.value(QStringLiteral("SockColour")).toString()));
+    if (attrs.hasAttribute(QStringLiteral("SockFrom")))
+        m_sockFrom = attrs.value(QStringLiteral("SockFrom")).toFloat();
+    if (attrs.hasAttribute(QStringLiteral("SockTo")))
+        m_sockTo = attrs.value(QStringLiteral("SockTo")).toFloat();
+    m_sockPattern = attrs.value(QStringLiteral("SockPattern")).toString();
+    if (attrs.hasAttribute(QStringLiteral("SockPatternOpacity")))
+        setSockPatternOpacity(attrs.value(QStringLiteral("SockPatternOpacity")).toFloat());
 
     root.skipCurrentElement();
     return true;
@@ -214,6 +226,21 @@ bool Truss::saveXML(QXmlStreamWriter *doc) const
     }
     if (isStandMounted())
         doc->writeAttribute(QStringLiteral("Stand"), QString::number(m_standId));
+    if (isStandMounted() && m_endStandId != invalidId())
+        doc->writeAttribute(QStringLiteral("EndStand"), QString::number(m_endStandId));
+    if (m_sock)
+    {
+        doc->writeAttribute(QStringLiteral("Sock"), QStringLiteral("1"));
+        doc->writeAttribute(QStringLiteral("SockColour"), m_sockColour.name());
+        doc->writeAttribute(QStringLiteral("SockFrom"), QString::number(double(m_sockFrom), 'f', 3));
+        if (m_sockTo >= 0.0f)
+            doc->writeAttribute(QStringLiteral("SockTo"), QString::number(double(m_sockTo), 'f', 3));
+        if (!m_sockPattern.isEmpty())
+            doc->writeAttribute(QStringLiteral("SockPattern"), m_sockPattern);
+        if (m_sockPatternOpacity < 1.0f)
+            doc->writeAttribute(QStringLiteral("SockPatternOpacity"),
+                                QString::number(double(m_sockPatternOpacity), 'f', 2));
+    }
     doc->writeEndElement();
     return true;
 }

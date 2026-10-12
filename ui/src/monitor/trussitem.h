@@ -64,6 +64,9 @@ public:
 
     /** Rendered pixel width of this truss (used for escape-from-truss threshold). */
     float pxWid() const { return m_pxWid; }
+    /** Drawn length in scene pixels. Near zero when the truss is edge-on, which
+     *  callers use to tell "along the run" from "no run visible in this view". */
+    float pxLen() const { return m_pxLen; }
 
     /** Highlight the truss (e.g. while a fixture is dragged over it). */
     void setHighlighted(bool highlighted);
@@ -75,6 +78,15 @@ public:
 
     // QGraphicsItem interface
     QRectF boundingRect() const override;
+
+    /** The truss BODY, without the padding and base-plate allowance
+     *  boundingRect() has to include for repainting and hit-testing.
+     *
+     *  A vertical truss's bounding rect is at least twice its width on each
+     *  side -- about four times its real area -- so anything measuring "how
+     *  much of this truss is covered" against it understates by the same
+     *  factor, and a tower buried under its own fixtures reported 31%. */
+    QRectF footprintRect() const;
     void paint(QPainter *painter, const QStyleOptionGraphicsItem *option,
                QWidget *widget) override;
     QVariant itemChange(GraphicsItemChange change,

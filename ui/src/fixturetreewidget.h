@@ -38,6 +38,10 @@ class Doc;
 #define PROP_FOLDER   Qt::UserRole + 5  //!< group-folder path (string)
 #define PROP_SOURCE   Qt::UserRole + 6  //!< power source index (int, into PowerDistribution::sources())
 #define PROP_CIRCUIT  Qt::UserRole + 7  //!< power circuit index (int, within its source's circuits())
+#define PROP_INVENTORY Qt::UserRole + 8 //!< marks the Inventory root (1) or one of its manufacturer/model folders (2)
+#define PROP_INVENTORY_NAME Qt::UserRole + 9 //!< an Inventory folder's bare name, before its "(N)" count
+#define PROP_CLASHES  Qt::UserRole + 10 //!< marks the "Address clashes" root
+#define PROP_DUPLICATES Qt::UserRole + 11 //!< marks the "Duplicate names" root and its rows
 
 class FixtureTreeWidget final : public QTreeWidget
 {
@@ -46,10 +50,46 @@ public:
 
     FixtureTreeWidget(Doc* doc, quint32 flags, QWidget *parent = 0);
 
+    /** A selection expressed in terms that survive a rebuild. */
+    struct Selection
+    {
+        enum Kind { None, Group, Universe, Fixture };
+        Kind   kind = None;
+        quint32 id = 0;
+    };
+    Selection currentSelection() const;
+    /** Re-select after a rebuild, without emitting -- callers own the state
+     *  change that prompted the rebuild. */
+    void restoreSelection(const Selection &sel);
+
     void updateTree();
+
+    /** Relabel the Inventory root and its folders with their fixture counts,
+     *  dropping folders left empty. updateTree() does this after a rebuild; a
+     *  caller that removes fixture rows in place calls it to catch up. */
+    void refreshInventoryCounts();
+
+    /** Toggle whether each fixture row expands to show its individual heads
+     *  as draggable children (see headDragMimeType()) -- off by default even
+     *  when constructed without the ShowHeads flag baked in, and meant to be
+     *  switched on/off at runtime (e.g. only while a Fixture Group editor
+     *  that can consume per-head drops is actually open), since permanently
+     *  expanding every fixture's heads would bury the tree for anything with
+     *  a large head count (a 96-head pixel bar, say). Rebuilds the tree. */
+    void setShowHeads(bool on);
 
     /** Get a QTreeWidgetItem whose fixture ID is $id */
     QTreeWidgetItem* fixtureItem(quint32 id) const;
+
+    /** Show fixture @p id's current name on every row that stands for it
+     *  (a fixture can be listed under its universe and in groups). */
+    void refreshFixtureName(quint32 id);
+
+    /** Show only rows whose text (any column: name, manufacturer, model...)
+     *  contains @p text, ignoring case; a folder stays shown -- and opens --
+     *  while anything inside it matches. Empty shows everything. Returns how
+     *  many fixture rows match. */
+    int setTextFilter(const QString &text);
 
     /** Get a QTreeWidgetItem whose group ID is $id */
     QTreeWidgetItem* groupItem(quint32 id) const;
@@ -81,6 +121,12 @@ public:
      *  a stream of group IDs). Used to drop groups onto folders. */
     static const char* groupDragMimeType();
 
+    /** MIME type used when dragging individual fixture HEADS out of the tree
+     *  (ShowHeads mode only) -- payload is a stream of (fixtureId, headIndex)
+     *  quint32 pairs. Lets a drop target (the Fixture Group editor's grid)
+     *  place just the dragged heads instead of a whole fixture's worth. */
+    static const char* headDragMimeType();
+
 signals:
     /** Emitted when one or more fixture groups are dropped onto a folder (or
      *  the root). $destPath is the target folder path ("" = root). */
@@ -96,6 +142,12 @@ signals:
      *  Doc::powerDistribution()->sources(). Only emitted with ShowPower set. */
     void fixturesDroppedOnCircuit(const QList<quint32>& fixtureIds, int sourceIdx, int circuitIdx);
 
+    /** Emitted when fixtures -- or fixture groups, standing for their
+     *  fixtures -- are dropped onto a universe row (or onto a fixture listed
+     *  under one). @p universe is zero-based. Only emitted with ShowGroups
+     *  set, where the universe rows are. */
+    void fixturesDroppedOnUniverse(const QList<quint32>& fixtureIds, quint32 universe);
+
 protected:
     /** Provide fixture/group IDs for dragging onto drop targets (the group
      *  editor grid for fixtures, folders for groups). */
@@ -103,6 +155,13 @@ protected:
         { return buildMimeData(items); }
     QMimeData* mimeData(const QList<QTreeWidgetItem*> items) const
         { return buildMimeData(items); }
+private:
+    /** The universe a drop on @p target means: a universe row's own, or the
+     *  one of the universe row a fixture is listed under. Invalid otherwise. */
+    QVariant dropUniverse(QTreeWidgetItem *target) const;
+    /** Fixture ids carried by a fixture or group drag. */
+    QList<quint32> droppedFixtures(const QMimeData *mime) const;
+
 private:
     QMimeData* buildMimeData(const QList<QTreeWidgetItem*> &items) const;
 

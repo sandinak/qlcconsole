@@ -37,6 +37,7 @@ private slots:
 
     void normalizeComponentPath();
     void denormalizeComponentPath();
+    void fixtureNamesAreUnique();
 
     void defaults();
     void mode();

@@ -36,6 +36,7 @@ private slots:
     void setType();
     void thresholdsDivisor();
     void attachDmxChannels();
+    void attachDmxChannelsSkipsStagedFixtures();
     void attachFunction();
     void xml();
 

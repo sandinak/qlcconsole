@@ -38,6 +38,8 @@
     var effect = new Object;
     effect.apiVersion   = 1;
     effect.name         = "Stage Shape";
+    // Takes the host's spread (fixture.phase, inputs._spread) in place of its own.
+    effect.hostSpread = "";
     effect.description  = "Aim moving heads around the outline of a shape on stage";
     effect.notes        = "Position-only: centres on the scene's Target (Aim) "
                         + "look and aims each head at its own point on the shape's "
@@ -164,12 +166,15 @@
             var local, spinDeg = 0.0;
             if (isLine) {
                 // Open shape: spread heads end-to-end, spin the whole line.
-                var s = (N > 1) ? i / (N - 1) : 0.5;
+                // On the host spread an amount of 1 runs end to end.
+                var s = inputs._spread ? Math.min(1, f.phase * N / Math.max(N - 1, 1))
+                                       : (N > 1) ? i / (N - 1) : 0.5;
                 local = [-1 + 2 * s, 0];
                 spinDeg = spin * t * 360.0;
             } else {
                 // Closed shape: spin walks the heads around the perimeter.
-                var phase = ((i / N) + spin * t) % 1.0;
+                // Its place round the outline: the host spread's, or list order.
+                var phase = ((inputs._spread ? f.phase : i / N) + spin * t) % 1.0;
                 if (phase < 0) phase += 1.0;
                 local = verts ? samplePoly(verts, cum, phase)
                               : [Math.cos(2 * Math.PI * phase), Math.sin(2 * Math.PI * phase)];

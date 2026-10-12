@@ -7,6 +7,8 @@
 (function() {
     var effect = new Object;
     effect.name        = "Gobo Chase";
+    // Takes the host's spread (fixture.phase, inputs._spread) in place of its own.
+    effect.hostSpread = "spread";
     effect.description = "Steps through gobo wheel positions across the fixture array";
     effect.apiVersion  = 1;
     effect.version     = 1;
@@ -26,7 +28,7 @@
         var t      = inputs._time  !== undefined ? inputs._time  : 0;
 
         return fixtures.map(function(f, i) {
-            var idx = Math.floor(t * rate + i * spread / Math.max(n, 1)) % count;
+            var idx = Math.floor(t * rate + (inputs._spread ? f.phase * count : i * spread / Math.max(n, 1))) % count;
             return { gobo: (idx + count) % count };
         });
     };

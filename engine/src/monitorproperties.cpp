@@ -17,7 +17,10 @@
   limitations under the License.
 */
 
+#include <QDateTime>
+#include <QSet>
 #include <QXmlStreamReader>
+#include <type_traits>
 #include <QXmlStreamWriter>
 #include <QDebug>
 #include <QFont>
@@ -29,6 +32,8 @@
 #include <cmath>
 
 #include "monitorproperties.h"
+#include "powerdistribution.h"
+#include "networktopology.h"
 #include "truss.h"
 #include "stageplatform.h"
 #include "stagetarget.h"
@@ -127,6 +132,115 @@ MonitorProperties::MonitorProperties()
     ensureDefaultLayer();
 }
 
+MonitorProperties::~MonitorProperties()
+{
+    freeRetired(true);
+}
+
+QByteArray MonitorProperties::snapshot(const Doc *mainDocument) const
+{
+    QByteArray out;
+    QXmlStreamWriter w(&out);
+    saveXML(&w, mainDocument);
+    return out;
+}
+
+void MonitorProperties::freeRetired(bool all)
+{
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    for (int i = m_retired.count() - 1; i >= 0; --i)
+    {
+        // Long enough for any DMX frame that found one to be done with it.
+        if (all || now - m_retired.at(i).first > 10000)
+        {
+            m_retired.at(i).second();
+            m_retired.removeAt(i);
+        }
+    }
+}
+
+namespace
+{
+template <class T> QByteArray xmlOf(const T *obj)
+{
+    QByteArray out;
+    QXmlStreamWriter w(&out);
+    obj->saveXML(&w);
+    return out;
+}
+}
+
+bool MonitorProperties::restoreSnapshot(const QByteArray &snap, const Doc *mainDocument)
+{
+    QXmlStreamReader r(snap);
+    if (!r.readNextStartElement())
+        return false;
+
+    freeRetired(false);
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    auto retireList = [this, now](const auto &objs) {
+        if (!objs.isEmpty())
+            m_retired.append(qMakePair(now, std::function<void()>([objs]() { qDeleteAll(objs); })));
+    };
+
+    // Set the structures aside (so reset() does not delete them) ...
+    auto oldTrusses = m_trusses;         m_trusses.clear();
+    auto oldPlatforms = m_platforms;     m_platforms.clear();
+    auto oldPipes = m_pipes;             m_pipes.clear();
+    auto oldStands = m_stands;           m_stands.clear();
+    auto oldTowers = m_towers;           m_towers.clear();
+    auto oldHangers = m_hangers;         m_hangers.clear();
+    auto oldSceneries = m_sceneries;     m_sceneries.clear();
+    auto oldTargets = m_stageTargets;    m_stageTargets.clear();
+
+    const QList<quint32> before = m_rigProps.keys();
+    reset();
+    const bool ok = loadXML(r, mainDocument);
+
+    /* ... then keep every one the snapshot has just as it is: the same
+       object, so whatever holds it -- an editor still open around the one
+       that was cancelled, the DMX thread -- holds the real thing. Only what
+       changed is replaced, and what is replaced is retired, not freed. */
+    auto keep = [&retireList](auto &now, auto &old) {
+        using Ptr = typename std::remove_reference<decltype(now)>::type::mapped_type;
+        QList<Ptr> retired;
+        for (auto it = now.begin(); it != now.end(); ++it)
+        {
+            Ptr was = old.value(it.key(), nullptr);
+            if (was != nullptr && xmlOf(was) == xmlOf(it.value()))
+            {
+                retired << it.value();
+                it.value() = was;
+                old.remove(it.key());
+            }
+        }
+        retired << old.values();
+        retireList(retired);
+    };
+    keep(m_trusses, oldTrusses);
+    keep(m_platforms, oldPlatforms);
+    keep(m_pipes, oldPipes);
+    keep(m_stands, oldStands);
+    keep(m_towers, oldTowers);
+    keep(m_hangers, oldHangers);
+    keep(m_sceneries, oldSceneries);
+    keep(m_stageTargets, oldTargets);
+    // What follows something else is worked out again: a kept bar whose
+    // parent truss was replaced follows the parent as it is now.
+    recomputeStandMounts();
+    recomputeChildTrusses();
+    recomputeHangers();
+    recomputeAnchoredFrames();
+
+    QSet<quint32> fids(before.begin(), before.end());
+    foreach (quint32 fid, m_rigProps.keys())
+        fids.insert(fid);
+    foreach (quint32 fid, fids)
+        emit rigPropsChanged(fid);
+    emit stageTargetsChanged();
+    return ok;
+}
+
 void MonitorProperties::reset()
 {
     m_gridSize = QVector3D(GRID_DEFAULT_WIDTH, GRID_DEFAULT_HEIGHT, GRID_DEFAULT_DEPTH);
@@ -152,9 +266,15 @@ void MonitorProperties::reset()
     m_stands.clear();
     qDeleteAll(m_towers);
     m_towers.clear();
+    qDeleteAll(m_hangers);
+    m_hangers.clear();
+    qDeleteAll(m_sceneries);
+    m_sceneries.clear();
     qDeleteAll(m_stageTargets);
     m_stageTargets.clear();
     m_rigProps.clear();
+    m_goboSwaps.clear();
+    m_headLayouts.clear();
     m_layers.clear();
     m_activeLayerId = defaultLayerId;
     ensureDefaultLayer();
@@ -232,10 +352,50 @@ void MonitorProperties::setPointOfView(MonitorProperties::PointOfView pov)
  * Fixture items
  ********************************************************************/
 
+void MonitorProperties::setGoboSwap(quint32 fid, quint32 channel, uchar slotMin,
+                                    const QString &image)
+{
+    const QPair<quint32, int> key(channel, int(slotMin));
+    if (image.isEmpty())
+    {
+        auto it = m_goboSwaps.find(fid);
+        if (it == m_goboSwaps.end())
+            return;
+        it.value().remove(key);
+        if (it.value().isEmpty())
+            m_goboSwaps.erase(it);
+        return;
+    }
+    m_goboSwaps[fid].insert(key, image);
+}
+
+QString MonitorProperties::goboSwap(quint32 fid, quint32 channel, uchar slotMin) const
+{
+    return m_goboSwaps.value(fid).value(qMakePair(channel, int(slotMin)));
+}
+
+QMap<QPair<quint32, int>, QString> MonitorProperties::goboSwaps(quint32 fid) const
+{
+    return m_goboSwaps.value(fid);
+}
+
 void MonitorProperties::removeFixture(quint32 fid)
 {
     if (m_fixtureItems.contains(fid))
         m_fixtureItems.take(fid);
+
+    /* Drop the rig props with it. Two separate bugs came from keeping them:
+
+       - Leaving a MOUNT behind stranded the fixture -- no item means it
+         vanishes from everything driven by fixtureItemsID() (the Layers tree,
+         the 2D plot), while the studio editor still listed it on its
+         truss/pipe/tower from the rig props alone: visible in one place,
+         unreachable in every other.
+       - Fixture ids are REUSED (Doc::createFixtureId() hands back any free id),
+         so a stale entry is inherited wholesale by the NEXT fixture to take
+         that id -- which silently arrives pre-mounted on a structure, at some
+         dead fixture's offset and drop height. */
+    m_rigProps.remove(fid);
 }
 
 void MonitorProperties::removeFixture(quint32 fid, quint16 head, quint16 linked)
@@ -882,8 +1042,20 @@ Truss *MonitorProperties::addTruss()
     return t;
 }
 
-// Unit stage-space vector pointing OUT of a truss face. Stage convention here:
-// +X = stage-right, +Y = downstage (toward audience), +Z = up.
+// Unit stage-space vector pointing OUT of a truss face.
+//
+// Stage convention, as the app actually behaves: +X = stage LEFT, +Y = downstage
+// (toward the audience), +Z = up. Confirmed against real shows -- in
+// stage-structures-demo.qxw the "SR Tower" is at X=0.21 and the "SL Tower" at
+// X=11.61 -- and it is what puts the plot in the standard ground-plan
+// orientation (audience at the bottom, upstage at the top, stage right on the
+// viewer's left).
+//
+// KNOWN INCONSISTENCY, left alone deliberately: the two X cases below are
+// therefore named backwards -- FaceStageRight returns +X, which is stage LEFT.
+// Correcting the mapping would MOVE every bar already placed via those faces
+// when its workspace is reloaded, so it is a deliberate call not to silently
+// change saved shows. Fix it only alongside a migration.
 static QVector3D barFaceVector(int face)
 {
     switch (face)
@@ -891,8 +1063,8 @@ static QVector3D barFaceVector(int face)
         case Truss::FaceTop:        return QVector3D(0, 0,  1);
         case Truss::FaceDownstage:  return QVector3D(0,  1, 0);
         case Truss::FaceUpstage:    return QVector3D(0, -1, 0);
-        case Truss::FaceStageRight: return QVector3D( 1, 0, 0);
-        case Truss::FaceStageLeft:  return QVector3D(-1, 0, 0);
+        case Truss::FaceStageRight: return QVector3D( 1, 0, 0);   // see above: actually stage LEFT
+        case Truss::FaceStageLeft:  return QVector3D(-1, 0, 0);   // see above: actually stage RIGHT
         case Truss::FaceBottom:
         default:                    return QVector3D(0, 0, -1);
     }
@@ -901,8 +1073,8 @@ static QVector3D barFaceVector(int face)
 void MonitorProperties::recomputeAnchoredFrames()
 {
     // A studio group anchored to a platform is SLAVED to it: its local frame
-    // origin tracks the platform's reference corner (upstage-left) with no
-    // rotation (platforms are axis-aligned). The origin Z is the platform's BASE
+    // origin tracks the platform's reference corner (upstage-left) and turns
+    // with it, so the frame's axes are the platform's own. The origin Z is the platform's BASE
     // — the floor, or the deck of a platform it's stacked on — so members stored
     // in group-local metres follow the platform in height as well as plan when it
     // moves/resizes/stacks, and the group's Front plane IS the riser face. Call
@@ -915,9 +1087,83 @@ void MonitorProperties::recomputeAnchoredFrames()
         const StagePlatform *pl = m_platforms.value(g.anchorId, nullptr);
         if (pl == nullptr)
             continue;
-        g.origin   = QVector3D(pl->originX(), pl->originY(), platformBaseZ(pl->id()));
-        g.rotation = 0.0f;
+        const QPointF corner = pl->toWorld(QPointF(double(pl->originX()), double(pl->originY())));
+        g.origin   = QVector3D(float(corner.x()), float(corner.y()), platformBaseZ(pl->id()));
+        g.rotation = pl->rotation();
     }
+}
+
+void MonitorProperties::turnFixtureFacing(quint32 fid, float deltaDeg)
+{
+    if (deltaDeg == 0.0f)
+        return;
+    FixtureRigProps rp = fixtureRigProps(fid);
+    double y = std::fmod(double(rp.studioYaw + deltaDeg), 360.0);
+    if (y > 180.0) y -= 360.0;
+    if (y <= -180.0) y += 360.0;
+    rp.studioYaw = (qAbs(y) < 1e-4) ? 0.0f : float(y);
+    double pz = std::fmod(double(rp.panZeroDir + deltaDeg), 360.0);
+    if (pz < 0.0) pz += 360.0;
+    rp.panZeroDir = float(pz);
+    setFixtureRigProps(fid, rp);
+}
+
+void MonitorProperties::turnPlatform(quint32 id, float deg)
+{
+    StagePlatform *pl = m_platforms.value(id, nullptr);
+    if (pl == nullptr)
+        return;
+    const float before = pl->rotation();
+    pl->setRotation(deg);
+    const float delta = pl->rotation() - before;
+    if (delta == 0.0f)
+        return;
+    const QPointF c = pl->centre();
+    const double r = qDegreesToRadians(double(delta));
+    const double cs = qCos(r), sn = qSin(r);
+
+    QList<quint32> fids = m_rigProps.keys();
+    foreach (quint32 fid, fids)
+    {
+        const FixtureRigProps rp = m_rigProps.value(fid);
+        bool turns = (rp.riserPlatformId == id);
+        if (rp.deckPlatformId == id && m_fixtureItems.contains(fid))
+        {
+            // Standing on the deck: round its centre (the stored position is mm).
+            QVector3D &p = m_fixtureItems[fid].m_baseItem.m_position;
+            const double dx = double(p.x()) / 1000.0 - c.x(), dy = double(p.y()) / 1000.0 - c.y();
+            p.setX(float((c.x() + dx * cs - dy * sn) * 1000.0));
+            p.setY(float((c.y() + dx * sn + dy * cs) * 1000.0));
+            turns = true;
+        }
+        const quint32 fg = fixtureFrameGroup(fid);
+        if (fg != 0 && m_groups.value(fg).anchorKind == QStringLiteral("platform")
+            && m_groups.value(fg).anchorId == id)
+            turns = true;
+        if (turns)
+            turnFixtureFacing(fid, delta);
+    }
+    recomputeAnchoredFrames();
+}
+
+void MonitorProperties::turnTower(quint32 id, float deg)
+{
+    Tower *tw = m_towers.value(id, nullptr);
+    if (tw == nullptr)
+        return;
+    const float before = tw->rotation();
+    tw->setRotation(deg);
+    const float delta = tw->rotation() - before;
+    if (delta == 0.0f)
+        return;
+    QList<quint32> fids = m_rigProps.keys();
+    foreach (quint32 fid, fids)
+        if (m_rigProps.value(fid).towerId == id)
+            turnFixtureFacing(fid, delta);
+    // A hanger's angle runs the other way round (0 downstage, 90 stage left).
+    foreach (Hanger *h, hangersOn(Hanger::OnTower, id))
+        h->setAngle(h->angle() - delta);
+    recomputeHangers();
 }
 
 void MonitorProperties::recomputeChildTrusses()
@@ -997,6 +1243,7 @@ void MonitorProperties::recomputeChildTrusses()
     // above passes have already resolved).
     recomputeStandMounts();
     recomputePipeAnchors();
+    recomputeHangers();         // on trusses that the passes above just placed
 }
 
 void MonitorProperties::recomputePipeAnchors()
@@ -1027,7 +1274,20 @@ void MonitorProperties::recomputePipeAnchors()
         Pipe *parent = m_pipes.value(b->parentPipeId(), nullptr);
         if (parent == nullptr || parent == b)
             continue;
-        const QVector3D p = parent->positionAt(b->parentPipeOffset());
+        QVector3D p = parent->positionAt(b->parentPipeOffset());
+        /* Perpendicular to the crossbar's OWN run (rotates with its
+         * runAngle), not the parent's -- so it steps sideways clear of the
+         * parent's own point rather than exactly on top of it. Zero
+         * standoff (the historical default) leaves p unchanged, which is
+         * why a fresh crossbar used to be exactly coincident with its boom
+         * in Top view (WORKFLOW-SUBTLETIES.md #14) -- the same reason a
+         * Truss bar has barStandoff. */
+        if (b->crossbarStandoff() != 0.0f)
+        {
+            const double rad = qDegreesToRadians(double(b->runAngle()));
+            p.setX(p.x() - float(qSin(rad)) * b->crossbarStandoff());
+            p.setY(p.y() + float(qCos(rad)) * b->crossbarStandoff());
+        }
         b->setOriginX(p.x());
         b->setOriginY(p.y());
         b->setBaseZ(p.z());
@@ -1046,6 +1306,9 @@ void MonitorProperties::removeTruss(quint32 id)
     for (auto it = m_rigProps.begin(); it != m_rigProps.end(); ++it)
         if (it->trussId == id)
             it->trussId = Truss::invalidId();
+    // Its hangers go with it (what hung on them stays, unmounted).
+    foreach (Hanger *h, hangersOn(Hanger::OnTruss, id))
+        removeHanger(h->id());
 
     // Detach any child bars hung on this truss — they become free trusses in
     // place (their last derived origin is kept).
@@ -1167,6 +1430,106 @@ quint32 MonitorProperties::nextStandId() const
     return id;
 }
 
+int MonitorProperties::foldItemLocksIntoLayers(PowerDistribution *pd, NetworkTopology *nt)
+{
+    quint32 lockedLayer = 0;
+    bool haveLayer = false;
+    int moved = 0;
+    auto target = [&]() -> quint32 {
+        if (!haveLayer)
+        {
+            foreach (const MonitorLayer &l, layers())
+                if (l.name == QStringLiteral("Locked"))
+                {
+                    lockedLayer = l.id;
+                    haveLayer = true;
+                    break;
+                }
+            if (!haveLayer)
+            {
+                lockedLayer = addLayer(QStringLiteral("Locked"));
+                haveLayer = true;
+            }
+            setLayerLocked(lockedLayer, true);
+        }
+        return lockedLayer;
+    };
+    // An object pinned on its own, on a layer that is not: that is the case
+    // layer-only locking cannot express, so it moves to a layer that can.
+    auto pinnedAlone = [this](bool locked, quint32 layerId) {
+        return locked && !layer(layerId).locked;
+    };
+
+    foreach (Truss *t, m_trusses)
+        if (pinnedAlone(t->locked(), t->layerId())) { t->setLayerId(target()); moved++; }
+    foreach (StagePlatform *p, m_platforms)
+        if (pinnedAlone(p->locked(), p->layerId())) { p->setLayerId(target()); moved++; }
+    foreach (Pipe *p, m_pipes)
+        if (pinnedAlone(p->locked(), p->layerId())) { p->setLayerId(target()); moved++; }
+    foreach (Stand *s, m_stands)
+        if (pinnedAlone(s->locked(), s->layerId())) { s->setLayerId(target()); moved++; }
+    foreach (Tower *t, m_towers)
+        if (pinnedAlone(t->locked(), t->layerId())) { t->setLayerId(target()); moved++; }
+    foreach (StageTarget *t, m_stageTargets)
+        if (pinnedAlone(t->locked(), t->layerId())) { t->setLayerId(target()); moved++; }
+    foreach (Scenery *s, m_sceneries)
+        if (pinnedAlone(s->locked(), s->layerId())) { s->setLayerId(target()); moved++; }
+    foreach (MonitorImage img, m_images)
+        if (pinnedAlone(img.locked, img.layerId)) { img.layerId = target(); setImage(img); moved++; }
+    if (pd != nullptr)
+        for (int i = 0; i < pd->sources().size(); ++i)
+            if (pinnedAlone(pd->sources().at(i).locked, pd->sources().at(i).layerId))
+            { pd->sources()[i].layerId = target(); moved++; }
+    if (nt != nullptr)
+        for (int i = 0; i < nt->nodes().size(); ++i)
+            if (pinnedAlone(nt->nodes().at(i).locked, nt->nodes().at(i).layerId))
+            { nt->nodes()[i].layerId = target(); moved++; }
+    return moved;
+}
+
+void MonitorProperties::syncItemLocksToLayers(PowerDistribution *pd, NetworkTopology *nt)
+{
+    foreach (Truss *t, m_trusses)            t->setLocked(layer(t->layerId()).locked);
+    foreach (StagePlatform *p, m_platforms)  p->setLocked(layer(p->layerId()).locked);
+    foreach (Pipe *p, m_pipes)               p->setLocked(layer(p->layerId()).locked);
+    foreach (Stand *s, m_stands)             s->setLocked(layer(s->layerId()).locked);
+    foreach (Tower *t, m_towers)             t->setLocked(layer(t->layerId()).locked);
+    foreach (StageTarget *t, m_stageTargets) t->setLocked(layer(t->layerId()).locked);
+    foreach (Scenery *s, m_sceneries)        s->setLocked(layer(s->layerId()).locked);
+    foreach (MonitorImage img, m_images)
+        if (img.locked != layer(img.layerId).locked)
+        {
+            img.locked = layer(img.layerId).locked;
+            setImage(img);
+        }
+    if (pd != nullptr)
+        for (int i = 0; i < pd->sources().size(); ++i)
+            pd->sources()[i].locked = layer(pd->sources().at(i).layerId).locked;
+    if (nt != nullptr)
+        for (int i = 0; i < nt->nodes().size(); ++i)
+            nt->nodes()[i].locked = layer(nt->nodes().at(i).layerId).locked;
+}
+
+quint32 MonitorProperties::nextSceneryId() const
+{
+    quint32 id = 0;
+    while (m_sceneries.contains(id))
+        ++id;
+    return id;
+}
+
+Scenery *MonitorProperties::addScenery()
+{
+    Scenery *s = new Scenery(nextSceneryId(), this);
+    m_sceneries.insert(s->id(), s);
+    return s;
+}
+
+void MonitorProperties::removeScenery(quint32 id)
+{
+    delete m_sceneries.take(id);
+}
+
 Stand *MonitorProperties::addStand()
 {
     quint32 id = nextStandId();
@@ -1183,8 +1546,12 @@ void MonitorProperties::removeStand(quint32 id)
             p->setStandId(Stand::invalidId());
     // …and any trusses that stood on it (they stay put at their last origin).
     foreach (Truss *t, m_trusses)
+    {
         if (t->standId() == id)
             t->setStandId(Stand::invalidId());
+        if (t->endStandId() == id)
+            t->setEndStandId(Stand::invalidId());   // the other end stays where it was
+    }
     delete m_stands.take(id);
 }
 
@@ -1220,6 +1587,20 @@ void MonitorProperties::recomputeStandMounts()
         if (s == nullptr)
             continue;
         t->setOrigin(s->topPos());
+        /* Spanning two stands: from this one's top to the other's -- the
+           truss's run and length follow them, at the first stand's height
+           (a truss lies level; two stands at different heights still meet it
+           at the first one's). */
+        Stand *e = t->spansStands() ? m_stands.value(t->endStandId(), nullptr) : nullptr;
+        if (e == nullptr)
+            continue;
+        const QVector3D a = s->topPos(), b = e->topPos();
+        const QPointF run(double(b.x() - a.x()), double(b.y() - a.y()));
+        const double len = qSqrt(run.x() * run.x() + run.y() * run.y());
+        if (len < 0.1)
+            continue;
+        t->setDirection(run / len);
+        t->setLength(float(len));
     }
 }
 
@@ -1239,8 +1620,112 @@ Tower *MonitorProperties::addTower()
     return t;
 }
 
+quint32 MonitorProperties::nextHangerId() const
+{
+    quint32 id = 0;
+    while (m_hangers.contains(id))
+        ++id;
+    return id;
+}
+
+Hanger *MonitorProperties::addHanger(Hanger::ParentKind kind, quint32 parentId)
+{
+    const quint32 id = nextHangerId();
+    Hanger *h = new Hanger(id, this);
+    h->setName(QStringLiteral("Hanger %1").arg(id + 1));
+    h->setParent(kind, parentId);
+    if (kind == Hanger::OnTruss)
+    {
+        if (const Truss *t = m_trusses.value(parentId, nullptr))
+            h->setLayerId(t->layerId());
+    }
+    else if (const Tower *tw = m_towers.value(parentId, nullptr))
+        h->setLayerId(tw->layerId());
+    m_hangers.insert(id, h);
+    recomputeHangers();
+    return h;
+}
+
+void MonitorProperties::removeHanger(quint32 id)
+{
+    if (!m_hangers.contains(id))
+        return;
+    // What hung on it stays where it was, unmounted.
+    for (auto it = m_rigProps.begin(); it != m_rigProps.end(); ++it)
+        if (it->hangerId == id)
+        {
+            const QVector3D at = m_hangers.value(id)->hook();
+            it->hangerId = UINT_MAX;
+            if (m_fixtureItems.contains(it.key()))
+                m_fixtureItems[it.key()].m_baseItem.m_position =
+                    QVector3D(at.x() * 1000.0f, at.y() * 1000.0f, at.z() * 1000.0f);
+        }
+    delete m_hangers.take(id);
+}
+
+QList<Hanger*> MonitorProperties::hangersOn(Hanger::ParentKind kind, quint32 parentId) const
+{
+    QList<Hanger*> out;
+    foreach (Hanger *h, m_hangers)
+        if (h->parentKind() == kind && h->parentId() == parentId)
+            out << h;
+    return out;
+}
+
+quint32 MonitorProperties::fixtureOnHanger(quint32 id) const
+{
+    for (auto it = m_rigProps.constBegin(); it != m_rigProps.constEnd(); ++it)
+        if (it->hangerId == id)
+            return it.key();
+    return UINT_MAX;
+}
+
+void MonitorProperties::recomputeHangers()
+{
+    foreach (Hanger *h, m_hangers)
+    {
+        const QVector3D dir = h->direction();
+        if (h->parentKind() == Hanger::OnTruss)
+        {
+            const Truss *t = m_trusses.value(h->parentId(), nullptr);
+            if (t == nullptr)
+                continue;
+            /* Clamped to the truss's FACE in the arm's direction, so the arm is
+               measured from the steel: on a tower, out from the side it points
+               through; on a horizontal run, out from the side chord. */
+            QVector3D at = t->positionAt(h->along());
+            const float half = t->width() * 0.5f;
+            if (t->type() == Truss::Vertical)
+            {
+                const float reach = qMax(qAbs(dir.x()), qAbs(dir.y()));
+                if (reach > 1e-4f)
+                    at += dir * (half / reach);
+            }
+            else
+                at += dir * half;
+            h->setFastened(at);
+        }
+        else
+        {
+            const Tower *tw = m_towers.value(h->parentId(), nullptr);
+            if (tw == nullptr)
+                continue;
+            const QVector3D centre(float(tw->centre().x()), float(tw->centre().y()), h->along());
+            // Out to its side, measured in the tower's own (turned) axes.
+            const double r = -qDegreesToRadians(double(tw->rotation()));
+            const float lx = float(double(dir.x()) * qCos(r) - double(dir.y()) * qSin(r));
+            const float ly = float(double(dir.x()) * qSin(r) + double(dir.y()) * qCos(r));
+            const float tx = qAbs(lx) > 1e-4f ? (tw->width() * 0.5f) / qAbs(lx) : 1e9f;
+            const float ty = qAbs(ly) > 1e-4f ? (tw->depth() * 0.5f) / qAbs(ly) : 1e9f;
+            h->setFastened(centre + dir * qMin(tx, ty));
+        }
+    }
+}
+
 void MonitorProperties::removeTower(quint32 id)
 {
+    foreach (Hanger *h, hangersOn(Hanger::OnTower, id))
+        removeHanger(h->id());
     for (auto it = m_rigProps.begin(); it != m_rigProps.end(); ++it)
         if (it->towerId == id)
             it->towerId = UINT_MAX;
@@ -1252,10 +1737,114 @@ float MonitorProperties::platformHeightAt(float xMetres, float yMetres) const
     float h = 0.0f;
     foreach (const StagePlatform *p, m_platforms)
     {
-        if (p->containsPoint(xMetres, yMetres))
-            h = qMax(h, platformBaseZ(p->id()) + p->height());   // absolute deck top
+        if (p->containsPoint(xMetres, yMetres))   // absolute deck top -- the tread, on steps
+            h = qMax(h, platformBaseZ(p->id()) + p->topAt(xMetres, yMetres));
     }
     return h;
+}
+
+QVector3D MonitorProperties::targetAimPoint(const StageTarget *t, bool subjectMode) const
+{
+    if (t == nullptr)
+        return QVector3D();
+
+    QVector3D p = t->position();
+
+    /* A BOUND target is a relationship, not a coordinate. Read the structure
+       every time rather than copying its position at bind time: a step gets
+       moved, restacked and re-heighted between load-ins, and a target that
+       remembers where the step USED to be is worse than no target at all. */
+    if (t->isBound())
+    {
+        const QString type = t->boundType();
+        if (type == QLatin1String("platform"))
+        {
+            if (StagePlatform *pl = platform(t->boundId()))
+            {
+                const float cx = pl->originX() + pl->width() * 0.5f;
+                const float cy = pl->originY() + pl->depth() * 0.5f;
+                p = QVector3D(cx, cy, platformBaseZ(pl->id()) + pl->topAt(cx, cy));
+            }
+        }
+        else if (type == QLatin1String("truss"))
+        {
+            if (Truss *tr = truss(t->boundId()))
+            {
+                const QVector3D o = tr->origin();
+                const QPointF d = tr->direction();
+                p = QVector3D(o.x() + float(d.x()) * tr->length() * 0.5f,
+                              o.y() + float(d.y()) * tr->length() * 0.5f,
+                              o.z());
+            }
+        }
+        else if (type == QLatin1String("tower"))
+        {
+            if (Tower *tw = tower(t->boundId()))
+                p = QVector3D(float(tw->centre().x()), float(tw->centre().y()), tw->height() * 0.5f);
+        }
+    }
+
+    const float above = targetAimHeight(t, subjectMode);
+    if (above > 0.0f)
+        p.setZ(platformHeightAt(p.x(), p.y()) + above);
+
+    return p;
+}
+
+QVector3D MonitorProperties::targetAimPointFor(const StageTarget *t, bool subjectMode,
+                                               const QVector3D &from, double beamDeg) const
+{
+    const QVector3D chest = targetAimPoint(t, subjectMode);
+    if (t == nullptr || !subjectMode || t->kind() != StageTarget::Kind::Person || beamDeg <= 0.0)
+        return chest;
+    const double tall = double(targetFigureHeight(t));
+    const double foot = double(chest.z()) - double(targetAimHeight(t, true));
+    const double waist = foot + 0.5 * tall;
+    if (double(chest.z()) <= waist)
+        return chest;                           // aimed low already (an override)
+
+    const QVector3D toSubject = chest - from;
+    const double dist = double(toSubject.length());
+    if (dist < 0.1)
+        return chest;
+    /* The spot's half-height on a standing body: its radius at that throw,
+       stretched by how steeply it comes down onto something upright. */
+    const double radius = dist * qTan(qDegreesToRadians(beamDeg * 0.5));
+    const double level = std::hypot(double(toSubject.x()), double(toSubject.y())) / dist;
+    const double halfHeight = radius / qMax(0.25, level);
+    // Its top edge a little over the head, and no lower than the waist.
+    const double top = foot + tall * 1.05;
+    const double z = qBound(waist, top - halfHeight, double(chest.z()));
+    return QVector3D(chest.x(), chest.y(), float(z));
+}
+
+float MonitorProperties::targetAimHeight(const StageTarget *t, bool subjectMode) const
+{
+    if (t == nullptr)
+        return 0.0f;
+    if (t->hasAimHeightOverride())
+        return t->aimHeightOverride();
+
+    /* A Person is aimed at the chest of its own height (a usual one when it
+       has none). A plain mark takes the show's follow-spot aim height, but
+       only when the caller says this is a follow-spot aim -- which is what
+       every show built before target kinds relies on. */
+    switch (t->kind())
+    {
+    case StageTarget::Kind::Person:
+        return t->effectivePersonHeight() * StageTarget::chestShare();
+    case StageTarget::Kind::None:
+        return subjectMode ? m_aimSubjectHeight : 0.0f;
+    default:
+        return StageTarget::defaultAimHeight(t->kind());
+    }
+}
+
+float MonitorProperties::targetFigureHeight(const StageTarget *t) const
+{
+    if (t == nullptr || t->kind() != StageTarget::Kind::Person)
+        return 0.0f;
+    return t->effectivePersonHeight();
 }
 
 float MonitorProperties::platformBaseZ(quint32 id) const
@@ -1323,9 +1912,9 @@ quint32 MonitorProperties::platformIdAt(float xMetres, float yMetres) const
     float bestH = -1.0f;
     foreach (const StagePlatform *p, m_platforms)
     {
-        if (p->containsPoint(xMetres, yMetres) && p->height() > bestH)
+        if (p->containsPoint(xMetres, yMetres) && p->topAt(xMetres, yMetres) > bestH)
         {
-            bestH = p->height();
+            bestH = p->topAt(xMetres, yMetres);
             best = p->id();
         }
     }
@@ -1349,17 +1938,87 @@ StageTarget *MonitorProperties::addStageTarget()
     quint32 id = nextStageTargetId();
     StageTarget *t = new StageTarget(id, this);
     m_stageTargets.insert(id, t);
+    emit stageTargetsChanged();
     return t;
 }
 
 void MonitorProperties::removeStageTarget(quint32 id)
 {
     delete m_stageTargets.take(id);
+    emit stageTargetsChanged();
 }
 
 /*********************************************************************
  * Fixture rig properties
  *********************************************************************/
+
+/* What a fixture is mounted ON, in words.
+ *
+   ONE wording, because the Lighting Studio inspector needs to say it too. That
+   inspector showed Face and Placement -- "Top", "Inside" -- but never WHICH
+   thing those were relative to, so a fixture decked on a riser read as
+   "Top / Inside" with no riser in sight, and the same fixture described two
+   different ways in two different panels. */
+QString MonitorProperties::mountDescription(const FixtureRigProps &rp, quint32 fid) const
+{
+    const bool isFeet = (gridUnits() == Feet);
+    const QString sfx = isFeet ? tr(" ft") : tr(" m");
+    const double toDisp = isFeet ? 3.28084 : 1.0;
+
+    if (rp.onHanger())
+    {
+        Hanger *h = hanger(rp.hangerId);
+        QString on;
+        if (h != nullptr && h->parentKind() == Hanger::OnTruss)
+        {
+            if (Truss *t = truss(h->parentId())) on = t->name();
+        }
+        else if (h != nullptr)
+        {
+            if (Tower *tw = tower(h->parentId())) on = tw->name();
+        }
+        return on.isEmpty() ? tr("Hanger %1").arg(h ? h->name() : QString())
+                            : tr("%1 on %2").arg(h ? h->name() : tr("Hanger"), on);
+    }
+    if (rp.trussId != Truss::invalidId())
+    {
+        Truss *t = truss(rp.trussId);
+        return tr("Truss %1 · %2%3 along").arg(t ? t->name() : QString())
+               .arg(double(rp.trussOffset) * toDisp, 0, 'f', 1).arg(sfx);
+    }
+    if (rp.pipeId != Pipe::invalidId())
+    {
+        Pipe *p = pipe(rp.pipeId);
+        return tr("Bar %1").arg(p ? p->name() : QString());
+    }
+    if (rp.towerId != Tower::invalidId())
+    {
+        Tower *t = tower(rp.towerId);
+        const QString tn = t ? t->name() : QString();
+        if (rp.towerMountSide == FixtureRigProps::TowerTop)    return tr("Tower %1 · top").arg(tn);
+        if (rp.towerMountSide == FixtureRigProps::TowerBottom) return tr("Tower %1 · bottom").arg(tn);
+        return tr("Tower %1 · shelf %2").arg(tn).arg(rp.towerShelf + 1);
+    }
+    if (rp.riserPlatformId != FixtureRigProps::invalidPlatformId())
+    {
+        StagePlatform *pl = platform(rp.riserPlatformId);
+        return tr("Riser %1 · %2").arg(pl ? pl->name() : QString())
+               .arg(rp.riserFace == FixtureRigProps::RiserTop ? tr("top") : tr("front face"));
+    }
+    if (rp.deckPlatformId != FixtureRigProps::invalidPlatformId())
+    {
+        StagePlatform *pl = platform(rp.deckPlatformId);
+        return tr("On deck %1").arg(pl ? pl->name() : QString());
+    }
+    if (fixtureFrameGroup(fid) != 0)
+        return tr("Studio group");
+    return tr("free / on the floor");
+}
+
+QString MonitorProperties::mountDescription(quint32 fid) const
+{
+    return mountDescription(fixtureRigProps(fid), fid);
+}
 
 FixtureRigProps MonitorProperties::fixtureRigProps(quint32 fid) const
 {
@@ -1369,46 +2028,91 @@ FixtureRigProps MonitorProperties::fixtureRigProps(quint32 fid) const
 void MonitorProperties::setFixtureRigProps(quint32 fid, const FixtureRigProps &props)
 {
     m_rigProps[fid] = props;
+
+    /* A mount implies a place on the plot.
+     *
+       Both the rig view and the Layers tree enumerate fixtureItemsID(), so a
+       fixture that has a structural mount but no PreviewItem is listed only by
+       whichever structure editor mounted it, and is invisible everywhere else --
+       on the truss, absent from the tree beneath it, absent from the rig.
+
+       repairOrphanedMounts() has always rebuilt these, but only when a workspace
+       is LOADED, which is no use during the session that creates them. The mount
+       already says where the fixture is, so build the item now, the same way.
+
+       Only for a REAL mount: an unmounted fixture has nothing to derive a
+       position from, and inventing one would put it at the origin. */
+    if (m_fixtureItems.contains(fid) == false
+        && props.primaryMount() != FixtureRigProps::NoMount)
+    {
+        const QVector3D w = fixtureRigPosition(fid);   // metres, from the mount
+        PreviewItem item;
+        item.m_position = QVector3D(w.x() * 1000.0f, w.y() * 1000.0f, w.z());
+        m_fixtureItems[fid].m_baseItem = item;
+    }
+
     emit rigPropsChanged(fid);
 }
 
 QVector3D MonitorProperties::fixtureRigPosition(quint32 fid) const
 {
-    if (!m_fixtureItems.contains(fid))
-        return QVector3D();
-
-    // Studio frame takes precedence: if the fixture sits under a frame-bearing
-    // group, its world position is derived from that group's local frame
-    // (origin + Rz(rotation) * groupLocal). See MonitorGroup::hasFrame.
-    const quint32 frameGid = fixtureFrameGroup(fid);
-    if (frameGid != 0)
-    {
-        const FixtureRigProps &grp = m_rigProps.value(fid, FixtureRigProps());
-        return groupLocalToWorld(frameGid, grp.groupLocal);
-    }
-
+    /* On a hanger: at its hook, wherever the hanger's parent has gone. */
     const FixtureRigProps &rp = m_rigProps.value(fid, FixtureRigProps());
+    if (rp.onHanger())
+        if (const Hanger *h = m_hangers.value(rp.hangerId, nullptr))
+            return h->hook();
+    return fixtureBasePosition(fid);
+}
+
+QVector3D MonitorProperties::fixtureBasePosition(quint32 fid) const
+{
+    /* NB: NO m_fixtureItems guard up here. A truss/pipe/tower/riser mount
+       derives the world position ENTIRELY from the structure's geometry plus
+       the mount offsets, so it is well defined whether or not the fixture also
+       has a 2D-plot item. It used to return a null vector for a fixture with no
+       item, which pinned a genuinely truss-mounted fixture to the world origin:
+       it drew far from its truss in the studio editor, and dragging it there
+       updated trussOffset/trussCross while the reported position stayed (0,0,0)
+       -- so it never appeared to move. Only the free-placed and deck branches
+       actually read m_fixtureItems, and they check for themselves. */
+    const FixtureRigProps &rp = m_rigProps.value(fid, FixtureRigProps());
+
     const Truss *t = (rp.trussId != Truss::invalidId()) ? m_trusses.value(rp.trussId, nullptr) : nullptr;
     if (t != nullptr)
     {
         QVector3D p = t->positionAt(rp.trussOffset);
-        // Offset Z by the mount side (elevation only). Half the truss thickness.
+        /* Offset Z by the mount side: half the truss thickness, so a fixture
+           sits on the top chord or hangs from the bottom one.
+         *
+           Horizontal runs only. A tower's width is HORIZONTAL -- its run is
+           the Z axis, and the offset along it already is the height. Nudging
+           it anyway put a followspot set on top of a 3.048 m tower at 3.193 m,
+           floating a truss-width above it ("T1 shows above the truss"), and
+           left every tower fixture on the default side 0.145 m below the
+           offset its own properties showed. */
         const float half = t->width() * 0.5f;
-        if (rp.trussMountSide == FixtureRigProps::TopMounted)
-            p.setZ(p.z() + half);
-        else if (rp.trussMountSide == FixtureRigProps::UnderHung)
-            p.setZ(p.z() - half);
+        if (t->type() != Truss::Vertical)
+        {
+            if (rp.trussMountSide == FixtureRigProps::TopMounted)
+                p.setZ(p.z() + half);
+            else if (rp.trussMountSide == FixtureRigProps::UnderHung)
+                p.setZ(p.z() - half);
+        }
         // Centered: leave on the chord.
         // Horizontal cross-position: slide across the truss width, perpendicular
         // to the run in the horizontal plane (Left/Right chord vs centred).
-        if (rp.trussCross != 0.0f)
+        if (t->type() == Truss::Vertical)
         {
-            if (t->type() == Truss::Vertical)
-            {
-                // A tower's run is vertical — "across" is stage left/right (X).
-                p.setX(p.x() + rp.trussCross);
-            }
-            else
+            /* A tower's run IS the Z axis, so both horizontals are free around
+               it — one scalar cannot say which face of the tower a fixture is
+               clamped to. trussCross is X, trussCrossY is Y. Without the second
+               one, a lateral drag in the SIDE view (whose horizontal screen
+               axis is Y) had nowhere to go and the fixture would not move. */
+            p.setX(p.x() + rp.trussCross);
+            p.setY(p.y() + rp.trussCrossY);
+        }
+        else if (rp.trussCross != 0.0f)
+        {
             {
                 const QPointF d = t->direction();
                 const double dl = std::hypot(d.x(), d.y());
@@ -1443,9 +2147,20 @@ QVector3D MonitorProperties::fixtureRigPosition(quint32 fid) const
     const Tower *tw = (rp.towerId != Tower::invalidId()) ? m_towers.value(rp.towerId, nullptr) : nullptr;
     if (tw != nullptr)
     {
-        QVector3D p = tw->shelfPos(rp.towerShelf, rp.towerU, rp.towerV);
+        QVector3D p;
+        const QPointF at = tw->toWorld(QPointF(double(tw->originX() + rp.towerU),
+                                               double(tw->originY() + rp.towerV)));
+        if (rp.towerMountSide == FixtureRigProps::TowerTop)
+            p = QVector3D(float(at.x()), float(at.y()), tw->height());
+        else if (rp.towerMountSide == FixtureRigProps::TowerBottom)
+            p = QVector3D(float(at.x()), float(at.y()), 0.0f);
+        else
+            p = tw->shelfPos(rp.towerShelf, rp.towerU, rp.towerV);
         p.setZ(p.z() + rp.mountZOffset);
         // Hung (base on top) = hangs UNDER the shelf; drop it a little below.
+        // Meaningless for Top/Bottom (nothing to hang under/from there) --
+        // the context menu already forces mountingType back to FloorMounted
+        // when picking either, so this only ever fires for a real shelf.
         if (rp.mountingType == Truss::TopHung)
             p.setZ(qMax(0.0f, p.z() - 0.15f));
         return p;
@@ -1456,11 +2171,20 @@ QVector3D MonitorProperties::fixtureRigPosition(quint32 fid) const
     if (rp.onDeck())
     {
         const StagePlatform *pl = m_platforms.value(rp.deckPlatformId, nullptr);
-        if (pl != nullptr)
+        if (pl != nullptr && m_fixtureItems.contains(fid))
         {
             const QVector3D p = m_fixtureItems[fid].m_baseItem.m_position;   // mm
+            const float base = platformBaseZ(pl->id());
+            // Inside: measured up from the platform's floor, same as a riser
+            // mount above -- a deck-mounted light can be in the box too.
+            // On steps, the tread it stands on -- not the top of the flight.
+            const float top = pl->isSteps() ? pl->topAt(p.x() / 1000.0f, p.y() / 1000.0f)
+                                            : pl->height();
+            if (rp.placement == FixtureRigProps::Inside)
+                return QVector3D(p.x() / 1000.0f, p.y() / 1000.0f,
+                                 base + qBound(0.0f, rp.deckHeightOffset, top));
             return QVector3D(p.x() / 1000.0f, p.y() / 1000.0f,
-                             platformBaseZ(pl->id()) + pl->height() + rp.deckHeightOffset);
+                             base + top + rp.deckHeightOffset);
         }
     }
 
@@ -1472,24 +2196,59 @@ QVector3D MonitorProperties::fixtureRigPosition(quint32 fid) const
         if (pl != nullptr)
         {
             if (rp.riserFace == FixtureRigProps::RiserTop)
-                return QVector3D(pl->originX() + rp.riserU,
-                                 pl->originY() + rp.riserV,
-                                 platformBaseZ(pl->id()) + pl->height());
+            {
+                const float base = platformBaseZ(pl->id());
+                /* INSIDE the step, not on it.
+                 *
+                 * placement only told the RENDERER not to seat the fixture out
+                 * onto the surface; the position was still derived as
+                 * base + height, i.e. on the deck. So a light "inside" a
+                 * clear-topped step still sat on the glass. Inside measures up
+                 * from the platform's own floor instead, so 0 rests on the
+                 * bottom of the box shining up through the top, and
+                 * mountZOffset raises it within the box. Clamped, because a
+                 * fixture that is inside something should not poke out of it. */
+                const QPointF at = pl->toWorld(QPointF(double(pl->originX() + rp.riserU),
+                                                       double(pl->originY() + rp.riserV)));
+                if (rp.placement == FixtureRigProps::Inside)
+                    return QVector3D(float(at.x()), float(at.y()),
+                                     base + qBound(0.0f, rp.mountZOffset, pl->height()));
+                return QVector3D(float(at.x()), float(at.y()), base + pl->height());
+            }
             // Front (downstage) face: Y = the DOWNSTAGE edge (originY + depth —
             // originY is the upstage edge in this plan view), X across the
             // width, Z = up the face FROM the platform base (which may sit on a
             // lower platform, not the floor).
-            return QVector3D(pl->originX() + rp.riserU,
-                             pl->originY() + pl->depth(),
-                             platformBaseZ(pl->id()) + rp.riserV);
+            const QPointF at = pl->toWorld(QPointF(double(pl->originX() + rp.riserU),
+                                                   double(pl->originY() + pl->depth())));
+            return QVector3D(float(at.x()), float(at.y()), platformBaseZ(pl->id()) + rp.riserV);
         }
     }
+
+    // Studio frame: derived from the group's local frame (origin + Rz(rotation)
+    // * groupLocal, see MonitorGroup::hasFrame) -- but only as a FALLBACK, once
+    // none of the structural mounts above matched. This used to run FIRST,
+    // unconditionally, which broke every truss/pipe/tower/riser-mounted fixture
+    // silently: attaching a fixture to a truss (attachFixtureToTruss()) ALSO
+    // makes it a member of that truss's own auto-created frame group, purely so
+    // the Layers tree/canvas can select them together -- not to redefine how
+    // the fixture is positioned. With frame-group checked first, that side
+    // effect permanently overrode the real trussOffset-based position with
+    // frame-local math that was never meant to compete with it, and dragging
+    // (StructureStudioView::dragFixtureTo(), which checks frame-group first for
+    // the same historical reason) silently moved the WRONG coordinate instead
+    // of sliding it along the truss.
+    const quint32 frameGid = fixtureFrameGroup(fid);
+    if (frameGid != 0)
+        return groupLocalToWorld(frameGid, rp.groupLocal);
 
     // Free-placed: stored X/Y are in MILLIMETRES (see setFixturePosition callers,
     // which pass raw mm), but this function must return METRES to match the truss
     // branch above and the target/platform world coordinates that callers (aim
     // solver, effect engine, Aim palette) subtract it from. Convert X/Y; Z is
     // already in metres (always 0 today).
+    if (!m_fixtureItems.contains(fid))
+        return QVector3D();   // free-placed with nowhere recorded to be
     const QVector3D p = m_fixtureItems[fid].m_baseItem.m_position;
     return QVector3D(p.x() / 1000.0f, p.y() / 1000.0f, p.z());
 }
@@ -1626,7 +2385,19 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
             if (tAttrs.hasAttribute(KXMLQLCMonitorItemYPosition))
                 pos.setY(tAttrs.value(KXMLQLCMonitorItemYPosition).toString().toDouble());
             if (tAttrs.hasAttribute(KXMLQLCMonitorItemZPosition))
-                pos.setZ(tAttrs.value(KXMLQLCMonitorItemZPosition).toString().toDouble());
+            {
+                double z = tAttrs.value(KXMLQLCMonitorItemZPosition).toString().toDouble();
+                /* Z is METRES (X/Y are millimetres -- see fixtureRigPosition).
+                   A run of builds wrote millimetres into it, so workspaces in
+                   the wild carry hang heights of 2500 "metres": the fixture is
+                   drawn kilometres above the stage and simply cannot be found
+                   in the elevation views. No venue is 100 m tall, so anything
+                   past that is confidently the mm bug -- repair it on load
+                   rather than making the operator hunt for an invisible light. */
+                if (qAbs(z) > 100.0)
+                    z /= 1000.0;
+                pos.setZ(z);
+            }
             item.m_position = pos;
 
             if (tAttrs.hasAttribute(KXMLQLCMonitorFixtureRotation)) // check legacy first
@@ -1693,7 +2464,19 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
             if (tAttrs.hasAttribute(KXMLQLCMonitorItemYPosition))
                 pos.setY(tAttrs.value(KXMLQLCMonitorItemYPosition).toString().toDouble());
             if (tAttrs.hasAttribute(KXMLQLCMonitorItemZPosition))
-                pos.setZ(tAttrs.value(KXMLQLCMonitorItemZPosition).toString().toDouble());
+            {
+                double z = tAttrs.value(KXMLQLCMonitorItemZPosition).toString().toDouble();
+                /* Z is METRES (X/Y are millimetres -- see fixtureRigPosition).
+                   A run of builds wrote millimetres into it, so workspaces in
+                   the wild carry hang heights of 2500 "metres": the fixture is
+                   drawn kilometres above the stage and simply cannot be found
+                   in the elevation views. No venue is 100 m tall, so anything
+                   past that is confidently the mm bug -- repair it on load
+                   rather than making the operator hunt for an invisible light. */
+                if (qAbs(z) > 100.0)
+                    z /= 1000.0;
+                pos.setZ(z);
+            }
             item.m_position = pos;
 
             if (tAttrs.hasAttribute(KXMLQLCMonitorItemXRotation))
@@ -1856,6 +2639,31 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                 delete s;
             }
         }
+        else if (root.name() == KXMLScenery)
+        {
+            Scenery *s = new Scenery(nextSceneryId(), this);
+            if (s->loadXML(root) && !m_sceneries.contains(s->id()))
+            {
+                m_sceneries.insert(s->id(), s);
+            }
+            else
+            {
+                qWarning() << "Discarding scenery with missing or duplicate id" << s->id();
+                delete s;
+            }
+        }
+        else if (root.name() == QStringLiteral("Hanger"))
+        {
+            const quint32 hid = root.attributes().value(QStringLiteral("ID")).toUInt();
+            Hanger *h = new Hanger(hid, this);
+            if (h->loadXML(root) && !m_hangers.contains(hid))
+                m_hangers.insert(hid, h);
+            else
+            {
+                qWarning() << "Discarding hanger with duplicate id" << hid;
+                delete h;
+            }
+        }
         else if (root.name() == QStringLiteral("Tower"))
         {
             Tower *t = new Tower(nextTowerId(), this);
@@ -1881,6 +2689,31 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                 qWarning() << "Discarding stage target with missing or duplicate id" << t->id();
                 delete t;
             }
+        }
+        else if (root.name() == QStringLiteral("HeadLayout"))
+        {
+            // Key="Mfr|Model|Mode" Cols Rows, and "c,r c,r ..." per head.
+            const QXmlStreamAttributes a = root.attributes();
+            HeadLayout l;
+            l.key = a.value("Key").toString();
+            l.size = QSize(a.value("Cols").toInt(), a.value("Rows").toInt());
+            const QStringList cells = root.readElementText().split(QLatin1Char(' '), Qt::SkipEmptyParts);
+            foreach (const QString &c, cells)
+            {
+                const QStringList xy = c.split(QLatin1Char(','));
+                l.cells << QPoint(xy.value(0).toInt(), xy.value(1, QStringLiteral("-1")).toInt());
+            }
+            if (l.isValid())
+                setHeadLayout(l);
+        }
+        else if (root.name() == QStringLiteral("GoboSwap"))
+        {
+            const QXmlStreamAttributes a = root.attributes();
+            const int slot = a.value("Slot").toInt();
+            if (slot >= 0 && slot <= 255)
+                setGoboSwap(a.value("Fixture").toUInt(), a.value("Channel").toUInt(),
+                            uchar(slot), a.value("Image").toString());
+            root.skipCurrentElement();
         }
         else if (root.name() == QStringLiteral("FixtureRig"))
         {
@@ -1911,8 +2744,27 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                 rp.trussMountSide = a.value("TrussSide").toInt();
             if (a.hasAttribute("TrussCross"))
                 rp.trussCross = a.value("TrussCross").toFloat();
+            if (a.hasAttribute("TrussCrossY"))
+                rp.trussCrossY = a.value("TrussCrossY").toFloat();
+            if (a.hasAttribute("Placement"))
+            {
+                // Anything not a placement we still have (the retired Recessed
+                // was 2) reads as OnSurface rather than as some other mode.
+                const int pv = a.value("Placement").toInt();
+                rp.placement = (pv == FixtureRigProps::Inside)
+                             ? int(FixtureRigProps::Inside)
+                             : int(FixtureRigProps::OnSurface);
+            }
             if (a.hasAttribute("MountZ"))
                 rp.mountZOffset = a.value("MountZ").toFloat();
+            if (a.hasAttribute("Hanger"))
+                rp.hangerId = a.value("Hanger").toUInt();
+            if (a.hasAttribute("LEDs"))
+                rp.lightLeds = qMax(-1, a.value("LEDs").toInt());
+            if (a.hasAttribute("LEDLayout"))
+                rp.lightLayout = qBound(-1, a.value("LEDLayout").toInt(), 1);
+            if (a.hasAttribute("Glass"))
+                rp.lightGlass = qBound(-1, a.value("Glass").toInt(), 1);
             if (a.hasAttribute("Deck"))
             {
                 rp.deckPlatformId   = a.value("Deck").toUInt();
@@ -1922,8 +2774,15 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                 rp.groupLocal = QVector3D(a.value("GLX").toFloat(),
                                           a.value("GLY").toFloat(),
                                           a.value("GLZ").toFloat());
-            if (a.hasAttribute("SM")) rp.studioMount = a.value("SM").toInt();
+            if (a.hasAttribute("SM"))
+            {
+                rp.studioMount = a.value("SM").toInt();
+                rp.studioFaceChosen = true;
+            }
             if (a.hasAttribute("SA")) rp.studioAngle = a.value("SA").toFloat();
+            if (a.hasAttribute("ST")) rp.studioTilt = a.value("ST").toFloat();
+            if (a.hasAttribute("SY")) rp.studioYaw = a.value("SY").toFloat();
+            if (a.hasAttribute("SF")) rp.studioFlip = (a.value("SF").toInt() != 0);
             if (a.hasAttribute("Boom"))
             {
                 rp.pipeId     = a.value("Boom").toUInt();
@@ -1936,6 +2795,10 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                 rp.towerShelf = a.value("TShelf").toInt();
                 rp.towerU     = a.value("TU").toFloat();
                 rp.towerV     = a.value("TV").toFloat();
+                // Absent in a file saved before Top/Bottom mounting existed --
+                // defaults to TowerShelf (0), preserving old files' meaning.
+                rp.towerMountSide = a.hasAttribute("TSide")
+                    ? a.value("TSide").toInt() : FixtureRigProps::TowerShelf;
             }
             m_rigProps[fid] = rp;
             root.skipCurrentElement();
@@ -1974,8 +2837,281 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
     recomputeChildTrusses();
     // Re-slave platform-anchored studio frames to their platforms.
     recomputeAnchoredFrames();
+    // Give any structurally-mounted fixture that lost its plot item one back,
+    // and drop any second mount left behind by an earlier attach.
+    repairOrphanedMounts();
+    // Re-agree riser faces with the planes their fixtures are drawn on.
+    repairMountPlanes();
 
     return true;
+}
+
+void MonitorProperties::repairOrphanedMounts()
+{
+    /* A fixture can end up rigged on a truss/pipe/tower/riser while having no
+       FxItem at all -- removeFixture() drops the item but leaves the rig props,
+       so any path that takes a mounted fixture off the 2D plot strands it. The
+       result is a fixture that is invisible everywhere the UI enumerates
+       fixtureItemsID() (the Layers tree, the plot) while still being listed on
+       its structure by the studio editor. stage-structures-demo.qxw shipped
+       with exactly this: fixture 7 (an XL-450) mounted on truss 2 with no item.
+
+       The mount already says where it is, so rebuild the item from
+       fixtureRigPosition() (metres -> the mm this map stores) and let it show
+       up again. */
+    /* First: collapse any fixture carrying MORE THAN ONE structural mount down
+       to its primary one. The mounts are mutually exclusive, but
+       attachFixtureToTruss()/...ToTower() used to set their own id without
+       clearing a previous one, so e.g. a fixture moved from a deck onto a truss
+       kept both. Nothing crashed -- it just meant two different bits of code
+       could pick two different structures for the same fixture, and the plot's
+       double-click opened the wrong editor. */
+    QMutableMapIterator<quint32, FixtureRigProps> mit(m_rigProps);
+    while (mit.hasNext())
+    {
+        mit.next();
+        FixtureRigProps rp = mit.value();
+        const FixtureRigProps::MountKind keep = rp.primaryMount();
+        if (keep == FixtureRigProps::NoMount)
+            continue;
+        const int mounts = int(rp.trussId != Truss::invalidId()) + int(rp.onPipe())
+                         + int(rp.onTower()) + int(rp.onDeck()) + int(rp.onRiser())
+                         + int(rp.onHanger());
+        if (mounts < 2)
+            continue;
+
+        const quint32 truss = rp.trussId, pipe = rp.pipeId, tower = rp.towerId;
+        const quint32 deck = rp.deckPlatformId, riser = rp.riserPlatformId;
+        const quint32 hanger = rp.hangerId;
+        rp.clearMounts();
+        switch (keep)
+        {
+        case FixtureRigProps::HangerMount: rp.hangerId = hanger;      break;
+        case FixtureRigProps::TrussMount: rp.trussId = truss;         break;
+        case FixtureRigProps::PipeMount:  rp.pipeId = pipe;           break;
+        case FixtureRigProps::TowerMount: rp.towerId = tower;         break;
+        case FixtureRigProps::DeckMount:  rp.deckPlatformId = deck;   break;
+        case FixtureRigProps::RiserMount: rp.riserPlatformId = riser; break;
+        default: break;
+        }
+        mit.setValue(rp);
+        qDebug() << "[Monitor] fixture" << mit.key() << "carried" << mounts
+                 << "structural mounts; kept the one it is drawn on";
+    }
+
+    QMapIterator<quint32, FixtureRigProps> it(m_rigProps);
+    while (it.hasNext())
+    {
+        it.next();
+        const quint32 fid = it.key();
+        const FixtureRigProps &rp = it.value();
+        if (m_fixtureItems.contains(fid))
+            continue;
+        if (rp.trussId == Truss::invalidId() && !rp.onPipe() && !rp.onTower()
+            && !rp.onRiser() && !rp.onDeck())
+            continue;
+
+        const QVector3D w = fixtureRigPosition(fid);   // metres, from the mount
+        PreviewItem item;
+        item.m_position = QVector3D(w.x() * 1000.0f, w.y() * 1000.0f, w.z());
+        m_fixtureItems[fid].m_baseItem = item;
+        qDebug() << "[Monitor] rebuilt the missing plot item for mounted fixture"
+                 << fid << "at" << w;
+    }
+}
+
+void MonitorProperties::repairMountPlanes()
+{
+    /* A riser mount stores which surface of the step it is on TWICE: riserFace
+       decides where fixtureRigPosition() puts it, studioMount decides which
+       plane it is drawn in. They are numbered oppositely and, before
+       FixtureRigProps::setStudioMount() existed, every "Face" control in the UI
+       wrote one and left the other -- so a strip could be positioned along a
+       step's front nosing while being drawn flat on its tread, firing up.
+
+       That is not a rendering bug and no amount of looking at the renderer
+       finds it: both halves do exactly what they are told by a fixture that is
+       telling them two different things. Reconcile it here, on load, so every
+       file already carrying the contradiction comes right.
+
+       riserFace wins, because it is the half with consequences beyond drawing:
+       it is what the position is derived from, and the position is the half
+       that was observably correct.
+
+       studioMount 2 (Side) is left alone. The riser model has a front and a
+       top and no third surface, so a strip run along a step's END is not a
+       contradiction to resolve -- it is something this model cannot say.
+
+       A deck mount has no face to disagree about, but it has the same stray
+       default a riser does: studioMount is 1 ("front face") unless something
+       set it otherwise, because that is FixtureRigProps' general default, not
+       anything chosen for a deck. A fixture never walked through the Face
+       combo (drag to a platform is the common path, not the properties
+       dialog) keeps that wrong default forever: fixtureBoxCorners() builds
+       its box on the Front/face axes -- seats it along world Y instead of
+       lifting it along Z, and swaps Height for Depth as the vertical extent
+       -- so Top (X-Y) still looks right while Front (X-Z) shows it
+       straddling the deck surface instead of standing on it ("front view of
+       UST1 is STILL putting it off the platform .. when the top view shows
+       it's clearly entirely on the platform"). Correct that specific stray
+       default to 0 (Top); Side (2) is left alone exactly as a riser's is --
+       a fixture deliberately lying on its side on the deck is a real fixture,
+       not the accident 1 always is.
+
+       A truss or pipe mount has the same stray default again, but the
+       correct plane now depends on which way the thing it's mounted to
+       runs: fillOrientationCombo() already treats a HORIZONTAL truss/pipe
+       like a deck -- "On top" / "Underhung" -- because a fixture riding a
+       horizontal bar lifts or hangs along Z exactly as one sitting on a
+       platform does, so studioMount needs the same Top correction there.
+       A VERTICAL truss/pipe is different: fillOrientationCombo() offers
+       "Sideways (clamped)" / "Upright (on top)", the fixture's free axis
+       is Z, and the default Front/face plane (1) is already the right one
+       -- that is why fixtures mounted straight onto a tower or vertical
+       truss render correctly with no correction at all. Only the
+       horizontal case is stray; Side (2) is, again, left alone. */
+    QMutableMapIterator<quint32, FixtureRigProps> it(m_rigProps);
+    while (it.hasNext())
+    {
+        it.next();
+        FixtureRigProps rp = it.value();
+        repairMountPlane(rp);
+        it.setValue(rp);
+    }
+}
+
+HeadLayout MonitorProperties::headLayoutFor(const Fixture *fx) const
+{
+    const QString key = HeadLayout::keyFor(fx);
+    if (key.isEmpty())
+        return HeadLayout();
+    if (m_headLayouts.contains(key))
+        return m_headLayouts.value(key);
+    const HeadLayout lib = HeadLayoutLibrary::load(key);
+    if (lib.isValid())
+        return lib;
+    return HeadLayout::headOrder(fx);
+}
+
+bool MonitorProperties::hasHeadLayout(const Fixture *fx) const
+{
+    const QString key = HeadLayout::keyFor(fx);
+    return !key.isEmpty() && (m_headLayouts.contains(key) || HeadLayoutLibrary::load(key).isValid());
+}
+
+void MonitorProperties::setHeadLayout(const HeadLayout &layout)
+{
+    if (layout.isValid())
+        m_headLayouts.insert(layout.key, layout);
+}
+
+void MonitorProperties::setFixtureFace(FixtureRigProps &rp, FixtureRigProps::Face face) const
+{
+    const int mount = (face == FixtureRigProps::FaceTop || face == FixtureRigProps::FaceBottom) ? 0
+                    : (face == FixtureRigProps::FaceFront || face == FixtureRigProps::FaceBack) ? 1 : 2;
+    rp.setStudioMount(mount);
+    rp.studioFaceChosen = true;
+    rp.studioFlip = (face == FixtureRigProps::FaceBottom || face == FixtureRigProps::FaceBack
+                     || face == FixtureRigProps::FaceStageRight);
+
+    const Truss *t = (rp.trussId != Truss::invalidId()) ? m_trusses.value(rp.trussId, nullptr) : nullptr;
+    if (t == nullptr || rp.placement == FixtureRigProps::Inside)
+        return;
+    const float half = t->width() * 0.5f;
+    // +X is stage left, +Y downstage.
+    if (t->type() == Truss::Vertical)
+    {
+        switch (face)
+        {
+        case FixtureRigProps::FaceFront:      rp.trussCrossY =  half; break;
+        case FixtureRigProps::FaceBack:       rp.trussCrossY = -half; break;
+        case FixtureRigProps::FaceStageLeft:  rp.trussCross  =  half; break;
+        case FixtureRigProps::FaceStageRight: rp.trussCross  = -half; break;
+        default: break;                      // its top or bottom: the run's ends
+        }
+        return;
+    }
+
+    if (face == FixtureRigProps::FaceTop || face == FixtureRigProps::FaceBottom)
+    {
+        rp.trussMountSide = (face == FixtureRigProps::FaceTop) ? FixtureRigProps::TopMounted
+                                                               : FixtureRigProps::UnderHung;
+        rp.trussCross = 0.0f;
+        return;
+    }
+    /* A side of a horizontal run: across it, on the chord that faces that
+       way -- when the run goes that way at all. A run up and down stage has
+       no downstage chord; one across stage has no stage-left one. */
+    const QPointF d = t->direction();
+    const double dl = std::hypot(d.x(), d.y());
+    if (dl <= 0.0)
+        return;
+    const double cx = -d.y() / dl, cy = d.x() / dl;   // the cross direction trussCross runs
+    double along = 0.0;
+    if (face == FixtureRigProps::FaceFront)          along = cy;
+    else if (face == FixtureRigProps::FaceBack)      along = -cy;
+    else if (face == FixtureRigProps::FaceStageLeft) along = cx;
+    else                                             along = -cx;
+    if (qAbs(along) < 0.5)
+        return;
+    rp.trussCross = (along > 0.0) ? half : -half;
+    rp.trussMountSide = FixtureRigProps::Centered;
+}
+
+void MonitorProperties::repairMountPlane(FixtureRigProps &rp) const
+{
+    /* A fixture on a hanger hangs from its chain: it has no face, whatever it
+       was given on what it hung from before. One left on the Top plane from
+       an earlier truss mount was drawn lying on its side -- three of six
+       lanterns on their hooks as dark squares beside three that looked like
+       lanterns ("why do the lanterns not all look the same"). */
+    if (rp.onHanger())
+    {
+        if (rp.studioMount != 1 || rp.studioAngle != 0.0f || rp.studioTilt != 0.0f)
+        {
+            qDebug() << "[Monitor] fixture hangs from a hanger"
+                     << "but kept the face of an earlier mount (plane" << rp.studioMount
+                     << ") -- hangs straight now";
+            rp.studioMount = 1;
+            rp.studioAngle = 0.0f;
+            rp.studioTilt = 0.0f;
+        }
+        return;
+    }
+
+    if (rp.onDeck() && rp.studioMount == 1 && !rp.studioFaceChosen)
+    {
+        qDebug() << "[Monitor] fixture is standing on a deck"
+                 << "but was left on the default Front/face plane"
+                 << "-- corrected to 0 (Top)";
+        rp.studioMount = 0;
+        return;
+    }
+
+    if (rp.studioMount == 1 && !rp.studioFaceChosen &&
+        ((rp.trussId != Truss::invalidId() && truss(rp.trussId) &&
+          truss(rp.trussId)->type() != Truss::Vertical) ||
+         (rp.onPipe() && pipe(rp.pipeId) && !pipe(rp.pipeId)->isVertical())))
+    {
+        qDebug() << "[Monitor] fixture rides a horizontal truss/pipe"
+                 << "but was left on the default Front/face plane"
+                 << "-- corrected to 0 (Top)";
+        rp.studioMount = 0;
+        return;
+    }
+
+    if (rp.onRiser() == false || rp.studioMount == 2)
+        return;
+
+    const int plane = FixtureRigProps::studioMountForRiserFace(rp.riserFace);
+    if (rp.studioMount == plane)
+        return;
+
+    qDebug() << "[Monitor] fixture is bolted to a riser's"
+             << (rp.riserFace == FixtureRigProps::RiserTop ? "top" : "front face")
+             << "but was drawn on plane" << rp.studioMount
+             << "-- corrected to" << plane;
+    rp.studioMount = plane;
 }
 
 bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) const
@@ -2301,9 +3437,48 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
     foreach (const Tower *t, m_towers)
         t->saveXML(doc);
 
+    // Hangers (after what they hang on)
+    foreach (const Hanger *h, m_hangers)
+        h->saveXML(doc);
+
+    // Scenery
+    foreach (const Scenery *s, m_sceneries)
+        s->saveXML(doc);
+
     // Stage targets
     foreach (const StageTarget *t, m_stageTargets)
         t->saveXML(doc);
+
+    // Gobo swaps
+    for (auto fit = m_goboSwaps.constBegin(); fit != m_goboSwaps.constEnd(); ++fit)
+        for (auto sit = fit.value().constBegin(); sit != fit.value().constEnd(); ++sit)
+        {
+            doc->writeStartElement(QStringLiteral("GoboSwap"));
+            doc->writeAttribute(QStringLiteral("Fixture"), QString::number(fit.key()));
+            doc->writeAttribute(QStringLiteral("Channel"), QString::number(sit.key().first));
+            doc->writeAttribute(QStringLiteral("Slot"),    QString::number(sit.key().second));
+            doc->writeAttribute(QStringLiteral("Image"),   sit.value());
+            doc->writeEndElement();
+        }
+
+    // LED maps the show uses (see HeadLayout), by key for a stable file.
+    {
+        QStringList keys = m_headLayouts.keys();
+        keys.sort();
+        foreach (const QString &k, keys)
+        {
+            const HeadLayout &l = m_headLayouts[k];
+            QStringList cells;
+            foreach (const QPoint &p, l.cells)
+                cells << QStringLiteral("%1,%2").arg(p.x()).arg(p.y());
+            doc->writeStartElement(QStringLiteral("HeadLayout"));
+            doc->writeAttribute(QStringLiteral("Key"), l.key);
+            doc->writeAttribute(QStringLiteral("Cols"), QString::number(l.size.width()));
+            doc->writeAttribute(QStringLiteral("Rows"), QString::number(l.size.height()));
+            doc->writeCharacters(cells.join(QLatin1Char(' ')));
+            doc->writeEndElement();
+        }
+    }
 
     // Fixture rig props (only write entries that differ from defaults)
     for (auto it = m_rigProps.constBegin(); it != m_rigProps.constEnd(); ++it)
@@ -2334,8 +3509,27 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
             doc->writeAttribute(QStringLiteral("TrussSide"), QString::number(rp.trussMountSide));
         if (rp.trussCross != 0.0f)
             doc->writeAttribute(QStringLiteral("TrussCross"), QString::number(double(rp.trussCross), 'f', 3));
+        /* NOT inside the TrussCross branch above, though they were indented as
+           if they were -- the same trap as KXMLQLCMonitorAimSubjectHeight
+           further up this function. A tower's cross-Y offset and a fixture's
+           placement are properties of the mount in their own right; tying
+           either to a non-zero trussCross would drop them from most files.
+           Indentation corrected, behaviour deliberately unchanged. */
+        if (!qFuzzyIsNull(rp.trussCrossY))
+            doc->writeAttribute(QStringLiteral("TrussCrossY"), QString::number(double(rp.trussCrossY), 'f', 3));
+        // Only when it is not the default, so existing files stay byte-identical.
+        if (rp.placement != FixtureRigProps::OnSurface)
+            doc->writeAttribute(QStringLiteral("Placement"), QString::number(rp.placement));
         if (rp.mountZOffset != 0.0f)
             doc->writeAttribute(QStringLiteral("MountZ"), QString::number(double(rp.mountZOffset), 'f', 3));
+        if (rp.onHanger())
+            doc->writeAttribute(QStringLiteral("Hanger"), QString::number(rp.hangerId));
+        if (rp.lightLeds >= 0)
+            doc->writeAttribute(QStringLiteral("LEDs"), QString::number(rp.lightLeds));
+        if (rp.lightLayout >= 0)
+            doc->writeAttribute(QStringLiteral("LEDLayout"), QString::number(rp.lightLayout));
+        if (rp.lightGlass >= 0)
+            doc->writeAttribute(QStringLiteral("Glass"), QString::number(rp.lightGlass));
         if (rp.onDeck())
         {
             doc->writeAttribute(QStringLiteral("Deck"),  QString::number(rp.deckPlatformId));
@@ -2353,15 +3547,35 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
             doc->writeAttribute(QStringLiteral("TShelf"), QString::number(rp.towerShelf));
             doc->writeAttribute(QStringLiteral("TU"),     QString::number(double(rp.towerU), 'f', 3));
             doc->writeAttribute(QStringLiteral("TV"),     QString::number(double(rp.towerV), 'f', 3));
+            doc->writeAttribute(QStringLiteral("TSide"),  QString::number(rp.towerMountSide));
         }
         if (!rp.groupLocal.isNull())
         {
             doc->writeAttribute(QStringLiteral("GLX"), QString::number(double(rp.groupLocal.x()), 'f', 3));
             doc->writeAttribute(QStringLiteral("GLY"), QString::number(double(rp.groupLocal.y()), 'f', 3));
             doc->writeAttribute(QStringLiteral("GLZ"), QString::number(double(rp.groupLocal.z()), 'f', 3));
-            doc->writeAttribute(QStringLiteral("SM"), QString::number(rp.studioMount));
-            doc->writeAttribute(QStringLiteral("SA"), QString::number(double(rp.studioAngle), 'f', 1));
         }
+        /* NOT part of the groupLocal branch, though they lived inside it for a
+           long time. The plane a linear fixture lies in and the angle it runs
+           at are properties of the FIXTURE, not of studio-frame membership: a
+           bar clamped to a truss and set to run vertically is saying something
+           about itself. Tying them to groupLocal meant those two controls did
+           nothing at all for every fixture outside a frame -- set the face,
+           save, reopen, and it is back on the front plane at 0 degrees, with no
+           hint as to why. The loader has always read them unconditionally.
+
+           Written only when they differ from the default so no existing file
+           gains attributes it did not have. */
+        if (rp.studioMount != 1 || rp.studioFaceChosen)   // a chosen Front is named
+            doc->writeAttribute(QStringLiteral("SM"), QString::number(rp.studioMount));
+        if (!qFuzzyIsNull(rp.studioAngle))
+            doc->writeAttribute(QStringLiteral("SA"), QString::number(double(rp.studioAngle), 'f', 1));
+        if (!qFuzzyIsNull(rp.studioTilt))
+            doc->writeAttribute(QStringLiteral("ST"), QString::number(double(rp.studioTilt), 'f', 1));
+        if (!qFuzzyIsNull(rp.studioYaw))
+            doc->writeAttribute(QStringLiteral("SY"), QString::number(double(rp.studioYaw), 'f', 2));
+        if (rp.studioFlip)
+            doc->writeAttribute(QStringLiteral("SF"), QStringLiteral("1"));
         doc->writeEndElement();
     }
 

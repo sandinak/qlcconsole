@@ -8,8 +8,15 @@
   placeable object with its own footprint and a list of shelf heights.
 
   Coordinate convention (same as the rest of the 2-D Monitor):
-    X = stage right (+) / stage left (-)
-    Y = upstage (+) / downstage (-)
+    X = stage left (+) / stage right (-)
+    Y = downstage (+) / upstage (-)
+    (These match how the app BEHAVES -- see barFaceVector() in
+    monitorproperties.cpp and any real show: in stage-structures-demo.qxw the
+    "SR Tower" sits at X=0.21 with the "SL Tower" at X=11.61, and the upstage
+    platforms are at Y=1.53 against the downstage ones at Y=3.97. The plot
+    draws +X rightward and +Y downward, which is the standard ground plan:
+    audience at the bottom of the page, upstage at the top, stage right on the
+    viewer's left. These comments used to say the opposite on both axes.)
     Z = height above stage floor (metres)
 
   The tower occupies [originX, originX+width] x [originY, originY+depth] on the
@@ -30,6 +37,7 @@
 #include <QColor>
 #include <QString>
 #include <QList>
+#include <QPointF>
 #include <climits>
 
 class QXmlStreamReader;
@@ -70,12 +78,38 @@ public:
     float shelfHeight(int i) const { return (i >= 0 && i < m_shelves.size()) ? m_shelves.at(i) : 0.0f; }
     void  addShelf(float z);
     void  removeShelf(int i);
+    /** Change shelf @p i's height IN PLACE, without re-sorting the list --
+     *  deliberately, so its index (and therefore any FixtureRigProps::
+     *  towerShelf already pointing at it) stays exactly where it was. A
+     *  fixture mounted on "shelf 3" must still be on "shelf 3" after its
+     *  height moves; add/removeShelf don't have that guarantee (position in
+     *  the sorted list can shift), but an edit shouldn't reassign fixtures
+     *  to a DIFFERENT physical shelf as a side effect of moving this one. */
+    void  setShelfHeight(int i, float z);
+    /** Bulk-replace the whole shelf list verbatim, bypassing addShelf()'s
+     *  duplicate guard -- for restoring a known-good snapshot (e.g. Cancel
+     *  in the Tower editor) exactly as it was, even if that snapshot
+     *  happens to predate the guard and contains a duplicate itself. */
+    void  setShelves(const QList<float> &z) { m_shelves = z; }
     void  clearShelves() { m_shelves.clear(); }
+
+    /** Which way it faces, degrees about its centre (0: square to the stage;
+     *  +X turning toward +Y). origin/width/depth and (u,v) into the footprint
+     *  are LOCAL -- the tower unturned; toWorld() turns them. */
+    float rotation() const { return m_rotation; }
+    void  setRotation(float deg);
+    bool  isRotated() const { return m_rotation != 0.0f; }
+    QPointF centre() const { return QPointF(double(m_originX + m_width * 0.5f), double(m_originY + m_depth * 0.5f)); }
+    QPointF toWorld(const QPointF &local) const;
+    QPointF toLocal(const QPointF &world) const;
+    /** Its four corners on the floor, turned: x0y0, x1y0, x1y1, x0y1. */
+    QList<QPointF> corners() const;
 
     /** World position of a point on shelf @p i at (u,v) metres into the footprint. */
     QVector3D shelfPos(int i, float u, float v) const
     {
-        return QVector3D(m_originX + u, m_originY + v, shelfHeight(i));
+        const QPointF w = toWorld(QPointF(double(m_originX + u), double(m_originY + v)));
+        return QVector3D(float(w.x()), float(w.y()), shelfHeight(i));
     }
     /** Centre of shelf @p i. */
     QVector3D shelfCentre(int i) const { return shelfPos(i, m_width * 0.5f, m_depth * 0.5f); }
@@ -89,6 +123,29 @@ public:
     quint32 groupId() const { return m_groupId; }
     void setGroupId(quint32 id) { m_groupId = id; }
 
+    /** FACES: opaque panels on the tower's sides -- a black facade over the
+     *  steel, or a printed one (@c facesPattern, an image stretched over each
+     *  face). On the sides in @c facesSides (FaceSide bits), from
+     *  @c facesFrom to @c facesTo metres up. */
+    enum FaceSide { FrontSide = 1, BackSide = 2, LeftSide = 4, RightSide = 8, AllSides = 15 };
+    bool hasFaces() const { return m_faces; }
+    void setFaces(bool on) { m_faces = on; }
+    int facesSides() const { return m_facesSides; }
+    void setFacesSides(int sides) { m_facesSides = sides & AllSides; }
+    QColor facesColour() const { return m_facesColour; }
+    void setFacesColour(const QColor &c) { m_facesColour = c.isValid() ? c : QColor(24, 24, 26); }
+    /** Metres up, within the tower; To < 0 (the default) is its top. */
+    float facesFrom() const { return qBound(0.0f, m_facesFrom, m_height); }
+    float facesTo() const { return m_facesTo < 0.0f ? m_height : qBound(facesFrom(), m_facesTo, m_height); }
+    void setFacesRange(float from, float to) { m_facesFrom = qMax(0.0f, from); m_facesTo = to; }
+    /** An image file printed on the faces; empty for plain colour. */
+    QString facesPattern() const { return m_facesPattern; }
+    void setFacesPattern(const QString &path) { m_facesPattern = path; }
+    /** How much of the print shows over the panels' own colour: 1 (the
+     *  default) all of it, less and the colour shows through. */
+    float facesPatternOpacity() const { return m_facesPatternOpacity; }
+    void setFacesPatternOpacity(float o) { m_facesPatternOpacity = qBound(0.0f, o, 1.0f); }
+
     bool loadXML(QXmlStreamReader &root);
     bool saveXML(QXmlStreamWriter *doc) const;
 
@@ -97,6 +154,7 @@ private:
     QString      m_name;
     float        m_originX = 0.0f;
     float        m_originY = 0.0f;
+    float        m_rotation = 0.0f;
     float        m_width   = 0.406f;   ///< 16"
     float        m_depth   = 0.406f;   ///< 16"
     float        m_height  = 2.438f;   ///< 8'
@@ -105,6 +163,13 @@ private:
     bool         m_locked  = false;
     quint32      m_layerId = 0;
     quint32      m_groupId = 0;
+    bool         m_faces = false;
+    int          m_facesSides = AllSides;
+    QColor       m_facesColour = QColor(24, 24, 26);
+    float        m_facesFrom = 0.0f;
+    float        m_facesTo = -1.0f;
+    QString      m_facesPattern;
+    float        m_facesPatternOpacity = 1.0f;
 };
 
 /** @} */

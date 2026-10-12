@@ -24,6 +24,8 @@
 #include "genericdmxsource_test.h"
 #include "genericdmxsource.h"
 #include "doc.h"
+#include "genericfader.h"
+#include "fadechannel.h"
 #include "fixture.h"
 #undef private
 #undef protected
@@ -79,6 +81,29 @@ void GenericDMXSource_Test::unsetAll()
     src.unsetAll();
     src.writeDMX(nullptr, m_doc->inputOutputMap()->universes());
     QCOMPARE(src.channelsCount(), quint32(0));
+}
+
+void GenericDMXSource_Test::aStagedFixtureNeverReachesAFader()
+{
+    // An inventory fixture reports universe 1 / address 1 like the real one
+    // above, but has no address: nothing written for it may reach the rig.
+    Fixture *staged = new Fixture(m_doc);
+    staged->setChannels(1);
+    staged->setPatched(false);
+    QVERIFY(m_doc->addFixture(staged));
+
+    GenericDMXSource src(m_doc);
+    src.setOutputEnabled(true);
+    src.set(staged->id(), 0, 200);
+    src.writeDMX(nullptr, m_doc->inputOutputMap()->universes());
+    QVERIFY(src.m_fadersMap.isEmpty());
+
+    src.set(m_fxiId, 0, 100);
+    src.writeDMX(nullptr, m_doc->inputOutputMap()->universes());
+    QCOMPARE(src.m_fadersMap.size(), 1);
+    const QHash<quint32, FadeChannel> chans = src.m_fadersMap.first()->channels();
+    QCOMPARE(chans.size(), 1);
+    QCOMPARE(chans.begin().value().fixture(), m_fxiId);
 }
 
 QTEST_MAIN(GenericDMXSource_Test)

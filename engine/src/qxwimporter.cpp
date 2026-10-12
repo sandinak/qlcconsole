@@ -366,6 +366,15 @@ QxwImportResult QxwImporter::import(Doc *sourceDoc, Doc *targetDoc,
             continue;
         }
 
+        // Fixture names are unique: one already in the show is numbered on.
+        const QString unique = targetDoc->uniqueFixtureName(copy->name());
+        if (unique != copy->name())
+        {
+            result.warnings << QObject::tr("Fixture \"%1\" imported as \"%2\": the show already has a \"%1\".")
+                                .arg(copy->name(), unique);
+            copy->setName(unique);
+        }
+
         bool collides = (targetDoc->fixture(oldId) != NULL);
         quint32 requestedId = collides ? Fixture::invalidId() : oldId;
         if (targetDoc->addFixture(copy, requestedId) == false)

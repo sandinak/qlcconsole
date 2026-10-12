@@ -53,7 +53,12 @@ if(APPLE)
         MACOSX_BUNDLE FALSE
     )
     if(${LIBOLA_FOUND} AND ${LIBOLASERVER_FOUND})
-        target_include_directories(${module_name} PRIVATE
+        # SYSTEM: OLA's public headers still use std::auto_ptr and
+        # std::binary_function, so any build that turns deprecation warnings
+        # into errors fails inside a dependency's headers rather than on
+        # anything in this tree. Marking them system keeps our own code under
+        # the strict flags without third-party C++98 breaking the build.
+        target_include_directories(${module_name} SYSTEM PRIVATE
             ${LIBOLA_INCLUDE_DIRS}
         )
 
@@ -66,7 +71,7 @@ if(APPLE)
             ${LIBOLASERVER_LIBRARIES}
         )
     else()
-        target_include_directories(${module_name} PRIVATE
+        target_include_directories(${module_name} SYSTEM PRIVATE
             /opt/local/include
         )
 

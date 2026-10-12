@@ -39,12 +39,28 @@ console-first programmer-mode workflow for macOS.
   [EFFECT_LIFECYCLE_DESIGN.md](EFFECT_LIFECYCLE_DESIGN.md).
 - **Effect presets** — named, reusable configurations layered over effect
   scripts; see [EFFECTPRESET_DESIGN.md](EFFECTPRESET_DESIGN.md).
-- **Lighting Studio** — a 2D rigging/plot tab: place and rig trusses,
-  platforms, pipes, stands, towers, and power sources; drag a fixture onto a
-  truss to bind it, with a visual tether line back to the truss and
-  select/move-together group behavior; a Layers panel for organizing the
-  plot; Top/Front/Side points of view and Power/DMX/Network/Stage-only
-  overlays.
+- **Lighting Studio** — a rigging tab for the physical rig: place and rig
+  trusses, towers, platforms and steps, pipes, stands, hangers, a
+  cyclorama and power sources; drag a fixture onto a structure to mount it,
+  with select/move-together group behavior; a Layers panel for organizing
+  the plot; Power/DMX/Network/Stage-only overlays. The plot is seen from
+  Top, Front or Side, and each structure's own editor adds an **Angled** 3D
+  view; **View → Rig Overview…** (⇧⌘R) opens the whole rig in 3D in a window
+  of its own. See [the feature guide](docs/features/lighting-studio.md).
+- **The rig view is lit by the show** — in Design mode the selected look
+  (or live output) lights the 3D rig: beams per head that carry past their
+  target and land as pools on the deck, platforms or cyc; brightness from
+  the fixture's declared lumens or watts; a Haze setting (None / Light /
+  Medium / Heavy) with a glow round lit LEDs; gobos, gobo rotation, prisms
+  and your own gobo images per fixture; pixel bars lit section by section;
+  truss socks and tower faces (with printed patterns) glowing with the
+  bars inside; people targets lit in the colour that reaches them. A moving
+  head's footprint shows everywhere its pan and tilt can reach.
+- **Lanterns and hangers** — hangers are rigging, like a truss: clamped to
+  a truss or tower with an arm and a drop to one hook, edited in the rig
+  view and copied to every tower in one step. A lantern body glows all
+  round, with its LEDs (a hanging cluster or tape) seen through clear or
+  diffusing glass.
 - **Fixtures tab** — a Power folder for modeling power sources/circuits and
   assigning fixtures to them, plus a per-universe DMX address usage grid.
 - **Connections tab** — the I/O manager rebuilt around a strict tree
@@ -76,15 +92,98 @@ console-first programmer-mode workflow for macOS.
 - **Move-in-black / pre-positioning** — Mark cues to silently pre-position
   movers before a reveal, with a live dangle-detector footer chip flagging
   any fixture left un-marked.
-- **Look scope** — a Scene/Look can declare whether it targets the whole
-  stage or a specific fixture group, surfaced as a Scope combo in the Looks
-  editor.
+- **Look scope** — a Scene/Look can record whether it is meant for the
+  whole stage or a specific fixture group. It is kept in the show file but
+  no longer shown in the Looks editor: it changes nothing that lights, and
+  next to Targets it read as a second place to choose fixtures.
 - Real **File → Import** for `.qxw` — merge fixtures, fixture groups, and
   functions (with their full dependency closure) from another workspace
   file into the one currently open, with automatic ID-collision remapping.
 - Rebrand throughout: application, launcher, and fixture-editor binaries,
   macOS app bundle, and About box now identify as qlcconsole, with clear
   in-app attribution to QLC+ and its original authors.
+- **Inventory-first workflow** — fixtures can be added to an inventory with
+  no address, then placed, grouped and programmed before they are patched
+  (they send no DMX until then). A docked Inventory panel in Lighting Studio
+  drags them onto trusses, risers and towers; the **Patch** dialog patches
+  or re-addresses a selection in one go (keeping their spacing or packed),
+  and fixtures can be returned to the inventory in Design mode. Drop
+  fixtures or a group on a universe in Fixture Manager to patch them there.
+- **Network design** — place Art-Net/sACN nodes and wireless DMX
+  transmitters/receivers on the plot (from a catalog of common gear, or
+  your own saved models); the Network overlay draws each port's cable run
+  through its fixtures, and **More → Network Report…** lists nodes, ports,
+  universes and run lengths, with Copy and Save CSV. Unpatched fixtures can
+  be placed on the nearest node port with room.
+- **WLED output** — Wi-Fi LED devices running WLED get one universe each,
+  by IP, sent as WLED's own JSON state only when the look changes (about ten
+  times a second at most). Devices that don't answer, or are on weak Wi-Fi,
+  are reported in the footer; while the rig view is open it shows what each
+  device's LEDs are actually doing. Looks can pick WLED's own effects for
+  the device to run. Tested against a stand-in so far, not yet a real WLED
+  on a show network.
+- **Scene transitions** — a scene can have a Transition in and out that
+  reaches each fixture by where it stands: wipes across, up/down or
+  front-to-back, from/to the centre, dissolve, or along each bar, set on
+  the scene's canvas in the Programming tab.
+- **Effect browser** — the look editor's effect picker is a searchable
+  browser with categories, a Recent list and a live 16-light preview of
+  each effect. The RGB Matrix effects hidden behind same-named scripts are
+  listed too ("Plasma (RGB Matrix)"), including the bottom-up Fire.
+- **Readiness footer** — the "Ready" chip becomes "Not ready (N)" and lists
+  unpatched fixtures, fixture types with no light output declared, address
+  clashes, duplicate names, unreadable or duplicate definition files,
+  universes with fixtures but no output, WLED devices not answering, files
+  in cloud storage not on this computer, and fixtures with no definition
+  here. Select rows (shift-click for a range) and fix them from the list.
+  See [the feature guide](docs/features/other-improvements.md#readiness-footer).
+- **Cloud-storage safety** — online-only files in a synced folder
+  (Synology Drive, iCloud, OneDrive, Dropbox) are skipped at startup
+  instead of waited on, with a footer warning and **Download Now**. A
+  **show cache** on this computer keeps every non-shipped definition a show
+  uses; before a show loads, each comes from the library, the cache, or a
+  cloud fetch you can Skip.
+- **Fixture definition repair** — a definition that won't load opens in
+  the Fixture Editor's repair view, showing where it breaks and offering
+  tested repairs; a Problems panel checks definitions as you edit, and each
+  definition shows whether it is Included or your own (Local).
+- **Stage targets** gain kinds (Person, Drum kit, Area, Structure), can
+  follow the truss, platform or tower they're bound to, and scenes say
+  "can't reach" when a head's pan/tilt range can't get there.
+- **Layers panel** — rename any row with Enter, Select All Similar, fixture
+  groups listed under the structures their fixtures are on, and plot
+  selection mirrored in the list.
+- **Plot** — Select All (⌘A), one undo per drag, and one lock per layer
+  (everything locked is outlined red).
+- Fixture names are unique: renaming to a taken name is refused, a
+  duplicate is numbered on add or import, and older shows' duplicates can
+  be numbered from the footer or Fixture Manager.
+- A batch of network fixtures gets one IP each, counting up from the first.
+- The look editor warns when a colour look is nearly dark (a hue picked
+  from black), and a palette being edited is tried on the open look so the
+  rig follows.
+- Programming tab: search over Fixtures & groups, and "← Back to <scene>"
+  from a fixture group's layout view.
+
+- **In-app help** — F1 opens the guide for whatever is in front (each tab,
+  the Rig Overview, Fixture Properties, the Patch dialog, the look editor,
+  the power dialogs); the Help menu lists Getting Started, What's New,
+  Keyboard and Mouse, Effects and Troubleshooting, with search across every
+  guide. The guides are bundled into the app, and a test checks every link
+  in them.
+- New guides: Getting Started (startup and the ways a show comes together),
+  What's New, Keyboard and Mouse, Effects, Troubleshooting.
+- **Text** effect — words on a pixel grid, scrolling or still, in the look's
+  colours; effect scripts can declare a `"text"` setting (a text box in the
+  look editor). The RGB Matrix Text algorithm gains a **Centered** style.
+- **Step Test Pattern** effect — strips counted, steps numbered and named,
+  and a spinner that stops if output freezes.
+- **Patch Others Like This** / the Patch dialog's **Match** — like
+  structures (four towers, four steps) patched alike: each fixture at its
+  counterpart's address, in its own structure's universe.
+- **Mount on → Deck** — the selection stood on the deck under each (or a
+  named one), upright, on its top, nothing floating.
+- The Rig Overview follows the Lighting Studio's layers.
 
 ### Changed
 - Versioning scheme: the in-app build string now tracks the QLC+ base version
@@ -98,6 +197,29 @@ console-first programmer-mode workflow for macOS.
   Editor each replaced their long rows of individual "New X" buttons with a
   compact "Add ▾"/"Edit ▾" dropdown; a View → Toolbar Style menu switches
   every toolbar at once between icons+text, icons-only, and text-only.
+- Lock is now the layer's lock: locking any object locks its layer. Older
+  shows' per-object locks move onto a locked layer named "Locked" on open.
+- When two local definition files describe the same fixture, the most
+  recently changed one is used.
+- View → Rig Overview… opens its window without switching to the Lighting
+  Studio tab.
+- The effect script called "Fire" is now "Firelight" (looks using
+  it keep it), so the RGB Matrix Fire is reachable again.
+
+- A drag in the Lighting Studio only moves a fixture; **Shift** held as you
+  drop hangs it on the truss or pipe, or stands it on the deck, it's over
+  (the outline turns green while it would). Inventory drops still place.
+  A mounted fixture is only offered a truss or pipe at its own height.
+- **Functions** has no tab — Window → Functions (⇧⌘4) opens it in a window
+  of its own.
+- ⇧⌘R closes the Rig Overview when it's in front; ⌘W closes it too.
+- Orientation is offered for anything that pans or tilts, bar-shaped or not,
+  and Test orientation names its centred pose (straight up / down / out).
+- Fixtures with a structure above them draw faded and dashed in the Top
+  view; the rulers band any selection and mark the middle of what's dragged.
+- The Connections Devices header is one row.
+- Effects on big pixel rigs: about 8 ms a tick for 96 × 64 pixels (was 68);
+  the rig view about 9 ms a frame on a 200-fixture show (was 51).
 
 ### Fixed
 - A workspace whose last-active tab was Lighting Studio could come up with
@@ -110,5 +232,28 @@ console-first programmer-mode workflow for macOS.
   placed anywhere across the truss's width while still touching it,
   matching how fixtures are actually rigged, instead of always snapping to
   dead center.
+- A show file with two fixtures on overlapping addresses dropped the
+  second on load, with every group, scene and cue that used it. It now
+  loads unpatched and flagged, and is saved back as it was.
+- A fixture whose definition was missing was saved as "Generic", losing
+  the real fixture for good. It now keeps and saves its manufacturer, model
+  and mode, saving warns first, and Fetch Definitions restores it.
+- Startup could hang for as long as cloud storage took to answer, or for
+  good when it couldn't be reached.
+- A steady effect could flash: the output sometimes caught it between
+  frames and sent a blank one.
+- An unpatched fixture in a running scene could crash the app.
+- A gobo look sent nothing, and a new gobo look had no wheel to pick from.
+- A look dropped on the canvas now lands where it was aimed, and a colour
+  change to a look reaches every scene that uses it.
+- Creating a palette or function in a new folder renamed the workspace's
+  first look to the folder's name.
+- Add Fixture gave every fixture in a network batch the same IP.
 
 [0.1.0]: https://github.com/sandinak/qlcconsole/releases/tag/v0.1.0
+- Lanterns on hangers that kept an earlier mount's face drew on their side;
+  a fixture on a hanger now always hangs straight.
+- A light at the foot of a tower, moved under the bar on top of it, was
+  hung on the bar.
+- A copy of a fixture's physical data recompiled a regular expression and
+  wrote a guessed power figure into the copy.

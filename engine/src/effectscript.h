@@ -105,10 +105,17 @@ class EffectScript
 public:
     EffectScript();
 
-    /** Load and evaluate @p path. Returns true iff the script is valid. */
+    /** Load and evaluate @p path. Returns true iff the script is valid.
+     *
+     *  A script can share helpers with others: @c effect.requires = ["wled"]
+     *  evaluates lib/wled.js (beside the script, else in the system scripts
+     *  directory's lib/) first, into the same engine -- what a family of ports
+     *  of one source's effects needs, rather than a copy in each. */
     bool load(const QString &path);
 
     bool isValid() const { return m_valid; }
+    /** Why load() failed, in a few words ("its script has an error: ..."). */
+    QString lastError() const { return m_error; }
     QString filePath() const { return m_filePath; }
 
     // --- Metadata (available after a successful load()) ---
@@ -116,6 +123,10 @@ public:
     QString     description()  const { return m_description; }
     QString     notes()        const { return m_notes; }
     QString     author()       const { return m_author; }
+    /** The WLED effect this is a port of, by WLED's own name ("Chase") --
+     *  empty for a native effect. A WLED lantern set to that effect is drawn
+     *  by running this on its LEDs (the rig view's LanternPixels). */
+    QString     wled()         const { return m_wled; }
     int         apiVersion()   const { return m_apiVersion; }
     /** Generator content version (effect.version; default 1). Bumped by the
      *  author when params/behaviour change; used to reason about Effects
@@ -132,6 +143,19 @@ public:
     QString     onFinish()     const { return m_onFinish; }
     /** Fallback one-shot length (ms) when nothing else resolves it. */
     int         naturalDurationMs() const { return m_naturalDurationMs; }
+
+    /** It takes the host's spread (SpreadLayer): reads fixture.phase when
+     *  inputs._spread is on. Declared as `effect.hostSpread = "spread,reverse"`,
+     *  naming its own params the host spread stands in for (comma-separated;
+     *  "" when it has none). */
+    bool        takesHostSpread() const { return m_takesHostSpread; }
+    QStringList hostSpreadParams() const
+    {
+        QStringList out;
+        foreach (const QString &p, m_hostSpreadParam.split(QLatin1Char(','), Qt::SkipEmptyParts))
+            out << p.trimmed();
+        return out;
+    }
 
     /** Fixture-type tags declared in the script (e.g. "moving", "rgb", "dimmer").
      *  Empty list means the script works with any fixture type. */
@@ -151,8 +175,10 @@ public:
     };
     struct ParamDef {
         QString name, description;
-        QString type;           // "" or "path" (XY drawn path); "path" params ignore min/max
+        QString type;           // "" or "path" (XY drawn path) or "text" (words to show);
+                                // "path" and "text" params ignore min/max
         float min = 0.0f, max = 1.0f, defaultValue = 0.5f;
+        QString defaultText;    // a "text" param's defaultValue
         QStringList enumValues; // non-empty → render as dropdown; value is integer index
         QStringList aliases;    // former names; stored values under an alias map to this param
     };
@@ -197,13 +223,15 @@ private:
     QJSValue  m_tickFn;   // the tick() function ref
 
     QString     m_filePath;
-    QString     m_name, m_description, m_notes, m_author;
+    QString     m_name, m_description, m_notes, m_author, m_wled;
     int         m_apiVersion = 0;
     int         m_version = 1;
     QString     m_lifecycle = QStringLiteral("loop");
     QString     m_syncTo    = QStringLiteral("span");
     QString     m_onFinish  = QStringLiteral("hold");
     int         m_naturalDurationMs = 2000;
+    bool        m_takesHostSpread = false;
+    QString     m_hostSpreadParam;
     QStringList m_fixtureTypes;
 
     QList<InputDef>   m_inputs;
@@ -213,6 +241,7 @@ private:
     QStringList       m_dataChannelKeys;
 
     bool m_valid = false;
+    QString m_error;
 };
 
 #endif // EFFECTSCRIPT_H

@@ -48,6 +48,7 @@
 #include "simpledesk.h"
 #include "cuestack.h"
 #include "apputil.h"
+#include "showstatus.h"
 #include "capturemanager.h"
 #include "cue.h"
 #include "doc.h"
@@ -93,6 +94,12 @@ SimpleDesk::SimpleDesk(QWidget* parent, Doc* doc)
     s_instance = this;
 
     Q_ASSERT(doc != NULL);
+
+    /* Channels the desk holds override every look and scene until released
+       ("selecting different WLED isn't changing the fixtures") -- said in the
+       footer, with Release, so a held fader is never a mystery. */
+    connect(m_engine, &SimpleDeskEngine::heldChannelsChanged, this, &SimpleDesk::publishHeld,
+            Qt::QueuedConnection);
 
     QSettings settings;
     QVariant var = settings.value(SETTINGS_PAGE_CHANNELS);
@@ -486,6 +493,46 @@ void SimpleDesk::resetUniverse()
     m_universeResetButton->click();
 }
 
+void SimpleDesk::publishHeld()
+{
+    ShowStatus *status = ShowStatus::instance();
+    QMap<int, QList<int> > byUniverse;
+    foreach (uint ch, m_engine->heldChannels())
+        byUniverse[int(ch >> 9)] << int(ch & 0x1FF) + 1;
+    if (byUniverse.isEmpty())
+    {
+        status->clearStatus("simpledesk.held");
+        return;
+    }
+    QStringList items;
+    QVariantList universes;
+    int total = 0;
+    for (auto it = byUniverse.constBegin(); it != byUniverse.constEnd(); ++it)
+    {
+        QList<int> chans = it.value();
+        std::sort(chans.begin(), chans.end());
+        QStringList nums;
+        foreach (int c, chans)
+            nums << QString::number(c);
+        total += chans.size();
+        items << tr("%1 — %n channel(s): %2", "", chans.size())
+                     .arg(m_doc->inputOutputMap()->getUniverseNameByIndex(it.key()), nums.join(", "));
+        universes << it.key();
+    }
+    status->setStatus("simpledesk.held", ShowStatus::Warning,
+                      tr("Simple Desk is holding %n channel(s)", "", total),
+                      tr("Held channels override every look and scene until released."),
+                      items, universes);
+}
+
+void SimpleDesk::releaseUniverse(int index)
+{
+    if (m_universesCombo->currentIndex() == index)
+        resetUniverse();                 // its sliders go back too
+    else
+        m_engine->resetUniverse(index);
+}
+
 void SimpleDesk::resetUniverse(int index)
 {
     m_universesCombo->setCurrentIndex(index);
@@ -596,7 +643,7 @@ void SimpleDesk::initSliderView(bool fullMode)
         int c = 0;
         foreach (Fixture *fixture, m_doc->fixtures())
         {
-            if (fixture->universe() != (quint32)m_universesCombo->currentIndex())
+            if (!fixture->isPatched() || fixture->universe() != (quint32)m_universesCombo->currentIndex())
                 continue;
             FixtureConsole* console = NULL;
             if (c%2 == 0)
@@ -1234,7 +1281,7 @@ void SimpleDesk::slotGroupValueChanged(quint32 groupID, uchar value)
     foreach (SceneValue scv, group->getChannels())
     {
         Fixture *fixture = m_doc->fixture(scv.fxi);
-        if (fixture == NULL)
+        if (fixture == NULL || !fixture->isPatched())
             continue;
         quint32 absAddr = fixture->universeAddress() + scv.channel;
 

@@ -63,6 +63,11 @@ bool RGBScriptsCache::load(const QDir& dir)
 
     foreach (QString file, dir.entryList())
     {
+        if (QLCFile::isOnlineOnly(dir.absoluteFilePath(file)))   // in cloud storage, not here: do not wait for it
+        {
+            QLCFile::noteSkippedOnlineOnly(dir.absoluteFilePath(file));
+            continue;
+        }
         if (!file.endsWith(".js", Qt::CaseInsensitive))
         {
             qDebug() << "    " << file << " skipped (special file or does not end on *.js)";

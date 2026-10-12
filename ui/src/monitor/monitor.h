@@ -32,6 +32,7 @@
 
 class MonitorGraphicsView;
 class MonitorLayersPanel;
+class MonitorInventoryPanel;
 class MonitorFixture;
 class MonitorLayout;
 class QScrollArea;
@@ -54,6 +55,7 @@ class Doc;
 class Monitor final : public QWidget
 {
     Q_OBJECT
+    friend class FixtureFields;     // the shared fixture rows use the rig helpers
     Q_DISABLE_COPY(Monitor)
 
     /*********************************************************************
@@ -62,6 +64,14 @@ class Monitor final : public QWidget
 public:
     /** Get the monitor singleton instance. Can be NULL. */
     static Monitor* instance();
+
+    /** Fixture Properties for ONE fixture -- the one fixture dialog, opened by
+     *  a double-click on a fixture wherever it is (plot, studio, Layers,
+     *  Fixture Manager). */
+    void editFixtureProperties(quint32 fid);
+    /** Fixture Properties for several at once: the rows they share, "mixed"
+     *  where they differ. */
+    void editFixturesProperties(const QList<quint32> &fids);
 
     /** Constructed once as a permanent tab (see App::init()) — public like
      *  every other tab-hosted manager (FunctionManager, ShowManager, …);
@@ -125,8 +135,9 @@ protected:
     /** Track the cursor over the canvas viewport to drive the ruler markers. */
     bool eventFilter(QObject *watched, QEvent *event) override;
 
-    /** Initialize settings & fill fixtures */
-    void fillGraphicsView();
+    /** Initialize settings & fill fixtures. @p keepView leaves the zoom as
+     *  it is (an undo, not a new document). */
+    void fillGraphicsView(bool keepView = false);
 
     /** show */
     void showGraphicsView();
@@ -177,6 +188,16 @@ public:
     /** Update monitor fixture labels */
     void updateFixtureLabelStyles();
 
+    /** The rig as it stands -- every structure, placement and rig prop, and
+     *  the fixtures' names -- for undo and Cancel (RigEditSession). */
+    QByteArray rigSnapshot() const;
+    /** Put the rig back as @p snap had it, and redraw. */
+    void restoreRig(const QByteArray &snap);
+    /** One undo step back to @p before, if the rig is not as it was. */
+    void pushRigUndo(const QByteArray &before);
+    /** Undo the rig's last change -- a move, a dialog's edit, a patch. */
+    void undo();
+
 protected:
     /** Create a new MonitorFixture* and append it to the layout */
     void createMonitorFixture(Fixture* fxi);
@@ -221,6 +242,29 @@ protected:
 public:
     void showFixturePropertiesById(quint32 fxId);
 
+    /** Flash a fixture at full intensity 3x to help find it on the rig -- same
+     *  mechanism as the rig editor's own "Locate" button, but callable directly
+     *  (e.g. from a right-click), no dialog required. Calling this again on a
+     *  fixture that's still flashing cancels it early. No-op for an invalid id. */
+    void locateFixture(quint32 fxId);
+
+    /** Locate appearance, shared with the Preferences page that sets it.
+     *  Read at flash time so a change applies to the next Locate. */
+    static QColor locateColor();
+    static int    locateIntensity();
+    static int    locateFlashes();
+
+    /** Flash every fixture in @p ids at once -- a group Locate. Public for the
+     *  same reason locateFixture() is: Fixtures & Groups and the studio canvas
+     *  both drive it. */
+    void locateFixtures(const QList<quint32> &ids);
+
+    /** Send a fixture's "reset" Maintenance-channel capability once -- same
+     *  detection the old Fixture Test quick-dialog uses, but callable directly
+     *  (e.g. from a right-click). No-op if the fixture has no Maintenance-group
+     *  capability whose name contains "reset". */
+    void resetFixture(quint32 fxId);
+
 protected:
     /** Dismiss any open fixture property editor (no-op with popup design). */
     void hideFixtureItemEditor();
@@ -229,7 +273,34 @@ protected:
     /** @param onlyFid if non-zero, edit JUST that fixture (studio single path,
      *  bypassing the map selection / group select-together); else edit the
      *  current map selection. */
-    void showFixtureItemEditor(quint32 onlyFid = 0);
+    /** @p onlyFid == Fixture::invalidId() means "use the map selection".
+     *  Spelt out rather than calling Fixture::invalidId() because monitor.h
+     *  only forward-declares Fixture; 0 is a REAL fixture id (the first one in
+     *  any workspace) and must never be used as the sentinel. */
+    void showFixtureItemEditor(quint32 onlyFid = quint32(~0u));
+    void showFixtureItemEditor(const QList<quint32> &fids);
+
+public:
+    /** A read-only angled look at the whole rig (StructureStudioView's
+     *  StageKind). Public so App's View menu and the studio footer button open
+     *  the SAME window; the Monitor owns it and raises the existing one. */
+    void showStageOverview();
+    /** ⇧⌘R: open it -- or, when it is the window in front, close it. Open
+     *  behind others, it is brought forward rather than shut unseen. */
+    void toggleStageOverview();
+
+protected:
+
+private:
+    /** The rig-overview window, kept so a second click raises the one that is
+     *  already open rather than stacking another. Cleared when it closes. */
+    class QDialog *m_overviewDlg = NULL;
+    /** The overview's renderer, so the active scene can reach it too --
+     *  it shows the same aim the studio draws as dashed lines. */
+    class StructureStudioView *m_overviewView = NULL;
+    quint32 m_activeSceneId = 0xFFFFFFFF;   ///< mirrors the graphics view's
+
+public:
 
 protected slots:
     /** Slot called when the grid width changes */
@@ -304,8 +375,7 @@ protected slots:
 
     /** Show the fixture properties editor on double-click. */
     void slotFixtureDoubleClicked(quint32 fid);
-    /** Edit ONE fixture's properties (studio single-fixture path). */
-    void editFixtureProperties(quint32 fid);
+
     /** True for a LINEAR fixture (strip/bar/tape): multi-head OR physically much
      *  wider than it is deep/tall. Drives the Face+Angle quick-settings. */
     bool isLinearFixture(class Fixture *fx) const;
@@ -318,6 +388,9 @@ protected slots:
      *  else upright/sideways/hung). Each item carries mountingType (UserRole) +
      *  trussMountSide (UserRole+1, -1 = leave as-is). Selects the current value. */
     void fillOrientationCombo(class QComboBox *cb, const struct FixtureRigProps &rp) const;
+    /** What a fixture's centred test pose is, by its orientation: "Straight
+     *  down" hung, "Straight up" upright, "Straight out" on a side arm. */
+    QString centredPoseName(quint32 fid) const;
 
     /** Open truss edit dialog on double-click. */
     void slotTrussDoubleClicked(quint32 tid);
@@ -326,11 +399,27 @@ protected slots:
     void slotAddBarToPipe(quint32 parentPipeId);
     void slotPlatformRemoveRequested(quint32 pid);
     void slotPipeRemoveRequested(quint32 pid);
+    void slotHangerRemoveRequested(quint32 hid);
     void slotStandRemoveRequested(quint32 sid);
     void slotTowerRemoveRequested(quint32 tid);
+    void slotSceneryRemoveRequested(quint32 sid);
     void slotAddImage();
+
+    /** Stage a fixture in the inventory (no universe/address yet). */
+    void slotAddToInventory();
+    /** Fixtures dragged from the Inventory panel landed on the plot. */
+    void slotFixturesDropped(const QList<quint32> &fixtureIds, QPointF scenePos);
     void slotEditImage(quint32 id);
     void slotImageRemoveRequested(quint32 id);
+
+    /** Add a new network node (ArtNet/sACN gateway, direct fixture interface,
+     *  or wireless DMX transmitter) interactively and refresh the canvas. */
+    void slotAddNetworkNode();
+    /** Open the network-node edit form for a specific node index (double-click). */
+    void slotEditNetworkNode(quint32 nodeIndex);
+    /** Show the network summary for the data package (N5). */
+    void slotNetworkReport();
+    void slotNetworkNodeRemoveRequested(quint32 nodeIndex);
 
     /** Show the Add context menu at the given scene position. */
     void slotCanvasContextMenu(QPointF scenePos);
@@ -340,11 +429,27 @@ protected slots:
 
     /** Add a new platform and open its editor. */
     void slotAddPlatform();
+    /** A flight of steps: 2 x 8" rise and run, 3' wide, climbing upstage. */
+    void slotAddSteps();
     void slotAddPipe();
     void slotAddElectric();
     void slotAddStand();
     void slotEditStand(quint32 sid);
     void slotAddTower();
+    /** Add a cyclorama: where the canvas menu was opened, or across the back
+     *  of the stage (full width, at the upstage edge) from the toolbar. */
+    void slotAddCyclorama();
+    /** Ask how far, and turn the plot's selection (MonitorGraphicsView::
+     *  rotateSelectedItems()). */
+    void slotRotateSelection();
+    /** Add a piece of scenery of @p kind (Scenery::Kind) where it usually
+     *  goes, or where the canvas menu was opened; then edit it. */
+    void slotAddScenery(int kind);
+    /** A fountain: a base with a rounded front, an outer and an inner wall
+     *  of blocks round it, and a silk flame in the middle -- grouped, so it
+     *  moves and turns as one. Asks for the sizes first. */
+    void slotAddFountain();
+    void slotEditScenery(quint32 sid);
     void slotEditTower(quint32 tid);
 
     /** Build the embedded graphical structure canvas pane (plane switcher + the
@@ -362,7 +467,23 @@ protected slots:
      *  structure, or add a bar. kind: 0=Stand,1=Tower,2=Truss,3=Platform,4=Pipe. */
     void studioAddFixture(int kind, quint32 id, class StructureStudioView *view);
     void studioAddGroup(int kind, quint32 id, class StructureStudioView *view);
-    void studioAddBar(int kind, quint32 id, class StructureStudioView *view);
+    /** Add a bar to the structure this editor shows: on a truss at @p offset
+     *  metres along it (mid-span when -1), a crossbar on a stand's or pipe's
+     *  boom. */
+    void studioAddBar(int kind, quint32 id, class StructureStudioView *view, float offset = -1.0f);
+    /** A hanger on truss (kind 2) or Tower (kind 1) @p id, at @p offset along it
+     *  (-1: three quarters up); opens its editor. */
+    void studioAddHanger(int kind, quint32 id, class StructureStudioView *view, float offset = -1.0f);
+public:
+    /** The same hanger as @p hid on every tower (standing truss or Tower)
+     *  that lacks one at that height and direction. Returns how many. */
+    int copyHangerToEveryTower(quint32 hid);
+protected:
+
+    /** What a fixture is mounted on, in words -- shared by the Fixture
+     *  Properties dialog and the Lighting Studio inspector so they cannot
+     *  describe the same fixture differently. */
+    QString mountDescription(const struct FixtureRigProps &rp, quint32 fid) const;
     /** Mount one fixture on the structure (clears its other mounts). */
     void mountFixtureOnStructure(quint32 fid, int kind, quint32 id, quint32 boomId);
     /** The pipe id to hang fixtures on for a stand/pipe kind (invalid if none). */
@@ -381,12 +502,19 @@ protected slots:
     /** Open the platform edit dialog for the given platform ID. */
     void slotEditPlatform(quint32 pid);
     void slotEditPipe(quint32 bid);
+    void slotEditHanger(quint32 hid);
 
     /** Open platform edit on double-click. */
     void slotPlatformDoubleClicked(quint32 pid);
 
     /** Add a new stage target and open its editor. */
     void slotAddTarget();
+
+    /** Stand a person where the click was: a Person target, named and placed
+     *  in one step, with no dialog in the way. Whoever it is, its height comes
+     *  from the follow-spot subject height, so the views draw it at the size
+     *  the lighting is aimed for. */
+    void slotAddPerson();
 
     /** Open the target edit dialog for the given target ID. */
     void slotEditTarget(quint32 tid);
@@ -424,6 +552,7 @@ protected:
     QPointF m_pendingAddScenePos;
     MonitorGraphicsView* m_graphicsView;
     MonitorLayersPanel* m_layersPanel;
+    MonitorInventoryPanel* m_inventoryPanel;
     QSpinBox* m_gridWSpin;
     QSpinBox *m_gridHSpin;
     QComboBox *m_unitsCombo;
@@ -440,6 +569,7 @@ protected:
     class MonitorRuler *m_vRuler = nullptr;  ///< left ruler
     QWidget   *m_rulerCorner = nullptr;      ///< top-left corner filler
     QLabel    *m_readoutLabel = nullptr;     ///< live X/Y coordinate readout
+    class QToolButton *m_offStageBtn = nullptr;  ///< footer "N off stage" warning
     QLabel    *m_modeLabel = nullptr;        ///< prominent current-mode chip
     /** Refresh the footer mode chip from the POV / overlay / Build state. */
     void updateModeIndicator();
@@ -456,13 +586,26 @@ protected:
     void applyMapView(int view);
     QAction *m_labelsAction;
     QAction *m_lockAction;
+    QAction *m_undoAction = nullptr;
     QAction *m_layersAction;
+    QAction *m_inventoryAction;
     QAction *m_groupAction;
     QAction *m_ungroupAction;
     QAction *m_addPlatformAction;
     QAction *m_pasteAction;
 
 private:
+    /** Opaque state for an in-progress locateFixture() flash sequence -- defined
+     *  in monitor.cpp (owns a FixtureLocate + QTimer, both file-local types
+     *  there). One per fixture id currently flashing; erased when the sequence
+     *  finishes or is cancelled by a second locateFixture() call on the same id. */
+    struct LocateSession;
+    QHash<quint32, LocateSession *> m_locateSessions;
+    /** Stops and deletes every in-progress locateFixture() session -- called
+     *  from the destructor. Defined next to LocateSession's own definition
+     *  (needs the complete type to actually delete each one). */
+    void cancelAllLocateSessions();
+
     /** Which structural feature a fixture lookup is scoped to. */
     enum FeatureKind { TrussFeature, PipeFeature, TowerFeature, PlatformFeature };
     /** Fixture ids currently mounted on the given feature (direct rig mount, or —
@@ -495,6 +638,7 @@ private:
         QString name;
         float   originX, originY;   ///< metres
         float   width, depth, height;
+        float   rotation, frontCurve;
         QColor  color;
     };
     struct TargetClip

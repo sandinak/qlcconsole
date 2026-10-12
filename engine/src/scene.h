@@ -28,6 +28,7 @@
 #include "genericfader.h"
 #include "fadechannel.h"
 #include "scenevalue.h"
+#include "scenetransition.h"
 #include "dmxsource.h"
 #include "function.h"
 #include "fixture.h"
@@ -291,6 +292,29 @@ private:
     quint32 m_lookScopeGroupId = FixtureGroup::invalidId();
 
     /*********************************************************************
+     * Transitions
+     *********************************************************************/
+public:
+    /** How the whole look arrives when the scene starts, and leaves when it
+     *  stops: each fixture head at its own moment (a wipe across the stage,
+     *  from the centre, a dissolve, along each bar) -- or None, the scene's
+     *  own fade as always. An active transition takes the place of the fade
+     *  time; effects in the look follow it too. Not in Beats tempo. */
+    SceneTransition transitionIn() const { return m_transitionIn; }
+    void setTransitionIn(const SceneTransition &t) { m_transitionIn = t; }
+    SceneTransition transitionOut() const { return m_transitionOut; }
+    void setTransitionOut(const SceneTransition &t) { m_transitionOut = t; }
+
+    /** The fixtures a transition places: the look's groups' and its own. */
+    QList<quint32> transitionFixtures() const;
+
+private:
+    SceneTransition m_transitionIn;
+    SceneTransition m_transitionOut;
+    TransitionMap m_transitionMapIn;        ///< built as the scene starts
+    bool m_applyTransitionIn = false;       ///< processValue(): this is the start
+
+    /*********************************************************************
      * Palettes
      *********************************************************************/
 public:
@@ -331,8 +355,22 @@ public:
      *  palettes with an explicit override in either direction appear. */
     QHash<quint32, PaletteFade> paletteFades() const;
 
+    /** A palette being TRIED ON this look: the Programming tab's look editor
+     *  editing a palette the look doesn't have. It plays after the look's own
+     *  palettes (so it wins on the channels it drives) and is never saved,
+     *  copied, or listed by palettes(). invalidId() clears it. Effect palettes
+     *  are not tried on -- the EffectScriptRunner owns those. */
+    void setTrialPalette(quint32 id);
+    quint32 trialPalette() const;
+
+    /** What actually plays: palettes(), then the trial palette if it isn't
+     *  already one of them. Scene::write and the rig view resolve this. */
+    QList<quint32> runtimePalettes() const;
+
 private:
     QList<quint32> m_palettes;
+    /** See setTrialPalette(); guarded by m_bindingsMutex, never saved. */
+    quint32 m_trialPalette = 0xFFFFFFFF;
     /** paletteId -> fade override (see setPaletteFade). Guarded by
      *  m_bindingsMutex like m_palettes. */
     QHash<quint32, PaletteFade> m_paletteFade;

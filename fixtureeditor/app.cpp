@@ -24,6 +24,7 @@
 #include <QFileDialog>
 #include <QWidgetList>
 #include <QMessageBox>
+#include <QDockWidget>
 #include <QSettings>
 #include <QMdiArea>
 #include <QMenuBar>
@@ -36,6 +37,7 @@
 #include <QMenu>
 #include <QIcon>
 #include <QUrl>
+#include <QFile>
 
 #include "qlcfixturedefcache.h"
 #include "qlcfixturedef.h"
@@ -45,8 +47,10 @@
 #include "avolitesd4parser.h"
 
 #include "app.h"
-#include "aboutbox.h"
 #include "fixtureeditor.h"
+#include "repairdialog.h"
+#include "fixturedefcheck.h"
+#include "fixturebrowser.h"
 
 #define SETTINGS_GEOMETRY "workspace/geometry"
 #define SETTINGS_OPENDIALOGSTATE "workspace/opendialog"
@@ -69,6 +73,26 @@ App::App(QWidget *parent) : QMainWindow(parent)
     QMdiArea *mdiArea = new QMdiArea(this);
     mdiArea->setBackground(QBrush(QColor(0x60, 0x60, 0x60)));
     setCentralWidget(mdiArea);
+
+    // Side panel: every fixture definition already on disk, searchable by
+    // manufacturer/model, double-click to open -- previously the only way
+    // in was File > Open's raw file dialog, with no browsing by name at
+    // all. A dock (not a splitter replacing centralWidget()) so every
+    // existing qobject_cast<QMdiArea*>(centralWidget()) call site
+    // (loadFixtureDefinition() and friends) keeps working untouched.
+    QDockWidget *browserDock = new QDockWidget(tr("Fixture Library"), this);
+    browserDock->setObjectName("FixtureBrowserDock");
+    // Fixed in place on purpose: with QDockWidget's default features this
+    // panel has its own close button, and there's no menu bar (see
+    // initMenuBar() below) offering any way to bring it back once
+    // dismissed -- accidentally closing it would permanently strand you
+    // without the browser for the rest of the session.
+    browserDock->setFeatures(QDockWidget::NoDockWidgetFeatures);
+    FixtureBrowser *browser = new FixtureBrowser(browserDock);
+    browserDock->setWidget(browser);
+    addDockWidget(Qt::LeftDockWidgetArea, browserDock);
+    connect(browser, &FixtureBrowser::definitionActivated,
+            this, &App::loadFixtureDefinition);
 
     QCoreApplication::setOrganizationName("qlcplus");
     QCoreApplication::setOrganizationDomain("qlcplus.org");
@@ -120,8 +144,42 @@ void App::loadFixtureDefinition(const QString& path)
 
     /* Attempt to create a fixture definition from the selected file */
     QString error(tr("Unrecognized file extension: %1").arg(path));
+    bool repaired = false;
     if (path.endsWith(KExtFixture, Qt::CaseInsensitive) == true)
+    {
         fixtureDef = loadQXF(path, error);
+        /* Will not load -- or loads but loses part of itself on the way (a
+           mode naming a channel that is not there): say where and why, and
+           offer the repairs, rather than "unable to load" and nothing to go
+           on, or a definition quietly missing a channel. */
+        QFile file(path);
+        QByteArray xml;
+        FixtureDefCheck::ParseProblem problem;
+        if (file.open(QIODevice::ReadOnly))
+        {
+            xml = file.readAll();
+            file.close();
+        }
+        if (!xml.isEmpty() && FixtureDefCheck::diagnose(xml, &problem))
+        {
+            delete fixtureDef;
+            fixtureDef = NULL;
+            RepairDialog dlg(path, xml, this);
+            if (dlg.exec() != QDialog::Accepted)
+                return;
+            fixtureDef = new QLCFixtureDef;
+            if (fixtureDef->loadXMLData(dlg.xml()) == false)
+            {
+                delete fixtureDef;
+                fixtureDef = NULL;
+            }
+            else
+            {
+                fixtureDef->setDefinitionSourceFile(path);
+                repaired = (dlg.xml() != xml);     // opened as it was: nothing to save
+            }
+        }
+    }
     else if (path.endsWith(KExtAvolitesFixture, Qt::CaseInsensitive) == true)
         fixtureDef = loadD4(path, error);
     else
@@ -136,12 +194,17 @@ void App::loadFixtureDefinition(const QString& path)
 
         sub->setWidget(editor);
         sub->setAttribute(Qt::WA_DeleteOnClose);
+        // Its window closing may be the last thing the editor was opened for.
+        connect(sub, &QObject::destroyed, this, &App::quitIfDone, Qt::QueuedConnection);
         qobject_cast<QMdiArea*> (centralWidget())->addSubWindow(sub);
 
         // check if sub-window is outside main area
         if (sub->x() >= this->width() || sub->y() >= this->height())
             sub->setGeometry(0, 0, sub->width(), sub->height());
 
+        // Repaired in memory: unsaved until it is looked over and saved.
+        if (repaired)
+            editor->setModified(true);
         editor->show();
         sub->show();
     }
@@ -150,6 +213,20 @@ void App::loadFixtureDefinition(const QString& path)
         QMessageBox::warning(this, tr("Fixture loading failed"),
                              tr("Unable to load fixture definition: ") + error);
     }
+}
+
+void App::setCloseWhenDone(bool on)
+{
+    m_closeWhenDone = on;
+}
+
+void App::quitIfDone()
+{
+    if (m_closeWhenDone == false)
+        return;
+    QMdiArea *area = qobject_cast<QMdiArea*> (centralWidget());
+    if (area != NULL && area->subWindowList().isEmpty())
+        QMetaObject::invokeMethod(qApp, "quit", Qt::QueuedConnection);
 }
 
 QLCFixtureDef *App::loadQXF(const QString& path, QString& errorMsg) const
@@ -278,11 +355,6 @@ void App::initActions()
     connect(m_helpIndexAction, SIGNAL(triggered(bool)),
             this, SLOT(slotHelpIndex()));
 
-    m_helpAboutAction = new QAction(QIcon(":/qlcconsole.png"),
-                                    tr("About Fixture Definition Editor..."), this);
-    connect(m_helpAboutAction, SIGNAL(triggered(bool)),
-            this, SLOT(slotHelpAbout()));
-
     m_helpAboutQtAction = new QAction(QIcon(":/qt.png"),
                                       tr("About Qt..."), this);
     connect(m_helpAboutQtAction, SIGNAL(triggered(bool)),
@@ -304,7 +376,30 @@ void App::initToolBar()
     m_toolBar->addSeparator();
 
     m_toolBar->addAction(m_helpIndexAction);
-    m_toolBar->addAction(m_helpAboutAction);
+    // "About Fixture Definition Editor..." deliberately left off -- this is
+    // one app in the qlcconsole suite, not a standalone product; the main
+    // window's own About already covers it, and duplicating that here was
+    // just clutter.
+
+    // Follows the SAME "Toolbar Style" preference as qlcconsole's own main
+    // toolbar (App::applyTabLabelMode(), ui/src/app.cpp) rather than a
+    // separate setting local to this app -- constructed with that app's
+    // explicit org/name rather than this one's (QCoreApplication's, set
+    // just below: organizationName matches, but applicationName doesn't,
+    // so a plain QSettings here would read/write an unrelated file).
+    QSettings mainAppSettings(QStringLiteral("qlcplus"), QStringLiteral("qlcconsole"));
+    switch (mainAppSettings.value(QStringLiteral("workspace/tabLabelMode"), 0).toInt())
+    {
+    case 1: // TabIconOnly
+        m_toolBar->setToolButtonStyle(Qt::ToolButtonIconOnly);
+        break;
+    case 2: // TabTextOnly
+        m_toolBar->setToolButtonStyle(Qt::ToolButtonTextOnly);
+        break;
+    default: // TabIconAndText
+        m_toolBar->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
+        break;
+    }
 }
 
 void App::initMenuBar()
@@ -324,7 +419,6 @@ void App::initMenuBar()
     m_helpMenu->setTitle(tr("&Help"));
     m_helpMenu->addAction(m_helpIndexAction);
     m_helpMenu->addSeparator();
-    m_helpMenu->addAction(m_helpAboutAction);
     m_helpMenu->addAction(m_helpAboutQtAction);
 
     menuBar()->addMenu(m_fileMenu);
@@ -433,12 +527,6 @@ void App::slotFileQuit()
 void App::slotHelpIndex()
 {
     QDesktopServices::openUrl(QUrl("https://docs.qlcplus.org/v4/fixture-definition-editor"));
-}
-
-void App::slotHelpAbout()
-{
-    AboutBox aboutbox(this);
-    aboutbox.exec();
 }
 
 void App::slotHelpAboutQt()

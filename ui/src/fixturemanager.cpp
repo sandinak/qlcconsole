@@ -25,6 +25,7 @@
 #include <QLabel>
 #include <QFont>
 #include <QTreeWidget>
+#include <QTreeWidgetItemIterator>
 #include <QScrollArea>
 #include <QMessageBox>
 #include <QToolButton>
@@ -46,6 +47,7 @@
 #include <QtGui>
 #include <climits>
 
+#include "patchlistdialog.h"
 #include "qlcfixturemode.h"
 #include "qlcfixturedef.h"
 #include "qlcchannel.h"
@@ -59,12 +61,17 @@
 #include "fixturetreewidget.h"
 #include "channelsselection.h"
 #include "addchannelsgroup.h"
+#include <functional>
 #include "fixturemanager.h"
+#include <QShortcut>
 #include "fixtureremap.h"
 #include "addrgbpanel.h"
 #include "addfixture.h"
+#include "patchinventorydialog.h"
+#include "fixturecreator.h"
 #include "rdmmanager.h"
 #include "universe.h"
+#include "patchundo.h"
 #include "fixture.h"
 #include "apputil.h"
 #include "doc.h"
@@ -93,6 +100,7 @@ FixtureManager::FixtureManager(QWidget* parent, Doc* doc)
     , m_ctxUniverse(InputOutputMap::invalidUniverse())
     , m_splitter(NULL)
     , m_fixtures_tree(NULL)
+    , m_fixturesSearch(NULL)
     , m_channel_groups_tree(NULL)
     , m_rdmManager(NULL)
     , m_info(NULL)
@@ -102,12 +110,19 @@ FixtureManager::FixtureManager(QWidget* parent, Doc* doc)
     , m_power(NULL)
     , m_universeUsage(NULL)
     , m_addAction(NULL)
+    , m_addInventoryAction(NULL)
+    , m_patchInventoryAction(NULL)
     , m_addRGBAction(NULL)
+    , m_addFixtureButtonAction(NULL)
+    , m_addChannelsGroupAction(NULL)
     , m_removeAction(NULL)
     , m_propertiesAction(NULL)
     , m_testAction(NULL)
+    , m_locateAction(NULL)
+    , m_resetAction(NULL)
     , m_fadeConfigAction(NULL)
     , m_remapAction(NULL)
+    , m_patchListAction(NULL)
     , m_groupAction(NULL)
     , m_unGroupAction(NULL)
     , m_newGroupAction(NULL)
@@ -115,12 +130,23 @@ FixtureManager::FixtureManager(QWidget* parent, Doc* doc)
     , m_moveDownAction(NULL)
     , m_importAction(NULL)
     , m_exportAction(NULL)
+    , m_expandAllAction(NULL)
+    , m_collapseAllAction(NULL)
     , m_groupMenu(NULL)
 {
     Q_ASSERT(s_instance == NULL);
     s_instance = this;
 
     Q_ASSERT(doc != NULL);
+
+    /* ⌘Z here undoes the rig's last change -- a patch included (the Patch
+       dialog records one undo step for what it applied). */
+    QShortcut *undo = new QShortcut(QKeySequence::Undo, this);
+    undo->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(undo, &QShortcut::activated, this, []() {
+        if (Monitor *mon = Monitor::instance())
+            mon->undo();
+    });
 
     new QVBoxLayout(this);
     layout()->setContentsMargins(0, 0, 0, 0);
@@ -137,6 +163,11 @@ FixtureManager::FixtureManager(QWidget* parent, Doc* doc)
         grpItem->setExpanded(true);
 
     /* Connect fixture list change signals from the new document object */
+    // A fixture renamed elsewhere (the Studio, Layers) shows here too.
+    connect(m_doc, &Doc::fixtureChanged, this, [this](quint32 id) {
+        if (m_fixtures_tree != NULL)
+            m_fixtures_tree->refreshFixtureName(id);
+    });
     connect(m_doc, SIGNAL(fixtureRemoved(quint32)),
             this, SLOT(slotFixtureRemoved(quint32)));
 
@@ -198,23 +229,48 @@ FixtureManager* FixtureManager::instance()
 
 void FixtureManager::slotFixtureRemoved(quint32 id)
 {
-    QList<QTreeWidgetItem*> groupsToDelete;
+    /* Find and drop the fixture's own row wherever it actually lives. It
+       used to be a direct child of a top-level folder -- true for a
+       fixture group, still -- but a universe's fixtures now sit one level
+       further down (Universes -> Universe N -> fixture, see updateTree()'s
+       "always present" universesRoot), and this only ever looked at direct
+       children. Doc::deleteFixture() had already succeeded by the time this
+       runs; the row was simply never found, so it sat there looking exactly
+       like the delete had silently done nothing. QTreeWidgetItemIterator
+       finds it regardless of how deep the tree's own grouping goes. */
+    /* Every row, not just the first: a fixture can be listed in more than one
+       place (a fixture group AND the Inventory, say). Collected first --
+       deleting while iterating would pull the tree out from under the
+       iterator. */
+    QList<QTreeWidgetItem *> rows;
+    for (QTreeWidgetItemIterator treeIt(m_fixtures_tree); *treeIt != NULL; ++treeIt)
+    {
+        QVariant fxiVar = (*treeIt)->data(KColumnName, PROP_ID);
+        if (fxiVar.isValid() == true && fxiVar.toUInt() == id
+            && !(*treeIt)->data(KColumnName, PROP_HEAD).isValid())
+            rows << *treeIt;
+    }
+    qDeleteAll(rows);
 
+    // The Inventory's folders carry fixture counts and vanish when emptied.
+    m_fixtures_tree->refreshInventoryCounts();
+
+    /* A top-level folder that just lost its last child: a fixture group
+       with nothing left in it. A universe folder is pre-seeded for every
+       universe regardless of fixture count (see updateTree()), so this is
+       naturally a no-op for those -- its own children are per-universe
+       folders, not fixtures, and removing one fixture two levels down
+       never empties it. */
+    QList<QTreeWidgetItem*> groupsToDelete;
     for (int i = 0; i < m_fixtures_tree->topLevelItemCount(); i++)
     {
         QTreeWidgetItem* grpItem = m_fixtures_tree->topLevelItem(i);
         Q_ASSERT(grpItem != NULL);
-        for (int j = 0; j < grpItem->childCount(); j++)
-        {
-            QTreeWidgetItem* fxiItem = grpItem->child(j);
-            Q_ASSERT(fxiItem != NULL);
-            QVariant var = fxiItem->data(KColumnName, PROP_ID);
-            if (var.isValid() == true && var.toUInt() == id)
-            {
-                delete fxiItem;
-                break;
-            }
-        }
+        // The Inventory and Power roots stay even when empty: they are where
+        // their Add actions live.
+        if (grpItem->data(KColumnName, PROP_INVENTORY).isValid()
+            || grpItem->data(KColumnName, PROP_SOURCE).isValid())
+            continue;
         if (grpItem->childCount() == 0)
             groupsToDelete << grpItem;
     }
@@ -245,6 +301,11 @@ void FixtureManager::slotChannelsGroupRemoved(quint32 id)
 
 void FixtureManager::slotModeChanged(Doc::Mode mode)
 {
+    // Split out from m_addAction (see its declaration); mirrors the same
+    // Design-only gating m_addAction gets below, unconditionally in every
+    // Design sub-branch and unconditionally false in the Operate branch.
+    m_addChannelsGroupAction->setEnabled(mode == Doc::Design);
+
     if (mode == Doc::Design)
     {
         int selected = m_fixtures_tree->selectedItems().size();
@@ -270,12 +331,20 @@ void FixtureManager::slotModeChanged(Doc::Mode mode)
             {
                 m_propertiesAction->setEnabled(true);
                 m_testAction->setEnabled(true);
+                m_resetAction->setEnabled(true);
             }
             else
             {
                 m_propertiesAction->setEnabled(false);
                 m_testAction->setEnabled(false);
+                m_resetAction->setEnabled(false);
             }
+            /* Locate is not single-selection like the others. Properties and
+               Reset act on one fixture because they have nowhere to put a
+               second answer; Locate just flashes, and "which of these twelve
+               are the front truss" is the question it exists to answer. Works
+               on a multi-selection and on a whole group. */
+            m_locateAction->setEnabled(true);
             m_groupAction->setEnabled(true);
 
             // Don't allow ungrouping from the "All fixtures" group
@@ -309,9 +378,14 @@ void FixtureManager::slotModeChanged(Doc::Mode mode)
         else
             m_fadeConfigAction->setEnabled(false);
 
-        // Always allow creating a group (its menu's "New Group" makes an
-        // empty one when no fixtures are selected; you then drag fixtures in).
-        m_groupAction->setEnabled(true);
+        // m_groupAction ("Add fixture to group...") is left at whichever
+        // per-branch state was set above -- true only when an actual fixture
+        // is selected. It used to be force-enabled unconditionally here
+        // because its dropdown's "New Group..." entry needed to work even
+        // with nothing selected; that's now a right-click on the Fixture
+        // Groups root/a group folder instead (slotContextMenuRequested()),
+        // so this action's only remaining job -- assigning a selection to an
+        // existing group -- genuinely needs a fixture selected.
     }
     else
     {
@@ -327,6 +401,9 @@ void FixtureManager::slotModeChanged(Doc::Mode mode)
         bool singleFixture = (item && item->data(KColumnName, PROP_ID).isValid() &&
                               m_fixtures_tree->selectedItems().size() == 1);
         m_testAction->setEnabled(singleFixture);
+        m_resetAction->setEnabled(singleFixture);
+        // Locate works on any selection, including in Operate mode.
+        m_locateAction->setEnabled(m_fixtures_tree->selectedItems().isEmpty() == false);
     }
 }
 
@@ -420,6 +497,8 @@ void FixtureManager::initDataView()
             this, SLOT(slotGroupFolderRenamed(QString,QString)));
     connect(m_fixtures_tree, SIGNAL(fixturesDroppedOnCircuit(QList<quint32>,int,int)),
             this, SLOT(slotFixturesDroppedOnCircuit(QList<quint32>,int,int)));
+    connect(m_fixtures_tree, SIGNAL(fixturesDroppedOnUniverse(QList<quint32>,quint32)),
+            this, SLOT(slotFixturesDroppedOnUniverse(QList<quint32>,quint32)));
 
     connect(m_fixtures_tree, SIGNAL(itemSelectionChanged()),
             this, SLOT(slotSelectionChanged()));
@@ -436,10 +515,29 @@ void FixtureManager::initDataView()
     connect(m_fixtures_tree, SIGNAL(collapsed(QModelIndex)),
             this, SLOT(slotFixtureItemExpanded()));
 
-    tabs->setTabToolTip(tabs->addTab(m_fixtures_tree, tr("Fixture Groups")), tr(
-        "Spatial groups: fixtures arranged on a head-layout grid.\n"
-        "Used for XY-pad / per-head effects and as drag-drop dynamic targets "
-        "in the Programming tab. Not the same as Channel Groups (next tab)."));
+    // Search box above the tree — filters by row name as you type, hiding
+    // everything else (but keeping a folder/group visible whenever something
+    // inside it still matches).
+    QWidget *fixturesPane = new QWidget(this);
+    QVBoxLayout *fixturesPaneLayout = new QVBoxLayout(fixturesPane);
+    fixturesPaneLayout->setContentsMargins(0, 0, 0, 0);
+    fixturesPaneLayout->setSpacing(0);
+    m_fixturesSearch = new QLineEdit(fixturesPane);
+    m_fixturesSearch->setPlaceholderText(tr("Search fixtures..."));
+    m_fixturesSearch->setClearButtonEnabled(true);
+    connect(m_fixturesSearch, &QLineEdit::textChanged,
+            this, &FixtureManager::slotFixturesSearchChanged);
+    fixturesPaneLayout->addWidget(m_fixturesSearch);
+    fixturesPaneLayout->addWidget(m_fixtures_tree, 1);
+
+    // Labeled "Fixtures" (not "Fixture Groups") -- this tree holds the whole
+    // patch (fixtures, spatial groups, Power, Universes), not just groups;
+    // the old label undersold what's actually in it.
+    tabs->setTabToolTip(tabs->addTab(fixturesPane, tr("Fixtures")), tr(
+        "The full patch: fixtures, universes, power circuits, and spatial "
+        "groups (fixtures arranged on a head-layout grid, used for XY-pad / "
+        "per-head effects and as drag-drop dynamic targets in the "
+        "Programming tab). Not the same as Channel Groups (next tab)."));
 
     m_channel_groups_tree = new QTreeWidget(this);
     QStringList chan_labels;
@@ -449,11 +547,14 @@ void FixtureManager::initDataView()
     m_channel_groups_tree->setAllColumnsShowFocus(true);
     m_channel_groups_tree->setIconSize(QSize(32, 32));
     m_channel_groups_tree->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    m_channel_groups_tree->setContextMenuPolicy(Qt::CustomContextMenu);
 
     connect(m_channel_groups_tree, SIGNAL(itemSelectionChanged()),
             this, SLOT(slotChannelsGroupSelectionChanged()));
     connect(m_channel_groups_tree, SIGNAL(itemDoubleClicked(QTreeWidgetItem*,int)),
             this, SLOT(slotChannelsGroupDoubleClicked(QTreeWidgetItem*)));
+    connect(m_channel_groups_tree, SIGNAL(customContextMenuRequested(const QPoint&)),
+            this, SLOT(slotChannelGroupContextMenuRequested(const QPoint&)));
 
     tabs->setTabToolTip(tabs->addTab(m_channel_groups_tree, tr("Channel Groups")), tr(
         "DMX-channel groups for Simple Desk (e.g. all the Gobo channels across "
@@ -612,6 +713,10 @@ void FixtureManager::clearRightPane()
         delete m_groupEditor;
         m_groupEditor = NULL;
         m_groupEditorId = FixtureGroup::invalidId();
+        // Only relevant while a grid that can consume per-head drops is open
+        // — see FixtureTreeWidget::setShowHeads()'s own comment for why this
+        // isn't just always on.
+        m_fixtures_tree->setShowHeads(false);
     }
     if (m_power != NULL)
     {
@@ -628,7 +733,14 @@ void FixtureManager::clearRightPane()
 void FixtureManager::fixtureGroupSelected(FixtureGroup* grp)
 {
     if (m_groupEditor != NULL && m_groupEditorId == grp->id())
-        return; // already editing this group's layout
+    {
+        /* Already editing it -- but make sure it can be SEEN. Returning early
+           with a collapsed right pane means clicking the group again does
+           nothing at all, forever: the editor exists, so this path is taken,
+           and nothing ever widens the pane back. */
+        ensureRightPaneVisible();
+        return;
+    }
 
     QByteArray state = m_splitter->saveState();
     clearRightPane();
@@ -636,8 +748,55 @@ void FixtureManager::fixtureGroupSelected(FixtureGroup* grp)
     m_groupEditor = new FixtureGroupEditor(grp, m_doc, this);
     m_groupEditorId = grp->id();
     m_splitter->insertWidget(1, m_groupEditor);
+    // The editor's grid accepts per-head drops (see FixtureGroupEditor::
+    // eventFilter()) — show each fixture's heads as draggable children in
+    // the source tree while it's open, so a specific head (not just a whole
+    // fixture) can actually be dragged onto a cell.
+    m_fixtures_tree->setShowHeads(true);
 
     m_splitter->restoreState(state);
+    ensureRightPaneVisible();
+}
+
+/* A right pane restored to zero width is the same thing as no right pane.
+ *
+   fixtureGroupSelected() (and the other pane-swappers) save the splitter state
+   BEFORE the new widget exists and restore it after inserting, so the sizes
+   being restored describe a different set of widgets. Where the pane was
+   collapsed -- by a drag, or by a state persisted from an earlier session --
+   the editor comes back 0 px wide: built, correct, and invisible, which reads
+   exactly like clicking the group doing nothing at all.
+ *
+   Only ever widens, and only from collapsed, so a pane the operator has
+   deliberately made narrow is left alone. */
+void FixtureManager::ensureRightPaneVisible()
+{
+    if (m_splitter == NULL || m_splitter->count() < 2)
+        return;
+
+    QList<int> sizes = m_splitter->sizes();
+    if (sizes.size() < 2)
+        return;
+
+    const int total = sizes.at(0) + sizes.at(1);
+    if (total <= 0)
+        return;                       // not laid out yet; nothing to fix
+    if (sizes.at(1) > 24)
+        return;                       // already visible
+
+    /* Leave the tree something, but scale that reserve to what there IS: a
+       fixed 120 px floor goes NEGATIVE on a narrow splitter, and the guard then
+       rejected its own result and silently did nothing -- which is how this
+       first looked like the guard not running at all. */
+    const int minTree = qMin(120, total / 2);
+    int right = qMax(240, total / 3);
+    right = qMin(right, total - minTree);
+    if (right <= 0)
+        return;
+
+    sizes[1] = right;
+    sizes[0] = total - right;
+    m_splitter->setSizes(sizes);
 }
 
 void FixtureManager::showPower()
@@ -853,9 +1012,16 @@ void FixtureManager::slotDoubleClicked(QTreeWidgetItem* item)
 
     if (fxivar.isValid() == true)
     {
-        // Double-click a fixture -> properties
+        /* Double-click a fixture -> Fixture Properties, the same dialog as
+           everywhere else (CONSOLIDATION_REVIEW #3); its definition and mode
+           are a button in it, and "Definition & Mode..." in the menu. */
         if (m_doc->mode() != Doc::Operate)
-            slotProperties();
+        {
+            if (Monitor *mon = Monitor::instance())
+                mon->editFixtureProperties(fxivar.toUInt());
+            else
+                slotProperties();
+        }
     }
     else if (grpvar.isValid() == true)
     {
@@ -876,20 +1042,24 @@ void FixtureManager::slotChannelsGroupDoubleClicked(QTreeWidgetItem*)
 
 void FixtureManager::slotTabChanged(int index)
 {
+    // Toolbar composition is per-tab: the "Add" dropdown (fixture/RGB panel)
+    // only makes sense on the fixtures tab; the Channel Groups tab gets its
+    // own single "Add Channel Group..." button.
+    const bool onChannelGroupsTab = (index == 1);
+    m_addFixtureButtonAction->setVisible(onChannelGroupsTab == false);
+    m_addChannelsGroupAction->setVisible(onChannelGroupsTab);
+
     if (index == 1)
     {
-        m_addAction->setToolTip(tr("Add channel group..."));
         updateChannelsGroupView();
         slotChannelsGroupSelectionChanged();
     }
     else if (index == 2)
     {
-        m_addAction->setToolTip(tr("Add fixture..."));
         updateRDMView();
     }
     else
     {
-        m_addAction->setToolTip(tr("Add fixture..."));
         updateView();
         slotSelectionChanged();
     }
@@ -905,6 +1075,11 @@ void FixtureManager::slotFixtureItemExpanded()
 void FixtureManager::slotDisplayFixtureInfo(QString &info)
 {
     m_info->setText(info);
+}
+
+void FixtureManager::slotFixturesSearchChanged(const QString &text)
+{
+    m_fixtures_tree->setTextFilter(text);
 }
 
 void FixtureManager::selectGroup(quint32 id)
@@ -994,35 +1169,52 @@ QString FixtureManager::fixtureInfo(const Fixture *fixture) const
         info += genInfo.arg(tr("Model")).arg(fixtureDef->model());
         info += genInfo.arg(tr("Mode")).arg(fixtureMode->name());
         info += genInfo.arg(tr("Type")).arg(fixtureDef->typeToString(fixtureDef->type()));
+        info += genInfo.arg(tr("Definition")).arg(fixtureDef->sourceDescription());
     }
 
-    // Universe
-    info += genInfo.arg(tr("Universe")).arg(fixture->universe() + 1);
+    // Connection (only worth stating when it isn't plain DMX)
+    if (fixture->connection() == Fixture::Network)
+        info += genInfo.arg(tr("Connection")).arg(fixture->ipAddress().isEmpty()
+                                ? tr("Network (no IP set)")
+                                : tr("Network, unicast to %1").arg(fixture->ipAddress()));
 
-    // Address
-    QString range = QString("%1 - %2").arg(fixture->address() + 1).arg(fixture->address() + fixture->channels());
-    info += genInfo.arg(tr("Address Range")).arg(range);
+    if (fixture->isPatched())
+    {
+        // Universe
+        info += genInfo.arg(tr("Universe")).arg(fixture->universe() + 1);
+
+        // Address
+        QString range = QString("%1 - %2").arg(fixture->address() + 1).arg(fixture->address() + fixture->channels());
+        info += genInfo.arg(tr("Address Range")).arg(range);
+    }
+    else
+    {
+        info += genInfo.arg(tr("Patch")).arg(tr("Unpatched -- in the inventory"));
+    }
 
     // Channels
     info += genInfo.arg(tr("Channels")).arg(fixture->channels());
 
-    // Binary address
-    QString binaryStr = QString("%1").arg(fixture->address() + 1, 10, 2, QChar('0'));
-    QString dipTable("<TABLE COLS='33' cellspacing='0'><TR><TD COLSPAN='33'><IMG SRC=\"" ":/ds_top.png\"></TD></TR>");
-    dipTable += "<TR><TD><IMG SRC=\"" ":/ds_border.png\"></TD><TD><IMG SRC=\"" ":/ds_border.png\"></TD>";
-    for (int i = 9; i >= 0; i--)
+    if (fixture->isPatched())
     {
-        if (binaryStr.at(i) == '0')
-            dipTable += "<TD COLSPAN='3'><IMG SRC=\"" ":/ds_off.png\"></TD>";
-        else
-            dipTable += "<TD COLSPAN='3'><IMG SRC=\"" ":/ds_on.png\"></TD>";
-    }
-    dipTable += "<TD><IMG SRC=\"" ":/ds_border.png\"></TD></TR>";
-    dipTable += "<TR><TD COLSPAN='33'><IMG SRC=\"" ":/ds_bottom.png\"></TD></TR>";
-    dipTable += "</TABLE>";
+        // Binary address
+        QString binaryStr = QString("%1").arg(fixture->address() + 1, 10, 2, QChar('0'));
+        QString dipTable("<TABLE COLS='33' cellspacing='0'><TR><TD COLSPAN='33'><IMG SRC=\"" ":/ds_top.png\"></TD></TR>");
+        dipTable += "<TR><TD><IMG SRC=\"" ":/ds_border.png\"></TD><TD><IMG SRC=\"" ":/ds_border.png\"></TD>";
+        for (int i = 9; i >= 0; i--)
+        {
+            if (binaryStr.at(i) == '0')
+                dipTable += "<TD COLSPAN='3'><IMG SRC=\"" ":/ds_off.png\"></TD>";
+            else
+                dipTable += "<TD COLSPAN='3'><IMG SRC=\"" ":/ds_on.png\"></TD>";
+        }
+        dipTable += "<TD><IMG SRC=\"" ":/ds_border.png\"></TD></TR>";
+        dipTable += "<TR><TD COLSPAN='33'><IMG SRC=\"" ":/ds_bottom.png\"></TD></TR>";
+        dipTable += "</TABLE>";
 
-    info += genInfo.arg(tr("Binary Address (DIP)"))
-            .arg(QString("%1").arg(dipTable));
+        info += genInfo.arg(tr("Binary Address (DIP)"))
+                .arg(QString("%1").arg(dipTable));
+    }
 
     /********************************************************************
      * Channels
@@ -1037,7 +1229,9 @@ QString FixtureManager::fixtureInfo(const Fixture *fixture) const
     for (quint32 ch = 0; ch < fixture->channels(); ch++)
     {
         QString chInfo("<TR><TD>%1</TD><TD>%2</TD><TD>%3</TD></TR>");
-        info += chInfo.arg(ch + 1).arg(fixture->address() + ch + 1)
+        info += chInfo.arg(ch + 1)
+                .arg(fixture->isPatched() ? QString::number(fixture->address() + ch + 1)
+                                          : QString::fromUtf8("\xE2\x80\x94"))
                 .arg(fixture->channel(ch)->name());
     }
 
@@ -1092,6 +1286,9 @@ QString FixtureManager::fixtureInfo(const Fixture *fixture) const
                 .arg(angle2.arg(physical.lensDegreesMin())
                 .arg(physical.lensDegreesMax()));
         }
+        if (physical.lensBeamsPerHead() > 1)
+            info += genInfo.arg(tr("Beams per Head"))
+                .arg(physical.lensBeamsPerHead());
 
         // Focus
         QString frange("%1&deg;");
@@ -1208,32 +1405,73 @@ void FixtureManager::initActions()
     // Fixture actions
     m_addAction = new QAction(QIcon(":/edit_add.png"),
                               tr("Add fixture..."), this);
-    connect(m_addAction, SIGNAL(triggered(bool)),
-            this, SLOT(slotAdd()));
+    connect(m_addAction, &QAction::triggered, this, &FixtureManager::addFixture);
+
+    m_addInventoryAction = new QAction(QIcon(":/edit_add.png"),
+                              tr("Add to inventory..."), this);
+    m_addInventoryAction->setToolTip(tr("Stage a fixture in the inventory: it can be placed and "
+                                        "grouped in the Studio now and given a universe and "
+                                        "address later"));
+    connect(m_addInventoryAction, &QAction::triggered, this, &FixtureManager::addToInventory);
+    // Same Design-only gating as "Add fixture...": mirror it rather than
+    // threading a second action through every branch of slotModeChanged().
+    connect(m_addAction, &QAction::changed, this, [this]() {
+        m_addInventoryAction->setEnabled(m_addAction->isEnabled());
+        m_patchInventoryAction->setEnabled(m_addAction->isEnabled());
+    });
+    m_patchInventoryAction = new QAction(tr("Patch Inventory…"), this);
+    m_patchInventoryAction->setToolTip(tr("Give the staged fixtures a real universe and address"));
+    connect(m_patchInventoryAction, &QAction::triggered, this, [this]() { patchInventory(); });
 
     m_addRGBAction = new QAction(QIcon(":/rgbpanel.png"),
                               tr("Add RGB panel..."), this);
     connect(m_addRGBAction, SIGNAL(triggered(bool)),
             this, SLOT(slotAddRGBPanel()));
 
+    // Channel Groups tab's own creation action — split out from m_addAction
+    // (see m_addChannelsGroupAction's declaration) so the toolbar never
+    // shows the wrong label for the active tab.
+    m_addChannelsGroupAction = new QAction(QIcon(":/edit_add.png"),
+                              tr("Add Channel Group..."), this);
+    connect(m_addChannelsGroupAction, &QAction::triggered, this, &FixtureManager::addChannelsGroup);
+
     m_removeAction = new QAction(QIcon(":/edit_remove.png"),
-                                 tr("Delete items"), this);
+                                 tr("Delete…"), this);
     connect(m_removeAction, SIGNAL(triggered(bool)),
             this, SLOT(slotRemove()));
 
     m_propertiesAction = new QAction(QIcon(":/configure.png"),
-                                     tr("Properties..."), this);
+                                     tr("Fixture Properties…"), this);
     connect(m_propertiesAction, SIGNAL(triggered(bool)),
             this, SLOT(slotProperties()));
 
     m_testAction = new QAction(QIcon(":/fixture.png"),
-                               tr("Test Fixture..."), this);
+                               tr("Test Fixture…"), this);
     m_testAction->setEnabled(false);
     connect(m_testAction, SIGNAL(triggered(bool)),
             this, SLOT(slotTestFixture()));
 
+    m_locateAction = new QAction(QIcon(":/fixture.png"), tr("Locate"), this);
+    m_locateAction->setToolTip(tr("Flash this fixture at full intensity 3 times "
+                                  "to identify it on the rig."));
+    m_locateAction->setEnabled(false);
+    connect(m_locateAction, &QAction::triggered, this, &FixtureManager::slotLocateFixture);
+
+    m_resetAction = new QAction(QIcon(":/fixture.png"), tr("Reset"), this);
+    m_resetAction->setToolTip(tr("Send this fixture's reset command (only shown "
+                                 "when its definition has one)."));
+    m_resetAction->setEnabled(false);
+    connect(m_resetAction, &QAction::triggered, this, &FixtureManager::slotResetFixture);
+
+    /* Named "Channels Fade Configuration" it read as fade-only, so the channel
+       MODIFIER column -- the tool that remaps a channel's DMX values on the way
+       out, e.g. an LM70 whose 0-127 is intensity and 128-255 is strobe -- was
+       effectively unfindable. Same dialog, honest name. */
     m_fadeConfigAction = new QAction(QIcon(":/fade.png"),
-                                     tr("Channels Fade Configuration..."), this);
+                                     tr("Channel Behaviour && Modifiers…"), this);
+    m_fadeConfigAction->setToolTip(
+        tr("Per-channel fade behaviour (HTP/LTP, can-fade) and value modifier "
+           "curves, which remap a channel's DMX values as they are sent."));
     connect(m_fadeConfigAction, SIGNAL(triggered(bool)),
             this, SLOT(slotFadeConfig()));
 
@@ -1246,7 +1484,7 @@ void FixtureManager::initActions()
         "bottom of the list."));
 
     m_unGroupAction = new QAction(QIcon(":/ungroup.png"),
-                                tr("Remove fixture from group"), this);
+                                tr("Remove from Group"), this);
     connect(m_unGroupAction, SIGNAL(triggered(bool)),
             this, SLOT(slotUnGroup()));
 
@@ -1279,6 +1517,22 @@ void FixtureManager::initActions()
                                tr("Remap fixtures..."), this);
     connect(m_remapAction, SIGNAL(triggered(bool)),
             this, SLOT(slotRemap()));
+
+    m_patchListAction = new QAction(QIcon(":/fileexport.png"), tr("Patch List..."), this);
+    m_patchListAction->setToolTip(tr("Every fixture's patch, output and mount, to save as CSV or PDF"));
+    connect(m_patchListAction, &QAction::triggered, this, &FixtureManager::slotPatchList);
+
+    // Icon-less, matching ConnectionsTree::appendUniversalMenuActions()'s
+    // "Collapse/Expand everything below" -- expand/collapse-all is a tree-
+    // state toggle, not an add/remove of anything, so it shouldn't borrow
+    // edit_add/edit_remove's create/delete iconography.
+    m_expandAllAction = new QAction(tr("Expand All"), this);
+    connect(m_expandAllAction, &QAction::triggered, this,
+            [this]() { if (m_fixtures_tree) m_fixtures_tree->expandAll(); });
+
+    m_collapseAllAction = new QAction(tr("Collapse All"), this);
+    connect(m_collapseAllAction, &QAction::triggered, this,
+            [this]() { if (m_fixtures_tree) m_fixtures_tree->collapseAll(); });
 }
 
 void FixtureManager::updateGroupMenu()
@@ -1293,15 +1547,15 @@ void FixtureManager::updateGroupMenu()
     foreach (QAction* a, m_groupMenu->actions())
         m_groupMenu->removeAction(a);
 
-    // Put all known fixture groups to the menu
+    // Put all known fixture groups to the menu. Creating a new one no longer
+    // lives here -- it's a right-click on the Fixture Groups root/a group
+    // folder instead (slotContextMenuRequested()) -- so every entry from
+    // here on is a real existing group with valid data().
     foreach (FixtureGroup* grp, m_doc->fixtureGroups())
     {
         QAction* a = m_groupMenu->addAction(grp->name());
         a->setData((qulonglong) grp);
     }
-
-    // Put a new group action to the group menu
-    m_groupMenu->addAction(m_newGroupAction);
 
     // Put the group menu to the group action
     m_groupAction->setMenu(m_groupMenu);
@@ -1320,37 +1574,56 @@ void FixtureManager::initToolBar()
     // extended here to the other manager toolbars that never set one.
     toolbar->setIconSize(QSize(20, 20));
     layout()->setMenuBar(toolbar);
-    toolbar->addAction(m_addAction);
-    toolbar->addAction(m_addRGBAction);
-    toolbar->addAction(m_removeAction);
-    toolbar->addAction(m_propertiesAction);
-    toolbar->addAction(m_testAction);
-    toolbar->addAction(m_fadeConfigAction);
-    toolbar->addSeparator();
-    toolbar->addAction(m_groupAction);
-    toolbar->addAction(m_unGroupAction);
-    toolbar->addSeparator();
-    toolbar->addAction(m_moveUpAction);
-    toolbar->addAction(m_moveDownAction);
-    toolbar->addSeparator();
-    toolbar->addAction(m_importAction);
-    toolbar->addAction(m_exportAction);
-    toolbar->addAction(m_remapAction);
 
-    // Discrete expand/collapse-all for the group tree.
-    toolbar->addSeparator();
-    QAction *expandAllAction = new QAction(QIcon(":/edit_add.png"), tr("Expand all groups"), this);
-    QAction *collapseAllAction = new QAction(QIcon(":/edit_remove.png"), tr("Collapse all groups"), this);
-    connect(expandAllAction, &QAction::triggered, this,
-            [this]() { if (m_fixtures_tree) m_fixtures_tree->expandAll(); });
-    connect(collapseAllAction, &QAction::triggered, this,
-            [this]() { if (m_fixtures_tree) m_fixtures_tree->collapseAll(); });
-    toolbar->addAction(expandAllAction);
-    toolbar->addAction(collapseAllAction);
+    // Trimmed to creation-only actions (2026-09-03 modernization pass):
+    // Properties/Test/Remove/Ungroup/Move Up/Down are all selection- or
+    // row-dependent, so they now live only in the tree context menus
+    // (slotContextMenuRequested() / slotChannelGroupContextMenuRequested()),
+    // matching Connections/Devices' toolbar-free convention. Import/Export/
+    // Remap/Fade Configuration are document-wide, not row-dependent either —
+    // those moved to App's "Fixtures" menu bar entry (populateFixturesMenu()).
+    // Expand/Collapse-all moved into the fixture tree's context menu.
+    // "Add fixture to group..." (m_groupAction) is also selection-dependent
+    // (it assigns THIS selection to an existing group) -- dropped from the
+    // toolbar too, staying only in the fixture context menu. Group CREATION
+    // moved off this toolbar entirely, onto the Fixture Groups root/a group
+    // folder's own right-click ("New Group...", see
+    // slotContextMenuRequested()) instead of a menu-bar/toolbar action.
 
-    QToolButton* btn = qobject_cast<QToolButton*> (toolbar->widgetForAction(m_groupAction));
-    Q_ASSERT(btn != NULL);
-    btn->setPopupMode(QToolButton::InstantPopup);
+    // "Add" dropdown (Add Fixture.../Add RGB panel...) — consolidates what
+    // used to be two separate always-visible buttons. Fixtures-tab only;
+    // hidden on the Channel Groups tab in favor of m_addChannelsGroupAction.
+    QToolButton* addBtn = new QToolButton(toolbar);
+    addBtn->setText(tr("Add"));
+    addBtn->setIcon(QIcon(":/edit_add.png"));
+    addBtn->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    addBtn->setPopupMode(QToolButton::InstantPopup);
+    QMenu* addMenu = new QMenu(addBtn);
+    addMenu->addAction(m_addAction);
+    addMenu->addAction(m_addInventoryAction);
+    addMenu->addAction(m_patchInventoryAction);
+    addMenu->addAction(m_addRGBAction);
+    addBtn->setMenu(addMenu);
+    m_addFixtureButtonAction = toolbar->addWidget(addBtn);
+
+    // addBtn is a plain QToolButton, not an action-backed toolbar button, so
+    // it doesn't automatically gray out when its menu's actions do (e.g.
+    // Operate mode, via slotModeChanged()) -- mirror m_addAction's enabled
+    // state onto it explicitly. m_addAction and m_addRGBAction are always
+    // enabled/disabled together in slotModeChanged(), so tracking either is
+    // equivalent.
+    connect(m_addAction, &QAction::changed, addBtn, [addBtn, this]() {
+        addBtn->setEnabled(m_addAction->isEnabled());
+    });
+    addBtn->setEnabled(m_addAction->isEnabled());
+
+    toolbar->addAction(m_addChannelsGroupAction);
+
+    // Initial per-tab visibility: the fixtures tab (index 0) is active at
+    // startup, and slotTabChanged() isn't guaranteed to fire before this
+    // (its QTabWidget::currentChanged connection is only made once both
+    // tabs already exist in initDataView(), called after this).
+    m_addChannelsGroupAction->setVisible(false);
 
     // Match the main window's icon/text display preference.
     applyToolbarLabelMode();
@@ -1371,35 +1644,79 @@ void FixtureManager::applyToolbarLabelMode()
         m_toolbar->setToolButtonStyle(style);
 }
 
+void FixtureManager::populateFixturesMenu(QMenu *menu)
+{
+    menu->addAction(m_importAction);
+    menu->addAction(m_exportAction);
+    menu->addAction(m_remapAction);
+    menu->addAction(m_patchListAction);
+    menu->addSeparator();
+    menu->addAction(m_fadeConfigAction);
+}
+
+void FixtureManager::slotPatchList()
+{
+    PatchListDialog dlg(m_doc, this);
+    dlg.exec();
+}
+
 void FixtureManager::addFixture()
 {
-    AddFixture af(this, m_doc);
-    // Seed the dialog with the universe the context menu was opened in, so
-    // right-clicking inside a universe adds there instead of the global default.
-    if (m_ctxUniverse != InputOutputMap::invalidUniverse())
-        af.preselectUniverse(m_ctxUniverse);
-    if (af.exec() == QDialog::Rejected)
+    // With the Inventory root selected, "Add fixture" means add to the inventory:
+    // asking for a universe and address there is exactly what you are avoiding.
+    QTreeWidgetItem *current = m_fixtures_tree->currentItem();
+    const bool inInventory = current != NULL
+                          && current->data(KColumnName, PROP_INVENTORY).isValid();
+    addFixtureImpl(inInventory);
+}
+
+void FixtureManager::addToInventory()
+{
+    addFixtureImpl(true);
+}
+
+void FixtureManager::returnToInventory(const QList<quint32> &fixtureIds)
+{
+    if (QMessageBox::question(this, tr("Return to inventory"),
+            tr("Release the universe and address of %n fixture(s)?\n\n"
+               "They stay in the show -- placement, groups and looks are kept -- but stop "
+               "sending DMX until they are patched again.", "", fixtureIds.size()),
+            QMessageBox::Yes | QMessageBox::No) != QMessageBox::Yes)
         return;
+    int done = 0;
+    foreach (quint32 fid, fixtureIds)
+        if (m_doc->unpatchFixture(fid))
+            done++;
+    if (done > 0)
+        updateView();
+}
 
-    if (af.invalidAddress())
-    {
-        QMessageBox msg(QMessageBox::Critical, tr("Error"),
-                tr("Please enter a valid address"), QMessageBox::Ok);
-        msg.exec();
-        return;
-    }
+void FixtureManager::patchInventory(const QList<quint32> &fixtureIds)
+{
+    patchOrReaddress(fixtureIds);
+}
 
-    quint32 latestFxi = Fixture::invalidId();
+void FixtureManager::patchOrReaddress(const QList<quint32> &fixtureIds, quint32 universe)
+{
+    PatchInventoryDialog dlg(m_doc, fixtureIds, this);
+    if (universe != UINT_MAX)
+        dlg.placeRows(universe, 0, false);
+    if (dlg.exec() == QDialog::Accepted)
+        updateView();
+}
 
-    QString name = af.name();
-    quint32 address = af.address();
-    quint32 universe = af.universe();
-    quint32 channels = af.channels();
-    int gap = af.gap();
+void FixtureManager::slotFixturesDroppedOnUniverse(const QList<quint32> &fixtureIds, quint32 universe)
+{
+    /* "clean ways to assign fixtures into universes": dragged onto a universe,
+       they are proposed packed into its first free channels -- reviewed and
+       applied in the Patch dialog, not moved behind the LD's back. */
+    patchOrReaddress(fixtureIds, universe);
+}
 
-    QLCFixtureDef* fixtureDef = af.fixtureDef();
-    QLCFixtureMode* mode = af.mode();
-
+void FixtureManager::addFixtureImpl(bool inventory, quint32 likeFixture, const QString &manufacturer)
+{
+    // The group the new fixtures join: the selected fixture's group, or the
+    // selected group itself.
     FixtureGroup* addToGroup = NULL;
     QTreeWidgetItem* current = m_fixtures_tree->currentItem();
     if (current != NULL)
@@ -1420,88 +1737,16 @@ void FixtureManager::addFixture()
         }
     }
 
-    /* If an empty name was given use the model instead */
-    if (name.simplified().isEmpty())
-    {
-        if (fixtureDef != NULL)
-            name = fixtureDef->model();
-        else
-            name = tr("Generic Dimmer");
-    }
-
-    /* Names already in use, so a multi-add continues past existing fixtures
-       and never collides. Seeded once and grown as we assign each name.
-       (A single add keeps the typed name verbatim — duplicates allowed.) */
-    QSet<QString> usedNames;
-    bool nameHasTrailingNumber = false;
-    if (af.amount() > 1)
-    {
-        for (Fixture *ef : m_doc->fixtures())
-            if (ef != NULL)
-                usedNames.insert(ef->name());
-        // If the typed name already ends in a number ("US #4"), treat it as the
-        // start of a run and INCREMENT that number (US #4, US #5, …) rather than
-        // bolting a second "#NN" counter onto it ("US #4 #1", "US #4 #2").
-        nameHasTrailingNumber =
-            QRegularExpression(QStringLiteral("\\d+$")).match(name.trimmed()).hasMatch();
-    }
-
-    /* Add the rest (if any) WITH address gap */
-    for (int i = 0; i < af.amount(); i++)
-    {
-        QString modname;
-
-        /* If we're adding more than one fixture, derive a unique name */
-        if (af.amount() > 1)
-        {
-            // Numbered base: hand nextUniqueName the SAME name each pass — the
-            // accumulating usedNames set makes it land on the next free number
-            // (US #4 → US #5 → US #6). Unnumbered base: classic "Name #NN".
-            const QString base = nameHasTrailingNumber
-                ? name
-                : QString("%1 #%2").arg(name)
-                      .arg(i + 1, AppUtil::digits(af.amount()), 10, QChar('0'));
-            modname = Doc::nextUniqueName(base, [&usedNames](const QString &c) {
-                return usedNames.contains(c);
-            });
-            usedNames.insert(modname);
-        }
-        else
-            modname = name;
-
-        /* Create the fixture */
-        Fixture* fxi = new Fixture(m_doc);
-
-        /* Assign the next address AFTER the previous fixture
-           address space plus gap. */
-        fxi->setAddress(address + (i * channels) + (i * gap));
-        fxi->setUniverse(universe);
-        fxi->setName(modname);
-        /* Set a fixture definition & mode if they were
-           selected. Otherwise create a fixture definition
-           and mode for a generic dimmer. */
-        if (fixtureDef != NULL && mode != NULL)
-        {
-            fxi->setFixtureDefinition(fixtureDef, mode);
-        }
-        else
-        {
-            QLCFixtureDef* genericDef = fxi->genericDimmerDef(channels);
-            QLCFixtureMode* genericMode = fxi->genericDimmerMode(genericDef, channels);
-            fxi->setFixtureDefinition(genericDef, genericMode);
-        }
-
-        m_doc->addFixture(fxi);
-        latestFxi = fxi->id();
-        if (addToGroup != NULL)
-            addToGroup->assignFixture(latestFxi);
-    }
-
-    QTreeWidgetItem* selectItem = m_fixtures_tree->fixtureItem(latestFxi);
-    if (selectItem != NULL)
-        m_fixtures_tree->setCurrentItem(selectItem);
+    const QList<quint32> created =
+        FixtureCreator::addFromDialog(this, m_doc, inventory, m_ctxUniverse, addToGroup,
+                                      m_doc->fixture(likeFixture), manufacturer);
+    if (created.isEmpty())
+        return;
 
     updateView();
+    QTreeWidgetItem* selectItem = m_fixtures_tree->fixtureItem(created.last());
+    if (selectItem != NULL)
+        m_fixtures_tree->setCurrentItem(selectItem);
 }
 
 void FixtureManager::addChannelsGroup()
@@ -1517,14 +1762,6 @@ void FixtureManager::addChannelsGroup()
     }
     else
         delete group;
-}
-
-void FixtureManager::slotAdd()
-{
-    if (m_currentTabIndex == 1)
-        addChannelsGroup();
-    else
-        addFixture();
 }
 
 void FixtureManager::slotAddRGBPanel()
@@ -1603,7 +1840,7 @@ void FixtureManager::slotAddRGBPanel()
         {
             Fixture *fxi = new Fixture(m_doc);
             Q_ASSERT(fxi != NULL);
-            fxi->setName(tr("%1 - Row %2").arg(rgb.name()).arg(i + 1));
+            fxi->setName(m_doc->uniqueFixtureName(tr("%1 - Row %2").arg(rgb.name()).arg(i + 1)));
             if (rowDef == NULL)
                 rowDef = fxi->genericRGBPanelDef(columns, components, rgb.is16Bit());
             if (rowMode == NULL)
@@ -1730,7 +1967,19 @@ void FixtureManager::removeFixture()
             this. However, FixtureManager is the only place to destroy fixtures,
             so it's rather safe to reset the fixture's address space here. */
         Fixture* fxi = m_doc->fixture(id);
-        Q_ASSERT(fxi != NULL);
+        if (fxi == NULL)
+        {
+            /* A selected row's id no longer matching a live fixture means
+               something else removed it (or the selection went stale)
+               between building this set and getting here -- there is
+               nothing left to reset or delete for it, so this used to be a
+               hard Q_ASSERT that took the whole app down over one already-
+               gone fixture. Skip it and keep going; the others in this same
+               batch are still real. */
+            qWarning() << Q_FUNC_INFO << "Selected fixture" << id
+                       << "no longer exists; skipping its deletion";
+            continue;
+        }
         QList<Universe*> ua = m_doc->inputOutputMap()->claimUniverses();
         int universe = fxi->universe();
         if (universe < ua.count())
@@ -1787,11 +2036,14 @@ void FixtureManager::editFixtureProperties()
     QVariant var = item->data(KColumnName, PROP_ID);
     if (var.isValid() == false)
         return;
+    editDefinitionAndMode(this, m_doc, var.toUInt());
+}
 
-    quint32 id = var.toUInt();
-    Fixture* fxi = m_doc->fixture(id);
+bool FixtureManager::editDefinitionAndMode(QWidget *parent, Doc *doc, quint32 fid)
+{
+    Fixture* fxi = (doc != NULL) ? doc->fixture(fid) : NULL;
     if (fxi == NULL)
-        return;
+        return false;
 
     QString manuf;
     QString model;
@@ -1804,8 +2056,10 @@ void FixtureManager::editFixtureProperties()
         mode = fxi->fixtureMode()->name();
     }
 
-    AddFixture af(this, m_doc, fxi);
-    af.setWindowTitle(tr("Change fixture properties"));
+    AddFixture af(parent, doc, fxi);
+    af.setInventoryMode(!fxi->isPatched());
+    af.setWindowTitle(fxi->isPatched() ? tr("Change fixture properties")
+                                       : tr("Change inventory fixture"));
     if (af.exec() == QDialog::Accepted)
     {
         if (af.invalidAddress() == false)
@@ -1818,14 +2072,31 @@ void FixtureManager::editFixtureProperties()
                 fxi->setName(af.name());
                 changed = true;
             }
-            if (fxi->universe() != af.universe())
+            // An inventory fixture's universe/address are placeholders: the
+            // dialog hides them, and they must not be "changed" into a claim.
+            if (fxi->isPatched() && fxi->universe() != af.universe())
             {
                 fxi->setUniverse(af.universe());
                 changed = true;
             }
-            if (fxi->address() != af.address())
+            if (fxi->isPatched() && fxi->address() != af.address())
             {
                 fxi->setAddress(af.address());
+                changed = true;
+            }
+            if (fxi->connection() != af.connection())
+            {
+                fxi->setConnection(af.connection());
+                changed = true;
+            }
+            if (fxi->ipAddress() != af.ipAddress())
+            {
+                fxi->setIPAddress(af.ipAddress());
+                changed = true;
+            }
+            if (fxi->transport() != af.transport())
+            {
+                fxi->setTransport(af.transport());
                 changed = true;
             }
             fxi->blockSignals(false);
@@ -1858,8 +2129,12 @@ void FixtureManager::editFixtureProperties()
             if (changed)
                 fxi->setID(fxi->id());
 
-            updateView();
-            slotSelectionChanged();
+            if (FixtureManager *fm = FixtureManager::instance())
+            {
+                fm->updateView();
+                fm->slotSelectionChanged();
+            }
+            return true;
         }
         else
         {
@@ -1868,6 +2143,7 @@ void FixtureManager::editFixtureProperties()
             msg.exec();
         }
     }
+    return false;
 }
 
 void FixtureManager::editChannelGroupProperties()
@@ -1893,30 +2169,18 @@ void FixtureManager::editChannelGroupProperties()
     }
 }
 
-int FixtureManager::headCount(const QList <QTreeWidgetItem*>& items) const
-{
-    int count = 0;
-    QListIterator <QTreeWidgetItem*> it(items);
-    while (it.hasNext() == true)
-    {
-        QTreeWidgetItem* item = it.next();
-        Q_ASSERT(item != NULL);
-
-        QVariant var = item->data(KColumnName, PROP_ID);
-        if (var.isValid() == false)
-            continue;
-
-        Fixture* fxi = m_doc->fixture(var.toUInt());
-        count += fxi->heads();
-    }
-
-    return count;
-}
-
 void FixtureManager::slotProperties()
 {
     if (m_currentTabIndex == 1)
+    {
         editChannelGroupProperties();
+        return;
+    }
+    // A fixture: Fixture Properties, the one dialog for a fixture everywhere.
+    QTreeWidgetItem *item = m_fixtures_tree->currentItem();
+    const QVariant var = item != NULL ? item->data(KColumnName, PROP_ID) : QVariant();
+    if (var.isValid() && Monitor::instance() != NULL)
+        Monitor::instance()->editFixtureProperties(var.toUInt());
     else
         editFixtureProperties();
 }
@@ -1934,9 +2198,70 @@ void FixtureManager::slotTestFixture()
         Monitor::instance()->showFixturePropertiesById(var.toUInt());
 }
 
+void FixtureManager::slotLocateFixture()
+{
+    /* Every fixture in the selection, expanding any selected GROUP to its
+       members -- selecting a group and asking "where is it" should light the
+       group, not nothing. Deduplicated, because a group and one of its own
+       fixtures can both be selected and flashing one fixture twice would
+       cancel it (locateFixture toggles). */
+    QList<quint32> ids;
+    QSet<quint32> seen;
+    foreach (QTreeWidgetItem *item, m_fixtures_tree->selectedItems())
+    {
+        const QVariant fxVar = item->data(KColumnName, PROP_ID);
+        if (fxVar.isValid())
+        {
+            const quint32 fid = fxVar.toUInt();
+            if (!seen.contains(fid)) { seen.insert(fid); ids << fid; }
+            continue;
+        }
+
+        const QVariant grpVar = item->data(KColumnName, PROP_GROUP);
+        if (grpVar.isValid())
+        {
+            FixtureGroup *grp = m_doc->fixtureGroup(grpVar.toUInt());
+            if (grp == NULL)
+                continue;
+            foreach (quint32 fid, grp->fixtureList())
+                if (!seen.contains(fid)) { seen.insert(fid); ids << fid; }
+        }
+    }
+
+    if (ids.isEmpty())
+        return;
+
+    Monitor::createAndShow(this, m_doc);
+    if (Monitor::instance())
+        Monitor::instance()->locateFixtures(ids);
+}
+
+void FixtureManager::slotResetFixture()
+{
+    QTreeWidgetItem* item = m_fixtures_tree->currentItem();
+    if (!item)
+        return;
+    QVariant var = item->data(KColumnName, PROP_ID);
+    if (!var.isValid())
+        return;
+    Monitor::createAndShow(this, m_doc);
+    if (Monitor::instance())
+        Monitor::instance()->resetFixture(var.toUInt());
+}
+
 void FixtureManager::slotFadeConfig()
 {
     ChannelsSelection cfg(m_doc, this, ChannelsSelection::ConfigurationMode);
+    /* Arriving from a fixture's own context menu, open on that fixture rather
+       than on the whole rig collapsed. The dialog still lists everything --
+       the same modifier usually wants setting on several fixtures at once. */
+    QTreeWidgetItem *item = m_fixtures_tree->currentItem();
+    if (item != NULL)
+    {
+        const QVariant var = item->data(KColumnName, PROP_ID);
+        if (var.isValid())
+            cfg.expandFixture(var.toUInt());
+    }
     if (cfg.exec() == QDialog::Rejected)
         return; // User pressed cancel
     m_doc->setModified();
@@ -1996,37 +2321,12 @@ void FixtureManager::slotUnGroup()
 
 void FixtureManager::slotGroupSelected(QAction* action)
 {
-    FixtureGroup* grp = NULL;
-
-    if (action->data().isValid() == true)
-    {
-        // Existing group selected
-        grp = (FixtureGroup*) (action->data().toULongLong());
-        Q_ASSERT(grp != NULL);
-    }
-    else
-    {
-        // New Group selected.
-
-        // Suggest an equilateral grid
-        qreal side = sqrt(headCount(m_fixtures_tree->selectedItems()));
-        if (side != floor(side))
-            side += 1; // Fixture number doesn't provide a full square
-        if (side < 1)
-            side = 4;  // empty group: a small default grid to drop into
-
-        CreateFixtureGroup cfg(this);
-        cfg.setSize(QSize(side, side));
-        if (cfg.exec() != QDialog::Accepted)
-            return; // User pressed cancel
-
-        grp = new FixtureGroup(m_doc);
-        Q_ASSERT(grp != NULL);
-        grp->setName(cfg.name());
-        grp->setSize(cfg.size());
-        m_doc->addFixtureGroup(grp);
-        updateGroupMenu();
-    }
+    // m_groupMenu (this action's origin) only ever lists real existing
+    // groups now -- "New Group..." creation moved to a right-click on the
+    // Fixture Groups root/a group folder (slotContextMenuRequested()).
+    Q_ASSERT(action->data().isValid());
+    FixtureGroup* grp = (FixtureGroup*) (action->data().toULongLong());
+    Q_ASSERT(grp != NULL);
 
     // Assign selected fixture items to the group
     foreach (QTreeWidgetItem* item, m_fixtures_tree->selectedItems())
@@ -2275,7 +2575,7 @@ void FixtureManager::copySelectionIntoGroup(FixtureGroup* target,
             const int y = curY + (it.key().y() - minY);
             if (target->assignHead(QLCPoint(x, y), it.value()) == true)
             {
-                target->setHeadSubGroup(QLCPoint(x, y), src->id());
+                target->setHeadSubGroup(QLCPoint(x, y), FixtureGroup::subGroupTagFor(src->id()));
                 blockMaxY = qMax(blockMaxY, y);
             }
         }
@@ -2314,13 +2614,21 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
     // Which universe was the click in? A universe row carries PROP_UNIVERSE; a
     // fixture row inherits its fixture's universe. "Add fixture" (fired from the
     // menu below) reads m_ctxUniverse to default the dialog to that universe.
+    // ctxIsUniverseRow distinguishes the direct hit (offer "Delete universe…")
+    // from a fixture merely living in that universe (don't).
     m_ctxUniverse = InputOutputMap::invalidUniverse();
+    bool ctxIsUniverseRow = false;
+    // A right-click on the Inventory root is a request to work on the inventory:
+    // the generic "Add fixture..." (which patches) would be the wrong offer there.
+    bool ctxIsInventoryRoot = false;
     if (QTreeWidgetItem *clicked = m_fixtures_tree->itemAt(pos))
     {
+        ctxIsInventoryRoot = clicked->data(KColumnName, PROP_INVENTORY).isValid();
         const QVariant uniVar = clicked->data(KColumnName, PROP_UNIVERSE);
         if (uniVar.isValid())
         {
             m_ctxUniverse = uniVar.toUInt();
+            ctxIsUniverseRow = true;
         }
         else
         {
@@ -2328,7 +2636,7 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
             if (fv.isValid() && clicked->data(KColumnName, PROP_HEAD).isValid() == false)
             {
                 Fixture *fxi = m_doc->fixture(fv.toUInt());
-                if (fxi != NULL)
+                if (fxi != NULL && fxi->isPatched())
                     m_ctxUniverse = fxi->universe();
             }
         }
@@ -2347,14 +2655,6 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
     }
 
     QMenu menu(this);
-    menu.addAction(m_addAction);
-    menu.addAction(m_addRGBAction);
-    menu.addAction(m_propertiesAction);
-    menu.addAction(m_testAction);
-    menu.addAction(m_removeAction);
-    menu.addSeparator();
-    menu.addAction(m_groupAction);
-    menu.addAction(m_unGroupAction);
 
     // Collect the selection so we can offer to move groups to a folder, and to
     // copy whole fixtures and/or whole fixture groups into a new/existing group.
@@ -2380,27 +2680,136 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
         }
     }
 
-    // "Move to folder…" — applies to every selected group.
-    QAction *moveToFolder = NULL;
-    if (selGroups.isEmpty() == false)
+    /* Laid out by what it is about, the same order whatever is selected:
+       the fixture itself, its address, finding it on the rig, organising it,
+       deleting it -- then what the clicked row offers (a root, a folder, the
+       inventory), then the view. Grouping and power are submenus: each is a
+       handful of related moves, and flat they were half the menu. */
+    const bool haveFixtureOrGroupSelection = selFixtures.isEmpty() == false
+                                           || selGroups.isEmpty() == false;
+
+    // ---- The fixture itself ----
+    QAction *editDefinition = NULL;
+    if (haveFixtureOrGroupSelection)
     {
-        menu.addSeparator();
-        moveToFolder = menu.addAction(selGroups.size() > 1
-            ? tr("Move %1 groups to folder…").arg(selGroups.size())
-            : tr("Move to folder…"));
+        menu.addAction(m_propertiesAction);
+        // Its definition and mode: the stock dialog, kept for what Fixture
+        // Properties does not change.
+        if (selFixtures.size() == 1 && m_doc->mode() != Doc::Operate)
+        {
+            const quint32 fid = selFixtures.first();
+            menu.addAction(tr("Definition && Mode…"), this, [this, fid]() {
+                editDefinitionAndMode(this, m_doc, fid);
+            });
+        }
+        /* The definition file itself, in the Fixture Editor -- one real
+           fixture with a .qxf; a generic dimmer has none. */
+        if (selFixtures.size() == 1 && selGroups.isEmpty())
+        {
+            Fixture *fxi = m_doc->fixture(selFixtures.first());
+            if (fxi != NULL && fxi->fixtureDef() != NULL &&
+                fxi->fixtureDef()->definitionSourceFile().isEmpty() == false)
+                editDefinition = menu.addAction(tr("Edit Fixture Definition…"));
+        }
     }
 
-    QAction *copyToNew = NULL;
-    QMenu *copyIntoMenu = NULL;
-    if (selFixtures.isEmpty() == false || selGroups.isEmpty() == false)
+    // Inventory: staged fixtures (no universe/address yet). The root offers
+    // adding one and patching them all; a selection of staged fixtures offers
+    // patching just those.
+    QAction *addToInv = NULL;
+    QAction *patchAll = NULL;
+    QList<quint32> stagedSel;
+    foreach (quint32 fid, selFixtures)
+    {
+        Fixture *sf = m_doc->fixture(fid);
+        if (sf != NULL && !sf->isPatched())
+            stagedSel << fid;
+    }
+    // A selected manufacturer/model folder stands for every staged fixture in it.
+    std::function<void(QTreeWidgetItem *)> collectStaged = [&](QTreeWidgetItem *node) {
+        for (int c = 0; c < node->childCount(); c++)
+        {
+            QTreeWidgetItem *ch = node->child(c);
+            const QVariant idv = ch->data(KColumnName, PROP_ID);
+            if (idv.isValid() && !ch->data(KColumnName, PROP_HEAD).isValid())
+            {
+                const quint32 fid = idv.toString().toUInt();
+                Fixture *sf = m_doc->fixture(fid);
+                if (sf != NULL && !sf->isPatched() && !stagedSel.contains(fid))
+                    stagedSel << fid;
+            }
+            else
+                collectStaged(ch);
+        }
+    };
+    foreach (QTreeWidgetItem *sel, m_fixtures_tree->selectedItems())
+        if (sel->data(KColumnName, PROP_INVENTORY).toInt() == 2)
+            collectStaged(sel);
+    // The other direction: patched fixtures can go back to the inventory.
+    QAction *returnToInv = NULL;
+    QList<quint32> patchedSel;
+    foreach (quint32 fid, selFixtures)
+    {
+        Fixture *pf = m_doc->fixture(fid);
+        if (pf != NULL && pf->isPatched())
+            patchedSel << fid;
+    }
+
+    // ---- Its address ----
+    /* Patch: one action, one name, one rule (AppUtil::patchActionText(),
+       patchAllowed()) -- giving staged fixtures an address and moving
+       patched ones are the same dialog, on the whole selection, so a mixed
+       set is placed as one block. */
+    QAction *readdress = NULL;
+    QList<quint32> readdressIds = patchedSel;
+    foreach (quint32 fid, stagedSel)
+        if (!readdressIds.contains(fid))
+            readdressIds << fid;
+    if (!readdressIds.isEmpty())
     {
         menu.addSeparator();
-        copyToNew = menu.addAction(tr("Create group from selection…"));
+        readdress = menu.addAction(AppUtil::patchActionText(readdressIds.size()));
+        readdress->setEnabled(AppUtil::patchAllowed(m_doc, readdressIds));
+        readdress->setToolTip(tr("Give a universe and address, or move to another -- as a block "
+                                 "keeping their spacing, or packed -- reviewed before it is applied"));
+    }
+    if (!patchedSel.isEmpty())
+    {
+        returnToInv = menu.addAction(patchedSel.size() > 1
+                                         ? tr("Return %1 Fixtures to Inventory…").arg(patchedSel.size())
+                                         : tr("Return to Inventory…"));
+        returnToInv->setEnabled(m_doc->mode() == Doc::Design);
+        returnToInv->setToolTip(tr("Release its universe and address but keep the fixture, its "
+                                   "placement and its groups"));
+    }
 
+    // ---- Finding it on the rig ----
+    if (haveFixtureOrGroupSelection)
+    {
+        menu.addSeparator();
+        menu.addAction(m_testAction);
+        menu.addAction(m_locateAction);
+        menu.addAction(m_resetAction);
+    }
+
+    // ---- Organising it ----
+    QAction *moveToFolder = NULL;
+    QAction *ungroupOnly = NULL;
+    QAction *copyToNew = NULL;
+    QMenu *copyIntoMenu = NULL;
+    QAction *rebuildComposite = NULL;
+    QMenu *circuitMenu = NULL;
+    QAction *removeFromCircuit = NULL;
+    if (haveFixtureOrGroupSelection)
+    {
+        menu.addSeparator();
+        QMenu *groupMenu = menu.addMenu(QIcon(":/group.png"), tr("Group"));
+        copyToNew = groupMenu->addAction(tr("Create Group from Selection…"));
         const QList<FixtureGroup*> groups = m_doc->fixtureGroups();
         if (groups.isEmpty() == false)
         {
-            copyIntoMenu = menu.addMenu(tr("Copy into group"));
+            // Fixtures join it; a group selected comes in as a block.
+            copyIntoMenu = groupMenu->addMenu(tr("Add to Group"));
             foreach (FixtureGroup *g, groups)
             {
                 if (g == NULL)
@@ -2409,75 +2818,203 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
                 a->setData(g->id());
             }
         }
+        if (selFixtures.isEmpty() == false)
+            groupMenu->addAction(m_unGroupAction);
+        if (selGroups.isEmpty() == false)
+        {
+            groupMenu->addSeparator();
+            moveToFolder = groupMenu->addAction(selGroups.size() > 1
+                ? tr("Move %1 Groups to Folder…").arg(selGroups.size())
+                : tr("Move to Folder…"));
+            /* Delete the GROUPING, keep the fixtures -- the shared Delete
+               also deletes any fixture rows caught in the selection. */
+            ungroupOnly = groupMenu->addAction(selGroups.size() > 1
+                ? tr("Remove %1 Groups (Keep Fixtures)").arg(selGroups.size())
+                : tr("Remove Group (Keep Fixtures)"));
+            ungroupOnly->setToolTip(tr("Deletes the grouping only — every fixture in "
+                                       "it stays in the workspace, patched as it is."));
+            // A composite group rebuilt from the source groups its heads recorded.
+            if (selGroups.size() == 1)
+            {
+                FixtureGroup *g = m_doc->fixtureGroup(selGroups.first());
+                if (g != NULL && g->headSubGroupMap().isEmpty() == false)
+                    rebuildComposite = groupMenu->addAction(tr("Rebuild Composite from Members"));
+            }
+        }
+
+        // Power circuits live in the power-distribution pane on the right.
+        if (selFixtures.isEmpty() == false)
+        {
+            QMenu *powerMenu = menu.addMenu(tr("Power"));
+            PowerDistribution *pd = m_doc->powerDistribution();
+            circuitMenu = powerMenu->addMenu(selFixtures.size() > 1
+                ? tr("Add %1 Fixtures to Circuit").arg(selFixtures.size())
+                : tr("Add to Circuit"));
+            bool haveCircuit = false;
+            for (int s = 0; s < pd->sources().size(); s++)
+            {
+                const PowerSource &src = pd->sources().at(s);
+                if (src.circuits.size() <= 1)
+                {
+                    // A wall socket, single-outlet UPS, or fresh source takes
+                    // fixtures directly (its single/implicit circuit).
+                    haveCircuit = true;
+                    QAction *a = circuitMenu->addAction(tr("%1 (direct)").arg(src.name));
+                    a->setData(QPoint(s, 0));
+                    continue;
+                }
+                for (int c = 0; c < src.circuits.size(); c++)
+                {
+                    haveCircuit = true;
+                    QAction *a = circuitMenu->addAction(tr("%1 / %2")
+                            .arg(src.name).arg(src.circuits.at(c).name));
+                    a->setData(QPoint(s, c));   // (source, circuit) indices
+                }
+            }
+            if (haveCircuit == false)
+            {
+                QAction *none = circuitMenu->addAction(
+                    tr("(no circuits yet — add one in the Power pane)"));
+                none->setEnabled(false);
+            }
+            removeFromCircuit = powerMenu->addAction(tr("Remove from Circuit"));
+        }
+        menu.addAction(m_fadeConfigAction);
+
+        // ---- Deleting it ----
+        menu.addSeparator();
+        menu.addAction(m_removeAction);
     }
 
-    // Assign the selected fixtures to a power circuit (or remove them). Circuits
-    // live in the power-distribution model shown in the pane on the right.
-    QMenu *circuitMenu = NULL;
-    QAction *removeFromCircuit = NULL;
-    if (selFixtures.isEmpty() == false)
+    // ---- What the clicked row offers ----
+    /* Creating something new is a root-ish click's (empty space, a universe,
+       the Power or Fixture Groups roots, a folder), never a fixture's. */
+    if (!haveFixtureOrGroupSelection && !ctxIsInventoryRoot)
     {
         menu.addSeparator();
-        PowerDistribution *pd = m_doc->powerDistribution();
-        circuitMenu = menu.addMenu(selFixtures.size() > 1
-            ? tr("Add %1 fixtures to power circuit").arg(selFixtures.size())
-            : tr("Add to power circuit"));
-        bool haveCircuit = false;
-        for (int s = 0; s < pd->sources().size(); s++)
-        {
-            const PowerSource &src = pd->sources().at(s);
-            if (src.circuits.size() <= 1)
-            {
-                // A wall socket, single-outlet UPS, or fresh source takes fixtures
-                // directly (its single/implicit circuit, created on demand).
-                haveCircuit = true;
-                QAction *a = circuitMenu->addAction(tr("%1 (direct)").arg(src.name));
-                a->setData(QPoint(s, 0));
-                continue;
-            }
-            for (int c = 0; c < src.circuits.size(); c++)
-            {
-                haveCircuit = true;
-                QAction *a = circuitMenu->addAction(tr("%1 / %2")
-                        .arg(src.name).arg(src.circuits.at(c).name));
-                a->setData(QPoint(s, c));   // (source, circuit) indices
-            }
-        }
-        if (haveCircuit == false)
-        {
-            QAction *none = circuitMenu->addAction(
-                tr("(no circuits yet — add one in the Power pane)"));
-            none->setEnabled(false);
-        }
-        removeFromCircuit = menu.addAction(tr("Remove from power circuit"));
+        menu.addAction(m_addAction);
+        menu.addAction(m_addRGBAction);
     }
 
-    // Build out the Power section itself: a new source from the "Power" folder
-    // (or from any power node — you don't have to hit the root exactly), a new
-    // circuit on whichever source was clicked.
+    // A universe row itself: delete it (renaming is inline; how it reaches
+    // hardware is the Connections tab's job).
+    QAction *deleteUni = NULL;
+    if (ctxIsUniverseRow)
+    {
+        menu.addSeparator();
+        deleteUni = menu.addAction(tr("Delete Universe…"));
+    }
+
+    // The Power section: a new source from its root, a circuit on a source.
     QAction *addPowerSource = NULL;
     QAction *addCircuit = NULL;
     if (ctxPowerSource != -2)
     {
         menu.addSeparator();
-        addPowerSource = menu.addAction(tr("Add power source…"));
+        addPowerSource = menu.addAction(tr("Add Power Source…"));
         if (ctxPowerSource >= 0)
-            addCircuit = menu.addAction(tr("Add circuit…"));
+            addCircuit = menu.addAction(tr("Add Circuit…"));
     }
 
-    // Fixture Studio: rebuild a composite group from the source groups recorded
-    // in its per-head provenance tags (re-pulls their current layout, ordered by
-    // studio geometry). Offered when exactly one group with provenance is picked.
-    QAction *rebuildComposite = NULL;
-    if (selGroups.size() == 1)
+    // "New Group..." on the Fixture Groups root or one of its folders.
+    QString newGroupPath;
+    bool offerNewGroup = false;
+    if (QTreeWidgetItem *clickedItem = m_fixtures_tree->itemAt(pos))
     {
-        FixtureGroup *g = m_doc->fixtureGroup(selGroups.first());
-        if (g != NULL && g->headSubGroupMap().isEmpty() == false)
+        const QVariant folderVar = clickedItem->data(KColumnName, PROP_FOLDER);
+        if (folderVar.isValid())
         {
-            menu.addSeparator();
-            rebuildComposite = menu.addAction(tr("Rebuild composite from members"));
+            offerNewGroup = true;
+            newGroupPath = folderVar.toString();
         }
     }
+    if (offerNewGroup)
+    {
+        menu.addSeparator();
+        menu.addAction(m_newGroupAction);
+    }
+
+    // The Duplicate names root: number them apart.
+    QAction *fixDuplicates = NULL;
+    if (QTreeWidgetItem *clicked = m_fixtures_tree->itemAt(pos))
+    {
+        if (clicked->data(KColumnName, PROP_DUPLICATES).isValid()
+            && !m_doc->duplicateFixtureNames().isEmpty())
+        {
+            menu.addSeparator();
+            fixDuplicates = menu.addAction(tr("Number the Duplicates"));
+            fixDuplicates->setToolTip(tr("Of each name, the patched fixture keeps it; the others "
+                                         "become “name #2”, “name #3”…"));
+        }
+    }
+
+    // The Address clashes root: give every one of them a home.
+    QAction *fixClashes = NULL;
+    if (QTreeWidgetItem *clicked = m_fixtures_tree->itemAt(pos))
+    {
+        if (clicked->data(KColumnName, PROP_CLASHES).isValid() && !m_doc->addressClashes().isEmpty())
+        {
+            menu.addSeparator();
+            fixClashes = menu.addAction(tr("Patch the Clashing Fixtures…"));
+            fixClashes->setToolTip(tr("Propose free channels for each one, to review and apply"));
+        }
+    }
+
+    /* Right-clicked a model's folder (or one of its fixtures) in the
+       Inventory: adding starts on that model and mode ("when I right click
+       on a model .. it should auto select that model from the list for
+       adding"); a manufacturer's folder, on that manufacturer. */
+    quint32 likeFixture = Fixture::invalidId();
+    QString likeManufacturer;
+    QTreeWidgetItem *invHit = m_fixtures_tree->itemAt(pos);
+    if (invHit != NULL && invHit->data(KColumnName, PROP_INVENTORY).toInt() == 2)
+    {
+        // A model folder holds fixtures; a manufacturer folder holds models.
+        std::function<quint32(QTreeWidgetItem *)> firstFixture = [&](QTreeWidgetItem *n) -> quint32 {
+            for (int c = 0; c < n->childCount(); ++c)
+            {
+                QTreeWidgetItem *ch = n->child(c);
+                if (ch->data(KColumnName, PROP_ID).isValid() && !ch->data(KColumnName, PROP_HEAD).isValid())
+                    return ch->data(KColumnName, PROP_ID).toString().toUInt();
+                const quint32 deeper = firstFixture(ch);
+                if (deeper != Fixture::invalidId())
+                    return deeper;
+            }
+            return Fixture::invalidId();
+        };
+        bool modelFolder = false;
+        for (int c = 0; c < invHit->childCount() && !modelFolder; ++c)
+            modelFolder = invHit->child(c)->data(KColumnName, PROP_ID).isValid();
+        const quint32 any = firstFixture(invHit);
+        Fixture *af = m_doc->fixture(any);
+        if (modelFolder)
+            likeFixture = any;
+        else if (af != NULL && af->fixtureDef() != NULL)
+            likeManufacturer = af->fixtureDef()->manufacturer();
+    }
+    else if (invHit != NULL && stagedSel.size() == 1 && selFixtures.size() == 1)
+    {
+        likeFixture = stagedSel.first();   // a staged fixture: more like it
+    }
+    Fixture *likeFx = m_doc->fixture(likeFixture);
+    QString addLabel = tr("Add to Inventory…");
+    if (likeFx != NULL)
+        addLabel = tr("Add More %1 to Inventory…").arg(likeFx->groupingModel());   // as its folder reads
+    else if (!likeManufacturer.isEmpty())
+        addLabel = tr("Add %1 Fixtures to Inventory…").arg(likeManufacturer);
+
+    if (ctxIsInventoryRoot || likeFx != NULL)
+    {
+        menu.addSeparator();
+        addToInv = menu.addAction(addLabel);
+        if (ctxIsInventoryRoot)
+            patchAll = menu.addAction(tr("Patch Inventory…"));
+    }
+
+    // ---- The view ----
+    menu.addSeparator();
+    menu.addAction(m_expandAllAction);
+    menu.addAction(m_collapseAllAction);
 
     QAction *chosen = menu.exec(QCursor::pos());
 
@@ -2489,11 +3026,92 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
     if (chosen == NULL)
         return;
 
+    if (readdress != NULL && chosen == readdress)
+    {
+        patchOrReaddress(readdressIds);
+        return;
+    }
+    if (fixDuplicates != NULL && chosen == fixDuplicates)
+    {
+        m_doc->makeFixtureNamesUnique();
+        updateView();
+        return;
+    }
+    if (fixClashes != NULL && chosen == fixClashes)
+    {
+        patchOrReaddress(m_doc->addressClashes());
+        return;
+    }
+    if (returnToInv != NULL && chosen == returnToInv)
+    {
+        returnToInventory(patchedSel);
+        return;
+    }
+    if (addToInv != NULL && chosen == addToInv)
+    {
+        addFixtureImpl(true, likeFixture, likeManufacturer);
+        return;
+    }
+    if (patchAll != NULL && chosen == patchAll)
+    {
+        patchInventory(QList<quint32>());
+        return;
+    }
+
+    if (offerNewGroup && chosen == m_newGroupAction)
+    {
+        // Suggest an equilateral grid, same heuristic slotGroupSelected() used
+        // for a selection-driven "New Group..." -- no selection is implied
+        // here (this is a root/folder click, not a fixture one), so this
+        // always takes the empty-group default (a small grid to drop into).
+        CreateFixtureGroup cfg(this);
+        cfg.setSize(QSize(4, 4));
+        if (cfg.exec() == QDialog::Accepted)
+        {
+            FixtureGroup *grp = new FixtureGroup(m_doc);
+            grp->setName(cfg.name());
+            grp->setSize(cfg.size());
+            grp->setPath(newGroupPath);
+            m_doc->addFixtureGroup(grp);
+            updateGroupMenu();
+            updateView();
+        }
+        return;
+    }
+
+    if (editDefinition != NULL && chosen == editDefinition)
+    {
+        Fixture *fxi = m_doc->fixture(selFixtures.first());
+        if (fxi != NULL && fxi->fixtureDef() != NULL)
+            AppUtil::launchFixtureEditor(fxi->fixtureDef()->definitionSourceFile(), this);
+        return;
+    }
+
     if (rebuildComposite != NULL && chosen == rebuildComposite)
     {
         const int blocks = m_doc->programmer()->rebuildCompositeGroup(selGroups.first());
         if (blocks > 0)
             updateView();
+        return;
+    }
+
+    if (chosen == ungroupOnly && selGroups.isEmpty() == false)
+    {
+        /* Name them: "Remove 3 groups" is not enough to check against when the
+           tree selection is not entirely obvious. */
+        QStringList gnames;
+        foreach (quint32 gid, selGroups)
+            if (FixtureGroup *g = m_doc->fixtureGroup(gid))
+                gnames << g->name();
+        if (QMessageBox::question(this, tr("Remove Group"),
+                tr("Remove %n group(s) — %1 — keeping every fixture in them?",
+                   "", selGroups.size()).arg(gnames.join(", ")),
+                QMessageBox::Yes | QMessageBox::No) != QMessageBox::Yes)
+            return;
+
+        foreach (quint32 gid, selGroups)
+            m_doc->deleteFixtureGroup(gid);
+        updateView();
         return;
     }
 
@@ -2576,6 +3194,10 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
         if (m_power != NULL)
             m_power->refresh();
     }
+    else if (chosen == deleteUni)
+    {
+        deleteUniverse(m_ctxUniverse);
+    }
     else if (chosen == addPowerSource)
     {
         // Same defaults slotAddSource() uses in the Power pane itself.
@@ -2608,6 +3230,90 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
                 m_power->refresh();
         }
     }
+}
+
+/** Mirrors ConnectionsTree::deleteUniverse() -- same rule, same messages,
+ *  since this is the same operation reached from a second tree. Not shared
+ *  code because the two classes don't share a base to hang it off of; keep
+ *  them in sync by hand if the rule ever changes. */
+void FixtureManager::deleteUniverse(quint32 universe)
+{
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    Universe *uni = iomap ? iomap->universe(universe) : NULL;
+    if (uni == NULL)
+        return;
+
+    // Only the LAST universe can go: removeUniverse() refuses anything else
+    // rather than leave a gap in the numbering, which the whole patch API
+    // depends on. Say so BEFORE asking, rather than asking a question that
+    // cannot be honoured.
+    if (universe + 1 != iomap->universesCount())
+    {
+        QMessageBox::information(this, tr("Delete universe"),
+            tr("Only the last universe can be deleted — removing one from the "
+               "middle would renumber the others and repoint every patch after "
+               "it.\n\nDelete universe %1 first, and work back.")
+                .arg(iomap->universesCount()));
+        return;
+    }
+
+    // Deleting a universe orphans every fixture patched into it -- they keep
+    // their universe id and simply lose output -- so this IS undoable, and
+    // the warning says which part is recoverable.
+    if (QMessageBox::question(
+            this, tr("Delete universe"),
+            tr("Delete \"%1\" completely?\n\nAny fixtures patched into it will "
+               "lose their output until it is restored.").arg(uni->name()),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
+        return;
+
+    if (iomap->patchUndo() != NULL)
+        iomap->patchUndo()->captureUniverses(tr("delete universe \"%1\"")
+                                                 .arg(uni->name()));
+
+    if (iomap->removeUniverse(int(universe)) == false)
+    {
+        // Guarded above, so reaching here means the rule changed underneath
+        // us. Do not leave a spent undo step and a modified flag behind for
+        // a deletion that did not happen.
+        if (iomap->patchUndo() != NULL)
+            iomap->patchUndo()->clear();
+        QMessageBox::warning(this, tr("Delete universe"),
+                             tr("\"%1\" could not be deleted.").arg(uni->name()));
+        return;
+    }
+
+    m_doc->setModified();
+    updateView();
+}
+
+void FixtureManager::slotChannelGroupContextMenuRequested(const QPoint &pos)
+{
+    QMenu menu(this);
+
+    // Creation is always offered, same as the fixtures tree's Add actions.
+    menu.addAction(m_addChannelsGroupAction);
+
+    // Properties/Move Up/Move Down only make sense for a single selected
+    // group; Remove works for one or several. Mirrors the enable-state
+    // logic slotChannelsGroupSelectionChanged() already maintains for these
+    // same actions' toolbar-button days — read fresh here since a menu
+    // should omit what doesn't apply, not just gray it out (matching the
+    // fixtures tree context menu's convention).
+    const int selectedCount = m_channel_groups_tree->selectedItems().size();
+    if (selectedCount > 0)
+    {
+        menu.addSeparator();
+        if (selectedCount == 1)
+        {
+            menu.addAction(m_propertiesAction);
+            menu.addAction(m_moveUpAction);
+            menu.addAction(m_moveDownAction);
+        }
+        menu.addAction(m_removeAction);
+    }
+
+    menu.exec(QCursor::pos());
 }
 
 void FixtureManager::slotGroupFolderRenamed(const QString& oldPath,

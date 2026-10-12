@@ -7,6 +7,8 @@
 (function() {
     var effect = new Object;
     effect.name        = "Native Strobe";
+    // Takes the host's spread (fixture.phase, inputs._spread) in place of its own.
+    effect.hostSpread = "spread";
     effect.description = "Hardware shutter strobe via the shutterOpen intent";
     effect.apiVersion  = 1;
     effect.version     = 1;
@@ -28,7 +30,7 @@
         var t          = inputs._time      !== undefined ? inputs._time      : 0;
 
         return fixtures.map(function(f, i) {
-            var phase = (t * rate + i * spread / Math.max(n, 1)) % 1;
+            var phase = (t * rate + (inputs._spread ? f.phase : i * spread / Math.max(n, 1))) % 1;
             return { shutterOpen: (phase < duty) ? 1 : 0, strobeRate: strobeRate };
         });
     };

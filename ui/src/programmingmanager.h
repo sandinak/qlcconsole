@@ -99,7 +99,11 @@ private slots:
     void slotPaletteTreeMenu(const QPoint &pos);
     void slotCanvasModified();
     void slotModeChanged();
-    void slotLookEdited();
+    void slotLookEdited(quint32 paletteId);
+    /** The look editor now shows @p paletteId: if the look on the canvas
+     *  doesn't have it, try it on that look (Scene::setTrialPalette) so the
+     *  rig follows the edit; say so, or say there is no look to show it on. */
+    void updateTrialPalette(quint32 paletteId);
     void slotCopy();
     void slotPaste();
     void slotPaletteDoubleClicked(QTreeWidgetItem *item);
@@ -148,6 +152,17 @@ private slots:
     void slotFollowSpotBindingChanged();
     void slotJoystickUpdated(float pan, float tilt);
     /** Dispatches controller button actions from ProgrammerController. */
+    /** The full 'how a look is built' explanation. Shown once on a first
+     *  run, and on demand after that. */
+    void showProgrammingGuide();
+public:
+    /** The full 'how a look is built' explanation, from anywhere that needs
+     *  a way back to it. */
+    static void showGuide(QWidget *parent);
+private:
+    /** True exactly once, ever -- and records that it has answered. */
+    static bool takeFirstRunGuideFlag();
+
     void slotButtonAction(const QString &action);
 
     // BPM / internal beat generator
@@ -273,7 +288,12 @@ private:
 
     QVBoxLayout *m_canvasLayout;
     QLabel *m_canvasTitle;
-    QLabel *m_canvasPlaceholder;
+    /** In a fixture group's layout view: back to the scene that was open
+     *  before it ("clicked back on an effect .. I can't get back"). */
+    class QPushButton *m_groupBackButton = nullptr;
+    quint32 m_groupReturnScene = UINT_MAX;
+    QWidget *m_canvasPlaceholder;   ///< empty-state: one line plus a way in
+    QLabel  *m_canvasHint;          ///< the one line
     SceneGroupLooks *m_canvas;
     QWidget *m_funcEditor;     //!< stock editor for non-scene functions
     LookEditor *m_lookEditor;      //!< bottom pane; sizes to content (no scroll)
@@ -281,9 +301,11 @@ private:
     FixtureConsole *m_fixtureConsole;
     QLabel *m_fixtureMixedNote;    //!< shown when selected fixed fixtures differ in type
     QList<quint32> m_selectedFixtures; //!< fixed fixtures edited together (same type)
+    quint32 m_selectedFixturesScene = UINT_MAX; //!< the scene m_selectedFixtures was announced for
     quint32 m_currentScene;       //!< scene shown in canvas (invalid if non-scene)
     quint32 m_canvasFunction;     //!< any function shown in canvas (preview target)
     quint32 m_previewFunction;    //!< the function we started for live preview
+    quint32 m_trialScene;         //!< scene a palette is being tried on (updateTrialPalette)
     quint32 m_operateFunction;   //!< scene we started in Operate mode (all channels live)
     quint32 m_clipboardFunction;  //!< Cmd-C source for Cmd-V duplicate
     quint32 m_clipboardPalette;   //!< Cmd-C source palette for Cmd-V duplicate
@@ -341,8 +363,6 @@ private:
     QPushButton  *m_bpmBtn;
     QSpinBox     *m_bpmSpin;
     QPushButton  *m_tapBtn;
-    QElapsedTimer m_tapTimer;
-    bool          m_tapActive = false;
 
     // Followspot config panel (kept for signal wiring; always hidden from UI)
     QWidget     *m_followSpotPanel;

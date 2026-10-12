@@ -215,6 +215,20 @@ fi
 popd
 
 #############################################################################
+# WLED tests
+#############################################################################
+
+$SLEEPCMD
+pushd plugins/wled/test
+eval $TESTPREFIX ./test.sh
+RESULT=$?
+if [ $RESULT != 0 ]; then
+	echo "${RESULT} WLED unit tests failed. Please fix before commit."
+	exit $RESULT
+fi
+popd
+
+#############################################################################
 # Final judgment
 #############################################################################
 

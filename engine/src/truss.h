@@ -9,8 +9,15 @@
   targets.
 
   Coordinate convention (same as the 2-D Monitor):
-    X = stage right (positive) / stage left (negative)
-    Y = upstage (positive) / downstage (negative)
+    X = stage left (positive) / stage right (negative)
+    Y = downstage (positive) / upstage (negative)
+    (These match how the app BEHAVES -- see barFaceVector() in
+    monitorproperties.cpp and any real show: in stage-structures-demo.qxw the
+    "SR Tower" sits at X=0.21 with the "SL Tower" at X=11.61, and the upstage
+    platforms are at Y=1.53 against the downstage ones at Y=3.97. The plot
+    draws +X rightward and +Y downward, which is the standard ground plan:
+    audience at the bottom of the page, upstage at the top, stage right on the
+    viewer's left. These comments used to say the opposite on both axes.)
     Z = height above stage floor (metres, always positive)
 
   Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,8 +28,10 @@
 
 #include <QObject>
 #include <QVector3D>
+#include <QtMath>
 #include <QPointF>
 #include <QString>
+#include <QColor>
 #include <climits>
 
 class QXmlStreamReader;
@@ -157,6 +166,40 @@ public:
     void setStandId(quint32 id) { m_standId = id; }
     bool isStandMounted() const { return m_standId != invalidId(); }
 
+    /** The stand its OTHER end rests on: a horizontal truss spanning two
+     *  stands (a goal post, a T-bar between two lifts) runs from the first
+     *  stand's top to this one's -- its direction and length follow the
+     *  stands (recomputeStandMounts()). Never for a vertical truss. */
+    quint32 endStandId() const { return m_endStandId; }
+    void setEndStandId(quint32 id) { m_endStandId = id; }
+    bool spansStands() const
+    { return isStandMounted() && m_endStandId != invalidId() && m_endStandId != m_standId
+             && m_type != Vertical; }
+
+    /** A SOCK: a diffusing fabric sleeve over part of the truss, lit from
+     *  within by the LED bars rigged Inside it -- they glow through it rather
+     *  than throwing beams. @c sockColour is the fabric (white by default);
+     *  it covers from @c sockFrom to @c sockTo metres along the truss. */
+    bool hasSock() const { return m_sock; }
+    void setSock(bool on) { m_sock = on; }
+    QColor sockColour() const { return m_sockColour; }
+    void setSockColour(const QColor &c) { m_sockColour = c.isValid() ? c : QColor(Qt::white); }
+    /** Metres along, within the truss; To < 0 (the default) is its far end. */
+    float sockFrom() const { return qBound(0.0f, m_sockFrom, m_length); }
+    float sockTo() const { return m_sockTo < 0.0f ? m_length : qBound(sockFrom(), m_sockTo, m_length); }
+    void setSockRange(float from, float to) { m_sockFrom = qMax(0.0f, from); m_sockTo = to; }
+    /** An image file printed on the sock (stretched over each side of it);
+     *  empty for plain fabric. */
+    QString sockPattern() const { return m_sockPattern; }
+    void setSockPattern(const QString &path) { m_sockPattern = path; }
+    /** How much of the print shows over the fabric's own colour: 1 (the
+     *  default) all of it, less and the fabric shows through. */
+    float sockPatternOpacity() const { return m_sockPatternOpacity; }
+    void setSockPatternOpacity(float o) { m_sockPatternOpacity = qBound(0.0f, o, 1.0f); }
+    /** Whether @p offset (metres along) is under the sock. */
+    bool sockCovers(float offset) const
+    { return m_sock && offset >= sockFrom() - 1e-4f && offset <= sockTo() + 1e-4f; }
+
     /** Compute the world-space position of a fixture whose truss-offset
      *  (metres from origin along the truss direction) is @p offset. */
     QVector3D positionAt(float offset) const;
@@ -196,6 +239,13 @@ private:
     int       m_barRun = RunAlong;            ///< Along / Across / Drop
     float     m_barCrossShift = 0.0f;         ///< shift along the run (0 = centred)
     quint32   m_standId = invalidId();        ///< stand this truss stands on
+    quint32   m_endStandId = invalidId();     ///< stand its other end rests on
+    bool      m_sock = false;                 ///< a fabric sleeve over it
+    QColor    m_sockColour = QColor(Qt::white);
+    float     m_sockFrom = 0.0f;              ///< metres along
+    float     m_sockTo = -1.0f;               ///< metres along; < 0 = its far end
+    QString   m_sockPattern;                  ///< image printed on it
+    float     m_sockPatternOpacity = 1.0f;    ///< 0..1, the print over the fabric
 };
 
 /** Per-fixture rig assignment.  Stored alongside MonitorProperties visual
@@ -244,10 +294,31 @@ struct FixtureRigProps
      *  near/far chord (Left/Right) instead of dead-centre while staying attached. */
     float            trussCross = 0.0f;
 
+    /** Second horizontal offset (metres), VERTICAL runs only. A vertical run's
+     *  axis IS the Z axis, so BOTH horizontal directions are free around it —
+     *  one scalar cannot say where on a tower a fixture is clamped.
+     *  @c trussCross is the X offset and this is the Y one. Meaningless for a
+     *  horizontal run, whose two non-axis freedoms are the horizontal normal
+     *  (@c trussCross) and height (@c mountZOffset). */
+    float            trussCrossY = 0.0f;
+
     /** Fine height nudge (metres, +up) applied on TOP of a structural mount
      *  (truss / pipe / tower) — e.g. to raise a followspot above the truss it
      *  sits on. 0 = flush with the mount. */
     float            mountZOffset = 0.0f;
+
+    /** On a hanger (Hanger: a bracket and chain on a truss or tower): the
+     *  fixture hangs from its hook. UINT_MAX = not on one. */
+    quint32          hangerId = UINT_MAX;
+
+    /** What makes its light, where the definition can say (QLCPhysical::leds()):
+     *  -1 = as the definition says (or as the device reports), 0 = one point,
+     *  N = that many LEDs -- this one's real build. @c lightLayout is a
+     *  QLCPhysical::LedLayout (hanging cluster, tape), -1 = as defined. */
+    int              lightLeds = -1;
+    int              lightLayout = -1;
+    /** Its glass: -1 = as the definition says, 0 = diffusing, 1 = clear. */
+    int              lightGlass = -1;
 
     /** Deck mount: a fixture standing ON TOP of a stage platform ("floor
      *  mounted"). Unlike a riser FACE mount it keeps its free XY position; only
@@ -275,6 +346,79 @@ struct FixtureRigProps
     int              studioMount = 1;              ///< default: front face
     float            studioAngle = 0.0f;
 
+    /** ROLL about the fixture's own long axis, degrees.
+     *
+     *  studioAngle turns a fixture WITHIN its mounting face -- on a step's top
+     *  that spins it flat, like a compass bearing. This tips it instead: the
+     *  emitting face rotates about the length of the bar, so a unit lying in a
+     *  step can be angled up toward the cast rather than straight up, which is
+     *  how they are actually built (bar light on a diagonal inside the box,
+     *  firing up through the plexi at an angle).
+     *
+     *  Positive tips the face AWAY from the in-face axis: for a bar lying on a
+     *  TOP face and running stage left-right that is UPSTAGE, away from the
+     *  audience (+Y is downstage).
+     *  0 = flat in its mounting face, which is every fixture that predates
+     *  this, so old files are unchanged. */
+    float            studioTilt = 0.0f;
+    /** A turn of the whole fixture about the vertical, degrees (+X toward
+     *  +Y, as everything on the plot turns): the face it is on, and so its
+     *  beam, turned with it. What a group or a platform/tower being turned
+     *  adds to everything on it. */
+    float            studioYaw = 0.0f;
+
+    /** Faces the OTHER way across its mounting plane: a 180-degree roll about
+     *  its own length. studioMount names a plane, not a direction -- the front
+     *  plane is faced from downstage (+Y), the side plane from stage left
+     *  (+X), the top from above -- so without this nothing could say Back
+     *  (upstage), Stage right or Bottom ("no way to put this fixture on the
+     *  back? also when I say side .. which side?"). See face()/setFace(). */
+    bool             studioFlip = false;
+    /** The face was CHOSEN (setFixtureFace(), or read from a file that names
+     *  it), not left at the Front default. The load-time repair that moves a
+     *  stray default Front onto the Top plane for a deck or a horizontal truss
+     *  must not undo a deliberate Front or Back. */
+    bool             studioFaceChosen = false;
+
+    /** The six faces a fixture can be on, as a direction: which way it faces
+     *  out. Each is a plane (studioMount) and a side of it (studioFlip). */
+    enum Face { FaceTop = 0, FaceBottom, FaceFront, FaceBack, FaceStageLeft, FaceStageRight };
+    /** The unit vector along its length (its LED grid's columns), from
+     *  studioMount and studioAngle -- the same as the rig view draws. */
+    QVector3D longAxis() const
+    {
+        const double th = qDegreesToRadians(double(studioAngle));
+        const float c = float(qCos(th)), s = float(qSin(th));
+        switch (studioMount)
+        {
+        case 0:  return QVector3D(c, s, 0.0f);       // Top: X-Y
+        case 2:  return QVector3D(0.0f, c, s);       // Side: Y-Z
+        default: return QVector3D(c, 0.0f, s);       // Front: X-Z
+        }
+    }
+    /** The unit vector across it, the way its grid's rows run (row 0 at the
+     *  top of a front-facing bar): the mount face's normal crossed with the
+     *  length, reversed when it faces the other way. Roll (studioTilt) is
+     *  left out: it tips the rows into depth, which a flat grid cannot show. */
+    QVector3D acrossAxis() const
+    {
+        const QVector3D n = (studioMount == 0) ? QVector3D(0, 0, 1)
+                          : (studioMount == 2) ? QVector3D(1, 0, 0) : QVector3D(0, 1, 0);
+        QVector3D h = QVector3D::crossProduct(n, longAxis());
+        if (h.length() < 1e-6f)
+            h = QVector3D(0, 0, -1);
+        h.normalize();
+        return studioFlip ? -h : h;
+    }
+
+    Face face() const
+    {
+        const int m = qBound(0, studioMount, 2);
+        return Face(m == 0 ? (studioFlip ? FaceBottom : FaceTop)
+                  : m == 1 ? (studioFlip ? FaceBack : FaceFront)
+                           : (studioFlip ? FaceStageRight : FaceStageLeft));
+    }
+
     /** Boom mount. When pipeId is valid the fixture rides a pipe's pipe at
      *  pipeOffset metres up from the base, facing pipeAngle degrees around it.
      *  Its world position is DERIVED from the pipe so it follows it. */
@@ -282,11 +426,16 @@ struct FixtureRigProps
     float            pipeOffset = 0.0f;            ///< metres up the pipe from the base
     float            pipeAngle  = 0.0f;            ///< facing degrees around the pipe
 
-    /** Tower-shelf mount. When towerId is valid the fixture sits on a tower's
-     *  shelf at (towerU, towerV) metres into the footprint. Derived from the
-     *  tower geometry so it follows. */
+    /** Tower mount. When towerId is valid the fixture rides the tower at
+     *  (towerU, towerV) metres into the footprint, at a height derived from
+     *  @c towerMountSide: a numbered SHELF (towerShelf, as before), the
+     *  tower's own TOP cap, or its BOTTOM/base — real, distinct positions
+     *  rather than fake shelf indices. Derived from the tower geometry so it
+     *  follows. */
+    enum TowerMountSide { TowerShelf = 0, TowerTop = 1, TowerBottom = 2 };
     quint32          towerId    = UINT_MAX;        ///< invalid = not tower-mounted
-    int              towerShelf = 0;               ///< shelf index
+    int              towerMountSide = TowerShelf;
+    int              towerShelf = 0;               ///< shelf index (towerMountSide == TowerShelf only)
     float            towerU     = 0.0f;            ///< metres across the footprint (X)
     float            towerV     = 0.0f;            ///< metres into the footprint (Y)
 
@@ -296,6 +445,98 @@ struct FixtureRigProps
     bool onPipe()  const { return pipeId != UINT_MAX; }
     bool onTower() const { return towerId != UINT_MAX; }
     enum RiserFace { RiserFront = 0, RiserTop = 1 };
+
+    /** WHERE the fixture sits relative to the thing carrying it, as distinct
+     *  from WHICH thing that is.
+     *
+     *  OnSurface: bolted to the outside -- its back flush with the face, its
+     *      body proud of it. The normal case, and what a face-mounted LED bar
+     *      on a step nosing is.
+     *  Inside: within the structure's volume -- a fixture rigged between a
+     *      truss's chords, or sitting inside a clear-topped step firing up
+     *      through it. Drawn centred on its position rather than pushed out,
+     *      and its height within the volume is settable by dragging in an
+     *      elevation.
+     *
+     *  There was briefly a third, Recessed, meaning "let into the surface". It
+     *  was render-only -- it sank the drawn body by half its depth and never
+     *  touched the position -- so for a 60 mm bar on a 600 mm step it did
+     *  nothing anyone could see, and it read as broken. Removed rather than
+     *  left as a control that appears not to work. The value 2 is deliberately
+     *  NOT reused, so any file written while it existed loads as OnSurface
+     *  rather than silently meaning something else. */
+    enum MountPlacement { OnSurface = 0, Inside = 1 };
+    int              placement = OnSurface;
+
+    /** The structural mounts are MUTUALLY EXCLUSIVE -- a fixture is clamped to
+     *  a truss, or riding a pipe, or on a tower shelf, or standing on a deck,
+     *  or bolted to a riser face, never two at once. */
+    enum MountKind { NoMount = 0, TrussMount, PipeMount, TowerMount,
+                     DeckMount, RiserMount, HangerMount };
+
+    bool onHanger() const { return hangerId != UINT_MAX; }
+
+    /** Which structure this fixture is on, in the SAME precedence
+     *  MonitorProperties::fixtureRigPosition() uses to derive its position.
+     *  Everything that asks "what is this fixture mounted on?" must go through
+     *  here: when a stale second mount was left behind, the position resolver
+     *  and the plot's double-click each picked a DIFFERENT one, so a fixture
+     *  drawn on its truss opened the editor for an unrelated platform. */
+    MountKind primaryMount() const
+    {
+        if (onHanger())                    return HangerMount;
+        if (trussId != Truss::invalidId()) return TrussMount;
+        if (onPipe())                      return PipeMount;
+        if (onTower())                     return TowerMount;
+        if (onDeck())                      return DeckMount;
+        if (onRiser())                     return RiserMount;
+        return NoMount;
+    }
+
+    /** riserFace and studioMount are two answers to ONE question -- which
+     *  surface of the step a fixture is on -- and they are numbered OPPOSITELY
+     *  (RiserFront = 0, but the front DRAWING plane is 1). Nothing enforced the
+     *  pairing and every caller inlined the inversion for itself, so a strip
+     *  could end up claiming the front face for its position and the tread for
+     *  its geometry: correctly placed along the step nosing, yet drawn lying
+     *  flat on top of the step and firing upwards. stage-structures-demo.qxw
+     *  shipped with exactly that on all eight of DS3's strips, which is what
+     *  made that one step look unlike its ten identical neighbours.
+     *
+     *  So the mapping lives here, once, and the plane is set through
+     *  setStudioMount() so the two cannot drift apart again. */
+    static int studioMountForRiserFace(int face)
+    { return face == RiserTop ? 0 : 1; }
+
+    /** Lay the fixture on a drawing plane (0 = top, 1 = front, 2 = side) and
+     *  take a riser mount's own face with it -- on a riser the face is not
+     *  decoration, it is what fixtureRigPosition() derives the position from,
+     *  so changing one without the other leaves the fixture drawn somewhere it
+     *  is not.
+     *
+     *  Side is deliberately exempt: a strip running along a step's END is a
+     *  position the riser model cannot express at all (it has a front and a
+     *  top, and nothing else), so the face is left alone rather than forced to
+     *  a wrong one. */
+    void setStudioMount(int face)
+    {
+        studioMount = face;
+        if (onRiser() && face != 2)
+            riserFace = (face == 0) ? RiserTop : RiserFront;
+    }
+
+    /** Unrig it from every structure. Call before setting a new mount so the
+     *  kinds stay exclusive -- attachFixtureToTruss()/...ToTower() used to set
+     *  their own id and leave any previous one in place. */
+    void clearMounts()
+    {
+        trussId          = Truss::invalidId();
+        pipeId           = UINT_MAX;
+        towerId          = UINT_MAX;
+        deckPlatformId   = UINT_MAX;
+        riserPlatformId  = UINT_MAX;
+        hangerId         = UINT_MAX;
+    }
 };
 
 /** @} */

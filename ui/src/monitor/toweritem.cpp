@@ -124,6 +124,21 @@ void TowerItem::paint(QPainter *painter,
     painter->drawRect(QRectF(0, 0, m_pxW, m_pxH));
     painter->drawLine(QPointF(0, 0), QPointF(m_pxW, m_pxH));
     painter->drawLine(QPointF(m_pxW, 0), QPointF(0, m_pxH));
+
+    // Its faced sides: thick edges in the panels' colour (front is downstage,
+    // the bottom of the plan; stage left is +X, the right).
+    if (m_tower->hasFaces())
+    {
+        QColor fc = m_tower->facesColour();
+        if (fc.lightness() < 60)
+            fc = fc.lighter(260);               // a black facade, still seen on the dark plan
+        painter->setPen(QPen(fc, 4.0, Qt::SolidLine, Qt::FlatCap));
+        const int sides = m_tower->facesSides();
+        if (sides & Tower::FrontSide) painter->drawLine(QPointF(0, m_pxH), QPointF(m_pxW, m_pxH));
+        if (sides & Tower::BackSide)  painter->drawLine(QPointF(0, 0), QPointF(m_pxW, 0));
+        if (sides & Tower::LeftSide)  painter->drawLine(QPointF(m_pxW, 0), QPointF(m_pxW, m_pxH));
+        if (sides & Tower::RightSide) painter->drawLine(QPointF(0, 0), QPointF(0, m_pxH));
+    }
 }
 
 void TowerItem::mousePressEvent(QGraphicsSceneMouseEvent *event)

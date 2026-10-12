@@ -78,6 +78,7 @@ how it shows up in the look editor and how the host knows what to inject.
 | `apiVersion` | int | API version (current: `1`). |
 | `version` | int | Generator content version (default `1`). Bump when you change params/behaviour so Effects (presets) authored against an older version can be reasoned about. |
 | `name` | string | Display name in the effect picker. |
+| `hostSpread` | string | The script takes the **host's spread** (the look editor's Spread row): when `inputs._spread` is true it reads each fixture's `phase` instead of working out its own offset. The value names the script's own params the host spread stands in for, comma-separated (`"spread,reverse"`); the look editor hides them while it's on. `""` if it has none. |
 | `description` | string | One-line tooltip. |
 | `notes` | string | Long help shown in the editor panel. |
 | `author` | string | Credit. |
@@ -114,6 +115,9 @@ effect.parameters = [
     // Project floor positions with px = pos.x, py = -pos.y (stage +y is upstage
     // = screen up) so it reads WYSIWYG against the 2D Monitor:
     { name: "angle", description: "Gradient direction", type: "direction", min: 0, max: 360, defaultValue: 0 },
+    // type:"text" → a text box in the look editor; the value is a string, and
+    // a string defaultValue is what the box (and params.<name>) start with:
+    { name: "text", description: "The words to show", type: "text", defaultValue: "HELLO" },
     // 'aliases' = former names for this param. A stored value under an old name
     // maps to this one, so renaming a param doesn't break saved looks/Effects:
     { name: "rate", description: "Cycles/sec", aliases: ["speed"], min: 0, max: 20, defaultValue: 1 }
@@ -146,6 +150,8 @@ One object per (filtered) fixture in the scene. Fields:
 |---|---|---|
 | `id` | int | Fixture id. |
 | `head` | int | Head index (0 = single-head). |
+| `name` | string | The fixture's name, for a script that works by how a rig is named ("DS1 #3", "CS2t1" — see `step-test-pattern.js`). |
+| `heads` | int | How many heads the fixture has (a 64-pixel strip: 64), so a pixel script knows a strip's length. |
 | `panRange` | number | Pan travel in **degrees** (from physical, default 360). |
 | `tiltRange` | number | Tilt travel in **degrees** (default 270). |
 | `hasPanTilt` | bool | Has pan and/or tilt channels. |
@@ -155,6 +161,7 @@ One object per (filtered) fixture in the scene. Fields:
 | `hasGobo` | bool | Has a gobo channel. |
 | `hasShutter` | bool | Has a shutter/strobe channel. |
 | `pos` | `{x,y,z}` | 3-D rig world position in **metres** (`{0,0,0}` if unplaced). |
+| `phase` | number | Where this head is in the effect's cycle, in **cycles**, from the host's spread (amount × its place along the chosen axis, direction, wings and blocks). 0 when the spread is off. Use it as the offset you'd otherwise compute from `i / n`: `t * rate + (inputs._spread ? f.phase : i * spread / n)`. |
 | `grid` | `{col,row,cols,rows}` | Cell coords for **pixel-style / matrix effects** (ripple, comet, plasma, RGBScript ports). `col,row` = this fixture's cell; `cols,rows` = grid size. Sourced from the fixture group's **head layout** (the same map RGB Matrix uses) when the scene targets a single laid-out group; otherwise the fixtures are a **1-D strip** in list order (`cols = N, rows = 1, row = 0`). Always present, so an effect can render on a grid unconditionally — a 1×N strip is just the degenerate case. |
 | `aimAt` | `{ <slot>: {pan,tilt} }` | Per-fixture aim **degrees** toward each bound `effect.targets` slot. Empty object per slot when unbound/unsolvable. |
 | `sceneTarget` | `{x,y,z, pan,tilt}` | The scene's **own Aim look** (implicit target). **Present only when the scene carries an Aim look.** `x,y,z` = the target's **world location** in metres (shared by all fixtures) — centre a shape/formation on it and return world-space aim intents (`aimX/aimY/aimZ`). `pan,tilt` = this fixture's pre-solved aim **degrees** at the target (subject-height biased; present only with usable rig geometry) — the followspot defers to the host's converged aim when these are present. |
@@ -169,9 +176,20 @@ unbound). Plus host-injected timing, always present:
 |---|---|
 | `inputs.<name>` | declared input slot value, 0..1 |
 | `inputs._time` | seconds since the scene started |
-| `inputs._beat` | 0.0–1.0 sawtooth phase within the current beat |
-| `inputs._bpm` | current BPM (0 = no beat source) |
-| `inputs._beatCount` | integer beats since start |
+| `inputs._beat` | 0.0–1.0 sawtooth phase within the current beat — of the app's one beat clock, so every effect is on the same beat |
+| `inputs._bpm` | current tempo, may be fractional (0 = no clock) |
+| `inputs._beatCount` | whole beats since this effect started |
+| `inputs._beatPos` | the beat clock's running count; its fraction is `_beat` |
+| `inputs._spread` | true when the look's host spread is on (see `hostSpread`, `fixture.phase`) |
+| `inputs._spreadAmount` | the host spread's amount in cycles, for an effect that lays heads out by it rather than offsetting time (`f.phase / _spreadAmount` is 0..1 along the spread) |
+
+When the effect runs on the main clock or a **speed master** (the look
+editor's Speed, or its look, chase step, chase or collection), the clock
+above is that master's and **`inputs._time` counts its beats instead of
+seconds**: a script computing `phase = _time * rate` then runs `rate`
+cycles per beat, locked to the master's beat, and stands still while the
+master is paused. Off a master `_time` is seconds since the effect started,
+as always.
 
 ### `palettes` — resolved palette references
 
@@ -210,7 +228,8 @@ colours than they declare slots for (e.g. an N-way spread):
 
 `params.<name>` — scalar number for normal/dropdown params (dropdowns give the
 **integer index**). `type:"path"` params arrive as a JS array of `[x,y]` pairs
-(0..1).
+(0..1). `type:"text"` params arrive as a **string** — what was typed in the
+look editor, else the parameter's string `defaultValue`.
 
 ### `state` — persistence
 
@@ -402,6 +421,16 @@ shipped scripts for colour/position patterns.
 
 - **Order matters:** the returned array must match `fixtures[]` order and length.
   Returning fewer entries silently drops the tail.
+- **The fixture objects are kept between ticks.** The host builds each
+  fixture's object once and updates only what changes (its `pos` when it
+  moves, `aimAt`/`sceneTarget`/`lastSpot` each tick when present), so a big
+  pixel rig costs little to hand over. Treat them as **read-only**: anything
+  you set on one would still be there next tick. Keep your own per-fixture
+  data in `state` (keyed by `id`/`head`). The *array* is new every tick, so
+  sorting or reversing `fixtures` in place is safe — but return the intents
+  in the original order.
+- **Answers: only the keys you mean.** The host reads each intent's own keys
+  (an intent is usually `{r,g,b}`); a key it doesn't know is ignored.
 - **`fixtureTypes` filters the array:** if you tag `["moving"]`, wash fixtures
   won't appear in `fixtures[]` at all.
 - **Stage/azimuth convention** (for position effects): degrees are clockwise from

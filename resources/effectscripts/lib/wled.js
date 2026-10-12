@@ -1,0 +1,192 @@
+/*
+  QLC+ Effect Script library: WLED
+
+  What a port of a WLED effect (WLED's FX.cpp) needs to read like the
+  original: a segment with WLED's own speed, intensity, palette and three
+  colours, setPixelColor()/fill(), color_from_palette(), and the FastLED
+  integer helpers WLED's effects are written in. A port says
+      effect.requires = ["wled"];
+      effect.wled     = "Chase";        // WLED's name for it
+  and its tick() is WLED's mode function with SEGMENT/SEGLEN/strip.now
+  replaced by the segment this builds:
+
+      var seg = WLED.segment(fixtures, inputs, palettes, params);
+      ...seg.setPixelColor(i, seg.colorFromPalette(i, true, seg.solidWrap, 0))...
+      return seg.out();
+
+  Colours are WLED's: 0xRRGGBB numbers. The three colours are the look's
+  first three (palettes.look.colors) -- on a WLED lantern, its primary,
+  secondary and tertiary colour channels. Mirror and reverse (params.option,
+  as the WLED definitions' Effect Option channel) are applied by out(), the
+  way WLED applies them to a segment, so an effect never sees them.
+
+  Palettes 0 and 2-5 are built from the three colours as WLED builds them;
+  6 (Party) and 11 (Rainbow) are FastLED's. Any other is drawn as 4
+  (Color Gradient) until its table is imported -- WLED.paletteKnown() says
+  which.
+*/
+var WLED = (function() {
+    var W = {};
+
+    W.r = function(c) { return (c >> 16) & 0xFF; };
+    W.g = function(c) { return (c >> 8) & 0xFF; };
+    W.b = function(c) { return c & 0xFF; };
+    W.rgb = function(r, g, b) { return ((r & 0xFF) << 16) | ((g & 0xFF) << 8) | (b & 0xFF); };
+
+    // FastLED 8/16-bit maths, as integers.
+    W.qadd8 = function(a, b) { return Math.min(255, a + b); };
+    W.qsub8 = function(a, b) { return Math.max(0, a - b); };
+    W.scale8 = function(i, s) { return (i * s) >> 8; };
+    /** sin16(0..65535) -> -32767..32767 (FastLED's is a close approximation). */
+    W.sin16 = function(x) { return Math.round(Math.sin((x & 0xFFFF) / 65536 * 2 * Math.PI) * 32767); };
+    W.cos16 = function(x) { return W.sin16((x & 0xFFFF) + 16384); };
+    /** sin8(0..255) -> 0..255. */
+    W.sin8 = function(x) { return Math.round(128 + Math.sin((x & 0xFF) / 256 * 2 * Math.PI) * 127.5) & 0xFF; };
+    W.cos8 = function(x) { return W.sin8((x & 0xFF) + 64); };
+    W.triwave8 = function(x) { x &= 0xFF; if (x & 0x80) x = 255 - x; return (x << 1) & 0xFF; };
+    W.beat8 = function(bpm, now) { return Math.floor(now * bpm * 256 / 60000) & 0xFF; };
+    W.beat16 = function(bpm, now) { return Math.floor(now * bpm * 65536 / 60000) & 0xFFFF; };
+    W.beatsin8 = function(bpm, lo, hi, now, phase) {
+        lo = lo || 0; hi = (hi === undefined) ? 255 : hi;
+        var s = W.sin8(W.beat8(bpm, now) + (phase || 0));
+        return lo + W.scale8(s, hi - lo);
+    };
+    W.beatsin16 = function(bpm, lo, hi, now, phase) {
+        lo = lo || 0; hi = (hi === undefined) ? 65535 : hi;
+        var s = W.sin16(W.beat16(bpm, now) + (phase || 0)) + 32768;
+        return lo + Math.floor(s * (hi - lo) / 65536);
+    };
+
+    /** WLED's color_blend(): @p blend 0 = all c1, 255 = all c2. */
+    W.colorBlend = function(c1, c2, blend) {
+        if (blend <= 0) return c1;
+        if (blend >= 255) return c2;
+        var mix = function(a, b) { return ((b * blend) + (a * (255 - blend))) >> 8; };
+        return W.rgb(mix(W.r(c1), W.r(c2)), mix(W.g(c1), W.g(c2)), mix(W.b(c1), W.b(c2)));
+    };
+    /** WLED's color_fade(): scale toward black by @p amount/255. */
+    W.colorFade = function(c, amount) {
+        return W.rgb(W.scale8(W.r(c), amount), W.scale8(W.g(c), amount), W.scale8(W.b(c), amount));
+    };
+    /** WLED's color_wheel(): 0..255 round red, green, blue. */
+    W.colorWheel = function(pos) {
+        pos = 255 - (pos & 0xFF);
+        if (pos < 85) return W.rgb(255 - pos * 3, 0, pos * 3);
+        if (pos < 170) { pos -= 85; return W.rgb(0, pos * 3, 255 - pos * 3); }
+        pos -= 170; return W.rgb(pos * 3, 255 - pos * 3, 0);
+    };
+
+    // A seeded random8 per segment (state.seed), so a port is repeatable.
+    W.random8 = function(state, lim, hi) {
+        state.seed = ((state.seed === undefined ? 1337 : state.seed) * 2053 + 13849) & 0xFFFF;
+        var r = (state.seed + (state.seed >> 8)) & 0xFF;
+        if (hi !== undefined) return lim + ((r * (hi - lim)) >> 8);
+        if (lim !== undefined) return (r * lim) >> 8;
+        return r;
+    };
+    W.random16 = function(state, lim) {
+        var r = (W.random8(state) << 8) | W.random8(state);
+        return lim !== undefined ? Math.floor(r * lim / 65536) : r;
+    };
+
+    var PARTY = [0x5500AB, 0x84007C, 0xB5004B, 0xE5001B, 0xE81700, 0xB84700, 0xAB7700, 0xABAB00,
+                 0xAB5500, 0xDD2200, 0xF2000E, 0xC2003E, 0x8F0071, 0x5F00A1, 0x2F00D0, 0x0007F9];
+    var RAINBOW = [0xFF0000, 0xD52A00, 0xAB5500, 0xAB7F00, 0xABAB00, 0x56D500, 0x00FF00, 0x00D52A,
+                   0x00AB55, 0x0056AA, 0x0000FF, 0x2A00D5, 0x5500AB, 0x7F0081, 0xAB0055, 0xD5002B];
+
+    /** CRGBPalette16(a, b, c): a gradient through the given stops. */
+    function gradient16(stops) {
+        var out = [];
+        for (var k = 0; k < 16; k++) {
+            var pos = k / 15 * (stops.length - 1);
+            var i = Math.min(stops.length - 2, Math.floor(pos));
+            out.push(W.colorBlend(stops[i], stops[i + 1], Math.round((pos - i) * 255)));
+        }
+        return out;
+    }
+
+    W.paletteKnown = function(id) { return id === 0 || (id >= 2 && id <= 6) || id === 11; };
+
+    /** The sixteen entries of WLED palette @p id, from colours @p c. */
+    W.palette16 = function(id, c) {
+        var p = c[0], s = c[1], t = c[2];
+        switch (id) {
+        case 2: return [p, p, p, p, p, p, p, p, p, p, p, p, p, p, p, p];
+        case 3: return [p, p, p, p, p, p, p, p, s, s, s, s, s, s, s, s];
+        case 5: return [p, p, p, p, p, s, s, s, s, s, t, t, t, t, t, p];
+        case 6: return PARTY;
+        case 11: return RAINBOW;
+        case 4:
+        default: return gradient16([t, s, p]);
+        }
+    };
+
+    /** FastLED ColorFromPalette() with linear blending between entries. */
+    W.colorFromPalette16 = function(pal, index) {
+        index &= 0xFF;
+        var hi = index >> 4, lo = index & 0x0F;
+        var a = pal[hi], b = pal[(hi + 1) & 15];
+        return lo ? W.colorBlend(a, b, lo << 4) : a;
+    };
+
+    W.segment = function(fixtures, inputs, palettes, params) {
+        var n = fixtures.length;
+        var opt = Math.floor((params.option || 0) / 64);
+        var mirror = (opt === 1 || opt === 3), reverse = (opt === 2 || opt === 3);
+        var L = (palettes && palettes.look && palettes.look.colors) ? palettes.look.colors : [];
+        var cols = [0, 1, 2].map(function(k) {
+            var c = L[k];
+            return (c && c.r !== undefined) ? W.rgb(Math.round(c.r), Math.round(c.g), Math.round(c.b)) : 0;
+        });
+        var seg = {
+            len: mirror ? Math.floor((n + 1) / 2) : n,      // SEGLEN
+            now: Math.floor(((inputs && inputs._time) || 0) * 1000),   // strip.now (ms)
+            speed: Math.round(params.speed === undefined ? 128 : params.speed),
+            intensity: Math.round(params.intensity === undefined ? 128 : params.intensity),
+            palette: Math.round(params.palette || 0),
+            solidWrap: false,               // PALETTE_SOLID_WRAP at WLED's default blend
+            px: []
+        };
+        for (var i = 0; i < seg.len; i++) seg.px.push(0);
+        var pal16 = seg.palette === 0 ? null : W.palette16(seg.palette, cols);
+
+        seg.color = function(k) { return cols[k] || 0; };           // SEGCOLOR(k)
+        seg.setPixelColor = function(i, c) { if (i >= 0 && i < seg.len) seg.px[i] = c; };
+        seg.getPixelColor = function(i) { return (i >= 0 && i < seg.len) ? seg.px[i] : 0; };
+        seg.fill = function(c) { for (var i = 0; i < seg.len; i++) seg.px[i] = c; };
+        /** WLED's color_from_palette(): palette 0 is colour @p mcol itself. */
+        seg.colorFromPalette = function(i, mapping, wrap, mcol) {
+            if (pal16 === null && mcol < 3) return cols[mcol];
+            var pal = pal16 || W.palette16(4, cols);
+            var idx = i;
+            if (mapping && seg.len > 1) idx = Math.floor((i * 255) / (seg.len - 1));
+            if (!wrap) idx = W.scale8(idx, 240);
+            return W.colorFromPalette16(pal, idx);
+        };
+        /** One {r, g, b} per fixture: mirror and reverse as WLED does them. */
+        seg.out = function() {
+            var out = [];
+            for (var j = 0; j < n; j++) {
+                var v = (mirror && j >= seg.len) ? n - 1 - j : j;
+                if (reverse) v = seg.len - 1 - v;
+                var c = seg.px[v] || 0;
+                out.push({ r: W.r(c), g: W.g(c), b: W.b(c) });
+            }
+            return out;
+        };
+        return seg;
+    };
+
+    /** The parameters every port takes: WLED's own, 0..255 as the definitions
+     *  send them. */
+    W.parameters = function() {
+        return [
+            { name: "speed",     description: "Speed (WLED)",     min: 0, max: 255, defaultValue: 128 },
+            { name: "intensity", description: "Intensity (WLED)", min: 0, max: 255, defaultValue: 128 },
+            { name: "palette",   description: "Palette (WLED number, 0 = colours)", min: 0, max: 71, defaultValue: 0 },
+            { name: "option",    description: "Option (64 mirror, 128 reverse, 192 both)", min: 0, max: 255, defaultValue: 0 }
+        ];
+    };
+
+    return W;
+})();

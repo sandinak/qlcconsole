@@ -22,9 +22,11 @@
 #include <QHeaderView>
 #include <QTreeWidget>
 #include <QMessageBox>
+#include <QPushButton>
 #include <QToolButton>
 #include <QFileDialog>
 #include <QCloseEvent>
+#include <QFileInfo>
 #include <QSettings>
 #include <QComboBox>
 #include <QLineEdit>
@@ -34,8 +36,12 @@
 #include <QMenu>
 #include <QList>
 #include <QUrl>
+#include <QDir>
 
 #include "qlcfixturedefcache.h"
+#include <QTimer>
+#include <QDoubleSpinBox>
+#include <QGridLayout>
 #include "qlcfixturemode.h"
 #include "qlcfixturedef.h"
 #include "qlccapability.h"
@@ -50,6 +56,7 @@
 #endif
 
 #include "fixtureeditor.h"
+#include "problemspanel.h"
 #include "editphysical.h"
 #include "editchannel.h"
 #include "editmode.h"
@@ -197,6 +204,73 @@ void QLCFixtureEditor::init()
             this, SLOT(slotCopyPhysicalClipboard(QLCPhysical)));
     connect(m_phyEdit, SIGNAL(requestPasteFromClipboard()),
             this, SLOT(slotPastePhysicalInfo()));
+
+    /* Problems: the definition checked as it is edited -- errors for what
+       is clearly wrong, warnings for what is missing. Re-checked a moment
+       after any change; the Physical page says nothing when it is edited,
+       so its fields are listened to directly. */
+    m_problems = new ProblemsPanel(this);
+    if (QGridLayout *grid = qobject_cast<QGridLayout *>(layout()))
+        grid->addWidget(m_problems, grid->rowCount(), 0, 1, qMax(1, grid->columnCount()));
+    else if (layout() != NULL)
+        layout()->addWidget(m_problems);
+    connect(m_problems, &ProblemsPanel::activated, this, &QLCFixtureEditor::goToIssue);
+    m_problemsTimer = new QTimer(this);
+    m_problemsTimer->setSingleShot(true);
+    m_problemsTimer->setInterval(250);
+    connect(m_problemsTimer, &QTimer::timeout, this, &QLCFixtureEditor::refreshProblems);
+    foreach (QSpinBox *w, m_phyEdit->findChildren<QSpinBox *>())
+        connect(w, QOverload<int>::of(&QSpinBox::valueChanged), m_problemsTimer, QOverload<>::of(&QTimer::start));
+    foreach (QDoubleSpinBox *w, m_phyEdit->findChildren<QDoubleSpinBox *>())
+        connect(w, QOverload<double>::of(&QDoubleSpinBox::valueChanged), m_problemsTimer, QOverload<>::of(&QTimer::start));
+    foreach (QComboBox *w, m_phyEdit->findChildren<QComboBox *>())
+        connect(w, &QComboBox::currentTextChanged, m_problemsTimer, QOverload<>::of(&QTimer::start));
+    foreach (QLineEdit *w, m_phyEdit->findChildren<QLineEdit *>())
+        connect(w, &QLineEdit::textChanged, m_problemsTimer, QOverload<>::of(&QTimer::start));
+    refreshProblems();
+}
+
+void QLCFixtureEditor::refreshProblems()
+{
+    if (m_problems == NULL)
+        return;
+    // What the Physical page shows is what will be saved.
+    if (m_phyEdit != NULL)
+        m_fixtureDef->setPhysical(m_phyEdit->physical());
+    m_problems->setIssues(FixtureDefCheck::check(m_fixtureDef));
+}
+
+void QLCFixtureEditor::goToIssue(const FixtureDefCheck::Issue &issue)
+{
+    using FixtureDefCheck::Issue;
+    auto selectNamed = [](QTreeWidget *list, int column, const QString &name) {
+        for (int i = 0; i < list->topLevelItemCount(); ++i)
+            if (list->topLevelItem(i)->text(column) == name)
+            {
+                list->setCurrentItem(list->topLevelItem(i));
+                list->scrollToItem(list->topLevelItem(i));
+                return true;
+            }
+        return false;
+    };
+    QString page;
+    switch (issue.section)
+    {
+    case Issue::General:  page = QStringLiteral("General"); break;
+    case Issue::Physical: page = QStringLiteral("Physical"); break;
+    case Issue::Channels: page = QStringLiteral("Channels"); break;
+    case Issue::Modes:    page = QStringLiteral("Modes"); break;
+    }
+    // A mode's own physical data is edited on the mode.
+    if (issue.section == Issue::Physical && !issue.target.isEmpty()
+        && m_fixtureDef->mode(issue.target.section(QStringLiteral(", "), 0, 0)) != NULL)
+        page = QStringLiteral("Modes");
+    if (QWidget *w = m_tab->findChild<QWidget *>(page))
+        m_tab->setCurrentWidget(w);
+    if (page == QLatin1String("Channels"))
+        selectNamed(m_channelList, CH_COL_NAME, issue.target);
+    else if (page == QLatin1String("Modes"))
+        selectNamed(m_modeList, MODE_COL_NAME, issue.target.section(QStringLiteral(", "), 0, 0));
 }
 
 void QLCFixtureEditor::closeEvent(QCloseEvent *e)
@@ -254,10 +328,35 @@ bool QLCFixtureEditor::checkManufacturerModel()
     return true;
 }
 
+bool QLCFixtureEditor::isUnderSystemDefinitionDirectory(const QString& path) const
+{
+    const QString sysDir = QDir::cleanPath(QLCFixtureDefCache::systemDefinitionDirectory().absolutePath());
+    const QString target = QDir::cleanPath(QFileInfo(path).absoluteFilePath());
+    return target == sysDir || target.startsWith(sysDir + "/");
+}
+
+QString QLCFixtureEditor::localOverridePath() const
+{
+    const QString man = m_fixtureDef->manufacturer().replace(" ", "-");
+    const QString mod = m_fixtureDef->model().replace(" ", "-");
+    const QDir dir = QLCFixtureDefCache::userDefinitionDirectory();
+    return dir.absoluteFilePath(QString("%1-%2%3").arg(man).arg(mod).arg(KExtFixture));
+}
+
 bool QLCFixtureEditor::save()
 {
     if (checkManufacturerModel() == false)
         return false;
+
+    refreshProblems();
+    if (m_problems != NULL && m_problems->errorCount() > 0)
+    {
+        if (QMessageBox::warning(this, tr("Errors in this definition"),
+                tr("This definition has %n error(s) -- things that are wrong, not just "
+                   "missing (see Problems).\n\nSave it anyway?", "", m_problems->errorCount()),
+                QMessageBox::Save | QMessageBox::Cancel, QMessageBox::Cancel) != QMessageBox::Save)
+            return false;
+    }
 
     if (m_fileName.simplified().isEmpty() == true)
     {
@@ -265,10 +364,34 @@ bool QLCFixtureEditor::save()
     }
     else
     {
+        QString targetPath = m_fileName;
+        bool redirected = false;
+        if (isUnderSystemDefinitionDirectory(m_fileName) == true)
+        {
+            // System definitions ship with the app and must stay static --
+            // silently rewriting one in place would make it indistinguishable
+            // from an install/upgrade, and un-reinstallable without knowing
+            // it had been touched. Redirect to a local override instead.
+            targetPath = localOverridePath();
+            QMessageBox::information(this, tr("System fixture definition"),
+                tr("\"%1\" is a system fixture definition and can't be "
+                   "modified in place.\n\nYour changes will be saved as a "
+                   "local copy instead:\n\n%2\n\nwhich will override the "
+                   "system definition for this manufacturer and model from "
+                   "now on -- the original stays untouched.")
+                   .arg(QFileInfo(m_fileName).fileName()).arg(targetPath));
+            redirected = true;
+        }
+
         m_fixtureDef->setPhysical(m_phyEdit->physical());
-        QFile::FileError error = m_fixtureDef->saveXML(m_fileName);
+        QFile::FileError error = m_fixtureDef->saveXML(targetPath);
         if (error == QFile::NoError)
         {
+            if (redirected == true)
+            {
+                m_fileName = targetPath;
+                setCaption();
+            }
             setModified(false);
             return true;
         }
@@ -322,6 +445,20 @@ bool QLCFixtureEditor::saveAs()
         if (path.right(KExtFixture.length()) != KExtFixture)
             path += KExtFixture;
 
+        if (isUnderSystemDefinitionDirectory(path) == true)
+        {
+            // Same rule as save(): never write into the system directory,
+            // even when the destination was hand-picked in this dialog.
+            const QString requested = path;
+            path = localOverridePath();
+            QMessageBox::information(this, tr("System fixture definition"),
+                tr("\"%1\" is under the system fixture directory, which "
+                   "can't be modified.\n\nSaving as a local copy instead:"
+                   "\n\n%2\n\nwhich will override the system definition for "
+                   "this manufacturer and model from now on.")
+                   .arg(QFileInfo(requested).fileName()).arg(path));
+        }
+
         m_fixtureDef->setPhysical(m_phyEdit->physical());
         QFile::FileError error = m_fixtureDef->saveXML(path);
         if (error == QFile::NoError)
@@ -374,6 +511,11 @@ void QLCFixtureEditor::setCaption()
     caption = QDir::toNativeSeparators(fileName);
     if (m_modified == true)
         caption += QString(" *");
+    // Where it comes from: an included one is never written in place.
+    if (m_fileName.isEmpty() == false)
+        caption += isUnderSystemDefinitionDirectory(m_fileName)
+            ? tr("  — Included (saves as a local copy)")
+            : tr("  — Local");
 
     parentWidget()->setWindowTitle(caption);
 }
@@ -382,6 +524,8 @@ void QLCFixtureEditor::setModified(bool modified)
 {
     m_modified = modified;
     setCaption();
+    if (modified && m_problemsTimer != NULL)
+        m_problemsTimer->start();
 }
 
 /*****************************************************************************
@@ -846,22 +990,99 @@ void QLCFixtureEditor::slotEditMode()
             this, SLOT(slotCopyPhysicalClipboard(QLCPhysical)));
     if (em.exec() == QDialog::Accepted)
     {
-        *mode = *(em.mode());
-
-        item = m_modeList->currentItem();
-        updateModeItem(mode, item);
-
-        // if mode name has changed, update
-        // all aliases referring to the old name
-        if (mode->name() != origName)
+        // A channel-count/order or head-count change to a mode that's
+        // already been saved to disk at least once is exactly the change
+        // class that silently corrupts an already-patched fixture's saved
+        // show data (Scenes/Chasers store values by channel INDEX, not
+        // name) -- offer to keep the original mode untouched and save the
+        // edit as a new mode instead, same mechanics slotCloneMode() already
+        // uses. Skipped for a definition that's never been saved at all --
+        // nothing could possibly be patched to a mode that doesn't exist on
+        // disk yet.
+        bool saveAsNewMode = false;
+        if (m_fileName.simplified().isEmpty() == false &&
+            modeStructureChanged(mode, em.mode()) == true)
         {
-            updateAliasModeName(origName, mode->name());
-            refreshAliasTree();
+            QMessageBox box(QMessageBox::Warning, tr("Mode layout changed"),
+                tr("This changes the channel layout of \"%1\" -- channel count, "
+                   "order, or head count differs from what's saved. Any fixture "
+                   "already patched to this mode may show incorrect behavior "
+                   "after saving, until it's re-patched, since shows store "
+                   "channel values by position, not by name.\n\n"
+                   "Keep \"%1\" as it is and save this edit as a new mode "
+                   "instead?").arg(origName), QMessageBox::NoButton, this);
+            QPushButton *newModeBtn = box.addButton(tr("Save as New Mode..."), QMessageBox::AcceptRole);
+            box.addButton(tr("Change \"%1\" Anyway").arg(origName), QMessageBox::DestructiveRole);
+            QPushButton *cancelBtn = box.addButton(QMessageBox::Cancel);
+            box.setDefaultButton(newModeBtn);
+            box.exec();
+
+            if (box.clickedButton() == cancelBtn)
+            {
+                disconnect(&em, SIGNAL(copyToClipboard(QLCPhysical)),
+                           this, SLOT(slotCopyPhysicalClipboard(QLCPhysical)));
+                return;
+            }
+            saveAsNewMode = (box.clickedButton() == newModeBtn);
         }
 
-        refreshAliasModes();
+        if (saveAsNewMode == true)
+        {
+            // Same mechanics as slotCloneMode(): prompt for a unique name,
+            // add the EDITED layout under it, leave the original mode (and
+            // anything already patched to it) completely untouched.
+            bool ok = false;
+            QString text;
+            while (true)
+            {
+                text = QInputDialog::getText(this, tr("Name the new mode"),
+                                             tr("Give a unique name for the mode"),
+                                             QLineEdit::Normal,
+                                             tr("%1 (edited)").arg(origName), &ok);
+                if (ok == false)
+                    break;
+                if (text.isEmpty() == true)
+                    continue;
+                if (m_fixtureDef->mode(text) != NULL)
+                {
+                    QMessageBox::information(this, tr("Invalid name"),
+                                             tr("Another mode by that name already exists."));
+                    continue;
+                }
+                break;
+            }
 
-        setModified();
+            if (ok == true && text.isEmpty() == false)
+            {
+                QLCFixtureMode *newMode = new QLCFixtureMode(m_fixtureDef, em.mode());
+                newMode->setName(text);
+                item = new QTreeWidgetItem(m_modeList);
+                m_fixtureDef->addMode(newMode);
+                updateModeItem(newMode, item);
+                m_modeList->setCurrentItem(item);
+                refreshAliasModes();
+                setModified();
+            }
+        }
+        else
+        {
+            *mode = *(em.mode());
+
+            item = m_modeList->currentItem();
+            updateModeItem(mode, item);
+
+            // if mode name has changed, update
+            // all aliases referring to the old name
+            if (mode->name() != origName)
+            {
+                updateAliasModeName(origName, mode->name());
+                refreshAliasTree();
+            }
+
+            refreshAliasModes();
+
+            setModified();
+        }
         m_modeList->header()->resizeSections(QHeaderView::ResizeToContents);
     }
     disconnect(&em, SIGNAL(copyToClipboard(QLCPhysical)),
@@ -980,6 +1201,28 @@ void QLCFixtureEditor::refreshModeList()
     m_modeList->resizeColumnToContents(MODE_COL_NAME);
     m_modeList->resizeColumnToContents(MODE_COL_HEAD);
     m_modeList->resizeColumnToContents(MODE_COL_CHS);
+}
+
+bool QLCFixtureEditor::modeStructureChanged(const QLCFixtureMode *original,
+                                            const QLCFixtureMode *edited) const
+{
+    Q_ASSERT(original != NULL);
+    Q_ASSERT(edited != NULL);
+
+    if (original->channels().size() != edited->channels().size())
+        return true;
+    if (original->heads().size() != edited->heads().size())
+        return true;
+
+    for (int i = 0; i < original->channels().size(); i++)
+    {
+        const QLCChannel *a = original->channel(i);
+        const QLCChannel *b = edited->channel(i);
+        if (a == NULL || b == NULL || a->name() != b->name() || a->group() != b->group())
+            return true;
+    }
+
+    return false;
 }
 
 void QLCFixtureEditor::updateModeItem(const QLCFixtureMode *mode,

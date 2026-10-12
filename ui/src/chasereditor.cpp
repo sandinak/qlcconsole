@@ -39,6 +39,9 @@
 #include "functionstreewidget.h"
 #include "functionselection.h"
 #include "speeddialwidget.h"
+#include "speedmasterspanel.h"
+#include <QComboBox>
+#include "speedmasters.h"
 #include "chasereditor.h"
 #include "mastertimer.h"
 #include "chaserstep.h"
@@ -59,6 +62,7 @@
 #define COL_FADEOUT  4
 #define COL_DURATION 5
 #define COL_NOTES    6
+#define COL_SPEED    7
 
 ChaserEditor::ChaserEditor(QWidget* parent, Chaser* chaser, Doc* doc, bool liveMode)
     : QWidget(parent)
@@ -74,6 +78,24 @@ ChaserEditor::ChaserEditor(QWidget* parent, Chaser* chaser, Doc* doc, bool liveM
 
     /* Disable editing of steps number */
     m_tree->setItemDelegateForColumn(COL_NUM, new NoEditDelegate(this));
+
+    /* Speed masters (SPEED_SPREAD_DESIGN.md, S2): the chase's, for every
+       step, and a step's own where it differs. */
+    m_tree->setColumnCount(COL_SPEED + 1);
+    m_tree->headerItem()->setText(COL_SPEED, tr("Speed"));
+    m_tree->setItemDelegateForColumn(COL_SPEED, new ComboBoxDelegate(
+        SpeedMastersPanel::choiceNames(m_doc, tr("As the chase")), this));
+    QComboBox *chaseSpeed = new QComboBox(this);
+    chaseSpeed->setObjectName(QStringLiteral("chaserSpeedMaster"));
+    SpeedMastersPanel::fillCombo(chaseSpeed, m_doc, tr("As played"), m_chaser->speedMaster());
+    chaseSpeed->setToolTip(tr("What the effects in this chase's steps keep time with. "
+                              "A step can say otherwise in its Speed column."));
+    connect(chaseSpeed, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, chaseSpeed](int) {
+        m_chaser->setSpeedMaster(chaseSpeed->currentData().toInt());
+        m_doc->setModified();
+    });
+    horizontalLayout->addWidget(new QLabel(tr("Speed:"), this));
+    horizontalLayout->addWidget(chaseSpeed);
     if (m_chaser->type() == Function::SequenceType)
         m_tree->header()->setSectionHidden(COL_NAME, true);
 
@@ -718,6 +740,12 @@ void ChaserEditor::slotItemChanged(QTreeWidgetItem *item, int column)
     else if (column == COL_NOTES)
     {
         step.note = itemText;
+    }
+    else if (column == COL_SPEED)
+    {
+        const QList<int> values = SpeedMastersPanel::choiceValues();
+        const int i = item->data(COL_SPEED, Qt::UserRole).toInt();
+        step.speedMaster = (i >= 0 && i < values.size()) ? values.at(i) : int(SpeedMasters::Inherit);
     }
     if (updateTreeNeeded)
         updateTree();
@@ -1408,6 +1436,12 @@ void ChaserEditor::updateItem(QTreeWidgetItem* item, ChaserStep& step)
 
     if (step.note.isEmpty() == false)
         item->setText(COL_NOTES, step.note);
+    {
+        const int i = SpeedMastersPanel::choiceValues().indexOf(step.speedMaster);
+        item->setData(COL_SPEED, Qt::UserRole, qMax(0, i));
+        item->setText(COL_SPEED, step.speedMaster == SpeedMasters::Inherit
+                                     ? QString() : m_doc->speedMasters()->assignmentName(step.speedMaster));
+    }
     step.fid = function->id();
 
     switch (m_chaser->fadeInMode())

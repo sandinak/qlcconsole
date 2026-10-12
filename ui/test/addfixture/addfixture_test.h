@@ -34,6 +34,9 @@ private slots:
     void cleanupTestCase();
 
     void findAddress();
+    void findAddressIgnoresUnpatchedFixtures();
+    void inventoryQuantityIsNotLimitedByAUniverse();
+    void addingMoreStartsOnTheSameModelAndMode();
     void initialNoFixture();
     void initialDimmer();
     void initialScanner();
@@ -42,6 +45,12 @@ private slots:
     void selectionGeneric();
 
     void rememberExpanded();
+
+    void inventoryModeHidesAddressAndIgnoresOverlap();
+    void connectionAndIpAreReported();
+    void aTakenNameIsRefusedWhenEditingAndNumberedWhenAdding();
+    void eachModelSaysWhereItsDefinitionComesFrom();
+    void aNetworkFixtureCanBeSentToByWled();
 
 private:
     Doc* m_doc;

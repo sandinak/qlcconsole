@@ -22,6 +22,7 @@ endif()
 add_executable(${module_name} WIN32
     ../ui/src/aboutbox.cpp ../ui/src/aboutbox.h ../ui/src/aboutbox.ui
     ../ui/src/apputil.cpp ../ui/src/apputil.h
+    ../ui/src/showstatus.cpp ../ui/src/showstatus.h
     addchannelsdialog.cpp addchannelsdialog.h addchannelsdialog.ui
     app.cpp app.h
     capabilitywizard.cpp capabilitywizard.h capabilitywizard.ui
@@ -29,8 +30,11 @@ add_executable(${module_name} WIN32
     edithead.cpp edithead.h edithead.ui
     editmode.cpp editmode.h editmode.ui
     editphysical.cpp editphysical.h editphysical.ui
+    fixturebrowser.cpp fixturebrowser.h
     fixtureeditor.cpp fixtureeditor.h fixtureeditor.ui
     main.cpp
+    repairdialog.cpp repairdialog.h
+    problemspanel.cpp problemspanel.h
     util.h
     ${QM_FILES}
 )
@@ -45,6 +49,7 @@ target_link_libraries(${module_name} PRIVATE
     Qt${QT_MAJOR_VERSION}::Core
     Qt${QT_MAJOR_VERSION}::Gui
     Qt${QT_MAJOR_VERSION}::Widgets
+    Qt${QT_MAJOR_VERSION}::Network
     qlcplusengine
 )
 

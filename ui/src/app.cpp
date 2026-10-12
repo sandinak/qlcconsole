@@ -65,6 +65,13 @@
 #include "monitorproperties.h"
 #include "vcframe.h"
 #include "app.h"
+#include "effectscriptrunner.h"
+#include <QPointer>
+#include <thread>
+#include <QRegularExpression>
+#include <memory>
+#include <atomic>
+#include <QProgressDialog>
 #include "doc.h"
 #include "fixture.h"
 #include "programmercontroller.h"
@@ -73,16 +80,22 @@
 #include "lastlookeffect.h"
 
 #include "qlcfixturedefcache.h"
+#include "qlcfixturemode.h"
+#include "patchinventorydialog.h"
 #include "audioplugincache.h"
 #include "rgbscriptscache.h"
 #include "videoprovider.h"
 #include "qlcconfig.h"
+#include "helpbrowser.h"
 #include "fixturegroup.h"
 #include "qlcfile.h"
 #include "apputil.h"
+#include "wledconfigcheck.h"
 #include "controlsurfaceengine.h"
 #include "pmjoverlay.h"
 #include "showstatus.h"
+#include "showstatusdialog.h"
+#include "qlcioplugin.h"
 #include "startupwindow.h"
 
 #if defined(WIN32) || defined(Q_OS_WIN)
@@ -347,6 +360,7 @@ void App::disableGUI()
     m_noGui = true;
 }
 
+
 void App::init()
 {
     QSettings settings;
@@ -374,20 +388,7 @@ void App::init()
         // Clamp the restored window to the current screen: a geometry saved on
         // a bigger/other display (or made too tall by an old minimum size) can
         // land partly off-screen and become impossible to grab/resize.
-        QScreen *scr = QGuiApplication::screenAt(frameGeometry().center());
-        if (scr == NULL)
-            scr = QGuiApplication::primaryScreen();
-        if (scr != NULL)
-        {
-            const QRect avail = scr->availableGeometry();
-            QRect g = geometry();
-            g.setSize(g.size().boundedTo(avail.size()));
-            if (g.right()  > avail.right())  g.moveRight(avail.right());
-            if (g.bottom() > avail.bottom()) g.moveBottom(avail.bottom());
-            if (g.left()   < avail.left())   g.moveLeft(avail.left());
-            if (g.top()    < avail.top())    g.moveTop(avail.top());
-            setGeometry(g);
-        }
+        AppUtil::ensureWindowOnScreen(this);
     }
     else
     {
@@ -461,6 +462,18 @@ void App::init()
         w->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
         const int idx = m_tab->addTab(w, icon, text);
         m_tabOriginals.append(qMakePair(text, icon));
+        // F1 on this view opens its guide (helpTopicFor()).
+        static const QHash<QString, QString> guide = {
+            { QStringLiteral("Connections"),     QStringLiteral("other-improvements.md#connections--patch") },
+            { QStringLiteral("Fixtures"),        QStringLiteral("fixture-manager.md") },
+            { QStringLiteral("Lighting Studio"), QStringLiteral("lighting-studio.md") },
+            { QStringLiteral("Functions"),       QStringLiteral("other-improvements.md#window-menu") },
+            { QStringLiteral("Programming"),     QStringLiteral("programming-tab.md") },
+            { QStringLiteral("Shows"),           QStringLiteral("shows.md") },
+            { QStringLiteral("Virtual Console"), QStringLiteral("getting-started.md#running-the-show") },
+            { QStringLiteral("Simple Desk"),     QStringLiteral("getting-started.md#running-the-show") } };
+        if (!w->property("helpTopic").isValid())
+            w->setProperty("helpTopic", guide.value(text, QStringLiteral("getting-started.md")));
         // Stored as tab data (travels with the tab through detach/reattach's
         // removeTab()/insertTab(), unlike m_tabOriginals' fixed construction-
         // order indexing) so the window title can find the right label
@@ -558,6 +571,10 @@ void App::init()
     addTab(w, QIcon(":/virtualconsole.png"), tr("Virtual Console"));
     w = new SimpleDesk(m_tab, m_doc);
     addTab(w, QIcon(":/slidermatrix.png"), tr("Simple Desk"));
+    /* Functions: no tab ("I keep hitting it by mistake instead of
+       Programming"), but there to open from the Window menu, in a window of
+       its own. Closing that window puts it away again. */
+    parkContext(tr("Functions"));
 
     // Load and apply the tab label mode preference.
     {
@@ -585,10 +602,9 @@ void App::init()
     // View menu can offer accurate "jump to tab" entries.
     initMenuBar();
 
-#if QT_VERSION >= QT_VERSION_CHECK(5, 6, 0)
-    /* Detach the tab's widget onto a new window on doubleClick */
-    connect(m_tab, SIGNAL(tabBarDoubleClicked(int)), this, SLOT(slotDetachContext(int)));
-#endif
+    /* Shift-click a tab: its view in a window of its own (eventFilter()). It
+       was a double-click, which broke views out by accident. */
+    m_tab->tabBar()->installEventFilter(this);
     connect(m_tab, SIGNAL(currentChanged(int)), this, SLOT(slotTabChanged(int)));
 
     // Listen to blackout changes and toggle m_controlBlackoutAction
@@ -832,6 +848,217 @@ void App::initDoc()
     connect(m_doc, SIGNAL(needAutosave()), this, SLOT(slotDocAutosave()));
     connect(m_doc, SIGNAL(modeChanged(Doc::Mode)), this, SLOT(slotModeChanged(Doc::Mode)));
     connect(m_doc, SIGNAL(loadProgress(QString,int)), this, SLOT(slotLoadProgress(QString,int)));
+
+    /* Fixtures not patched, or whose definition says nothing about how much
+       light they put out, go in the footer's "Not ready" list. Re-checked a
+       moment after any fixture change -- a load or a bulk patch is hundreds
+       of changes, and one check covers them all. */
+    QTimer *fixtureReadiness = new QTimer(this);
+    fixtureReadiness->setObjectName(QStringLiteral("fixtureReadinessTimer"));
+    fixtureReadiness->setSingleShot(true);
+    fixtureReadiness->setInterval(200);
+    connect(fixtureReadiness, &QTimer::timeout, this, [this]() {
+        AppUtil::updateFixtureReadiness(m_doc);
+    });
+    auto recheckFixtures = [fixtureReadiness]() { fixtureReadiness->start(); };
+    connect(m_doc, &Doc::fixtureAdded, fixtureReadiness, recheckFixtures);
+    connect(m_doc, &Doc::fixtureRemoved, fixtureReadiness, recheckFixtures);
+    connect(m_doc, &Doc::fixtureChanged, fixtureReadiness, recheckFixtures);
+    connect(m_doc, &Doc::loaded, fixtureReadiness, recheckFixtures);
+    // An effect look that would not start: the footer, a moment later.
+    if (m_doc->effectScriptRunner() != nullptr)
+        connect(m_doc->effectScriptRunner(), &EffectScriptRunner::failuresChanged,
+                fixtureReadiness, recheckFixtures);
+
+    /* Each WLED read for whether it is set up the way this show drives it
+       (WledConfigCheck): what does not match goes in the footer and on the
+       fixture, with Fix on Device. Read again a moment after the show loads
+       or a fixture changes (a patch, a mode), and every so often anyway. */
+    WledConfigCheck *wledCheck = new WledConfigCheck(m_doc, this);
+    QTimer *wledRecheck = new QTimer(this);
+    wledRecheck->setSingleShot(true);
+    wledRecheck->setInterval(1500);
+    connect(wledRecheck, &QTimer::timeout, wledCheck, &WledConfigCheck::checkNow);
+    auto recheckWled = [wledRecheck]() { wledRecheck->start(); };
+    connect(m_doc, &Doc::loaded, wledRecheck, recheckWled);
+    connect(m_doc, &Doc::fixtureAdded, wledRecheck, recheckWled);
+    connect(m_doc, &Doc::fixtureChanged, wledRecheck, recheckWled);
+    connect(m_doc, &Doc::fixtureRemoved, wledRecheck, recheckWled);
+    wledRecheck->start();
+    // Once at startup too: files skipped while the libraries loaded (in cloud
+    // storage, not on this computer) are worth saying with no show open.
+    fixtureReadiness->start();
+
+    /* ...and each can be fixed from there: the unpatched selected and
+       patched, a definition opened to say what it puts out. */
+    ShowStatus::instance()->setAction("simpledesk.held", tr("Release"),
+        [](QWidget *, const QVariantList &items) {
+            if (SimpleDesk *desk = SimpleDesk::instance())
+            {
+                foreach (const QVariant &v, items)
+                    desk->releaseUniverse(v.toInt());
+            }
+        });
+    ShowStatus::instance()->setAction("wled.config", tr("Fix on Device…"),
+        [](QWidget *parent, const QVariantList &items) {
+            QList<quint32> ids;
+            foreach (const QVariant &v, items)
+                ids << v.toUInt();
+            if (WledConfigCheck::instance() != nullptr)
+                WledConfigCheck::instance()->confirmFix(parent, ids);
+        });
+    ShowStatus::instance()->setAction("fixtures.unpatched", tr("Patch…"),
+        [this](QWidget *parent, const QVariantList &items) {
+            QList<quint32> ids;
+            foreach (const QVariant &v, items)
+                ids << v.toUInt();
+            PatchInventoryDialog dlg(m_doc, ids, parent);
+            dlg.exec();
+            AppUtil::updateFixtureReadiness(m_doc);
+        });
+    ShowStatus::instance()->setAction("fixtures.output", tr("Edit Definition…"),
+        [this](QWidget *parent, const QVariantList &items) {
+            QStringList files;
+            foreach (const QVariant &v, items)
+                if (!files.contains(v.toString()))
+                    files << v.toString();
+            foreach (const QString &file, files)
+            {
+                if (file.isEmpty())
+                {
+                    QMessageBox::information(parent, tr("No definition to edit"),
+                        tr("A generic fixture has no definition file. Change it to "
+                           "its real model in the Fixture Manager to give it one."));
+                    continue;
+                }
+                watchDefinition(file);
+                AppUtil::launchFixtureEditor(file, parent);
+            }
+        });
+    ShowStatus::instance()->setAction("fixtures.clash", tr("Re-patch…"),
+        [this](QWidget *parent, const QVariantList &items) {
+            QList<quint32> ids;
+            foreach (const QVariant &v, items)
+                ids << v.toUInt();
+            PatchInventoryDialog dlg(m_doc, ids, parent);
+            dlg.exec();
+            AppUtil::updateFixtureReadiness(m_doc);
+        });
+    ShowStatus::instance()->setAction("fixtures.duplicates", tr("Number Them"),
+        [this](QWidget *, const QVariantList &items) {
+            QStringList names;
+            foreach (const QVariant &v, items)
+                names << v.toString();
+            m_doc->makeFixtureNamesUnique(names);
+            AppUtil::updateFixtureReadiness(m_doc);
+        });
+    /* Opened in the fixture editor, which says where the file breaks and
+       offers repairs; saved there, it is watched and loads. */
+    ShowStatus::instance()->setAction("definitions.failed", tr("Repair in Fixture Editor…"),
+        [this](QWidget *parent, const QVariantList &items) {
+            foreach (const QVariant &v, items)
+            {
+                const QString file = v.toString();
+                watchDefinition(file);
+                AppUtil::launchFixtureEditor(file, parent);
+            }
+        });
+    auto trashDefinitions = [this](QWidget *parent, const QVariantList &items) {
+            QStringList files, names;
+            foreach (const QVariant &v, items)
+                if (!files.contains(v.toString()))
+                {
+                    files << v.toString();
+                    names << QFileInfo(v.toString()).fileName();
+                }
+            if (files.isEmpty()
+                || QMessageBox::question(parent, tr("Move to Trash"),
+                       tr("Move %n definition file(s) to the Trash?\n\n%1", "", files.size())
+                           .arg(names.join("\n")),
+                       QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel) != QMessageBox::Yes)
+                return;
+            QStringList failed;
+            foreach (const QString &file, files)
+            {
+                if (QFile::moveToTrash(file))
+                    m_doc->fixtureDefCache()->forgetFailedDefinition(file);
+                else
+                    failed << QFileInfo(file).fileName();
+            }
+            if (!failed.isEmpty())
+                QMessageBox::warning(parent, tr("Move to Trash"),
+                    tr("Could not move these to the Trash:\n\n%1").arg(failed.join("\n")));
+            AppUtil::updateFixtureReadiness(m_doc);
+        };
+    ShowStatus::instance()->addAction("definitions.failed", tr("Move to Trash…"), trashDefinitions);
+    /* Online-only files: fetch them without holding anything up -- a thread
+       of their own reads each one (which makes the cloud send it), however
+       long that takes. Fixtures and effects then load at once; anything else
+       loads next time qlcconsole starts. */
+    ShowStatus::instance()->setAction("fixtures.nodefinition", tr("Fetch Definitions"),
+        [this](QWidget *parent, const QVariantList &) { recoverUnavailableDefinitions(parent); });
+    ShowStatus::instance()->setAction("storage.onlineonly", tr("Download Now"),
+        [this](QWidget *parent, const QVariantList &items) {
+            QStringList paths;
+            foreach (const QVariant &v, items)
+                paths << v.toString();
+            if (paths.isEmpty())
+                return;
+            QPointer<App> self(this);
+            QPointer<QWidget> where(parent);
+            std::thread([self, where, paths]() {
+                QStringList fetched;
+                for (const QString &path : paths)
+                {
+                    QFile f(path);
+                    if (f.open(QIODevice::ReadOnly))
+                    {
+                        f.readAll();
+                        f.close();
+                    }
+                    if (!QLCFile::isOnlineOnly(path))
+                        fetched << path;
+                }
+                QMetaObject::invokeMethod(qApp, [self, where, paths, fetched]() {
+                    if (self.isNull())
+                        return;
+                    bool scripts = false;
+                    QStringList later;
+                    for (const QString &path : fetched)
+                    {
+                        QLCFile::forgetSkippedOnlineOnly(path);
+                        if (path.endsWith(QLatin1String(".qxf"), Qt::CaseInsensitive))
+                            self->m_doc->fixtureDefCache()->loadQXF(path, true);
+                        else if (path.endsWith(QLatin1String(".js"), Qt::CaseInsensitive))
+                            scripts = true;
+                        else
+                            later << QFileInfo(path).fileName();
+                    }
+                    if (scripts && self->m_doc->effectScriptRunner() != nullptr)
+                        self->m_doc->effectScriptRunner()->cache()->rescan();
+                    AppUtil::updateFixtureReadiness(self->m_doc);
+                    QString text = tr("Downloaded %1 of %2.").arg(fetched.size()).arg(paths.size());
+                    if (fetched.size() < paths.size())
+                        text += QLatin1Char(' ') + tr("The rest did not come -- is the cloud storage "
+                                                      "connected?");
+                    if (!later.isEmpty())
+                        text += QLatin1Char(' ') + tr("These load next time qlcconsole starts: %1")
+                                                       .arg(later.join(QStringLiteral(", ")));
+                    QMessageBox::information(where, tr("Cloud storage"), text);
+                });
+            }).detach();
+        });
+    ShowStatus::instance()->setAction("definitions.duplicates", tr("Move to Trash…"), trashDefinitions);
+    ShowStatus::instance()->setAction("universes.nooutput", tr("Open Connections"),
+        [this](QWidget *parent, const QVariantList &items) {
+            InputOutputManager *io = InputOutputManager::instance();
+            if (io == NULL || items.isEmpty())
+                return;
+            switchToTabContaining(io);
+            io->selectUniverse(items.first().toUInt());
+            if (QDialog *dlg = qobject_cast<QDialog *>(parent))
+                dlg->accept();          // out of the way of the tab it opened
+        });
 #ifdef DEBUG_SPEED
     speedTime.start();
 #endif
@@ -877,6 +1104,10 @@ void App::initDoc()
             m_startupWindow->logDetail(name);
     });
     m_doc->ioPluginCache()->load(IOPluginCache::systemPluginDirectory());
+    // WLED devices that stop answering, or fade to a weak signal: the footer.
+    if (QLCIOPlugin *wled = m_doc->ioPluginCache()->plugin(QStringLiteral("WLED")))
+        if (QTimer *t = findChild<QTimer *>(QStringLiteral("fixtureReadinessTimer")))
+            connect(wled, &QLCIOPlugin::targetProblemsChanged, t, QOverload<>::of(&QTimer::start));
 
     /* Load audio decoder plugins
      * This doesn't use a AudioPluginCache::systemPluginDirectory() cause
@@ -919,6 +1150,36 @@ void App::initDoc()
         m_startupWindow->beginStep(tr("Initializing control surfaces"));
     m_controlSurfaceEngine = new ControlSurfaceEngine(this);
     m_pmjOverlay = new PMJOverlay(m_doc, m_controlSurfaceEngine, this, this);
+}
+
+void App::watchDefinition(const QString &file)
+{
+    if (m_definitionWatcher == nullptr)
+    {
+        m_definitionWatcher = new QFileSystemWatcher(this);
+        connect(m_definitionWatcher, &QFileSystemWatcher::fileChanged, this, [this](const QString &path) {
+            /* After the editor has finished writing -- and an editor that
+               saves by replacing the file drops it from the watch, so it is
+               put back. */
+            QTimer::singleShot(300, this, [this, path]() {
+                if (QFile::exists(path) && !m_definitionWatcher->files().contains(path))
+                    m_definitionWatcher->addPath(path);
+                // A file that would not load: try it again.
+                if (m_doc->fixtureDefCache()->failedDefinitions().contains(path))
+                    m_doc->fixtureDefCache()->loadQXF(path, true);
+                QSet<QLCFixtureDef *> defs;
+                foreach (Fixture *fx, m_doc->fixtures())
+                    if (fx != NULL && fx->fixtureDef() != NULL
+                        && fx->fixtureDef()->definitionSourceFile() == path)
+                        defs.insert(fx->fixtureDef());
+                foreach (QLCFixtureDef *def, defs)
+                    m_doc->fixtureDefCache()->reloadPhysical(def);
+                AppUtil::updateFixtureReadiness(m_doc);
+            });
+        });
+    }
+    if (!m_definitionWatcher->files().contains(file))
+        m_definitionWatcher->addPath(file);
 }
 
 void App::updateOutputReadiness()
@@ -988,6 +1249,14 @@ void App::slotDocModified(bool state)
 {
     updateWindowTitle();
 
+    /* Saving changes what the programmer chip should SAY without changing what
+       the programmer holds, so it has to be re-rendered here too -- otherwise
+       it keeps its red "unsaved" styling until the next unrelated programmer
+       event. */
+    if (m_doc != NULL)
+        slotProgrammerDirtyChanged(m_doc->hasProgrammerValues()
+                                   || !m_doc->editedSceneIds().isEmpty());
+
     if (m_statusDirtyLabel != NULL)
     {
         if (state == true)
@@ -1041,7 +1310,7 @@ void App::slotUniverseWritten(quint32 idx, const QByteArray &ua)
 {
     foreach (Fixture *fixture, m_doc->fixtures())
     {
-        if (fixture->universe() != idx)
+        if (!fixture->isPatched() || fixture->universe() != idx)
             continue;
 
         fixture->setChannelValues(ua);
@@ -1235,6 +1504,12 @@ void App::initActions()
 
     m_fileSaveAction = new QAction(QIcon(":/filesave.png"), tr("&Save"), this);
     m_fileSaveAction->setShortcut(QKeySequence("CTRL+S"));
+    /* Application-wide, not window-wide. Saving the workspace is an operation
+       on the DOCUMENT, and the document is the same one whichever window has
+       focus -- so Cmd+S has to work from the Lighting Studio pulled off into
+       its own window, which is exactly where somebody has been arranging a rig
+       for an hour and most wants to save. */
+    m_fileSaveAction->setShortcutContext(Qt::ApplicationShortcut);
     m_fileSaveAction->setShortcutContext(Qt::ApplicationShortcut);
     connect(m_fileSaveAction, SIGNAL(triggered(bool)), this, SLOT(slotFileSave()));
 
@@ -1395,8 +1670,16 @@ void App::initActions()
 
     m_controlPanicAction->setMenu(m_fadeAndStopMenu);
 
-    /* Help actions */
-    m_helpIndexAction = new QAction(QIcon(":/help.png"), tr("&Index"), this);
+    /* Help actions. The app's own guides (HelpBrowser), opened on what is
+       in front; the stock QLC+ reference, online, kept for what is unchanged
+       from it. */
+    m_helpContextAction = new QAction(QIcon(":/help.png"), tr("qlcconsole &Help"), this);
+    m_helpContextAction->setShortcuts({ QKeySequence(Qt::Key_F1), QKeySequence(QKeySequence::HelpContents) });
+    m_helpContextAction->setShortcutContext(Qt::ApplicationShortcut);
+    m_helpContextAction->setToolTip(tr("Help on what you're looking at"));
+    connect(m_helpContextAction, &QAction::triggered, this, &App::slotHelpContext);
+
+    m_helpIndexAction = new QAction(tr("QLC+ Reference (online)"), this);
     m_helpIndexAction->setShortcut(QKeySequence("SHIFT+F1"));
     connect(m_helpIndexAction, SIGNAL(triggered(bool)), this, SLOT(slotHelpIndex()));
 
@@ -1430,40 +1713,28 @@ void App::initToolBar()
     m_toolbar->setContextMenuPolicy(Qt::CustomContextMenu);
     // Matches every per-manager toolbar's icon size (Fixture/Function/Show
     // Manager, Connections, ...), all already 20x20 — this was the one
-    // toolbar still at the tab bar's larger 24x24. Smaller icons shrink the
-    // whole row height, which matters more here than anywhere else: this
-    // is the one toolbar merged into the macOS title bar itself
-    // (setUnifiedTitleAndToolBarOnMac below), so its height is space taken
-    // from the title bar, not just another row in the window.
+    // toolbar still at the tab bar's larger 24x24.
     m_toolbar->setIconSize(QSize(20, 20));
     addToolBar(m_toolbar);
 
-#if defined(__APPLE__) || defined(Q_OS_MAC)
-    // Merge this toolbar into the title bar (native macOS "unified toolbar"
-    // look) instead of a separate strip below it — Branson asked for this
-    // directly, to use screen real estate more efficiently. Only applies to
-    // this app-level toolbar (Panic/Blackout/Blind/Operate); the per-manager
-    // toolbars (Fixture Manager's Add/Delete/Properties/etc.) are embedded
-    // inside each tab's own widget via layout()->setMenuBar()/addWidget(),
-    // not QMainWindow toolbars, so this API doesn't reach them.
-    setUnifiedTitleAndToolBarOnMac(true);
-
-    // Icon-only, locked, regardless of the general "Toolbar Style"
-    // preference (View menu) that governs every other toolbar and the tab
-    // bar: a button tall enough for a text label under its icon makes the
-    // unified chrome grow to fit it, which is what actually produced the
-    // two-row look Branson flagged from a screenshot ("icons at the top of
-    // the bar, not below the title line") — Qt was still rendering ONE
-    // unified area, just a tall one, with the title text effectively
-    // becoming its own line inside that taller area. Icon-only is short
-    // enough to sit level with the title text on the single native row,
-    // matching how every stock macOS app with a unified toolbar does this
-    // (Safari, Mail, Xcode, ...) — none of them label their title-bar
-    // buttons either. The general preference still governs every per-
-    // manager toolbar and the tab bar (see slotSetTabLabelMode below); it
-    // just does not reach this one, on purpose.
-    m_toolbar->setToolButtonStyle(Qt::ToolButtonIconOnly);
-#endif
+    // A macOS-native "unified title bar" merge (icons sitting level with the
+    // window title, like Safari/Mail) was attempted here and repeatedly
+    // failed for months of iteration -- root-caused 2026-09-03: Qt's
+    // setUnifiedTitleAndToolBarOnMac() on the Cocoa platform plugin never
+    // actually creates a native NSToolbar object (confirmed both by a
+    // documented Qt/Cocoa limitation and, directly, by instrumenting
+    // AppKit's own NSWindow.toolbar and finding it nil at every check, on
+    // two separate machines). Every native call this toolbar tried
+    // (NSWindowToolbarStyleUnifiedCompact included) was therefore setting a
+    // property on a toolbar that never existed -- structurally incapable of
+    // doing anything, not a timing bug. A real fix needs an actual
+    // NSToolbar built in Objective-C++; deliberately not pursued (Branson's
+    // call) since it's macOS-only new surface area and Windows/Linux have no
+    // equivalent "unified title bar" concept to begin with -- a toolbar as
+    // its own row is already the normal, correct look there. This toolbar
+    // is now a plain, ordinary QMainWindow toolbar on every platform,
+    // following the same "Toolbar Style" preference as everything else
+    // (applyTabLabelMode()) instead of being locked to icon-only.
 
     // Native-first layout: the full command set lives in the menu bar (see
     // initMenuBar). The toolbar keeps only the handful of live show controls
@@ -1521,6 +1792,8 @@ void App::initMenuBar()
         }
         quitAction->setMenuRole(QAction::QuitRole);
         quitAction->setShortcut(QKeySequence::Quit);
+        // Same reasoning as Save: quitting is an application-level act.
+        quitAction->setShortcutContext(Qt::ApplicationShortcut);
         fileMenu->addAction(quitAction);
     }
 
@@ -1532,21 +1805,16 @@ void App::initMenuBar()
     // just duplicate it. The action itself (and its shortcut) still exists
     // and still works via slotControlMonitor().
     viewMenu->addAction(m_addressToolAction);
-    viewMenu->addSeparator();
-    // Jump-to-tab entries, taken from the real tab list (m_tabOriginals keeps
-    // each tab's label/icon regardless of the icon-only/text-only display mode).
-    for (int i = 0; i < m_tabOriginals.size(); i++)
-    {
-        QAction* jump = viewMenu->addAction(m_tabOriginals.at(i).second,
-                                            m_tabOriginals.at(i).first);
-        // Ctrl+Shift+<n> (⇧⌘n on macOS): the plain Ctrl+<n> row is taken by
-        // the Function Manager's "add function" shortcuts.
-        jump->setShortcut(QKeySequence(QString("CTRL+SHIFT+%1").arg(i + 1)));
-        connect(jump, &QAction::triggered, this, [this, i]() {
-            if (i < m_tab->count())
-                m_tab->setCurrentIndex(i);
-        });
-    }
+
+    /* The rig overview is a way of LOOKING at the show, so it belongs in the
+       View menu next to the tab jumps rather than buried in the Lighting Studio
+       footer -- it is not a studio tool, it is a window onto the whole rig. The
+       footer button stays as the in-context way to reach it. */
+    m_rigOverviewAction = viewMenu->addAction(tr("Rig Overview…"));
+    m_rigOverviewAction->setShortcut(QKeySequence("CTRL+SHIFT+R"));
+    m_rigOverviewAction->setToolTip(tr("An angled, read-only view of the whole rig"));
+    connect(m_rigOverviewAction, &QAction::triggered, this, &App::slotRigOverview);
+
 
     // Backstage color themes: low-glare palettes for working near a stage/
     // audience. Persisted (App::setTheme() -> workspace/theme).
@@ -1634,6 +1902,32 @@ void App::initMenuBar()
             m_statusGrandMasterBox->setVisible(on);
     });
 
+    /* ---- Fixtures: document-wide fixture actions ----
+     * Import/Export/Remap and Channels Fade Configuration used to live on
+     * Fixture Manager's own toolbar, but none of them act on a specific
+     * tree row (they're document-wide), so a right-click context menu
+     * doesn't fit them the way it fits Properties/Remove — this menu is
+     * their home instead (2026-09-03 modernization pass). */
+    if (FixtureManager::instance() != NULL)
+    {
+        QMenu* fixturesMenu = mb->addMenu(tr("F&ixtures"));
+
+        // Launches the standalone Fixture Editor (qlcconsole-fixtureeditor)
+        // — editing fixture DEFINITIONS (channels/modes/capabilities), not
+        // Fixture Manager's own patch/properties. Branson specifically asked
+        // for the editor here, not a jump to the Fixture Manager tab (which
+        // is already one click away via its own tab, and via View's jump
+        // list) — this menu's whole reason to exist is actions that don't
+        // live anywhere else yet.
+        QAction* editorAction = fixturesMenu->addAction(tr("Fixture Editor..."));
+        connect(editorAction, &QAction::triggered, this, [this]() {
+            AppUtil::launchFixtureEditor(QString(), this);
+        });
+        fixturesMenu->addSeparator();
+
+        FixtureManager::instance()->populateFixturesMenu(fixturesMenu);
+    }
+
     /* ---- Control: playback + live editing ---- */
     QMenu* ctrlMenu = mb->addMenu(tr("&Control"));
     ctrlMenu->addAction(m_modeToggleAction);
@@ -1657,8 +1951,75 @@ void App::initMenuBar()
     ctrlMenu->addAction(m_lastLookAction);
     ctrlMenu->addAction(m_clearLastLookAction);
 
+    /* ---- Window: every view, wherever it is ----
+       "the menubar needs a windows thing so I can find them .. if I break out
+       a tab it's hard to find". Each view is listed with its shortcut and
+       brings it forward -- the tab, or its own window when it has been broken
+       out (marked so). A broken-out view can be put back from here, one or
+       all of them. */
+    QMenu* windowMenu = mb->addMenu(tr("&Window"));
+    windowMenu->setObjectName("windowMenu");
+    for (int i = 0; i < m_tabOriginals.size(); i++)
+    {
+        QAction* jump = windowMenu->addAction(m_tabOriginals.at(i).second,
+                                              m_tabOriginals.at(i).first);
+        // Ctrl+Shift+<n> (⇧⌘n on macOS): the plain Ctrl+<n> row is taken by
+        // the Function Manager's "add function" shortcuts.
+        jump->setShortcut(QKeySequence(QString("CTRL+SHIFT+%1").arg(i + 1)));
+        /* Resolve by LABEL, not by construction order. Detaching a view calls
+           removeTab(), so every index after it shifts and a raw
+           setCurrentIndex(i) lands on the wrong page -- or on nothing at all
+           for the detached view itself. */
+        const QString label = m_tabOriginals.at(i).first;
+        jump->setData(label);
+        connect(jump, &QAction::triggered, this, [this, label]() {
+            showContext(label);
+        });
+        m_windowJumps << jump;
+    }
+    windowMenu->addSeparator();
+    m_windowDockMenu = windowMenu->addMenu(tr("Put Back in Main Window"));
+    m_windowDockAll = windowMenu->addAction(tr("Put All Back in Main Window"));
+    connect(m_windowDockAll, &QAction::triggered, this, &App::reattachAllContexts);
+    m_windowBreakOut = windowMenu->addAction(tr("Move to Its Own Window"));
+    m_windowBreakOut->setObjectName(QStringLiteral("windowBreakOut"));
+    connect(m_windowBreakOut, &QAction::triggered, this, [this]() {
+        if (m_tab != NULL && m_tab->currentIndex() >= 0)
+            slotDetachContext(m_tab->currentIndex());
+    });
+    m_windowShiftClick = windowMenu->addAction(tr("Shift-Click a Tab to Open It in a Window"));
+    m_windowShiftClick->setObjectName(QStringLiteral("windowShiftClick"));
+    m_windowShiftClick->setCheckable(true);
+    m_windowShiftClick->setChecked(shiftClickBreaksOut());
+    connect(m_windowShiftClick, &QAction::toggled, this, &App::setShiftClickBreaksOut);
+    windowMenu->addSeparator();
+    QAction *minimize = windowMenu->addAction(tr("Minimize"));
+    minimize->setShortcut(QKeySequence(QStringLiteral("CTRL+M")));
+    connect(minimize, &QAction::triggered, this, []() {
+        if (QWidget *w = QApplication::activeWindow())
+            w->showMinimized();
+    });
+    connect(windowMenu, &QMenu::aboutToShow, this, &App::updateWindowMenu);
+    updateWindowMenu();
+
     /* ---- Help ---- */
     QMenu* helpMenu = mb->addMenu(tr("&Help"));
+    helpMenu->setObjectName(QStringLiteral("helpMenu"));
+    helpMenu->addAction(m_helpContextAction);
+    helpMenu->addSeparator();
+    const QList<QPair<QString, QString> > guides = {
+        { tr("Getting Started"),    QStringLiteral("getting-started.md") },
+        { tr("What's New"),         QStringLiteral("whats-new.md") },
+        { tr("Keyboard and Mouse"), QStringLiteral("shortcuts.md") },
+        { tr("Effects"),            QStringLiteral("effects.md") },
+        { tr("Troubleshooting"),    QStringLiteral("troubleshooting.md") },
+        { tr("All Guides"),         QStringLiteral("README.md") } };
+    for (const auto &g : guides)
+    {
+        const QString topic = g.second;
+        helpMenu->addAction(g.first, this, [topic]() { HelpBrowser::open(topic); });
+    }
+    helpMenu->addSeparator();
     helpMenu->addAction(m_helpIndexAction);
     helpMenu->addAction(m_helpAboutAction);         // → app menu (About) on macOS
 }
@@ -2041,9 +2402,12 @@ QFile::FileError App::slotFileSave()
     QFile::FileError error;
     QString asfName = autoSaveFileName();
 
-    /* Attempt to save with the existing name. Fall back to Save As. */
+    /* Attempt to save with the existing name. Fall back to Save As (which
+       asks about missing definitions itself). */
     if (fileName().isEmpty() == true)
         error = slotFileSaveAs();
+    else if (!confirmSaveWithoutDefinitions())
+        return QFile::NoError;
     else
         error = saveXML(fileName());
 
@@ -2059,6 +2423,9 @@ QFile::FileError App::slotFileSaveAs()
 {
     QString fn;
     QString asfName = autoSaveFileName();
+
+    if (!confirmSaveWithoutDefinitions())
+        return QFile::NoError;
 
     /* Create a file save dialog */
     QFileDialog dialog(this);
@@ -2116,6 +2483,18 @@ QFile::FileError App::slotFileSaveAs()
 /*****************************************************************************
  * Control action slots
  *****************************************************************************/
+
+void App::slotRigOverview()
+{
+    /* Ask the Lighting Studio for it: the Monitor owns the window (and the
+       raise-the-existing-one behaviour), so the menu entry and the footer
+       button open the SAME window rather than two that drift apart. But do
+       NOT bring the Studio tab forward to do it -- the overview is a window
+       of its own, opened to look at the rig beside whatever you are working
+       in ("every time I open the rig view .. the studio tab comes up"). */
+    if (Monitor *mon = Monitor::instance())
+        mon->toggleStageOverview();
+}
 
 void App::slotControlMonitor()
 {
@@ -2416,9 +2795,142 @@ void App::slotCaptureUndoStackChanged()
     }
 }
 
+void App::showContext(const QString &tabLabel)
+{
+    /* Still docked? Switch to it and bring the main window forward.
+       Matching on the label rather than the index is what makes this survive
+       detaching: tabData is set once in addTab() and travels with the page
+       through removeTab()/insertTab(). */
+    for (int t = 0; t < m_tab->count(); ++t)
+    {
+        if (m_tab->tabBar()->tabData(t).toString() != tabLabel)
+            continue;
+        m_tab->setCurrentIndex(t);
+        if (isMinimized())
+            showNormal();
+        raise();
+        activateWindow();
+        return;
+    }
+
+    /* Detached: the view IS open, it just lives in its own window now. Bring
+       that window to the front. Picking an already-detached view used to do
+       nothing visible, because there was no tab left here to select. */
+    foreach (DetachedContext *dw, findChildren<DetachedContext *>())
+    {
+        QWidget *w = dw->centralWidget();
+        if (w == NULL || w->property("tabLabel").toString() != tabLabel)
+            continue;
+        if (dw->isMinimized())
+            dw->showNormal();
+        else
+            dw->show();
+        dw->raise();
+        dw->activateWindow();
+        return;
+    }
+
+    /* Put away (parkContext()): open it in a window of its own. */
+    foreach (QWidget *w, m_parkedContexts)
+        if (w != NULL && w->property("tabLabel").toString() == tabLabel)
+        {
+            openContextWindow(w, tabLabel);
+            return;
+        }
+}
+
+void App::parkContext(const QString &tabLabel)
+{
+    for (int t = 0; t < m_tab->count(); ++t)
+    {
+        if (m_tab->tabBar()->tabData(t).toString() != tabLabel)
+            continue;
+        QWidget *context = m_tab->widget(t);
+        context->setProperty("tabIndex", t);
+        context->setProperty("tabIcon", QVariant::fromValue(m_tab->tabIcon(t)));
+        context->setProperty("tabLabel", tabLabel);
+        context->setProperty("parked", true);
+        m_tab->removeTab(t);
+        context->setParent(this);
+        context->hide();
+        m_parkedContexts << context;
+        updateWindowTitle();
+        return;
+    }
+}
+
+QStringList App::detachedContexts() const
+{
+    QStringList out;
+    foreach (DetachedContext *dw, findChildren<DetachedContext *>())
+        if (dw->centralWidget() != NULL      // put back, a window holds nothing
+            && !dw->centralWidget()->property("parked").toBool())   // no tab to go back to
+            out << dw->centralWidget()->property("tabLabel").toString();
+    return out;
+}
+
+void App::updateWindowMenu()
+{
+    const QStringList away = detachedContexts();
+    foreach (QAction *jump, m_windowJumps)
+    {
+        const QString label = jump->data().toString();
+        jump->setText(away.contains(label) ? tr("%1 — in its own window").arg(label) : label);
+    }
+    if (m_windowDockMenu != NULL)
+    {
+        m_windowDockMenu->clear();
+        foreach (const QString &label, away)
+            m_windowDockMenu->addAction(label, this, [this, label]() { reattachContext(label); });
+        m_windowDockMenu->setEnabled(!away.isEmpty());
+    }
+    if (m_windowDockAll != NULL)
+        m_windowDockAll->setEnabled(!away.isEmpty());
+    if (m_windowBreakOut != NULL)
+    {
+        const int idx = m_tab != NULL ? m_tab->currentIndex() : -1;
+        const QString label = idx >= 0 ? m_tab->tabBar()->tabData(idx).toString() : QString();
+        m_windowBreakOut->setText(label.isEmpty() ? tr("Move to Its Own Window")
+                                                  : tr("Move %1 to Its Own Window").arg(label));
+        m_windowBreakOut->setEnabled(idx >= 0);
+    }
+}
+
+#define SETTINGS_SHIFT_CLICK_BREAKS_OUT "workspace/shiftClickBreaksOut"
+
+bool App::shiftClickBreaksOut() const
+{
+    return QSettings().value(SETTINGS_SHIFT_CLICK_BREAKS_OUT, true).toBool();
+}
+
+void App::setShiftClickBreaksOut(bool on)
+{
+    QSettings().setValue(SETTINGS_SHIFT_CLICK_BREAKS_OUT, on);
+    if (m_windowShiftClick != NULL && m_windowShiftClick->isChecked() != on)
+        m_windowShiftClick->setChecked(on);
+}
+
+void App::reattachContext(const QString &tabLabel)
+{
+    foreach (DetachedContext *dw, findChildren<DetachedContext *>())
+        if (dw->centralWidget() != NULL && dw->centralWidget()->property("tabLabel").toString() == tabLabel)
+        {
+            dw->close();                // closing puts it back (slotReattachContext)
+            showContext(tabLabel);
+            return;
+        }
+}
+
+void App::reattachAllContexts()
+{
+    foreach (DetachedContext *dw, findChildren<DetachedContext *>())
+        if (dw->centralWidget() != NULL)
+            dw->close();
+}
+
 void App::slotDetachContext(int index)
 {
-    /* Get the widget that has been double-clicked */
+    /* Get the widget that has been shift-clicked */
     QWidget *context = m_tab->widget(index);
     context->setProperty("tabIndex", index);
     context->setProperty("tabIcon", QVariant::fromValue(m_tab->tabIcon(index)));
@@ -2438,7 +2950,11 @@ void App::slotDetachContext(int index)
     // never shifts to reflect what's actually still showing.
     m_tab->removeTab(index);
     updateWindowTitle();
+    openContextWindow(context, tabLabel);
+}
 
+void App::openContextWindow(QWidget *context, const QString &tabLabel)
+{
     DetachedContext *detachedWindow = new DetachedContext(this);
     detachedWindow->setCentralWidget(context);
     detachedWindow->resize(800, 600);
@@ -2467,6 +2983,14 @@ void App::slotReattachContext()
     QIcon tabIcon = context->property("tabIcon").value<QIcon>();
     QString tabLabel = context->property("tabLabel").toString();
 
+    if (context->property("parked").toBool())
+    {
+        // It has no tab: put it away again until it is asked for
+        context->setParent(this);
+        context->hide();
+        return;
+    }
+
     qDebug() << "Reattaching context" << tabIndex << tabLabel << context;
 
     context->setParent(m_tab);
@@ -2481,6 +3005,36 @@ void App::slotReattachContext()
 /*****************************************************************************
  * Help action slots
  *****************************************************************************/
+
+QString App::helpTopicFor(QWidget *w) const
+{
+    /* The nearest "helpTopic" up from what has focus -- a dialog, a view, a
+       tab -- else, in the main window, the tab on screen. */
+    for (QWidget *p = w; p != nullptr; p = p->parentWidget())
+    {
+        if (HelpBrowser *help = qobject_cast<HelpBrowser *>(p))
+            return help->currentFile();
+        const QVariant topic = p->property("helpTopic");
+        if (topic.isValid() && !topic.toString().isEmpty())
+            return topic.toString();
+    }
+    if (m_tab != nullptr && m_tab->currentWidget() != nullptr
+        && (w == nullptr || w->window() == this))
+    {
+        const QVariant topic = m_tab->currentWidget()->property("helpTopic");
+        if (topic.isValid())
+            return topic.toString();
+    }
+    return QStringLiteral("getting-started.md");
+}
+
+void App::slotHelpContext()
+{
+    QWidget *w = QApplication::focusWidget();
+    if (w == nullptr)
+        w = QApplication::activeWindow();
+    HelpBrowser::open(helpTopicFor(w));
+}
 
 void App::slotHelpIndex()
 {
@@ -2574,12 +3128,211 @@ QString App::autoSaveFileName() const
     return autosaveFilePath();
 }
 
+/*****************************************************************************
+ * Definitions a show needs, kept on this computer
+ *****************************************************************************/
+
+namespace
+{
+/** Letters and digits only, lower case: "PHS Chorus" ~ "PHS-Chorus-8". */
+QString squash(const QString &s)
+{
+    QString out;
+    for (const QChar &c : s)
+        if (c.isLetterOrNumber())
+            out += c.toLower();
+    return out;
+}
+
+/** The online-only definition files that may be @p manufacturer @p model,
+ *  by their names (what is in them cannot be read without fetching them). */
+QStringList candidatesFor(const QString &manufacturer, const QString &model)
+{
+    QStringList out;
+    const QString man = squash(manufacturer), mod = squash(model);
+    foreach (const QString &path, QLCFile::skippedOnlineOnly())
+    {
+        if (!path.endsWith(QString(KExtFixture), Qt::CaseInsensitive))
+            continue;
+        const QString name = squash(QFileInfo(path).completeBaseName());
+        if ((!mod.isEmpty() && name.contains(mod)) || (!man.isEmpty() && name.contains(man)))
+            out << path;
+    }
+    return out;
+}
+}
+
+QStringList App::fetchFromCloud(const QStringList &paths, QWidget *parent)
+{
+    QStringList fetched;
+    if (paths.isEmpty())
+        return fetched;
+    QProgressDialog progress(parent != nullptr ? parent : this);
+    progress.setWindowTitle(tr("Cloud storage"));
+    progress.setCancelButtonText(tr("Skip"));
+    progress.setRange(0, paths.size());
+    progress.setMinimumDuration(0);
+    progress.setWindowModality(Qt::ApplicationModal);
+    for (int i = 0; i < paths.size(); ++i)
+    {
+        const QString path = paths.at(i);
+        progress.setValue(i);
+        progress.setLabelText(tr("Waiting for the cloud to send %1…\n(%2 of %3 -- Skip to go on without the rest)")
+                                  .arg(QFileInfo(path).fileName()).arg(i + 1).arg(paths.size()));
+        // Reading it is what makes the cloud send it -- in a thread, so a
+        // cloud that never answers holds up nothing but this window.
+        auto done = std::make_shared<std::atomic<bool> >(false);
+        std::thread([path, done]() {
+            QFile f(path);
+            if (f.open(QIODevice::ReadOnly))
+                f.readAll();
+            done->store(true);
+        }).detach();
+        while (!done->load() && !progress.wasCanceled())
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+        if (progress.wasCanceled())
+            break;
+        if (!QLCFile::isOnlineOnly(path))
+        {
+            fetched << path;
+            QLCFile::forgetSkippedOnlineOnly(path);
+        }
+    }
+    progress.setValue(paths.size());
+    return fetched;
+}
+
+void App::prepareShowDefinitions(const QString &fileName)
+{
+    // The show itself first: not here, it cannot even be read.
+    if (QLCFile::isOnlineOnly(fileName))
+        fetchFromCloud(QStringList() << fileName, this);
+    QFile f(fileName);
+    if (QLCFile::isOnlineOnly(fileName) || !f.open(QIODevice::ReadOnly))
+        return;
+    const QString text = QString::fromUtf8(f.readAll());
+    f.close();
+
+    // What it names, and which of those are not to hand.
+    static const QRegularExpression fixtureRe(
+        QStringLiteral("<Fixture>\\s*<Manufacturer>([^<]*)</Manufacturer>\\s*<Model>([^<]*)</Model>"));
+    QLCFixtureDefCache *defs = m_doc->fixtureDefCache();
+    QList<QPair<QString, QString> > missing;
+    QRegularExpressionMatchIterator it = fixtureRe.globalMatch(text);
+    while (it.hasNext())
+    {
+        const QRegularExpressionMatch m = it.next();
+        const QPair<QString, QString> fx(m.captured(1).trimmed(), m.captured(2).trimmed());
+        if (fx.second == QString(KXMLFixtureGeneric) || fx.second == QString(KXMLFixtureRGBPanel)
+            || missing.contains(fx) || defs->fixtureDef(fx.first, fx.second) != nullptr)
+            continue;
+        if (defs->loadFromShowCache(fx.first, fx.second))
+            continue;                               // the copy kept for shows
+        missing << fx;
+    }
+    if (missing.isEmpty())
+        return;
+
+    // Not here, not cached: the cloud copies that may be them.
+    QStringList fetch;
+    for (const auto &fx : missing)
+        foreach (const QString &path, candidatesFor(fx.first, fx.second))
+            if (!fetch.contains(path))
+                fetch << path;
+    foreach (const QString &path, fetchFromCloud(fetch, this))
+        defs->loadQXF(path, true);
+    // And keep them, so the next run of this show needs nothing remote.
+    for (const auto &fx : missing)
+        defs->cacheForShows(defs->fixtureDef(fx.first, fx.second));
+}
+
+void App::cacheShowDefinitions()
+{
+    QLCFixtureDefCache *defs = m_doc->fixtureDefCache();
+    foreach (Fixture *fx, m_doc->fixtures())
+        if (fx != nullptr && !fx->definitionUnavailable())
+            defs->cacheForShows(fx->fixtureDef());
+}
+
+bool App::confirmSaveWithoutDefinitions()
+{
+    QStringList models;
+    int count = 0;
+    foreach (Fixture *fx, m_doc->fixtures())
+    {
+        if (fx == nullptr || !fx->definitionUnavailable())
+            continue;
+        ++count;
+        const QString m = fx->unavailableManufacturer() + QLatin1Char(' ') + fx->unavailableModel();
+        if (!models.contains(m))
+            models << m;
+    }
+    if (count == 0)
+        return true;
+    return QMessageBox::warning(this, tr("Save"),
+        tr("%n fixture(s) have no definition on this computer and are standing in as "
+           "dimmers:\n\n%1\n\nThey are saved as what they really are -- their make, model "
+           "and mode -- so nothing is lost. But until their definitions are back they "
+           "cannot be programmed properly. Fetch them first (the footer's warning) if "
+           "you can.\n\nSave anyway?", "", count).arg(models.join(QStringLiteral("\n"))),
+        QMessageBox::Save | QMessageBox::Cancel, QMessageBox::Cancel) == QMessageBox::Save;
+}
+
+void App::recoverUnavailableDefinitions(QWidget *parent)
+{
+    QLCFixtureDefCache *defs = m_doc->fixtureDefCache();
+    QList<Fixture *> waiting;
+    QStringList fetch;
+    foreach (Fixture *fx, m_doc->fixtures())
+    {
+        if (fx == nullptr || !fx->definitionUnavailable())
+            continue;
+        waiting << fx;
+        if (defs->fixtureDef(fx->unavailableManufacturer(), fx->unavailableModel()) != nullptr
+            || defs->loadFromShowCache(fx->unavailableManufacturer(), fx->unavailableModel()))
+            continue;
+        foreach (const QString &path, candidatesFor(fx->unavailableManufacturer(), fx->unavailableModel()))
+            if (!fetch.contains(path))
+                fetch << path;
+    }
+    foreach (const QString &path, fetchFromCloud(fetch, parent))
+        defs->loadQXF(path, true);
+
+    // Each its own definition back -- where the mode is there and the
+    // channel count is what it was patched as.
+    int restored = 0;
+    QStringList still;
+    foreach (Fixture *fx, waiting)
+    {
+        QLCFixtureDef *def = defs->fixtureDef(fx->unavailableManufacturer(), fx->unavailableModel());
+        QLCFixtureMode *mode = def != nullptr ? def->mode(fx->unavailableMode()) : nullptr;
+        if (mode != nullptr && quint32(mode->channels().size()) == fx->channels())
+        {
+            defs->cacheForShows(def);
+            fx->setFixtureDefinition(def, mode);
+            ++restored;
+        }
+        else
+            still << fx->name();
+    }
+    if (restored > 0)
+        m_doc->setModified();
+    AppUtil::updateFixtureReadiness(m_doc);
+    QMessageBox::information(parent, tr("Definitions"),
+        still.isEmpty() ? tr("%n fixture(s) have their definitions back.", "", restored)
+                        : tr("%1 fixture(s) have their definitions back; these still have none: %2")
+                              .arg(restored).arg(still.join(QStringLiteral(", "))));
+}
+
 QFile::FileError App::loadXML(const QString& fileName)
 {
     QFile::FileError retval = QFile::NoError;
 
     if (fileName.isEmpty() == true)
         return QFile::OpenError;
+
+    // Every definition it needs on this computer before it loads.
+    prepareShowDefinitions(fileName);
 
     QXmlStreamReader *doc = QLCFile::getXMLReader(fileName);
     if (doc == NULL || doc->device() == NULL || doc->hasError())
@@ -2618,6 +3371,7 @@ QFile::FileError App::loadXML(const QString& fileName)
             setFileName(fileName);
             m_doc->resetModified();
             retval = QFile::NoError;
+            cacheShowDefinitions();     // the next run of it needs nothing remote
 
             // Tabs constructed before this load (e.g. the app's startup-active
             // tab, built during App::startup() — BEFORE a -o/--open command-line
@@ -2733,6 +3487,13 @@ bool App::loadXML(QXmlStreamReader& doc, bool goToConsole, bool fromMemory)
                                 dw->restoreGeometry(geo);
                             else
                                 dw->resize(800, 600);
+                            // Saved geometry can be from a different machine's
+                            // screen layout entirely (this is per-workspace-file
+                            // state, unlike the main window's local QSettings),
+                            // or restoreGeometry() above can have silently failed
+                            // outright (Qt version/format mismatch) and left a
+                            // tiny construction-time default -- fix up either way.
+                            AppUtil::ensureWindowOnScreen(dw);
                             dw->show();
                             w->show();
                             connect(dw, SIGNAL(closing()), this, SLOT(slotReattachContext()));
@@ -2760,18 +3521,12 @@ bool App::loadXML(QXmlStreamReader& doc, bool goToConsole, bool fromMemory)
     // Perform post-load operations
     VirtualConsole::instance()->postLoad();
 
-    if (m_doc->errorLog().isEmpty() == false &&
-        fromMemory == false)
-    {
-        QMessageBox msg(QMessageBox::Warning, tr("Warning"),
-                        tr("Some errors occurred while loading the project:") + "<br><br>" + m_doc->errorLog(),
-                        QMessageBox::Ok);
-        msg.setTextFormat(Qt::RichText);
-        QSpacerItem* horizontalSpacer = new QSpacerItem(800, 0, QSizePolicy::Minimum, QSizePolicy::Expanding);
-        QGridLayout* layout = (QGridLayout*)msg.layout();
-        layout->addItem(horizontalSpacer, layout->rowCount(), 0, 1, layout->columnCount());
-        msg.exec();
-    }
+    /* What went wrong loading it: in the footer with every other problem,
+       where it stays until it is fixed -- not a dialog seen once and gone
+       (CONSOLIDATION_REVIEW #5). Missing definitions are left out here: the
+       footer lists those fixtures already, with a fix. */
+    if (fromMemory == false)
+        AppUtil::updateLoadProblems(m_doc->errorLog());
 
     m_doc->inputOutputMap()->startUniverses();
 
@@ -2873,6 +3628,7 @@ QFile::FileError App::saveXML(const QString& fileName, bool autosave)
            set it also in an unmodified state. */
         setFileName(fileName);
         m_doc->resetModified();
+        cacheShowDefinitions();     // what it uses, kept on this computer
     }
 
     return QFile::NoError;
@@ -3028,10 +3784,18 @@ void App::applyTabLabelMode()
     if (!m_tab)
         return;
     const int count = m_tab->count();
-    for (int i = 0; i < count && i < m_tabOriginals.size(); ++i)
+    for (int i = 0; i < count; ++i)
     {
-        const QString &origText = m_tabOriginals.at(i).first;
-        const QIcon   &origIcon = m_tabOriginals.at(i).second;
+        /* By the tab's own label, not its place: with a view put away or in
+           a window of its own, the places no longer line up. */
+        int o = -1;
+        for (int k = 0; k < m_tabOriginals.size() && o < 0; ++k)
+            if (m_tabOriginals.at(k).first == m_tab->tabBar()->tabData(i).toString())
+                o = k;
+        if (o < 0)
+            continue;
+        const QString &origText = m_tabOriginals.at(o).first;
+        const QIcon   &origIcon = m_tabOriginals.at(o).second;
         switch (m_tabLabelMode)
         {
         case TabIconOnly:
@@ -3050,18 +3814,12 @@ void App::applyTabLabelMode()
     }
 
     // Apply the same mode to the main toolbar so "Text only" hides toolbar
-    // icons and "Icons only" hides toolbar text labels.
-    //
-    // Except on macOS: initToolBar() locks it to icon-only there and this
-    // must not undo that. A text label under an icon makes the button tall
-    // enough that Qt's unified title/toolbar chrome grows to fit it, which
-    // is what actually produced a visible two-row title bar rather than
-    // icons sitting level with the title text on one native row — see
-    // initToolBar()'s own comment on this exact toolbar.
-#if defined(__APPLE__) || defined(Q_OS_MAC)
-    if (m_toolbar)
-        m_toolbar->setToolButtonStyle(Qt::ToolButtonIconOnly);
-#else
+    // icons and "Icons only" hides toolbar text labels. Used to be locked to
+    // icon-only on macOS while this toolbar was (unsuccessfully) trying to
+    // merge into the native title bar -- that attempt is gone (see
+    // initToolBar()'s comment: no real NSToolbar was ever involved, so
+    // nothing was actually merging), so this toolbar now follows the same
+    // general preference as every other toolbar and platform.
     if (m_toolbar)
     {
         switch (m_tabLabelMode)
@@ -3077,7 +3835,6 @@ void App::applyTabLabelMode()
             break;
         }
     }
-#endif
 
     // Keep the 2D monitor window's toolbars in sync if it is open.
     if (Monitor::instance() != NULL)
@@ -3756,6 +4513,27 @@ void App::initStatusBar()
 
 bool App::eventFilter(QObject *watched, QEvent *event)
 {
+    if (m_tab != NULL && watched == m_tab->tabBar() && event->type() == QEvent::MouseButtonPress)
+    {
+        QMouseEvent *me = static_cast<QMouseEvent *>(event);
+        if (me->button() == Qt::LeftButton && (me->modifiers() & Qt::ShiftModifier)
+            && shiftClickBreaksOut())
+        {
+            const int idx = m_tab->tabBar()->tabAt(me->pos());
+            if (idx >= 0)
+            {
+                // Not from inside the tab bar's own event: detaching removes the tab.
+                QWidget *view = m_tab->widget(idx);
+                QTimer::singleShot(0, this, [this, view]() {
+                    const int at = m_tab->indexOf(view);
+                    if (at >= 0)
+                        slotDetachContext(at);
+                });
+                return true;
+            }
+        }
+    }
+
     // Click the status-bar MTC chip → a menu to BIND the timecode: arm Follow
     // MTC and pick which universe carries the code (or accept any).
     if (watched == m_statusTimecodeLabel && event->type() == QEvent::MouseButtonPress
@@ -4565,9 +5343,37 @@ void App::slotProgrammerDirtyChanged(bool dirty)
     if (hasNew)
         parts << tr("new values pending");
     const QString detail = parts.join(QStringLiteral(", "));
-    m_statusProgrammerLabel->setText(
-        tr("<span style='color:#e60000;font-weight:bold;'>"
-           "● Programmer: %1</span>").arg(detail));
+
+    /* Two different situations wear the same red warning otherwise.
+       The programmer holds a pre-edit snapshot per scene so Revert can undo an
+       edit, and that snapshot deliberately SURVIVES a save -- you can save your
+       work and still change your mind. But a red "● Programmer: 2 scenes
+       edited" after saving reads as "you have unsaved work", which is exactly
+       what the operator has just dealt with, so it teaches them to ignore the
+       one indicator that matters when it is real.
+
+       Red while the document is genuinely dirty; a calmer "held" while it is
+       saved and the only thing outstanding is the ability to revert. Values
+       captured in the programmer but not yet stored anywhere are always red,
+       saved document or not -- those really would be lost. */
+    const bool docDirty = m_doc->isModified();
+    if (docDirty || hasNew)
+    {
+        m_statusProgrammerLabel->setText(
+            tr("<span style='color:#e60000;font-weight:bold;'>"
+               "● Programmer: %1</span>").arg(detail));
+        m_statusProgrammerLabel->setToolTip(
+            tr("The programmer is holding edits that are not saved yet."));
+    }
+    else
+    {
+        m_statusProgrammerLabel->setText(
+            tr("<span style='color:#909090;font-weight:bold;'>"
+               "◍ Programmer: %1 (saved, revertable)</span>").arg(detail));
+        m_statusProgrammerLabel->setToolTip(
+            tr("Saved. The programmer still holds each scene's pre-edit state, "
+               "so Revert can undo these edits."));
+    }
     m_statusProgrammerLabel->show();
 }
 
@@ -4619,52 +5425,9 @@ void App::updateStatusBar()
 
 void App::showStatusDetails()
 {
-    const QList<ShowStatus::Entry> entries = ShowStatus::instance()->allEntries();
-    if (entries.isEmpty())
+    if (ShowStatus::instance()->allEntries().isEmpty())
         return;
-
-    QDialog dlg(this);
-    dlg.setWindowTitle(tr("Show readiness"));
-
-    QVBoxLayout *lay = new QVBoxLayout(&dlg);
-
-    // An actual list, not a wall of prose: one top-level row per registered
-    // source (its summary, bold), the one-sentence detail as an italic
-    // child, then each individually affected thing (a universe, say) as its
-    // own row underneath -- so "which ones, specifically" is a glance
-    // rather than a re-read of a paragraph.
-    QTreeWidget *tree = new QTreeWidget(&dlg);
-    tree->setHeaderHidden(true);
-    tree->setColumnCount(1);
-    foreach (const ShowStatus::Entry &e, entries)
-    {
-        QTreeWidgetItem *top = new QTreeWidgetItem(tree);
-        top->setText(0, e.summary.isEmpty() ? e.key : e.summary);
-        QFont boldFont = top->font(0);
-        boldFont.setBold(true);
-        top->setFont(0, boldFont);
-
-        if (e.detail.isEmpty() == false)
-        {
-            QTreeWidgetItem *d = new QTreeWidgetItem(top);
-            d->setText(0, e.detail);
-            QFont italicFont = d->font(0);
-            italicFont.setItalic(true);
-            d->setFont(0, italicFont);
-        }
-        foreach (const QString &line, e.items)
-            new QTreeWidgetItem(top, QStringList(line));
-
-        top->setExpanded(true);
-    }
-    lay->addWidget(tree);
-
-    QDialogButtonBox *box = new QDialogButtonBox(QDialogButtonBox::Close, &dlg);
-    connect(box, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-    connect(box, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-    lay->addWidget(box);
-
-    dlg.resize(520, 360);
+    ShowStatusDialog dlg(this);
     dlg.exec();
 }
 

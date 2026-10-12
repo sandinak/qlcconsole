@@ -40,11 +40,15 @@ add_library(${module_name}
     channelmodifiergraphicsview.cpp channelmodifiergraphicsview.h
     channelsselection.cpp channelsselection.h channelsselection.ui
     chasereditor.cpp chasereditor.h chasereditor.ui
+    colourswatchbutton.cpp colourswatchbutton.h
+    wledconfigcheck.cpp wledconfigcheck.h
     clickandgoslider.cpp clickandgoslider.h
     clickandgowidget.cpp clickandgowidget.h
     collectioneditor.cpp collectioneditor.h collectioneditor.ui
     consolechannel.cpp consolechannel.h
     createfixturegroup.cpp createfixturegroup.h createfixturegroup.ui
+    headtypesdialog.cpp headtypesdialog.h
+    stagegroupdialog.cpp stagegroupdialog.h
     ctkrangeslider.cpp ctkrangeslider.h
     cuestackmodel.cpp cuestackmodel.h
     customfeedbackdialog.cpp customfeedbackdialog.h customfeedbackdialog.ui
@@ -52,6 +56,7 @@ add_library(${module_name}
     efxeditor.cpp efxeditor.h efxeditor.ui
     efxpreviewarea.cpp efxpreviewarea.h
     fixtureconsole.cpp fixtureconsole.h
+    fixturecreator.cpp fixturecreator.h
     fixturegroupeditor.cpp fixturegroupeditor.h fixturegroupeditor.ui
     fixturemanager.cpp fixturemanager.h
     fixtureremap.cpp fixtureremap.h fixtureremap.ui
@@ -69,6 +74,9 @@ add_library(${module_name}
     inputchanneleditor.cpp inputchanneleditor.h inputchanneleditor.ui
     inputoutputmanager.cpp inputoutputmanager.h
     connectionstree.cpp connectionstree.h
+    powerprofiledialog.cpp powerprofiledialog.h
+    universeoutputview.cpp universeoutputview.h
+    deviceprofile.cpp deviceprofile.h
     universepatchgrid.cpp universepatchgrid.h
     inputoutputpatcheditor.cpp inputoutputpatcheditor.h inputoutputpatcheditor.ui
     inputprofileeditor.cpp inputprofileeditor.h inputprofileeditor.ui
@@ -87,19 +95,33 @@ add_library(${module_name}
     monitor/monitorlayerspanel.cpp monitor/monitorlayerspanel.h
     monitor/monitorruler.cpp monitor/monitorruler.h
     monitor/monitorimageitem.cpp monitor/monitorimageitem.h
+    monitor/monitorinventorypanel.cpp monitor/monitorinventorypanel.h
     monitor/monitorlayout.cpp monitor/monitorlayout.h
     monitor/trussitem.cpp monitor/trussitem.h
     monitor/platformitem.cpp monitor/platformitem.h
     monitor/pipeitem.cpp monitor/pipeitem.h
+    monitor/sceneryitem.cpp monitor/sceneryitem.h
+    monitor/fountaindiagram.cpp monitor/fountaindiagram.h
+    monitor/beamoptics.cpp monitor/beamoptics.h
+    monitor/gobowheelsdialog.cpp monitor/gobowheelsdialog.h
     monitor/standitem.cpp monitor/standitem.h
+    monitor/hangeritem.cpp monitor/hangeritem.h
     monitor/toweritem.cpp monitor/toweritem.h
     monitor/powersourceitem.cpp monitor/powersourceitem.h
+    monitor/networknodeitem.cpp monitor/networknodeitem.h
     monitor/riserfaceeditor.cpp monitor/riserfaceeditor.h
     monitor/studiogroupeditor.cpp monitor/studiogroupeditor.h
     monitor/studiotemplate.cpp monitor/studiotemplate.h
     monitor/studiocomponentbrowser.cpp monitor/studiocomponentbrowser.h
     monitor/studioplaneview.cpp monitor/studioplaneview.h
     monitor/structurestudioview.cpp monitor/structurestudioview.h
+    monitor/zraster.cpp monitor/zraster.h
+    monitor/fixturevisualtraits.cpp monitor/fixturevisualtraits.h
+    monitor/lanternpixels.cpp monitor/lanternpixels.h
+    monitor/lightcontrols.cpp monitor/lightcontrols.h
+    monitor/rigeditsession.h
+    monitor/fixturefields.cpp monitor/fixturefields.h
+    monitor/humanfigure.cpp monitor/humanfigure.h
     monitor/targetitem.cpp monitor/targetitem.h
     palettegenerator.cpp palettegenerator.h
     playbackslider.cpp playbackslider.h
@@ -117,9 +139,19 @@ add_library(${module_name}
     gradientdirectionwidget.cpp gradientdirectionwidget.h
     bundleeditor.cpp bundleeditor.h
     bundlebrowser.cpp bundlebrowser.h
+    effectbrowser.cpp effectbrowser.h
+    fadetimespin.cpp fadetimespin.h
     lookeditor.cpp lookeditor.h
     effectscripteditor.cpp effectscripteditor.h
     pathdrawwidget.cpp pathdrawwidget.h
+    networkreportdialog.cpp networkreportdialog.h
+    patchlistdialog.cpp patchlistdialog.h
+    speedmasterspanel.cpp speedmasterspanel.h
+    spreadpreview.cpp spreadpreview.h
+    networktopologydialog.cpp networktopologydialog.h
+    patchinventorydialog.cpp patchinventorydialog.h
+    helpbrowser.cpp helpbrowser.h
+    universecombo.cpp universecombo.h
     powerdistributiondialog.cpp powerdistributiondialog.h
     powerdistributionwidget.cpp powerdistributionwidget.h
     universeusagewidget.cpp universeusagewidget.h
@@ -144,6 +176,7 @@ add_library(${module_name}
     showmanager/trackitem.cpp showmanager/trackitem.h
     showmanager/videoitem.cpp showmanager/videoitem.h
     showstatus.cpp showstatus.h
+    showstatusdialog.cpp showstatusdialog.h
     simpledesk.cpp simpledesk.h
     simpledeskengine.cpp simpledeskengine.h
     speeddial.cpp speeddial.h
@@ -213,6 +246,7 @@ target_link_libraries(${module_name} PUBLIC
     Qt${QT_MAJOR_VERSION}::Gui
     Qt${QT_MAJOR_VERSION}::Multimedia
     Qt${QT_MAJOR_VERSION}::MultimediaWidgets
+    Qt${QT_MAJOR_VERSION}::Network
     Qt${QT_MAJOR_VERSION}::Widgets
     qlcplusengine
 )
@@ -220,13 +254,13 @@ target_link_libraries(${module_name} PUBLIC
 # Add resources and RGB Script deps
 if(QT_VERSION_MAJOR GREATER 5)
     target_link_libraries(${module_name} PUBLIC Qt${QT_MAJOR_VERSION}::Qml)
-    qt_add_resources(qlcplusui_resource_files "qlcui.qrc")
+    qt_add_resources(qlcplusui_resource_files "qlcui.qrc" "help.qrc")
 else()
     target_link_libraries(${module_name} PUBLIC Qt${QT_MAJOR_VERSION}::Script)
     # EffectScript (via lookeditor) uses QJSEngine; link privately so
     # QT_QML_LIB doesn't leak to downstream test binaries.
     target_link_libraries(${module_name} PRIVATE Qt${QT_MAJOR_VERSION}::Qml)
-    qt5_add_resources(qlcplusui_resource_files "qlcui.qrc")
+    qt5_add_resources(qlcplusui_resource_files "qlcui.qrc" "help.qrc")
 endif()
 
 target_sources(${module_name} PRIVATE ${qlcplusui_resource_files})
@@ -234,6 +268,7 @@ target_sources(${module_name} PRIVATE ${qlcplusui_resource_files})
 if(WIN32)
     target_include_directories(${module_name} PUBLIC ../../hotplugmonitor/src)
 endif()
+
 
 install(TARGETS ${module_name}
     LIBRARY DESTINATION ${INSTALLROOT}/${LIBSDIR}

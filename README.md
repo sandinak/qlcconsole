@@ -47,9 +47,37 @@ built for. A device-agnostic **control-surface engine** drives hardware
 control surfaces (an OpenDeck PMJ Black 1 overlay today), and boot now runs
 through one consistent startup window — name/version, a live log of what's
 loading, a progress bar — instead of a bare, platform-inconsistent dialog.
+
+Beyond programming, it's built for **designing the rig** before the show:
+
+- **Lighting Studio** — trusses, towers, risers, steps and hangers with
+  fixtures mounted on them, seen from Top/Front/Side or a free 3D angle. The
+  rig view is **lit by the show**: beams and pools that land where they're
+  aimed, haze, gobos and prisms, LED bars and lanterns glowing in their live
+  colour.
+- **Inventory first, patch last** — stock and place fixtures before they
+  have addresses, lay out the Art-Net/sACN nodes and cable runs, then patch
+  each fixture to the nearest node with room.
+- **WLED** — Wi-Fi LED devices get a universe each by IP, sent as WLED's own
+  state only when the look changes, with their own effects run on the device.
+- **Scene transitions** — a look can arrive and leave fixture by fixture:
+  wipes across the stage, from or to the centre, dissolve, along each bar.
+- **A footer that says what isn't ready** — unpatched fixtures, address
+  clashes, universes with no output, unreadable definitions, devices not
+  answering — and fixes each from the list.
+- **Safe with cloud storage** — never hangs waiting on an online-only file,
+  keeps every definition a show uses on this computer, and never loses a
+  fixture's real identity when its definition is missing.
+
 See [CHANGELOG.md](CHANGELOG.md) for a user-facing summary of what's
 changed, or [DONE.md](DONE.md)/[TODO.md](TODO.md) for the detailed
-development log.
+development log. For a guided tour of the fork's features — the rig-design
+**Lighting Studio** view, the palette-driven **Programming** tab, the
+**Fixture Manager**'s group folders and head-layout grid, and **Stage
+Targets**/aim-solving — with screenshots and step-by-step workflows, see the
+[feature guide](docs/features/README.md); new to it, start with
+[Getting started](docs/features/getting-started.md). The same guides are
+built into the app: **F1** opens the one for whatever you're looking at.
 
 **Platform support:** macOS first. The upstream QLC+ codebase this is forked
 from supports Linux and Windows too, but qlcconsole's own testing, packaging,

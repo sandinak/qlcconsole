@@ -277,6 +277,49 @@ public:
      *  This is quite safe cause even 300bpm should happen every 200ms. */
     void requestBeat();
 
+    /*********************************************************************
+     * The beat clock
+     *
+     * One running count of beats every effect reads, so two effects on the
+     * same tempo are on the same beat whenever each was started. It runs at
+     * bpm() whatever the beat source; a beat source (Internal fires beat()
+     * on each whole beat, External re-aligns it on each beat it sends) and
+     * the tap only steer it. See SPEED_SPREAD_DESIGN.md, S1.
+     *********************************************************************/
+public:
+    /** Beats since the clock started: whole part counts beats, the fraction
+     *  is where in the beat we are. Continuous across tempo changes; safe to
+     *  read from any thread. */
+    double beatPosition() const;
+
+    /** The tempo, fractional (bpmNumber() is the same, rounded). */
+    double bpm() const;
+    /** Set the tempo; the beat position carries on from where it is. Values
+     *  outside 1..999 are ignored. */
+    void setBpm(double bpm);
+
+    /** Put a beat on now: move the clock's phase @p pull of the way (0..1)
+     *  to the nearest whole beat. 1 snaps (a tap); less nudges (an external
+     *  beat source, so a steady clock with jitter doesn't jolt the lights). */
+    void alignBeat(double pull = 1.0);
+
+    /** Tap tempo: the tempo from the average of the last four taps (a pause
+     *  of two seconds starts over), and the beat on this tap. A first tap
+     *  only sets the phase. Returns the tempo afterwards. */
+    double tap();
+
+private:
+    /** Beat position at @p ns on m_clock. Caller holds m_clockMutex. */
+    double positionAtLocked(qint64 ns) const;
+
+    mutable QMutex m_clockMutex;
+    QElapsedTimer m_clock;
+    qint64 m_anchorNs = 0;          //!< m_clock time of the anchor
+    double m_anchorBeats = 0;       //!< beat position at the anchor
+    double m_bpm = 120;
+    qint64 m_lastBeatIndex = 0;     //!< the whole beat Internal last fired
+    QList<qint64> m_taps;           //!< recent taps, m_clock ns
+
 signals:
     void bpmNumberChanged(int bpm);
     void beat();
@@ -290,10 +333,6 @@ private:
     int m_beatTimeDuration;
     /** Flag to request a beat generation at the next MasterTimer tick */
     bool m_beatRequested;
-    /** The reference of a platform dependent timer to measure precise elapsed time */
-    QElapsedTimer m_beatTimer;
-    /** Time offset in milliseconds when the last beat occurred */
-    int m_lastBeatOffset;
 };
 
 /** @} */

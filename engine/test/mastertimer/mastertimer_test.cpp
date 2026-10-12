@@ -416,4 +416,111 @@ void MasterTimer_Test::restart()
     mt->stopAllFunctions();
 }
 
+/* The beat clock (SPEED_SPREAD_DESIGN.md, S1): one running beat count every
+   effect reads. */
+static double frac(double v) { return v - std::floor(v); }
+
+void MasterTimer_Test::theBeatClockRunsAtTheTempo()
+{
+    SKIP_IF_CLOCK_UNTRUSTWORTHY();
+    MasterTimer *mt = m_doc->masterTimer();
+    mt->setBpm(600);                        // ten beats a second
+    const double from = mt->beatPosition();
+    QTest::qWait(300);
+    const double beats = mt->beatPosition() - from;
+    QVERIFY2(beats > 2.5 && beats < 4.5, qPrintable(QString::number(beats)));
+
+    mt->setBpm(120.5);                      // fractional
+    QCOMPARE(mt->bpm(), 120.5);
+    QCOMPARE(mt->bpmNumber(), 121);
+    mt->setBpm(0);                          // nonsense ignored
+    QCOMPARE(mt->bpm(), 120.5);
+    mt->requestBpmNumber(0);
+    QCOMPARE(mt->bpm(), 120.5);
+}
+
+void MasterTimer_Test::aTempoChangeKeepsTheBeatsPlace()
+{
+    MasterTimer *mt = m_doc->masterTimer();
+    mt->setBpm(120);
+    QTest::qWait(50);
+    const double before = mt->beatPosition();
+    mt->setBpm(60);
+    const double after = mt->beatPosition();
+    QVERIFY2(qAbs(after - before) < 0.05, qPrintable(QString("%1 -> %2").arg(before).arg(after)));
+    mt->requestBpmNumber(90);
+    QVERIFY(qAbs(mt->beatPosition() - after) < 0.05);
+    QCOMPARE(mt->beatTimeDuration(), 667);
+}
+
+void MasterTimer_Test::alignBeatPutsTheBeatNow()
+{
+    SKIP_IF_CLOCK_UNTRUSTWORTHY();
+    MasterTimer *mt = m_doc->masterTimer();
+    mt->setBpm(60);                         // a second a beat: slow enough to measure
+    QTest::qWait(30);
+    mt->alignBeat(1.0);
+    double f = frac(mt->beatPosition());
+    QVERIFY2(f < 0.02 || f > 0.98, qPrintable(QString::number(f)));
+
+    // Half a pull from a quarter beat off: an eighth off.
+    QTest::qWait(250);
+    const double off = frac(mt->beatPosition());
+    mt->alignBeat(0.5);
+    f = frac(mt->beatPosition());
+    QVERIFY2(qAbs(f - off / 2) < 0.03, qPrintable(QString("%1 -> %2").arg(off).arg(f)));
+
+    // An external beat (requestBeat) nudges the same way.
+    QTest::qWait(250);
+    const double before = frac(mt->beatPosition());
+    mt->requestBeat();
+    QVERIFY(frac(mt->beatPosition()) < before);
+}
+
+void MasterTimer_Test::tapSetsTheTempoAndTheBeat()
+{
+    SKIP_IF_CLOCK_UNTRUSTWORTHY();
+    MasterTimer *mt = m_doc->masterTimer();
+    mt->setBpm(60);
+    mt->tap();                              // the first tap sets only the beat
+    QCOMPARE(mt->bpm(), 60.0);
+    for (int i = 0; i < 4; ++i)
+    {
+        QTest::qWait(250);                  // 240 BPM
+        mt->tap();
+    }
+    QVERIFY2(mt->bpm() > 200 && mt->bpm() < 260, qPrintable(QString::number(mt->bpm())));
+    const double f = frac(mt->beatPosition());
+    QVERIFY2(f < 0.05 || f > 0.95, qPrintable(QString::number(f)));
+
+    // A long pause starts over: one tap sets nothing but the beat.
+    const double bpm = mt->bpm();
+    QTest::qWait(2100);
+    mt->tap();
+    QCOMPARE(mt->bpm(), bpm);
+}
+
+void MasterTimer_Test::internalBeatsFireOnTheClocksBeats()
+{
+    SKIP_IF_CLOCK_UNTRUSTWORTHY();
+    MasterTimer *mt = m_doc->masterTimer();
+    mt->setBpm(600);
+    mt->setBeatSourceType(MasterTimer::Internal);
+    int beats = 0;
+    connect(mt, &MasterTimer::beat, this, [&beats]() { beats++; });
+    const double from = mt->beatPosition();
+    QElapsedTimer t;
+    t.start();
+    while (t.elapsed() < 500)
+    {
+        mt->timerTick();
+        QTest::qWait(10);
+    }
+    const double crossed = std::floor(mt->beatPosition()) - std::floor(from);
+    QVERIFY2(qAbs(beats - crossed) <= 1, qPrintable(QString("%1 beats, %2 crossed").arg(beats).arg(crossed)));
+    QVERIFY(beats >= 3);
+    mt->setBeatSourceType(MasterTimer::None);
+    disconnect(mt, &MasterTimer::beat, this, nullptr);
+}
+
 QTEST_MAIN(MasterTimer_Test)

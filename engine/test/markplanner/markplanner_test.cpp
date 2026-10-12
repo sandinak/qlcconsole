@@ -192,4 +192,26 @@ void MarkPlanner_Test::signalFiresOnlyOnChange()
     QCOMPARE(spy.count(), 1);
 }
 
+void MarkPlanner_Test::aDarkFixtureIsPresetButAStagedOneIsNot()
+{
+    startChaserLightingFixtureA(m_doc, m_fixtureA);
+
+    MarkPlanner planner(m_doc, m_mark);
+    planner.setDarkGapMs(0);                           // any lead time will do
+    planner.setEnabled(true);
+    QMetaObject::invokeMethod(&planner, "evaluate");
+    QVERIFY(m_mark->isMarked(m_fixtureA));             // dark now, lit next: pre-set
+    planner.setEnabled(false);                         // releases its own pre-set
+    QVERIFY(!m_mark->isMarked(m_fixtureA));
+
+    // Same cue, but A goes back to the inventory: it has no address, so
+    // there is nothing to pre-set.
+    QVERIFY(m_doc->unpatchFixture(m_fixtureA));
+    MarkPlanner staged(m_doc, m_mark);
+    staged.setDarkGapMs(0);
+    staged.setEnabled(true);
+    QMetaObject::invokeMethod(&staged, "evaluate");
+    QVERIFY(!m_mark->isMarked(m_fixtureA));
+}
+
 QTEST_GUILESS_MAIN(MarkPlanner_Test)

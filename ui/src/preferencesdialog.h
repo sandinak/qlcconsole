@@ -41,6 +41,8 @@ private slots:
 private:
     void setupUI();
     void setupAutosaveTab();
+    /** Locate appearance: how a fixture identifies itself on the rig. */
+    void setupLocateTab();
     void loadSettings();
     void saveSettings();
     void updateAutosaveControls();
@@ -51,6 +53,7 @@ private:
     // UI Components
     QTabWidget* m_tabWidget;
     QWidget* m_autosaveTab;
+    QWidget* m_locateTab;
     
     // Autosave controls
     QGroupBox* m_autosaveGroup;
@@ -58,6 +61,12 @@ private:
     QSpinBox* m_autosaveIntervalSpin;
     QCheckBox* m_autosaveUseBackupCheck;
     QSpinBox* m_autosaveMaxBackupsSpin;
+
+    // Locate controls
+    class QPushButton* m_locateColorBtn;
+    class QColor*      m_locateColor;
+    QSpinBox*          m_locateIntensitySpin;
+    QSpinBox*          m_locateFlashesSpin;
     QPushButton* m_restoreDefaultsButton;
     
     QDialogButtonBox* m_buttonBox;

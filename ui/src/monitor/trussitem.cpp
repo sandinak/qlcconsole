@@ -112,6 +112,17 @@ void TrussItem::setHighlighted(bool highlighted)
     }
 }
 
+QRectF TrussItem::footprintRect() const
+{
+    if (m_truss->type() == Truss::Vertical && !m_elevation)
+    {
+        // Seen from above a tower is its cross-section, not its base plate.
+        const qreal h = m_pxWid / 2.0;
+        return QRectF(-h, -h, m_pxWid, m_pxWid);
+    }
+    return QRectF(0, -m_pxWid / 2.0, m_pxLen, m_pxWid);
+}
+
 QRectF TrussItem::boundingRect() const
 {
     const qreal pad = 2.0;
@@ -121,7 +132,23 @@ QRectF TrussItem::boundingRect() const
         const qreal ph = qMax(qreal(m_pxWid), m_pxWid / 2.0 + 7.0) + pad;
         return QRectF(-ph, -ph, 2 * ph, 2 * ph);
     }
-    return QRectF(-pad, -m_pxWid / 2.0 - pad, m_pxLen + 2*pad, m_pxWid + 2*pad);
+    QRectF r(-pad, -m_pxWid / 2.0 - pad, m_pxLen + 2*pad, m_pxWid + 2*pad);
+
+    /* A truss seen END-ON projects to almost nothing: a left-right truss in
+       Side view has a length of ~0 px, leaving a four-pixel hit area that is
+       drawn but cannot realistically be clicked -- which is why an unlocked
+       XL-450 could not be selected there to place it. Hit testing uses this
+       rect (there is no shape() override), so give it a floor. paint() draws
+       its own geometry regardless, so nothing looks different; there is just
+       something to grab. */
+    const qreal kMinGrab = 14.0;
+    if (r.width() < kMinGrab || r.height() < kMinGrab)
+    {
+        const qreal w = qMax(r.width(),  kMinGrab);
+        const qreal h = qMax(r.height(), kMinGrab);
+        r = QRectF(r.center().x() - w / 2.0, r.center().y() - h / 2.0, w, h);
+    }
+    return r;
 }
 
 void TrussItem::paint(QPainter *painter,
@@ -201,6 +228,17 @@ void TrussItem::paint(QPainter *painter,
     painter->setPen(Qt::NoPen);
     painter->setBrush(QBrush(chordFill));
     painter->drawRect(QRectF(0, top, L, m_pxWid));
+
+    // Its sock: a band of the fabric's colour over the stretch it covers.
+    if (m_truss->hasSock() && m_truss->length() > 0.0f)
+    {
+        const double x0 = L * m_truss->sockFrom() / m_truss->length();
+        const double x1 = L * m_truss->sockTo() / m_truss->length();
+        QColor fabric = m_truss->sockColour();
+        fabric.setAlpha(150);
+        painter->setBrush(fabric);
+        painter->drawRect(QRectF(x0, top - 1.0, x1 - x0, m_pxWid + 2.0));
+    }
 
     // Web spacing: at least 1 cell, at most 30px
     double webSpacing = qBound(6.0, double(m_pxWid) * 2.0, 30.0);

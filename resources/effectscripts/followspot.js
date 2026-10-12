@@ -16,7 +16,7 @@
     effect.description = "Pan/tilt fixtures with joystick X/Y axes";
     effect.author      = "QLC+";
     effect.fixtureTypes = ["moving"];
-    effect.notes = "Maps joystick X/Y axes to pan and tilt so you can fly moving heads live. This effect controls POSITION ONLY — it never touches colour or dimmer, so the scene's own Color/Dimmer palettes always retain control. Sensitivity and deadzone are global joystick settings (HID device profile / I/O Manager), not configured here. Person Height biases the tilt centre so the beam lands at the subject's head. Bind the followTarget slot to a stage target to seed the initial position from a pre-set Aim palette.";
+    effect.notes = "Maps joystick X/Y axes to pan and tilt so you can fly moving heads live. This effect controls POSITION — it never touches colour, and it touches the dimmer only when Fade Near Limit is set, so the scene's own Color/Dimmer palettes otherwise retain control. Fade Near Limit dims a head as the target nears the edge of what it can point at, reaching dark where it cannot follow, so it goes out rather than sticking lit at its limit. Size On Subject zooms each head that has a zoom so its beam is that wide where it lands on the subject, whatever the throw -- a near head zooms out, a far one in -- within the lens's range. Sensitivity and deadzone are global joystick settings (HID device profile / I/O Manager), not configured here. Person Height biases the tilt centre so the beam lands at the subject's head. Bind the followTarget slot to a stage target to seed the initial position from a pre-set Aim palette.";
 
     // The host injects joystick data automatically when a HID profile is active.
     // Manual input bindings (x / y) are kept as a fallback for non-HID controllers.
@@ -53,7 +53,9 @@
     //       every transition (ignores the last spot position).
     effect.parameters = [
         { name: "followMode",   description: "On scene change: hold the last beam position, or snap to the bound followTarget", values: ["lastPosition", "snapToTarget"], defaultValue: 0 },
-        { name: "personHeight", description: "Height of person being followed (cm) — adjusts tilt centre", min: 50, max: 250, defaultValue: 170 }
+        { name: "personHeight", description: "Height of person being followed (cm) — adjusts tilt centre", min: 50, max: 250, defaultValue: 170 },
+        { name: "fadeNearLimit", description: "Fade a head out over this many degrees before its pan/tilt limit, dark where it cannot reach the target (0 = off)", min: 0, max: 45, defaultValue: 0 },
+        { name: "sizeOnSubject", description: "Zoom each head so its beam is this wide on the subject (cm), whatever its distance (0 = off)", min: 0, max: 800, defaultValue: 0 }
     ];
 
     effect.tick = function(fixtures, inputs, palettes, params, state, data) {
@@ -105,8 +107,31 @@
                 // effect doesn't fight the Aim look; it just declares the scene a
                 // followspot and carries followMode / personHeight.
                 var hasTarget = f.sceneTarget && f.sceneTarget.pan !== undefined;
-                if (hasTarget)
+                if (hasTarget) {
+                    // Fade near the limit: the head is about to stick where it
+                    // can go no further, so take its light down with the
+                    // margin it has left, dark once it cannot reach. Only the
+                    // dimmer, and only while fading -- a tick that writes no
+                    // dimmer hands the channel straight back to the scene.
+                    var fade = params.fadeNearLimit !== undefined ? params.fadeNearLimit : 0;
+                    var margin = f.sceneTarget.reachMargin;
+                    if (fade > 0 && margin !== undefined && margin < fade)
+                        intent.dimmer = Math.max(0, margin / fade);
+
+                    // Size on subject: the angle that makes the beam this wide
+                    // at this distance, placed within what the lens can do. A
+                    // subject closer than the lens's narrowest can make small
+                    // gets the narrowest; one further than its widest can make
+                    // big gets the widest.
+                    var size = params.sizeOnSubject !== undefined ? params.sizeOnSubject : 0;
+                    var dist = f.sceneTarget.distance;
+                    if (size > 0 && f.hasZoom && dist !== undefined && dist > 0.05) {
+                        var want = 2 * Math.atan((size / 100) / 2 / dist) * 180 / Math.PI;
+                        var span = f.lensMax - f.lensMin;
+                        intent.zoom = Math.min(1, Math.max(0, (want - f.lensMin) / span));
+                    }
                     return intent;
+                }
 
                 // FREE-FLY (no target): the operator flies this head's angle from
                 // centre with the stick.  Coherent for a single head; with no shared
@@ -136,8 +161,9 @@
                 }
             }
 
-            // Position-only: deliberately no colour or dimmer in the intent, so
-            // the scene's own Color/Dimmer palettes always retain control.
+            // Position only here: no colour or dimmer in the intent, so the
+            // scene's own Color/Dimmer palettes retain control (the exceptions
+            // are the reach fade and the zoom for size above).
             return intent;
         });
     };

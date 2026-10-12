@@ -31,7 +31,7 @@ void ProgrammerFlasher::flashFixture(quint32 fixtureId, int durationMs)
     if (m_doc == nullptr)
         return;
     Fixture *fxi = m_doc->fixture(fixtureId);
-    if (fxi == nullptr)
+    if (fxi == nullptr || !fxi->isPatched())
         return;
 
     // Resolve intensity channels. Prefer the fixture's master intensity

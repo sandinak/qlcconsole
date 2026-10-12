@@ -129,6 +129,44 @@ public:
     bool reloadOrAddFixtureDef(QLCFixtureDef *fixtureDef);
 
     /**
+     * Re-read only the PHYSICAL properties (size, lens, lumens, power, ...)
+     * of @p fixtureDef and its modes from its file, in place. Unlike
+     * reloadFixtureDef() no mode is replaced, so fixtures in an open show
+     * keep their mode pointers -- what lets a definition edited while the
+     * show is open (its lumens, say) take effect without reopening it.
+     *
+     * @return false if the file cannot be read
+     */
+    bool reloadPhysical(QLCFixtureDef *fixtureDef);
+
+    /** Definition files that could not be read, each with why -- shown in
+     *  the footer, so a broken file is not silently missing from the
+     *  library. A file that loads later is dropped from it. */
+    QMap<QString, QString> failedDefinitions() const { return m_failedDefinitions; }
+    /** A definition set aside because another of the same manufacturer and
+     *  model was already loaded: which file is used, which is not, and
+     *  whether they are the same file twice over. */
+    struct Duplicate
+    {
+        QString kept;           ///< the file in use
+        QString ignored;        ///< the one set aside
+        bool keptIsLocal = false;
+        bool ignoredIsLocal = false;
+        bool identical = false; ///< byte for byte (local copies)
+    };
+    /** Every definition set aside as a duplicate, in load order. A local one
+     *  replacing an included one is by design; two LOCAL files for one
+     *  fixture are worth tidying. */
+    QList<Duplicate> duplicates() const { return m_duplicates; }
+
+    /** Stop listing @p path as failed (it was deleted). */
+    void forgetFailedDefinition(const QString &path) { m_failedDefinitions.remove(path); }
+
+    /** Every definition known, loaded or not -- without loading any (unlike
+     *  fixtureDef()). For listing them with their source(). */
+    QList<QLCFixtureDef *> definitions() const { return m_defs; }
+
+    /**
      * Load fixture definitions from the given path. Ignores duplicates.
      * Returns true even if $fixturePath doesn't contain any fixtures,
      * if it is still accessible (and exists).
@@ -180,6 +218,23 @@ public:
      */
     static QDir userDefinitionDirectory();
 
+    /**
+     * The show cache: a copy of every definition a show uses that is not
+     * shipped with qlcconsole, kept on THIS computer -- beside the user
+     * folders, never in cloud storage -- so a show on a production run never
+     * waits on a remote file ("we cannot have remote stuff for a showfile on
+     * a production run"). Filled as shows load and save.
+     */
+    static QDir showCacheDirectory();
+    /** The file a definition of @p manufacturer @p model is cached as. */
+    static QString showCacheFile(const QString &manufacturer, const QString &model);
+    /** Copy @p def into the show cache, if it is not shipped and its file is
+     *  on this computer. True when the cache holds it afterwards. */
+    bool cacheForShows(const QLCFixtureDef *def) const;
+    /** Load @p manufacturer @p model from the show cache. True when it is
+     *  then known. */
+    bool loadFromShowCache(const QString &manufacturer, const QString &model);
+
     /** Load a QLC native fixture definition from the file specified in $path */
     bool loadQXF(const QString& path, bool isUser = false);
 
@@ -189,6 +244,8 @@ public:
 private:
     QString m_mapAbsolutePath;
     QList <QLCFixtureDef*> m_defs;
+    QMap<QString, QString> m_failedDefinitions;   //!< path -> why it failed
+    QList<Duplicate> m_duplicates;
 };
 
 /** @} */

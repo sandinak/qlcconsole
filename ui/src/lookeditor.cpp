@@ -12,6 +12,8 @@
 #include <QStackedWidget>
 #include <QColorDialog>
 #include <QCheckBox>
+#include <QScrollArea>
+#include <QSplitter>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QSlider>
@@ -28,19 +30,30 @@
 #include <QDataStream>
 #include <QMenu>
 #include <functional>
+#include <algorithm>
 
+#include <QTreeWidget>
+#include <QDialogButtonBox>
+#include <QDialog>
 #include "lookeditor.h"
+#include "fadetimespin.h"
+#include "effectbrowser.h"
+#include "qlcfixturedefcache.h"
+#include "wledfixture.h"
 #include "pathdrawwidget.h"
 #include "gradientdirectionwidget.h"
 #include "virtualconsole/vcxypadarea.h"
 #include "capabilitybar.h"
 #include "qlcpalette.h"
 #include "monitorproperties.h"
+#include "gobolibrary.h"
 #include "stagetarget.h"
 #include "qlccapability.h"
 #include "qlcchannel.h"
 #include "fixturegroup.h"
 #include "fixture.h"
+#include "qlcfixturedef.h"
+#include "qlcfixturemode.h"
 #include "scene.h"
 #include "doc.h"
 #include "effectscriptrunner.h"
@@ -67,6 +80,9 @@
 #include "inputoutputmap.h"
 #include "qlcioplugin.h"
 #include "qlceventpos.h"
+#include "speedmasters.h"
+#include "spreadlayer.h"
+#include "spreadpreview.h"
 
 // VC XY pad works in DMX space [0..256); palette pan/tilt are degrees.
 static const qreal XY_MAX = 256.0;
@@ -77,7 +93,9 @@ static const char *PALETTE_DROP_MIME = "application/x-qlcplus-palettes";
 
 // Effect picker combo: each item is a category header, a raw engine script, or
 // a preset. The kind is stored at EffectKindRole, the name at Qt::UserRole.
-enum { EffectKindHeader = 0, EffectKindScript = 1, EffectKindPreset = 2 };
+// A WLED item is one of WLED's own effects, run ON WLED fixtures by the device
+// (QLCPalette::wledEffect()) and by its port, where there is one, elsewhere.
+enum { EffectKindHeader = 0, EffectKindScript = 1, EffectKindPreset = 2, EffectKindWled = 3 };
 static const int EffectKindRole = Qt::UserRole + 1;
 
 // Display order for the category groups in the effect picker.
@@ -223,6 +241,7 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     , m_paletteId(QLCPalette::invalidId())
     , m_loading(false)
 {
+    setProperty("helpTopic", QStringLiteral("programming-tab.md#the-inline-look-editor"));
     QVBoxLayout *root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
 
@@ -250,34 +269,33 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     m_warning->hide();
     root->addWidget(m_warning);
 
+    m_trialNote = new QLabel(this);
+    m_trialNote->setStyleSheet("color: #2a7ab8; font-style: italic;");
+    m_trialNote->setWordWrap(true);
+    m_trialNote->hide();
+    root->addWidget(m_trialNote);
+
     // Per-look fade override row: "Fade in [ step ] s   out [ step ] s". Each
     // spin's minimum reads "step" — meaning fall back to the chaser step /
     // scene fade for that direction. Any value >= 0 overrides it for this look's
     // channels only, so colour can snap while movers glide (in) and a look can
     // release slower than it punches in (a "pulse": 0 in, slow out).
-    auto makeFadeSpin = [this]() -> QDoubleSpinBox* {
-        QDoubleSpinBox *sp = new QDoubleSpinBox(m_fadeRow);
-        sp->setDecimals(2);
-        sp->setSingleStep(0.1);
-        sp->setRange(-0.1, 600.0);         // -0.1 = the special "step" value
-        sp->setSpecialValueText(tr("step")); // shown when value == minimum
-        sp->setSuffix(tr(" s"));
-        connect(sp, SIGNAL(valueChanged(double)), this, SLOT(slotFadeTimeChanged()));
-        return sp;
-    };
     m_fadeRow = new QWidget(this);
     QHBoxLayout *fadeLay = new QHBoxLayout(m_fadeRow);
     fadeLay->setContentsMargins(0, 0, 0, 0);
-    QLabel *fadeLbl = new QLabel(tr("Fade in"), m_fadeRow);
-    fadeLbl->setToolTip(tr("Per-look fade time for this look's channels only.\n"
-                           "0 = snap instantly; \"step\" (spin below 0) = follow "
-                           "the chaser step / scene fade."));
-    fadeLay->addWidget(fadeLbl);
-    m_fadeInSpin = makeFadeSpin();
+    m_fadeInLabel = new QLabel(tr("Fade in"), m_fadeRow);
+    m_fadeInLabel->setToolTip(tr("This look's own fade, for its channels only. 0 snaps; "
+                                 "\"scene\" (the lowest value) follows the scene's fade."));
+    fadeLay->addWidget(m_fadeInLabel);
+    // The one fade-time control (FadeTimeSpin); labels set per look.
+    m_fadeInSpin = new FadeTimeSpin(m_fadeRow, tr("scene"));
+    connect(m_fadeInSpin, &FadeTimeSpin::msChanged, this, &LookEditor::slotFadeTimeChanged);
     fadeLay->addWidget(m_fadeInSpin);
     fadeLay->addSpacing(8);
-    fadeLay->addWidget(new QLabel(tr("out"), m_fadeRow));
-    m_fadeOutSpin = makeFadeSpin();
+    m_fadeOutLabel = new QLabel(tr("out"), m_fadeRow);
+    fadeLay->addWidget(m_fadeOutLabel);
+    m_fadeOutSpin = new FadeTimeSpin(m_fadeRow, tr("scene"));
+    connect(m_fadeOutSpin, &FadeTimeSpin::msChanged, this, &LookEditor::slotFadeTimeChanged);
     fadeLay->addWidget(m_fadeOutSpin);
     fadeLay->addStretch(1);
     root->addWidget(m_fadeRow);
@@ -300,7 +318,11 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     // Empty page
     QWidget *empty = new QWidget(this);
     QVBoxLayout *el = new QVBoxLayout(empty);
-    el->addWidget(new QLabel(tr("Select a look above to edit it."), empty));
+    /* No label here. The title bar immediately above this already reads
+       "Select a look to edit it", and the two said the same thing one line
+       apart -- which is how an empty panel ends up carrying more text than a
+       full one. */
+    el->addStretch();
     m_pageEmpty = m_stack->addWidget(empty);
 
     // Color page: RGB picker on the LEFT, vertical numbered sliders (R G B,
@@ -310,8 +332,11 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     // Level-role fader mapping (fader N controls the Nth slider here), so
     // it's visible on screen which physical fader does what.
     QWidget *colorPage = new QWidget(this);
-    QHBoxLayout *cl = new QHBoxLayout(colorPage);
+    QVBoxLayout *cv = new QVBoxLayout(colorPage);
+    cv->setContentsMargins(0, 0, 0, 0);
+    QHBoxLayout *cl = new QHBoxLayout();
     cl->setContentsMargins(0, 0, 0, 0);
+    cv->addLayout(cl, 1);
 
     m_colorDialog = new QColorDialog(colorPage);
     m_colorDialog->setOptions(QColorDialog::NoButtons
@@ -353,6 +378,12 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     xl->addWidget(m_amberRow);
     xl->addWidget(m_uvRow);
     cl->addWidget(extras, 0);
+
+    m_colorWarning = new QLabel(colorPage);
+    m_colorWarning->setWordWrap(true);
+    m_colorWarning->setStyleSheet(QStringLiteral("color: #e0a030;"));
+    m_colorWarning->setVisible(false);
+    cv->addWidget(m_colorWarning, 0);
 
     m_pageColor = m_stack->addWidget(colorPage);
     connect(m_colorDialog, SIGNAL(currentColorChanged(QColor)),
@@ -504,6 +535,19 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     QVBoxLayout *sv = new QVBoxLayout(single);
     // Named capabilities (gobo/shutter) from a representative fixture, with a
     // gobo image preview beside the picker.
+    QHBoxLayout *sourceRow = new QHBoxLayout();
+    sv->addLayout(sourceRow);
+    m_singleSourceLabel = new QLabel(tr("Wheel of"), single);
+    sourceRow->addWidget(m_singleSourceLabel);
+    m_singleSourceCombo = new QComboBox(single);
+    m_singleSourceCombo->setToolTip(tr("The look stores one DMX value; each fixture "
+                                       "type has its own wheel. Pick the type whose "
+                                       "gobos to choose from."));
+    sourceRow->addWidget(m_singleSourceCombo, 1);
+    m_singleSourceLabel->setVisible(false);
+    m_singleSourceCombo->setVisible(false);
+    connect(m_singleSourceCombo, SIGNAL(activated(int)),
+            this, SLOT(slotSingleSourcePicked(int)));
     QHBoxLayout *pickRow = new QHBoxLayout();
     sv->addLayout(pickRow);
     m_singlePreview = new QLabel(single);
@@ -538,10 +582,30 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
 
     // Effect picker row (Effects grouped by category, each over a Generator)
     QHBoxLayout *efScriptRow = new QHBoxLayout();
-    efScriptRow->addWidget(new QLabel(tr("Effect:"), effectPage));
+    QLabel *effectLabel = new QLabel(tr("Effect:"), effectPage);
+    efScriptRow->addWidget(effectLabel);
     m_effectScriptCombo = new QComboBox(effectPage);
     m_effectScriptCombo->setToolTip(tr("Pick an Effect (or a raw Generator) for this look"));
+    /* Cap the popup and force it to scroll. Several styles (macOS among them)
+       otherwise draw every item at once, and with categories, generators and
+       every preset under each, the list grew taller than the screen -- so the
+       ends of it simply could not be reached. "combobox-popup: 0" is the
+       documented way to make Qt use a scrolling list view that honours
+       maxVisibleItems. */
+    m_effectScriptCombo->setMaxVisibleItems(20);
+    m_effectScriptCombo->setStyleSheet(QStringLiteral("QComboBox { combobox-popup: 0; }"));
     efScriptRow->addWidget(m_effectScriptCombo, 1);
+
+    /* A flat list is the wrong shape for data that is three levels deep, and no
+       amount of scrolling fixes "I know it is a Chase, show me the chases". The
+       Browse dialog presents the SAME items as a filterable tree; picking there
+       just sets this combo, so the combo stays the single source of truth and
+       nothing downstream has to know the dialog exists. */
+    QPushButton *browseBtn = new QPushButton(tr("Browse…"), effectPage);
+    browseBtn->setToolTip(tr("Pick from a searchable tree of categories, "
+                             "generators and presets"));
+    connect(browseBtn, &QPushButton::clicked, this, &LookEditor::slotBrowseEffects);
+    efScriptRow->addWidget(browseBtn);
 
     m_newScriptButton = new QPushButton(tr("New script…"), effectPage);
     m_newScriptButton->setToolTip(tr("Create a new effect script from a template and open it in the editor"));
@@ -554,6 +618,56 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     efScriptRow->addWidget(m_editScriptButton);
 
     efv->addLayout(efScriptRow);
+
+    /* The picker itself: search, a tab per category, each effect with what it
+       does and a strip of lights running it ("a better way than a drop down
+       ... too long and too disjointed"). It mirrors the combo above, which
+       stays the one source of truth but is no longer shown. */
+    m_effectScriptCombo->hide();
+    browseBtn->hide();
+    effectLabel->hide();
+    efScriptRow->insertStretch(0, 1);
+    /* Side by side: the list on the left, the full height, and what the one
+       picked does and its settings on the right ("on a regular sized screen
+       we're running out of space .. move the effect list to the left side and
+       options on the right like the color picker"). Stacked, the parameters
+       pushed the list down to a few rows. */
+    QSplitter *effectSplit = new QSplitter(Qt::Horizontal, effectPage);
+    effectSplit->setObjectName(QStringLiteral("effectSplit"));
+    effectSplit->setChildrenCollapsible(false);
+    m_effectBrowser = new EffectBrowser(m_doc, m_effectScriptCombo, effectSplit);
+    m_effectBrowser->setMinimumWidth(260);
+    QScrollArea *detailScroll = new QScrollArea(effectSplit);
+    detailScroll->setObjectName(QStringLiteral("effectDetails"));
+    detailScroll->setWidgetResizable(true);
+    detailScroll->setFrameShape(QFrame::NoFrame);
+    detailScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);   // it fits the width
+    detailScroll->setMinimumWidth(240);
+    QWidget *details = new QWidget(detailScroll);
+    QVBoxLayout *detailCol = new QVBoxLayout(details);
+    detailCol->setContentsMargins(6, 0, 6, 0);
+    detailCol->setSpacing(4);
+    detailScroll->setWidget(details);
+    effectSplit->addWidget(m_effectBrowser);
+    effectSplit->addWidget(detailScroll);
+    effectSplit->setStretchFactor(0, 3);
+    effectSplit->setStretchFactor(1, 2);
+    {
+        QSettings settings;
+        const QByteArray st = settings.value(QStringLiteral("lookeditor/effectSplit")).toByteArray();
+        if (!st.isEmpty())
+            effectSplit->restoreState(st);
+    }
+    connect(effectSplit, &QSplitter::splitterMoved, this, [effectSplit](int, int) {
+        QSettings settings;
+        settings.setValue(QStringLiteral("lookeditor/effectSplit"), effectSplit->saveState());
+    });
+    efv->addWidget(effectSplit, 1);
+    // From here, the details column.
+    QVBoxLayout *efvPage = efv;
+    efv = detailCol;
+    QWidget *effectPageOuter = effectPage;
+    effectPage = details;
 
     // Short description label (one line, shown below combo)
     m_effectDescLabel = new QLabel(effectPage);
@@ -615,11 +729,17 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     m_saveAsEffectButton = new QPushButton(tr("Save as Effect…"), effectPage);
     m_saveAsEffectButton->setToolTip(
         tr("Save this Generator + its current settings as a named Effect you can reuse"));
-    efSaveRow->addWidget(m_saveAsEffectButton);
+    // On a row of its own: the column beside the list is narrow.
+    QHBoxLayout *efSaveAsRow = new QHBoxLayout();
+    efSaveAsRow->addStretch(1);
+    efSaveAsRow->addWidget(m_saveAsEffectButton);
     efv->addLayout(efSaveRow);
+    efv->addLayout(efSaveAsRow);
     connect(m_saveAsEffectButton, &QPushButton::clicked, this, &LookEditor::slotSaveAsEffect);
 
     efv->addStretch(1);
+    efv = efvPage;
+    effectPage = effectPageOuter;
 
     m_pageEffect = m_stack->addWidget(effectPage);
     connect(m_effectScriptCombo, SIGNAL(currentIndexChanged(int)),
@@ -630,6 +750,22 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
 
 LookEditor::~LookEditor()
 {
+    /* Its children outlive this body: a Name field that still has focus loses
+       it as they go and says "edited" -- into an editor already gone (a Qt
+       assertion; a crash without one). */
+    if (m_nameEdit != nullptr)
+        m_nameEdit->disconnect(this);
+}
+
+void LookEditor::setTrialNote(const QString &text)
+{
+    m_trialNote->setText(text);
+    m_trialNote->setVisible(!text.isEmpty());
+}
+
+QString LookEditor::trialNote() const
+{
+    return m_trialNote->isHidden() ? QString() : m_trialNote->text();
 }
 
 void LookEditor::setPalette(quint32 paletteId)
@@ -697,6 +833,7 @@ void LookEditor::setPalette(quint32 paletteId)
         m_amberSlider->setValue(wauv.isValid() ? wauv.green() : 0);
         m_uvSlider->setValue   (wauv.isValid() ? wauv.blue()  : 0);
         m_whiteSlider->blockSignals(false); m_amberSlider->blockSignals(false); m_uvSlider->blockSignals(false);
+        updateColorWarning();
 
         // White is near-universal on LED fixtures and is the common request,
         // so always offer it; gate the rarer Amber/UV on actual presence (but
@@ -804,42 +941,29 @@ void LookEditor::setPalette(quint32 paletteId)
         m_singleSlider->setValue(p->intValue1());
         m_singleValue->setText(QString::number(p->intValue1()));
 
-        // Named capabilities for gobo/shutter from a representative fixture.
+        // Named capabilities for gobo/shutter, from the look's fixtures or,
+        // with none that can, from any fixture type in the workspace.
         int chGroup = -1;
         if (p->type() == QLCPalette::Gobo)         chGroup = QLCChannel::Gobo;
         else if (p->type() == QLCPalette::Shutter) chGroup = QLCChannel::Shutter;
 
-        m_singleCombo->clear();
-        const QLCChannel *ch = (chGroup >= 0) ? representativeChannel(chGroup) : NULL;
-        m_singleChannel = ch;
-        if (ch != NULL)
+        m_singleSources = (chGroup >= 0) ? singleChannelSources(chGroup)
+                                         : QList<ChannelSource>();
+        m_singleSourceCombo->clear();
+        int source = 0;
+        for (int i = 0; i < m_singleSources.size(); i++)
         {
-            int sel = -1, idx = 0;
-            foreach (QLCCapability *cap, ch->capabilities())
-            {
-                // Show a gobo/effect thumbnail next to each named capability.
-                QIcon icon;
-                if (cap->presetType() == QLCCapability::Picture)
-                {
-                    const QPixmap px(cap->resource(0).toString());
-                    if (px.isNull() == false)
-                        icon = QIcon(px);
-                }
-                m_singleCombo->addItem(icon, cap->name(),
-                                       (int(cap->min()) + int(cap->max())) / 2);
-                if (p->intValue1() >= cap->min() && p->intValue1() <= cap->max())
-                    sel = idx;
-                idx++;
-            }
-            if (sel >= 0)
-                m_singleCombo->setCurrentIndex(sel);
-            m_singleCombo->setIconSize(QSize(32, 32));
-            m_singleCombo->setVisible(true);
+            m_singleSourceCombo->addItem(m_singleSources.at(i).label);
+            if (m_singleSources.at(i).key == m_singleSourceKey)
+                source = i;
         }
-        else
-        {
-            m_singleCombo->setVisible(false);
-        }
+        m_singleSourceCombo->setCurrentIndex(source);
+        const bool choose = m_singleSources.size() > 1;
+        m_singleSourceLabel->setVisible(choose);
+        m_singleSourceCombo->setVisible(choose);
+        m_singleChannel = m_singleSources.isEmpty() ? NULL
+                                                    : m_singleSources.at(source).channel;
+        fillSingleCapabilities(p->intValue1());
         updateSinglePreview(p->intValue1());
         m_stack->setCurrentIndex(m_pageSingle);
         setMaximumHeight(340);
@@ -847,20 +971,21 @@ void LookEditor::setPalette(quint32 paletteId)
     }
     }
 
-    // Per-look fade override: only meaningful with a context scene, and not
-    // for Effect palettes (the EffectScriptRunner owns their timing, not the
-    // scene's palette-fade path).
-    if (m_contextScene != NULL && p->type() != QLCPalette::Effect)
+    /* This look's own fades, with a context scene -- by the same rule as
+       the canvas (LookFades): an effect has only its release (out), a
+       colour feeding an effect has none, anything else both. */
+    const bool fadeIn = LookFades::hasFadeIn(m_doc, m_contextScene, m_paletteId);
+    const bool fadeOut = LookFades::hasFadeOut(m_doc, m_contextScene, m_paletteId);
+    if (m_contextScene != NULL && (fadeIn || fadeOut))
     {
-        const int inMs  = m_contextScene->paletteFadeIn(m_paletteId);
-        const int outMs = m_contextScene->paletteFadeOut(m_paletteId);
-        m_fadeInSpin->blockSignals(true);
-        m_fadeOutSpin->blockSignals(true);
-        // < 0 override -> the spin's special "step" minimum.
-        m_fadeInSpin->setValue(inMs   >= 0 ? inMs  / 1000.0 : m_fadeInSpin->minimum());
-        m_fadeOutSpin->setValue(outMs >= 0 ? outMs / 1000.0 : m_fadeOutSpin->minimum());
-        m_fadeInSpin->blockSignals(false);
-        m_fadeOutSpin->blockSignals(false);
+        m_fadeInLabel->setVisible(fadeIn);
+        m_fadeInSpin->setVisible(fadeIn);
+        m_fadeOutLabel->setVisible(fadeOut);
+        m_fadeOutSpin->setVisible(fadeOut);
+        m_fadeOutLabel->setText(fadeIn ? tr("out") : tr("Release"));
+        m_fadeOutSpin->setSpecialValueText(LookFades::defaultLabel(m_doc, m_paletteId));
+        m_fadeInSpin->setMs(m_contextScene->paletteFadeIn(m_paletteId));
+        m_fadeOutSpin->setMs(m_contextScene->paletteFadeOut(m_paletteId));
         m_fadeRow->show();
     }
     else
@@ -997,11 +1122,15 @@ void LookEditor::maybeAutoName(QLCPalette *p)
     {
         // Prefer the preset's name ("Breathe") over the engine basename.
         if (!p->effectPreset().isEmpty()) { autoName = p->effectPreset(); break; }
+        if (!p->wledEffect().isEmpty()) { autoName = tr("WLED %1").arg(p->wledEffect()); break; }
         const QString path = p->scriptPath();
         if (!path.isEmpty() && m_doc->effectScriptRunner())
         {
             const EffectScriptCache *cache = m_doc->effectScriptRunner()->cache();
-            const QString n = cache->nameFromPath(path);
+            // Its name as listed ("Fire", "Plasma (RGB Matrix)"), else its file's.
+            QString n = cache->scriptMeta(EffectScriptCache::portableName(path)).displayName;
+            if (n.isEmpty())
+                n = cache->nameFromPath(path);
             if (!n.isEmpty()) autoName = n;
         }
         break;
@@ -1068,9 +1197,9 @@ void LookEditor::slotFadeTimeChanged()
     if (m_loading || m_contextScene == NULL || m_paletteId == QLCPalette::invalidId())
         return;
 
-    // A value below 0 is the special "step" (fall-back) state.
-    const int inMs  = m_fadeInSpin->value()  < 0 ? -1 : int(m_fadeInSpin->value()  * 1000.0 + 0.5);
-    const int outMs = m_fadeOutSpin->value() < 0 ? -1 : int(m_fadeOutSpin->value() * 1000.0 + 0.5);
+    // -1 is the default (the scene's fade; for an effect's release, snap).
+    const int inMs  = !m_fadeInSpin->isHidden() ? m_fadeInSpin->ms() : -1;   // an effect has none
+    const int outMs = m_fadeOutSpin->ms();
     m_contextScene->setPaletteFade(m_paletteId, inMs, outMs);
     m_doc->setModified();
     // Re-run the preview so the new transition time takes effect, and refresh
@@ -1128,8 +1257,36 @@ void LookEditor::commitColor()
     const QColor wauv(m_whiteSlider->value(), m_amberSlider->value(), m_uvSlider->value());
     p->setValue(QLCPalette::colorToString(rgb, wauv));
     maybeAutoName(p);
+    updateColorWarning();
     m_doc->setModified();
     emit paletteChanged(m_paletteId);
+}
+
+QString LookEditor::darkColourWarning(const QColor &rgb, const QColor &wauv)
+{
+    int level = qMax(rgb.red(), qMax(rgb.green(), rgb.blue()));
+    if (wauv.isValid())
+        level = qMax(level, qMax(wauv.red(), qMax(wauv.green(), wauv.blue())));
+    // A fifth of full is dim but deliberate; below that it reads as "off".
+    if (level >= 51)
+        return QString();
+    if (level == 0)
+        return tr("This colour is black: fixtures that mix colour (RGB, RGBW) "
+                  "will be dark whatever their dimmer is set to.");
+    return tr("This colour is at %1% brightness: fixtures that mix colour (RGB, "
+              "RGBW) will be nearly dark -- their dimmer scales the colour, it "
+              "cannot raise it. Raise the picker's brightness (Val) or the "
+              "sliders. Colour-wheel fixtures only take the hue and still shine.")
+               .arg(qMax(1, qRound(level * 100.0 / 255.0)));
+}
+
+void LookEditor::updateColorWarning()
+{
+    const QString text = darkColourWarning(
+        QColor(m_redSlider->value(), m_greenSlider->value(), m_blueSlider->value()),
+        QColor(m_whiteSlider->value(), m_amberSlider->value(), m_uvSlider->value()));
+    m_colorWarning->setText(text);
+    m_colorWarning->setVisible(!text.isEmpty());
 }
 
 bool LookEditor::targetsHaveColour(int primaryColour) const
@@ -1229,6 +1386,30 @@ void LookEditor::slotSingleValueChanged(int v)
     emit paletteChanged(m_paletteId);
 }
 
+QString LookEditor::slotPicture(QLCCapability *cap, QString *swapName) const
+{
+    if (cap == NULL)
+        return QString();
+    // The fixtures of the type being browsed, for their own swapped glass.
+    MonitorProperties *props = m_doc->monitorProperties();
+    for (const ChannelSource &src : m_singleSources)
+    {
+        if (src.channel != m_singleChannel || props == NULL)
+            continue;
+        for (quint32 fid : src.fixtures)
+        {
+            const QString swap = props->goboSwap(fid, src.channelIndex, cap->min());
+            const QString path = swap.isEmpty() ? QString() : GoboLibrary::resolve(swap);
+            if (path.isEmpty())
+                continue;
+            if (swapName != NULL)
+                *swapName = QFileInfo(swap).completeBaseName();
+            return path;
+        }
+    }
+    return cap->presetType() == QLCCapability::Picture ? cap->resource(0).toString() : QString();
+}
+
 void LookEditor::updateSinglePreview(int v)
 {
     // Find the Picture-preset capability covering v and show its image.
@@ -1239,8 +1420,9 @@ void LookEditor::updateSinglePreview(int v)
         {
             if (v >= cap->min() && v <= cap->max())
             {
-                if (cap->presetType() == QLCCapability::Picture)
-                    px = QPixmap(cap->resource(0).toString());
+                const QString picture = slotPicture(cap);
+                if (!picture.isEmpty())
+                    px = QPixmap(picture);
                 break;
             }
         }
@@ -1266,6 +1448,140 @@ void LookEditor::slotSingleCapabilityPicked(int index)
     // Set the slider to the picked capability's mid value; that drives the
     // palette update via slotSingleValueChanged().
     m_singleSlider->setValue(m_singleCombo->itemData(index).toInt());
+}
+
+void LookEditor::slotSingleSourcePicked(int index)
+{
+    if (index < 0 || index >= m_singleSources.size())
+        return;
+    m_singleSourceKey = m_singleSources.at(index).key;
+    m_singleChannel = m_singleSources.at(index).channel;
+    fillSingleCapabilities(m_singleSlider->value());
+    updateSinglePreview(m_singleSlider->value());
+}
+
+void LookEditor::fillSingleCapabilities(int v)
+{
+    m_singleCombo->clear();
+    if (m_singleChannel == NULL)
+    {
+        m_singleCombo->setVisible(false);
+        return;
+    }
+    int sel = -1, idx = 0;
+    foreach (QLCCapability *cap, m_singleChannel->capabilities())
+    {
+        /* Show a gobo/effect thumbnail next to each named capability -- the
+           glass actually fitted: a slot a unit has swapped (Gobo Wheels…)
+           shows that picture, and says so. */
+        QString swapName;
+        const QString picture = slotPicture(cap, &swapName);
+        const QString name = swapName.isEmpty() ? cap->name()
+                                                : tr("%1 — %2").arg(cap->name(), swapName);
+        QIcon icon;
+        if (!picture.isEmpty())
+        {
+            const QPixmap px(picture);
+            if (px.isNull() == false)
+                icon = QIcon(px);
+        }
+        m_singleCombo->addItem(icon, name,
+                               (int(cap->min()) + int(cap->max())) / 2);
+        if (v >= cap->min() && v <= cap->max())
+            sel = idx;
+        idx++;
+    }
+    if (sel >= 0)
+        m_singleCombo->setCurrentIndex(sel);
+    m_singleCombo->setIconSize(QSize(32, 32));
+    m_singleCombo->setVisible(true);
+}
+
+QList<LookEditor::ChannelSource> LookEditor::singleChannelSources(int group) const
+{
+    // The look's own targets first; a look with none that can (or no look at
+    // all) falls back to the whole workspace.
+    QList<quint32> ids;
+    if (m_contextScene != NULL)
+    {
+        QSet<quint32> seen;
+        foreach (quint32 fid, m_contextScene->fixtures())
+            if (!seen.contains(fid)) { seen.insert(fid); ids << fid; }
+        foreach (quint32 gid, m_contextScene->fixtureGroups())
+        {
+            FixtureGroup *g = m_doc->fixtureGroup(gid);
+            if (g == NULL)
+                continue;
+            foreach (quint32 fid, g->fixtureList())
+            {
+                if (!seen.contains(fid)) { seen.insert(fid); ids << fid; }
+            }
+        }
+    }
+
+    auto gather = [this, group](const QList<quint32> &fids) {
+        QList<ChannelSource> out;
+        QHash<QString, int> count;
+        foreach (quint32 fid, fids)
+        {
+            Fixture *f = m_doc->fixture(fid);
+            if (f == NULL)
+                continue;
+            // The channel QLCPalette writes the value to (per fixture mode).
+            const quint32 chn = f->fixtureMode() == NULL ? QLCChannel::invalid()
+                : f->fixtureMode()->channelNumber(QLCChannel::Group(group), QLCChannel::MSB);
+            const QLCChannel *ch = (chn == QLCChannel::invalid()) ? NULL : f->channel(chn);
+            if (ch == NULL)
+                continue;
+            QString key, label;
+            if (f->fixtureDef() != NULL)
+            {
+                label = QString("%1 %2").arg(f->fixtureDef()->manufacturer(),
+                                             f->fixtureDef()->model());
+                key = label;
+                if (f->fixtureMode() != NULL)
+                    key += QLatin1Char('/') + f->fixtureMode()->name();
+            }
+            else
+            {
+                label = key = f->name();
+            }
+            if (!count.contains(key))
+            {
+                ChannelSource src;
+                src.key = key;
+                src.label = label;
+                src.channel = ch;
+                src.channelIndex = chn;
+                out << src;
+            }
+            for (ChannelSource &src : out)
+                if (src.key == key)
+                    src.fixtures << fid;
+            count[key]++;
+        }
+        std::stable_sort(out.begin(), out.end(),
+                         [&count](const ChannelSource &a, const ChannelSource &b) {
+            return count.value(a.key) > count.value(b.key);
+        });
+        for (int i = 0; i < out.size(); i++)
+        {
+            const int n = count.value(out.at(i).key);
+            out[i].label = n > 1 ? tr("%1 (%2 fixtures)").arg(out.at(i).label).arg(n)
+                                 : out.at(i).label;
+        }
+        return out;
+    };
+
+    QList<ChannelSource> sources = gather(ids);
+    if (sources.isEmpty())
+    {
+        QList<quint32> all;
+        foreach (Fixture *f, m_doc->fixtures())
+            all << f->id();
+        sources = gather(all);
+    }
+    return sources;
 }
 
 void LookEditor::slotBeamChanged(int)
@@ -1353,7 +1669,15 @@ void LookEditor::rebuildEffectDynWidget()
             if (!gName.isEmpty() && m_doc->effectScriptRunner())
                 gScriptPath = m_doc->effectScriptRunner()->cache()->scriptPath(gName);
         }
-        const QString buildKey = QString::number(m_paletteId) + QLatin1Char('|') + gScriptPath;
+        // The speed choice too: on a master the rate reads "per beat".
+        const int speedKey = gp ? int(gp->effectParamValues().value(QStringLiteral("__speedMaster"),
+                                                                    SpeedMasters::Inherit))
+                                : int(SpeedMasters::Inherit);
+        // ...and whether the host spread is on: it hides the script's own.
+        const bool spreadKey = gp && SpreadLayer::fromParams(gp->effectParamValues()).isActive();
+        const QString buildKey = QString::number(m_paletteId) + QLatin1Char('|') + gScriptPath
+                                 + QLatin1Char('|') + QString::number(speedKey)
+                                 + QLatin1Char('|') + QString::number(int(spreadKey));
         qDebug() << "[LE-DIAG] buildKey=" << buildKey
                  << "cached=" << m_effectBuildKey
                  << "hasLayout=" << (m_effectDynWidget->layout() != nullptr);
@@ -1423,7 +1747,7 @@ void LookEditor::rebuildEffectDynWidget()
         m_effectDescLabel->hide();
         m_effectNotesLabel->hide();
         m_effectTypesLabel->hide();
-        dv->addWidget(new QLabel(tr("(select a generator above to configure it)"), m_effectDynWidget));
+        dv->addWidget(new QLabel(tr("(pick an effect from the list to set it up)"), m_effectDynWidget));
         dv->addStretch(1);
         m_loading = false;
         return;
@@ -1596,6 +1920,21 @@ void LookEditor::rebuildEffectDynWidget()
         dv->addLayout(tform);
     }
 
+    // On a speed master (its own choice, else its look's), the effect's time
+    // counts the master's beats: "speed"/"rate" read as cycles per beat.
+    int speedChoice = int(p->effectParamValues().value(QStringLiteral("__speedMaster"),
+                                                       SpeedMasters::Inherit));
+    const int lookSpeed = m_contextScene != nullptr ? m_contextScene->speedMaster()
+                                                    : int(SpeedMasters::Inherit);
+    const int effectiveSpeed = speedChoice != SpeedMasters::Inherit ? speedChoice : lookSpeed;
+    const bool onMaster = SpeedMasters::isMaster(effectiveSpeed)
+                          || effectiveSpeed == SpeedMasters::MainClock;
+
+    // The host spread, when on, stands in for the script's own spread params.
+    const SpreadLayer::Settings hostSpread = SpreadLayer::fromParams(p->effectParamValues());
+    const QStringList supersededBySpread = tmpScript.takesHostSpread() && hostSpread.isActive()
+                                           ? tmpScript.hostSpreadParams() : QStringList();
+
     // --- Parameters ---
     const QList<EffectScript::ParamDef> &pdefs = tmpScript.paramDefs();
     if (!pdefs.isEmpty())
@@ -1608,6 +1947,8 @@ void LookEditor::rebuildEffectDynWidget()
         form->setContentsMargins(0, 0, 0, 0);
         for (const EffectScript::ParamDef &pd : pdefs)
         {
+            if (supersededBySpread.contains(pd.name))
+                continue;
             double cur = p->effectParamValues().value(pd.name, pd.defaultValue);
 
             if (pd.type == QLatin1String("path"))
@@ -1627,6 +1968,27 @@ void LookEditor::rebuildEffectDynWidget()
                     emit paletteValueChanged(m_paletteId);
                 });
                 form->addRow(pd.name, pdw);
+            }
+            else if (pd.type == QLatin1String("text"))
+            {
+                // Words for the effect to show → a line to type them in; taken
+                // as they are typed, so the rig shows them as they are.
+                QLineEdit *le = new QLineEdit(m_effectDynWidget);
+                const QString existing = p->effectStringParams().contains(pd.name)
+                                         ? p->effectStringParam(pd.name) : pd.defaultText;
+                le->setText(existing);
+                le->setToolTip(pd.description);
+                le->setObjectName(QStringLiteral("effectText_") + pd.name);
+                const QString paramName = pd.name;
+                connect(le, &QLineEdit::textChanged,
+                        this, [this, paramName](const QString &text) {
+                    QLCPalette *pp = m_doc->palette(m_paletteId);
+                    if (!pp) return;
+                    pp->setEffectStringParam(paramName, text);
+                    m_doc->setModified();
+                    emit paletteValueChanged(m_paletteId);
+                });
+                form->addRow(pd.name, le);
             }
             else if (pd.type == QLatin1String("direction"))
             {
@@ -1763,7 +2125,12 @@ void LookEditor::rebuildEffectDynWidget()
                 rl->addWidget(val);
 
                 connect(sl, SIGNAL(valueChanged(int)), this, SLOT(slotEffectParamChanged(int)));
-                form->addRow(pd.name, row);
+                const bool perBeat = onMaster && (pd.name == QLatin1String("speed")
+                                                  || pd.name == QLatin1String("rate"));
+                if (perBeat)
+                    sl->setToolTip(tr("Cycles per beat of %1: 1 = one a beat, 0.25 = one a bar.")
+                                       .arg(m_doc->speedMasters()->assignmentName(effectiveSpeed)));
+                form->addRow(perBeat ? tr("%1 (per beat)").arg(pd.name) : pd.name, row);
             }
         }
         dv->addLayout(form);
@@ -1805,6 +2172,143 @@ void LookEditor::rebuildEffectDynWidget()
             m_learnLoParam.clear();
             m_learnHiParam.clear();
         }
+    }
+
+    // --- Spread (per look) ---
+    // How the effect's cycle is spread across its heads, worked out by the host
+    // (SPEED_SPREAD_DESIGN.md, S3) for any effect that takes it.
+    if (tmpScript.takesHostSpread())
+    {
+        QLabel *hdr = new QLabel(tr("Spread"), m_effectDynWidget);
+        hdr->setStyleSheet("font-weight: bold;");
+        dv->addWidget(hdr);
+        QWidget *row = new QWidget(m_effectDynWidget);
+        row->setObjectName(QStringLiteral("effectSpread"));
+        QHBoxLayout *rl = new QHBoxLayout(row);
+        rl->setContentsMargins(0, 0, 0, 0);
+
+        QDoubleSpinBox *amount = new QDoubleSpinBox(row);
+        amount->setObjectName(QStringLiteral("spreadAmount"));
+        amount->setRange(0.0, 8.0);
+        amount->setSingleStep(0.25);
+        amount->setDecimals(2);
+        amount->setSuffix(tr(" cycles"));
+        amount->setSpecialValueText(tr("its own"));
+        amount->setValue(hostSpread.amount);
+        amount->setToolTip(tr("How far the effect's cycle runs across its heads: 1 = one full "
+                              "wave across them, 0.5 = half, 0 = the effect's own spread."));
+        QComboBox *axis = new QComboBox(row);
+        axis->setObjectName(QStringLiteral("spreadAxis"));
+        axis->addItems({ tr("In look order"), tr("Across columns"), tr("Down rows"),
+                         tr("Stage left to right"), tr("Front to back"), tr("By height"),
+                         tr("Out from the target"), tr("Around the target") });
+        axis->setCurrentIndex(int(hostSpread.axis));
+        axis->setToolTip(tr("What the heads are put in order by: the look's list, the head "
+                            "layout's columns or rows, where they stand on stage, or how far "
+                            "out from / which way round the look's Aim target (a ripple, a "
+                            "sweep). Heads at the same place share a phase."));
+        QComboBox *dir = new QComboBox(row);
+        dir->setObjectName(QStringLiteral("spreadDirection"));
+        dir->addItems({ tr("Forward"), tr("Reverse"), tr("Centre out"), tr("Ends in") });
+        dir->setCurrentIndex(int(hostSpread.direction));
+        QSpinBox *wings = new QSpinBox(row);
+        wings->setObjectName(QStringLiteral("spreadWings"));
+        wings->setRange(1, 8);
+        wings->setPrefix(tr("wings "));
+        wings->setValue(hostSpread.wings);
+        wings->setToolTip(tr("Split the heads into mirrored parts, each running the spread"));
+        QSpinBox *blocks = new QSpinBox(row);
+        blocks->setObjectName(QStringLiteral("spreadBlocks"));
+        blocks->setRange(1, 32);
+        blocks->setPrefix(tr("blocks of "));
+        blocks->setValue(hostSpread.blocks);
+        blocks->setToolTip(tr("Neighbouring heads that share a phase"));
+        for (QWidget *w : { (QWidget *)axis, (QWidget *)dir, (QWidget *)wings, (QWidget *)blocks })
+            w->setEnabled(hostSpread.isActive());
+
+        auto store = [this, amount, axis, dir, wings, blocks]() {
+            if (m_loading) return;
+            QLCPalette *pp = m_doc->palette(m_paletteId);
+            if (!pp || pp->type() != QLCPalette::Effect) return;
+            const bool wasOn = SpreadLayer::fromParams(pp->effectParamValues()).isActive();
+            pp->setEffectParamValue(SpreadLayer::paramName("Amount"), amount->value());
+            pp->setEffectParamValue(SpreadLayer::paramName("Axis"), axis->currentIndex());
+            pp->setEffectParamValue(SpreadLayer::paramName("Direction"), dir->currentIndex());
+            pp->setEffectParamValue(SpreadLayer::paramName("Wings"), wings->value());
+            pp->setEffectParamValue(SpreadLayer::paramName("Blocks"), blocks->value());
+            m_doc->setModified();
+            emit paletteValueChanged(m_paletteId);
+            // Turned on or off: the script's own spread shows or hides.
+            if (wasOn != (amount->value() != 0))
+                QTimer::singleShot(0, this, &LookEditor::rebuildEffectDynWidget);
+        };
+        connect(amount, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [store](double) { store(); });
+        connect(axis, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [store](int) { store(); });
+        connect(dir, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [store](int) { store(); });
+        connect(wings, QOverload<int>::of(&QSpinBox::valueChanged), this, [store](int) { store(); });
+        connect(blocks, QOverload<int>::of(&QSpinBox::valueChanged), this, [store](int) { store(); });
+        rl->addWidget(amount);
+        rl->addWidget(axis);
+        rl->addWidget(dir);
+        rl->addWidget(wings);
+        rl->addWidget(blocks);
+        rl->addStretch(1);
+        dv->addWidget(row);
+
+        // The spread, seen: the look's heads coloured by phase.
+        if (m_contextScene != nullptr)
+        {
+            SpreadPreview *preview = new SpreadPreview(m_doc, m_contextScene->id(), m_paletteId,
+                                                       m_effectDynWidget);
+            preview->setVisible(hostSpread.isActive());
+            dv->addWidget(preview);
+            connect(this, &LookEditor::paletteValueChanged, preview, [preview](quint32) {
+                preview->refresh();
+            });
+            connect(amount, QOverload<double>::of(&QDoubleSpinBox::valueChanged), preview,
+                    [preview](double v) { preview->setVisible(v != 0); });
+        }
+    }
+
+    // --- Speed master (per look) ---
+    // What the effect's time runs on (SPEED_SPREAD_DESIGN.md, S2): the look's
+    // choice (which a chase step, chase or collection may hand down), its own
+    // speed, the main beat clock, or a speed master.
+    {
+        QWidget *row = new QWidget(m_effectDynWidget);
+        QHBoxLayout *rl = new QHBoxLayout(row);
+        rl->setContentsMargins(0, 6, 0, 0);
+        rl->addWidget(new QLabel(tr("Speed:"), row));
+        QComboBox *cb = new QComboBox(row);
+        cb->setObjectName(QStringLiteral("effectSpeedMaster"));
+        SpeedMasters *sm = m_doc->speedMasters();
+        cb->addItem(lookSpeed == SpeedMasters::Inherit
+                        ? tr("As the look (own speed unless a chase sets one)")
+                        : tr("As the look (%1)").arg(sm->assignmentName(lookSpeed)),
+                    int(SpeedMasters::Inherit));
+        cb->addItem(sm->assignmentName(SpeedMasters::Free), int(SpeedMasters::Free));
+        cb->addItem(sm->assignmentName(SpeedMasters::MainClock), int(SpeedMasters::MainClock));
+        for (int i = 0; i < SpeedMasters::Count; ++i)
+            cb->addItem(sm->name(i), SpeedMasters::Master1 + i);
+        cb->setCurrentIndex(qMax(0, cb->findData(speedChoice)));
+        cb->setToolTip(tr("What this effect's speed follows. On the main clock or a speed "
+                          "master its speed counts in cycles per beat and it stays on the beat; "
+                          "a master's tap, rate and pause move it."));
+        connect(cb, QOverload<int>::of(&QComboBox::currentIndexChanged),
+                this, [this, cb](int) {
+            if (m_loading) return;
+            QLCPalette *pp = m_doc->palette(m_paletteId);
+            if (!pp || pp->type() != QLCPalette::Effect) return;
+            pp->setEffectParamValue(QStringLiteral("__speedMaster"), cb->currentData().toInt());
+            m_doc->setModified();
+            emit paletteValueChanged(m_paletteId);
+            // Relabel the speed for beats or seconds (not from inside the
+            // combo's own signal: the rebuild deletes it).
+            QTimer::singleShot(0, this, &LookEditor::rebuildEffectDynWidget);
+        });
+        rl->addWidget(cb);
+        rl->addStretch(1);
+        dv->addWidget(row);
     }
 
     // --- One-shot length override (per look) ---
@@ -1951,7 +2455,7 @@ void LookEditor::populateEffectPicker(QLCPalette *p)
         const EffectScriptCache::ScriptMeta m = scache->scriptMeta(n);
         ScriptNode node;
         node.display  = n;
-        node.basename = scache->nameFromPath(scache->scriptPath(n));
+        node.basename = EffectScriptCache::portableName(scache->scriptPath(n));
         node.category = scriptCategory(m.fixtureTypes);
         node.tooltip  = m.description;
         byBasename.insert(node.basename, nodes.size());
@@ -2029,7 +2533,58 @@ void LookEditor::populateEffectPicker(QLCPalette *p)
         }
     }
 
+    /* WLED's own effects, where the show has WLED fixtures or the WLED
+       definitions are installed: run by the device on WLED fixtures, by their
+       port (if any) on everything else. */
+    const QStringList wled = wledEffectNames();
+    if (!wled.isEmpty())
+    {
+        addHeader(QStringLiteral("WLED"));
+        const QString curWled = p ? p->wledEffect() : QString();
+        for (const QString &fx : wled)
+        {
+            m_effectScriptCombo->addItem(QStringLiteral("  ") + fx, fx);
+            const int widx = m_effectScriptCombo->count() - 1;
+            m_effectScriptCombo->setItemData(widx, EffectKindWled, EffectKindRole);
+            const bool ported = !scache->scriptPathForWled(fx).isEmpty();
+            m_effectScriptCombo->setItemData(widx, ported
+                ? tr("WLED's %1, run by WLED fixtures themselves; others run its port").arg(fx)
+                : tr("WLED's %1, run by WLED fixtures themselves (no port yet: "
+                     "other fixtures are left as the look sets them)").arg(fx), Qt::ToolTipRole);
+            if (!curWled.isEmpty() && fx.compare(curWled, Qt::CaseInsensitive) == 0)
+                selectIdx = widx;
+        }
+    }
+
     m_effectScriptCombo->setCurrentIndex(selectIdx);
+    if (m_effectBrowser != nullptr)
+        m_effectBrowser->reload();
+}
+
+QStringList LookEditor::wledEffectNames() const
+{
+    // A WLED fixture in the show says what its firmware's list is...
+    foreach (Fixture *fx, m_doc->fixtures())
+        if (WledFixture::runsEffects(fx))
+            return WledFixture::effectNames(fx);
+    // ...else the installed WLED definition's.
+    QLCFixtureDef *def = m_doc->fixtureDefCache()->fixtureDef(QStringLiteral("WLED"),
+                                                             QStringLiteral("Lantern"));
+    if (def == nullptr)
+        def = m_doc->fixtureDefCache()->fixtureDef(QStringLiteral("WLED"), QStringLiteral("Effect Mode"));
+    QStringList out;
+    if (def != nullptr)
+    {
+        foreach (QLCChannel *ch, def->channels())
+        {
+            if (ch->name() == QLatin1String("Effect"))
+            {
+                foreach (QLCCapability *cap, ch->capabilities())
+                    out << cap->name();
+            }
+        }
+    }
+    return out;
 }
 
 void LookEditor::slotEffectScriptChanged(int /*index*/)
@@ -2083,7 +2638,21 @@ void LookEditor::slotEffectScriptChanged(int /*index*/)
         }
     };
 
-    if (kind == EffectKindPreset)
+    if (kind == EffectKindWled)
+    {
+        /* One of WLED's own: WLED fixtures run it (QLCPalette::wledEffect());
+           everything else runs its port, or -- with none yet -- the stand-in
+           that only gives the look WLED's controls. */
+        QString path = scache->scriptPathForWled(name);
+        if (path.isEmpty())
+            path = scache->scriptPath(QStringLiteral("WLED device effect"));
+        p->setScriptPath(path);
+        p->setEffectPreset(QString());
+        p->setWledEffect(name);
+        p->clearEffectParamValues();
+        carryOverParams(p, path);
+    }
+    else if (kind == EffectKindPreset)
     {
         // Stamp the preset: engine script + pinned param values + identity. The
         // preset's own values win; shared params it doesn't pin still carry over.
@@ -2092,6 +2661,7 @@ void LookEditor::slotEffectScriptChanged(int /*index*/)
         const QString path = scache->scriptPath(pr.script);
         p->setScriptPath(path);
         p->setEffectPreset(pr.name);
+        p->setWledEffect(QString());
         p->clearEffectParamValues();
         carryOverParams(p, path);
         for (auto it = pr.params.constBegin(); it != pr.params.constEnd(); ++it)
@@ -2104,6 +2674,7 @@ void LookEditor::slotEffectScriptChanged(int /*index*/)
         const QString path = name.isEmpty() ? QString() : scache->scriptPath(name);
         p->setScriptPath(path);
         p->setEffectPreset(QString());
+        p->setWledEffect(QString());
         p->clearEffectParamValues();
         carryOverParams(p, path);
     }
@@ -2116,10 +2687,12 @@ void LookEditor::slotEffectScriptChanged(int /*index*/)
     // so browsing effect palettes reads the same as the script picker.
     {
         QString engineBase;
-        if (kind == EffectKindPreset)
+        if (kind == EffectKindWled)
+            maybeAutoPath(p, QStringLiteral("WLED"), name);
+        else if (kind == EffectKindPreset)
             engineBase = m_doc->effectScriptRunner()->presetCache()->preset(name).script;
         else if (!name.isEmpty())
-            engineBase = scache->nameFromPath(scache->scriptPath(name));
+            engineBase = EffectScriptCache::portableName(scache->scriptPath(name));
         if (!engineBase.isEmpty())
         {
             const EffectScriptCache::ScriptMeta meta = scache->scriptMeta(engineBase);
@@ -2166,7 +2739,7 @@ void LookEditor::slotSaveAsEffect()
             return;
     }
 
-    const QString base = scache->nameFromPath(p->scriptPath());
+    const QString base = EffectScriptCache::portableName(p->scriptPath());
     const EffectScriptCache::ScriptMeta meta = scache->scriptMeta(base);
 
     EffectPresetCache::Preset preset;
@@ -2205,7 +2778,7 @@ void LookEditor::slotExportEffect()
     }
 
     EffectScriptCache *scache = m_doc->effectScriptRunner()->cache();
-    const QString base = scache->nameFromPath(p->scriptPath());
+    const QString base = EffectScriptCache::portableName(p->scriptPath());
     const EffectScriptCache::ScriptMeta meta = scache->scriptMeta(base);
 
     // Read the script source so the file is portable (a recipient who lacks the
@@ -2375,6 +2948,128 @@ void LookEditor::openScriptInEditor(const QString &filePath)
         populateEffectPicker(p);
         m_effectScriptCombo->blockSignals(false);
     }
+}
+
+/** Pick an effect from a filterable tree instead of a screen-tall dropdown.
+ *
+ *  Built by walking the combo rather than re-reading the caches: the combo is
+ *  already the assembled, sorted, correctly-grouped list, and rebuilding it
+ *  here would be a second copy of that logic to keep in step. Each row carries
+ *  its combo index, so choosing one is just setCurrentIndex() and every
+ *  existing handler fires exactly as it would have.
+ */
+void LookEditor::slotBrowseEffects()
+{
+    if (m_effectScriptCombo == nullptr)
+        return;
+
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("Choose an effect"));
+    QVBoxLayout *lay = new QVBoxLayout(&dlg);
+
+    QLineEdit *filter = new QLineEdit(&dlg);
+    filter->setPlaceholderText(tr("Type to filter…"));
+    filter->setClearButtonEnabled(true);
+    lay->addWidget(filter);
+
+    QTreeWidget *tree = new QTreeWidget(&dlg);
+    tree->setHeaderHidden(true);
+    tree->setUniformRowHeights(true);
+    lay->addWidget(tree, 1);
+
+    const int kIndexRole = Qt::UserRole + 1;
+
+    QTreeWidgetItem *category = nullptr;   // current header
+    QTreeWidgetItem *script   = nullptr;   // current generator, presets nest under it
+    for (int i = 0; i < m_effectScriptCombo->count(); i++)
+    {
+        const int kind = m_effectScriptCombo->itemData(i, EffectKindRole).toInt();
+        // The combo indents with spaces and bullets for visual nesting; the
+        // tree provides real nesting, so strip that decoration back off.
+        QString text = m_effectScriptCombo->itemText(i);
+        text.remove(QStringLiteral("•"));
+        text = text.trimmed();
+
+        QTreeWidgetItem *item = nullptr;
+        if (kind == EffectKindHeader)
+        {
+            category = new QTreeWidgetItem(tree);
+            category->setText(0, text);
+            QFont f = category->font(0); f.setBold(true); category->setFont(0, f);
+            category->setFlags(category->flags() & ~Qt::ItemIsSelectable);
+            script = nullptr;
+            continue;
+        }
+        if (kind == EffectKindPreset && script != nullptr)
+            item = new QTreeWidgetItem(script);
+        else if (category != nullptr)
+            { item = new QTreeWidgetItem(category); script = item; }
+        else
+            { item = new QTreeWidgetItem(tree); script = item; }
+
+        item->setText(0, text);
+        item->setToolTip(0, m_effectScriptCombo->itemData(i, Qt::ToolTipRole).toString());
+        item->setData(0, kIndexRole, i);
+        if (i == m_effectScriptCombo->currentIndex())
+        {
+            tree->setCurrentItem(item);
+            item->setSelected(true);
+        }
+    }
+    tree->expandAll();
+
+    /* Filtering hides non-matching leaves and any category left with nothing
+       under it, so the tree collapses down to what was asked for rather than
+       leaving empty headings behind. */
+    connect(filter, &QLineEdit::textChanged, &dlg, [tree](const QString &needle) {
+        for (int c = 0; c < tree->topLevelItemCount(); c++)
+        {
+            QTreeWidgetItem *cat = tree->topLevelItem(c);
+            int visible = 0;
+            for (int s = 0; s < cat->childCount(); s++)
+            {
+                QTreeWidgetItem *sc = cat->child(s);
+                int subVisible = 0;
+                for (int pr = 0; pr < sc->childCount(); pr++)
+                {
+                    QTreeWidgetItem *pi = sc->child(pr);
+                    const bool m = needle.isEmpty()
+                        || pi->text(0).contains(needle, Qt::CaseInsensitive);
+                    pi->setHidden(!m);
+                    if (m) subVisible++;
+                }
+                const bool selfMatch = needle.isEmpty()
+                    || sc->text(0).contains(needle, Qt::CaseInsensitive);
+                sc->setHidden(!selfMatch && subVisible == 0);
+                if (!sc->isHidden()) visible++;
+            }
+            cat->setHidden(visible == 0);
+        }
+    });
+
+    QDialogButtonBox *bb = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+    connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    lay->addWidget(bb);
+
+    // Double-click picks and closes, which is what everyone tries first.
+    connect(tree, &QTreeWidget::itemDoubleClicked, &dlg,
+            [&dlg](QTreeWidgetItem *it, int) {
+        if (it != nullptr && it->data(0, Qt::UserRole + 1).isValid())
+            dlg.accept();
+    });
+
+    dlg.resize(460, 520);
+    if (dlg.exec() != QDialog::Accepted)
+        return;
+
+    QTreeWidgetItem *chosen = tree->currentItem();
+    if (chosen == nullptr)
+        return;
+    const QVariant idx = chosen->data(0, kIndexRole);
+    if (idx.isValid())
+        m_effectScriptCombo->setCurrentIndex(idx.toInt());
 }
 
 void LookEditor::slotNewEffectScript()

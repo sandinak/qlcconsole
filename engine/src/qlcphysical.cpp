@@ -40,6 +40,7 @@ QLCPhysical::QLCPhysical()
     , m_lensName("Other")
     , m_lensDegreesMin(0)
     , m_lensDegreesMax(0)
+    , m_lensBeamsPerHead(1)
     , m_focusType("Fixed")
     , m_focusPanMax(0)
     , m_focusTiltMax(0)
@@ -74,14 +75,24 @@ QLCPhysical& QLCPhysical::operator=(const QLCPhysical& physical)
         m_lensName = physical.lensName();
         m_lensDegreesMin = physical.lensDegreesMin();
         m_lensDegreesMax = physical.lensDegreesMax();
+        m_lensBeamsPerHead = physical.lensBeamsPerHead();
 
         m_focusType = physical.focusType();
         m_focusPanMax = physical.focusPanMax();
         m_focusTiltMax = physical.focusTiltMax();
         m_layout = physical.layoutSize();
 
-        m_powerConsumption = physical.powerConsumption();
+        /* What it says, not powerConsumption()'s guess from the bulb when
+           it says nothing: a copy is the same physical, and that guess built
+           a regular expression on every copy -- thousands a frame in the
+           rig view. */
+        m_powerConsumption = physical.m_powerConsumption;
         m_dmxConnector = physical.dmxConnector();
+        m_bodyShape = physical.bodyShape();
+        m_emission = physical.emission();
+        m_leds = physical.leds();
+        m_ledLayout = physical.ledLayout();
+        m_clearGlass = physical.clearGlass();
     }
 
     return *this;
@@ -97,6 +108,7 @@ bool QLCPhysical::isEmpty() const
         m_depth == 0 &&
         m_lensDegreesMin == 0 &&
         m_lensDegreesMax == 0 &&
+        m_lensBeamsPerHead == 1 &&
         m_focusPanMax == 0 &&
         m_focusTiltMax == 0 &&
         m_powerConsumption == 0)
@@ -209,6 +221,16 @@ double QLCPhysical::lensDegreesMax() const
     return m_lensDegreesMax;
 }
 
+void QLCPhysical::setLensBeamsPerHead(int beams)
+{
+    m_lensBeamsPerHead = qMax(1, beams);
+}
+
+int QLCPhysical::lensBeamsPerHead() const
+{
+    return m_lensBeamsPerHead;
+}
+
 void QLCPhysical::setFocusType(const QString& type)
 {
     m_focusType = type;
@@ -265,7 +287,8 @@ int QLCPhysical::powerConsumption() const
         /* If power consumption value is missing, return bulb watts
          * plus a guesstimate 100W, since there's usually other
           * electronics consuming power as well. */
-        int bulbWatts = bulbType().remove(QRegularExpression("[A-Z]*")).toInt();
+        static const QRegularExpression letters("[A-Z]*");
+        int bulbWatts = bulbType().remove(letters).toInt();
         if (bulbWatts > 0)
             return bulbWatts + 100;
         else
@@ -286,6 +309,19 @@ QString QLCPhysical::dmxConnector() const
 /****************************************************************************
  * Load & Save
  ****************************************************************************/
+
+
+QString QLCPhysical::ledLayoutToString(LedLayout layout)
+{
+    return layout == TapeLeds ? QStringLiteral("Tape")
+         : layout == FaceLeds ? QStringLiteral("Face") : QStringLiteral("Cluster");
+}
+
+QLCPhysical::LedLayout QLCPhysical::stringToLedLayout(const QString &str)
+{
+    return str == QLatin1String("Tape") ? TapeLeds
+         : str == QLatin1String("Face") ? FaceLeds : ClusterLeds;
+}
 
 bool QLCPhysical::loadXML(QXmlStreamReader &doc)
 {
@@ -317,6 +353,8 @@ bool QLCPhysical::loadXML(QXmlStreamReader &doc)
             m_lensName = attrs.value(KXMLQLCPhysicalLensName).toString();
             m_lensDegreesMin = QLocale::c().toDouble(attrs.value(KXMLQLCPhysicalLensDegreesMin).toString());
             m_lensDegreesMax = QLocale::c().toDouble(attrs.value(KXMLQLCPhysicalLensDegreesMax).toString());
+            // Absent (every stock definition) reads as 0, which clamps to 1.
+            setLensBeamsPerHead(attrs.value(KXMLQLCPhysicalLensBeamsPerHead).toString().toInt());
         }
         else if (doc.name() == KXMLQLCPhysicalFocus)
         {
@@ -337,6 +375,19 @@ bool QLCPhysical::loadXML(QXmlStreamReader &doc)
         {
             m_powerConsumption = attrs.value(KXMLQLCPhysicalTechnicalPowerConsumption).toString().toInt();
             m_dmxConnector = attrs.value(KXMLQLCPhysicalTechnicalDmxConnector).toString();
+        }
+        else if (doc.name() == KXMLQLCPhysicalBody)
+        {
+            m_bodyShape = (attrs.value(KXMLQLCPhysicalBodyShape).toString() == QLatin1String("Lantern"))
+                          ? LanternBody : BoxBody;
+            const QString e = attrs.value(KXMLQLCPhysicalBodyEmission).toString();
+            m_emission = e == QLatin1String("Omni") ? OmniEmission
+                       : e == QLatin1String("Laser") ? LaserEmission
+                       : e == QLatin1String("Star") ? StarEmission
+                       : e == QLatin1String("Flame") ? FlameEmission : BeamEmission;
+            m_leds = qMax(0, attrs.value(KXMLQLCPhysicalBodyLEDs).toInt());
+            m_ledLayout = stringToLedLayout(attrs.value(KXMLQLCPhysicalBodyLayout).toString());
+            m_clearGlass = attrs.value(KXMLQLCPhysicalBodyGlass).toString() == QLatin1String("Clear");
         }
         else
         {
@@ -375,6 +426,8 @@ bool QLCPhysical::saveXML(QXmlStreamWriter *doc) const
     doc->writeAttribute(KXMLQLCPhysicalLensName, m_lensName);
     doc->writeAttribute(KXMLQLCPhysicalLensDegreesMin, QLocale::c().toString(m_lensDegreesMin));
     doc->writeAttribute(KXMLQLCPhysicalLensDegreesMax, QLocale::c().toString(m_lensDegreesMax));
+    if (m_lensBeamsPerHead > 1)
+        doc->writeAttribute(KXMLQLCPhysicalLensBeamsPerHead, QString::number(m_lensBeamsPerHead));
     doc->writeEndElement();
 
     /* Focus */
@@ -398,6 +451,27 @@ bool QLCPhysical::saveXML(QXmlStreamWriter *doc) const
     doc->writeAttribute(KXMLQLCPhysicalTechnicalPowerConsumption, QString::number(m_powerConsumption));
     doc->writeAttribute(KXMLQLCPhysicalTechnicalDmxConnector, m_dmxConnector);
     doc->writeEndElement();
+
+    /* Body (qlcconsole): only when it is not a plain box throwing a beam */
+    if (m_bodyShape != BoxBody || m_emission != BeamEmission || m_leds > 0 || m_clearGlass)
+    {
+        doc->writeStartElement(KXMLQLCPhysicalBody);
+        doc->writeAttribute(KXMLQLCPhysicalBodyShape,
+                            m_bodyShape == LanternBody ? QStringLiteral("Lantern") : QStringLiteral("Box"));
+        doc->writeAttribute(KXMLQLCPhysicalBodyEmission,
+                            m_emission == OmniEmission ? QStringLiteral("Omni")
+                            : m_emission == LaserEmission ? QStringLiteral("Laser")
+                            : m_emission == StarEmission ? QStringLiteral("Star")
+                            : m_emission == FlameEmission ? QStringLiteral("Flame") : QStringLiteral("Beam"));
+        if (m_leds > 0)
+        {
+            doc->writeAttribute(KXMLQLCPhysicalBodyLEDs, QString::number(m_leds));
+            doc->writeAttribute(KXMLQLCPhysicalBodyLayout, ledLayoutToString(m_ledLayout));
+        }
+        if (m_clearGlass)
+            doc->writeAttribute(KXMLQLCPhysicalBodyGlass, QStringLiteral("Clear"));
+        doc->writeEndElement();
+    }
 
     doc->writeEndElement();
 

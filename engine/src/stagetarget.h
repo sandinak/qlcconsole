@@ -10,8 +10,15 @@
   to document "this palette points fixtures at this location."
 
   Coordinate convention (same as Truss/StagePlatform):
-    X = stage right (+) / left (-)
-    Y = upstage (+) / downstage (-)
+    X = stage left (+) / stage right (-)
+    Y = downstage (+) / upstage (-)
+    (These match how the app BEHAVES -- see barFaceVector() in
+    monitorproperties.cpp and any real show: in stage-structures-demo.qxw the
+    "SR Tower" sits at X=0.21 with the "SL Tower" at X=11.61, and the upstage
+    platforms are at Y=1.53 against the downstage ones at Y=3.97. The plot
+    draws +X rightward and +Y downward, which is the standard ground plan:
+    audience at the bottom of the page, upstage at the top, stage right on the
+    viewer's left. These comments used to say the opposite on both axes.)
     Z = height above stage floor (metres, >= 0; 0 = floor target)
 
   Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,6 +34,7 @@
 #include <QObject>
 #include <QColor>
 #include <QVector3D>
+#include <QSizeF>
 #include <QString>
 #include <QMutex>
 #include <climits>
@@ -74,6 +82,102 @@ public:
     /********************************************************************
      * Appearance
      ********************************************************************/
+    /********************************************************************
+     * What this target IS
+     ********************************************************************/
+public:
+    /** What a target stands for.
+     *
+     *  A kind is only worth having if it changes one of two things: the height
+     *  light should be aimed at, or the shape drawn at the point. Anything else
+     *  is a label, and a label in a file format is a liability.
+     *
+     *  Persisted as a STRING, deliberately. Storing an ordinal means a kind can
+     *  never be reordered or removed without silently re-meaning every saved
+     *  file -- exactly the trap StagePlatform::TopMaterial fell into, where
+     *  value 2 is permanently burned because Recessed was withdrawn. An unknown
+     *  name read from a newer file degrades to None rather than becoming
+     *  whatever now sits at that index. */
+    enum class Kind
+    {
+        None,        ///< a bare mark: aim at its own Z
+        Person,      ///< a standing subject
+        DrumKit,     ///< a kit: lower, and wide enough that a point lies
+        Structure,   ///< bound to a truss/platform/tower -- follows it
+        Area         ///< a region of deck, not a point
+    };
+
+    static QString kindToString(Kind k);
+    static Kind    stringToKind(const QString &s, Kind fallback = Kind::None);
+
+    Kind kind() const { return m_kind; }
+    void setKind(Kind k) { m_kind = k; }
+
+    /** Height above whatever the target is standing on that light should be
+     *  aimed at, for this kind. 0 means "aim at the target's own Z".
+     *
+     *  A follow-spot wants a chest, not a pair of feet -- and a drum kit's
+     *  chest is not a vocalist's. One global subject height applied to
+     *  everything is what made every target the same height whatever was
+     *  actually standing there. */
+    static float defaultAimHeight(Kind k);
+
+    /** Per-target override of the above, in metres. Negative = use the kind's
+     *  default. One override removes the pressure to invent a new Kind for
+     *  every one-off, which is how these lists go wrong. */
+    float aimHeightOverride() const { return m_aimHeightOverride; }
+    void  setAimHeightOverride(float m) { m_aimHeightOverride = m; }
+    bool  hasAimHeightOverride() const { return m_aimHeightOverride >= 0.0f; }
+
+    /** How tall a Person is, in metres, standing on whatever is under it:
+     *  the figure is drawn this tall, and is aimed at its chest
+     *  (chestShare() of it). Negative = not given: defaultPersonHeight(). The
+     *  follow-spot aim height never sizes a person -- read as "how tall", it
+     *  drew a 5'4" entry as a 6'8" figure. */
+    float personHeight() const { return m_personHeight; }
+    void  setPersonHeight(float m) { m_personHeight = m; }
+    bool  hasPersonHeight() const { return m_personHeight > 0.0f; }
+    /** personHeight(), or a usual height (1.75 m) when none is given. */
+    float effectivePersonHeight() const
+    { return hasPersonHeight() ? m_personHeight : defaultPersonHeight(); }
+    static constexpr float defaultPersonHeight() { return 1.75f; }
+
+    /** Where on a person light is aimed, as a share of their height: the
+     *  chest. */
+    static constexpr float chestShare() { return 0.8f; }
+
+    /** The height to aim at above the target's footing, override or default. */
+    float effectiveAimHeight() const
+    { return hasAimHeightOverride() ? m_aimHeightOverride : defaultAimHeight(m_kind); }
+
+
+    /********************************************************************
+     * Structure binding (Kind::Structure)
+     ********************************************************************/
+public:
+    /** The structure this target follows: "platform", "truss" or "tower", and
+     *  its id. A bound target is a RELATIONSHIP, not a coordinate -- move or
+     *  restack the step and the target goes with it, which is what actually
+     *  happens between load-ins. Empty type = not bound.
+     *
+     *  Typed by string for the same reason Kind is. */
+    QString boundType() const { return m_boundType; }
+    quint32 boundId()   const { return m_boundId; }
+    void setBinding(const QString &type, quint32 id) { m_boundType = type; m_boundId = id; }
+    void clearBinding() { m_boundType.clear(); m_boundId = invalidId(); }
+    bool isBound() const { return m_boundType.isEmpty() == false && m_boundId != invalidId(); }
+
+    /********************************************************************
+     * Footprint (Kind::Area, and anything else with real extent)
+     ********************************************************************/
+public:
+    /** Width (X) and depth (Y) in metres. A drum kit is not a point, and
+     *  neither is a downstage-centre area: knowing a target is 1.6 m across is
+     *  what lets you see whether an 8-degree beam actually covers it, which is
+     *  the question this view is opened to answer. Zero = a point. */
+    QSizeF footprint() const { return m_footprint; }
+    void   setFootprint(const QSizeF &s) { m_footprint = s; }
+
     QColor color() const { return m_color; }
     void   setColor(const QColor &c) { m_color = c; }
 
@@ -102,6 +206,12 @@ private:
     QVector3D m_position;
     mutable QMutex m_positionMutex;   ///< guards m_position (GUI joystick vs DMX aim read)
     QColor    m_color;
+    Kind      m_kind = Kind::None;
+    float     m_aimHeightOverride = -1.0f;   ///< < 0 = use the kind's default
+    float     m_personHeight = -1.0f;        ///< Person: how tall; < 0 = not given
+    QString   m_boundType;                   ///< "platform" | "truss" | "tower"
+    quint32   m_boundId = UINT_MAX;
+    QSizeF    m_footprint;                   ///< metres; empty = a point
     bool      m_locked = false;
     quint32   m_layerId = 0;   ///< 2D-map organizational layer (0 = Default)
     quint32   m_groupId = 0;   ///< 2D-map group (0 = ungrouped)

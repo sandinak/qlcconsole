@@ -55,6 +55,7 @@ private slots:
     void armDimmer();
     void arm8bit();
     void arm16bit();
+    void armStagedFixture();
     void disarm();
 
     void writeDimmer();

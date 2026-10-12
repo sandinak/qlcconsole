@@ -35,7 +35,11 @@
 
 #include <QPixmap>
 
+#include <QtMath>
+#include "headlayout.h"
 #include "monitorfixtureitem.h"
+#include <QGraphicsScene>
+#include "monitor.h"
 
 // Returns a 16×16 open-hand cursor — much smaller than the macOS system hand.
 static QCursor smallOpenHandCursor()
@@ -64,6 +68,7 @@ static QCursor smallOpenHandCursor()
 #include "monitorproperties.h"
 #include "qlcfixturehead.h"
 #include "qlcfixturemode.h"
+#include "qlcphysical.h"
 #include "qlccapability.h"
 #include "fixture.h"
 #include "qlcfixturedef.h"
@@ -118,6 +123,7 @@ MonitorFixtureItem::MonitorFixtureItem(Doc *doc, quint32 fid)
     Q_ASSERT(fxi != NULL);
 
     m_name = fxi->name();
+    m_traits = classifyFixture(fxi);
 
     setToolTip(baseToolTip());
 
@@ -390,25 +396,52 @@ void MonitorFixtureItem::setSize(QSize size)
     int headsWidth = m_width;
     int headsHeight = m_height;
 
-    // Choose the head grid from the HEAD COUNT and the fixture's ASPECT RATIO,
-    // not from the pixel area (stable at any size, no degenerate wrapping).
+    const int n = m_heads.count();
+    int columns = 0, rows = 0;
+
+    /* The fixture definition may DECLARE its pixel layout (the Physical tab's
+       "Layout (Columns x Rows)" -- an XL-450 says 15 x 5). That is the real
+       arrangement of the LEDs in the housing, so honour it rather than
+       re-deriving a guess: the guess below infers a grid from head count and
+       aspect ratio, which for a 15x5 matrix produced the wrong number of rows
+       and drew a fixture that looks nothing like the actual product.
+       Only trust it when it can actually hold the heads this mode has --
+       layoutSize() defaults to 1x1 and some definitions declare a layout for a
+       different mode's head count. */
+    if (Fixture *fxi = m_doc->fixture(m_fid))
+    {
+        if (const QLCFixtureMode *mode = fxi->fixtureMode())
+        {
+            const QSize declared = HeadLayout::declaredGrid(mode);
+            if (declared.isValid() && declared.width() * declared.height() >= n)
+            {
+                columns = declared.width();
+                rows    = declared.height();
+            }
+        }
+    }
+
+    // No usable declaration: choose the head grid from the HEAD COUNT and the
+    // fixture's ASPECT RATIO, not from the pixel area (stable at any size, no
+    // degenerate wrapping).
     //  - clearly elongated fixtures (tape / battens / pixel bars) -> a single
     //    line: one row when wide, one column when tall;
     //  - otherwise a grid matching the shape (cols ~ sqrt(N*AR)).
-    const int n = m_heads.count();
-    const double aspect = double(headsWidth) / double(headsHeight); // w/h
-    const double kLineAspect = 3.0; // beyond this, treat as a single strip
-    int columns, rows;
-    if (aspect >= kLineAspect)        { columns = n; rows = 1; }     // wide strip
-    else if (aspect <= 1.0 / kLineAspect) { columns = 1; rows = n; } // tall strip
-    else
+    if (columns == 0)
     {
-        columns = qRound(sqrt(double(n) * aspect));
-        if (columns < 1)
-            columns = 1;
-        if (columns > n)
-            columns = n;
-        rows = (n + columns - 1) / columns; // ceil(n/columns)
+        const double aspect = double(headsWidth) / double(headsHeight); // w/h
+        const double kLineAspect = 3.0; // beyond this, treat as a single strip
+        if (aspect >= kLineAspect)        { columns = n; rows = 1; }     // wide strip
+        else if (aspect <= 1.0 / kLineAspect) { columns = 1; rows = n; } // tall strip
+        else
+        {
+            columns = qRound(sqrt(double(n) * aspect));
+            if (columns < 1)
+                columns = 1;
+            if (columns > n)
+                columns = n;
+            rows = (n + columns - 1) / columns; // ceil(n/columns)
+        }
     }
 
     if (rows < 1)
@@ -474,6 +507,23 @@ void MonitorFixtureItem::setSize(QSize size)
                                   Qt::AlignHCenter | Qt::TextWrapAnywhere, m_name);
 
     setTransformOriginPoint(m_width / 2, m_height / 2);
+    update();
+}
+
+void MonitorFixtureItem::refreshName()
+{
+    /* The name was read once, when the item was made: renamed anywhere else
+       (the edit dialog, Layers, the Fixture Manager) the plot kept the old
+       label and tooltip. */
+    Fixture *fxi = m_doc->fixture(m_fid);
+    if (fxi == NULL || fxi->name() == m_name)
+        return;
+    prepareGeometryChange();
+    m_name = fxi->name();
+    setToolTip(baseToolTip());
+    QFontMetrics fm(m_font);
+    m_labelRect = fm.boundingRect(QRect(-10, m_height + 2, m_width + 20, 30),
+                                  Qt::AlignHCenter | Qt::TextWrapAnywhere, m_name);
     update();
 }
 
@@ -721,9 +771,11 @@ qreal MonitorFixtureItem::facingReach() const
 
 QRectF MonitorFixtureItem::boundingRect() const
 {
-    // Arc strokes are drawn up to MOVEMENT_THICKNESS px outside the fixture cell
-    // rectangle; add a margin so Qt's dirty-region clipping never hides them.
-    const qreal m = MOVEMENT_THICKNESS + 1;
+    // Arc strokes reach MOVEMENT_THICKNESS px outside the cell rectangle and
+    // the selection halo reaches 6 px (3 px offset + half its 6 px pen); the
+    // margin covers the larger, or Qt's dirty-region clipping leaves stale
+    // halo fragments on the canvas when the selection changes.
+    const qreal m = qMax(qreal(MOVEMENT_THICKNESS), qreal(6.0)) + 1;
     QRectF rect;
     if (m_labelVisibility)
         rect = QRectF(-10 - m, -m, m_width + 20 + 2 * m, m_height + m_labelRect.height() + 2 + m);
@@ -755,6 +807,46 @@ QPainterPath MonitorFixtureItem::shape() const
     return path;
 }
 
+void MonitorFixtureItem::drawBody(QPainter *painter, const QRectF &r) const
+{
+    if (m_traits.kind == FixtureSilhouette::Mover)
+    {
+        // Shared with the Structure Studio elevation editor (fixturevisualtraits.h)
+        // so the same fixture reads as the same shape in both places, and
+        // switches with the canvas's own POV like the studio editor's plane.
+        // headCount > 1 (a genuine multi-head fixture) draws one full unit
+        // per head, each centred in its own slice of the cell width.
+        const int units = qMax(1, m_traits.headCount);
+        painter->drawPath(m_elevationView ? moverElevationPath(r, false, units)
+                                           : moverPlanPath(r, units));
+        return;
+    }
+    switch (m_traits.kind)
+    {
+        case FixtureSilhouette::Par:
+        {
+            // A can/wash unit: rounded, but still clearly rectangular.
+            const qreal rad = qMin(r.width(), r.height()) * 0.25;
+            painter->drawRoundedRect(r, rad, rad);
+            break;
+        }
+        case FixtureSilhouette::Lantern:
+        {
+            // A lantern: a rounded cage, its glowing core in the middle.
+            const qreal rad = qMin(r.width(), r.height()) * 0.45;
+            painter->drawRoundedRect(r, rad, rad);
+            break;
+        }
+        case FixtureSilhouette::Bar:
+        case FixtureSilhouette::Generic:
+        default:
+            // Unchanged original body shape for bars/pixel strips and anything
+            // this classifier doesn't have a dedicated silhouette for.
+            painter->drawRect(r);
+            break;
+    }
+}
+
 void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget)
 {
     Q_UNUSED(option);
@@ -763,6 +855,8 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
 
     if (m_highlighted)
         defColor = QColor(255, 140, 0);   // orange — externally highlighted
+    else if (m_ghosted)
+        defColor = QColor(200, 60, 60);   // red — on a locked layer, like every locked object
     else if (this->isSelected() == true)
     {
         if (m_isolated)
@@ -783,20 +877,58 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
             bodyPen.setStyle(Qt::DashLine);
             bodyPen.setCosmetic(true);
         }
+        else if (m_beneath && !this->isSelected() && !m_highlighted)
+        {
+            bodyPen.setStyle(Qt::DashLine);    // under a structure (setBeneath())
+            bodyPen.setColor(QColor(170, 170, 170));
+        }
+        else if (this->isSelected() || m_highlighted)
+        {
+            /* A one-pixel outline disappears on a multi-head bar: the LED
+               heads are bright child items covering the whole interior, so the
+               only selected-ness on screen was a hairline around a 300 px
+               strip. Selection has to survive being next to its own light. */
+            bodyPen.setWidthF(2.5);
+            bodyPen.setCosmetic(true);
+        }
         painter->setPen(bodyPen);
+    }
+
+    /* Halo just OUTSIDE the body for selection/highlight, where no head can
+       cover it. Drawn by the parent, so it wraps the fixture's full laid-out
+       extent whatever grid the heads use -- "all the LEDs", not a few. */
+    if ((this->isSelected() || m_highlighted) && !m_isolated)
+    {
+        QColor halo = defColor;
+        halo.setAlpha(110);
+        QPen haloPen(halo, 6.0);
+        haloPen.setCosmetic(true);
+        haloPen.setJoinStyle(Qt::MiterJoin);
+        painter->setBrush(Qt::NoBrush);
+        const QPen keep = painter->pen();
+        painter->setPen(haloPen);
+        drawBody(painter, QRectF(-3.0, -3.0, m_width + 6.0, m_height + 6.0));
+        painter->setPen(keep);
     }
 
     // draw item background
     painter->setBrush(QBrush(QColor(33, 33, 33)));
-    painter->drawRect(0, 0, m_width, m_height);
+    drawBody(painter, QRectF(0, 0, m_width, m_height));
 
-    // Truss-bind indicator: inner border ring (cyan = bound, red = escaping)
-    if (m_escapeMode || m_boundToTruss)
+    /* Truss-bind indicator, inner border ring:
+         cyan  = bound to a truss and staying that way
+         red   = bound, but far enough off that releasing will DETACH it
+         green = not bound, but over a truss, so releasing will ATTACH it
+       The two mid-drag colours answer "what happens if I let go" while there
+       is still time to change your mind. */
+    if (m_escapeMode || m_attachMode || m_boundToTruss)
     {
-        QColor ring = m_escapeMode ? QColor(220, 60, 60) : QColor(0, 180, 255);
+        QColor ring = m_escapeMode ? QColor(220, 60, 60)
+                    : m_attachMode ? QColor(60, 200, 90)
+                                   : QColor(0, 180, 255);
         painter->setPen(QPen(ring, 2.0));
         painter->setBrush(Qt::NoBrush);
-        painter->drawRect(QRectF(1.5, 1.5, m_width - 3, m_height - 3));
+        drawBody(painter, QRectF(1.5, 1.5, m_width - 3, m_height - 3));
     }
 
     // Marked (move-in-black): a thin dashed violet outline so a pre-positioned-
@@ -809,7 +941,7 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
         markPen.setCosmetic(true);
         painter->setPen(markPen);
         painter->setBrush(Qt::NoBrush);
-        painter->drawRect(QRectF(0.75, 0.75, m_width - 1.5, m_height - 1.5));
+        drawBody(painter, QRectF(0.75, 0.75, m_width - 1.5, m_height - 1.5));
     }
     // The pan/tilt indicators are drawn around screen-down (Qt angle 270°),
     // which represents the home/centre pointing = downstage. Rotating the
@@ -892,12 +1024,26 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
 
     if (m_labelVisibility)
     {
+        /* Undo any view rotation for the label alone: the plot can be turned in
+           quarter steps, and a name is the one thing that must stay upright
+           however the page is read. The item's own geometry SHOULD turn -- only
+           the text is pinned. */
+        const double viewTurn = qRadiansToDegrees(qAtan2(painter->transform().m12(),
+                                                         painter->transform().m11()));
+        painter->save();
+        if (qAbs(viewTurn) > 0.5)
+        {
+            painter->translate(m_labelRect.center());
+            painter->rotate(-viewTurn);
+            painter->translate(-m_labelRect.center());
+        }
         painter->setFont(m_font);
         painter->setPen(QPen(Qt::NoPen));
         painter->setBrush(QBrush(QColor(33, 33, 33)));
         painter->drawRoundedRect(m_labelRect, 2, 2);
         painter->setPen(QPen(Qt::white, 1));
         painter->drawText(m_labelRect, Qt::AlignHCenter | Qt::TextWrapAnywhere, m_name);
+        painter->restore();
     }
 }
 
@@ -927,6 +1073,19 @@ QVariant MonitorFixtureItem::itemChange(GraphicsItemChange change, const QVarian
     // deselected, drop the isolated state so it doesn't linger.
     if (change == ItemSelectedHasChanged && !value.toBool())
         m_isolated = false;
+
+    /* Bring a selected fixture to the front of its own kind.
+     *
+     *  An orthographic view flattens one axis away, so items that differ only
+     *  along it land on exactly the same point -- in Side view every fixture on
+     *  a left-right truss stacks up, and the mouse can only ever reach whichever
+     *  one happens to be on top. Selecting one (from the layers tree, say) and
+     *  then finding the drag grabs a different fixture is the same trap from the
+     *  other side. Raising the selected one puts the thing you just chose under
+     *  the pointer. Half a z-step, so it clears its peers without jumping above
+     *  targets (3.0) or anything else with a deliberate layer. */
+    if (change == ItemSelectedHasChanged)
+        setZValue(value.toBool() ? 2.5 : 0.0);
 
     // Snapping is intentionally NOT done per-item here: quantising each
     // selected fixture independently during a drag scrambles a multi-
@@ -1022,6 +1181,14 @@ void MonitorFixtureItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
 
     QMenu menu;
 
+    /* Locate first, and available whether or not the rig is unlocked or the
+       app is in Operate: everything else in this menu edits the rig, while
+       Locate only asks "which physical light is this one" -- the question you
+       have while pointing at the canvas with the rig in front of you. Acts on
+       the whole selection when several fixtures are selected. */
+    QAction *locateAct = menu.addAction(tr("Locate"));
+    menu.addSeparator();
+
     // Facing (pan-zero direction) quick-set for moving heads — rig editing, so
     // only offered while unlocked.
     QAction *faceDS = NULL, *faceSR = NULL, *faceUS = NULL, *faceSL = NULL;
@@ -1064,6 +1231,31 @@ void MonitorFixtureItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
     QAction *chosen = menu.exec(event->screenPos());
     if (chosen == NULL)
     {
+        event->accept();
+        return;
+    }
+
+    if (chosen == locateAct)
+    {
+        /* The whole selection, so selecting a truss-worth of heads and asking
+           where they are lights all of them. Falls back to this item when
+           nothing is selected -- right-clicking a fixture you have not clicked
+           first is the common case. */
+        QList<quint32> ids;
+        if (scene() != NULL)
+        {
+            foreach (QGraphicsItem *gi, scene()->selectedItems())
+            {
+                MonitorFixtureItem *fi = dynamic_cast<MonitorFixtureItem *>(gi);
+                if (fi != NULL && !ids.contains(fi->fixtureID()))
+                    ids << fi->fixtureID();
+            }
+        }
+        if (ids.isEmpty())
+            ids << m_fid;
+
+        if (Monitor::instance() != NULL)
+            Monitor::instance()->locateFixtures(ids);
         event->accept();
         return;
     }

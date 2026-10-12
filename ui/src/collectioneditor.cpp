@@ -31,6 +31,9 @@
 #include <QAction>
 
 #include "functionselection.h"
+#include "speedmasterspanel.h"
+#include <QComboBox>
+#include <QLabel>
 #include "collectioneditor.h"
 #include "mastertimer.h"
 #include "collection.h"
@@ -64,6 +67,19 @@ CollectionEditor::CollectionEditor(QWidget* parent, Collection* fc, Doc* doc)
             this, SLOT(slotTestClicked()));
 
     m_nameEdit->setText(m_collection->name());
+
+    /* What the members' effects keep time with (SPEED_SPREAD_DESIGN.md, S2):
+       handed to each member as it starts; a member's own choice wins. */
+    QComboBox *speed = new QComboBox(this);
+    speed->setObjectName(QStringLiteral("collectionSpeedMaster"));
+    SpeedMastersPanel::fillCombo(speed, m_doc, tr("As played"), m_collection->speedMaster());
+    speed->setToolTip(tr("What the effects in this collection's members keep time with"));
+    connect(speed, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, speed](int) {
+        m_collection->setSpeedMaster(speed->currentData().toInt());
+        m_doc->setModified();
+    });
+    gridLayout->addWidget(new QLabel(tr("Speed:"), this), 8, 0);
+    gridLayout->addWidget(speed, 8, 1);
 
     // Enable drag & drop on the function list.
     //   - Internal drag REORDERS a member (drag it to a new position).

@@ -18,6 +18,11 @@
 */
 
 #include <QtTest>
+#include <QTemporaryDir>
+#include <QDateTime>
+#include <QRegularExpression>
+#include "qlcfixturemode.h"
+#include "qlcphysical.h"
 
 #define private public
 #include "qlcfixturedefcache.h"
@@ -262,4 +267,142 @@ void QLCFixtureDefCache_Test::storeDef()
 // calls QCoreApplication::applicationDirPath() on macOS/iOS/Windows — that
 // needs a real QCoreApplication instance to resolve correctly (without one
 // it warns and returns an empty path, failing the path comparison).
+/* A definition edited while a show is open -- its lumens set from the
+   footer's "declare no light output" -- is re-read in place: the new
+   physical values, the same mode objects fixtures already point at. */
+void QLCFixtureDefCache_Test::reloadPhysicalKeepsTheModes()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath("CY-200.qxf");
+    QVERIFY(QFile::copy(QString("%1/Futurelight/Futurelight-CY-200.qxf").arg(INTERNAL_FIXTUREDIR), path));
+    QFile::setPermissions(path, QFile::ReadOwner | QFile::WriteOwner);
+
+    QLCFixtureDefCache local;
+    QVERIFY(local.loadQXF(path));
+    QLCFixtureDef *def = local.fixtureDef("Futurelight", "CY-200");
+    QVERIFY(def != NULL);
+    QVERIFY(!def->modes().isEmpty());
+    QLCFixtureMode *mode = def->modes().first();
+
+    QFile f(path);
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    QString xml = QString::fromUtf8(f.readAll());
+    f.close();
+    xml.replace(QRegularExpression("Lumens=\"\\d*\""), "Lumens=\"1234\"");
+    QVERIFY(xml.contains("Lumens=\"1234\""));
+    QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    f.write(xml.toUtf8());
+    f.close();
+
+    QVERIFY(local.reloadPhysical(def));
+    QCOMPARE(def->modes().first(), mode);                  // the same mode object
+    QCOMPARE(mode->physical().bulbLumens(), 1234);
+    QVERIFY(mode->physical().declaresOutput());
+}
+
+/* A definition file that cannot be read is remembered, with why, for the
+   footer -- and forgotten once it loads. */
+void QLCFixtureDefCache_Test::aDefinitionThatFailsIsRemembered()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath("Broken.qxf");
+    QFile f(path);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write("<?xml version=\"1.0\"?>\n<FixtureDefinition><Manufacturer>X</Manu");
+    f.close();
+
+    QLCFixtureDefCache local;
+    QVERIFY(!local.loadQXF(path));
+    QVERIFY(local.failedDefinitions().contains(path));
+    QVERIFY(!local.failedDefinitions().value(path).isEmpty());
+
+    QFile::remove(path);
+    QVERIFY(QFile::copy(QString("%1/Futurelight/Futurelight-CY-200.qxf").arg(INTERNAL_FIXTUREDIR), path));
+    QVERIFY(local.loadQXF(path));
+    QVERIFY(!local.failedDefinitions().contains(path));
+}
+
+/* The user's folder is read first: a local definition of a fixture that
+   also ships with the app is the one used, and says it replaces it. */
+void QLCFixtureDefCache_Test::aLocalDefinitionSaysItReplacesTheIncludedOne()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString included = QString("%1/Futurelight/Futurelight-CY-200.qxf").arg(INTERNAL_FIXTUREDIR);
+    const QString path = dir.filePath("Futurelight-CY-200.qxf");
+    QVERIFY(QFile::copy(included, path));
+
+    QLCFixtureDefCache local;
+    QVERIFY(local.loadQXF(path, true));                     // the user's copy
+    QLCFixtureDef *def = local.definitions().first();
+    QCOMPARE(def->source(), QLCFixtureDef::Local);
+    QVERIFY(!def->overridesIncluded());
+    QCOMPARE(def->sourceDescription(), QString("Local"));
+
+    QVERIFY(local.loadQXF(included, false));                // then the included one
+    QCOMPARE(local.definitions().size(), 1);                // set aside
+    QVERIFY(def->overridesIncluded());
+    QVERIFY(def->sourceDescription().contains("replaces the included one"));
+
+    QLCFixtureDef other;
+    QCOMPARE(other.source(), QLCFixtureDef::Included);
+    other.setSource(QLCFixtureDef::Downloadable);
+    QCOMPARE(other.source(), QLCFixtureDef::Downloadable);
+    QVERIFY(!other.isUser());
+    QCOMPARE(other.sourceDescription(), QString("Downloadable"));
+}
+
+/* Two local files for one fixture: the one changed last is used (it was
+   alphabetical, so "X 2.qxf" beat "X.qxf" whichever was current), and the
+   one set aside is recorded -- identical or not -- for the footer. */
+void QLCFixtureDefCache_Test::ofTwoLocalCopiesTheNewestIsUsed()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString source = QString("%1/Futurelight/Futurelight-CY-200.qxf").arg(INTERNAL_FIXTUREDIR);
+    QFile in(source);
+    QVERIFY(in.open(QIODevice::ReadOnly));
+    const QByteArray xml = in.readAll();
+
+    auto write = [&](const QString &name, const QByteArray &data, int ageSeconds) {
+        const QString path = dir.filePath(name);
+        QFile f(path);
+        f.open(QIODevice::WriteOnly);
+        f.write(data);
+        f.close();
+        f.open(QIODevice::ReadWrite);
+        f.setFileTime(QDateTime::currentDateTime().addSecs(-ageSeconds), QFileDevice::FileModificationTime);
+        f.close();
+        return path;
+    };
+    QByteArray edited = xml;
+    edited.replace("Lumens=\"0\"", "Lumens=\"777\"");
+    const QString older = write("Futurelight-CY-200.qxf", xml, 3600);
+    const QString newer = write("Futurelight-CY-200 2.qxf", edited, 10);
+    write("Futurelight-CY-200 3.qxf", xml, 7200);                // same as the original
+
+    QLCFixtureDefCache local;
+    QVERIFY(local.load(QDir(dir.path(), "*.qxf")));
+    QCOMPARE(local.definitions().size(), 1);
+    QCOMPARE(local.definitions().first()->definitionSourceFile(), newer);
+
+    const QList<QLCFixtureDefCache::Duplicate> dups = local.duplicates();
+    QCOMPARE(dups.size(), 2);
+    foreach (const QLCFixtureDefCache::Duplicate &d, dups)
+    {
+        QCOMPARE(d.kept, newer);
+        QVERIFY(d.keptIsLocal && d.ignoredIsLocal);
+        QVERIFY(!d.identical);                                   // newer was edited
+    }
+    QVERIFY(dups.at(0).ignored == older || dups.at(1).ignored == older);
+
+    // A local one replacing an included one is recorded, not a local copy.
+    local.loadQXF(source, false);                            // read fine, set aside
+    QCOMPARE(local.duplicates().size(), 3);
+    QVERIFY(!local.duplicates().last().ignoredIsLocal);
+    QVERIFY(local.definitions().first()->overridesIncluded());
+}
+
 QTEST_GUILESS_MAIN(QLCFixtureDefCache_Test)

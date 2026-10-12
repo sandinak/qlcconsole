@@ -529,6 +529,11 @@ void MidiPlugin::loadMidiTemplates(const QDir& dir)
     while (it.hasNext() == true)
     {
         QString path = dir.absoluteFilePath(it.next());
+        if (QLCFile::isOnlineOnly(path))   // in cloud storage, not on this machine: do not wait for it
+        {
+            QLCFile::noteSkippedOnlineOnly(path);
+            continue;
+        }
         qDebug() << "[MIDI] Loading MIDI template:" << path;
 
         MidiTemplate* templ;

@@ -79,10 +79,13 @@ void RGBText_Test::animationStyle()
     QCOMPARE(RGBText::stringToAnimationStyle("Vertical"), RGBText::Vertical);
     QCOMPARE(RGBText::stringToAnimationStyle("Horizontal"), RGBText::Horizontal);
     QCOMPARE(RGBText::stringToAnimationStyle("Letters"), RGBText::StaticLetters);
+    QCOMPARE(RGBText::stringToAnimationStyle("Centered"), RGBText::Centered);
+    QCOMPARE(RGBText::animationStyleToString(RGBText::Centered), QString("Centered"));
     QCOMPARE(RGBText::stringToAnimationStyle("Foobar"), RGBText::StaticLetters);
 
     QStringList styles = RGBText::animationStyles();
-    QCOMPARE(styles.size(), 3);
+    QCOMPARE(styles.size(), 4);
+    QVERIFY(styles.contains("Centered") == true);
     QVERIFY(styles.contains("Vertical") == true);
     QVERIFY(styles.contains("Horizontal") == true);
     QVERIFY(styles.contains("Letters") == true);
@@ -359,6 +362,51 @@ void RGBText_Test::staticLetters()
             QCOMPARE(map[i][j], QColor(Qt::black).rgb());
         }
     }
+}
+
+/* Centered: the whole word, still, in the middle -- as far from the left
+   edge as from the right, and the same with the offsets nudging it. */
+void RGBText_Test::centered()
+{
+    RGBText text(m_doc);
+    text.setText("II");
+    text.setAnimationStyle(RGBText::Centered);
+    QCOMPARE(text.rgbMapStepCount(QSize(40, 20)), 1);
+
+    QRgb color(0xFFFFFFFF);
+    RGBMap map;
+    auto litSpan = [&map](int &first, int &last, int &top, int &bottom) {
+        first = top = 1000; last = bottom = -1;
+        for (int y = 0; y < map.size(); y++)
+            for (int x = 0; x < map[y].size(); x++)
+                if (map[y][x] != QColor(Qt::black).rgb())
+                {
+                    first = qMin(first, x); last = qMax(last, x);
+                    top = qMin(top, y); bottom = qMax(bottom, y);
+                }
+    };
+    text.rgbMap(QSize(40, 20), color, 0, map);
+    QCOMPARE(map.size(), 20);
+    QCOMPARE(map[0].size(), 40);
+    int first, last, top, bottom;
+    litSpan(first, last, top, bottom);
+    QVERIFY(last >= first);
+    // The same margin either side, give or take the font's own bearing
+    QVERIFY(qAbs(first - (39 - last)) <= 2);
+    QVERIFY(qAbs(top - (19 - bottom)) <= 3);
+
+    // Every step is the same picture
+    RGBMap again;
+    text.rgbMap(QSize(40, 20), color, 0, again);
+    QCOMPARE(again, map);
+
+    // An offset moves it over
+    text.setXOffset(5);
+    text.rgbMap(QSize(40, 20), color, 0, map);
+    int first2, last2;
+    litSpan(first2, last2, top, bottom);
+    QCOMPARE(first2, first + 5);
+    QCOMPARE(last2, last + 5);
 }
 
 void RGBText_Test::horizontalScroll()

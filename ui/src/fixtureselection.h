@@ -48,9 +48,19 @@ public slots:
     /** @reimp */
     int exec() override;
 
+protected:
+    /** Down from the search box moves into the list. */
+    bool eventFilter(QObject *watched, QEvent *event) override;
+
+private slots:
+    /** Filter the list as the search text changes; a single match is
+     *  selected, so Return adds it. */
+    void slotSearchChanged(const QString &text);
+
 private:
     Doc* m_doc;
     FixtureTreeWidget *m_tree;
+    class QLineEdit *m_search;
     quint32 m_treeFlags;
 
     /************************************************************************

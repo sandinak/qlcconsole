@@ -48,7 +48,9 @@ class AudioCapture;
 class RGBScriptsCache;
 class AudioPluginCache;
 class MonitorProperties;
+class SpeedMasters;
 class PowerDistribution;
+class NetworkTopology;
 class TimecodeSource;
 class CaptureManager;
 class ProgrammerFlasher;
@@ -187,6 +189,9 @@ private:
     mutable QSharedPointer<AudioCapture> m_inputCapture;
     MonitorProperties *m_monitorProps;
     PowerDistribution *m_powerDist;
+    SpeedMasters *m_speedMasters;
+    class PowerLimiter *m_powerLimiter = nullptr;
+    NetworkTopology *m_networkTopology;
     TimecodeSource *m_timecodeSource;
 
     /*********************************************************************
@@ -427,8 +432,31 @@ public:
      * @p isTaken decides collisions, so the caller controls the namespace
      * (functions in a folder, fixtures in the doc, an accumulating batch, …).
      */
+    /** The same for a name that is a MODEL designation ("LM70", "Par 64"). Its
+     *  own digits are part of what it is, so they are never bumped -- LM70 must
+     *  not become LM71 -- and a taken name gets " #2", " #3"... appended instead.
+     *  nextUniqueName() below is for names that already carry a counter. */
+    static QString nextUniqueModelName(const QString &name,
+                                       const std::function<bool(const QString &)> &isTaken);
+
     static QString nextUniqueName(const QString &name,
                                   const std::function<bool(const QString &)> &isTaken);
+
+    /** Fixture names are unique: two fixtures called "AT1-3z" (one on the
+     *  tower, a stray inventory copy in a corner of the plot) cannot be told
+     *  apart anywhere a fixture is picked by name. */
+    /** True when a fixture other than @p except is called @p name. */
+    bool fixtureNameTaken(const QString &name, quint32 except = UINT_MAX) const;
+    /** @p name if no other fixture has it, else the next free "name #2",
+     *  "name #3"... -- its own digits are kept ("AT1-3z" is not "AT1-4z"). */
+    QString uniqueFixtureName(const QString &name, quint32 except = UINT_MAX) const;
+    /** Names more than one fixture has, each with those fixtures' IDs. */
+    QMap<QString, QList<quint32> > duplicateFixtureNames() const;
+    /** Give every fixture a name of its own: of each set sharing a name the
+     *  first patched one (else the lowest ID) keeps it, the rest are
+     *  numbered. Only the names in @p only, when given. Returns how many
+     *  were renamed. */
+    int makeFixtureNamesUnique(const QStringList &only = QStringList());
 
     /**
      * Step the most-recently-started running Chaser forward/backward.
@@ -604,6 +632,9 @@ public:
     /** Drives all active EffectScript instances (tick, DMX, input routing).
         QObject child of Doc (auto-deleted). */
     EffectScriptRunner *effectScriptRunner() const { return m_effectScriptRunner; }
+    /** Effect looks that would not start, and why (palette id -> reason);
+     *  the runner's failures(), for code that does not include it. */
+    QHash<quint32, QString> effectFailures() const;
 
     /** Fork-owned "last-look persistence" holder: keeps a stopped show's final
         look on the rig (Operate) instead of blacking out. QObject child of Doc
@@ -625,11 +656,13 @@ public:
      *  unit (e.g. importing a Show must bring its Chasers and their Scenes). */
     QList<quint32> functionFunctions(quint32 fid) const;
 
-    /** First local DMX address (0-511) in @p universe with @p channels
-     *  consecutive free slots, or 0xFFFFFFFF if the universe has no room.
-     *  Used by Import to relocate a fixture whose original address is
-     *  already occupied in the target workspace. */
-    quint32 findFreeAddress(quint32 universe, quint32 channels) const;
+    /** First local DMX address (0-511) in @p universe, from @p from on, with
+     *  @p channels consecutive free slots -- treating the fixtures in @p ignore
+     *  as already moved away -- or 0xFFFFFFFF if the universe has no room.
+     *  Used by Import to relocate a fixture whose original address is already
+     *  occupied in the target workspace, and by re-addressing. */
+    quint32 findFreeAddress(quint32 universe, quint32 channels, quint32 from = 0,
+                            const QSet<quint32> &ignore = QSet<quint32>()) const;
 
     /** Snapshot the current pre-GM output of everything function @p fid drives
      *  and install it as the held last look (so the rig doesn't blackout when
@@ -666,6 +699,56 @@ public:
      * @return true if the fixture was successfully added to doc,
      *         otherwise false.
      */
+    /** Give a staged (or already patched) fixture a real universe and address.
+     *  Refuses -- returning false and changing nothing -- if the range would
+     *  run past the universe or overlap another fixture. Applies the fixture's
+     *  channel capabilities to the universe, which addFixture() skipped while
+     *  it was in the inventory. */
+    bool patchFixture(quint32 id, quint32 universe, quint32 address);
+
+    /** One fixture's new home, for patchFixtures(). */
+    struct FixturePatch
+    {
+        quint32 fixtureId;
+        quint32 universe;   //!< zero-based
+        quint32 address;    //!< zero-based within the universe
+    };
+
+    /** Patch or MOVE several fixtures as one step: all of them, or -- if any
+     *  one would run past its universe, overlap a fixture outside the set or
+     *  another entry -- none, with @p why saying which. The fixtures being
+     *  moved are checked against where the others are GOING, not where they
+     *  are now, so a block can shift onto its own old channels. Moving an
+     *  already patched fixture is Design mode only, for the reason
+     *  unpatchFixture() is. */
+    bool patchFixtures(const QList<FixturePatch> &patches, QString *why = NULL);
+
+    /** The same checks as patchFixtures(), changing nothing. @p channels
+     *  overrides a fixture's footprint (the mode it is about to be given). */
+    bool canPatchFixtures(const QList<FixturePatch> &patches, QString *why = NULL,
+                          const QHash<quint32, quint32> &channels = QHash<quint32, quint32>()) const;
+
+    /** Fixtures that loaded unpatched because their address clashed with
+     *  another fixture's (see Fixture::addressClash()), in id order. */
+    QList<quint32> addressClashes() const;
+
+    /** Take a patched fixture back into the inventory: it keeps its name, its
+     *  placement and everything it is in, but releases its channels and stops
+     *  writing DMX. Design mode only -- a running function holds channels
+     *  resolved against the old address until it is restarted. Returns false
+     *  (changing nothing) if the fixture is unknown, already staged, or the
+     *  document is in Operate mode. */
+    bool unpatchFixture(quint32 id);
+
+    /** Whether a fixture's mode can change to @p newMode (or, with NULL, a
+     *  generic dimmer's channel count can change) without breaking what refers
+     *  to its channel numbers. Scenes store raw channel indexes, so a fixture a
+     *  scene sets directly is locked to its mode; a fixture group's layout
+     *  stores head indexes, so a mode with a different head count is refused
+     *  too. Palettes and looks built from them are by capability and are fine.
+     *  On false, @p why says what stands in the way. */
+    bool canChangeFixtureMode(quint32 id, const QLCFixtureMode *newMode, QString *why = NULL) const;
+
     bool addFixture(Fixture* fixture, quint32 id = Fixture::invalidId(), bool crossUniverse = false);
 
     /**
@@ -758,6 +841,10 @@ protected:
     /** Fixtures list cache */
     bool m_fixturesListCacheUpToDate;
     QList<Fixture*> m_fixturesListCache;
+
+    /** Register a patched fixture's channel capabilities/defaults/modifiers
+     *  with the universes it lives in, growing them if needed. */
+    void applyFixtureToUniverses(Fixture *fixture, bool crossUniverse);
 
     /** Map of the addresses occupied by fixtures */
     QHash <quint32, quint32> m_addresses;
@@ -968,6 +1055,15 @@ public:
      */
     QList<quint32> getUsage(quint32 fid);
 
+    /**
+     * Announce that a function changed for a reason external to the function
+     * itself -- a palette it references being edited, for example, which is
+     * not a Function and so has no changed() signal of its own to relay.
+     * Marks the doc modified and emits functionChanged(fid), same as a
+     * function announcing its own edit would.
+     */
+    void notifyFunctionChanged(quint32 fid);
+
 protected:
     /**
      * Create a new function Id
@@ -1027,6 +1123,18 @@ public:
 public:
     /** Returns a reference to the power distribution model instance */
     PowerDistribution *powerDistribution();
+
+    /** The show's speed masters (SpeedMasters). Never null. */
+    SpeedMasters *speedMasters() const { return m_speedMasters; }
+    /** Holds fixtures to their maximum draw (PowerLimiter) */
+    class PowerLimiter *powerLimiter() const { return m_powerLimiter; }
+
+    /*********************************************************************
+     * Network Topology
+     *********************************************************************/
+public:
+    /** Returns a reference to the network/cabling topology model instance */
+    NetworkTopology *networkTopology();
 
     /*********************************************************************
      * Timecode

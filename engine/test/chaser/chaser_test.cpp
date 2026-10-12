@@ -883,6 +883,58 @@ void Chaser_Test::preRun()
     c->postRun(&timer, ua);
 }
 
+/* "every time I run a function and then remove it .. the last thing sent
+   hangs on the fixtures": a function deleted while it runs is stopped first,
+   so what it drove is let go -- a scene's channels, a chaser's step. */
+void Chaser_Test::deletingARunningFunctionLetsGoOfItsChannels()
+{
+    Fixture* fxi = new Fixture(m_doc);
+    fxi->setAddress(0);
+    fxi->setUniverse(0);
+    fxi->setChannels(1);
+    m_doc->addFixture(fxi);
+    MasterTimer *timer = m_doc->masterTimer();
+    auto level = [this]() {
+        QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+        ua.first()->processFaders();
+        const uchar v = uchar(ua.first()->preGMValues().at(0));
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        return v;
+    };
+
+    // A scene, running, then deleted.
+    Scene* s = new Scene(m_doc);
+    s->setValue(fxi->id(), 0, 255);
+    m_doc->addFunction(s);
+    s->start(timer, FunctionParent::master());
+    for (int i = 0; i < 5; ++i)
+        timer->timerTick();
+    QCOMPARE(int(level()), 255);
+    QVERIFY(m_doc->deleteFunction(s->id()));
+    for (int i = 0; i < 5; ++i)
+        timer->timerTick();
+    QCOMPARE(int(level()), 0);
+
+    // A chaser on its first step, deleted: the step stops with it.
+    Chaser* c = new Chaser(m_doc);
+    c->setDuration(MasterTimer::tick() * 100);
+    m_doc->addFunction(c);
+    Scene* step = new Scene(m_doc);
+    step->setValue(fxi->id(), 0, 200);
+    m_doc->addFunction(step);
+    c->addStep(step->id());
+    c->start(timer, FunctionParent::master());
+    for (int i = 0; i < 5; ++i)
+        timer->timerTick();
+    QVERIFY(step->isRunning());
+    QCOMPARE(int(level()), 200);
+    QVERIFY(m_doc->deleteFunction(c->id()));
+    for (int i = 0; i < 5; ++i)
+        timer->timerTick();
+    QVERIFY(!step->isRunning());
+    QCOMPARE(int(level()), 0);
+}
+
 void Chaser_Test::writeHTP()
 {
     Fixture* fxi = new Fixture(m_doc);

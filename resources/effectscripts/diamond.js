@@ -8,6 +8,8 @@
     var effect = new Object;
     effect.apiVersion   = 1;
     effect.name         = "Diamond";
+    // Takes the host's spread (fixture.phase, inputs._spread) in place of its own.
+    effect.hostSpread = "phaseSpread";
     effect.description  = "Diamond (rotated-square) pan/tilt path";
     effect.author       = "QLC+";
     effect.fixtureTypes = ["moving"];
@@ -60,7 +62,8 @@
         return fixtures.map(function(f, i) {
             if (!f.hasPanTilt) return {};
 
-            var fixturePhase = (n > 1) ? (i / (n - 1)) * phaseSpread * 2 * Math.PI : 0;
+            var fixturePhase = inputs._spread ? f.phase * 2 * Math.PI
+                             : (n > 1) ? (i / (n - 1)) * phaseSpread * 2 * Math.PI : 0;
             var d = diamond(baseTheta - fixturePhase);
 
             var pan  = (cx + panRadius  * d.x) * f.panRange;

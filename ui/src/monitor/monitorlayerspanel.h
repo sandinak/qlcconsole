@@ -31,6 +31,7 @@
 #include <QString>
 #include <QList>
 #include <QPair>
+#include <QSet>
 #include <QColor>
 #include <QTreeWidget>
 #include <QDropEvent>
@@ -55,6 +56,9 @@ class LayersTreeWidget final : public QTreeWidget
     Q_OBJECT
 public:
     explicit LayersTreeWidget(QWidget *parent = nullptr) : QTreeWidget(parent) {}
+
+    /** A row's name is being typed in. */
+    bool isEditing() const { return state() == QAbstractItemView::EditingState; }
 
 signals:
     /** Emitted on drop: the dragged rows and the row they were dropped onto
@@ -105,6 +109,25 @@ public:
      *  items may have changed (e.g. after a workspace load or a group op). */
     void reload();
 
+    /** The right-click menu for @p item (null = blank space), built but not
+     *  shown: the item's own section comes from the plot, so the list offers
+     *  everything the plot does. */
+    void buildContextMenu(class QMenu *menu, QTreeWidgetItem *item);
+
+    /** Select and scroll to the row for @p kind / @p id ("Show in Layers").
+     *  False when the list has no such row. */
+    bool revealItem(const QString &kind, quint32 id);
+
+    /** Mirror the plot's selection: select exactly the rows for @p objects
+     *  (kind, id), open their folders and scroll to the first -- without
+     *  handing the selection back to the plot. */
+    void followMapSelection(const QList<QPair<QString, quint32> > &objects);
+
+    /** Select the rows of the fixture groups @p ids (the first row of each, as
+     *  a group can be listed in several places), and their fixtures on the
+     *  plot. */
+    void selectFixtureGroups(const QList<quint32> &ids);
+
 signals:
     /** Emitted when the in-panel close/hide button is clicked. */
     void closeRequested();
@@ -146,6 +169,13 @@ private:
     QList<ItemDesc> gatherItems() const;
     void buildGroupNode(QTreeWidgetItem *parent, quint32 groupId,
                         const QList<ItemDesc> &items);
+    /** Walks the (about-to-be-discarded) tree collecting a key per collapsed
+     *  layer/group node, so reload() can restore collapse state afterward
+     *  instead of hard-expanding everything -- see m_collapsedKeys. */
+    void collectCollapsedNodes(QTreeWidgetItem *item, QSet<QString> &out) const;
+    /** True if the layer/group node identified by (type, id) was collapsed
+     *  before the reload() currently in progress captured m_collapsedKeys. */
+    bool wasNodeCollapsed(NodeType type, quint32 id) const;
     /** Expand or collapse a node and all of its descendants. */
     static void setSubtreeExpanded(QTreeWidgetItem *node, bool expanded);
     /** Hide tree rows that don't match @p text (matches keep their ancestors +
@@ -159,7 +189,14 @@ private:
      *  so the caller can nest those fixtures. Works for a group's members OR a
      *  layer's loose fixtures. */
     void addLocalFixtureGroups(QTreeWidgetItem *host, const QSet<quint32> &fixtureSet,
-                               QHash<quint32, QTreeWidgetItem *> &map);
+                               QHash<quint32, QList<QTreeWidgetItem *> > &map);
+    /** The plot objects a fixture group stands for: its fixtures on the plot. */
+    QList<QPair<QString, quint32> > fixtureGroupMembers(quint32 fgId) const;
+    /** A Fixture Group row (no children). */
+    QTreeWidgetItem *addFixtureGroupNode(QTreeWidgetItem *host, class FixtureGroup *fg);
+    /** Fixture Groups listed by this reload, so the ones local nowhere -- a
+     *  group across several trusses -- can be given a home at the end. */
+    QSet<quint32> m_listedFixtureGroups;
     void addItemLeaf(QTreeWidgetItem *parent, const ItemDesc &d);
     /** The tree icon for an item KIND (fixture/truss/platform/pipe/stand/tower/
      *  image/power). @p color tints the platform swatch. */
@@ -185,7 +222,8 @@ private:
 
     void beginRenameCurrent();
     /** Rename the underlying map item (fixture/truss/platform/power). */
-    void renameMapItem(const QString &kind, quint32 id, const QString &name);
+    /** False when the plot refused the name (a fixture name already taken). */
+    bool renameMapItem(const QString &kind, quint32 id, const QString &name);
 
     /** Per-item position lock for an object by (kind,id): truss / platform /
      *  image / power. Fixtures have no per-item lock (returns false / no-op). */
@@ -204,6 +242,8 @@ private:
     Doc                 *m_doc;
     MonitorProperties   *m_props;
     MonitorGraphicsView *m_view;
+    /** Guards the tree -> canvas selection sync against feeding back. */
+    bool m_syncingSelection = false;
 
     LayersTreeWidget *m_tree;
     class QLineEdit *m_search = nullptr;   //!< filter box above the tree
@@ -220,6 +260,8 @@ private:
     /** True while a tree drag is in flight — reload() is suppressed so we never
      *  rebuild the tree inside Qt's nested drag event loop. */
     bool m_suppressReload = false;
+    bool m_reloadQueued = false;   ///< a deferred reload (after a rename) is pending
+    bool m_reloadAfterEdit = false; ///< a reload asked for while a name was being typed
 
     /** After a drop, the (queued) reload scrolls this layer back into view so
      *  the target layer never appears to "vanish". <0 = none. */
@@ -227,6 +269,15 @@ private:
 
     /** Guards row-widget/selection/edit handlers while reload() repopulates. */
     bool m_reloading = false;
+
+    /** Layer/group nodes the user had collapsed, captured at the start of the
+     *  reload() currently in progress (from the tree about to be cleared) and
+     *  consulted while rebuilding, so a reload — triggered by ~20 different
+     *  things (toggling a layer's visibility/lock, renaming, drag-drop, add/
+     *  remove layer, ...) — no longer force-expands every folder the user had
+     *  deliberately closed. Keyed "<NodeType>:<id>"; only meaningful during a
+     *  single reload() call, not persisted across app runs. */
+    QSet<QString> m_collapsedKeys;
 };
 
 /** @} */

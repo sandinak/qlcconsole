@@ -18,6 +18,8 @@
 */
 
 #include <QtTest>
+#include <QPushButton>
+#include <QDialogButtonBox>
 #include <QList>
 
 #include "qlcfixturedefcache.h"
@@ -136,7 +138,7 @@ void AddFixture_Test::initialNoFixture()
     QVERIFY(af.amount() == 1);
     QVERIFY(af.gap() == 0);
     QVERIFY(af.channels() == 1);
-    QVERIFY(af.m_tree->columnCount() == 1);
+    QVERIFY(af.m_tree->columnCount() == 2);      // Fixture Model, Source
 
     // Check that all makes & models are put to the tree
     QStringList makers(m_doc->fixtureDefCache()->manufacturers());
@@ -160,7 +162,7 @@ void AddFixture_Test::initialNoFixture()
         else
         {
             QCOMPARE(i, af.m_tree->topLevelItemCount() - 1); // Generic should be last
-            QCOMPARE(top->childCount(), 4);
+            QCOMPARE(top->childCount(), 5);   // Generic, RGB, RGBW, Smoke, Silk Flame
             QCOMPARE(top->child(0)->text(0), QString(KXMLFixtureGeneric));
 
             QStringList models(m_doc->fixtureDefCache()->models(top->text(0)));
@@ -251,7 +253,7 @@ void AddFixture_Test::initialDimmer()
         else
         {
             QCOMPARE(i, af.m_tree->topLevelItemCount() - 1); // Generic should be last
-            QCOMPARE(top->childCount(), 4);
+            QCOMPARE(top->childCount(), 5);   // Generic, RGB, RGBW, Smoke, Silk Flame
             QCOMPARE(top->child(0)->text(0), QString(KXMLFixtureGeneric));
 
             QStringList models(m_doc->fixtureDefCache()->models(top->text(0)));
@@ -351,7 +353,7 @@ void AddFixture_Test::initialScanner()
         else
         {
             QCOMPARE(i, af.m_tree->topLevelItemCount() - 1); // Generic should be last
-            QCOMPARE(top->childCount(), 4);
+            QCOMPARE(top->childCount(), 5);   // Generic, RGB, RGBW, Smoke, Silk Flame
             QCOMPARE(top->child(0)->text(0), QString(KXMLFixtureGeneric));
 
             QStringList models(m_doc->fixtureDefCache()->models(top->text(0)));
@@ -447,7 +449,7 @@ void AddFixture_Test::selectionGeneric()
     QTreeWidgetItem* item = af.m_tree->topLevelItem(af.m_tree->topLevelItemCount() - 1);
     QVERIFY(item != NULL);
     // First, select the parent node so that selectionChanged() fires
-    QCOMPARE(item->childCount(), 4);
+    QCOMPARE(item->childCount(), 5);
     af.m_tree->setCurrentItem(item);
     // Then, select the child to fire again
     item = item->child(0);
@@ -503,4 +505,204 @@ void AddFixture_Test::rememberExpanded()
     }
 }
 
+void AddFixture_Test::aTakenNameIsRefusedWhenEditingAndNumberedWhenAdding()
+{
+    Fixture *a = new Fixture(m_doc);
+    a->setName("AT1-3z");
+    a->setChannels(1);
+    QVERIFY(m_doc->addFixture(a));
+    Fixture *b = new Fixture(m_doc);
+    b->setName("AT1-36-1");
+    b->setChannels(1);
+    b->setAddress(10);
+    QVERIFY(m_doc->addFixture(b));
+    {
+        // Changing b's properties: renaming it to a's name is refused.
+        AddFixture af(NULL, m_doc, b);
+        QPushButton *ok = af.m_buttonBox->button(QDialogButtonBox::Ok);
+        QVERIFY(ok != NULL && ok->isEnabled());
+        af.m_nameEdit->setText("AT1-3z");
+        af.slotNameEdited("AT1-3z");
+        QVERIFY(!af.m_nameErrorLabel->isHidden());
+        QVERIFY(af.m_nameErrorLabel->text().contains("Another fixture is already called this"));
+        QVERIFY(!af.m_buttonBox->button(QDialogButtonBox::Ok)->isEnabled());
+        // Its own name is fine.
+        af.m_nameEdit->setText("AT1-36-1");
+        af.slotNameEdited("AT1-36-1");
+        QVERIFY(af.m_nameErrorLabel->isHidden());
+        QVERIFY(af.m_buttonBox->button(QDialogButtonBox::Ok)->isEnabled());
+    }
+    {
+        // Adding one: allowed, and the label says the name it will get.
+        AddFixture af(NULL, m_doc);
+        af.m_nameEdit->setText("AT1-3z");
+        af.slotNameEdited("AT1-3z");
+        QVERIFY(!af.m_nameErrorLabel->isHidden());
+        QVERIFY2(af.m_nameErrorLabel->text().contains("AT1-3z #2"), qPrintable(af.m_nameErrorLabel->text()));
+    }
+    m_doc->deleteFixture(a->id());
+    m_doc->deleteFixture(b->id());
+}
+
 QTEST_MAIN(AddFixture_Test)
+
+void AddFixture_Test::inventoryModeHidesAddressAndIgnoresOverlap()
+{
+    // Occupy universe 1's first channels so a normal add there would overlap.
+    Fixture *taken = new Fixture(m_doc);
+    taken->setChannels(512);
+    QVERIFY(m_doc->addFixture(taken));
+
+    AddFixture af(NULL, m_doc);
+    af.setInventoryMode(true);
+    QVERIFY(af.inventoryMode());
+    QVERIFY(af.m_universeCombo->isHidden());
+    QVERIFY(af.m_addressSpin->isHidden());
+    QVERIFY(af.m_gapSpin->isHidden());
+    QVERIFY(af.windowTitle().contains("Inventory"));
+    // The channel count is a footprint decision: made when patching, not here.
+    QVERIFY(af.m_channelsSpin->isHidden());
+    QVERIFY(af.m_channelsLabel->isHidden());
+
+    // A staged fixture claims no address, so a full universe is no obstacle.
+    af.m_addressSpin->setValue(1);
+    QVERIFY(!af.invalidAddress());
+
+    m_doc->deleteFixture(taken->id());
+}
+
+void AddFixture_Test::connectionAndIpAreReported()
+{
+    AddFixture af(NULL, m_doc);
+    QCOMPARE(af.connection(), Fixture::Dmx);
+    QVERIFY(af.ipAddress().isEmpty());
+    QVERIFY(!af.m_ipEdit->isEnabled());              // only a network fixture has an IP
+
+    af.m_ipEdit->setText("172.18.2.41");
+    QVERIFY2(af.ipAddress().isEmpty(), "a DMX fixture must not carry an IP");
+
+    af.m_connectionCombo->setCurrentIndex(af.m_connectionCombo->findData(
+        AddFixture::connectionKey(Fixture::Network, Fixture::ArtNetTransport)));
+    QCOMPARE(af.connection(), Fixture::Network);
+    QVERIFY(af.m_ipEdit->isEnabled());
+    QCOMPARE(af.ipAddress(), QString("172.18.2.41"));
+}
+
+void AddFixture_Test::findAddressIgnoresUnpatchedFixtures()
+{
+    // An inventory fixture sits on the placeholder 0/0 and claims nothing: a
+    // new fixture still goes to address 1, not after the placeholder.
+    QList <Fixture*> fixtures;
+    Fixture *staged = new Fixture(m_doc);
+    staged->setChannels(24);
+    staged->setPatched(false);
+    fixtures << staged;
+    QCOMPARE(AddFixture::findAddress(8, fixtures, 4), quint32(0));
+    staged->setPatched(true);
+    QCOMPARE(AddFixture::findAddress(8, fixtures, 4), quint32(24));
+    delete staged;
+}
+
+void AddFixture_Test::inventoryQuantityIsNotLimitedByAUniverse()
+{
+    // "why can't I add more than 1 fixture here?": a 165-channel fixture with
+    // the (hidden) address where the auto-search put it left room for one.
+    AddFixture af(NULL, m_doc);
+    af.m_channelsSpin->setValue(165);
+    af.m_addressSpin->setValue(300);
+    QCOMPARE(af.m_amountSpin->maximum(), 1);          // patching: one fits there
+
+    af.setInventoryMode(true);
+    QVERIFY(af.m_amountSpin->maximum() >= 100);
+    af.m_amountSpin->setValue(16);
+    QCOMPARE(af.amount(), 16);
+
+    // And it stays lifted when the hidden address or footprint moves.
+    af.m_addressSpin->setValue(400);
+    af.m_channelsSpin->setValue(200);
+    QCOMPARE(af.amount(), 16);
+}
+
+void AddFixture_Test::addingMoreStartsOnTheSameModelAndMode()
+{
+    // "when I right click on a model .. it should auto select that model from
+    // the list for adding": the dialog starts on the model AND the mode.
+    QLCFixtureDef *def = m_doc->fixtureDefCache()->fixtureDef("Martin", "MAC300");
+    QVERIFY(def != NULL);
+    QVERIFY(def->modes().size() > 1);
+    QLCFixtureMode *second = def->modes().at(1);
+    Fixture *like = new Fixture(m_doc);
+    like->setFixtureDefinition(def, second);
+
+    AddFixture af(NULL, m_doc);
+    QVERIFY(af.fixtureDef() != def);                  // Generic by default
+    af.preselectLike(like);
+    af.setInventoryMode(true);
+    QCOMPARE(af.fixtureDef(), def);
+    QCOMPARE(af.mode(), second);
+
+    // A manufacturer's folder: that manufacturer, opened.
+    AddFixture bf(NULL, m_doc);
+    bf.preselectManufacturer("Martin");
+    QTreeWidgetItem *martin = NULL;
+    for (int i = 0; i < bf.m_tree->topLevelItemCount(); ++i)
+        if (bf.m_tree->topLevelItem(i)->text(0) == "Martin")
+            martin = bf.m_tree->topLevelItem(i);
+    QVERIFY(martin != NULL);
+    QVERIFY(martin->isExpanded());
+
+    delete like;
+}
+
+/* Included, Local, or (one day) Downloadable: each model in the list says
+   where its definition comes from. */
+void AddFixture_Test::eachModelSaysWhereItsDefinitionComesFrom()
+{
+    QLCFixtureDef *local = new QLCFixtureDef();
+    local->setManufacturer("Zz Test");
+    local->setModel("My Own Bar");
+    local->setSource(QLCFixtureDef::Local);
+    local->setOverridesIncluded(true);
+    QLCFixtureMode *mode = new QLCFixtureMode(local);
+    mode->setName("1ch");
+    local->addMode(mode);
+    QVERIFY(m_doc->fixtureDefCache()->addFixtureDef(local));
+
+    AddFixture af(NULL, m_doc);
+    QCOMPARE(af.m_tree->columnCount(), 2);
+    QList<QTreeWidgetItem *> found = af.m_tree->findItems("My Own Bar", Qt::MatchExactly | Qt::MatchRecursive);
+    QCOMPARE(found.size(), 1);
+    QCOMPARE(found.first()->text(1), QString("Local — replaces the included one"));
+    found = af.m_tree->findItems("MAC 250", Qt::MatchStartsWith | Qt::MatchRecursive);
+    QVERIFY(!found.isEmpty());
+    QCOMPARE(found.first()->text(1), QString("Included"));
+}
+
+/* Network fixtures go as Art-Net -- or, for WLED on Wi-Fi, through WLED's own
+   API. The choice is offered, read back, and shown again when edited. */
+void AddFixture_Test::aNetworkFixtureCanBeSentToByWled()
+{
+    {
+        AddFixture af(NULL, m_doc);
+        const int wled = af.m_connectionCombo->findText("Network (WLED, JSON over Wi-Fi)");
+        QVERIFY(wled >= 0);
+        af.m_connectionCombo->setCurrentIndex(wled);
+        QCOMPARE(af.connection(), Fixture::Network);
+        QCOMPARE(af.transport(), Fixture::WledTransport);
+        QVERIFY(af.m_ipEdit->isEnabled());
+        af.m_connectionCombo->setCurrentIndex(af.m_connectionCombo->findText("DMX"));
+        QCOMPARE(af.connection(), Fixture::Dmx);
+        QVERIFY(!af.m_ipEdit->isEnabled());
+    }
+    Fixture *lantern = new Fixture(m_doc);
+    lantern->setName("Lantern SL");
+    lantern->setChannels(4);
+    lantern->setAddress(100);
+    lantern->setConnection(Fixture::Network);
+    lantern->setIPAddress("192.168.20.185");
+    lantern->setTransport(Fixture::WledTransport);
+    QVERIFY(m_doc->addFixture(lantern));
+    AddFixture edit(NULL, m_doc, lantern);
+    QCOMPARE(edit.transport(), Fixture::WledTransport);
+    QCOMPARE(edit.ipAddress(), QString("192.168.20.185"));
+}

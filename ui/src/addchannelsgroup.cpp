@@ -62,6 +62,8 @@ AddChannelsGroup::AddChannelsGroup(QWidget* parent, Doc* doc, ChannelsGroup *gro
 
     foreach (Fixture* fxi, m_doc->fixtures())
     {
+        if (!fxi->isPatched())
+            continue;           // no address, no channels to group
         QTreeWidgetItem *topItem = NULL;
         quint32 uni = fxi->universe();
         for (int i = 0; i < m_tree->topLevelItemCount(); i++)

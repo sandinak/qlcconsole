@@ -1029,6 +1029,7 @@
     <F n="Generic-Generic-RGB" m="Generic RGB"/>
     <F n="Generic-Generic-RGBW" m="Generic RGBW"/>
     <F n="Generic-Generic-Smoke" m="Generic Smoke"/>
+    <F n="Generic-Silk-Flame" m="Silk Flame (relay)"/>
   </M>
   <M n="Geni">
     <F n="Geni-Mojo-Color-Moc" m="Mojo Color Moc"/>
@@ -1426,6 +1427,9 @@
   </M>
   <M n="NJD">
     <F n="NJD-Spectre" m="Spectre"/>
+  </M>
+  <M n="Oppsk">
+    <F n="Oppsk-Wall-Washer-Light-Bar" m="Wall Washer Light Bar"/>
   </M>
   <M n="Optima_Lighting">
     <F n="Optima-Lighting-PAR64-LED" m="PAR64 LED"/>
@@ -1995,10 +1999,17 @@
     <F n="Venue-THINPAR-64" m="ThinPar 64"/>
     <F n="Venue-TriStrip3Z" m="TriStrip3Z"/>
   </M>
+  <M n="Warmdance">
+    <F n="Warmdance-ZQ06199" m="ZQ06199"/>
+  </M>
   <M n="WLED">
     <F n="WLED-Effect-Mode" m="Effect Mode"/>
+    <F n="WLED-Lantern" m="Lantern"/>
   </M>
   <M n="XStatic">
     <F n="XStatic-X-240Bar-RGB" m="X-240Bar RGB"/>
+  </M>
+  <M n="YeeSite">
+    <F n="YeeSite-60W-RGB-Pixel-Light-Bar" m="60W RGB Pixel Light Bar"/>
   </M>
 </FixturesMap>

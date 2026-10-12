@@ -22,12 +22,14 @@
 #include <QXmlStreamWriter>
 #include <QDebug>
 
+#include "speedmasters.h"
 #include "chaserstep.h"
 #include "function.h"
 #include "doc.h"
 
 #define KXMLQLCSequenceSceneValues  QStringLiteral("Values")
 #define KXMLQLCStepNote             QStringLiteral("Note")
+#define KXMLQLCStepSpeedMaster      QStringLiteral("SpeedMaster")
 
 ChaserStep::ChaserStep(quint32 aFid, uint aFadeIn, uint aHold, uint aFadeOut)
     : fid(aFid)
@@ -47,6 +49,7 @@ ChaserStep::ChaserStep(const ChaserStep& cs)
     , duration(cs.duration)
     , values(cs.values)
     , note(cs.note)
+    , speedMaster(cs.speedMaster)
 {
 }
 
@@ -61,6 +64,7 @@ ChaserStep &ChaserStep::operator=(const ChaserStep &step)
         duration = step.duration;
         values = step.values;
         note = step.note;
+        speedMaster = step.speedMaster;
     }
 
     return *this;
@@ -148,6 +152,7 @@ QVariant ChaserStep::toVariant() const
     list << fadeOut;
     list << duration;
     list << note;
+    list << speedMaster;
     return list;
 }
 
@@ -155,7 +160,7 @@ ChaserStep ChaserStep::fromVariant(const QVariant& var)
 {
     ChaserStep cs;
     QList <QVariant> list(var.toList());
-    if (list.size() == 6)
+    if (list.size() == 6 || list.size() == 7)
     {
         cs.fid = list.takeFirst().toUInt();
         cs.fadeIn = list.takeFirst().toUInt();
@@ -163,6 +168,8 @@ ChaserStep ChaserStep::fromVariant(const QVariant& var)
         cs.fadeOut = list.takeFirst().toUInt();
         cs.duration = list.takeFirst().toUInt();
         cs.note = list.takeFirst().toString();
+        if (!list.isEmpty())
+            cs.speedMaster = list.takeFirst().toInt();
     }
     return cs;
 }
@@ -192,6 +199,8 @@ bool ChaserStep::loadXML(QXmlStreamReader &root, int& stepNumber, Doc *doc)
         stepNumber = attrs.value(KXMLQLCFunctionNumber).toString().toInt();
     if (attrs.hasAttribute(KXMLQLCStepNote) == true)
         note = attrs.value(KXMLQLCStepNote).toString();
+    if (attrs.hasAttribute(KXMLQLCStepSpeedMaster) == true)
+        speedMaster = SpeedMasters::stringToAssignment(attrs.value(KXMLQLCStepSpeedMaster).toString());
 
     if (attrs.hasAttribute(KXMLQLCSequenceSceneValues) == true)
     {
@@ -277,6 +286,8 @@ bool ChaserStep::saveXML(QXmlStreamWriter *doc, int stepNumber, bool isSequence)
     doc->writeAttribute(KXMLQLCFunctionSpeedFadeOut, QString::number(fadeOut));
     if (note.isEmpty() == false)
         doc->writeAttribute(KXMLQLCStepNote, note);
+    if (speedMaster != SpeedMasters::Inherit)
+        doc->writeAttribute(KXMLQLCStepSpeedMaster, SpeedMasters::assignmentToString(speedMaster));
 
     if (isSequence)
     {

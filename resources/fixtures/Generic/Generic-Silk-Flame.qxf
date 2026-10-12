@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE FixtureDefinition>
+<FixtureDefinition xmlns="http://www.qlcplus.org/FixtureDefinition">
+ <Creator>
+  <Name>Q Light Controller Plus</Name>
+  <Version>4.14.2</Version>
+  <Author>qlcconsole</Author>
+ </Creator>
+ <Manufacturer>Generic</Manufacturer>
+ <Model>Silk Flame (relay)</Model>
+ <Type>Effect</Type>
+ <Channel Name="Relay">
+  <Group Byte="0">Intensity</Group>
+  <Capability Min="0" Max="127">Off</Capability>
+  <Capability Min="128" Max="255">On (fan and lights)</Capability>
+ </Channel>
+ <Mode Name="Relay">
+  <Channel Number="0">Relay</Channel>
+ </Mode>
+ <Physical>
+  <Bulb Type="LED" Lumens="0" ColourTemperature="0"/>
+  <Dimensions Weight="2" Width="300" Height="150" Depth="300"/>
+  <Lens Name="Other" DegreesMin="0" DegreesMax="0"/>
+  <Focus Type="Fixed" PanMax="0" TiltMax="0"/>
+  <Technical PowerConsumption="60" DmxConnector="Other"/>
+  <Body Shape="Box" Emission="Flame"/>
+ </Physical>
+</FixtureDefinition>

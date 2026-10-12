@@ -25,8 +25,13 @@
 #include <QSettings>
 
 #include "fixturetreewidget.h"
+#include <QLineEdit>
+#include <QKeyEvent>
+#include <QTreeWidgetItemIterator>
 #include "fixtureselection.h"
 #include "doc.h"
+
+#define KColumnName 0
 
 #define SETTINGS_GEOMETRY "fixtureselection/geometry"
 
@@ -50,6 +55,20 @@ FixtureSelection::FixtureSelection(QWidget* parent, Doc* doc)
                   FixtureTreeWidget::Model |
                   FixtureTreeWidget::AddressRange |
                   FixtureTreeWidget::ShowGroups;
+
+    // Type to find: name, manufacturer or model.
+    m_search = new QLineEdit(this);
+    m_search->setObjectName("fixtureSearch");
+    m_search->setPlaceholderText(tr("Search fixtures (name, manufacturer, model)..."));
+    m_search->setClearButtonEnabled(true);
+    m_search->installEventFilter(this);
+    m_mainLayout->addWidget(m_search);
+    connect(m_search, &QLineEdit::textChanged, this, &FixtureSelection::slotSearchChanged);
+    // Return adds what is picked (the single match, say).
+    connect(m_search, &QLineEdit::returnPressed, this, [this]() {
+        if (!m_tree->selectedItems().isEmpty())
+            accept();
+    });
 
     m_tree = new FixtureTreeWidget(m_doc, m_treeFlags, this);
     m_mainLayout->addWidget(m_tree);
@@ -83,9 +102,64 @@ int FixtureSelection::exec()
         item->setText(0, tr("Go to the Fixture Manager and add some fixtures first."));
         m_tree->resizeColumnToContents(0);
         m_tree->setEnabled(false);
+        m_search->setEnabled(false);
         m_buttonBox->setStandardButtons(QDialogButtonBox::Cancel);
     }
+    else
+    {
+        m_tree->setTextFilter(m_search->text());
+        m_search->setFocus();
+    }
     return QDialog::exec();
+}
+
+void FixtureSelection::slotSearchChanged(const QString &text)
+{
+    m_tree->setTextFilter(text);
+
+    // Nothing hidden stays selected; one selectable match is picked for you.
+    QList<QTreeWidgetItem *> matches;
+    for (QTreeWidgetItemIterator it(m_tree); *it != NULL; ++it)
+    {
+        QTreeWidgetItem *item = *it;
+        if (item->isHidden() && item->isSelected())
+            item->setSelected(false);
+        bool shown = !item->isHidden();
+        for (QTreeWidgetItem *up = item->parent(); shown && up != NULL; up = up->parent())
+            shown = !up->isHidden();
+        const bool fixtureRow = item->data(KColumnName, PROP_ID).isValid()
+                                && !item->data(KColumnName, PROP_HEAD).isValid();
+        if (shown && fixtureRow && !text.trimmed().isEmpty()
+            && (item->flags() & Qt::ItemIsSelectable) && (item->flags() & Qt::ItemIsEnabled))
+            matches << item;
+    }
+    if (matches.size() == 1)
+    {
+        m_tree->clearSelection();
+        matches.first()->setSelected(true);
+        m_tree->setCurrentItem(matches.first());
+        m_tree->scrollToItem(matches.first());
+    }
+}
+
+bool FixtureSelection::eventFilter(QObject *watched, QEvent *event)
+{
+    if (watched == m_search && event->type() == QEvent::KeyPress
+        && static_cast<QKeyEvent *>(event)->key() == Qt::Key_Down)
+    {
+        // Into the list, on the first row still showing.
+        for (QTreeWidgetItemIterator it(m_tree); *it != NULL; ++it)
+        {
+            QTreeWidgetItem *item = *it;
+            if (item->isHidden() || !(item->flags() & Qt::ItemIsSelectable))
+                continue;
+            m_tree->setCurrentItem(item);
+            break;
+        }
+        m_tree->setFocus();
+        return true;
+    }
+    return QDialog::eventFilter(watched, event);
 }
 
 /****************************************************************************

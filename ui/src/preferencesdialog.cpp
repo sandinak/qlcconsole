@@ -2,6 +2,16 @@
 #include "autosavemanager.h"
 #include <QSettings>
 #include <QIcon>
+#include <QColorDialog>
+#include <QPushButton>
+#include <QGridLayout>
+#include <QVBoxLayout>
+#include <QGroupBox>
+#include <QSpinBox>
+#include <QLabel>
+#include <QTabWidget>
+
+#include "monitor/monitor.h"
 
 #define SETTINGS_GEOMETRY "preferencesdialog/geometry"
 
@@ -58,6 +68,7 @@ void PreferencesDialog::setupUI()
     
     // Setup tabs
     setupAutosaveTab();
+    setupLocateTab();
     
     // Create button box
     m_buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
@@ -130,8 +141,60 @@ void PreferencesDialog::setupAutosaveTab()
     updateAutosaveControls();
 }
 
+void PreferencesDialog::setupLocateTab()
+{
+    m_locateTab = new QWidget();
+    m_tabWidget->addTab(m_locateTab, QIcon(":/fixture.png"), tr("Locate"));
+
+    QVBoxLayout *tabLayout = new QVBoxLayout(m_locateTab);
+    QGroupBox *box = new QGroupBox(tr("Locate Flash"), m_locateTab);
+    tabLayout->addWidget(box);
+    QGridLayout *g = new QGridLayout(box);
+
+    QLabel *why = new QLabel(
+        tr("How a fixture identifies itself when you ask where it is.\n"
+           "Three white flashes at full is a lot of light to stand next to, "
+           "and in a dark house it lights the room."), box);
+    why->setWordWrap(true);
+    g->addWidget(why, 0, 0, 1, 2);
+
+    g->addWidget(new QLabel(tr("Colour:"), box), 1, 0);
+    m_locateColor = new QColor(Monitor::locateColor());
+    m_locateColorBtn = new QPushButton(box);
+    m_locateColorBtn->setStyleSheet(
+        QString("background-color: %1").arg(m_locateColor->name()));
+    connect(m_locateColorBtn, &QPushButton::clicked, this, [this]() {
+        QColor c = QColorDialog::getColor(*m_locateColor, this, tr("Locate colour"));
+        if (c.isValid())
+        {
+            *m_locateColor = c;
+            m_locateColorBtn->setStyleSheet(
+                QString("background-color: %1").arg(c.name()));
+        }
+    });
+    g->addWidget(m_locateColorBtn, 1, 1);
+
+    g->addWidget(new QLabel(tr("Intensity:"), box), 2, 0);
+    m_locateIntensitySpin = new QSpinBox(box);
+    m_locateIntensitySpin->setRange(1, 255);
+    m_locateIntensitySpin->setToolTip(
+        tr("DMX level for the flash. Fixtures with no dimmer channel are "
+           "scaled through their colour emitters instead, so this dims them too."));
+    g->addWidget(m_locateIntensitySpin, 2, 1);
+
+    g->addWidget(new QLabel(tr("Flashes:"), box), 3, 0);
+    m_locateFlashesSpin = new QSpinBox(box);
+    m_locateFlashesSpin->setRange(1, 10);
+    g->addWidget(m_locateFlashesSpin, 3, 1);
+
+    tabLayout->addStretch(1);
+}
+
 void PreferencesDialog::loadSettings()
 {
+    m_locateIntensitySpin->setValue(Monitor::locateIntensity());
+    m_locateFlashesSpin->setValue(Monitor::locateFlashes());
+
     if (m_autoSaveManager)
     {
         m_autosaveEnabledCheck->setChecked(m_autoSaveManager->isEnabled());
@@ -143,6 +206,13 @@ void PreferencesDialog::loadSettings()
 
 void PreferencesDialog::saveSettings()
 {
+    {
+        QSettings s;
+        s.setValue("monitor/locate/color", m_locateColor->name());
+        s.setValue("monitor/locate/intensity", m_locateIntensitySpin->value());
+        s.setValue("monitor/locate/flashes", m_locateFlashesSpin->value());
+    }
+
     if (m_autoSaveManager)
     {
         m_autoSaveManager->setEnabled(m_autosaveEnabledCheck->isChecked());

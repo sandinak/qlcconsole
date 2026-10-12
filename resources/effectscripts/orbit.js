@@ -8,6 +8,8 @@
     var effect = new Object;
     effect.apiVersion  = 1;
     effect.name        = "Orbit";
+    // Takes the host's spread (fixture.phase, inputs._spread) in place of its own.
+    effect.hostSpread = "phaseSpread";
     effect.description = "Fixtures orbit a joystick-controlled center in unison";
     effect.author      = "QLC+";
     effect.fixtureTypes = ["moving"];
@@ -44,7 +46,7 @@
             if (!f.hasPanTilt) return {};
 
             var phase = t * speed * 2 * Math.PI
-                        + i * spread * 2 * Math.PI / n;
+                        + (inputs._spread ? f.phase : i * spread / n) * 2 * Math.PI;
 
             var pan  = (cx + panR  * Math.cos(phase)) * f.panRange;
             var tilt = (cy + tiltR * Math.sin(phase)) * f.tiltRange;

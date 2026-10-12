@@ -258,6 +258,36 @@ elseif (IOS)
     set(USERMODIFIERSTEMPLATEDIR "${USERDATADIR}/ModifiersTemplates")
 endif ()
 
+# Device profiles
+if (WIN32)
+    set(DEVICEPROFILEDIR "DeviceProfiles")
+elseif (APPLE)
+    set(DEVICEPROFILEDIR "${DATADIR}/DeviceProfiles")
+elseif (UNIX)
+    set(DEVICEPROFILEDIR "${DATADIR}/deviceprofiles")
+endif ()
+
+if (ANDROID)
+    set(DEVICEPROFILEDIR "${DATADIR}/deviceprofiles")
+elseif (IOS)
+    set(DEVICEPROFILEDIR "DeviceProfiles")
+endif ()
+
+# User device profiles
+if (WIN32)
+    set(USERDEVICEPROFILEDIR "${USERDATADIR}/DeviceProfiles")
+elseif (APPLE)
+    set(USERDEVICEPROFILEDIR "${USERDATADIR}/DeviceProfiles")
+elseif (UNIX)
+    set(USERDEVICEPROFILEDIR "${USERDATADIR}/deviceprofiles")
+endif ()
+
+if (ANDROID)
+    set(USERDEVICEPROFILEDIR "${USERDATADIR}/deviceprofiles")
+elseif (IOS)
+    set(USERDEVICEPROFILEDIR "${USERDATADIR}/DeviceProfiles")
+endif ()
+
 # Fixtures
 if (WIN32)
     set(FIXTUREDIR "Fixtures")
