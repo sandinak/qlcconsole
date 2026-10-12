@@ -146,6 +146,7 @@ add_library(${module_name}
     pathdrawwidget.cpp pathdrawwidget.h
     networkreportdialog.cpp networkreportdialog.h
     patchlistdialog.cpp patchlistdialog.h
+    speedmastersfooter.cpp speedmastersfooter.h
     speedmasterspanel.cpp speedmasterspanel.h
     spreadpreview.cpp spreadpreview.h
     networktopologydialog.cpp networktopologydialog.h

@@ -64,6 +64,7 @@
 #include "studiotemplate.h"
 #include "monitorproperties.h"
 #include "vcframe.h"
+#include "speedmastersfooter.h"
 #include "app.h"
 #include "effectscriptrunner.h"
 #include <QPointer>
@@ -137,6 +138,7 @@ typedef BOOL (WINAPI *SetProcessInformationType)(
 #define SETTINGS_SHOW_FOOTER_LOAD  QStringLiteral("workspace/showFooterLoad")
 #define SETTINGS_SHOW_FOOTER_POWER QStringLiteral("workspace/showFooterPower")
 #define SETTINGS_SHOW_FOOTER_GM    QStringLiteral("workspace/showFooterGM")
+#define SETTINGS_SHOW_FOOTER_SPEED QStringLiteral("workspace/showFooterSpeedMasters")
 #define KXMLQLCWorkspaceWindow QStringLiteral("CurrentWindow")
 
 #define MAX_RECENT_FILES    10
@@ -593,6 +595,7 @@ void App::init()
         m_showFooterLoad = settings.value(SETTINGS_SHOW_FOOTER_LOAD, true).toBool();
         m_showFooterPower = settings.value(SETTINGS_SHOW_FOOTER_POWER, true).toBool();
         m_showFooterGM = settings.value(SETTINGS_SHOW_FOOTER_GM, true).toBool();
+        m_showFooterSpeed = settings.value(SETTINGS_SHOW_FOOTER_SPEED, true).toBool();
     }
 
     if (m_startupWindow != NULL)
@@ -1900,6 +1903,18 @@ void App::initMenuBar()
         settings.setValue(SETTINGS_SHOW_FOOTER_GM, on);
         if (m_statusGrandMasterBox != NULL)
             m_statusGrandMasterBox->setVisible(on);
+    });
+
+    m_showFooterSpeedAction = viewMenu->addAction(tr("Show Speed Masters in Footer"));
+    m_showFooterSpeedAction->setObjectName(QStringLiteral("showFooterSpeedMasters"));
+    m_showFooterSpeedAction->setCheckable(true);
+    m_showFooterSpeedAction->setChecked(m_showFooterSpeed);
+    connect(m_showFooterSpeedAction, &QAction::toggled, this, [this](bool on) {
+        m_showFooterSpeed = on;
+        QSettings settings;
+        settings.setValue(SETTINGS_SHOW_FOOTER_SPEED, on);
+        if (m_statusSpeedMasters != NULL)
+            m_statusSpeedMasters->setVisible(on);
     });
 
     /* ---- Fixtures: document-wide fixture actions ----
@@ -4280,6 +4295,15 @@ void App::initStatusBar()
                 this, &App::slotFooterGrandMasterMoved);
         gmBox->setVisible(m_showFooterGM);   // View menu preference
         sb->addWidget(gmBox, 0);
+    }
+
+    // The speed masters beside the GM: each master's tempo, lit on its beat;
+    // a click opens the Speed Masters window at it.
+    if (m_doc != NULL)
+    {
+        m_statusSpeedMasters = new SpeedMastersFooter(m_doc, this);
+        m_statusSpeedMasters->setVisible(m_showFooterSpeed);   // View menu preference
+        sb->addWidget(m_statusSpeedMasters, 0);
     }
 
     // Spacer that pushes the centred health chips (MTC/Load, created below)

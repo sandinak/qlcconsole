@@ -25,6 +25,7 @@
 #include <QString>
 #include <QMutex>
 #include <QList>
+#include <climits>
 
 class QXmlStreamReader;
 class QXmlStreamWriter;
@@ -126,6 +127,21 @@ public:
      *  for Free/Inherit. */
     bool clockFor(int assignment, double *beatPos, double *bpm) const;
 
+    /** What a control surface can drive on a master: Tap (a button),
+     *  Rate (a fader, 0..200 %), Pause (a button: press to toggle). */
+    enum Control { TapControl, RateControl, PauseControl, ControlCount };
+    static QString controlToString(Control control);
+    /** The input channel driving @p control of master @p index;
+     *  universe UINT_MAX when none. */
+    void setInput(int index, Control control, quint32 universe, quint32 channel);
+    void clearInput(int index, Control control);
+    bool input(int index, Control control, quint32 *universe, quint32 *channel) const;
+
+public slots:
+    /** A value from an input universe (InputOutputMap::inputValueChanged). */
+    void slotInputValue(quint32 universe, quint32 channel, uchar value);
+
+public:
     bool loadXML(QXmlStreamReader &root);
     bool saveXML(QXmlStreamWriter *doc) const;
     /** Nothing changed from reset(): not written to the file. */
@@ -148,6 +164,9 @@ private:
         qint64 anchorNs = 0;        //!< Own: clock time of the anchor
         double anchorBeats = 0;     //!< Own: position at the anchor; paused: the frozen position
         QList<qint64> taps;
+        quint32 inUniverse[ControlCount] = { UINT_MAX, UINT_MAX, UINT_MAX };
+        quint32 inChannel[ControlCount] = { UINT_MAX, UINT_MAX, UINT_MAX };
+        uchar inLast[ControlCount] = { 0, 0, 0 };   //!< for a button's press
     };
 
     bool valid(int index) const { return index >= 0 && index < MaxCount; }

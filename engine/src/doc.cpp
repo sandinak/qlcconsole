@@ -128,6 +128,8 @@ Doc::Doc(QObject* parent, int universes)
 
     // Speed masters read the main beat clock, so after m_masterTimer too.
     m_speedMasters = new SpeedMasters(this, this);
+    connect(m_ioMap, &InputOutputMap::inputValueChanged,
+            m_speedMasters, &SpeedMasters::slotInputValue);
 
     // Fixtures held to a maximum draw: kept in step with the show.
     m_powerLimiter = new PowerLimiter(this);

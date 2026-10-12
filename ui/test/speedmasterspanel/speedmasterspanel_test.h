@@ -39,6 +39,8 @@ private slots:
     void aChaseAndItsStepsAreGivenAMaster();
     void aCollectionIsGivenAMaster();
     void theCountShowsTheMastersInUse();
+    void theFooterShowsEachMastersTempo();
+    void aMastersInputsAreMappedInItsWindow();
 
 private:
     Doc *m_doc = nullptr;

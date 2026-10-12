@@ -23,6 +23,8 @@
 #include <QHBoxLayout>
 #include <QGridLayout>
 #include <QPushButton>
+#include <QDialogButtonBox>
+#include <QDialog>
 #include <QComboBox>
 #include <QLineEdit>
 #include <QPointer>
@@ -34,6 +36,8 @@
 
 #include "speedmasterspanel.h"
 #include "speedmasters.h"
+#include "inputselectionwidget.h"
+#include "qlcinputsource.h"
 #include "doc.h"
 
 QList<double> SpeedMastersPanel::ratios()
@@ -107,7 +111,7 @@ SpeedMastersPanel::SpeedMastersPanel(Doc *doc, QWidget *parent)
     QGridLayout *grid = new QGridLayout();
     outer->addLayout(grid);
     const QStringList heads = { QString(), tr("Name"), tr("Follows"), tr("Ratio"), tr("BPM"),
-                                QString(), tr("Rate"), QString(), QString() };
+                                QString(), tr("Rate"), QString(), QString(), QString() };
     for (int c = 0; c < heads.size(); ++c)
         if (!heads.at(c).isEmpty())
             grid->addWidget(new QLabel(QStringLiteral("<b>%1</b>").arg(heads.at(c)), this), 0, c);
@@ -189,6 +193,13 @@ SpeedMastersPanel::SpeedMastersPanel(Doc *doc, QWidget *parent)
             m_doc->speedMasters()->setPaused(i, on);
             m_doc->setModified();
         });
+
+        r.inputs = new QPushButton(inputsText(0), this);
+        r.inputs->setObjectName(QStringLiteral("speedMasterInputs%1").arg(i + 1));
+        r.inputs->setToolTip(tr("Drive this master's Tap, Rate and Pause from a MIDI "
+                                "controller or other input."));
+        grid->addWidget(r.inputs, g, 9);
+        connect(r.inputs, &QPushButton::clicked, this, [this, i]() { editInputs(i); });
     }
     // Only once every row exists: the "Follows" lists name the others.
     applyCount();
@@ -202,7 +213,7 @@ SpeedMastersPanel::SpeedMastersPanel(Doc *doc, QWidget *parent)
     m_lightTimer->start();
 }
 
-SpeedMastersPanel *SpeedMastersPanel::open(Doc *doc, QWidget *parent)
+SpeedMastersPanel *SpeedMastersPanel::open(Doc *doc, QWidget *parent, int focus)
 {
     static QPointer<SpeedMastersPanel> panel;
     if (panel.isNull())
@@ -210,7 +221,66 @@ SpeedMastersPanel *SpeedMastersPanel::open(Doc *doc, QWidget *parent)
     panel->show();
     panel->raise();
     panel->activateWindow();
+    if (focus >= 0 && focus < SpeedMasters::MaxCount && panel->m_rows[focus].bpm->isVisible())
+    {
+        panel->m_rows[focus].bpm->setFocus();
+        panel->m_rows[focus].bpm->selectAll();
+    }
     return panel;
+}
+
+QString SpeedMastersPanel::inputsText(int mapped)
+{
+    return mapped == 0 ? tr("Inputs...") : tr("Inputs (%1)").arg(mapped);
+}
+
+void SpeedMastersPanel::editInputs(int index)
+{
+    SpeedMasters *sm = m_doc->speedMasters();
+    QDialog dlg(this);
+    dlg.setObjectName(QStringLiteral("speedMasterInputsDialog"));
+    dlg.setWindowTitle(tr("%1: inputs").arg(sm->name(index)));
+    QVBoxLayout *lay = new QVBoxLayout(&dlg);
+    lay->addWidget(new QLabel(tr("Move a control with Auto Detect on, or choose one. "
+                                 "<b>Tap</b> and <b>Pause</b> want a button (Pause: press "
+                                 "to stop, press again to go on); <b>Rate</b> a fader, "
+                                 "its middle the tempo as set, the top double."), &dlg));
+    lay->itemAt(0)->widget()->setProperty("wordWrap", true);
+
+    const SpeedMasters::Control controls[SpeedMasters::ControlCount] =
+        { SpeedMasters::TapControl, SpeedMasters::RateControl, SpeedMasters::PauseControl };
+    const QStringList titles = { tr("Tap"), tr("Rate"), tr("Pause") };
+    InputSelectionWidget *pick[SpeedMasters::ControlCount];
+    for (int c = 0; c < SpeedMasters::ControlCount; ++c)
+    {
+        pick[c] = new InputSelectionWidget(m_doc, &dlg);
+        pick[c]->setObjectName(QStringLiteral("speedMasterInput%1").arg(titles.at(c)));
+        pick[c]->setTitle(titles.at(c));
+        pick[c]->setKeyInputVisibility(false);
+        pick[c]->setCustomFeedbackVisibility(false);
+        quint32 u = 0, ch = 0;
+        if (sm->input(index, controls[c], &u, &ch))
+            pick[c]->setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(u, ch)));
+        lay->addWidget(pick[c]);
+    }
+    QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+    connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    lay->addWidget(bb);
+    const int result = dlg.exec();
+    for (int c = 0; c < SpeedMasters::ControlCount; ++c)
+        pick[c]->stopAutoDetection();
+    if (result != QDialog::Accepted)
+        return;
+    for (int c = 0; c < SpeedMasters::ControlCount; ++c)
+    {
+        QSharedPointer<QLCInputSource> src = pick[c]->inputSource();
+        if (!src.isNull() && src->isValid())
+            sm->setInput(index, controls[c], src->universe(), src->channel());
+        else
+            sm->clearInput(index, controls[c]);
+    }
+    m_doc->setModified();
 }
 
 void SpeedMastersPanel::applySource(int index)
@@ -251,6 +321,10 @@ void SpeedMastersPanel::refresh(int index)
     r.rateText->setText(QStringLiteral("%1%").arg(r.rate->value()));
     r.rate->setEnabled(own);
     r.pause->setChecked(sm->isPaused(index));
+    int mapped = 0;
+    for (int c = 0; c < SpeedMasters::ControlCount; ++c)
+        mapped += sm->input(index, SpeedMasters::Control(c), nullptr, nullptr) ? 1 : 0;
+    r.inputs->setText(inputsText(mapped));
     // Other masters' "Follows" lists name them; keep the names current.
     for (int j = 0; j < SpeedMasters::MaxCount; ++j)
     {
@@ -273,7 +347,7 @@ void SpeedMastersPanel::applyCount()
         const Row &r = m_rows[i];
         for (QWidget *w : { (QWidget *)r.light, (QWidget *)r.name, (QWidget *)r.source, (QWidget *)r.ratio,
                             (QWidget *)r.bpm, (QWidget *)r.tap, (QWidget *)r.rate, (QWidget *)r.rateText,
-                            (QWidget *)r.pause })
+                            (QWidget *)r.pause, (QWidget *)r.inputs })
             w->setVisible(i < n);
         // What it can follow: its own tempo, the main clock, the others in use.
         m_refreshing = true;

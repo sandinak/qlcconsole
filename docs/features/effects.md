@@ -148,6 +148,17 @@ Each row has:
 - **Pause** — the master stops; everything on it freezes where it is.
   A following master picks up on the beat again when un-paused.
 - A light that flashes on the master's beat.
+- **Inputs…** — drive the master from a MIDI controller (or any input):
+  **Tap** and **Pause** on buttons (Pause: press to stop, again to go on),
+  **Rate** on a fader — its middle is the tempo as set, the top double,
+  the bottom stopped. Move the control with **Auto Detect** on, or choose
+  it; the button then reads how many are mapped. Saved with the show.
+
+The masters also sit in the **footer**, beside the Grand Master: a button
+for each, reading its tempo ("Pars 120", or "paused") and lit on its beat;
+click one to open this window at that master. **View → Show Speed Masters
+in Footer** turns them off. With more than eight in use the names are
+shortened (an unnamed one shows its number, "S9"); the tooltip has it all.
 
 **What runs on a master** — choose **Speed** in any of these; the
 innermost choice wins:

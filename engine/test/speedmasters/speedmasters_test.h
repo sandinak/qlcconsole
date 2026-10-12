@@ -50,6 +50,7 @@ private slots:
     void goQuantizeIsSavedWithTheChase();
     void aShowUsesFourToSixteen();
     void aMasterFollowsTheShowTimeline();
+    void aControlSurfaceDrivesAMaster();
 
 private:
     Doc *m_doc = nullptr;

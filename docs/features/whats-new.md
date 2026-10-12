@@ -105,6 +105,15 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Effects
 
+- **Speed masters in the footer** — a button for each, reading its tempo
+  and lit on its beat; a click opens the Speed Masters window at it
+  (**View → Show Speed Masters in Footer**). Each master's **Inputs…**
+  maps its Tap, Rate and Pause to a MIDI controller.
+  ([Speed masters](effects.md#speed-masters))
+- **A rainbow on a wash with no dimmer is a rainbow.** On an RGBW head with
+  no master dimmer (a Cobra Wash in 13-channel mode, say) an effect's own
+  dimmer put red, green, blue and white all at full under its colour — a
+  rainbow came out white.
 - **Spread.** One Spread row for every chasing effect — amount in cycles,
   in look order or across columns, rows or the stage, **out from or round
   the look's target**, forward, reverse, centre out or ends in, with wings

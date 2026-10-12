@@ -25,11 +25,18 @@
 #include <QComboBox>
 #include <QLineEdit>
 #include <QSlider>
+#include <QToolButton>
+#include <QApplication>
+#include <QDialog>
 
 #define private public
 #include "chasereditor.h"
 #undef private
 #include "speedmasterspanel.h"
+#include "speedmastersfooter.h"
+#include "inputselectionwidget.h"
+#include "qlcinputsource.h"
+#include "inputoutputmap.h"
 #include "collectioneditor.h"
 #include "speedmasters.h"
 #include "collection.h"
@@ -200,6 +207,81 @@ void SpeedMastersPanel_Test::theCountShowsTheMastersInUse()
     count->setValue(6);
     QCOMPARE(sm->count(), 6);
     QVERIFY(!panel.row(6).name->isVisible());
+}
+
+/* "put the masters in the footer as a set of buttons that show the bpm ..
+   and clickable opens the window" */
+void SpeedMastersPanel_Test::theFooterShowsEachMastersTempo()
+{
+    SpeedMasters *sm = m_doc->speedMasters();
+    sm->setName(0, "Pars");
+    sm->setBpm(0, 128);
+    SpeedMastersFooter footer(m_doc);
+    footer.show();
+    QTRY_COMPARE(footer.button(0)->text(), QString("Pars 128"));
+    QVERIFY(footer.button(3)->isVisible());
+    QVERIFY(!footer.button(4)->isVisible());          // four in use
+    sm->setCount(6);
+    QVERIFY(footer.button(5)->isVisible());
+    sm->setPaused(1, true);
+    QTRY_COMPARE(footer.button(1)->text(), QString("Speed 2 paused"));
+    QCOMPARE(SpeedMastersFooter::buttonText("A very long name", 90, false),
+             QString("A very lo%1 90").arg(QChar(0x2026)));
+
+    footer.button(2)->click();                       // opens the window
+    SpeedMastersPanel *panel = nullptr;
+    foreach (QWidget *w, QApplication::topLevelWidgets())
+        if (qobject_cast<SpeedMastersPanel *>(w) != nullptr && w->isVisible())
+            panel = qobject_cast<SpeedMastersPanel *>(w);
+    QVERIFY(panel != nullptr);
+    panel->close();
+}
+
+/* "in the windows have mapping to midi targets" */
+void SpeedMastersPanel_Test::aMastersInputsAreMappedInItsWindow()
+{
+    SpeedMasters *sm = m_doc->speedMasters();
+    SpeedMastersPanel panel(m_doc);
+    QCOMPARE(panel.row(0).inputs->text(), SpeedMastersPanel::inputsText(0));
+
+    bool sawDialog = false;
+    QTimer::singleShot(0, this, [&sawDialog]() {
+        QDialog *dlg = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+        QVERIFY(dlg != nullptr);
+        sawDialog = dlg->objectName() == QLatin1String("speedMasterInputsDialog");
+        InputSelectionWidget *rate = dlg->findChild<InputSelectionWidget *>("speedMasterInputRate");
+        InputSelectionWidget *pause = dlg->findChild<InputSelectionWidget *>("speedMasterInputPause");
+        QVERIFY(rate != nullptr && pause != nullptr);
+        rate->setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(0, 7)));
+        pause->setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(0, 8)));
+        dlg->accept();
+    });
+    panel.row(0).inputs->click();
+    QVERIFY(sawDialog);
+    quint32 u = 99, c = 99;
+    QVERIFY(sm->input(0, SpeedMasters::RateControl, &u, &c));
+    QCOMPARE(u, quint32(0));
+    QCOMPARE(c, quint32(7));
+    QVERIFY(!sm->input(0, SpeedMasters::TapControl, nullptr, nullptr));
+    QCOMPARE(panel.row(0).inputs->text(), SpeedMastersPanel::inputsText(2));
+
+    // And the controller drives it.
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 7, 255);
+    QCOMPARE(sm->rate(0), 2.0);
+    QCOMPARE(panel.row(0).rate->value(), 200);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 8, 127);
+    QVERIFY(sm->isPaused(0));
+
+    // Cancel leaves them as they were.
+    QTimer::singleShot(0, this, []() {
+        QDialog *dlg = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+        InputSelectionWidget *rate = dlg->findChild<InputSelectionWidget *>("speedMasterInputRate");
+        rate->setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(0, 99)));
+        dlg->reject();
+    });
+    panel.row(0).inputs->click();
+    QVERIFY(sm->input(0, SpeedMasters::RateControl, &u, &c));
+    QCOMPARE(c, quint32(7));
 }
 
 QTEST_MAIN(SpeedMastersPanel_Test)

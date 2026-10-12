@@ -601,4 +601,68 @@ void SpeedMasters_Test::aMasterFollowsTheShowTimeline()
         timer->timerTick();
 }
 
+/* "in the window have mapping to midi targets": Tap, Rate and Pause, each
+   from an input channel, saved with the show. */
+void SpeedMasters_Test::aControlSurfaceDrivesAMaster()
+{
+    SpeedMasters *sm = m_doc->speedMasters();
+    sm->setInput(1, SpeedMasters::TapControl, 0, 10);
+    sm->setInput(1, SpeedMasters::RateControl, 0, 11);
+    sm->setInput(1, SpeedMasters::PauseControl, 0, 12);
+    quint32 u = 0, c = 0;
+    QVERIFY(sm->input(1, SpeedMasters::RateControl, &u, &c));
+    QCOMPARE(u, quint32(0));
+    QCOMPARE(c, quint32(11));
+    QVERIFY(!sm->input(0, SpeedMasters::RateControl, nullptr, nullptr));
+
+    // The fader: top is 200 %, the middle 100 %, the bottom stopped.
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 11, 255);
+    QCOMPARE(sm->rate(1), 2.0);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 11, 128);
+    QCOMPARE(sm->rate(1), 1.0);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 11, 0);
+    QCOMPARE(sm->rate(1), 0.0);
+    sm->setRate(1, 1.0);
+
+    // Pause: a press toggles it, the release does nothing.
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 12, 127);
+    QVERIFY(sm->isPaused(1));
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 12, 0);
+    QVERIFY(sm->isPaused(1));
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 12, 127);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 12, 0);
+    QVERIFY(!sm->isPaused(1));
+
+    // Tap: presses half a second apart are 120 BPM; releases aren't taps.
+    sm->setBpm(1, 60);
+    for (int i = 0; i < 3; ++i)
+    {
+        if (i > 0)
+            QTest::qWait(500);
+        emit m_doc->inputOutputMap()->inputValueChanged(0, 10, 127);
+        emit m_doc->inputOutputMap()->inputValueChanged(0, 10, 0);
+    }
+    QVERIFY2(qAbs(sm->setBpm(1) - 120.0) < 8.0, qPrintable(QString::number(sm->setBpm(1))));
+    QCOMPARE(sm->isPaused(1), false);                // the tap channel only taps
+    QCOMPARE(sm->rate(0), 1.0);                      // and only master 2 moved
+
+    // Saved with the show.
+    QByteArray xml;
+    {
+        QXmlStreamWriter w(&xml);
+        QVERIFY(sm->saveXML(&w));
+    }
+    Doc other(this);
+    QXmlStreamReader r(xml);
+    r.readNextStartElement();
+    QVERIFY(other.speedMasters()->loadXML(r));
+    QVERIFY(other.speedMasters()->input(1, SpeedMasters::PauseControl, &u, &c));
+    QCOMPARE(c, quint32(12));
+    QVERIFY(other.speedMasters()->input(1, SpeedMasters::TapControl, &u, &c));
+    QCOMPARE(c, quint32(10));
+
+    sm->clearInput(1, SpeedMasters::TapControl);
+    QVERIFY(!sm->input(1, SpeedMasters::TapControl, nullptr, nullptr));
+}
+
 QTEST_MAIN(SpeedMasters_Test)

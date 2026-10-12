@@ -47,7 +47,9 @@ before building):
    test-workspaces/speed-spread-demo.qxw). **S4** control-surface
    automapping (a Speed page: masters on faders, taps, beat LEDs; PMJ
    `Favorites` → Tap) is **backlogged until Branson is at the surface**
-   (2026-10-12). **S5** Ableton Link deferred (GPL licence).
+   (2026-10-12) -- but each master's Tap / Rate / Pause can already be
+   mapped by hand (Speed Masters → Inputs..., 2026-10-12), and the masters
+   sit in the footer; S4 is the automatic page on top of that. **S5** Ableton Link deferred (GPL licence).
    [SPEED_SPREAD_DESIGN.md](SPEED_SPREAD_DESIGN.md).
 2. **Field generators sampled at positions, plus fire** — generators that
    are a field over the stage, each fixture taking its value from where it

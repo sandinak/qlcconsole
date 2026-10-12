@@ -618,6 +618,9 @@ private:
     bool m_showFooterLoad = true;
     bool m_showFooterPower = true;
     bool m_showFooterGM = true;
+    bool m_showFooterSpeed = true;
+    QAction* m_showFooterSpeedAction = nullptr;
+    class SpeedMastersFooter* m_statusSpeedMasters = nullptr;
     QAction* m_showFooterLoadAction = nullptr;
     QAction* m_showFooterPowerAction = nullptr;
     QAction* m_showFooterGMAction = nullptr;

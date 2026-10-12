@@ -433,6 +433,99 @@ bool SpeedMasters::clockFor(int assignment, double *beatPos, double *bpm) const
 }
 
 /*********************************************************************
+ * Control surface inputs
+ *********************************************************************/
+
+QString SpeedMasters::controlToString(Control control)
+{
+    switch (control)
+    {
+        case TapControl:   return QStringLiteral("Tap");
+        case RateControl:  return QStringLiteral("Rate");
+        case PauseControl: return QStringLiteral("Pause");
+        default:           return QString();
+    }
+}
+
+void SpeedMasters::setInput(int index, Control control, quint32 universe, quint32 channel)
+{
+    if (!valid(index) || control < 0 || control >= ControlCount)
+        return;
+    {
+        QMutexLocker locker(&m_mutex);
+        Master &m = m_masters[index];
+        m.inUniverse[control] = universe;
+        m.inChannel[control] = channel;
+        m.inLast[control] = 0;
+    }
+    emit changed(index);
+}
+
+void SpeedMasters::clearInput(int index, Control control)
+{
+    setInput(index, control, UINT_MAX, UINT_MAX);
+}
+
+bool SpeedMasters::input(int index, Control control, quint32 *universe, quint32 *channel) const
+{
+    if (!valid(index) || control < 0 || control >= ControlCount)
+        return false;
+    QMutexLocker locker(&m_mutex);
+    const Master &m = m_masters[index];
+    if (universe != nullptr) *universe = m.inUniverse[control];
+    if (channel != nullptr) *channel = m.inChannel[control];
+    return m.inUniverse[control] != UINT_MAX;
+}
+
+void SpeedMasters::slotInputValue(quint32 universe, quint32 channel, uchar value)
+{
+    // Find what this channel drives first, then act outside the lock: tap(),
+    // setRate() and setPaused() take it themselves.
+    struct Hit { int index; Control control; bool pressed; };
+    QList<Hit> hits;
+    {
+        QMutexLocker locker(&m_mutex);
+        for (int i = 0; i < m_count; ++i)
+        {
+            Master &m = m_masters[i];
+            for (int c = 0; c < ControlCount; ++c)
+            {
+                if (m.inUniverse[c] != universe || m.inChannel[c] != channel)
+                    continue;
+                hits << Hit{ i, Control(c), m.inLast[c] == 0 && value > 0 };
+                m.inLast[c] = value;
+            }
+        }
+    }
+    foreach (const Hit &h, hits)
+    {
+        switch (h.control)
+        {
+            case TapControl:
+                if (h.pressed)
+                    tap(h.index);
+            break;
+            case RateControl:
+            {
+                // A fader's middle is 100 %: snap there, so a fader parked
+                // near the centre detent runs the master at its tempo.
+                double rate = value / 127.5;
+                if (qAbs(rate - 1.0) < 0.02)
+                    rate = 1.0;
+                setRate(h.index, rate);
+            }
+            break;
+            case PauseControl:
+                if (h.pressed)
+                    setPaused(h.index, !isPaused(h.index));
+            break;
+            default:
+            break;
+        }
+    }
+}
+
+/*********************************************************************
  * Load & save
  *********************************************************************/
 
@@ -444,6 +537,9 @@ bool SpeedMasters::isDefault() const
         const Master &m = m_masters[i];
         if (!m.name.isEmpty() || m.mode != Own || m.bpm != 120.0 || m.rate != 1.0 || m.paused)
             return false;
+        for (int c = 0; c < ControlCount; ++c)
+            if (m.inUniverse[c] != UINT_MAX)
+                return false;
     }
     return m_count == DefaultCount;
 }
@@ -476,6 +572,16 @@ bool SpeedMasters::saveXML(QXmlStreamWriter *doc) const
             doc->writeAttribute(KXMLRate, QString::number(m.rate));
         if (m.paused)
             doc->writeAttribute(KXMLPaused, QStringLiteral("1"));
+        for (int c = 0; c < ControlCount; ++c)
+        {
+            if (m.inUniverse[c] == UINT_MAX)
+                continue;
+            doc->writeStartElement(QStringLiteral("Input"));
+            doc->writeAttribute(QStringLiteral("Control"), controlToString(Control(c)));
+            doc->writeAttribute(QStringLiteral("Universe"), QString::number(m.inUniverse[c]));
+            doc->writeAttribute(QStringLiteral("Channel"), QString::number(m.inChannel[c]));
+            doc->writeEndElement();
+        }
         doc->writeEndElement();
     }
     doc->writeEndElement();
@@ -524,7 +630,18 @@ bool SpeedMasters::loadXML(QXmlStreamReader &root)
                 follows << Pending{ i, src, a.value(KXMLRatio).toString().toDouble() };
             }
         }
-        root.skipCurrentElement();
+        while (root.readNextStartElement())
+        {
+            if (root.name() == QLatin1String("Input") && valid(i))
+            {
+                const QXmlStreamAttributes in = root.attributes();
+                for (int c = 0; c < ControlCount; ++c)
+                    if (in.value(QStringLiteral("Control")) == controlToString(Control(c)))
+                        setInput(i, Control(c), in.value(QStringLiteral("Universe")).toString().toUInt(),
+                                 in.value(QStringLiteral("Channel")).toString().toUInt());
+            }
+            root.skipCurrentElement();
+        }
     }
     // Follows last, once every master exists -- setFollow() refuses loops a
     // hand-edited file might have.
