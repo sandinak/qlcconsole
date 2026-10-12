@@ -706,8 +706,10 @@ void LookEditor_Test::wledOnlyEffectsNeedAWledTarget()
     // Only what runs here too: the ported ones.
     const QStringList without = inWledTab();
     QVERIFY2(!without.isEmpty(), "the ported WLED effects still run on the par");
+    // ...each one a port: an effect script that says it is WLED's.
+    EffectScriptCache *cache = doc.effectScriptRunner()->cache();
     for (const QString &n : without)
-        QVERIFY2(n.contains("Breathe") || n.contains("Chase"), qPrintable(n));
+        QVERIFY2(!cache->scriptPathForWled(n).isEmpty(), qPrintable(n + " has no port"));
     ed.closeEffectPicker(true);
 
     // A WLED device among the targets: all of WLED's own.
