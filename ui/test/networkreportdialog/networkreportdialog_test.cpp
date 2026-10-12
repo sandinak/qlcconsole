@@ -140,12 +140,15 @@ void NetworkReportDialog_Test::saveCsvAsksWhereAndCanBeCancelled()
 
     // Chosen: written there.
     const QString path = dir.filePath("chosen.csv");
-    whenModal<QFileDialog>([path](QFileDialog *fd) {
+    QStringList chosen;
+    whenModal<QFileDialog>([path, &chosen](QFileDialog *fd) {
+        fd->setDirectory(QFileInfo(path).absolutePath());
         fd->selectFile(path);
-        QMetaObject::invokeMethod(fd, "accept");
+        chosen = fd->selectedFiles();
+        static_cast<QDialog *>(fd)->done(QDialog::Accepted);
     });
     dlg.slotSaveCsv();
-    QVERIFY(QFile::exists(path));
+    QVERIFY2(QFile::exists(path), qPrintable(chosen.join(", ")));
 
     // Somewhere it cannot write: told so.
     QString told;

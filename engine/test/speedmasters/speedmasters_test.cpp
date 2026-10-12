@@ -433,16 +433,23 @@ void SpeedMasters_Test::aGoLandsOnTheNextBeat()
     go(chase);                                       // twice in one beat: one step
     QElapsedTimer t;
     t.start();
-    while (chase->currentStepIndex() == 0 && t.elapsed() < 2000)
+    double pos = 0;
+    qint64 landed = 0;
+    while (t.elapsed() < 2000)
     {
         timer->timerTick();
+        if (chase->currentStepIndex() != 0)
+        {
+            pos = timer->beatPosition();             // the moment it moved
+            landed = t.elapsed();
+            break;
+        }
         QTest::qWait(10);
     }
     QCOMPARE(chase->currentStepIndex(), 1);
-    QVERIFY2(t.elapsed() > 650 && t.elapsed() < 1100,
-             qPrintable(QString("landed %1 ms after the GO, the beat was ~850 away").arg(t.elapsed())));
+    QVERIFY2(landed > 650 && landed < 1100,
+             qPrintable(QString("landed %1 ms after the GO, the beat was ~850 away").arg(landed)));
     // ...and on the beat.
-    const double pos = timer->beatPosition();
     QVERIFY2(pos - std::floor(pos) < 0.1, qPrintable(QString::number(pos)));
     for (int i = 0; i < 20; ++i)
         timer->timerTick();
@@ -472,20 +479,20 @@ void SpeedMasters_Test::aGoOnTheBarWaitsForTheBar()
     go(chase);
     QElapsedTimer t;
     t.start();
-    bool sawBeatsPass = false;
-    const double from = timer->beatPosition();
-    while (chase->currentStepIndex() == 0 && t.elapsed() < 2500)
+    double bars = 0;
+    while (t.elapsed() < 2500)
     {
         timer->timerTick();
-        if (timer->beatPosition() - from > 1.0)
-            sawBeatsPass = true;
+        if (chase->currentStepIndex() != 0)
+        {
+            bars = timer->beatPosition() / 4.0;      // the moment it moved
+            break;
+        }
         QTest::qWait(10);
     }
     QCOMPARE(chase->currentStepIndex(), 1);
     // It landed on a bar line: a whole number of bars (4 beats).
-    const double bars = timer->beatPosition() / 4.0;
     QVERIFY2(bars - std::floor(bars) < 0.1, qPrintable(QString::number(bars)));
-    Q_UNUSED(sawBeatsPass);
     chase->stop(FunctionParent::master());
     for (int i = 0; i < 5; ++i)
         timer->timerTick();
