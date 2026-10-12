@@ -1178,6 +1178,72 @@ void EffectInstance_Test::anEffectRunsOnUnpatchedFixturesToo()
     QVERIFY2(forStaged > 0, "the effect skipped the unpatched fixture");
 }
 
+/* "expected the rainbow chase ... only had white" -- an RGBW wash with no
+   master dimmer (the Cobra Wash in 13-channel mode): Rainbow's intent brings
+   a hue and dimmer 1, and the dimmer put R, G, B and W all at full. */
+void EffectInstance_Test::aRainbowOnRgbwWithNoDimmerIsAHueNotWhite()
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("RGBW1");
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    const QLCChannel::Preset pr[4] = { QLCChannel::IntensityRed, QLCChannel::IntensityGreen,
+                                       QLCChannel::IntensityBlue, QLCChannel::IntensityWhite };
+    for (int c = 0; c < 4; c++)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(QString("C%1").arg(c));
+        ch->setPreset(pr[c]);
+        def->addChannel(ch);
+        mode->insertChannel(ch, c);
+    }
+    QLCFixtureHead head;
+    for (int c = 0; c < 4; c++)
+        head.addChannel(quint32(c));
+    mode->insertHead(-1, head);
+    mode->cacheHeads();
+    def->addMode(mode);
+    Fixture *wash = new Fixture(m_doc);
+    wash->setFixtureDefinition(def, mode);
+    wash->setUniverse(1); wash->setAddress(0);
+    QVERIFY(m_doc->addFixture(wash));
+    QCOMPARE(wash->masterIntensityChannel(), QLCChannel::invalid());
+
+    QLCPalette *rainbow = new QLCPalette(QLCPalette::Effect, m_doc);
+    rainbow->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/rainbow.js");
+    QVERIFY(m_doc->addPalette(rainbow));
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixture(wash->id());
+    scene->addPalette(rainbow->id());
+
+    EffectInstance inst(m_doc, scene->id(), rainbow->id());
+    QVERIFY(inst.isValid());
+    int cols = 0, rows = 0;
+    const QList<EffectInstance::EffectCell> cells = inst.effectiveCells(cols, rows);
+    QCOMPARE(cells.size(), 1);
+    QJSEngine *js = inst.m_script.engine();
+    QJSValue intents = js->newArray(1);
+    QJSValue o = js->newObject();                    // what rainbow.js sends: a hue, and dimmer 1
+    o.setProperty("r", 0); o.setProperty("g", 120); o.setProperty("b", 255);
+    o.setProperty("dimmer", 1.0);
+    intents.setProperty(0, o);
+    QMap<quint32, int> out;                          // channel -> highest value written
+    foreach (const EffectInstance::DmxWrite &w, inst.parseIntents(intents, cells))
+        out[w.channel] = qMax(out.value(w.channel), int(w.value));
+    QCOMPARE(out.value(0), 0);                       // red stays dark
+    QCOMPARE(out.value(1), 120);
+    QCOMPARE(out.value(2), 255);
+    QCOMPARE(out.value(3), 0);                       // and white is not lit
+
+    o.setProperty("dimmer", 0.5);                    // the dimmer dims the hue
+    out.clear();
+    foreach (const EffectInstance::DmxWrite &w, inst.parseIntents(intents, cells))
+        out[w.channel] = qMax(out.value(w.channel), int(w.value));
+    QCOMPARE(out.value(1), 60);
+    QCOMPARE(out.value(2), 128);
+    QCOMPARE(out.value(3), 0);
+}
+
 void EffectInstance_Test::aScriptsMissingTextIsEmptyNotUndefined()
 {
     QTemporaryDir dir;

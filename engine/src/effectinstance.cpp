@@ -1755,6 +1755,13 @@ EffectInstance::parseIntents(const QJSValue &intents,
         // (HTP could only push it up).  Per-fixture phase (script `spread`) makes
         // fixtures flicker independently rather than in unison.
         QJSValue dimVal = iv("dimmer");
+        // An intent that brings its own colour (a rainbow's hue) and a dimmer
+        // on a fixture with no master dimmer: the dimmer dims THAT colour.
+        // Scaling the emitters from the look's base instead put every one --
+        // white too -- at full under the hue, and a rainbow came out white.
+        const bool carriesColour = !iv("r").isUndefined() || !iv("g").isUndefined()
+                                || !iv("b").isUndefined() || !iv("w").isUndefined();
+        float ownColourMul = 1.0f;
         if (!dimVal.isUndefined())
         {
             const float mul = qBound(0.0f, (float)dimVal.toNumber(), 1.0f) * envelope;
@@ -1766,6 +1773,10 @@ EffectInstance::parseIntents(const QJSValue &intents,
                 const uchar out  = (uchar)qBound(0, (int)qRound(base * mul), 255);
                 writes.append({uniIdx, (int)fxi->address() + (int)miCh,
                                out, fxi->id(), miCh, /*replace=*/true});
+            }
+            else if (carriesColour)
+            {
+                ownColourMul = qBound(0.0f, (float)dimVal.toNumber(), 1.0f);
             }
             else if (fxi->fixtureMode() != nullptr)
             {
@@ -1807,7 +1818,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
         auto writeEmitter = [&](QLCChannel::PrimaryColour colour, uchar dmxValRaw) -> bool {
             // Scale colour output by the scene's actuation envelope (so the effect
             // ramps in/holds with the scene) and by the look's master Dimmer.
-            uchar dmxVal = (uchar)qBound(0, (int)qRound(dmxValRaw * envelope * lookColorMul), 255);
+            uchar dmxVal = (uchar)qBound(0, (int)qRound(dmxValRaw * envelope * lookColorMul * ownColourMul), 255);
             bool matched = false;
             // Only THIS head's channels — so a pixel effect colours one pixel, not
             // the whole (multi-head) fixture.
