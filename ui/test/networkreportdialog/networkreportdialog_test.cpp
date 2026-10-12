@@ -151,18 +151,24 @@ void NetworkReportDialog_Test::saveCsvAsksWhereAndCanBeCancelled()
     dlg.slotSaveCsv();
     QVERIFY2(QFile::exists(path), qPrintable(chosen.join(", ")));
 
-    // Somewhere it cannot write: told so.
+    // Somewhere it cannot write -- a read-only folder (Linux's file dialog
+    // won't even accept one that doesn't exist): told so.
+    const QString locked = dir.filePath("locked");
+    QVERIFY(QDir().mkpath(locked));
+    QVERIFY(QFile::setPermissions(locked, QFileDevice::ReadOwner | QFileDevice::ExeOwner));
     QString told;
-    whenModal<QFileDialog>([&told](QFileDialog *fd) {
+    whenModal<QFileDialog>([&told, locked](QFileDialog *fd) {
         whenModal<QMessageBox>([&told](QMessageBox *mb) {
             told = mb->text();
             mb->accept();
         });
-        fd->selectFile("/nonexistent-dir/net.csv");
-        QMetaObject::invokeMethod(fd, "accept");
+        fd->setDirectory(locked);
+        fd->selectFile(locked + "/network-report.csv");
+        static_cast<QDialog *>(fd)->done(QDialog::Accepted);
     });
     dlg.slotSaveCsv();
-    QVERIFY2(told.startsWith("Could not save ") && told.contains("nonexistent-dir/net.csv"), qPrintable(told));
+    QFile::setPermissions(locked, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+    QVERIFY2(told.startsWith("Could not save ") && told.contains("locked/network-report.csv"), qPrintable(told));
 }
 
 QTEST_MAIN(NetworkReportDialog_Test)

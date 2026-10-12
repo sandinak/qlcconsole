@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include <QElapsedTimer>
 #include <QDoubleSpinBox>
 #include <QSpinBox>
 #include <QTreeWidget>
@@ -120,10 +121,16 @@ void SpeedMastersPanel_Test::tapRateAndPauseReachTheMaster()
     r.pause->setChecked(false);
     r.bpm->setValue(90);
     QCOMPARE(sm->setBpm(3), 90.0);
+    // The tempo the two taps really were: a busy CI runner stretches a
+    // qWait(500), and the master should follow the taps, not the plan.
+    QElapsedTimer between;
     r.tap->click();
+    between.start();
     QTest::qWait(500);
     r.tap->click();
-    QVERIFY2(qAbs(sm->bpm(3) - 120.0) < 15, qPrintable(QString::number(sm->bpm(3))));
+    const double tapped = 60000.0 / double(between.elapsed());
+    QVERIFY2(qAbs(sm->bpm(3) - tapped) < tapped * 0.05,
+             qPrintable(QString("%1 for taps at %2").arg(sm->bpm(3)).arg(tapped)));
     QTRY_VERIFY(qAbs(r.bpm->value() * 1.5 - sm->bpm(3)) < 1.0);   // the panel shows it
 }
 
