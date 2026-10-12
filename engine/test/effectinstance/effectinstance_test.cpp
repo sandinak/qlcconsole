@@ -31,6 +31,7 @@
 #include "qlcchannel.h"
 #include "qlcfixturehead.h"
 #include "effectinstance.h"
+#include "effectscriptrunner.h"
 #include "effectscript.h"
 #include "effectscriptcache.h"
 #include "wledfixture.h"
@@ -1242,6 +1243,156 @@ void EffectInstance_Test::aRainbowOnRgbwWithNoDimmerIsAHueNotWhite()
     QCOMPARE(out.value(1), 60);
     QCOMPARE(out.value(2), 128);
     QCOMPARE(out.value(3), 0);
+
+    // The colour is the effect's: written over the look's, dark channels too.
+    bool redWritten = false;
+    foreach (const EffectInstance::DmxWrite &w, inst.parseIntents(intents, cells))
+    {
+        if (w.channel <= 2)
+            QVERIFY2(w.replace, "a colour effect's colour merged with the look's");
+        redWritten = redWritten || w.channel == 0;
+    }
+    QVERIFY2(redWritten, "red at 0 left to the look");
+}
+
+/* "If I set a color on the entire set I see the color sweep but no rainbow" */
+void EffectInstance_Test::aRainbowWithALookColourSweepsThatColour()
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("RGB3");
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    const QLCChannel::Preset pr[3] = { QLCChannel::IntensityRed, QLCChannel::IntensityGreen,
+                                       QLCChannel::IntensityBlue };
+    for (int c = 0; c < 3; c++)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(QString("C%1").arg(c));
+        ch->setPreset(pr[c]);
+        def->addChannel(ch);
+        mode->insertChannel(ch, c);
+    }
+    QLCFixtureHead head;
+    head.addChannel(0); head.addChannel(1); head.addChannel(2);
+    mode->insertHead(-1, head);
+    mode->cacheHeads();
+    def->addMode(mode);
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    for (int i = 0; i < 4; ++i)
+    {
+        Fixture *fx = new Fixture(m_doc);
+        fx->setFixtureDefinition(def, mode);
+        fx->setUniverse(2); fx->setAddress(quint32(i * 3));
+        QVERIFY(m_doc->addFixture(fx));
+        scene->addFixture(fx->id());
+    }
+    QLCPalette *rainbow = new QLCPalette(QLCPalette::Effect, m_doc);
+    rainbow->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/rainbow.js");
+    QVERIFY(m_doc->addPalette(rainbow));
+    scene->addPalette(rainbow->id());
+
+    auto sample = [&](QList<QColor> &heads) {
+        EffectInstance inst(m_doc, scene->id(), rainbow->id());
+        QVERIFY(inst.isValid());
+        inst.runTick();
+        QMap<int, QColor> byHead;
+        foreach (const EffectInstance::DmxWrite &w, inst.dmxWrites())
+        {
+            if (!byHead.contains(w.addr / 3))
+                byHead.insert(w.addr / 3, QColor(0, 0, 0));
+            QColor &c = byHead[w.addr / 3];
+            if (w.addr % 3 == 0) c.setRed(w.value);
+            else if (w.addr % 3 == 1) c.setGreen(w.value);
+            else c.setBlue(w.value);
+        }
+        heads = byHead.values();
+    };
+
+    // The look playing: an effect owns its heads' colour only while it's on.
+    scene->start(m_doc->masterTimer(), FunctionParent::master());
+    for (int i = 0; i < 3; ++i)
+        m_doc->masterTimer()->timerTick();
+    QVERIFY(scene->isRunning());
+
+    QList<QColor> heads;
+    sample(heads);                                   // no colour: the wheel
+    QCOMPARE(heads.size(), 4);
+    QSet<int> hues;
+    foreach (const QColor &c, heads)
+        hues << c.hue() / 30;
+    QString seen;
+    foreach (const QColor &c, heads)
+        seen += QString(" (%1 %2 %3)").arg(c.red()).arg(c.green()).arg(c.blue());
+    QVERIFY2(hues.size() >= 3, qPrintable("no colour in the look: a rainbow across the heads:" + seen));
+
+    QLCPalette *cyan = new QLCPalette(QLCPalette::Color, m_doc);
+    cyan->setValue(QColor(0, 220, 255));
+    QVERIFY(m_doc->addPalette(cyan));
+    scene->addPalette(cyan->id());
+    sample(heads);                                   // cyan: a sweep of cyan
+    int brightest = 0, dimmest = 255;
+    foreach (const QColor &c, heads)
+    {
+        QCOMPARE(c.red(), 0);
+        QVERIFY2(qAbs(c.green() - c.blue() * 220 / 255) <= 2,
+                 qPrintable(QString("not cyan: %1 %2 %3").arg(c.red()).arg(c.green()).arg(c.blue())));
+        brightest = qMax(brightest, c.blue());
+        dimmest = qMin(dimmest, c.blue());
+    }
+    QVERIFY2(brightest - dimmest > 100, "the cyan should sweep, bright to dark across the heads");
+
+    // Not playing: it writes nothing -- no holding the heads black. (The
+    // same look, never started; stopping this one from a timerTick() on the
+    // test's thread would deadlock on the universes the tick holds.)
+    Scene *idle = new Scene(m_doc);
+    m_doc->addFunction(idle);
+    foreach (quint32 fid, scene->fixtures())
+        idle->addFixture(fid);
+    idle->addPalette(rainbow->id());
+    idle->addPalette(cyan->id());
+    QVERIFY(!idle->isRunning());
+    EffectInstance after(m_doc, idle->id(), rainbow->id());
+    after.runTick();
+    foreach (const EffectInstance::DmxWrite &w, after.dmxWrites())
+        QVERIFY2(!(w.replace && w.value == 0), "a stopped effect holds a channel at 0");
+}
+
+void EffectInstance_Test::effectsOnOneChannelLayerAsADeskDoes()
+{
+    auto w = [](int addr, int value, bool replace, float scale = -1.0f, int base = 0) {
+        EffectInstance::DmxWrite d;
+        d.universeId = 0; d.addr = addr; d.value = uchar(value); d.fixtureId = 0;
+        d.channel = quint32(addr); d.replace = replace; d.scale = scale; d.base = uchar(base);
+        return d;
+    };
+    auto valueAt = [](const QList<EffectInstance::DmxWrite> &out, int addr) {
+        int n = 0, v = -1;
+        foreach (const EffectInstance::DmxWrite &d, out)
+            if (d.addr == addr) { ++n; v = d.value; }
+        return n == 1 ? v : -100 - n;                // exactly one write per channel
+    };
+    // A colour, then a dimmer at half on a no-dimmer head: half the colour,
+    // not half the look's (cyan's) value.
+    QList<EffectInstance::DmxWrite> out = EffectScriptRunner::composeWrites(
+        { w(1, 200, true), w(1, 110, true, 0.5f, 220) });
+    QCOMPARE(valueAt(out, 1), 100);
+    QVERIFY(out.first().replace);
+    // The dimmer first, the colour after: the same.
+    out = EffectScriptRunner::composeWrites({ w(1, 110, true, 0.5f, 220), w(1, 200, true) });
+    QCOMPARE(valueAt(out, 1), 100);
+    // A dimmer alone: the look's own value, scaled.
+    out = EffectScriptRunner::composeWrites({ w(2, 110, true, 0.5f, 220) });
+    QCOMPARE(valueAt(out, 2), 110);
+    // Two dimmers: both.
+    out = EffectScriptRunner::composeWrites({ w(2, 110, true, 0.5f, 220), w(2, 55, true, 0.25f, 220) });
+    QCOMPARE(valueAt(out, 2), 28);
+    // Two colours owning it: the later.
+    out = EffectScriptRunner::composeWrites({ w(3, 200, true), w(3, 40, true) });
+    QCOMPARE(valueAt(out, 3), 40);
+    // Two that only add (a sparkle over a pulse): the higher.
+    out = EffectScriptRunner::composeWrites({ w(4, 40, false), w(4, 90, false), w(5, 7, false) });
+    QCOMPARE(valueAt(out, 4), 90);
+    QCOMPARE(valueAt(out, 5), 7);
 }
 
 void EffectInstance_Test::aScriptsMissingTextIsEmptyNotUndefined()

@@ -1800,7 +1800,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
                     const uchar base = sceneBaseValue(fid, c, 255);
                     const uchar out = (uchar)qBound(0, (int)qRound(base * mul), 255);
                     writes.append({uniIdx, (int)fxi->address() + (int)c,
-                                   out, fxi->id(), c, /*replace=*/true});
+                                   out, fxi->id(), c, /*replace=*/true, mul, base});
                 }
             }
         }
@@ -1815,6 +1815,14 @@ EffectInstance::parseIntents(const QJSValue &intents,
             (fxi->masterIntensityChannel() == QLCChannel::invalid()) ? m_lookDimmer : 1.0f;
         // Write DMX @value onto every channel carrying primary @colour.
         // Returns true if the fixture actually has such an emitter.
+        // An intent with a colour in it OWNS its head's colour: written over
+        // the look's static colour, not merged highest-wins with it (cyan
+        // under a rainbow turned every hue pastel), zeros and all. One that's
+        // all black writes nothing and leaves the head to the look.
+        // Only while it's on: an effect whose look has stopped (envelope 0)
+        // must not hold its heads black over whatever plays there next.
+        const bool ownsColour = carriesColour && envelope > 0.0f
+            && (iv("r").toInt() > 0 || iv("g").toInt() > 0 || iv("b").toInt() > 0 || iv("w").toInt() > 0);
         auto writeEmitter = [&](QLCChannel::PrimaryColour colour, uchar dmxValRaw) -> bool {
             // Scale colour output by the scene's actuation envelope (so the effect
             // ramps in/holds with the scene) and by the look's master Dimmer.
@@ -1840,7 +1848,10 @@ EffectInstance::parseIntents(const QJSValue &intents,
                     // churns the fader and, more importantly, keeps an idle frame
                     // looking "busy". Dropping them lets a note effect with nothing
                     // lit produce an EMPTY frame, which the runner uses to idle.
-                    if (dmxVal != 0)
+                    if (ownsColour)
+                        writes.append({uniIdx, (int)fxi->address() + (int)c, dmxVal, fxi->id(), c,
+                                       /*replace=*/true});
+                    else if (dmxVal != 0)
                         writes.append({uniIdx, (int)fxi->address() + (int)c, dmxVal, fxi->id(), c});
                     matched = true;   // the emitter exists regardless of this value
                 }
@@ -1875,6 +1886,10 @@ EffectInstance::parseIntents(const QJSValue &intents,
         // the intent onto RGB(W) so it still works on fixtures that lack it.
         if (!writeColour("w", QLCChannel::White))
             writeAsRGB("w", 1.0f, 1.0f, 1.0f, 0.0f);
+        // A colour that says nothing of white means none: the look's white
+        // mustn't wash it out on an RGBW head.
+        if (ownsColour && iv("w").isUndefined())
+            writeEmitter(QLCChannel::White, 0);
         if (!writeColour("a", QLCChannel::Amber))
         {
             // Fixture has no discrete amber emitter.  A colour-only warmth pulse

@@ -2984,6 +2984,10 @@ void App::openContextWindow(QWidget *context, const QString &tabLabel)
     detachedWindow->setWindowTitle(title);
     detachedWindow->show();
     context->show();
+    // In front, not opened behind the main window (where it looks as if the
+    // Shift-click did nothing).
+    detachedWindow->raise();
+    detachedWindow->activateWindow();
 
     connect(detachedWindow, SIGNAL(closing()),
             this, SLOT(slotReattachContext()));

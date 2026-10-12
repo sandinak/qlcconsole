@@ -112,6 +112,13 @@ The latest changes, newest first. Each links to the guide with the detail.
   (**View → Show Speed Masters in Footer**). Each master's **Inputs…**
   maps its Tap, Rate and Pause to a MIDI controller.
   ([Speed masters](effects.md#speed-masters))
+- **Effects layer as on a desk.** A colour effect replaces the look's
+  colour on its heads instead of adding to it (Cyan under a rainbow washed
+  every hue pale); a dimmer effect dims what's there, the colour effect's
+  included. ([Effects](effects.md))
+- **Rainbow with a colour in the look sweeps that colour** — a wave of
+  Cyan across the heads, no rainbow; with two or more, it sweeps through
+  them.
 - **A rainbow on a wash with no dimmer is a rainbow.** On an RGBW head with
   no master dimmer (a Cobra Wash in 13-channel mode, say) an effect's own
   dimmer put red, green, blue and white all at full under its colour — a

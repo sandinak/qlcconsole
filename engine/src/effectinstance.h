@@ -47,6 +47,12 @@ public:
         quint32 channel;     // fixture-relative channel index
         bool    replace = false; // true → overwrite the scene value (bypass HTP)
                                  //        so the effect can drive a channel DOWN
+        float   scale = -1.0f;   // >= 0: a dimmer on a head with no dimmer channel --
+                                 //       this channel times @scale. @value is then
+                                 //       @base * @scale, @base the look's own value;
+                                 //       another effect's colour on the channel is
+                                 //       scaled instead (EffectScriptRunner composes)
+        uchar   base = 0;
     };
 
     EffectInstance(Doc *doc, quint32 sceneId, quint32 effectPaletteId);

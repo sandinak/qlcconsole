@@ -12,7 +12,7 @@
     effect.description = "Continuous hue rotation across all selected fixtures";
     effect.author      = "QLC+";
     effect.fixtureTypes = ["rgb"];
-    effect.notes = "Continuously rotates hue across the full spectrum. Speed controls rotation rate; spread staggers starting hues so adjacent fixtures show different colours simultaneously. Works with any fixture that has additive RGB (or CMY) colour mixing.";
+    effect.notes = "Continuously rotates hue across the full spectrum. Speed controls rotation rate; spread staggers starting hues so adjacent fixtures show different colours simultaneously. With a colour in the look it sweeps that colour instead (a wave of it across the heads); with two or more, it sweeps through the look's colours. Works with any fixture that has additive RGB (or CMY) colour mixing.";
 
     effect.inputs = [];  // time-driven only
 
@@ -55,9 +55,28 @@
         var baseHue = (t / speed * 360) % 360;
         var n = Math.max(fixtures.length, 1);
 
+        // A colour in the look: the sweep is in the look's colours, not the
+        // wheel ("If I set a color on the entire set I see the color sweep
+        // but no rainbow"). One colour sweeps as a wave of that colour; two
+        // or more, the sweep runs through them, round and back to the first.
+        var look = (palettes && palettes.look && palettes.look.colors) ? palettes.look.colors : [];
+        function lookColour(cycle) {
+            var c = ((cycle % 1) + 1) % 1;
+            if (look.length === 1) {
+                var lvl = (0.5 + 0.5 * Math.cos(c * 2 * Math.PI)) * dim;
+                return { r: Math.round(look[0].r * lvl), g: Math.round(look[0].g * lvl), b: Math.round(look[0].b * lvl) };
+            }
+            var x = c * look.length, k = Math.floor(x), f = x - k;
+            var a = look[k % look.length], b = look[(k + 1) % look.length];
+            return { r: Math.round((a.r + (b.r - a.r) * f) * dim),
+                     g: Math.round((a.g + (b.g - a.g) * f) * dim),
+                     b: Math.round((a.b + (b.b - a.b) * f) * dim) };
+        }
+
         return fixtures.map(function(f, i) {
-            var hue  = baseHue + (inputs._spread ? f.phase : (i / n) * spread) * 360;
-            var rgb  = hsvToRgb(hue, sat, dim);
+            var offset = inputs._spread ? f.phase : (i / n) * spread;
+            var rgb = look.length > 0 ? lookColour(baseHue / 360 + offset)
+                                      : hsvToRgb(baseHue + offset * 360, sat, dim);
             var intent = { r: rgb.r, g: rgb.g, b: rgb.b };
             if (f.hasDimmer) intent.dimmer = dim;
             return intent;

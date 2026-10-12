@@ -12,6 +12,18 @@ Colours come from the **look**: an effect that uses a colour takes the
 look's Colour palettes (first, second…) and its Dimmer, so the same effect
 works in any colour.
 
+**How a look's parts layer** on a head, as on a desk:
+
+- The look's **static colour** is the base.
+- A **colour effect** replaces it on the heads it lights — it doesn't add
+  to it (Cyan under a rainbow no longer turns every hue pale). White and
+  any channel the effect doesn't name go dark under it. Heads the effect
+  leaves black keep the look's colour.
+- A **dimmer effect** (Wave, Dimmer Phaser, Candle…) dims whatever ends up
+  there. On a head with no dimmer channel it scales the colour — the
+  colour effect's, else the look's.
+- Two colour effects on the same head: the later one in the look wins.
+
 ## Colour
 
 | Effect | What it does |
@@ -21,7 +33,7 @@ works in any colour.
 | **Color Gradient** | A smooth gradient between two colours, optionally moving |
 | **Color Phaser** | A waveform crossfade between two colours, phase-spread across the fixtures |
 | **Color Spread** | Two colours distributed across the group |
-| **Rainbow** | Continuous hue rotation across the fixtures |
+| **Rainbow** | Continuous hue rotation across the fixtures. With a colour in the look it sweeps **that colour** instead (a wave of it across the heads); with two or more, it sweeps through them |
 | **Spatial Gradient** | A gradient laid across the rig by where each fixture really is (its 3D position), at a direction you set on a compass |
 | **Warm Cool** | Alternates warm (white) and cool (blue) across the fixtures |
 | **Amber Pulse** / **UV Pulse** | A phase-shifted pulse or chase on the amber / UV emitters |
