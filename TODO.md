@@ -20,7 +20,7 @@ under `~/.claude/.../memory/`.
   probably the WLED controller rather than the interface; needs more
   testing. Still to do: the live view included;
   effect / palette names read from the device (`/json/eff`, `/json/pal`);
-  56 WLED effects ported, written from behaviour (WLED is EUPL -- never
+  92 WLED effects ported, written from behaviour (WLED is EUPL -- never
   from FX.cpp); the rest of the 1D list next, 2D / sound-reactive only if
   wanted; compare the ports side by side with a real device.
 - **Control surfaces** — PMJ (OpenDeck) mapping as the show's operating

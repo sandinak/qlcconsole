@@ -618,7 +618,7 @@ void EffectInstance_Test::everyWledPortRuns()
             QVERIFY2(seen.size() > 1, qPrintable(file + ": never moves"));
         ports++;
     }
-    QVERIFY2(ports >= 50, qPrintable(QString("only %1 WLED ports").arg(ports)));
+    QVERIFY2(ports >= 90, qPrintable(QString("only %1 WLED ports").arg(ports)));
 }
 
 /* "for WLED based fixtures we should be selecting WLED effects": a look set
