@@ -37,11 +37,18 @@ class SpeedMasterButton final : public QToolButton
 public:
     explicit SpeedMasterButton(QWidget *parent = nullptr);
 
-    /** On the beat: lit orange. @p level 0..1 (the rate, 0..200 %) and
-     *  @p levelAlpha 0..1: the green bar while the rate is being moved,
+    /** How the beat shows on the button. */
+    enum BeatStyle { NoBeat, Blink, Bar };
+
+    /** The beat: @p phase 0..1 through it, drawn in @p style (Blink: lit
+     *  orange at its start; Bar: an orange bar filling the button's foot
+     *  across each beat; NoBeat: neither). @p level 0..1 (the rate, 0..200 %)
+     *  and @p levelAlpha 0..1: the green bar while the rate is being moved,
      *  fading out after. Repaints only when what's drawn changes. */
-    void setState(bool fired, double level, double levelAlpha);
+    void setState(BeatStyle style, double phase, double level, double levelAlpha);
     bool isFired() const { return m_fired; }
+    /** The beat bar's width now; 0 when it isn't drawn. */
+    int beatBarWidth() const { return m_barPx; }
     /** The green bar's width; 0 when it isn't showing. */
     int levelWidth() const;
 
@@ -50,6 +57,7 @@ protected:
 
 private:
     bool m_fired = false;
+    int m_barPx = 0;        //!< the beat bar, in pixels
     double m_level = 0;     //!< 0..1; the width comes from the button's own at paint
     int m_levelAlpha = 0;   //!< 0..255, in steps
 };
@@ -76,6 +84,15 @@ public:
      *  tempo. */
     static QString buttonText(const QString &name, double bpm, bool paused, int maxName = 10);
 
+    /** When the beat shows: always, or only on masters something playing is
+     *  on (SpeedMasters::playingMask()). */
+    enum BeatWhen { Always, WhilePlaying };
+    /** The View menu's choices, kept in the settings. */
+    static SpeedMasterButton::BeatStyle beatStyle();
+    static void setBeatStyle(SpeedMasterButton::BeatStyle style);
+    static BeatWhen beatWhen();
+    static void setBeatWhen(BeatWhen when);
+
 private:
     void applyCount();
     void tick();
@@ -87,6 +104,13 @@ private:
     QElapsedTimer m_clock;
     QTimer *m_timer;
     quint32 m_used = 0;     //!< SpeedMasters::usedMask(), re-read twice a second
+    quint32 m_playing = 0;  //!< SpeedMasters::playingMask(), re-read with it
+    SpeedMasterButton::BeatStyle m_style = SpeedMasterButton::Blink;
+    BeatWhen m_when = Always;
+public:
+    /** Take the View menu's choices now (else within half a second). */
+    void reloadBeatOptions() { m_style = beatStyle(); m_when = beatWhen(); }
+private:
     int m_ticks = 0;
 };
 

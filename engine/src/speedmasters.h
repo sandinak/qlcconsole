@@ -137,6 +137,11 @@ public:
      *  next time it's asked (any thread). */
     void markUsageDirty() { m_usageDirty.storeRelaxed(1); }
     bool isUsed(int index) const { return (usedMask() >> index) & 1u; }
+    /** Which masters something PLAYING now is on: a running function (its
+     *  own choice or one handed down), an effect in a running look, and what
+     *  those masters follow. Walks the running functions: ask it a few
+     *  times a second, not every frame. */
+    quint32 playingMask() const;
 
     /** What a control surface can drive on a master: Tap (a button),
      *  Rate (a fader, 0..200 %), Pause (a button: press to toggle). */

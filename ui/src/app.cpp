@@ -22,6 +22,7 @@
 
 #include <QContextMenuEvent>
 #include <QMenu>
+#include <QActionGroup>
 #include <QToolButton>
 #include <QTableWidget>
 #include <QtWidgets>
@@ -1918,6 +1919,49 @@ void App::initMenuBar()
         if (m_statusSpeedMasters != NULL)
             m_statusSpeedMasters->setVisible(on);
     });
+    /* How the masters in the footer show their beat: a blink, a bar across
+       each beat, or not at all -- always, or only while something on that
+       master is playing. */
+    {
+        QMenu *beat = viewMenu->addMenu(tr("Speed Master Beat in Footer"));
+        beat->setObjectName(QStringLiteral("speedFooterBeatMenu"));
+        QActionGroup *styles = new QActionGroup(beat);
+        const QList<QPair<QString, SpeedMasterButton::BeatStyle> > styleItems = {
+            { tr("Blink"), SpeedMasterButton::Blink },
+            { tr("Bar Across Each Beat"), SpeedMasterButton::Bar },
+            { tr("No Beat"), SpeedMasterButton::NoBeat } };
+        for (const auto &it : styleItems)
+        {
+            QAction *a = beat->addAction(it.first);
+            a->setCheckable(true);
+            a->setChecked(SpeedMastersFooter::beatStyle() == it.second);
+            a->setData(int(it.second));
+            styles->addAction(a);
+        }
+        beat->addSeparator();
+        QActionGroup *whens = new QActionGroup(beat);
+        const QList<QPair<QString, SpeedMastersFooter::BeatWhen> > whenItems = {
+            { tr("Always"), SpeedMastersFooter::Always },
+            { tr("Only While Something on It Plays"), SpeedMastersFooter::WhilePlaying } };
+        for (const auto &it : whenItems)
+        {
+            QAction *a = beat->addAction(it.first);
+            a->setCheckable(true);
+            a->setChecked(SpeedMastersFooter::beatWhen() == it.second);
+            a->setData(int(it.second));
+            whens->addAction(a);
+        }
+        connect(styles, &QActionGroup::triggered, this, [this](QAction *a) {
+            SpeedMastersFooter::setBeatStyle(SpeedMasterButton::BeatStyle(a->data().toInt()));
+            if (m_statusSpeedMasters != NULL)
+                m_statusSpeedMasters->reloadBeatOptions();
+        });
+        connect(whens, &QActionGroup::triggered, this, [this](QAction *a) {
+            SpeedMastersFooter::setBeatWhen(SpeedMastersFooter::BeatWhen(a->data().toInt()));
+            if (m_statusSpeedMasters != NULL)
+                m_statusSpeedMasters->reloadBeatOptions();
+        });
+    }
 
     /* ---- Fixtures: document-wide fixture actions ----
      * Import/Export/Remap and Channels Fade Configuration used to live on

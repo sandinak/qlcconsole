@@ -313,4 +313,66 @@ void SpeedMastersPanel_Test::aMastersInputsAreMappedInItsWindow()
     QCOMPARE(c, quint32(7));
 }
 
+/* "vs a blink can we have a bar that goes across the bug(s) in time .. a
+   configurable option? No Blink, Blink, Bar" and "show action on that bug
+   only when relevant .. all the time or not at all" */
+void SpeedMastersPanel_Test::theBeatIsABlinkABarOrNothingAlwaysOrWhilePlaying()
+{
+    SpeedMasters *sm = m_doc->speedMasters();
+    sm->setBpm(0, 120);
+    Scene *look = new Scene(m_doc);
+    m_doc->addFunction(look);
+    look->setSpeedMaster(SpeedMasters::Master1);
+    const SpeedMasterButton::BeatStyle wasStyle = SpeedMastersFooter::beatStyle();
+    const SpeedMastersFooter::BeatWhen wasWhen = SpeedMastersFooter::beatWhen();
+    auto restore = qScopeGuard([&]() {
+        SpeedMastersFooter::setBeatStyle(wasStyle);
+        SpeedMastersFooter::setBeatWhen(wasWhen);
+    });
+    SpeedMastersFooter footer(m_doc);
+    footer.show();
+    SpeedMasterButton *b = footer.button(0);
+    QTRY_VERIFY(b->isVisible());
+
+    // A bar across each beat: it grows through the beat; no blink.
+    SpeedMastersFooter::setBeatStyle(SpeedMasterButton::Bar);
+    SpeedMastersFooter::setBeatWhen(SpeedMastersFooter::Always);
+    footer.reloadBeatOptions();
+    int least = INT_MAX, most = 0;
+    QElapsedTimer t;
+    t.start();
+    while (t.elapsed() < 700)                       // more than a beat at 120
+    {
+        QTest::qWait(20);
+        least = qMin(least, b->beatBarWidth());
+        most = qMax(most, b->beatBarWidth());
+        QVERIFY(!b->isFired());
+    }
+    QVERIFY2(most > b->width() / 2 && least < b->width() / 4,
+             qPrintable(QString("the bar went from %1 to %2 px").arg(least).arg(most)));
+
+    // No beat: neither.
+    SpeedMastersFooter::setBeatStyle(SpeedMasterButton::NoBeat);
+    footer.reloadBeatOptions();
+    for (int k = 0; k < 30; ++k)
+    {
+        QTest::qWait(20);
+        QVERIFY(!b->isFired() && b->beatBarWidth() == 0);
+    }
+
+    // Blink, but only while something on it plays: nothing until the look runs.
+    SpeedMastersFooter::setBeatStyle(SpeedMasterButton::Blink);
+    SpeedMastersFooter::setBeatWhen(SpeedMastersFooter::WhilePlaying);
+    footer.reloadBeatOptions();
+    QTest::qWait(600);
+    for (int k = 0; k < 30; ++k)
+    {
+        QTest::qWait(20);
+        QVERIFY(!b->isFired());
+    }
+    look->m_running = true;                         // as preRun() marks it
+    QTRY_VERIFY_WITH_TIMEOUT(b->isFired(), 2000);
+    look->m_running = false;
+}
+
 QTEST_MAIN(SpeedMastersPanel_Test)

@@ -28,6 +28,7 @@
 #include "mastertimer.h"
 #include "show.h"
 #include "chaser.h"
+#include "scene.h"
 #include "qlcpalette.h"
 #include "doc.h"
 
@@ -497,6 +498,52 @@ quint32 SpeedMasters::usedMask() const
     m_usedCount = m_count;
     m_usedCache = m_count >= 32 ? mask : mask & ((1u << m_count) - 1);
     return m_usedCache;
+}
+
+quint32 SpeedMasters::playingMask() const
+{
+    quint32 mask = 0;
+    auto mark = [&mask](int assignment) {
+        if (isMaster(assignment))
+            mask |= 1u << (assignment - Master1);
+    };
+    if (m_doc != nullptr)
+    {
+        foreach (Function *f, m_doc->functions())
+        {
+            if (!f->isRunning())
+                continue;
+            const int own = f->effectiveSpeedMaster();
+            mark(own);
+            if (Scene *sc = qobject_cast<Scene *>(f))
+            {
+                foreach (quint32 pid, sc->palettes())
+                {
+                    QLCPalette *p = m_doc->palette(pid);
+                    if (p == nullptr || p->type() != QLCPalette::Effect)
+                        continue;
+                    const int fx = int(p->effectParamValues().value(QStringLiteral("__speedMaster"),
+                                                                    SpeedMasters::Inherit));
+                    mark(fx != SpeedMasters::Inherit ? fx : own);
+                }
+            }
+        }
+    }
+    QMutexLocker locker(&m_mutex);
+    for (bool grew = true; grew; )
+    {
+        grew = false;
+        for (int i = 0; i < m_count; ++i)
+        {
+            const Master &m = m_masters[i];
+            if (((mask >> i) & 1u) && m.mode == Follow && valid(m.follows) && !((mask >> m.follows) & 1u))
+            {
+                mask |= 1u << m.follows;
+                grew = true;
+            }
+        }
+    }
+    return m_count >= 32 ? mask : mask & ((1u << m_count) - 1);
 }
 
 /*********************************************************************

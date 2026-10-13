@@ -153,6 +153,9 @@ The latest changes, newest first. Each links to the guide with the detail.
   instead of the middle of the heads' range (straight down, on a hung
   mover). ([Position](effects.md#position-moving-heads))
 
+- **How the footer shows a master's beat** — a blink, a bar across each
+  beat, or nothing; always, or only while something on that master plays
+  (**View → Speed Master Beat in Footer**).
 - **Speed masters in the footer** — a button for each master something is
   on (an unused one neither shows nor flashes, there or in its window),
   reading its tempo and lit on its beat, with a green level bar while its

@@ -20,6 +20,7 @@
 #include <QStyleOptionToolButton>
 #include <QStylePainter>
 #include <QHBoxLayout>
+#include <QSettings>
 #include <QTimer>
 #include <cmath>
 
@@ -39,15 +40,19 @@ SpeedMasterButton::SpeedMasterButton(QWidget *parent)
     setFocusPolicy(Qt::NoFocus);
 }
 
-void SpeedMasterButton::setState(bool fired, double level, double levelAlpha)
+void SpeedMasterButton::setState(BeatStyle style, double phase, double level, double levelAlpha)
 {
+    const bool fired = style == Blink && phase < 0.15;
+    const int barPx = style == Bar ? qRound(qBound(0.0, phase, 1.0) * (width() - 4)) : 0;
     level = qBound(0.0, level, 1.0);
     const int alpha = qMin(qRound(qBound(0.0, levelAlpha, 1.0) * 8) * 32, 255);   // a few steps, not every frame
     const bool sameLevel = alpha == 0 ? m_levelAlpha == 0
                          : (alpha == m_levelAlpha && qRound(level * width()) == qRound(m_level * width()));
-    if (fired == m_fired && sameLevel)
+    // Only when what's drawn changes: a bar moves a pixel at a time.
+    if (fired == m_fired && barPx == m_barPx && sameLevel)
         return;
     m_fired = fired;
+    m_barPx = barPx;
     m_level = level;
     m_levelAlpha = alpha;
     update();
@@ -72,6 +77,8 @@ void SpeedMasterButton::paintEvent(QPaintEvent *)
     const QRect inner = rect().adjusted(2, 2, -2, -2);
     if (m_fired)
         p.fillRect(inner, QColor(0xf5, 0xa6, 0x23));                    // the beat
+    if (m_barPx > 0)                                                    // the beat, across it
+        p.fillRect(QRect(inner.left(), inner.bottom() - 3, m_barPx, 4), QColor(0xf5, 0xa6, 0x23));
     if (levelWidth() > 0)
         p.fillRect(QRect(inner.left(), inner.top(), levelWidth(), inner.height()),
                    QColor(0x43, 0xa0, 0x47, m_levelAlpha * 3 / 4));   // the level, while moved
@@ -101,6 +108,7 @@ SpeedMastersFooter::SpeedMastersFooter(Doc *doc, QWidget *parent)
     m_clock.start();
     connect(m_doc->speedMasters(), &SpeedMasters::countChanged, this, [this](int) { applyCount(); });
     applyCount();
+    reloadBeatOptions();
 
     // The beat light and the tempo: a follower's tempo moves with what it
     // follows, and a tap moves an own one, so read them as the panel does.
@@ -125,12 +133,34 @@ QString SpeedMastersFooter::buttonText(const QString &name, double bpm, bool pau
                   : QStringLiteral("%1 %2").arg(n).arg(qRound(bpm));
 }
 
+SpeedMasterButton::BeatStyle SpeedMastersFooter::beatStyle()
+{
+    return SpeedMasterButton::BeatStyle(
+        qBound(0, QSettings().value(QStringLiteral("workspace/speedFooterBeat"), int(SpeedMasterButton::Blink)).toInt(), 2));
+}
+
+void SpeedMastersFooter::setBeatStyle(SpeedMasterButton::BeatStyle style)
+{
+    QSettings().setValue(QStringLiteral("workspace/speedFooterBeat"), int(style));
+}
+
+SpeedMastersFooter::BeatWhen SpeedMastersFooter::beatWhen()
+{
+    return BeatWhen(qBound(0, QSettings().value(QStringLiteral("workspace/speedFooterBeatWhen"), int(Always)).toInt(), 1));
+}
+
+void SpeedMastersFooter::setBeatWhen(BeatWhen when)
+{
+    QSettings().setValue(QStringLiteral("workspace/speedFooterBeatWhen"), int(when));
+}
+
 void SpeedMastersFooter::applyCount()
 {
     // Only the masters something is on: an unused one neither shows nor
     // flashes ("If the masters are not used .. they should not fire or be
     // visible").
     m_used = m_doc->speedMasters()->usedMask();
+    m_playing = m_doc->speedMasters()->playingMask();
     for (int i = 0; i < m_buttons.size(); ++i)
         m_buttons.at(i)->setVisible((m_used >> i) & 1u);
 }
@@ -142,7 +172,11 @@ void SpeedMastersFooter::tick()
     // What's used changes with any edit anywhere (a look's Speed, a chase
     // step's): look again twice a second rather than chase every signal.
     if (++m_ticks % 16 == 0)
+    {
         applyCount();
+        m_style = beatStyle();
+        m_when = beatWhen();
+    }
     SpeedMasters *sm = m_doc->speedMasters();
     for (int i = 0; i < sm->count() && i < m_buttons.size(); ++i)
     {
@@ -183,6 +217,11 @@ void SpeedMastersFooter::tick()
             if (levelAlpha == 0)
                 m_rateMovedAt[i] = -1;
         }
-        b->setState(!paused && pos - std::floor(pos) < 0.15, rate / 2.0, levelAlpha);
+        // The beat, as the View menu says: in its style, always or only
+        // while something on this master plays; none while paused.
+        SpeedMasterButton::BeatStyle style = paused ? SpeedMasterButton::NoBeat : m_style;
+        if (m_when == WhilePlaying && !((m_playing >> i) & 1u))
+            style = SpeedMasterButton::NoBeat;
+        b->setState(style, pos - std::floor(pos), rate / 2.0, levelAlpha);
     }
 }
