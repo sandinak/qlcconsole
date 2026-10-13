@@ -605,7 +605,23 @@ QList<quint32> Scene::runtimePalettes() const
     {
         QLCPalette *p = doc() != NULL ? doc()->palette(m_trialPalette) : NULL;
         if (p != NULL && p->type() != QLCPalette::Effect)
-            out.append(m_trialPalette);
+        {
+            /* Tried on so it shows, by the stacking rules: a Colour as the
+               look's colour 1; anything else as the lowest of the look's own,
+               above the first effect -- appended, it went under an effect
+               (and was the effect's) or was only colour 2. */
+            int at = out.size();
+            for (int i = 0; i < out.size(); ++i)
+            {
+                QLCPalette *q = doc()->palette(out.at(i));
+                if (q != NULL && q->type() == QLCPalette::Effect)
+                {
+                    at = i;
+                    break;
+                }
+            }
+            out.insert(p->type() == QLCPalette::Color ? 0 : at, m_trialPalette);
+        }
     }
     return out;
 }

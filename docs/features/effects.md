@@ -277,6 +277,14 @@ The Colours and Dimmers **above every effect** are the **look's own**:
 they're the base, and every effect that has **no** colour or dimmer of its
 own uses them. An effect with its own uses its own.
 
+### Trying a palette on
+
+While the look editor edits a palette the look on the canvas doesn't have,
+it's **tried on** that look (not saved into it) by the same rules: a Colour
+as the look's colour 1 — so an effect with no colour of its own shows it
+too — and anything else as the lowest of the look's own, above the first
+effect, so it wins what it sets.
+
 ### Examples
 
 On a par (master dimmer), an RGB batten (no dimmer), a colour-wheel mover

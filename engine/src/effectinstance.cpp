@@ -288,7 +288,7 @@ void EffectInstance::runTick()
     // lower in the list wins (EffectScriptRunner::composeWrites()).
     if (Scene *sc = qobject_cast<Scene *>(m_doc->function(m_sceneId)))
     {
-        const int layer = sc->palettes().indexOf(m_effectPaletteId);
+        const int layer = sc->runtimePalettes().indexOf(m_effectPaletteId);
         for (DmxWrite &w : writes)
             w.layer = layer;
     }
@@ -454,7 +454,7 @@ void EffectInstance::buildSceneBaseValues()
     // matching Scene::write). Effect palettes are skipped — that's us.
     const QList<quint32> groups = scene->fixtureGroups();
     const QList<quint32> fixtures = scene->fixtures();
-    const QList<quint32> orderedPalettes = scene->palettes();
+    const QList<quint32> orderedPalettes = scene->runtimePalettes();
     for (quint32 pid : orderedPalettes)
     {
         QLCPalette *p = m_doc->palette(pid);
@@ -896,7 +896,7 @@ bool EffectInstance::aimCentre(QVector3D *centre) const
     Scene *sc = qobject_cast<Scene*>(m_doc->function(m_sceneId));
     if (mp == nullptr || sc == nullptr)
         return false;
-    for (quint32 spid : sc->palettes())
+    for (quint32 spid : sc->runtimePalettes())
     {
         QLCPalette *ap = m_doc->palette(spid);
         if (ap == nullptr || ap->type() != QLCPalette::Aim)
@@ -1113,7 +1113,7 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
         // the host's converged aim whenever it is present.
         if (Scene *sc = qobject_cast<Scene*>(m_doc->function(m_sceneId)))
         {
-            for (quint32 spid : sc->palettes())
+            for (quint32 spid : sc->runtimePalettes())
             {
                 QLCPalette *ap = m_doc->palette(spid);
                 if (ap == NULL || ap->type() != QLCPalette::Aim)
@@ -1525,7 +1525,7 @@ void EffectInstance::ownLook(QList<QColor> &colours, double &dimmer) const
     if (scene == nullptr)
         return;
     bool underThis = false;
-    foreach (quint32 pid, scene->palettes())
+    foreach (quint32 pid, scene->runtimePalettes())
     {
         QLCPalette *p = m_doc->palette(pid);
         if (p == nullptr)
@@ -1552,7 +1552,7 @@ void EffectInstance::lookColours(QList<QColor> &colours, double &dimmer, bool *h
     double ownDimmer = -1.0, baseDimmer = -1.0;
     if (Scene *scene = qobject_cast<Scene *>(m_doc->function(m_sceneId)))
     {
-        const QList<quint32> pals = scene->palettes();
+        const QList<quint32> pals = scene->runtimePalettes();
         bool underThis = false;
         foreach (quint32 pid, pals)
         {

@@ -1149,7 +1149,7 @@ void ProgrammingManager::updateTrialPalette(quint32 paletteId)
        following." A palette only reaches the rig through a look that plays
        it, and a new one is in none -- so the pad moved a value nothing sent.
        While it is being edited, it is tried on the look on the canvas: played
-       after the look's own palettes, never saved into it. */
+       over the look's own (Scene::runtimePalettes()), never saved into it. */
     Scene *old = qobject_cast<Scene*>(m_doc->function(m_trialScene));
     if (old != nullptr)
     {

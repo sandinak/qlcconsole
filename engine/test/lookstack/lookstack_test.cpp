@@ -550,4 +550,34 @@ void LookStack_Test::editingALookWhileItPlaysKeepsTheOrder()
     IS(rgbOf(d, m_batten).blue(), 64);          // and the batten's colour with it
 }
 
+/* The Programming tab tries a palette being edited on the look on the
+   canvas: it shows -- a Colour as colour 1 (and an effect's colour when the
+   effect has none of its own), anything else as the lowest of the look's
+   own, even with an effect in the look. */
+void LookStack_Test::aPaletteTriedOnShowsByTheSameRules()
+{
+    QByteArray d = play({ colour(kBlue), dimmer(255), effect("lookcolour.js") });
+    RGB_IS(rgbOf(d, m_par), kBlue);
+
+    QLCPalette *red = colour(kRed);
+    m_playing->setTrialPalette(red->id());
+    m_playing->requestPaletteRefresh();
+    d = tickAndRead();
+    RGB_IS(rgbOf(d, m_par), kRed);              // through the effect, as its colour
+    IS(wheelOf(d, m_wheel), 14);
+
+    QLCPalette *half = dimmer(128);
+    m_playing->setTrialPalette(half->id());
+    m_playing->requestPaletteRefresh();
+    d = tickAndRead();
+    IS(dimmerOf(d, m_par), 128);                // not under the effect: the look's
+    RGB_IS(rgbOf(d, m_par), kBlue);
+
+    QLCPalette *aim = panTilt(180, 90);
+    m_playing->setTrialPalette(aim->id());
+    m_playing->requestPaletteRefresh();
+    d = tickAndRead();
+    IS(panOf(d, m_mover), panValue(m_mover, 180));
+}
+
 QTEST_MAIN(LookStack_Test)
