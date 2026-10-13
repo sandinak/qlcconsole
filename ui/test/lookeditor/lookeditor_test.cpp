@@ -330,24 +330,72 @@ void LookEditor_Test::effectsArePickedFromABrowserWithWledsOwn()
     browser->show();
     QCoreApplication::processEvents();
     browser->tickPreviews();
-    QCOMPARE(browser->m_frames.value(rowNamed("WLED Chase")->data(Qt::UserRole + 11).toString()).size(), 16);
+    QCOMPARE(browser->m_frames.value(rowNamed("WLED Chase")->data(Qt::UserRole + 11).toString()).lights.size(), 16);
     if (!qEnvironmentVariableIsEmpty("BROWSER_PNG"))
     {
         browser->search()->clear();
-        browser->tabs()->setCurrentIndex(browser->tabNames().indexOf("Color"));
-        for (int k = 0; k < 6; ++k)
-        {
-            QTest::qWait(90);
-            browser->tickPreviews();
-        }
+        const QString tab = qEnvironmentVariableIsEmpty("BROWSER_TAB")
+                                ? QStringLiteral("Color") : qEnvironmentVariable("BROWSER_TAB");
+        browser->tabs()->setCurrentIndex(browser->tabNames().indexOf(tab));
         browser->setParent(nullptr);
-        browser->resize(560, 420);
+        browser->resize(560, 760);
         browser->show();
         QCoreApplication::processEvents();
-        browser->tickPreviews();
+        for (int k = 0; k < 32; ++k)            // a position effect's trail fills in
+        {
+            QTest::qWait(80);
+            browser->tickPreviews();
+        }
         browser->grab().save(qEnvironmentVariable("BROWSER_PNG"));
         browser->setParent(&ed);
     }
+}
+
+/* "position based effects shouldn't show matrix lines but show what the
+   effect does": a position effect's preview is where the heads point and the
+   shape they trace; a gobo, iris or zoom one is a row of beams. */
+void LookEditor_Test::previewsShowWhatEachEffectDoes()
+{
+    Doc doc(this);
+    doc.effectScriptRunner()->cache()->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    QLCPalette *look = new QLCPalette(QLCPalette::Effect, &doc);
+    look->setName("Look");
+    QVERIFY(doc.addPalette(look));
+    LookEditor ed(&doc);
+    ed.setPalette(look->id());
+    EffectBrowser *browser = ed.m_effectBrowser;
+    QVERIFY(browser != nullptr);
+    EffectScriptCache *cache = doc.effectScriptRunner()->cache();
+
+    const EffectBrowser::Preview diamond = browser->previewFrame(cache->scriptPath("Diamond"));
+    QCOMPARE(diamond.kind, EffectBrowser::Preview::Position);
+    QCOMPARE(diamond.spots.size(), 16);
+    const QVector<QVector<QPointF> > shape = browser->samplePaths(cache->scriptPath("Diamond"));
+    QVERIFY(!shape.isEmpty());
+    QRectF seen;
+    foreach (const QPointF &q, shape.at(0))
+        seen = seen.isNull() ? QRectF(q, QSizeF(1e-9, 1e-9)) : seen.united(QRectF(q, QSizeF(1e-9, 1e-9)));
+    QVERIFY2(seen.width() > 0.01 && seen.height() > 0.01, "a diamond moves both ways");
+
+    QCOMPARE(browser->previewFrame(cache->scriptPath("Stage Shape")).kind,
+             EffectBrowser::Preview::Position);       // aims at the look's target
+    QCOMPARE(browser->previewFrame(cache->scriptPath("Gobo Chase")).kind, EffectBrowser::Preview::Gobo);
+    QCOMPARE(browser->previewFrame(cache->scriptPath("Iris Pulse")).kind, EffectBrowser::Preview::Beam);
+    QCOMPARE(browser->previewFrame(cache->scriptPath("Zoom Pulse")).kind, EffectBrowser::Preview::Beam);
+
+    // A follow-spot does nothing held still: it is previewed steered.
+    EffectBrowser::Preview follow;
+    for (int k = 0; k < 3 && follow.kind != EffectBrowser::Preview::Position; ++k)
+        follow = browser->previewFrame(cache->scriptPath("Followspot"));
+    QCOMPARE(follow.kind, EffectBrowser::Preview::Position);
+
+    // Amber lights in amber, not dark.
+    const EffectBrowser::Preview amber = browser->previewFrame(cache->scriptPath("Amber Pulse"));
+    QCOMPARE(amber.kind, EffectBrowser::Preview::Lights);
+    int lit = 0;
+    foreach (const QColor &c, amber.lights)
+        lit += (c.red() > 60 && c.blue() < c.red()) ? 1 : 0;
+    QVERIFY2(lit > 0, "amber pulse should light amber");
 }
 
 /* An effect with words to show (the Text effect) gets a box to type them in,

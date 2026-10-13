@@ -15,6 +15,10 @@
 #include <QSharedPointer>
 #include <QElapsedTimer>
 #include <QWidget>
+#include <QPointF>
+#include <QSet>
+#include <QVector>
+#include <QColor>
 #include <QColor>
 #include <QHash>
 
@@ -107,8 +111,27 @@ private:
     void refill();
     void pick(QListWidgetItem *item);
     void tickPreviews();
-    /** The colours of a strip of 16 for @p scriptPath, now. */
-    QVector<QColor> previewFrame(const QString &scriptPath);
+public:
+    /** What a row's preview shows: what the effect does, now. */
+    struct Preview
+    {
+        enum Kind { Lights, Position, Gobo, Beam };
+        Kind kind = Lights;
+        QVector<QColor> lights;     ///< Lights: the strip of 16
+        QVector<QPointF> spots;     ///< Position: where each head points, 0..1 (pan, tilt)
+        QVector<double> beams;      ///< Beam: each head's beam size 0..1; Gobo: the slot
+    };
+    /** A preview for @p scriptPath, now (and its trail, for a position one). */
+    Preview previewFrame(const QString &scriptPath);
+    Preview frame(const QString &scriptPath) const { return m_frames.value(scriptPath); }
+
+private:
+    /** A preview's script and its run (state), defined in the .cpp. */
+    struct Run;
+    /** The preview of @p run at @p t seconds. */
+    Preview previewWith(Run *run, double t, bool steer = false);
+    /** A position effect's shape: four heads' paths over eight seconds. */
+    QVector<QVector<QPointF> > samplePaths(const QString &scriptPath);
 
     Doc *m_doc;
     QComboBox *m_source;
@@ -120,10 +143,12 @@ private:
     QList<Entry> m_entries;
     QList<QColor> m_previewColours;
 
-    /** A preview's script and its run (state), defined in the .cpp. */
-    struct Run;
     QHash<QString, QSharedPointer<Run> > m_runs;   ///< by script path; null = would not load
-    QHash<QString, QVector<QColor> > m_frames;     ///< last frame per script path
+    QHash<QString, Preview> m_frames;             ///< last frame per script path
+    /** A position effect's shape, sampled once (samplePaths()). */
+    QHash<QString, QVector<QVector<QPointF> > > m_paths;
+    /** Position effects that only follow a joystick: previewed steered. */
+    QSet<QString> m_steered;
     friend class EffectRowDelegate;
     bool m_filling = false;
 };

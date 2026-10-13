@@ -98,6 +98,10 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 - **92 WLED effects run on any fixture** — Android, Aurora, Blink, Blink Rainbow, Bouncing Balls, Bpm, Breathe, Candle, Candle Multi, Chase, Chase Flash, Chase Rainbow, Chunchun, Colorful, Colorloop, Colortwinkles, Colorwaves, Dancing Shadows, Dissolve, Drip, Dynamic, Dynamic Smooth, Fade, Fairy, Fill Noise, Fire 2012, Fire Flicker, Fireworks 1D, Flow, Glitter, Gradient, Halloween Eyes, Heartbeat, Hyper Sparkle, Juggle, Lake, Lightning, Loading, Meteor, Multi Comet, Noise Pal, Oscillate, Pacifica, Palette, Phased, Plasma, Police, Popcorn, Pride 2015, Railway, Rain, Rainbow, Rainbow Runner, Random Colors, Ripple, Ripple Rainbow, Rolling Balls, Running, Running Dual, Saw, Scan, Scanner, Sine, Sinelon, Sinelon Dual, Sinelon Rainbow, Solid, Solid Glitter, Sparkle, Sparkle Dark, Spots, Spots Fade, Stream, Strobe, Strobe Rainbow, Sunrise, Sweep, Tetrix, Theater, Theater Rainbow, Traffic Light, Tri Fade, Tri Wipe, TV Simulator, Twinkle, Twinklecat, Twinklefox, Two Areas, Two Dots, Washing Machine, Wavesins, Wipe — so a look with one runs it on its WLED
   devices and its other fixtures alike.
+- **Effect previews show what the effect does.** A position effect draws
+  the shape its heads trace, with the heads along it, instead of a strip
+  of lights; gobo, iris and zoom effects show a row of beams; amber and UV
+  pulses light in their own colours. ([The effect browser](programming-tab.md#the-effect-browser))
 - **WLED effects only where they can run.** A WLED effect that only runs on
   a WLED device is offered only when the look's targets include one;
   without, the WLED tab lists the ones that run on any fixture.

@@ -173,8 +173,19 @@ names the effect, with **Change effect…** to open the browser again:
   is open.
 - Tabs: **Recent**, **Color**, **Dimmer**, **Position**, **Beam**, **Other**
   and **WLED**. Recent is remembered between sessions.
-- Each row shows the effect's name, what it does, and a live strip of 16
-  lights running it. Presets sit under the effect they're built from.
+- Each row shows the effect's name, what it does, and a live preview of
+  what it does:
+  - a **colour or dimmer** effect: a strip of 16 lights running it (amber
+    and UV in their own colours, a shutter strobe blinking);
+  - a **position** effect: where the heads point — the shape it traces (a
+    diamond, an orbit, a figure 8, Stage Shape's outline round its target)
+    as a faint line, every head as a dot along it, four of them bright —
+    zoomed to fit its movement. One that only follows a joystick (a
+    follow-spot) is shown being steered;
+  - a **gobo, iris or zoom** effect: a row of beams seen end-on — their
+    gobo pattern, or their size opening and closing.
+
+  Presets sit under the effect they're built from.
 
 Two effects are called fire-something:
 
