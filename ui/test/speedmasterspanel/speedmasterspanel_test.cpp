@@ -19,6 +19,7 @@
 
 #include <QtTest>
 #include <QElapsedTimer>
+#include <QSettings>
 #include <QDoubleSpinBox>
 #include <QSpinBox>
 #include <QTreeWidget>
@@ -223,6 +224,18 @@ void SpeedMastersPanel_Test::theFooterShowsEachMastersTempo()
     SpeedMasters *sm = m_doc->speedMasters();
     sm->setName(0, "Pars");
     sm->setBpm(0, 128);
+    // The beat as the View menu sets it, whatever an earlier run saved.
+    const SpeedMasterButton::BeatStyle wasStyle = SpeedMastersFooter::beatStyle();
+    const SpeedMastersFooter::BeatWhen wasWhen = SpeedMastersFooter::beatWhen();
+    auto restore = qScopeGuard([&]() {
+        SpeedMastersFooter::setBeatStyle(wasStyle);
+        SpeedMastersFooter::setBeatWhen(wasWhen);
+    });
+    // Out of the box a master beats only while something on it plays: one
+    // blinking with nothing playing reads as something running.
+    QSettings().remove(QStringLiteral("workspace/speedFooterBeatWhen"));
+    QCOMPARE(SpeedMastersFooter::beatWhen(), SpeedMastersFooter::WhilePlaying);
+    SpeedMastersFooter::setBeatStyle(SpeedMasterButton::Blink);
     SpeedMastersFooter footer(m_doc);
     footer.show();
     // Nothing on any master: nothing in the footer, nothing flashing.
@@ -245,7 +258,18 @@ void SpeedMastersPanel_Test::theFooterShowsEachMastersTempo()
     other->setSpeedMaster(SpeedMasters::Inherit);
     QTRY_VERIFY(!footer.button(1)->isVisible());      // taken off: gone again
 
+    // Nothing playing: no beat, all through two of them at 128.
+    QElapsedTimer quiet;
+    quiet.start();
+    while (quiet.elapsed() < 1000)
+    {
+        QVERIFY(!footer.button(0)->isFired());
+        QTest::qWait(20);
+    }
+
     // The blink is the beat; the green level only while the rate moves.
+    SpeedMastersFooter::setBeatWhen(SpeedMastersFooter::Always);
+    footer.reloadBeatOptions();
     QTRY_VERIFY(footer.button(0)->isFired());
     QTRY_VERIFY(!footer.button(0)->isFired());
     QCOMPARE(footer.button(0)->levelWidth(), 0);
