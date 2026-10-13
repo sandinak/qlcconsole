@@ -3368,8 +3368,11 @@ void StructureStudioView::rebuildAimTargets()
         if (fx == nullptr || scv.channel >= fx->channels())
             continue;
         QByteArray &arr = m_sceneValues[scv.fxi];
+        // Zero-filled: resize() leaves the new bytes as whatever was in
+        // memory -- every channel the look doesn't set drew as junk (on
+        // Linux, an old string's bytes lit a pixel bar grey).
         if (arr.size() < int(fx->channels()))
-            arr.resize(int(fx->channels()));
+            arr.append(QByteArray(int(fx->channels()) - arr.size(), char(0)));
         arr[int(scv.channel)] = char(scv.value);
     }
     foreach (quint32 pid, pals)
@@ -3394,7 +3397,7 @@ void StructureStudioView::rebuildAimTargets()
                 continue;
             QByteArray &arr = m_sceneValues[scv.fxi];
             if (arr.size() < int(fx->channels()))
-                arr.resize(int(fx->channels()));
+                arr.append(QByteArray(int(fx->channels()) - arr.size(), char(0)));
             arr[int(scv.channel)] = char(scv.value);
         }
     }

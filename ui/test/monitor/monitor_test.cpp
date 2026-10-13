@@ -207,13 +207,23 @@ static void driveMessageBox(const std::function<bool(QWidget *)> &fill, const QS
 // technique: schedule the dialog interaction via QTimer::singleShot(0, ...)
 // BEFORE calling the slot — exec()'s own nested event loop processes it.
 
+/* The LED maps these tests expect, from the repo -- not whatever is in the
+   operator's own library (~/Library/.../HeadLayouts). They passed on a Mac
+   that had the maps there and failed everywhere else. */
+static QString testLayouts()
+{
+    return QFileInfo(QStringLiteral(__FILE__)).absolutePath() + QStringLiteral("/headlayouts");
+}
+
 void Monitor_Test::initTestCase()
 {
     m_doc = new Doc(this);
+    HeadLayoutLibrary::setUserDirectoryOverride(testLayouts());
 }
 
 void Monitor_Test::cleanupTestCase()
 {
+    HeadLayoutLibrary::setUserDirectoryOverride(QString());
     delete m_doc;
     m_doc = NULL;
 }
@@ -7374,7 +7384,10 @@ void Monitor_Test::anAreaTargetShowsItsSize()
     MonitorProperties *props = doc->monitorProperties();
 
     StageTarget *area = props->addStageTarget();
-    area->setName("Downstage centre");
+    // A short name: its label is measured with the mark below, and a font
+    // without real glyphs (QPA minimal, the Linux test runner's) draws a long
+    // one wider than 1.5 m of plan.
+    area->setName("DSC");
     area->setKind(StageTarget::Kind::Area);
     area->setPosition(QVector3D(5.0f, 3.0f, 0.0f));
     area->setFootprint(QSizeF(3.0, 1.5));
@@ -7409,7 +7422,33 @@ void Monitor_Test::anAreaTargetShowsItsSize()
 
         view.setViewPOV(MonitorGraphicsView::PovTop);
         view.updateTargets();
-        QRect top = extent(view.grab().toImage());
+        /* From above: the rectangle by its edges -- runs of 30 px and more
+           -- so its name label isn't measured with it (a platform with no
+           real fonts draws the label wider than the area: 314 px for 300). */
+        auto edges = [](const QImage &img) {
+            int x0 = INT_MAX, x1 = -1, y0 = INT_MAX, y1 = -1;
+            for (int y = 0; y < img.height(); ++y)
+            {
+                int run = 0;
+                for (int x = 0; x <= img.width(); ++x)
+                {
+                    const QColor c = x < img.width() ? img.pixelColor(x, y) : QColor(Qt::black);
+                    if (c.green() > c.red() + 40 && c.green() > c.blue() + 40)
+                    {
+                        ++run;
+                        continue;
+                    }
+                    if (run >= 30)
+                    {
+                        x0 = qMin(x0, x - run); x1 = qMax(x1, x - 1);
+                        y0 = qMin(y0, y); y1 = qMax(y1, y);
+                    }
+                    run = 0;
+                }
+            }
+            return QRect(QPoint(x0, y0), QPoint(x1, y1));
+        };
+        QRect top = edges(view.grab().toImage());
         QVERIFY2(qAbs(top.width() - 3.0 * ppm) < 12 && qAbs(top.height() - 1.5 * ppm) < 12,
                  qPrintable(QString("from above the area is %1 x %2 px, expected %3 x %4")
                             .arg(top.width()).arg(top.height()).arg(3.0 * ppm).arg(1.5 * ppm)));
@@ -7549,11 +7588,18 @@ void Monitor_Test::aPersonTargetIsDrawnAsAPerson()
         v.setPlane(StructureStudioView::Angled);
         v.setAngledView(25.0, 20.0);
 
+        /* Not the axis tripod in the corner (drawAxisTripod(): its green
+           "DS" label read as figure where a heavier font draws it -- Linux). */
+        auto withoutTripod = [&v](QImage img) {
+            QPainter p(&img);
+            p.fillRect(QRect(v.width() - 140, v.height() - 120, 140, 120), Qt::black);
+            return img;
+        };
         who->setKind(StageTarget::Kind::None);
-        const Extent bare = measure(v.grab().toImage());
+        const Extent bare = measure(withoutTripod(v.grab().toImage()));
         who->setKind(StageTarget::Kind::Person);
         v.update();
-        const Extent figure = measure(v.grab().toImage());
+        const Extent figure = measure(withoutTripod(v.grab().toImage()));
         QVERIFY2(bare.n == 0,
                  qPrintable(QString("a plain target drew %1 px in the rig").arg(bare.n)));
         QVERIFY2(figure.n > 300,
@@ -15727,7 +15773,7 @@ void Monitor_Test::headKindGroupsFollowTheLedMapAndTheRig()
         delete doc;
     }
     delete def;
-    HeadLayoutLibrary::setUserDirectoryOverride(QString());
+    HeadLayoutLibrary::setUserDirectoryOverride(testLayouts());
 }
 
 /* Four bars 15 cm apart on each of two trusses 4 m apart, hanging: closed
@@ -16115,7 +16161,7 @@ void Monitor_Test::twoBarsOfOneKindEachSplitIntoAGroupPerKind()
     QCOMPARE(w->head(QLCPoint(48, 0)).fxi, bars[7]->id());
     delete doc;
     delete def;
-    HeadLayoutLibrary::setUserDirectoryOverride(QString());
+    HeadLayoutLibrary::setUserDirectoryOverride(testLayouts());
 }
 
 /* "if I right click on US1t1 to edit fixture I get nothing": a washer inside
@@ -17393,7 +17439,7 @@ void Monitor_Test::theSplitWizardOffersAViewAndKeepsAnExistingGroup()
     }
     delete doc;
     delete def;
-    HeadLayoutLibrary::setUserDirectoryOverride(QString());
+    HeadLayoutLibrary::setUserDirectoryOverride(testLayouts());
 }
 
 void Monitor_Test::theSplitWizardMapsRowsAndMakesAGroupPerKind()
@@ -17449,7 +17495,7 @@ void Monitor_Test::theSplitWizardMapsRowsAndMakesAGroupPerKind()
     QCOMPARE(doc->monitorProperties()->headLayoutFor(bars[0]).cellOf(45), QPoint(0, 1));
     delete doc;
     delete def;
-    HeadLayoutLibrary::setUserDirectoryOverride(QString());
+    HeadLayoutLibrary::setUserDirectoryOverride(testLayouts());
 }
 
 void Monitor_Test::theRigViewDrawsHeadsWhereTheLedMapSays()
@@ -17477,7 +17523,7 @@ void Monitor_Test::theRigViewDrawsHeadsWhereTheLedMapSays()
     }
     delete doc;
     delete def;
-    HeadLayoutLibrary::setUserDirectoryOverride(QString());
+    HeadLayoutLibrary::setUserDirectoryOverride(testLayouts());
 }
 
 void Monitor_Test::layersListsEveryGroupAFixtureIsIn()
