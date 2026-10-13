@@ -100,6 +100,12 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
 {
     QHBoxLayout *root = new QHBoxLayout(this);
     QSplitter *splitter = new QSplitter(Qt::Horizontal, this);
+    splitter->setObjectName(QStringLiteral("programmingSplitter"));
+    /* A handle moves the edge and stops at a panel's minimum: never snaps a
+       panel shut ("it jumps and ... only shows that"), which a collapsible
+       splitter does the moment a drag passes a minimum. */
+    splitter->setChildrenCollapsible(false);
+    m_mainSplit = splitter;
     root->addWidget(splitter);
 
     // --- Left: function tree (folders) of what you build ---
@@ -550,7 +556,30 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     bl->addStretch();
     phl->addLayout(bl);
     phl->addStretch();
-    m_canvasLayout->addWidget(m_canvasPlaceholder, 1);
+    /* The canvas (targets and looks) over the editor of what's selected
+       (look editor / fixture console), with a handle between them. */
+    m_canvasSplit = new QSplitter(Qt::Vertical, this);
+    m_canvasSplit->setObjectName(QStringLiteral("programmingCanvasSplitter"));
+    m_canvasSplit->setChildrenCollapsible(false);
+    QWidget *canvasTop = new QWidget(m_canvasSplit);
+    m_canvasTopLayout = new QVBoxLayout(canvasTop);
+    m_canvasTopLayout->setContentsMargins(0, 0, 0, 0);
+    // Scrolls when the handle makes it shorter than the editor in it.
+    QScrollArea *editorScroll = new QScrollArea(m_canvasSplit);
+    editorScroll->setWidgetResizable(true);
+    editorScroll->setFrameShape(QFrame::NoFrame);
+    editorScroll->setMinimumHeight(80);
+    QWidget *editorInner = new QWidget(editorScroll);
+    m_editorLayout = new QVBoxLayout(editorInner);
+    m_editorLayout->setContentsMargins(0, 0, 0, 0);
+    editorScroll->setWidget(editorInner);
+    m_editorPane = editorScroll;
+    m_canvasSplit->addWidget(canvasTop);
+    m_canvasSplit->addWidget(m_editorPane);
+    m_canvasSplit->setStretchFactor(0, 1);
+    m_canvasSplit->setStretchFactor(1, 0);
+    m_canvasLayout->addWidget(m_canvasSplit, 1);
+    m_canvasTopLayout->addWidget(m_canvasPlaceholder, 1);
 
     /* Once, on a first run -- queued, so it lands after the window is up rather
        than during construction. Never on a headless platform ("offscreen", or
@@ -570,9 +599,9 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     // Take the look editor's full preferred height; the canvas above (Expanding)
     // shrinks first to make room. Maximum (not Fixed) so the window can still be
     // resized very short if needed (the canvas hits its min first).
-    m_lookEditor->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
-    m_lookEditor->setMaximumHeight(340); // matches the capped picker/XY pad
-    m_canvasLayout->addWidget(m_lookEditor);
+    // In the lower pane of the canvas splitter: its handle sets the height.
+    m_lookEditor->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
+    m_editorLayout->addWidget(m_lookEditor);
 
     // Per-fixture DMX channel editor, shown at the bottom when fixed-fixture
     // targets are selected (instead of the look editor). Height-bounded so a
@@ -598,7 +627,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     m_fixtureScroll->setMinimumWidth(150);
     m_fixtureScroll->setWidget(m_fixtureConsole);
     m_fixtureScroll->hide();
-    m_canvasLayout->addWidget(m_fixtureScroll);
+    m_editorLayout->addWidget(m_fixtureScroll);
 
     // Shown instead of the console when several selected fixed fixtures are of
     // different types (editing them by channel index would be meaningless).
@@ -608,7 +637,12 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     m_fixtureMixedNote->setMinimumHeight(120);
     m_fixtureMixedNote->setStyleSheet("QLabel { color: gray; }");
     m_fixtureMixedNote->hide();
-    m_canvasLayout->addWidget(m_fixtureMixedNote);
+    m_editorLayout->addWidget(m_fixtureMixedNote);
+
+    // The lower pane only while it has something to show.
+    for (QWidget *w : { (QWidget *)m_lookEditor, (QWidget *)m_fixtureScroll, (QWidget *)m_fixtureMixedNote })
+        w->installEventFilter(this);
+    syncEditorPane();
 
     // Estimated electrical load of the previewed look (Design mode only);
     // the readout is the app status-bar chip, this just drives the timer.
@@ -692,6 +726,19 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     splitter->setStretchFactor(0, 2); // nav
     splitter->setStretchFactor(1, 3); // canvas
     splitter->setStretchFactor(2, 2); // sources
+
+    // Where the handles were left, next time.
+    {
+        QSettings st;
+        splitter->restoreState(st.value(QStringLiteral("programming/splitter")).toByteArray());
+        m_canvasSplit->restoreState(st.value(QStringLiteral("programming/canvasSplitter")).toByteArray());
+    }
+    connect(splitter, &QSplitter::splitterMoved, this, [splitter]() {
+        QSettings().setValue(QStringLiteral("programming/splitter"), splitter->saveState());
+    });
+    connect(m_canvasSplit, &QSplitter::splitterMoved, this, [this]() {
+        QSettings().setValue(QStringLiteral("programming/canvasSplitter"), m_canvasSplit->saveState());
+    });
 
     // Open on DOUBLE-click only; single-click just selects, so a function
     // can be click-dragged from the tree into a collection/chaser canvas
@@ -897,7 +944,7 @@ void ProgrammingManager::loadCanvas(quint32 sceneId)
         if (pid != QLCPalette::invalidId()) { m_fixtureScroll->hide(); m_fixtureMixedNote->hide(); m_lookEditor->show(); }
     });
     // Insert above the bottom editors.
-    m_canvasLayout->insertWidget(m_canvasLayout->indexOf(m_lookEditor), m_canvas, 1);
+    m_canvasTopLayout->addWidget(m_canvas, 1);
 
     stopOperateScene();  // stop the previous scene before starting the new one
     startPreview();
@@ -1005,7 +1052,7 @@ void ProgrammingManager::loadFunctionEditor(Function *f)
     }
 
     m_funcEditor = ed;
-    m_canvasLayout->insertWidget(m_canvasLayout->indexOf(m_lookEditor), m_funcEditor, 1);
+    m_canvasTopLayout->addWidget(m_funcEditor, 1);
     m_funcEditor->show();
     // A Show owns its own transport (Play/Stop in the timeline editor) — never
     // auto-play it on open. Other editors preview live so the view reflects them.
@@ -1046,7 +1093,7 @@ void ProgrammingManager::loadGroupEditor(quint32 groupId)
     // Reuse the func-editor slot as the hosted canvas widget so clearEditors()
     // tears it down on the next selection.
     m_funcEditor = new FixtureGroupEditor(grp, m_doc, this);
-    m_canvasLayout->insertWidget(m_canvasLayout->indexOf(m_lookEditor), m_funcEditor, 1);
+    m_canvasTopLayout->addWidget(m_funcEditor, 1);
     m_funcEditor->show();
 
     m_canvasTitle->setText(tr("Fixture group: %1   —   %n head(s)", "", grp->headList().count())
@@ -1143,6 +1190,24 @@ void ProgrammingManager::slotLookEdited(quint32 paletteId)
                              || s->trialPalette() == paletteId))
             m_doc->notifyFunctionChanged(s->id());
     }
+}
+
+bool ProgrammingManager::eventFilter(QObject *watched, QEvent *event)
+{
+    if ((event->type() == QEvent::Show || event->type() == QEvent::Hide)
+        && (watched == m_lookEditor || watched == m_fixtureScroll || watched == m_fixtureMixedNote))
+        QMetaObject::invokeMethod(this, [this]() { syncEditorPane(); }, Qt::QueuedConnection);
+    return QWidget::eventFilter(watched, event);
+}
+
+void ProgrammingManager::syncEditorPane()
+{
+    // The editor pane under the canvas shows while one of its editors does.
+    if (m_editorPane == nullptr)
+        return;
+    const bool any = !m_lookEditor->isHidden() || !m_fixtureScroll->isHidden()
+                     || !m_fixtureMixedNote->isHidden();
+    m_editorPane->setVisible(any);
 }
 
 void ProgrammingManager::updateTrialPalette(quint32 paletteId)

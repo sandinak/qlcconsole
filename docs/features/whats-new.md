@@ -121,6 +121,15 @@ The latest changes, newest first. Each links to the guide with the detail.
   little early lands on the music. The Next button shows a GO waiting.
   ([GO on the beat](getting-started.md#go-on-the-beat))
 
+### Programming tab
+
+- **The handles move the edges you drag** — no pane snaps shut, and the
+  canvas can be narrowed (its fades-and-transitions line wraps; it was 1300
+  px at its narrowest, so a handle squeezed the panes beside it instead).
+  A new handle sits **between the looks and the Look Editor**, which
+  scrolls when made short. Positions are remembered.
+  ([Layout](programming-tab.md#layout))
+
 ### Effects
 
 - **A look stacks the same way every time** — top to bottom, the lower

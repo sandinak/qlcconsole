@@ -36,6 +36,7 @@
 #include "speedmasterspanel.h"
 #include "speedmasters.h"
 #include "scenegrouplooks.h"
+#include "flowlayout.h"
 #include "fadetimespin.h"
 #include "scenetransition.h"
 #include <QSpinBox>
@@ -152,7 +153,19 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
        looked past forever after. Its content now lives in the Programming
        guide, which this reaches; the explanation is still one click away
        without standing in front of the work. */
-    QHBoxLayout *helpRow = new QHBoxLayout();
+    /* Wraps when the panel is narrow: as one row it set the whole canvas's
+       minimum width (1300 px), so the Programming tab's handles couldn't
+       narrow it and squeezed the panels beside it instead. Each group keeps
+       its label with its controls. */
+    FlowLayout *helpRow = new FlowLayout(0, 12, 4);
+    auto group = [this](const QList<QWidget *> &parts) {
+        QWidget *g = new QWidget(this);
+        QHBoxLayout *gl = new QHBoxLayout(g);
+        gl->setContentsMargins(0, 0, 0, 0);
+        for (QWidget *w : parts)
+            gl->addWidget(w);
+        return g;
+    };
 
     /* How the whole look arrives and leaves: each fixture at its own moment
        -- a wipe across the stage, from the centre, a dissolve, along each
@@ -259,21 +272,11 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
         outShape->setObjectName(QStringLiteral("transitionOutShape"));
         inTime->setObjectName(QStringLiteral("transitionInTime"));
         edge->setObjectName(QStringLiteral("transitionEdge"));
-        helpRow->addWidget(new QLabel(tr("Fade in"), this));
-        helpRow->addWidget(fadeIn);
-        helpRow->addWidget(new QLabel(tr("out"), this));
-        helpRow->addWidget(fadeOut);
-        helpRow->addSpacing(12);
-        helpRow->addWidget(new QLabel(tr("Transition in:"), this));
-        helpRow->addWidget(inShape);
-        helpRow->addWidget(inTime);
-        helpRow->addSpacing(8);
-        helpRow->addWidget(new QLabel(tr("out:"), this));
-        helpRow->addWidget(outShape);
-        helpRow->addWidget(outTime);
-        helpRow->addSpacing(8);
-        helpRow->addWidget(new QLabel(tr("Edge:"), this));
-        helpRow->addWidget(edge);
+        helpRow->addWidget(group({ new QLabel(tr("Fade in"), this), fadeIn,
+                                   new QLabel(tr("out"), this), fadeOut }));
+        helpRow->addWidget(group({ new QLabel(tr("Transition in:"), this), inShape, inTime }));
+        helpRow->addWidget(group({ new QLabel(tr("out:"), this), outShape, outTime }));
+        helpRow->addWidget(group({ new QLabel(tr("Edge:"), this), edge }));
 
         /* What this look's effects run on (SPEED_SPREAD_DESIGN.md, S2): a
            speed master, the main clock, their own speed -- or whatever the
@@ -292,11 +295,8 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
                 m_doc->setModified();
             emit sceneModified();
         });
-        helpRow->addSpacing(8);
-        helpRow->addWidget(new QLabel(tr("Speed:"), this));
-        helpRow->addWidget(speed);
+        helpRow->addWidget(group({ new QLabel(tr("Speed:"), this), speed }));
     }
-    helpRow->addStretch();
     QPushButton *guideBtn = new QPushButton(tr("How this works"), this);
     guideBtn->setFlat(true);
     guideBtn->setCursor(Qt::PointingHandCursor);

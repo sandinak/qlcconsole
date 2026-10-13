@@ -1284,6 +1284,67 @@ void ProgrammingManager_Test::editingARunningEffectChangesItsOutput()
 
 /* "can we make this row more useful using a dropdown paradigm like we did for
    the studio options? right now scrolling is a bit obnoxious" */
+/* "resizing handles in the programming page don't really move things right
+   .. it jumps and either picks one of the associated panels and only shows
+   that .. and we need one between the look stack and editing panel" */
+void ProgrammingManager_Test::theHandlesMoveEdgesAndNeverHideAPanel()
+{
+    Scene *look = new Scene(m_doc);
+    look->setName("Handles");
+    QVERIFY(m_doc->addFunction(look));
+    ProgrammingManager mgr(nullptr, m_doc);
+    mgr.resize(1400, 900);
+    mgr.show();
+    QVERIFY(openCanvas(mgr, look->id()) != nullptr);
+    QApplication::processEvents();
+
+    auto drag = [](QSplitter *sp, int handle, const QPoint &by) {
+        QSplitterHandle *h = sp->handle(handle);
+        const QPoint from = h->rect().center();
+        QTest::mousePress(h, Qt::LeftButton, Qt::NoModifier, from);
+        QMouseEvent move(QEvent::MouseMove, QPointF(from + by), QPointF(h->mapToGlobal(from + by)),
+                         Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(h, &move);
+        QTest::mouseRelease(h, Qt::LeftButton, Qt::NoModifier, from + by);
+        QApplication::processEvents();
+    };
+
+    QSplitter *main = mgr.findChild<QSplitter *>("programmingSplitter");
+    QVERIFY(main != nullptr);
+    QVERIFY(!main->childrenCollapsible());
+    // Drag the left handle all the way right, then the right one all the way
+    // left: every panel stays, at its minimum at worst.
+    drag(main, 1, QPoint(3000, 0));
+    for (int w : main->sizes())
+        QVERIFY2(w > 0, "a panel was snapped shut");
+    drag(main, 2, QPoint(-3000, 0));
+    for (int w : main->sizes())
+        QVERIFY2(w > 0, "a panel was snapped shut");
+    QVERIFY(main->widget(1)->isVisible() && main->widget(1)->width() > 100);
+
+    // The look stack over the look editor, a handle between them.
+    QSplitter *canvas = mgr.findChild<QSplitter *>("programmingCanvasSplitter");
+    QVERIFY(canvas != nullptr);
+    QVERIFY(canvas->widget(1)->isAncestorOf(mgr.m_lookEditor));
+    QVERIFY(canvas->widget(0)->isAncestorOf(mgr.m_canvas));
+    QVERIFY(!canvas->childrenCollapsible());
+    const int before = canvas->sizes().at(1);
+    drag(canvas, 1, QPoint(0, -120));               // up: a taller editor
+    QVERIFY2(canvas->sizes().at(1) > before + 60,
+             qPrintable(QString("%1 -> %2").arg(before).arg(canvas->sizes().at(1))));
+    drag(canvas, 1, QPoint(0, 3000));               // all the way down: still there
+    QVERIFY(canvas->sizes().at(1) > 0 && canvas->sizes().at(0) > 0);
+    // The editor can be made short (it scrolls), the canvas narrow (its
+    // fade/transition row wraps): a handle has room to move both ways.
+    QVERIFY2(canvas->sizes().at(1) < 150, qPrintable(QString::number(canvas->sizes().at(1))));
+    QVERIFY2(main->widget(1)->minimumSizeHint().width() < 700,
+             qPrintable(QString::number(main->widget(1)->minimumSizeHint().width())));
+    mgr.resize(1000, 800);
+    QApplication::processEvents();
+    if (!qEnvironmentVariableIsEmpty("HANDLES_SHOT"))
+        mgr.grab().save(qEnvironmentVariable("HANDLES_SHOT"));
+}
+
 void ProgrammingManager_Test::theToolbarFitsWithItsMenus()
 {
     ProgrammingManager mgr(nullptr, m_doc);

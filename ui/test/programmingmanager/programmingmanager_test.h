@@ -62,6 +62,7 @@ private slots:
     void theRigViewFollowsALookSwappedOnTheScene();
     void editingARunningEffectChangesItsOutput();
     void theToolbarFitsWithItsMenus();
+    void theHandlesMoveEdgesAndNeverHideAPanel();
     void unpatchedTargetsAreFlaggedInTheProgrammingView();
     void anEffectIsALookForWhatItDrives();
     void unpatchedAndSilentFixturesAreInTheFooter();

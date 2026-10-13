@@ -47,6 +47,13 @@ Three panes:
   the folders on the way down open, and a matching group keeps all its
   fixtures. Clear the search and the tree closes back up.
 
+**Resizing:** drag the handles between the three panes, and the one
+between the canvas and the Look Editor below it. A handle moves its edge
+and stops where a pane reaches its smallest — no pane snaps shut. The
+fades-and-transitions line wraps when the canvas is narrow; the Look Editor
+scrolls when you make it shorter than it is. Where you leave the handles
+is remembered.
+
 Double-clicking a fixture group opens its layout view in the canvas. A
 **← Back to &lt;scene&gt;** button there returns you to the scene you came
 from; if you open an effect while in a group's view, the tab goes back to
