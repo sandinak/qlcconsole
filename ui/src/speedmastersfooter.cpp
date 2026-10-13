@@ -146,7 +146,7 @@ void SpeedMastersFooter::setBeatStyle(SpeedMasterButton::BeatStyle style)
 
 SpeedMastersFooter::BeatWhen SpeedMastersFooter::beatWhen()
 {
-    return BeatWhen(qBound(0, QSettings().value(QStringLiteral("workspace/speedFooterBeatWhen"), int(Always)).toInt(), 1));
+    return BeatWhen(qBound(0, QSettings().value(QStringLiteral("workspace/speedFooterBeatWhen"), int(WhilePlaying)).toInt(), 1));
 }
 
 void SpeedMastersFooter::setBeatWhen(BeatWhen when)
