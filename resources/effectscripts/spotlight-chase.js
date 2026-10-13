@@ -109,7 +109,9 @@
             if (f.hasDimmer)
                 intent.dimmer = bright;
 
-            if (f.hasPanTilt) {
+            // Where the look points it (its Aim or Pan/Tilt) stands, unless a
+            // position palette is bound to the effect itself.
+            if (f.hasPanTilt && !(f.lookAim && !(palettes.pos && palettes.pos.pan !== undefined))) {
                 intent.pan  = aimPan  * f.panRange;
                 intent.tilt = aimTilt * f.tiltRange;
             }

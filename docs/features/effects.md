@@ -53,6 +53,15 @@ works in any colour.
 
 ## Position (moving heads)
 
+A movement effect moves **round where the look points each head**: put an
+**Aim** look (a stage target) or a **Pan/Tilt** look in with it, and the
+ballyhoo, orbit, figure 8, diamond, Lissajous, phaser, wander, sweep, wave
+or fan runs over that point — each head round its own aim at the target.
+The effect's own centre setting (or a joystick) then nudges it from there.
+Without one, it runs round the middle of each head's pan and tilt (on a
+hung mover, about straight down). A spotlight chase leaves the look's aim
+where it is.
+
 | Effect | What it does |
 |---|---|
 | **Ballyhoo** | Wide, pseudo-random audience-scan sweeps |

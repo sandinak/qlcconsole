@@ -123,6 +123,11 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Effects
 
+- **Movement effects run round the look's aim.** With an Aim or Pan/Tilt
+  look in it, a ballyhoo, orbit, figure 8 and the rest move over that point
+  instead of the middle of the heads' range (straight down, on a hung
+  mover). ([Position](effects.md#position-moving-heads))
+
 - **Speed masters in the footer** — a button for each master something is
   on (an unused one neither shows nor flashes, there or in its window),
   reading its tempo and lit on its beat, with a green level bar while its

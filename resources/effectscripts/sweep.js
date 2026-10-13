@@ -65,6 +65,10 @@
             basePhase = t * speed;
 
         return fixtures.map(function(f, i) {
+            // Round where the look points this head (its Aim or Pan/Tilt), the
+            // centre setting nudging from there; else the centre setting.
+            var ax = f.lookAim ? f.lookAim.pan  + (center - 0.5) : center;
+            var ay = f.lookAim ? f.lookAim.tilt + (center - 0.5) : center;
             if (!f.hasPanTilt) return {};
 
             // Cascade: each fixture is staggered forward in time
@@ -74,8 +78,8 @@
             var wave = (mode === 1) ? sawtooth(phase) : triangle(phase);
 
             // wave is 0..1; map to center ± sweep
-            var pan  = (center - panSweep  + wave * panSweep  * 2) * f.panRange;
-            var tilt = (center - tiltSweep + wave * tiltSweep * 2) * f.tiltRange;
+            var pan  = (ax - panSweep  + wave * panSweep  * 2) * f.panRange;
+            var tilt = (ay - tiltSweep + wave * tiltSweep * 2) * f.tiltRange;
 
             var intent = {
                 pan:  Math.max(0, Math.min(f.panRange,  pan)),

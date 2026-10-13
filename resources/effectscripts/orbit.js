@@ -43,13 +43,17 @@
         var n = Math.max(fixtures.length, 1);
 
         return fixtures.map(function(f, i) {
+            // Round where the look points this head (its Aim or Pan/Tilt), the
+            // centre setting nudging from there; else the centre setting.
+            var ax = f.lookAim ? f.lookAim.pan  + (cx - 0.5) : cx;
+            var ay = f.lookAim ? f.lookAim.tilt + (cy - 0.5) : cy;
             if (!f.hasPanTilt) return {};
 
             var phase = t * speed * 2 * Math.PI
                         + (inputs._spread ? f.phase : i * spread / n) * 2 * Math.PI;
 
-            var pan  = (cx + panR  * Math.cos(phase)) * f.panRange;
-            var tilt = (cy + tiltR * Math.sin(phase)) * f.tiltRange;
+            var pan  = (ax + panR  * Math.cos(phase)) * f.panRange;
+            var tilt = (ay + tiltR * Math.sin(phase)) * f.tiltRange;
 
             var intent = {
                 pan:  Math.max(0, Math.min(f.panRange,  pan)),

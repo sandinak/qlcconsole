@@ -1127,6 +1127,36 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
             obj.deleteProperty("sceneTarget");
             sceneTargetCleared.insert(fid);
         }
+        /* lookAim: where the look's own Aim / Pan-Tilt points this head, as
+           fractions of its pan and tilt range (the scripts' own units) -- the
+           centre a movement effect moves round ("should I expect the lights
+           to ballyhoo over the point of target 2?"). Absent when the look
+           doesn't point it. */
+        if (f.fixture != nullptr)
+        {
+            const quint32 panCh = f.fixture->channelNumber(QLCChannel::Pan, QLCChannel::MSB);
+            const quint32 tiltCh = f.fixture->channelNumber(QLCChannel::Tilt, QLCChannel::MSB);
+            const quint32 panFine = f.fixture->channelNumber(QLCChannel::Pan, QLCChannel::LSB);
+            const quint32 tiltFine = f.fixture->channelNumber(QLCChannel::Tilt, QLCChannel::LSB);
+            auto has = [this, fid](quint32 ch) {
+                return ch != QLCChannel::invalid()
+                       && m_sceneBaseValues.contains((quint64(fid) << 32) | ch);
+            };
+            if (has(panCh) || has(tiltCh))
+            {
+                auto frac = [this, fid](quint32 msb, quint32 lsb) {
+                    const int hi = sceneBaseValue(fid, msb, 128);
+                    const int lo = lsb != QLCChannel::invalid() ? sceneBaseValue(fid, lsb, 0) : 0;
+                    return double((hi << 8) | lo) / 65535.0;
+                };
+                QJSValue la = engine->newObject();
+                la.setProperty("pan", has(panCh) ? frac(panCh, panFine) : 0.5);
+                la.setProperty("tilt", has(tiltCh) ? frac(tiltCh, tiltFine) : 0.5);
+                obj.setProperty("lookAim", la);
+            }
+            else if (obj.hasOwnProperty("lookAim"))
+                obj.deleteProperty("lookAim");
+        }
         if (lastSpotOf.contains(fid))
             obj.setProperty("lastSpot", lastSpotOf.value(fid));
         else if (f.lastSpotSet)

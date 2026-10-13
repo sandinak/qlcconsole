@@ -1357,6 +1357,75 @@ void EffectInstance_Test::aRainbowWithALookColourSweepsThatColour()
         QVERIFY2(!(w.replace && w.value == 0), "a stopped effect holds a channel at 0");
 }
 
+/* "should I expect the lights to ballyhoo over the point of target 2? cause
+   it seems to ballyhoo pointing straight down" -- a movement effect moves
+   round where the look's Aim or Pan/Tilt points each head. */
+void EffectInstance_Test::aMovementEffectMovesRoundWhereTheLookPoints()
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Mover");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    const QLCChannel::Preset pr[2] = { QLCChannel::PositionPan, QLCChannel::PositionTilt };
+    for (int c = 0; c < 2; c++)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(c == 0 ? "Pan" : "Tilt");
+        ch->setPreset(pr[c]);
+        def->addChannel(ch);
+        mode->insertChannel(ch, c);
+    }
+    QLCFixtureHead head;
+    head.addChannel(0); head.addChannel(1);
+    mode->insertHead(-1, head);
+    mode->cacheHeads();
+    def->addMode(mode);
+    Fixture *mover = new Fixture(m_doc);
+    mover->setFixtureDefinition(def, mode);
+    mover->setUniverse(3); mover->setAddress(0);
+    QVERIFY(m_doc->addFixture(mover));
+
+    QLCPalette *bally = new QLCPalette(QLCPalette::Effect, m_doc);
+    bally->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/ballyhoo.js");
+    bally->setEffectParamValue("panSize", 0.0);      // no sweep: just its centre
+    bally->setEffectParamValue("tiltSize", 0.0);
+    QVERIFY(m_doc->addPalette(bally));
+
+    auto centre = [&](Scene *scene, int &pan, int &tilt) {
+        EffectInstance inst(m_doc, scene->id(), bally->id());
+        QVERIFY(inst.isValid());
+        inst.runTick();
+        pan = tilt = -1;
+        foreach (const EffectInstance::DmxWrite &w, inst.dmxWrites())
+        {
+            if (w.fixtureId != mover->id()) continue;
+            if (w.channel == 0) pan = w.value;
+            if (w.channel == 1) tilt = w.value;
+        }
+    };
+
+    // Nothing pointing it: the middle of its range, as before.
+    Scene *free = new Scene(m_doc);
+    m_doc->addFunction(free);
+    free->addFixture(mover->id());
+    free->addPalette(bally->id());
+    int pan, tilt;
+    centre(free, pan, tilt);
+    QVERIFY2(qAbs(pan - 128) <= 1 && qAbs(tilt - 128) <= 1,
+             qPrintable(QString("pan %1 tilt %2").arg(pan).arg(tilt)));
+
+    // The look points it a quarter of the way round, near the top of its tilt.
+    Scene *aimed = new Scene(m_doc);
+    m_doc->addFunction(aimed);
+    aimed->addFixture(mover->id());
+    aimed->setValue(mover->id(), 0, 64);
+    aimed->setValue(mover->id(), 1, 40);
+    aimed->addPalette(bally->id());
+    centre(aimed, pan, tilt);
+    QVERIFY2(qAbs(pan - 64) <= 1 && qAbs(tilt - 40) <= 1,
+             qPrintable(QString("pan %1 tilt %2, the look points it at 64 / 40").arg(pan).arg(tilt)));
+}
+
 void EffectInstance_Test::effectsOnOneChannelLayerAsADeskDoes()
 {
     auto w = [](int addr, int value, bool replace, float scale = -1.0f, int base = 0) {
