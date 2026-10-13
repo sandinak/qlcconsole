@@ -1297,9 +1297,14 @@ void ProgrammingManager_Test::theToolbarFitsWithItsMenus()
     QVERIFY(park && mark && beat && more);
     QVERIFY(mgr.m_highlightBtn->isVisible() && mgr.m_flashBtn->isVisible());
     QVERIFY(!mgr.m_parkBtn->isVisible() && !mgr.m_snapshotBtn->isVisible());
-    // One row that fits a laptop's width without scrolling.
+    /* One row that fits without scrolling, measured in ordinary buttons of
+       the platform's own style (Linux draws it all wider than the Mac, so a
+       pixel limit fit one and not the other). */
     QWidget *row = mgr.m_highlightBtn->parentWidget();
-    QVERIFY2(row->sizeHint().width() < 1000, qPrintable(QString::number(row->sizeHint().width())));
+    QPushButton ref(QStringLiteral("Highlight"), row);
+    const double buttons = double(row->sizeHint().width()) / ref.sizeHint().width();
+    QVERIFY2(buttons < 12, qPrintable(QString("%1 px: %2 buttons wide")
+                                         .arg(row->sizeHint().width()).arg(buttons)));
 
     // The Beat menu turns the beat on, and the button says the tempo.
     QCOMPARE(beat->text(), QString("Beat off"));
