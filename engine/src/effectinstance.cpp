@@ -1796,6 +1796,16 @@ EffectInstance::parseIntents(const QJSValue &intents,
         {
             const float mul = qBound(0.0f, (float)dimVal.toNumber(), 1.0f) * envelope;
             quint32 miCh = fxi->masterIntensityChannel();
+            /* No master dimmer, but this head has a dimmer of its own (a mover
+               whose definition puts its Dimmer in its head): that is the
+               dimmer ("breathe isn't applying to this set"). */
+            if (miCh == QLCChannel::invalid())
+            {
+                const quint32 hd = fxi->channelNumber(QLCChannel::Intensity, QLCChannel::MSB, head);
+                const QLCChannel *hc = hd != QLCChannel::invalid() ? fxi->channel(hd) : nullptr;
+                if (hc != nullptr && hc->colour() == QLCChannel::NoColour)
+                    miCh = hd;
+            }
             if (miCh != QLCChannel::invalid())
             {
                 // Base from the scene's Dimmer look; full if the scene sets none.
@@ -1954,7 +1964,17 @@ EffectInstance::parseIntents(const QJSValue &intents,
             int tR = qBound(0, iv("r").toInt(), 255);
             int tG = qBound(0, iv("g").toInt(), 255);
             int tB = qBound(0, iv("b").toInt(), 255);
-            quint32 nCh = fxi->channels();
+            // A wheel has a colour, not a level: match the hue at full, so a
+            // breathing blue stays on the blue slot instead of hopping to
+            // whichever slot is nearest a darker blue. Black: leave the wheel.
+            const int top = qMax(tR, qMax(tG, tB));
+            if (top > 0)
+            {
+                tR = tR * 255 / top;
+                tG = tG * 255 / top;
+                tB = tB * 255 / top;
+            }
+            quint32 nCh = top > 0 ? fxi->channels() : 0;
             for (quint32 c = 0; c < nCh; ++c)
             {
                 if (!fxi->fixtureMode()) break;

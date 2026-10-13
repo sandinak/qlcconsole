@@ -55,6 +55,7 @@ private slots:
     void aRainbowWithALookColourSweepsThatColour();
     void effectsOnOneChannelLayerAsADeskDoes();
     void aMovementEffectMovesRoundWhereTheLookPoints();
+    void aDimmerInTheHeadBreathesAndTheWheelHoldsItsColour();
     /** A follow-spot with Fade Near Limit takes a head's dimmer down when its
      *  target is out of that head's reach, and leaves the dimmer to the scene
      *  when it is comfortably within it. */

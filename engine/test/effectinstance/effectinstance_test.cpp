@@ -32,6 +32,7 @@
 #include "qlcfixturehead.h"
 #include "effectinstance.h"
 #include "effectscriptrunner.h"
+#include "qlccapability.h"
 #include "effectscript.h"
 #include "effectscriptcache.h"
 #include "wledfixture.h"
@@ -1424,6 +1425,74 @@ void EffectInstance_Test::aMovementEffectMovesRoundWhereTheLookPoints()
     centre(aimed, pan, tilt);
     QVERIFY2(qAbs(pan - 64) <= 1 && qAbs(tilt - 40) <= 1,
              qPrintable(QString("pan %1 tilt %2, the look points it at 64 / 40").arg(pan).arg(tilt)));
+}
+
+/* "breathe isn't applying to this set": a mover whose definition puts its
+   Dimmer in its head (no master dimmer) and colours by a wheel. Breathe's
+   dimmer goes to that Dimmer; its dimmed blue keeps the wheel on blue. */
+void EffectInstance_Test::aDimmerInTheHeadBreathesAndTheWheelHoldsItsColour()
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("WheelSpot");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    QLCChannel *pan = new QLCChannel(); pan->setName("Pan"); pan->setPreset(QLCChannel::PositionPan);
+    QLCChannel *wheel = new QLCChannel(); wheel->setName("Color wheel"); wheel->setGroup(QLCChannel::Colour);
+    const struct { int lo, hi; QColor c; const char *n; } wheelSlots[] = {
+        { 0, 9, QColor(0, 0, 0), "Off" }, { 10, 19, QColor(255, 0, 0), "Red" },
+        { 20, 29, QColor(0, 0, 255), "Blue" }, { 30, 39, QColor(255, 255, 255), "White" } };
+    for (const auto &sl : wheelSlots)
+    {
+        QLCCapability *cap = new QLCCapability(uchar(sl.lo), uchar(sl.hi), sl.n);
+        cap->setResource(0, sl.c);
+        wheel->addCapability(cap);
+    }
+    QLCChannel *dim = new QLCChannel(); dim->setName("Dimmer"); dim->setPreset(QLCChannel::IntensityDimmer);
+    QList<QLCChannel *> chans = { pan, wheel, dim };
+    for (int c = 0; c < chans.size(); c++)
+    {
+        def->addChannel(chans.at(c));
+        mode->insertChannel(chans.at(c), c);
+    }
+    QLCFixtureHead head;
+    head.addChannel(0); head.addChannel(1); head.addChannel(2);   // the dimmer is the head's
+    mode->insertHead(-1, head);
+    mode->cacheHeads();
+    def->addMode(mode);
+    Fixture *spot = new Fixture(m_doc);
+    spot->setFixtureDefinition(def, mode);
+    spot->setUniverse(3); spot->setAddress(100);
+    QVERIFY(m_doc->addFixture(spot));
+    QCOMPARE(spot->masterIntensityChannel(), QLCChannel::invalid());
+
+    QLCPalette *breathe = new QLCPalette(QLCPalette::Effect, m_doc);
+    breathe->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/dimmer-phaser.js");
+    QVERIFY(m_doc->addPalette(breathe));
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixture(spot->id());
+    scene->addPalette(breathe->id());
+    EffectInstance inst(m_doc, scene->id(), breathe->id());
+    QVERIFY(inst.isValid());
+    int cols = 0, rows = 0;
+    const QList<EffectInstance::EffectCell> cells = inst.effectiveCells(cols, rows);
+    QCOMPARE(cells.size(), 1);
+
+    QJSEngine *js = inst.m_script.engine();
+    QJSValue intents = js->newArray(1);
+    QJSValue o = js->newObject();                    // what Breathe sends at 30 %: the look's
+    o.setProperty("dimmer", 0.3);                    // blue, dimmed, and the dimmer
+    o.setProperty("r", 0); o.setProperty("g", 0); o.setProperty("b", 76);
+    intents.setProperty(0, o);
+    int dimOut = -1, wheelOut = -1;
+    foreach (const EffectInstance::DmxWrite &w, inst.parseIntents(intents, cells))
+    {
+        if (w.channel == 2) dimOut = w.value;
+        if (w.channel == 1) wheelOut = w.value;
+    }
+    QVERIFY2(qAbs(dimOut - 77) <= 1, qPrintable(QString("the head's dimmer got %1").arg(dimOut)));
+    QVERIFY2(wheelOut >= 20 && wheelOut <= 29,
+             qPrintable(QString("a dim blue should keep the wheel on blue, not %1").arg(wheelOut)));
 }
 
 void EffectInstance_Test::effectsOnOneChannelLayerAsADeskDoes()

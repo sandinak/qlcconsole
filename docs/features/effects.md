@@ -19,9 +19,14 @@ works in any colour.
   to it (Cyan under a rainbow no longer turns every hue pale). White and
   any channel the effect doesn't name go dark under it. Heads the effect
   leaves black keep the look's colour.
-- A **dimmer effect** (Wave, Dimmer Phaser, Candle…) dims whatever ends up
-  there. On a head with no dimmer channel it scales the colour — the
-  colour effect's, else the look's.
+- A **dimmer effect** (Wave, Dimmer Phaser, Breathe, Candle…) dims whatever
+  ends up there: on the fixture's master dimmer, else the head's own dimmer
+  (a mover whose definition puts its Dimmer in its head). On a head with no
+  dimmer channel at all it scales the colour — the colour effect's, else
+  the look's.
+- On a **colour-wheel** fixture an effect's colour picks the nearest slot
+  by its **hue**, not its brightness — a breathing blue stays on the blue
+  slot while the dimmer does the breathing.
 - Two colour effects on the same head: the later one in the look wins.
 
 ## Colour
