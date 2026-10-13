@@ -153,6 +153,7 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
        empty tree would be a dead end when you are trying to patch for the
        first time. */
     m_showUnused = new QCheckBox(tr("Show unused protocols and interfaces"), this);
+    m_showUnused->setObjectName("connectionsShowUnused");
     m_showUnused->setChecked(false);
     connect(m_showUnused, SIGNAL(toggled(bool)), this, SLOT(refresh()));
 
@@ -225,6 +226,7 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     bar->insertWidget(bar->indexOf(hint) + 1, m_status);   // on the same row
 
     m_tree = new QTreeWidget(this);
+    m_tree->setObjectName("connectionsTree");
     m_tree->setColumnCount(3);
     m_tree->setHeaderLabels(QStringList()
                             << tr("Device") << tr("Detail") << tr("Carries"));
@@ -264,6 +266,7 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     /* Beside it, what the selected universe is sending ("it would be nice to
        see what's being sent out on a U if selected on the right hand side"). */
     m_output = new UniverseOutputView(m_doc, this);
+    m_output->setObjectName("connectionsOutput");
     QScrollArea *outScroll = new QScrollArea(this);
     outScroll->setWidget(m_output);
     outScroll->setWidgetResizable(false);

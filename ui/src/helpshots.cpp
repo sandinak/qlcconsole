@@ -1,0 +1,591 @@
+/*
+  Q Light Controller Plus
+  helpshots.cpp
+
+  Copyright (C) Branson Matheson
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0.txt
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+*/
+
+#include <QCoreApplication>
+#include <QApplication>
+#include <QTreeWidgetItemIterator>
+#include <QDialogButtonBox>
+#include <QTreeWidget>
+#include <QStatusBar>
+#include <QTabWidget>
+#include <QListWidget>
+#include <QCheckBox>
+#include <QLineEdit>
+#include <QScrollArea>
+#include <QSplitter>
+#include <QAction>
+#include <QToolBar>
+#include <QTabBar>
+#include <QPainterPath>
+#include <QPainter>
+#include <QSettings>
+#include <QTemporaryDir>
+#include <QWidget>
+#include <QTimer>
+#include <QDir>
+
+#include "programmingmanager.h"
+#include "patchinventorydialog.h"
+#include "functionstreewidget.h"
+#include "scenegrouplooks.h"
+#include "effectbrowser.h"
+#include "lookeditor.h"
+#include "helpshots.h"
+#include "qlcpalette.h"
+#include "fixture.h"
+#include "scene.h"
+#include "app.h"
+#include "doc.h"
+
+namespace
+{
+const QColor kCallout(255, 122, 0);     // reads on the dark theme and on white
+
+void settle()
+{
+    // Two passes: the first lays out what the setup changed, the second
+    // paints what that layout revealed (lazily built panels, scroll ranges).
+    // Widgets replaced by deleteLater() go too -- an event loop would have
+    // removed them, and a grab would show them next to their replacement.
+    for (int i = 0; i < 2; ++i)
+    {
+        QCoreApplication::sendPostedEvents();
+        QCoreApplication::sendPostedEvents(NULL, QEvent::DeferredDelete);
+        QCoreApplication::processEvents();
+    }
+}
+
+QWidget *named(const QObject *root, const char *name)
+{
+    QWidget *w = root ? root->findChild<QWidget *>(QLatin1String(name)) : NULL;
+    if (w == NULL)
+        fprintf(stderr, "[HELPSHOT] no control named %s\n", name);
+    return w;
+}
+
+HelpShots::Callout mark(QWidget *w, int number)
+{
+    HelpShots::Callout c;
+    c.widget = w;
+    c.number = number;
+    return c;
+}
+
+/** The row of @a tree whose first column contains @a text. */
+QTreeWidgetItem *rowNamed(QTreeWidget *tree, const QString &text)
+{
+    if (tree == NULL)
+        return NULL;
+    for (QTreeWidgetItemIterator it(tree); *it; ++it)
+        if ((*it)->text(0).contains(text, Qt::CaseInsensitive))
+            return *it;
+    return NULL;
+}
+
+/** @a item's row, in @a frame's grab coordinates. */
+HelpShots::Callout markRow(QTreeWidget *tree, QTreeWidgetItem *item,
+                           QWidget *grab, int number)
+{
+    HelpShots::Callout c;
+    c.number = number;
+    if (tree != NULL && item != NULL && grab != NULL)
+    {
+        QRect r = tree->visualItemRect(item);
+        r.setLeft(0);
+        r.setRight(tree->viewport()->width() - 1);
+        c.rect = QRect(tree->viewport()->mapTo(grab, r.topLeft()), r.size());
+    }
+    return c;
+}
+
+/** The part of @a w that's on show, in @a grab's coordinates: clipped by
+    every parent on the way up, as a control in a scroll area or under a
+    splitter can be bigger than what you see of it. Empty when hidden. */
+QRect seenRect(QWidget *w, QWidget *grab)
+{
+    if (w == NULL || grab == NULL || !w->isVisible())
+        return QRect();
+    QRect r = w->rect();
+    for (QWidget *c = w; c != grab; c = c->parentWidget())
+    {
+        if (c->parentWidget() == NULL)
+            return QRect();             // not inside the grab
+        r = r.translated(c->pos()).intersected(c->parentWidget()->rect());
+    }
+    return r;
+}
+
+const int kWidth = 1280;
+const int kHeight = 780;
+}
+
+HelpShots::HelpShots(App *app, const QString &outDir, const QString &only)
+    : QObject(app)
+    , m_app(app)
+    , m_outDir(outDir)
+    , m_only(only)
+    , m_failed(0)
+{
+}
+
+void HelpShots::isolateSettings()
+{
+    if (qEnvironmentVariableIsEmpty("QLC_HELP_SHOTS"))
+        return;
+    // Kept for the whole run; removed with it.
+    static QTemporaryDir dir;
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, dir.path());
+}
+
+void HelpShots::runIfRequested(App *app)
+{
+    const QString outDir = QString::fromLocal8Bit(qgetenv("QLC_HELP_SHOTS"));
+    if (outDir.isEmpty() || app == NULL)
+        return;
+    QDir().mkpath(outDir);
+
+    HelpShots *hs = new HelpShots(app, outDir,
+                                  QString::fromLocal8Bit(qgetenv("QLC_HELP_SHOTS_ONLY")));
+    for (const Shot &s : hs->shots())
+        if (hs->m_only.isEmpty() || s.name.contains(hs->m_only, Qt::CaseInsensitive))
+            hs->m_queue << s;
+
+    // The pictures are all in one theme, the one that reads best printed
+    // small: Blue. (The settings are this run's own; see isolateSettings().)
+    app->setTheme(App::ThemeBlue);
+
+    // Past startup, so the window has its size and the show is in.
+    QTimer::singleShot(700, hs, &HelpShots::next);
+}
+
+void HelpShots::next()
+{
+    if (m_queue.isEmpty())
+    {
+        fprintf(stderr, "[HELPSHOT] done, %d failed\n", m_failed);
+        // The shots change the show (selections, opened looks); none of that
+        // is the user's, so quit without the save prompt.
+        m_app->doc()->resetModified();
+        QCoreApplication::exit(m_failed == 0 ? 0 : 1);
+        return;
+    }
+    const Shot shot = m_queue.takeFirst();
+    take(shot);
+    QTimer::singleShot(50, this, &HelpShots::next);
+}
+
+void HelpShots::take(const Shot &shot)
+{
+    Frame frame = shot.setup();
+    settle();
+    if (frame.grab.isNull())
+    {
+        fprintf(stderr, "[HELPSHOT] %s: nothing to grab\n", qPrintable(shot.name));
+        ++m_failed;
+    }
+    else
+    {
+        for (const Callout &c : frame.callouts)
+            if (c.widget.isNull() ? c.rect.isEmpty() : seenRect(c.widget, frame.grab).isEmpty())
+            {
+                fprintf(stderr, "[HELPSHOT] %s: callout %d has no control on show\n",
+                        qPrintable(shot.name), c.number);
+                ++m_failed;
+            }
+
+        const QImage img = annotate(frame.grab->grab().toImage(), frame);
+        const QString path = m_outDir + QLatin1Char('/') + shot.name + QStringLiteral(".png");
+        if (img.save(path))
+            fprintf(stderr, "[HELPSHOT] %s\n", qPrintable(path));
+        else
+        {
+            fprintf(stderr, "[HELPSHOT] %s: can't write\n", qPrintable(path));
+            ++m_failed;
+        }
+    }
+    if (shot.cleanup)
+        shot.cleanup();
+    settle();
+}
+
+QImage HelpShots::annotate(const QImage &image, const Frame &frame)
+{
+    const qreal dpr = image.devicePixelRatio();
+    const QMargins pad = frame.pad;
+
+    // The grab, on a page wide enough for the padding, in the window colour.
+    QImage out(QSize(image.width() + (pad.left() + pad.right()) * dpr,
+                     image.height() + (pad.top() + pad.bottom()) * dpr),
+               QImage::Format_ARGB32_Premultiplied);
+    out.setDevicePixelRatio(dpr);
+    out.fill(QApplication::palette().color(QPalette::Window));
+
+    QPainter p(&out);
+    p.drawImage(QPoint(pad.left(), pad.top()), image);
+    p.setRenderHint(QPainter::Antialiasing);
+
+    // Bigger marks on a bigger picture: the help shrinks a whole window to
+    // fit its page, and the numbers must still read there.
+    const QRect bounds(QPoint(0, 0), out.size() / dpr);
+    const qreal scale = qBound(1.0, bounds.width() / 900.0, 1.6);
+    const int badge = qRound(22 * scale);
+    QFont f = QApplication::font();
+    f.setBold(true);
+    f.setPixelSize(qRound(14 * scale));
+    p.setFont(f);
+
+    for (const Callout &c : frame.callouts)
+    {
+        QRect r = c.rect;
+        if (!c.widget.isNull() && !frame.grab.isNull())
+            r = seenRect(c.widget, frame.grab);
+        if (r.isEmpty())
+            continue;
+        r.translate(pad.left(), pad.top());
+        r = r.adjusted(-3, -3, 3, 3).intersected(bounds.adjusted(1, 1, -1, -1));
+
+        p.setBrush(Qt::NoBrush);
+        p.setPen(QPen(kCallout, 2.5 * scale));
+        p.drawRoundedRect(QRectF(r), 5, 5);
+
+        // Where the number goes: on a big control, its top-left corner; on a
+        // short one, outside it so it hides none of its text: to its left, or
+        // where the shot asks (above, right); at its corner when there's no
+        // room to its left.
+        QRect b(0, 0, badge, badge);
+        if (c.place == Above)
+            b.moveCenter(QPoint(r.center().x(), r.top() - badge / 2 - 2));
+        else if (c.place == Left)
+            b.moveCenter(QPoint(r.left() - badge / 2 - 3, r.center().y()));
+        else if (r.height() >= 3 * badge || c.place == Corner)
+            b.moveCenter(r.topLeft());
+        else if (c.place == Right)
+            b.moveCenter(QPoint(r.right() + badge / 2 + 3, r.center().y()));
+        else if (r.left() - badge - 3 >= bounds.left())
+            b.moveCenter(QPoint(r.left() - badge / 2 - 3, r.center().y()));
+        else
+            b.moveCenter(r.topLeft());
+        b.moveLeft(qBound(bounds.left() + 1, b.left(), bounds.right() - badge - 1));
+        b.moveTop(qBound(bounds.top() + 1, b.top(), bounds.bottom() - badge - 1));
+
+        p.setPen(QPen(Qt::white, 1.5));
+        p.setBrush(kCallout);
+        p.drawEllipse(b);
+        p.setPen(Qt::white);
+        p.drawText(b, Qt::AlignCenter, QString::number(c.number));
+    }
+    p.end();
+
+    if (!frame.crop.isEmpty())
+    {
+        const QRect crop = frame.crop.translated(pad.left(), pad.top());
+        QImage cropped = out.copy(QRect(crop.topLeft() * dpr, crop.size() * dpr)
+                                  .intersected(out.rect()));
+        cropped.setDevicePixelRatio(dpr);
+        return cropped;
+    }
+    return out;
+}
+
+QList<HelpShots::Shot> HelpShots::shots()
+{
+    App *app = m_app;
+    Doc *doc = app->doc();
+    ProgrammingManager *pm = app->findChild<ProgrammingManager *>();
+
+    auto function = [doc](const QString &name) -> Function * {
+        for (Function *f : doc->functions())
+            if (f != NULL && f->name().contains(name, Qt::CaseInsensitive))
+                return f;
+        fprintf(stderr, "[HELPSHOT] no function %s\n", qPrintable(name));
+        return NULL;
+    };
+    auto palette = [doc](const QString &name) -> QLCPalette * {
+        for (QLCPalette *p : doc->palettes())
+            if (p != NULL && p->name() == name)
+                return p;
+        fprintf(stderr, "[HELPSHOT] no palette %s\n", qPrintable(name));
+        return NULL;
+    };
+    // The main window at the size every picture of it is taken at.
+    auto window = [app]() {
+        app->showNormal();
+        app->resize(kWidth, kHeight);
+    };
+    // Brings forward the tab that holds @a w.
+    auto showTab = [app](QWidget *w) {
+        while (w != NULL && app->m_tab->indexOf(w) < 0)
+            w = w->parentWidget();
+        if (w != NULL)
+            app->m_tab->setCurrentWidget(w);
+        settle();
+    };
+    // How tall the Programming tab's look editor is, under the canvas.
+    auto editorHeight = [pm](int px) {
+        if (pm == NULL || pm->m_canvasSplit == NULL)
+            return;
+        const QList<int> was = pm->m_canvasSplit->sizes();
+        int total = 0;
+        for (int h : was)
+            total += h;
+        pm->m_canvasSplit->setSizes(QList<int>() << total - px << px);
+        settle();
+    };
+    // Opens a scene in the Programming tab, selected in the tree, and selects
+    // the look whose row contains @a look (none when empty).
+    auto openScene = [pm, function, showTab](const QString &scene, const QString &look) {
+        if (pm == NULL)
+            return;
+        showTab(pm);
+        // Narrow side panes: the canvas's toolbar wants the width.
+        if (QSplitter *split = qobject_cast<QSplitter *>(named(pm, "programmingSplitter")))
+        {
+            const int side = 250;
+            split->setSizes(QList<int>() << side << split->width() - 2 * side << side);
+        }
+        Function *f = function(scene);
+        if (f == NULL)
+            return;
+        pm->m_funcTree->clearSelection();
+        if (QTreeWidgetItem *it = pm->m_funcTree->functionItem(f))
+        {
+            pm->m_funcTree->scrollToItem(it);
+            it->setSelected(true);
+        }
+        pm->m_currentScene = Function::invalidId();     // build it afresh
+        pm->loadCanvas(f->id());
+        settle();
+        if (look.isEmpty())
+            return;
+        QTreeWidget *looks = qobject_cast<QTreeWidget *>(named(pm, "sceneLooks"));
+        if (QTreeWidgetItem *it = rowNamed(looks, look))
+        {
+            looks->clearSelection();
+            looks->setCurrentItem(it);
+            it->setSelected(true);
+        }
+        else
+            fprintf(stderr, "[HELPSHOT] no look %s\n", qPrintable(look));
+    };
+
+    QList<Shot> list;
+
+    // Getting started: the whole window, what's where.
+    list << Shot{ QStringLiteral("getting-started-main-window"), [=]() {
+        window();
+        openScene(QStringLiteral("05 Stage Shape"), QString());
+        // The toolbar's buttons, not the bar: on macOS it runs under the menus.
+        QRect buttons;
+        for (QAction *a : { app->m_controlPanicAction, app->m_controlBlackoutAction,
+                            app->m_controlBlindAction, app->m_modeToggleAction })
+            if (QWidget *w = app->m_toolbar->widgetForAction(a))
+                buttons |= QRect(w->mapTo(app, QPoint(0, 0)), w->size());
+        Frame f;
+        f.grab = app;
+        Callout bar;
+        bar.rect = buttons;
+        bar.number = 1;
+        f.callouts << bar
+                   << mark(app->m_tab->currentWidget(), 2)
+                   << mark(app->m_tab->tabBar(), 3)
+                   << mark(app->statusBar(), 4);
+        return f;
+    }, nullptr };
+
+    // Programming: the three panes and the look editor under the canvas.
+    list << Shot{ QStringLiteral("programming-tab-layout"), [=]() {
+        window();
+        openScene(QStringLiteral("05 Stage Shape"), QStringLiteral("White"));
+        editorHeight(250);
+        Frame f;
+        f.grab = app;
+        f.callouts << mark(named(pm, "programmingFunctions"), 1)
+                   << mark(named(pm, "sceneTargets"), 2)
+                   << mark(named(pm, "sceneLooks"), 3)
+                   << mark(named(pm, "lookEditor"), 4)
+                   << mark(named(pm, "programmingSources"), 5)
+                   << mark(named(pm, "programmingFixturesGroups"), 6);
+        return f;
+    }, nullptr };
+
+    // The look editor on an Effect look: what's picked, its Spread, its master.
+    list << Shot{ QStringLiteral("programming-tab-look-editor-effect"), [=]() {
+        window();
+        openScene(QStringLiteral("05 Stage Shape"), QStringLiteral("Line"));
+        editorHeight(600);
+        // Scrolled down to the Spread row and the speed master under it.
+        for (const char *name : { "effectSpeedMaster", "effectSpread" })
+        {
+            QWidget *row = named(pm, name);
+            for (QWidget *w = row; w != NULL; w = w->parentWidget())
+                if (QScrollArea *sa = qobject_cast<QScrollArea *>(w))
+                {
+                    sa->ensureWidgetVisible(row, 0, 8);
+                    break;
+                }
+        }
+        Frame f;
+        f.grab = named(pm, "lookEditor");
+        f.callouts << mark(named(pm, "effectChange"), 1)
+                   << mark(named(pm, "effectSpread"), 2);
+        Callout master = mark(named(pm, "effectSpeedMaster"), 3);
+        master.place = Right;       // its label is on its left
+        f.callouts << master;
+        return f;
+    }, nullptr };
+
+    // The effect browser, opened from that look.
+    list << Shot{ QStringLiteral("programming-tab-effect-browser"), [=]() {
+        window();
+        openScene(QStringLiteral("05 Stage Shape"), QStringLiteral("Line"));
+        LookEditor *le = pm ? pm->m_lookEditor : NULL;
+        Frame f;
+        if (le == NULL)
+            return f;
+        le->openEffectPicker();
+        settle();
+        QWidget *dlg = named(le, "effectPicker");
+        if (dlg == NULL)
+            return f;
+        dlg->resize(900, 600);
+        f.grab = dlg;
+        f.pad = QMargins(30, 0, 0, 0);      // numbers left of the search and tabs
+        if (EffectBrowser *eb = dlg->findChild<EffectBrowser *>())
+        {
+            Callout list = mark(eb->list(), 3);
+            list.place = Left;      // its corner is under the tabs' number
+            f.callouts << mark(eb->search(), 1) << mark(eb->tabs(), 2) << list;
+        }
+        f.callouts << mark(named(dlg, "effectPickerInfo"), 4)
+                   << mark(named(dlg, "effectPickerDone"), 5);
+        return f;
+    }, [=]() {
+        if (pm != NULL && pm->m_lookEditor != NULL)
+            pm->m_lookEditor->closeEffectPicker(false);
+    } };
+
+    // The footer, on its own.
+    list << Shot{ QStringLiteral("footer"), [=]() {
+        window();
+        openScene(QStringLiteral("05 Stage Shape"), QString());
+        Frame f;
+        f.grab = app->statusBar();
+        f.pad = QMargins(4, 30, 4, 4);      // the numbers go above the chips
+        int n = 0;
+        for (const char *name : { "footerReadiness", "footerGrandMaster",
+                                  "speedMastersFooter", "footerTimecode",
+                                  "footerLoad", "footerMode" })
+        {
+            Callout c = mark(named(app, name), ++n);
+            c.place = Above;
+            f.callouts << c;
+        }
+        return f;
+    }, nullptr };
+
+    // Connections, by universe, with the first universe's output showing.
+    list << Shot{ QStringLiteral("connections-by-universe"), [=]() {
+        window();
+        openScene(QStringLiteral("05 Stage Shape"), QString());   // something to send
+        Frame f;
+        QCheckBox *byUni = qobject_cast<QCheckBox *>(named(app, "connectionsByUniverse"));
+        QTreeWidget *tree = qobject_cast<QTreeWidget *>(named(app, "connectionsTree"));
+        if (byUni == NULL || tree == NULL)
+            return f;
+        showTab(tree);
+        byUni->setChecked(true);
+        settle();
+        if (tree->topLevelItemCount() > 0)
+        {
+            tree->setCurrentItem(tree->topLevelItem(0));
+            tree->topLevelItem(0)->setSelected(true);
+        }
+        f.grab = app;
+        Callout by = mark(byUni, 1);
+        by.place = Corner;          // to its right is the next tick box
+        f.callouts << by
+                   << mark(tree, 2)
+                   << mark(named(app, "connectionsOutput"), 3);
+        return f;
+    }, nullptr };
+
+    // The Patch dialog, proposing addresses for every fixture in the show.
+    list << Shot{ QStringLiteral("patch-dialog"), [=]() {
+        window();
+        QList<quint32> ids;
+        for (Fixture *fx : doc->fixtures())
+            ids << fx->id();
+        PatchInventoryDialog *dlg = new PatchInventoryDialog(doc, ids, app);
+        dlg->setAttribute(Qt::WA_DeleteOnClose);
+        dlg->setObjectName(QStringLiteral("helpShotPatch"));
+        dlg->resize(1100, 680);
+        dlg->show();
+        Frame f;
+        f.grab = dlg;
+        f.pad = QMargins(30, 0, 0, 0);
+        for (const char *name : { "placeHow", "addressOrder" })
+        {
+            Callout c = mark(named(dlg, name), f.callouts.size() + 1);
+            c.place = Above;        // their labels are on their left
+            f.callouts << c;
+        }
+        f.callouts << mark(named(dlg, "patchTable"), 3)
+                   << mark(named(dlg, "patchSummary"), 4)
+                   << mark(named(dlg, "patchApply"), 5);
+        return f;
+    }, [=]() {
+        if (QWidget *dlg = app->findChild<QWidget *>(QStringLiteral("helpShotPatch")))
+            dlg->close();
+    } };
+
+    // The stack checker: a second movement effect covers the first. Last,
+    // as it changes the show (and puts it back).
+    list << Shot{ QStringLiteral("effects-stack-checker"), [=]() {
+        window();
+        Frame f;
+        Scene *scene = qobject_cast<Scene *>(function(QStringLiteral("06 Stage Shape")));
+        QLCPalette *line = palette(QStringLiteral("Line"));
+        if (scene == NULL || line == NULL)
+            return f;
+        if (!scene->palettes().contains(line->id()))
+            scene->addPalette(line->id());
+        openScene(scene->name(), QString());
+        editorHeight(120);
+        QWidget *canvas = pm ? pm->m_canvas : NULL;
+        QTreeWidget *looks = qobject_cast<QTreeWidget *>(named(pm, "sceneLooks"));
+        QTreeWidgetItem *covered = rowNamed(looks, QStringLiteral("Circle"));
+        if (looks != NULL && covered != NULL)
+            looks->scrollToItem(covered);
+        settle();
+        f.grab = canvas;
+        f.callouts << markRow(looks, covered, canvas, 1)
+                   << mark(named(pm, "lookStackNotes"), 2);
+        return f;
+    }, [=]() {
+        // Put the show back as it was.
+        Scene *scene = qobject_cast<Scene *>(function(QStringLiteral("06 Stage Shape")));
+        QLCPalette *line = palette(QStringLiteral("Line"));
+        if (scene != NULL && line != NULL)
+            scene->removePalette(line->id());
+        doc->resetModified();
+    } };
+
+    return list;
+}

@@ -82,6 +82,7 @@ class App final : public QMainWindow
 {
     Q_OBJECT
     Q_DISABLE_COPY(App)
+    friend class HelpShots;     // sets up views for the help's pictures
 
     /*********************************************************************
      * Initialization

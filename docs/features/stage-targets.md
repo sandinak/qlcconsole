@@ -94,7 +94,7 @@ which fixtures can't reach their assigned target — worse than the ordinary
 amber "nothing covers this channel" warning, because the fixture isn't
 idle, it's stuck at its limit pointing somewhere else.
 
-In the rig view itself, two overlays answer the same question spatially
+In the Lighting Studio itself, two overlays answer the same question spatially
 (Show menu, or a fixture/structure's own context menu):
 
 - **Light footprint** — everywhere a selected head's full pan/tilt sweep
@@ -122,7 +122,7 @@ with an Aim look:
   covering more of them without washing the wall behind — down to the waist
   at most. Each head works from its own throw and its own beam, read live
   from its zoom and iris channels, so a near head and a far one land the
-  same way. The rig view draws the same thing.
+  same way. The Lighting Studio and the Rig Overview draw the same thing.
 - Movement stays **target-converged**: the effect moves the shared aim
   point, and the scene's Aim look re-aims every head at it — which is what
   keeps multiple heads genuinely converged on the same spot, rather than

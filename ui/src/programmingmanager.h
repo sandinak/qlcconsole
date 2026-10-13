@@ -55,6 +55,7 @@ class Doc;
 class ProgrammingManager final : public QWidget
 {
     Q_OBJECT
+    friend class HelpShots;     // opens scenes for the help's pictures
 
 public:
     ProgrammingManager(QWidget *parent, Doc *doc);

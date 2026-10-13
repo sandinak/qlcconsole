@@ -23,7 +23,14 @@ Manager / Scene Editor.
 
 ## Layout
 
-![Programming tab with a scene's Targets and Looks open](../images/programming-tab-targets-looks.png)
+![The Programming tab with a scene open and a look selected](../images/programming-tab-layout.png)
+
+1. **Scenes / functions** — double-click one to open it.
+2. **Targets** — the fixtures and groups the open scene lights.
+3. **Looks** — what it does to them, top to bottom; select one to edit it.
+4. **The Look Editor**, for the selected look.
+5. **Palettes** and **Bundles** — drag a palette onto Looks.
+6. **Fixtures &amp; groups** — drag them onto Targets.
 
 Three panes:
 
@@ -92,7 +99,7 @@ that scene first, with the effect showing.
 
 If some of a scene's targets are still in the inventory (not patched), an
 amber warning under Targets says so: they send no DMX, and the look shows in
-the rig view only until you patch them in the Fixture Manager. Unpatched
+the Lighting Studio and the Rig Overview only until you patch them in the Fixture Manager. Unpatched
 target rows are also marked "(unpatched)".
 
 A **Bundle** is a related, separate shortcut: a portable, shareable snapshot
@@ -165,7 +172,23 @@ palettes so you can see it on the rig, but it's never saved into the look.
 The editor says "Trying it on “&lt;look&gt;” — not saved into it"; drag the
 palette onto the look to keep it. With no look open it says "Not in a look".
 
+![The Look Editor on an Effect look](../images/programming-tab-look-editor-effect.png)
+
+1. **Change effect…** opens the effect browser (below).
+2. **Spread** — how the effect is spread across the heads
+   ([Spread](effects.md#spread)).
+3. **Speed** — the speed master it runs on
+   ([Speed masters](effects.md#speed-masters)).
+
 ### The effect browser
+
+![The effect browser](../images/programming-tab-effect-browser.png)
+
+1. **Search effects…** — every category at once.
+2. **The tabs**: Recent, Color, Dimmer, Position, Beam, Other, WLED.
+3. **The effects**, each with a live preview; the one picked is playing.
+4. **What the picked effect does**, what it works with and its settings.
+5. **Done** keeps it; **Cancel** puts back what the look had.
 
 An Effect look picks its effect from a browser rather than a dropdown. The
 browser is a **window of its own**, so once an effect is picked its
@@ -266,7 +289,7 @@ tick in a release build (it was 68). Renaming or moving a fixture shows up
 on the next tick.
 
 An effect run across two or more groups is laid out **as the rig stands on
-stage**: one grid with every head where the rig view draws it — across is
+stage**: one grid with every head where the Lighting Studio draws it — across is
 stage left to right, up is height (or upstage, when everything is at one
 height). A sine over the towers, bars and steps then moves across the stage
 as one, instead of group by group. An effect on a single group still uses

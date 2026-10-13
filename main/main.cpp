@@ -43,6 +43,7 @@
 #include "simpledesk.h"
 #include "webaccess.h"
 #include "webaccessauth.h"
+#include "helpshots.h"
 #include "app.h"
 #include "doc.h"
 
@@ -290,6 +291,10 @@ bool parseArgs()
  */
 int main(int argc, char** argv)
 {
+    // Before anything reads a setting: the help's pictures start from the
+    // default layout and leave the user's own settings alone.
+    HelpShots::isolateSettings();
+
     /* Create the Qt core application object */
     QApplication qapp(argc, argv);
 
@@ -342,6 +347,8 @@ int main(int argc, char** argv)
 
     // Automated UI-screenshot hook (offscreen grabs); no-op unless QLC_SHOT_DIR set.
     app.captureScenarioIfRequested();
+    // The help's pictures (tools/help-shots.sh); no-op unless QLC_HELP_SHOTS set.
+    HelpShots::runIfRequested(&app);
     if (QLCArgs::kioskMode == true)
         app.enableKioskMode();
     if (QLCArgs::kioskMode == true && QLCArgs::closeButtonRect.isValid() == true)

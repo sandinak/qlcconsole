@@ -13,15 +13,22 @@
     <file alias="help/troubleshooting.md">../../docs/features/troubleshooting.md</file>
     <file alias="help/whats-new.md">../../docs/features/whats-new.md</file>
     <file alias="help/EFFECTSCRIPT_API.md">../../EFFECTSCRIPT_API.md</file>
+    <file alias="images/connections-by-universe.png">../../docs/images/connections-by-universe.png</file>
     <file alias="images/connections-devices-tab.png">../../docs/images/connections-devices-tab.png</file>
+    <file alias="images/effects-stack-checker.png">../../docs/images/effects-stack-checker.png</file>
     <file alias="images/fixture-manager-grid-editor.png">../../docs/images/fixture-manager-grid-editor.png</file>
     <file alias="images/fixture-manager-groups.png">../../docs/images/fixture-manager-groups.png</file>
+    <file alias="images/footer.png">../../docs/images/footer.png</file>
+    <file alias="images/getting-started-main-window.png">../../docs/images/getting-started-main-window.png</file>
     <file alias="images/lighting-studio-fixture-mount-properties.png">../../docs/images/lighting-studio-fixture-mount-properties.png</file>
     <file alias="images/lighting-studio-front-view-badges.png">../../docs/images/lighting-studio-front-view-badges.png</file>
     <file alias="images/lighting-studio-rig-overview-3d.png">../../docs/images/lighting-studio-rig-overview-3d.png</file>
     <file alias="images/lighting-studio-top-view.png">../../docs/images/lighting-studio-top-view.png</file>
     <file alias="images/lighting-studio-truss-editor.png">../../docs/images/lighting-studio-truss-editor.png</file>
+    <file alias="images/patch-dialog.png">../../docs/images/patch-dialog.png</file>
+    <file alias="images/programming-tab-effect-browser.png">../../docs/images/programming-tab-effect-browser.png</file>
+    <file alias="images/programming-tab-layout.png">../../docs/images/programming-tab-layout.png</file>
     <file alias="images/programming-tab-look-editor-color.png">../../docs/images/programming-tab-look-editor-color.png</file>
-    <file alias="images/programming-tab-targets-looks.png">../../docs/images/programming-tab-targets-looks.png</file>
+    <file alias="images/programming-tab-look-editor-effect.png">../../docs/images/programming-tab-look-editor-effect.png</file>
 </qresource>
 </RCC>

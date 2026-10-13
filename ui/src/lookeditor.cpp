@@ -255,6 +255,7 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     nameLbl->setMinimumWidth(44);
     nameRow->addWidget(nameLbl);
     m_nameEdit = new QLineEdit(this);
+    m_nameEdit->setObjectName("lookName");
     m_nameEdit->setPlaceholderText(tr("palette name"));
     m_nameEdit->setEnabled(false);
     nameRow->addWidget(m_nameEdit, 1);
@@ -305,6 +306,7 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     m_fadeRow->hide();
 
     m_stack = new QStackedWidget(this);
+    m_stack->setObjectName("lookPages");
     // QStackedWidget's minimumSizeHint() is the max over ALL pages, not just
     // the current one (a well-known Qt quirk — same one QTabWidget has at
     // the app-window level). The pan/tilt page's 200x200 XY pad
@@ -342,6 +344,7 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     cv->addLayout(cl, 1);
 
     m_colorDialog = new QColorDialog(colorPage);
+    m_colorDialog->setObjectName("lookColor");
     m_colorDialog->setOptions(QColorDialog::NoButtons
                               | QColorDialog::DontUseNativeDialog);
     m_colorDialog->setWindowFlags(Qt::Widget);
@@ -403,6 +406,7 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     m_dimmerValue->setMinimumWidth(32);
     dtop->addWidget(m_dimmerValue);
     m_dimmerBar = new CapabilityBar(dimmer);
+    m_dimmerBar->setObjectName("lookDimmer");
     dv->addWidget(m_dimmerBar);
     // Capability name at the current value on a representative fixture.
     m_dimmerCap = new QLabel(dimmer);
@@ -441,6 +445,7 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     QHBoxLayout *pl = new QHBoxLayout();
     pl->setContentsMargins(0, 0, 0, 0);
     m_xyPad = new VCXYPadArea(pantilt);
+    m_xyPad->setObjectName("lookPanTilt");
     m_xyPad->setMode(Doc::Operate); // interactive
     m_xyPad->setMinimumSize(200, 200);
     m_xyPad->setMaximumSize(280, 280); // keep the bottom look pane compact

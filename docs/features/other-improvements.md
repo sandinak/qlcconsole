@@ -26,6 +26,12 @@ refers to them, so one from the middle can't be removed without renumbering
 the rest.) Only the **Device** column is edited in place; Detail and
 Carries describe the row and aren't text to type over.
 
+![Connections, by universe, with Universe 1's output showing](../images/connections-by-universe.png)
+
+1. **By universe** — every universe in use, in number order.
+2. **The universes**, each with where it goes and what it carries.
+3. **What the selected universe is sending**, channel by channel.
+
 Select a universe and the panel on the right shows what it is **sending**,
 live: all 512 channels, each with its value and a bar as high, the channels
 of each patched fixture shaded together and named where they start. The
@@ -65,7 +71,7 @@ WLED output rather than borrowing Art-Net.
 - Every few seconds it checks in with each device. Any that **don't answer,
   or answer on weak Wi-Fi** (weaker than -75 dBm), are listed by fixture name
   in the [readiness footer](#readiness-footer).
-- While the rig view is open and showing a WLED fixture, it asks that device
+- While the Lighting Studio or the Rig Overview is showing a WLED fixture, it asks that device
   what its LEDs are actually showing and draws that — a **live view** of the
   real pixels. It stops asking when the view is closed.
 
@@ -119,9 +125,9 @@ needs attention, and **Not ready (N)** in red when something does. Hover it
 for a one-line reason per problem; click it for the full list, where each
 problem can be fixed on the spot. It checks for:
 
-- fixtures **not patched** (they appear in the rig view but send no DMX);
+- fixtures **not patched** (they appear in the Lighting Studio but send no DMX);
 - fixture types that **declare no light output** (no lumens or watts, so the
-  rig view has to guess how bright they are);
+  Lighting Studio and the Rig Overview have to guess how bright they are);
 - **address clashes** — a show file with two fixtures on overlapping
   channels now loads the second one unpatched and flagged, instead of
   silently dropping it;
@@ -305,7 +311,7 @@ gives. Whenever that would go over the maximum, its colours are scaled down
 **together** — the colour holds, only the brightness drops — on what its
 universe sends. Red alone at 2 A under a 3 A maximum is left as it is; full
 white at 6 A is sent at about 69%. The universe panel in Connections, the
-rig view and the power panel all show the held-back output, and the power
+Lighting Studio, the Rig Overview and the power panel all show the held-back output, and the power
 panel's footer names the fixtures being held back. A fixture with a maximum
 but no readings isn't limited, and says so. The live and full-load
 estimates use the readings (and the cap) wherever a fixture has them.

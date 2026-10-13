@@ -1,4 +1,4 @@
-# Lighting Studio (the rig view)
+# Lighting Studio
 
 ## Why
 
@@ -471,8 +471,8 @@ of, and doesn't override, the real locks above.
 
 ## Beams, footprint, and coverage
 
-When a fixture is live (Design or Operate mode), the rig view shows what
-it's actually doing, not just where it sits:
+When a fixture is live (Design or Operate mode), the Lighting Studio and
+the Rig Overview show what it's actually doing, not just where it sits:
 
 - **Live colour** — a fixture shades by its real current output, reading
   every color-primary channel the fixture defines (RGB/W/Amber/UV/CMY and
@@ -509,7 +509,7 @@ workspace.
 
 ### How bright each fixture is
 
-The rig view sizes each fixture's light from what the device actually puts
+The Lighting Studio and the Rig Overview size each fixture's light from what the device actually puts
 out, read from its fixture definition: the **declared lumens**, or failing
 that the **declared watts at about 35 lm/W**. A 100 W LED fixture (3500 lm)
 is the reference full beam, and a fixture's output is shared between its
@@ -559,7 +559,7 @@ halo; movers show their beams.
 ### Lasers and star projectors
 
 A fixture definition can say what its light *is* (Fixture Editor → Look in
-the rig view → **Light**). **Beam**, the default, is a cone that lands as a
+the Lighting Studio → **Light**). **Beam**, the default, is a cone that lands as a
 pool. **All round** is a bare source, like a lantern. Two more are for
 lasers:
 
@@ -597,7 +597,7 @@ the structure editor's inspector and in **Fixture Properties**:
   (a wash's array behind its lenses — a 36 × 18 W mover shows its 36 there,
   lit in the beam's colour, dark when it is out), with an **LEDs** count for
   the LED kinds. The fixture definition sets it (Fixture Editor → Look in
-  the rig view → Source); a fixture can say otherwise for its own build.
+  the Lighting Studio → Source); a fixture can say otherwise for its own build.
 - **Glass** — **Diffuse** (the default: each pane glows from the LEDs
   nearest it, the LEDs a blur behind, frosted when dark) or **Clear** (each
   LED shows as a bead in its own colour).
@@ -609,7 +609,7 @@ LEDs it drives, and that wins over the definition's count.
 What the LEDs show, best source first:
 
 1. **The device's own live pixels**, when it's a WLED fixture that answers
-   on the network (asked only while a rig view showing it is on screen and
+   on the network (asked only while the Lighting Studio or the Rig Overview shows it and
    the look is actually going out).
 2. Otherwise, the **port of its WLED effect**, run on the LEDs with the
    speed, intensity, palette and colours the device is sent — the same

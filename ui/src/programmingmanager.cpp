@@ -115,6 +115,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     navCol->addWidget(new QLabel(tr("Scenes / functions"), this));
 
     m_funcTree = new FunctionsTreeWidget(m_doc, this);
+    m_funcTree->setObjectName("programmingFunctions");
     m_funcTree->setDisplayFilter(FunctionsTreeWidget::FunctionsOnly);
     m_funcTree->setHeaderHidden(true);
     m_funcTree->setColumnHidden(1, true);
@@ -148,6 +149,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     // window — see App::slotDetachContext, which gives a detached tab no
     // menu bar of its own, only whatever the tab widget itself carries.
     m_addFuncBtn = new QToolButton(this);
+    m_addFuncBtn->setObjectName("programmingAddFunction");
     m_addFuncBtn->setText(tr("Add"));
     m_addFuncBtn->setIcon(QIcon(":/edit_add.png"));
     m_addFuncBtn->setPopupMode(QToolButton::InstantPopup);
@@ -195,6 +197,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
         toolbar->setContentsMargins(0, 0, 0, 0);
 
         m_highlightBtn = new QPushButton(tr("Highlight"), this);
+        m_highlightBtn->setObjectName("programmingHighlight");
         m_highlightBtn->setCheckable(true);
         m_highlightBtn->setToolTip(tr("Drive selected fixtures to full white so you can identify them in the rig"));
         toolbar->addWidget(m_highlightBtn);
@@ -596,6 +599,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     // scrolled: it always renders fully at its preferred height (Fixed
     // vertical), and the canvas above (stretch) shrinks to make room.
     m_lookEditor = new LookEditor(m_doc, this);
+    m_lookEditor->setObjectName("lookEditor");
     // Take the look editor's full preferred height; the canvas above (Expanding)
     // shrinks first to make room. Maximum (not Fixed) so the window can still be
     // resized very short if needed (the canvas hits its min first).
@@ -657,6 +661,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     // --- Right: drag sources (palette tree + fixtures & groups tree) ---
     // ── Source panel: tabbed (Palettes | Bundles | Fixtures) ─────────────
     auto *sourceTab = new QTabWidget(this);
+    sourceTab->setObjectName("programmingSources");
     sourceTab->setDocumentMode(true);
 
     // ── Palettes tab ──────────────────────────────────────────────────────
@@ -668,6 +673,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     paletteFilter->setClearButtonEnabled(true);
     palCol->addWidget(paletteFilter);
     m_paletteTree = new FunctionsTreeWidget(m_doc, palTab);
+    m_paletteTree->setObjectName("programmingPalettes");
     m_paletteTree->setDisplayFilter(FunctionsTreeWidget::PalettesOnly);
     m_paletteTree->setHeaderHidden(true);
     m_paletteTree->setColumnHidden(1, true);
@@ -711,6 +717,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     fixGroupFilter->setClearButtonEnabled(true);
     srcCol->addWidget(fixGroupFilter);
     m_fixGroupSource = new FixtureGroupSource(m_doc, sourcePanel);
+    m_fixGroupSource->setObjectName("programmingFixturesGroups");
     srcCol->addWidget(m_fixGroupSource, 2);
     connect(fixGroupFilter, &QLineEdit::textChanged,
             m_fixGroupSource, &FixtureGroupSource::setFilterText);

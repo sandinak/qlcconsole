@@ -16,6 +16,13 @@ The latest changes, newest first. Each links to the guide with the detail.
   cues and the show end are; [Getting started](getting-started.md) (starting the app and
   the ways a show comes together), [Keyboard and mouse](shortcuts.md),
   [Effects](effects.md) and [Troubleshooting](troubleshooting.md).
+- **Pictures with numbered marks** on the parts each guide talks about:
+  the main window and the footer ([Getting started](getting-started.md#finding-your-way-around)),
+  the [Programming tab](programming-tab.md#layout), the effect look editor
+  and the [effect browser](programming-tab.md#the-effect-browser), the
+  [stack checker](effects.md#the-stack-checker),
+  [Connections by universe](other-improvements.md#connections--patch) and the
+  [Patch dialog](fixture-manager.md#patching-the-patch-dialog).
 
 ### Lighting Studio
 
@@ -23,7 +30,7 @@ The latest changes, newest first. Each links to the guide with the detail.
   middle of the stage grid — and turns about it, instead of centring
   whatever the rig's bounding box was (which floated the floor half a
   truss-height below the middle).
-- **The rig view shows a running position effect on an Aim look.** A head
+- **The Lighting Studio and the Rig Overview show a running position effect on an Aim look.** A head
   under a look with an Aim target was always drawn pointing at the target —
   so Stage Shape, or an orbit round a target, never showed. Selected, a
   look still shows where its target is; running, the heads are drawn where
@@ -52,7 +59,7 @@ The latest changes, newest first. Each links to the guide with the detail.
   mount drew some on their side; it's cleared when the show loads.
 - **Rig Overview** (⇧⌘R) **follows the Studio's layers** — hide a layer,
   it leaves the overview — and the same shortcut, or ⌘W, closes it.
-- **Faster rig view**: a 200-fixture show draws in about 9 ms a frame (it
+- **Faster drawing of the rig**: a 200-fixture show draws in about 9 ms a frame (it
   was 51).
 
 - **A truss between two stands** — the truss editor's **Other end on

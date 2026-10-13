@@ -6,7 +6,8 @@ from a show file you're bringing to a venue. Each step links to the guide
 with the detail.
 
 Press **F1** anywhere for the help on what you're looking at; **Help →
-qlcconsole Help** opens this guide set.
+qlcconsole Help** opens this guide set. The numbered pictures are shrunk to fit the
+page — click one to see it full size.
 
 ## Starting the app
 
@@ -46,6 +47,15 @@ not opened — and saving then can write an empty workspace over it.
 
 ## Finding your way around
 
+![The main window: toolbar, the open tab, the tabs, the footer](../images/getting-started-main-window.png)
+
+1. **The toolbar** — **Stop ALL functions** (the panic button), **Blackout**,
+   **Blind**, and **Operate** to run the show.
+2. **The open tab** — here Programming, with a scene open.
+3. **The tabs**, along the bottom.
+4. **The footer** — is the show ready to run, how busy the output is, Design
+   or Operate (below).
+
 The tabs follow the order a show is built in:
 
 | Tab | What it's for | Guide |
@@ -70,6 +80,17 @@ open scene plays live so you can see it, and nothing runs that you didn't
 start. **Operate** (⌘F12) runs the show for real — and locks the editing
 that would disturb it (moving fixtures, re-patching). The mode shows in
 the footer.
+
+![The footer: readiness, grand master, speed masters, timecode, load, mode](../images/footer.png)
+
+1. **Ready** / **Not ready (N)** — click it for the list.
+2. **GM** — the grand master, over everything that's sent.
+3. **Speed masters** — one button per master the show uses, showing its
+   tempo; click one to set it
+   ([Speed masters](effects.md#speed-masters)).
+4. **MTC** — the timecode the Shows timeline follows.
+5. **Load** — how much of each DMX tick the show uses.
+6. **DESIGN** / **OPERATE** — click to switch.
 
 **The footer** says whether the show is ready to run: **Ready**, or **Not
 ready (N)** in red — click it for the list (unpatched or clashing

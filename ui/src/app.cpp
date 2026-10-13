@@ -4293,6 +4293,7 @@ void App::initStatusBar()
     // Create mode label (far left). No stretch: a dedicated spacer centres the
     // global MTC/Load chips between the mode label and the right-hand chips.
     m_statusModeLabel = new QLabel(this);
+    m_statusModeLabel->setObjectName("footerReadiness");
     m_statusModeLabel->setMinimumWidth(160);
     m_statusModeLabel->installEventFilter(this);   // click → full ShowStatus details
     sb->addWidget(m_statusModeLabel, 0);
@@ -4309,6 +4310,7 @@ void App::initStatusBar()
     // showMessage(), which this app doesn't currently use.
     {
         QWidget *gmBox = new QWidget(this);
+        gmBox->setObjectName("footerGrandMaster");
         m_statusGrandMasterBox = gmBox;
         QHBoxLayout *gmLayout = new QHBoxLayout(gmBox);
         gmLayout->setContentsMargins(0, 0, 4, 0);
@@ -4374,6 +4376,7 @@ void App::initStatusBar()
     chipFont.setFamily(QFontDatabase::systemFont(QFontDatabase::FixedFont).family());
 
     m_statusTimecodeLabel = new QLabel(this);
+    m_statusTimecodeLabel->setObjectName("footerTimecode");
     m_statusTimecodeLabel->setFont(chipFont);
     m_statusTimecodeLabel->setToolTip(tr("MIDI Time Code. Grey: no source. "
         "Amber: connected but not advancing (spoken scene / manual GO). "
@@ -4383,6 +4386,7 @@ void App::initStatusBar()
     sb->addWidget(m_statusTimecodeLabel, 0);
 
     m_statusLoadLabel = new QLabel(this);
+    m_statusLoadLabel->setObjectName("footerLoad");
     m_statusLoadLabel->setFont(chipFont);
     m_statusLoadLabel->setAlignment(Qt::AlignCenter);
     // Fixed width sized to the widest reading, so the % / ms changing never
@@ -4509,6 +4513,7 @@ void App::initStatusBar()
     // separate from the mode-toggle button (which shows the destination
     // mode, not the current one). Always visible.
     m_statusModeChipLabel = new QLabel(this);
+    m_statusModeChipLabel->setObjectName("footerMode");
     m_statusModeChipLabel->setAlignment(Qt::AlignRight);
     m_statusModeChipLabel->setCursor(Qt::PointingHandCursor);
     m_statusModeChipLabel->setToolTip(tr("Click to switch Design/Operate mode."));

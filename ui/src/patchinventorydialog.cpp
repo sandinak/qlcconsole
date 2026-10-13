@@ -203,6 +203,7 @@ PatchInventoryDialog::PatchInventoryDialog(Doc *doc, const QList<quint32> &fixtu
     }
 
     m_table = new QTableWidget(0, 9, this);
+    m_table->setObjectName("patchTable");
     m_table->setHorizontalHeaderLabels({ tr("Fixture"), tr("Model"), tr("Mode"), tr("Ch"), tr("Connection"),
                                          tr("Universe"), tr("Address"), tr("Via"), tr("Status") });
     m_table->verticalHeader()->hide();
@@ -213,6 +214,7 @@ PatchInventoryDialog::PatchInventoryDialog(Doc *doc, const QList<quint32> &fixtu
     root->addWidget(m_table, 1);
 
     m_summary = new QLabel(this);
+    m_summary->setObjectName("patchSummary");
     root->addWidget(m_summary);
     /* Fixtures a fit found no room for ("flag if it goes over 1 U .. tho I
        want the option to continue that patch"). */
@@ -259,6 +261,7 @@ PatchInventoryDialog::PatchInventoryDialog(Doc *doc, const QList<quint32> &fixtu
     btns->addStretch();
     QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Cancel, this);
     m_apply = bb->addButton(tr("Apply"), QDialogButtonBox::AcceptRole);
+    m_apply->setObjectName("patchApply");
     btns->addWidget(bb);
     root->addLayout(btns);
 

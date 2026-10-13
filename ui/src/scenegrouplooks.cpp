@@ -364,6 +364,7 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
     QLabel *scopeLabel = new QLabel(tr("Scope:"), this);
     scopeRow->addWidget(scopeLabel);
     m_scopeCombo = new QComboBox(this);
+    m_scopeCombo->setObjectName("sceneScope");
     m_scopeCombo->setToolTip(tr("What this look is FOR (a statement of intent) — "
         "not what it paints. Whole Stage, or a specific fixture group/zone."));
     scopeRow->addWidget(m_scopeCombo, 1);
@@ -373,6 +374,7 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
     connect(m_scopeCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(slotScopeChanged(int)));
 
     m_targetList = new QTreeWidget(this);
+    m_targetList->setObjectName("sceneTargets");
     m_targetList->setHeaderHidden(true);
     m_targetList->setRootIsDecorated(true);
     m_targetList->setSelectionMode(QAbstractItemView::ExtendedSelection);
@@ -389,6 +391,7 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
     QVBoxLayout *lookCol = new QVBoxLayout();
     lookCol->addWidget(new QLabel(tr("Looks"), this));
     m_lookList = new QTreeWidget(this);
+    m_lookList->setObjectName("sceneLooks");
     m_lookList->setColumnCount(LookColCount);
     m_lookList->setHeaderLabels(QStringList() << tr("Look") << tr("Fade In") << tr("Fade Out"));
     if (QTreeWidgetItem *hdr = m_lookList->headerItem())
@@ -817,9 +820,9 @@ void SceneGroupLooks::reload()
     if (unpatched > 0)
         m_unpatchedNote->setText(unpatched == allFixtures.count()
             ? tr("⚠ None of these fixtures is patched: they send no DMX. The look shows in the "
-                 "rig view only. Patch them in the Fixture Manager.")
+                 "Lighting Studio only. Patch them in the Fixture Manager.")
             : tr("⚠ %1 of these %2 fixtures are not patched: they send no DMX. They show in "
-                 "the rig view only. Patch them in the Fixture Manager.")
+                 "the Lighting Studio only. Patch them in the Fixture Manager.")
                   .arg(unpatched).arg(allFixtures.count()));
 
     // Declared scope: (re)populate from every group in the doc (not just this
