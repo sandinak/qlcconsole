@@ -1337,8 +1337,12 @@ void ProgrammingManager_Test::theHandlesMoveEdgesAndNeverHideAPanel()
     // The editor can be made short (it scrolls), the canvas narrow (its
     // fade/transition row wraps): a handle has room to move both ways.
     QVERIFY2(canvas->sizes().at(1) < 150, qPrintable(QString::number(canvas->sizes().at(1))));
-    QVERIFY2(main->widget(1)->minimumSizeHint().width() < 700,
-             qPrintable(QString::number(main->widget(1)->minimumSizeHint().width())));
+    // In characters of its own font (Linux's draws everything wider).
+    const double canvasChars = double(main->widget(1)->minimumSizeHint().width())
+                               / main->widget(1)->fontMetrics().averageCharWidth();
+    QVERIFY2(canvasChars < 75, qPrintable(QString("%1 px, %2 characters")
+                                              .arg(main->widget(1)->minimumSizeHint().width())
+                                              .arg(canvasChars)));
     mgr.resize(1000, 800);
     QApplication::processEvents();
     if (!qEnvironmentVariableIsEmpty("HANDLES_SHOT"))

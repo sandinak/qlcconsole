@@ -886,6 +886,28 @@ void LookEditor::openEffectPicker()
     m_effectPicker->raise();
     m_effectPicker->activateWindow();
     m_effectBrowser->search()->setFocus();
+    /* Wide enough for every tab, whole ("so we can see the tab names at
+       least"), whatever the font: a wider one (Linux's, a large system font)
+       overflowed the 860 px it opens at. Once laid out, grow the window by
+       what the tabs lack, and give it to the browser's side. */
+    QTimer::singleShot(0, this, [this]() {
+        if (m_effectPicker == nullptr || !m_effectPicker->isVisible())
+            return;
+        QTabBar *tabs = m_effectBrowser->tabs();
+        const int lack = tabs->sizeHint().width() - tabs->width();
+        if (lack <= 0)
+            return;
+        m_effectPicker->resize(m_effectPicker->width() + lack + 8, m_effectPicker->height());
+        if (QSplitter *ps = m_effectPicker->findChild<QSplitter *>())
+        {
+            QList<int> sz = ps->sizes();
+            if (sz.size() == 2)
+            {
+                sz[0] += lack + 8;
+                ps->setSizes(sz);
+            }
+        }
+    });
 }
 
 void LookEditor::closeEffectPicker(bool keep)
