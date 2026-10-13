@@ -104,6 +104,7 @@ add_library(${module_name} SHARED
     lastlookeffect.cpp lastlookeffect.h
     effectscript.cpp effectscript.h
     effectscriptcache.cpp effectscriptcache.h
+    lookstackcheck.cpp lookstackcheck.h
     effectpresetcache.cpp effectpresetcache.h
     qlcbundle.cpp qlcbundle.h
     bundlecache.cpp bundlecache.h

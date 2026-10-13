@@ -32,6 +32,7 @@
 #include "qlcchannel.h"
 #include "qlcpalette.h"
 #include "fixture.h"
+#include "lookstackcheck.h"
 #include "fixturegroup.h"
 #include "scene.h"
 #include "doc.h"
@@ -67,6 +68,12 @@ const char *kScripts[][2] = {
       "(function() { var e = {}; e.apiVersion = 1; e.name = 'T Pan 90';"
       " e.fixtureTypes = ['moving'];"
       " e.tick = function(fx) { return fx.map(function() { return { pan: 90, tilt: 45 }; }); };"
+      " return e; })()" },
+    // For a kind of fixture none of the looks here has.
+    { "uvonly.js",
+      "(function() { var e = {}; e.apiVersion = 1; e.name = 'T UV Only';"
+      " e.fixtureTypes = ['uvonly'];"
+      " e.tick = function(fx) { return fx.map(function() { return { uv: 255 }; }); };"
       " return e; })()" },
     { "pan180.js",
       "(function() { var e = {}; e.apiVersion = 1; e.name = 'T Pan 180';"
@@ -578,6 +585,84 @@ void LookStack_Test::aPaletteTriedOnShowsByTheSameRules()
     m_playing->requestPaletteRefresh();
     d = tickAndRead();
     IS(panOf(d, m_mover), panValue(m_mover, 180));
+}
+
+/* "can we have the system evaluate the stack looking for inconsistencies
+   where some things won't work and let the user know" */
+void LookStack_Test::theCheckerSaysWhatWontWork()
+{
+    auto issuesFor = [this](const QList<QLCPalette *> &stack, bool withTargets = true) {
+        Scene *scene = new Scene(m_doc);
+        m_doc->addFunction(scene);
+        if (withTargets)
+            for (Fixture *fx : { m_par, m_batten, m_wheel, m_mover, m_twoSet })
+                scene->addFixture(fx->id());
+        for (QLCPalette *p : stack)
+            scene->addPalette(p->id());
+        return LookStackCheck::check(m_doc, scene);
+    };
+    auto about = [](const QList<LookStackCheck::Issue> &all, QLCPalette *p, const QString &words) {
+        for (const LookStackCheck::Issue &i : all)
+            if ((p == nullptr || i.paletteId == p->id()) && i.text.contains(words))
+                return true;
+        return false;
+    };
+    auto dump = [](const QList<LookStackCheck::Issue> &all) {
+        QStringList t;
+        for (const LookStackCheck::Issue &i : all)
+            t << QString("%1: %2").arg(i.paletteId).arg(i.text);
+        return t.join(" | ");
+    };
+
+    // A clean look: nothing to say.
+    QList<LookStackCheck::Issue> got = issuesFor({ colour(kBlue), dimmer(255), effect("lookcolour.js") });
+    QVERIFY2(got.isEmpty(), qPrintable(dump(got)));
+
+    // A static look the one below always covers.
+    QLCPalette *full = dimmer(255);
+    got = issuesFor({ colour(kBlue), full, dimmer(128) });
+    QVERIFY2(about(got, full, "Never shows"), qPrintable(dump(got)));
+    QLCPalette *pt = panTilt(90, 45);
+    got = issuesFor({ dimmer(255), pt, panTilt(180, 90) });
+    QVERIFY2(about(got, pt, "Never shows") && about(got, pt, "position"), qPrintable(dump(got)));
+
+    // An effect the one below covers, on all its heads.
+    QLCPalette *upper = effect("lookcolour.js");
+    got = issuesFor({ dimmer(255), upper, colour(kGreen), effect("red.js") });
+    QVERIFY2(about(got, upper, "Covered"), qPrintable(dump(got)));
+    QLCPalette *firstMove = effect("pan90.js");
+    got = issuesFor({ dimmer(255), panTilt(0, 0), firstMove, effect("pan180.js") });
+    QVERIFY2(about(got, firstMove, "Covered") && about(got, firstMove, "position"), qPrintable(dump(got)));
+
+    // The look's colour replaced by an effect's own.
+    QLCPalette *blue = colour(kBlue);
+    got = issuesFor({ blue, dimmer(255), effect("lookcolour.js"), colour(kRed) });
+    QVERIFY2(about(got, blue, "Replaced"), qPrintable(dump(got)));
+
+    // A dimmer under a movement effect: only its heads get it.
+    QLCPalette *ownFull = dimmer(255);
+    got = issuesFor({ colour(kBlue), panTilt(0, 0), effect("pan90.js"), ownFull });
+    QVERIFY2(about(got, ownFull, "only the 2 head(s)") && about(got, ownFull, "other 3"),
+             qPrintable(dump(got)));
+
+    // An effect for fixtures the look hasn't.
+    QLCPalette *uv = effect("uvonly.js");
+    got = issuesFor({ colour(kBlue), dimmer(255), uv });
+    QVERIFY2(about(got, uv, "Does nothing"), qPrintable(dump(got)));
+
+    // A movement effect with nothing to move round.
+    QLCPalette *loose = effect("pan90.js");
+    got = issuesFor({ dimmer(255), loose });
+    QVERIFY2(about(got, loose, "No Aim or Pan/Tilt"), qPrintable(dump(got)));
+
+    // A third colour no fixture or effect can show (the two-set bar takes 2).
+    QLCPalette *third = colour(kGreen);
+    got = issuesFor({ colour(kBlue), colour(kRed), third, dimmer(255) });
+    QVERIFY2(about(got, third, "Colour 3"), qPrintable(dump(got)));
+
+    // No targets.
+    got = issuesFor({ colour(kBlue) }, false);
+    QVERIFY2(about(got, nullptr, "No targets"), qPrintable(dump(got)));
 }
 
 QTEST_MAIN(LookStack_Test)

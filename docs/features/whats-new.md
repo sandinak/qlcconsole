@@ -123,6 +123,11 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Programming tab
 
+- **The Looks list checks the stack** — a look the one below always covers,
+  an effect another covers, a dimmer only some heads get, an effect for
+  fixtures the look hasn't… are marked in the list with why, and counted
+  under it. ([The stack checker](effects.md#the-stack-checker))
+
 - **The handles move the edges you drag** — no pane snaps shut, and the
   canvas can be narrowed (its fades-and-transitions line wraps; it was 1300
   px at its narrowest, so a handle squeezed the panes beside it instead).
@@ -207,6 +212,10 @@ The latest changes, newest first. Each links to the guide with the detail.
   fit on an ordinary screen.
 
 ### Views and windows
+
+- **Connections → By universe lists the universes in use** — fixtures
+  patched in, an output or an input — and says how many it hides; **Show
+  unused universes** shows them all.
 
 - **Connections holds still.** The list refreshes every few seconds to
   catch nodes coming and going; it no longer drops the universe you picked

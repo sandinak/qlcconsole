@@ -354,6 +354,7 @@ void SpeedMastersPanel_Test::theBeatIsABlinkABarOrNothingAlwaysOrWhilePlaying()
     // No beat: neither.
     SpeedMastersFooter::setBeatStyle(SpeedMasterButton::NoBeat);
     footer.reloadBeatOptions();
+    QTest::qWait(100);                              // the next frames repaint without it
     for (int k = 0; k < 30; ++k)
     {
         QTest::qWait(20);

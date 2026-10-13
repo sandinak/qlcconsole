@@ -10,6 +10,7 @@
 #include <QHBoxLayout>
 #include <QListWidget>
 #include <QTreeWidget>
+#include <QStyle>
 #include <QTreeWidgetItemIterator>
 #include <QHeaderView>
 #include <QPushButton>
@@ -36,6 +37,7 @@
 #include "speedmasterspanel.h"
 #include "speedmasters.h"
 #include "scenegrouplooks.h"
+#include "lookstackcheck.h"
 #include "flowlayout.h"
 #include "fadetimespin.h"
 #include "scenetransition.h"
@@ -71,6 +73,8 @@ enum { LookColName = 0, LookColIn = 1, LookColOut = 2, LookColCount = 3 };
 // and BOTH fades of a colour/dimmer nested under an effect (it feeds the effect's
 // gradient — a value, not a painted look — so it has no fade of its own).
 static const int LookFadeInertRole = Qt::UserRole + 3;
+// What LookStackCheck says about a look (empty: nothing).
+static const int LookStackNoteRole = Qt::UserRole + 6;
 
 /* What a fade's default (-1) means for this look: "scene" -- follow the
    scene's fade (or a chaser step's) -- or, for an effect's release, "snap".
@@ -424,6 +428,15 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
            "0 = snap instantly; \"step\" = follow the chaser step / scene fade "
            "(spin below 0, or right-click → Reset, to return to \"step\")."));
     lookCol->addWidget(m_lookList);
+    /* What in this stack won't do what it looks like it does (a look the one
+       below always covers, an effect for fixtures the look hasn't...): the
+       rows are marked, this line says how many. LookStackCheck. */
+    m_stackNotes = new QLabel(this);
+    m_stackNotes->setObjectName(QStringLiteral("lookStackNotes"));
+    m_stackNotes->setWordWrap(true);
+    m_stackNotes->setStyleSheet(QStringLiteral("QLabel { color: #d08a2a; }"));
+    m_stackNotes->hide();
+    lookCol->addWidget(m_stackNotes);
     QHBoxLayout *lookBtns = new QHBoxLayout();
     m_removeLookButton = new QPushButton(tr("Remove"), this);
     lookBtns->addWidget(m_removeLookButton);
@@ -939,6 +952,7 @@ void SceneGroupLooks::reload()
             it->setSelected(true);
     }
     m_lookList->expandAll();
+    markStackIssues();
     m_lookList->blockSignals(false);
 }
 
@@ -1676,4 +1690,50 @@ void SceneGroupLooks::applyLookOrderFromList()
         // colour dropped between two effects re-homes under the effect above it).
         reload();
     }
+}
+
+void SceneGroupLooks::markStackIssues()
+{
+    if (m_stackNotes == nullptr || m_scene == nullptr)
+        return;
+    const QList<LookStackCheck::Issue> issues = LookStackCheck::check(m_doc, m_scene);
+    QHash<quint32, QStringList> byLook;
+    QStringList whole;
+    int warnings = 0;
+    for (const LookStackCheck::Issue &i : issues)
+    {
+        if (i.level == LookStackCheck::Issue::Warning)
+            ++warnings;
+        if (i.paletteId == QLCPalette::invalidId())
+            whole << i.text;
+        else
+            byLook[i.paletteId] << i.text;
+    }
+    const QIcon warn = style()->standardIcon(QStyle::SP_MessageBoxWarning);
+    QTreeWidgetItemIterator it(m_lookList);
+    for (; *it; ++it)
+    {
+        QTreeWidgetItem *item = *it;
+        const quint32 pid = item->data(LookColName, Qt::UserRole).toUInt();
+        if (!byLook.contains(pid))
+            continue;
+        item->setIcon(LookColIn, warn);
+        const QString tip = byLook.value(pid).join(QStringLiteral("\n\n"));
+        const QString was = item->toolTip(LookColName);
+        item->setToolTip(LookColName, was.isEmpty() ? tip : tip + QStringLiteral("\n\n") + was);
+        item->setToolTip(LookColIn, tip);
+        item->setData(LookColName, LookStackNoteRole, tip);
+    }
+    if (issues.isEmpty())
+    {
+        m_stackNotes->hide();
+        return;
+    }
+    QString text = warnings > 0
+        ? tr("%n thing(s) in this look won't do what they seem -- hover the marked looks.", "", issues.size())
+        : tr("%n note(s) on this look -- hover the marked looks.", "", issues.size());
+    if (!whole.isEmpty())
+        text = whole.join(QStringLiteral(" ")) + QLatin1Char(' ') + text;
+    m_stackNotes->setText(text);
+    m_stackNotes->show();
 }

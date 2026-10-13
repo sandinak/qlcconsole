@@ -47,6 +47,7 @@ private slots:
     void theSameOnAFixtureGroup();
     void editingALookWhileItPlaysKeepsTheOrder();
     void aPaletteTriedOnShowsByTheSameRules();
+    void theCheckerSaysWhatWontWork();
 
 private:
     /* One look of these palettes, played; the DMX of universe 1 after. */

@@ -2237,3 +2237,8 @@ EffectInstance::parseIntents(const QJSValue &intents,
 
     return writes;
 }
+
+QStringList EffectInstance::scriptFixtureTypes() const
+{
+    return m_script.fixtureTypes();
+}

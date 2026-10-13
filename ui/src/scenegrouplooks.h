@@ -142,7 +142,11 @@ private:
     QLabel *m_unpatchedNote;    //!< some targets are in the inventory: no DMX
     QComboBox *m_scopeCombo;    //!< declared look scope — see Scene::LookScope
     QTreeWidget *m_targetList;  //!< groups + fixtures grouped by type
-    QTreeWidget *m_lookList;    //!< Look | In | Out (In/Out editable per look)
+    QTreeWidget *m_lookList;
+    /** Under the list: what in the stack won't do what it seems. */
+    class QLabel *m_stackNotes = nullptr;
+    /** Mark the looks LookStackCheck has something to say about. */
+    void markStackIssues();    //!< Look | In | Out (In/Out editable per look)
     QPushButton *m_removeTargetButton;
     QPushButton *m_removeLookButton;
     QPushButton *m_moveLookUpButton;

@@ -281,6 +281,27 @@ The Colours and Dimmers **above every effect** are the **look's own**:
 they're the base, and every effect that has **no** colour or dimmer of its
 own uses them. An effect with its own uses its own.
 
+### The stack checker
+
+The Looks list checks the stack against these rules as you build it, and
+marks a look (a warning sign in its row; the reason in its tooltip) when it
+won't do what it seems to, with a line under the list saying how many:
+
+- **Never shows** — a static look the one below it always covers (two
+  Dimmers, two Pan/Tilts: the lower wins).
+- **Covered** — an effect another below it overrides on the same heads (two
+  colour effects, two movement effects); "on 3 of its 8 heads" when only some.
+- **Replaced** — the look's colour, where a colour effect with its own colour
+  lights the heads (it shows only where the effect leaves a head dark).
+- **Belongs to the effect** — a Dimmer under a movement effect reaches only
+  the heads that effect moves; the look's other heads get no dimmer.
+- **Does nothing** — an effect for a kind of fixture the look hasn't.
+- **No Aim or Pan/Tilt** — a movement effect with nothing to move round.
+- **Colour 3 of the look** — a colour no fixture has a set for and no
+  effect uses.
+- **No targets** — the look lights nothing until fixtures or groups are
+  added.
+
 ### Trying a palette on
 
 While the look editor edits a palette the look on the canvas doesn't have,

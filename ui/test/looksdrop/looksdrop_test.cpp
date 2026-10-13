@@ -272,4 +272,39 @@ void LooksDrop_Test::theTreeNestsWhatTheEngineGivesAnEffect()
     QVERIFY(!QLCPalette::isEffectScoped(m_doc, scene->palettes(), aim->id()));
 }
 
+/* The stack checker's findings, on the rows they're about. */
+void LooksDrop_Test::whatWontWorkIsMarkedInTheList()
+{
+    Fixture *fx = new Fixture(m_doc);
+    fx->setChannels(1);
+    QVERIFY(m_doc->addFixture(fx));
+    QLCPalette *full = new QLCPalette(QLCPalette::Dimmer, m_doc);
+    full->setName("Full");
+    full->setValue(255);
+    m_doc->addPalette(full);
+    QLCPalette *half = new QLCPalette(QLCPalette::Dimmer, m_doc);
+    half->setName("Half");
+    half->setValue(128);
+    m_doc->addPalette(half);
+    Scene *scene = new Scene(m_doc);
+    scene->addFixture(fx->id());
+    scene->addPalette(full->id());
+    scene->addPalette(half->id());
+    QVERIFY(m_doc->addFunction(scene));
+
+    SceneGroupLooks looks(scene, m_doc);
+    QTreeWidgetItem *fullRow = looks.m_lookList->topLevelItem(0);
+    QCOMPARE(fullRow->data(0, Qt::UserRole).toUInt(), full->id());
+    QVERIFY2(fullRow->toolTip(0).contains("Never shows"), qPrintable(fullRow->toolTip(0)));
+    QVERIFY(!fullRow->icon(1).isNull());
+    QVERIFY(looks.m_lookList->topLevelItem(1)->icon(1).isNull());
+    QVERIFY(!looks.m_stackNotes->isHidden());
+    QVERIFY(looks.m_stackNotes->text().contains("hover"));
+
+    // Put right (only one dimmer): nothing to say.
+    scene->removePalette(full->id());
+    looks.reload();
+    QVERIFY2(looks.m_stackNotes->isHidden(), qPrintable(looks.m_stackNotes->text()));
+}
+
 QTEST_MAIN(LooksDrop_Test)

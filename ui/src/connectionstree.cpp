@@ -185,12 +185,17 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     m_byUniverse->setToolTip(tr("Every universe in number order, with where each goes and what "
                                 "it carries -- rather than the wiring, output by output"));
     m_byUniverse->setChecked(QSettings().value(QStringLiteral("connections/byUniverse"), false).toBool());
-    connect(m_byUniverse, &QCheckBox::toggled, this, [this](bool on) {
+    // By universe, the same box shows or hides the universes nothing uses.
+    auto labelUnused = [this]() {
+        m_showUnused->setText(m_byUniverse->isChecked() ? tr("Show unused universes")
+                                                        : tr("Show unused protocols and interfaces"));
+    };
+    connect(m_byUniverse, &QCheckBox::toggled, this, [this, labelUnused](bool on) {
         QSettings().setValue(QStringLiteral("connections/byUniverse"), on);
-        m_showUnused->setEnabled(!on);
+        labelUnused();
         refresh();
     });
-    m_showUnused->setEnabled(!m_byUniverse->isChecked());
+    labelUnused();
 
     QHBoxLayout *bar = new QHBoxLayout;
     bar->addWidget(m_byUniverse);
@@ -4392,10 +4397,28 @@ void ConnectionsTree::buildUniverseList()
         return where.isEmpty() ? plugin : QStringLiteral("%1 → %2").arg(plugin, where);
     };
 
+    /* "an 'active' only view": a universe nothing is patched into and that
+       goes nowhere is hidden unless "Show unused universes" is ticked. Only
+       hidden -- universes are numbered by position and every patch refers to
+       them, so one from the middle can't be removed without renumbering the
+       rest. */
+    const bool showUnused = m_showUnused != NULL && m_showUnused->isChecked();
+    QSet<quint32> carrying;
+    foreach (Fixture *fx, m_doc->fixtures())
+        if (fx != NULL && fx->isPatched())
+            carrying.insert(fx->universe());
+    int hidden = 0;
     foreach (Universe *u, iomap->universes())
     {
         if (u == NULL)
             continue;
+        const bool inUse = carrying.contains(u->id()) || u->outputPatchesCount() > 0
+                           || u->inputPatch() != NULL;
+        if (!inUse && !showUnused)
+        {
+            ++hidden;
+            continue;
+        }
         QTreeWidgetItem *item = new QTreeWidgetItem(m_tree);
         item->setFlags(item->flags() | Qt::ItemIsEditable);       // rename inline
         item->setText(COL_NAME, tr("%1: %2").arg(u->id() + 1).arg(u->name()));
@@ -4438,6 +4461,17 @@ void ConnectionsTree::buildUniverseList()
         setCarriesFixtures(item, u->id());
         if (selected.contains(u->id()))
             item->setSelected(true);
+    }
+    if (hidden > 0)
+    {
+        QTreeWidgetItem *note = new QTreeWidgetItem(m_tree);
+        note->setText(COL_NAME, tr("%n unused universe(s) hidden", "", hidden));
+        note->setText(COL_DETAIL, tr("nothing patched into them, no output -- tick "
+                                     "\"Show unused universes\" to see them"));
+        note->setFlags(Qt::ItemIsEnabled);
+        note->setForeground(COL_NAME, QBrush(QColor(138, 142, 153)));
+        note->setForeground(COL_DETAIL, QBrush(QColor(138, 142, 153)));
+        note->setData(COL_NAME, ROLE_UNIVERSE, Universe::invalid());
     }
 
     if (current != Universe::invalid())

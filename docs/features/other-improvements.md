@@ -18,7 +18,12 @@ the output it goes to, and only unpatched ones gather in their own
 universe in number order, each with where it goes ("Art-Net → CS1
 (172.18.2.211) port 1", "WLED → 172.18.2.55", or "not patched") and what it
 carries — same right-click actions, renamed inline the same way. The choice
-is remembered. Only the **Device** column is edited in place; Detail and
+is remembered. By universe, only the universes **in use** are listed — a
+fixture patched into it, an output or an input — with a line at the foot
+saying how many are hidden; tick **Show unused universes** to see them all.
+(They're only hidden: universes are numbered by position and every patch
+refers to them, so one from the middle can't be removed without renumbering
+the rest.) Only the **Device** column is edited in place; Detail and
 Carries describe the row and aren't text to type over.
 
 Select a universe and the panel on the right shows what it is **sending**,

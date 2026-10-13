@@ -1138,6 +1138,49 @@ void ConnectionsTree_Test::theListTakesTheHeightNotTheHeader()
              qPrintable(QString("the list is %1 px of 900").arg(tree.m_tree->height())));
 }
 
+/* "for universes can we have a way to refactor the layout to remove
+   universes that aren't used .. or .. an 'active' only view?" */
+void ConnectionsTree_Test::byUniverseShowsOnlyTheUniversesInUse()
+{
+    InputOutputMap *io = m_doc->inputOutputMap();
+    while (io->universesCount() < 4)
+        io->addUniverse();
+    Fixture *fx = new Fixture(m_doc);
+    fx->setChannels(3);
+    fx->setUniverse(1);                              // universe 2 carries a fixture
+    fx->setAddress(0);
+    QVERIFY(m_doc->addFixture(fx));
+
+    ConnectionsTree tree(m_doc);
+    tree.m_byUniverse->setChecked(true);
+    QCOMPARE(tree.m_showUnused->text(), QString("Show unused universes"));
+    tree.m_showUnused->setChecked(false);
+    tree.refresh();
+    QStringList shown;
+    QString note;
+    for (int i = 0; i < tree.m_tree->topLevelItemCount(); ++i)
+    {
+        QTreeWidgetItem *it = tree.m_tree->topLevelItem(i);
+        if (it->data(0, Qt::UserRole + 1).toUInt() == 0 && it->text(0).contains("hidden"))
+            note = it->text(0);
+        else
+            shown << it->text(0);
+    }
+    QVERIFY2(shown.join(",").contains("2:"), qPrintable(shown.join(",")));
+    for (const QString &s : shown)
+        QVERIFY2(!s.startsWith("3:") && !s.startsWith("4:"), qPrintable(shown.join(",")));
+    QVERIFY2(note.contains("hidden"), qPrintable(note));
+
+    tree.m_showUnused->setChecked(true);             // all of them again
+    tree.refresh();
+    QStringList all;
+    for (int i = 0; i < tree.m_tree->topLevelItemCount(); ++i)
+        all << tree.m_tree->topLevelItem(i)->text(0);
+    QVERIFY2(all.join(",").contains("3:") && all.join(",").contains("4:"), qPrintable(all.join(",")));
+    QVERIFY(!all.join(",").contains("hidden"));
+    tree.m_byUniverse->setChecked(false);
+}
+
 QTEST_MAIN(ConnectionsTree_Test)
 
 void ConnectionsTree_Test::byUniverseListsEveryUniverseWithWhereItGoes()
@@ -1150,6 +1193,7 @@ void ConnectionsTree_Test::byUniverseListsEveryUniverseWithWhereItGoes()
 
     ConnectionsTree tree(m_doc);
     QVERIFY(tree.applyTarget(0, stub->name(), 0, "172.18.2.211", 0) == true);
+    tree.m_showUnused->setChecked(true);         // every one, used or not
     tree.m_byUniverse->setChecked(true);
 
     // Every universe, in number order -- patched or not.

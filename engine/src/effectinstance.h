@@ -145,6 +145,8 @@ public:
     // Returns the scene's fixture list filtered by the script's declared fixtureTypes.
     // If the script declares no types, all scene fixtures are returned.
     QList<quint32> effectiveFixtureIds() const;
+    /** The fixture kinds the script is for (effect.fixtureTypes). */
+    QStringList scriptFixtureTypes() const;
 
     /** One drawable CELL per fixture HEAD, with its grid position. A multi-head /
      *  pixel fixture yields one cell per head (so effects can address individual
