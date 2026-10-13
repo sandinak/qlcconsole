@@ -851,26 +851,38 @@ void SceneGroupLooks::reload()
     // source of truth (see QLCPalette::isEffectScoped); the tree is derived from
     // it and re-derived after every reorder, so nesting == "after this effect".
     QTreeWidgetItem *currentEffectParent = NULL;
-    foreach (quint32 pid, m_scene->palettes())
+    QLCPalette *currentEffect = NULL;
+    const QList<quint32> pals = m_scene->palettes();
+    foreach (quint32 pid, pals)
     {
         QLCPalette *p = m_doc->palette(pid);
         const bool isEffect = (p != NULL && p->type() == QLCPalette::Effect);
 
-        // Effects (and any look before the first effect) are top-level; a
-        // non-effect after an effect nests under it.
-        QTreeWidgetItem *it = (isEffect || currentEffectParent == NULL)
-                                  ? new QTreeWidgetItem(m_lookList)
-                                  : new QTreeWidgetItem(currentEffectParent);
+        // Effects, and everything that is the look's own, are top-level; a
+        // Colour/Dimmer under an effect nests under it -- the engine's rule
+        // (an Aim or Pan/Tilt after an effect is still the look's).
+        const bool scoped = !isEffect && currentEffectParent != NULL
+                            && QLCPalette::isEffectScoped(m_doc, pals, pid);
+        QTreeWidgetItem *it = scoped ? new QTreeWidgetItem(currentEffectParent)
+                                     : new QTreeWidgetItem(m_lookList);
         it->setText(LookColName, lookLabel(pid));
         it->setData(LookColName, Qt::UserRole, pid);
         if (p != NULL)
             it->setIcon(LookColName, QIcon(p->iconResource()));
 
-        const bool feedsEffect = (!isEffect && currentEffectParent != NULL);
+        const bool feedsEffect = scoped;
+        // What a nested one does depends on the effect: one that takes
+        // colours uses it as its own; one that doesn't (a ballyhoo) has it
+        // applied with its output, on the heads it moves.
+        const bool takesColours = QLCPalette::effectUsesLookColours(currentEffect);
         it->setToolTip(LookColName,
-            isEffect    ? tr("Effect. Nest colours/dimmers under it to feed its gradient and master.")
-            : feedsEffect ? tr("Feeds the effect above — not painted on the fixtures directly.")
-                          : tr("Lights the fixtures directly (static base)."));
+            isEffect    ? tr("Effect. Colours/dimmers nested under it are its own.")
+            : !feedsEffect ? tr("The look's own: lights the fixtures directly, and feeds every "
+                                "effect that has no colour or dimmer of its own.")
+            : takesColours ? tr("The effect above's own colour/level — not painted on the "
+                                "fixtures directly, and not the look's.")
+                           : tr("Applied with the effect above, on the heads it drives, while it "
+                                "plays — not the look's."));
 
         // In/Out fade cells (ms at Qt::UserRole; -1 = "step").
         //  • Effect: Fade In is the scene envelope (inert); Fade Out is a real
@@ -901,9 +913,8 @@ void SceneGroupLooks::reload()
                    "Per-key attack/decay comes from the effect's own parameters "
                    "(e.g. Glow / Release), not this column."));
         else if (feedsEffect)
-            it->setToolTip(LookColName,
-                tr("Feeds the effect above (its colour) — not painted on the "
-                   "fixtures, so it has no fade of its own."));
+            it->setToolTip(LookColName, it->toolTip(LookColName) + QLatin1Char(' ')
+                                        + tr("It has no fade of its own."));
 
         // Draggable + (In/Out) editable. Only EFFECT items accept drops, so
         // dropping a colour onto one nests it (feeds the effect); dropping between
@@ -919,7 +930,10 @@ void SceneGroupLooks::reload()
         it->setFlags(f);
 
         if (isEffect)
+        {
             currentEffectParent = it;
+            currentEffect = p;
+        }
 
         if (selPid != QLCPalette::invalidId() && pid == selPid)
             it->setSelected(true);
