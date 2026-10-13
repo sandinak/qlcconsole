@@ -123,6 +123,18 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Effects
 
+- **A look stacks the same way every time** — top to bottom, the lower
+  wins; colours are colour 1, 2, 3; an effect's colour replaces the base
+  instead of mixing with it; dimmer effects scale and multiply; a Colour or
+  Dimmer under an effect is that effect's only, and the ones above are the
+  look's own, for every effect. Fixed along the way: two static looks on a
+  channel kept the *higher* value (Blue then Red came out magenta-ish, two
+  Pan/Tilts kept the bigger pan); a second Colour look moved a colour
+  wheel; an Aim or a Dimmer placed after a movement effect did nothing;
+  a Dimmer look didn't dim a fixture with no dimmer; two effects on one
+  channel went by which started first, not their order in the list.
+  ([How a look stacks](effects.md#how-a-look-stacks))
+
 - **Breathe and the other dimmer effects work on movers with a head
   dimmer** (no master dimmer in their definition), and a colour-wheel
   fixture's wheel holds its colour while they breathe instead of hopping

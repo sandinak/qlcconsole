@@ -5,6 +5,7 @@
   Licensed under the Apache License, Version 2.0 (the "License");
 */
 
+#include <algorithm>
 #include "effectscriptrunner.h"
 #include "effectinstance.h"
 
@@ -762,8 +763,15 @@ void EffectScriptRunner::writeDMX(MasterTimer *timer, QList<Universe*> universes
     }
 }
 
-QList<EffectInstance::DmxWrite> EffectScriptRunner::composeWrites(const QList<EffectInstance::DmxWrite> &writes)
+QList<EffectInstance::DmxWrite> EffectScriptRunner::composeWrites(const QList<EffectInstance::DmxWrite> &unordered)
 {
+    // In the look's order, top to bottom: what comes later is lower in the
+    // list, and wins.
+    QList<EffectInstance::DmxWrite> writes = unordered;
+    std::stable_sort(writes.begin(), writes.end(),
+                     [](const EffectInstance::DmxWrite &a, const EffectInstance::DmxWrite &b) {
+                         return a.layer < b.layer;
+                     });
     // What several effects write to one channel, layered as a desk does: a
     // colour sets it (the last effect's, if two do; the highest, if both only
     // add), and a dimmer on a no-dimmer head then scales whatever is there --
@@ -792,15 +800,18 @@ QList<EffectInstance::DmxWrite> EffectScriptRunner::composeWrites(const QList<Ef
             if (!haveSet.at(i))
                 c.base = w.base;
         }
-        else if (!haveSet.at(i) || w.replace || c.replace)
+        else if (haveSet.at(i) && c.htp && w.htp)
         {
-            c.value = (!haveSet.at(i) || w.replace) ? w.value : qMax(c.value, w.value);
-            c.replace = c.replace || w.replace;
-            haveSet[i] = true;
+            c.value = qMax(c.value, w.value);  // both only add: the higher
         }
         else
         {
-            c.value = qMax(c.value, w.value);
+            // The lower in the list sets it -- a pan, a wheel slot, a colour
+            // that owns its head -- whatever was above.
+            c.value = w.value;
+            c.replace = c.replace || w.replace;
+            c.htp = c.htp && w.htp;
+            haveSet[i] = true;
         }
     }
     for (int i = 0; i < composed.size(); ++i)

@@ -1,0 +1,553 @@
+/*
+  Q Light Controller Plus - Unit test
+  lookstack_test.cpp
+
+  How a look's list stacks, end to end: static looks, effects, and the
+  colours and dimmers that belong to an effect, on four kinds of fixture.
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+*/
+
+#include <QtTest>
+#include <QTemporaryDir>
+#include <QXmlStreamReader>
+#include <QXmlStreamWriter>
+
+#include <QtTest>
+#include <QFile>
+
+#define protected public                // Universe::processFaders()
+#include "universe.h"
+#undef protected
+#define private public                  // MasterTimer::timerTick()
+#include "mastertimer.h"
+#undef private
+#include "effectscriptrunner.h"
+#include "inputoutputmap.h"
+#include "qlcfixturemode.h"
+#include "qlcfixturehead.h"
+#include "qlcfixturedef.h"
+#include "qlccapability.h"
+#include "qlcphysical.h"
+#include "qlcchannel.h"
+#include "qlcpalette.h"
+#include "fixture.h"
+#include "fixturegroup.h"
+#include "scene.h"
+#include "doc.h"
+
+#include "lookstack_test.h"
+
+namespace
+{
+/* Effects whose output is fixed, so every look has one right answer. */
+const char *kScripts[][2] = {
+    // Takes the look's colour (reads palettes.look): the first one, as is.
+    { "lookcolour.js",
+      "(function() { var e = {}; e.apiVersion = 1; e.name = 'T Look Colour';"
+      " e.fixtureTypes = ['rgb', 'moving', 'colorwheel'];"
+      " e.tick = function(fx, inp, pal) {"
+      "   var c = (pal.look && pal.look.colors && pal.look.colors.length) ? pal.look.colors[0] : null;"
+      "   return fx.map(function() { return c ? { r: c.r, g: c.g, b: c.b } : {}; }); };"
+      " return e; })()" },
+    // A colour of its own, whatever the look's.
+    { "red.js",
+      "(function() { var e = {}; e.apiVersion = 1; e.name = 'T Red';"
+      " e.fixtureTypes = ['rgb', 'moving', 'colorwheel'];"
+      " e.tick = function(fx) { return fx.map(function() { return { r: 255, g: 0, b: 0 }; }); };"
+      " return e; })()" },
+    // A dimmer effect: half of whatever is there.
+    { "half.js",
+      "(function() { var e = {}; e.apiVersion = 1; e.name = 'T Half';"
+      " e.fixtureTypes = ['dimmer', 'rgb', 'moving'];"
+      " e.tick = function(fx) { return fx.map(function() { return { dimmer: 0.5 }; }); };"
+      " return e; })()" },
+    // Movement only, movers only.
+    { "pan90.js",
+      "(function() { var e = {}; e.apiVersion = 1; e.name = 'T Pan 90';"
+      " e.fixtureTypes = ['moving'];"
+      " e.tick = function(fx) { return fx.map(function() { return { pan: 90, tilt: 45 }; }); };"
+      " return e; })()" },
+    { "pan180.js",
+      "(function() { var e = {}; e.apiVersion = 1; e.name = 'T Pan 180';"
+      " e.fixtureTypes = ['moving'];"
+      " e.tick = function(fx) { return fx.map(function() { return { pan: 180, tilt: 90 }; }); };"
+      " return e; })()" },
+};
+
+const QColor kRed(255, 0, 0), kGreen(0, 255, 0), kBlue(0, 0, 255);
+
+QLCChannel *chan(QLCFixtureDef *def, const QString &name, QLCChannel::Preset preset)
+{
+    QLCChannel *ch = new QLCChannel();
+    ch->setName(name);
+    ch->setPreset(preset);
+    def->addChannel(ch);
+    return ch;
+}
+
+/* A definition with these channels, the first @p inHead of them its head's
+   (the rest, a dimmer, the fixture's master). */
+Fixture *make(Doc *doc, const QString &model, QLCFixtureDef::FixtureType type,
+              const QList<QLCChannel *> &chans, QLCFixtureDef *def, int inHead,
+              quint32 address)
+{
+    def->setManufacturer("Test");
+    def->setModel(model);
+    def->setType(type);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("Mode");
+    for (int c = 0; c < chans.size(); c++)
+        mode->insertChannel(chans.at(c), c);
+    QLCFixtureHead head;
+    for (int c = 0; c < inHead; c++)
+        head.addChannel(quint32(c));
+    mode->insertHead(-1, head);
+    QLCPhysical phy;
+    phy.setFocusPanMax(540);
+    phy.setFocusTiltMax(270);
+    mode->setPhysical(phy);
+    mode->cacheHeads();
+    def->addMode(mode);
+    Fixture *fx = new Fixture(doc);
+    fx->setName(model);
+    fx->setFixtureDefinition(def, mode);
+    fx->setUniverse(0);
+    fx->setAddress(address);
+    doc->addFixture(fx);
+    return fx;
+}
+}
+
+void LookStack_Test::initTestCase()
+{
+    QVERIFY(m_scripts.isValid());
+    for (const auto &s : kScripts)
+    {
+        QFile f(m_scripts.filePath(QString::fromLatin1(s[0])));
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(s[1]);
+    }
+}
+
+void LookStack_Test::init()
+{
+    m_doc = new Doc(this);
+
+    QLCFixtureDef *par = new QLCFixtureDef();
+    m_par = make(m_doc, "Par", QLCFixtureDef::ColorChanger,
+                 { chan(par, "R", QLCChannel::IntensityRed), chan(par, "G", QLCChannel::IntensityGreen),
+                   chan(par, "B", QLCChannel::IntensityBlue),
+                   chan(par, "Dimmer", QLCChannel::IntensityMasterDimmer) }, par, 3, 0);
+
+    QLCFixtureDef *bat = new QLCFixtureDef();
+    m_batten = make(m_doc, "Batten", QLCFixtureDef::ColorChanger,
+                    { chan(bat, "R", QLCChannel::IntensityRed), chan(bat, "G", QLCChannel::IntensityGreen),
+                      chan(bat, "B", QLCChannel::IntensityBlue), chan(bat, "W", QLCChannel::IntensityWhite) },
+                    bat, 4, 10);
+
+    QLCFixtureDef *wd = new QLCFixtureDef();
+    QLCChannel *wheel = new QLCChannel();
+    wheel->setName("Color wheel");
+    wheel->setGroup(QLCChannel::Colour);
+    const struct { int lo, hi; QColor c; const char *n; } wheelSlots[] = {
+        { 0, 9, QColor(0, 0, 0), "Off" }, { 10, 19, kRed, "Red" }, { 20, 29, kGreen, "Green" },
+        { 30, 39, kBlue, "Blue" }, { 40, 49, QColor(255, 255, 255), "White" } };
+    for (const auto &sl : wheelSlots)
+    {
+        QLCCapability *cap = new QLCCapability(uchar(sl.lo), uchar(sl.hi), sl.n);
+        cap->setResource(0, sl.c);
+        wheel->addCapability(cap);
+    }
+    wd->addChannel(wheel);
+    m_wheel = make(m_doc, "WheelSpot", QLCFixtureDef::MovingHead,
+                   { chan(wd, "Pan", QLCChannel::PositionPan), chan(wd, "Tilt", QLCChannel::PositionTilt),
+                     wheel, chan(wd, "Dimmer", QLCChannel::IntensityDimmer) }, wd, 4, 20);
+
+    QLCFixtureDef *md = new QLCFixtureDef();
+    m_mover = make(m_doc, "Mover", QLCFixtureDef::MovingHead,
+                   { chan(md, "Pan", QLCChannel::PositionPan), chan(md, "Tilt", QLCChannel::PositionTilt),
+                     chan(md, "R", QLCChannel::IntensityRed), chan(md, "G", QLCChannel::IntensityGreen),
+                     chan(md, "B", QLCChannel::IntensityBlue),
+                     chan(md, "Dimmer", QLCChannel::IntensityMasterDimmer) }, md, 5, 30);
+
+    QLCFixtureDef *ts = new QLCFixtureDef();
+    m_twoSet = make(m_doc, "TwoSet", QLCFixtureDef::ColorChanger,
+                    { chan(ts, "R1", QLCChannel::IntensityRed), chan(ts, "G1", QLCChannel::IntensityGreen),
+                      chan(ts, "B1", QLCChannel::IntensityBlue), chan(ts, "R2", QLCChannel::IntensityRed),
+                      chan(ts, "G2", QLCChannel::IntensityGreen), chan(ts, "B2", QLCChannel::IntensityBlue) },
+                    ts, 6, 40);
+
+    // What each is, as the rules need it.
+    QVERIFY(m_par->masterIntensityChannel() != QLCChannel::invalid());
+    QCOMPARE(m_batten->masterIntensityChannel(), QLCChannel::invalid());
+    QCOMPARE(m_wheel->masterIntensityChannel(), QLCChannel::invalid());
+    QVERIFY(m_mover->masterIntensityChannel() != QLCChannel::invalid());
+}
+
+void LookStack_Test::cleanup()
+{
+    /* Not deleted: a scene still playing can't be stopped from this thread
+       without the timer tick it would need (it holds the universes). One
+       Doc a test is a few kilobytes. */
+    m_doc = nullptr;
+}
+
+QLCPalette *LookStack_Test::colour(const QColor &c)
+{
+    QLCPalette *p = new QLCPalette(QLCPalette::Color, m_doc);
+    p->setValue(c);
+    m_doc->addPalette(p);
+    return p;
+}
+
+QLCPalette *LookStack_Test::dimmer(int value)
+{
+    QLCPalette *p = new QLCPalette(QLCPalette::Dimmer, m_doc);
+    p->setValue(value);
+    m_doc->addPalette(p);
+    return p;
+}
+
+QLCPalette *LookStack_Test::panTilt(double pan, double tilt)
+{
+    QLCPalette *p = new QLCPalette(QLCPalette::PanTilt, m_doc);
+    p->setValue(pan, tilt);
+    m_doc->addPalette(p);
+    return p;
+}
+
+QLCPalette *LookStack_Test::effect(const QString &file)
+{
+    QLCPalette *p = new QLCPalette(QLCPalette::Effect, m_doc);
+    p->setScriptPath(m_scripts.filePath(file));
+    m_doc->addPalette(p);
+    return p;
+}
+
+QByteArray LookStack_Test::play(const QList<QLCPalette *> &stack, bool asGroup)
+{
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    if (asGroup)
+    {
+        FixtureGroup *grp = new FixtureGroup(m_doc);
+        m_doc->addFixtureGroup(grp);
+        for (Fixture *fx : { m_par, m_batten, m_wheel, m_mover, m_twoSet })
+            grp->assignFixture(fx->id());
+        scene->addFixtureGroup(grp->id());
+    }
+    else
+    {
+        for (Fixture *fx : { m_par, m_batten, m_wheel, m_mover, m_twoSet })
+            scene->addFixture(fx->id());
+    }
+    for (QLCPalette *p : stack)
+        scene->addPalette(p->id());
+    m_playing = scene;
+    scene->start(m_doc->masterTimer(), FunctionParent::master());
+    return tickAndRead();
+}
+
+QByteArray LookStack_Test::tickAndRead()
+{
+    MasterTimer *timer = m_doc->masterTimer();
+    for (int i = 0; i < 12; ++i)
+    {
+        timer->timerTick();
+        QTest::qWait(15);                   // the effect runner ticks on its own timer
+    }
+    QList<Universe *> unis = m_doc->inputOutputMap()->claimUniverses();
+    for (Universe *u : unis)
+        u->processFaders();
+    const QByteArray out = unis.first()->preGMValues().left(64);
+    m_doc->inputOutputMap()->releaseUniverses(false);
+    return out;
+}
+
+static int at(const QByteArray &dmx, int i) { return int(uchar(dmx.at(i))); }
+
+QColor LookStack_Test::rgbOf(const QByteArray &dmx, const Fixture *fx) const
+{
+    const int a = int(fx->address());
+    if (fx == m_par || fx == m_batten)
+        return QColor(at(dmx, a), at(dmx, a + 1), at(dmx, a + 2));
+    return QColor(at(dmx, a + 2), at(dmx, a + 3), at(dmx, a + 4));        // the mover
+}
+
+int LookStack_Test::dimmerOf(const QByteArray &dmx, const Fixture *fx) const
+{
+    const int a = int(fx->address());
+    if (fx == m_par) return at(dmx, a + 3);
+    if (fx == m_wheel) return at(dmx, a + 3);
+    if (fx == m_mover) return at(dmx, a + 5);
+    return -1;
+}
+
+int LookStack_Test::wheelOf(const QByteArray &dmx, const Fixture *fx) const
+{
+    return at(dmx, int(fx->address()) + 2);
+}
+
+int LookStack_Test::panOf(const QByteArray &dmx, const Fixture *fx) const
+{
+    return at(dmx, int(fx->address()));
+}
+
+int LookStack_Test::panValue(Fixture *fx, double degrees) const
+{
+    foreach (const SceneValue &sv, fx->positionToValues(QLCChannel::Pan, float(degrees)))
+        if (sv.channel == 0)
+            return sv.value;
+    return -1;
+}
+
+static QString rgb(const QColor &c) { return QString("%1,%2,%3").arg(c.red()).arg(c.green()).arg(c.blue()); }
+#define RGB_IS(actual, expected) QVERIFY2((actual) == (expected), \
+    qPrintable(QString("%1 is %2, should be %3").arg(#actual, rgb(actual), rgb(expected))))
+#define IS(actual, expected) QVERIFY2((actual) == (expected), \
+    qPrintable(QString("%1 is %2, should be %3").arg(#actual).arg(actual).arg(expected)))
+
+/* Rule 1: down the list, the lower look wins on what they both set -- but
+   Colour looks are numbered, not stacked: the first is colour 1, the next
+   colour 2 (a fixture's second colour set, an effect's second colour). A
+   fixture with one colour shows colour 1, whole -- never a mix. */
+void LookStack_Test::staticLooksTheLowerWins()
+{
+    QByteArray d = play({ colour(kBlue), colour(kRed) });
+    RGB_IS(rgbOf(d, m_par), kBlue);             // colour 1; not blue + red = magenta
+    RGB_IS(rgbOf(d, m_mover), kBlue);
+    IS(wheelOf(d, m_wheel), 34);                // the blue slot
+
+    init();
+    d = play({ colour(kRed), colour(kBlue) });
+    RGB_IS(rgbOf(d, m_par), kRed);
+    IS(wheelOf(d, m_wheel), 14);
+
+    init();
+    d = play({ dimmer(255), dimmer(128) });
+    IS(dimmerOf(d, m_par), 128);                // not the higher
+    IS(dimmerOf(d, m_wheel), 128);
+    IS(dimmerOf(d, m_mover), 128);
+
+    init();
+    d = play({ panTilt(180, 90), panTilt(90, 45) });
+    IS(panOf(d, m_mover), panValue(m_mover, 90));
+    IS(panOf(d, m_wheel), panValue(m_wheel, 90));
+}
+
+/* Rule 3: an effect that takes colours, with none of its own, takes the look's. */
+void LookStack_Test::aColourEffectTakesTheLooksColour()
+{
+    const QByteArray d = play({ colour(kBlue), dimmer(255), effect("lookcolour.js") });
+    RGB_IS(rgbOf(d, m_par), kBlue);
+    RGB_IS(rgbOf(d, m_batten), kBlue);
+    IS(wheelOf(d, m_wheel), 34);
+    IS(dimmerOf(d, m_par), 255);
+}
+
+/* Rule 3: a colour under an effect is the effect's -- its colour, and not
+   painted as the look's (the look's blue doesn't show through). */
+void LookStack_Test::aColourUnderAnEffectIsThatEffectsOnly()
+{
+    const QByteArray d = play({ colour(kBlue), dimmer(255), effect("lookcolour.js"), colour(kRed) });
+    RGB_IS(rgbOf(d, m_par), kRed);
+    RGB_IS(rgbOf(d, m_batten), kRed);
+    RGB_IS(rgbOf(d, m_mover), kRed);
+    IS(wheelOf(d, m_wheel), 14);
+    IS(at(d, int(m_batten->address()) + 3), 0); // white stays out of it
+}
+
+/* Rule 1 for effects: two on one colour, the lower in the list wins, each
+   with its own colour. */
+void LookStack_Test::theLowerOfTwoColourEffectsWins()
+{
+    QByteArray d = play({ dimmer(255), effect("lookcolour.js"), colour(kGreen),
+                          effect("lookcolour.js"), colour(kBlue) });
+    RGB_IS(rgbOf(d, m_par), kBlue);
+    IS(wheelOf(d, m_wheel), 34);
+
+    init();
+    d = play({ dimmer(255), effect("lookcolour.js"), colour(kBlue),
+               effect("lookcolour.js"), colour(kGreen) });
+    RGB_IS(rgbOf(d, m_par), kGreen);
+
+    init();
+    d = play({ dimmer(255), effect("red.js"), effect("lookcolour.js"), colour(kGreen) });
+    RGB_IS(rgbOf(d, m_par), kGreen);
+
+    init();
+    d = play({ dimmer(255), effect("lookcolour.js"), colour(kGreen), effect("red.js") });
+    RGB_IS(rgbOf(d, m_par), kRed);
+}
+
+/* Rule 2: an effect's colour replaces the look's on its heads -- not added
+   to it (blue under a red effect is not magenta). */
+void LookStack_Test::aColourEffectOverridesTheStaticColour()
+{
+    const QByteArray d = play({ colour(kBlue), dimmer(255), effect("red.js") });
+    RGB_IS(rgbOf(d, m_par), kRed);
+    RGB_IS(rgbOf(d, m_batten), kRed);
+    RGB_IS(rgbOf(d, m_mover), kRed);
+    IS(wheelOf(d, m_wheel), 14);
+    IS(dimmerOf(d, m_par), 255);
+}
+
+/* Rule 2: a dimmer effect scales what is there: a master dimmer, a head's
+   own dimmer, or -- with no dimmer -- the colour. Two multiply. */
+void LookStack_Test::dimmerEffectsScaleAndMultiply()
+{
+    QByteArray d = play({ colour(kBlue), dimmer(255), effect("half.js") });
+    IS(dimmerOf(d, m_par), 128);
+    IS(dimmerOf(d, m_mover), 128);
+    IS(dimmerOf(d, m_wheel), 128);              // its head's dimmer
+    IS(rgbOf(d, m_batten).blue(), 128);         // no dimmer: its colour
+    RGB_IS(rgbOf(d, m_par), kBlue);             // the colour itself left alone
+    IS(wheelOf(d, m_wheel), 34);
+
+    init();
+    d = play({ colour(kBlue), dimmer(255), effect("half.js"), effect("half.js") });
+    IS(dimmerOf(d, m_par), 64);
+    IS(dimmerOf(d, m_wheel), 64);
+    IS(rgbOf(d, m_batten).blue(), 64);
+
+    init();
+    d = play({ colour(kBlue), dimmer(128), effect("half.js") });
+    IS(dimmerOf(d, m_par), 64);                 // half of the look's own level
+}
+
+/* A movement effect leaves the look's colour and dimmer alone. */
+void LookStack_Test::aMovementEffectKeepsTheLooksColourAndDimmer()
+{
+    const QByteArray d = play({ colour(kBlue), dimmer(255), effect("pan90.js") });
+    IS(panOf(d, m_mover), panValue(m_mover, 90));
+    IS(panOf(d, m_wheel), panValue(m_wheel, 90));
+    RGB_IS(rgbOf(d, m_mover), kBlue);
+    IS(dimmerOf(d, m_mover), 255);
+    IS(wheelOf(d, m_wheel), 34);
+    IS(dimmerOf(d, m_wheel), 255);
+    RGB_IS(rgbOf(d, m_par), kBlue);             // not a mover: the look, untouched
+}
+
+/* "if you assign colors, dimmers, etc. to effects [they] only apply to that
+   effect": under a movement effect, on the heads it moves. */
+void LookStack_Test::aColourOrDimmerUnderAMovementEffectIsItsOwn()
+{
+    const QByteArray d = play({ colour(kBlue), dimmer(255), effect("pan90.js"), colour(kRed), dimmer(128) });
+    RGB_IS(rgbOf(d, m_mover), kRed);
+    IS(dimmerOf(d, m_mover), 128);
+    IS(wheelOf(d, m_wheel), 14);
+    IS(dimmerOf(d, m_wheel), 128);
+    // The heads it doesn't move keep the look's own.
+    RGB_IS(rgbOf(d, m_par), kBlue);
+    IS(dimmerOf(d, m_par), 255);
+    RGB_IS(rgbOf(d, m_batten), kBlue);
+}
+
+void LookStack_Test::aDimmerUnderAMovementEffectIsNotTheLooks()
+{
+    const QByteArray d = play({ colour(kBlue), effect("pan90.js"), dimmer(255) });
+    IS(dimmerOf(d, m_mover), 255);              // the effect's dimmer, on its heads
+    IS(dimmerOf(d, m_wheel), 255);
+    IS(dimmerOf(d, m_par), 0);                  // not the look's: the par has none
+}
+
+/* An Aim or Pan/Tilt is never an effect's: after one, it still points the heads. */
+void LookStack_Test::anAimOrPanTiltAfterAnEffectIsStillTheLooks()
+{
+    const QByteArray d = play({ colour(kBlue), dimmer(255), effect("lookcolour.js"), panTilt(180, 90) });
+    IS(panOf(d, m_mover), panValue(m_mover, 180));
+    IS(panOf(d, m_wheel), panValue(m_wheel, 180));
+    RGB_IS(rgbOf(d, m_mover), kBlue);
+}
+
+void LookStack_Test::theLowerOfTwoMovementEffectsWins()
+{
+    QByteArray d = play({ dimmer(255), effect("pan90.js"), effect("pan180.js") });
+    IS(panOf(d, m_mover), panValue(m_mover, 180));
+
+    init();
+    d = play({ dimmer(255), effect("pan180.js"), effect("pan90.js") });
+    IS(panOf(d, m_mover), panValue(m_mover, 90));
+    IS(panOf(d, m_wheel), panValue(m_wheel, 90));
+}
+
+/* "colors, dimmers, etc. that are above have precedence across all the
+   effects": the look's own feed every effect that has none of its own. */
+void LookStack_Test::theLooksOwnColoursFeedEveryEffectWithoutItsOwn()
+{
+    const QByteArray d = play({ colour(kGreen), dimmer(255), effect("lookcolour.js"),
+                                effect("half.js"), effect("pan90.js") });
+    RGB_IS(rgbOf(d, m_par), kGreen);
+    IS(dimmerOf(d, m_par), 128);
+    IS(wheelOf(d, m_wheel), 24);
+    IS(dimmerOf(d, m_wheel), 128);
+    IS(panOf(d, m_mover), panValue(m_mover, 90));
+    RGB_IS(rgbOf(d, m_mover), kGreen);
+}
+
+/* A Dimmer look on a fixture with no dimmer channel dims its colour -- as
+   it does an effect's colour on it. */
+void LookStack_Test::aDimmerLookDimsAFixtureWithNoDimmer()
+{
+    QByteArray d = play({ colour(kBlue), dimmer(128) });
+    IS(rgbOf(d, m_batten).blue(), 128);
+    IS(dimmerOf(d, m_par), 128);
+    IS(rgbOf(d, m_par).blue(), 255);            // a dimmer of its own: the colour stays whole
+
+    init();
+    d = play({ colour(kBlue), dimmer(128), effect("lookcolour.js") });
+    IS(rgbOf(d, m_batten).blue(), 128);         // the same with an effect's colour
+    IS(dimmerOf(d, m_par), 128);
+}
+
+/* Colour looks are numbered: colour 1 to a fixture's first colour set,
+   colour 2 to its second. */
+void LookStack_Test::colourOneAndTwoGoToAFixturesTwoColourSets()
+{
+    const QByteArray d = play({ colour(kBlue), colour(kRed) });
+    const int a = int(m_twoSet->address());
+    RGB_IS(QColor(at(d, a), at(d, a + 1), at(d, a + 2)), kBlue);
+    RGB_IS(QColor(at(d, a + 3), at(d, a + 4), at(d, a + 5)), kRed);
+    RGB_IS(rgbOf(d, m_par), kBlue);             // one set: colour 1
+}
+
+/* The same rules when the look is on a fixture group, not fixtures. */
+void LookStack_Test::theSameOnAFixtureGroup()
+{
+    QByteArray d = play({ colour(kBlue), dimmer(255), effect("pan90.js"), colour(kRed), dimmer(128) }, true);
+    RGB_IS(rgbOf(d, m_mover), kRed);
+    IS(dimmerOf(d, m_mover), 128);
+    IS(wheelOf(d, m_wheel), 14);
+    RGB_IS(rgbOf(d, m_par), kBlue);
+    IS(dimmerOf(d, m_par), 255);
+
+    init();
+    d = play({ colour(kBlue), colour(kRed), dimmer(255), dimmer(128) }, true);
+    RGB_IS(rgbOf(d, m_par), kBlue);
+    IS(dimmerOf(d, m_par), 128);
+    IS(wheelOf(d, m_wheel), 34);
+    IS(rgbOf(d, m_batten).blue(), 128);
+
+    init();
+    d = play({ colour(kBlue), dimmer(255), effect("lookcolour.js"), colour(kRed), effect("half.js") }, true);
+    RGB_IS(rgbOf(d, m_par), kRed);
+    IS(dimmerOf(d, m_par), 128);
+}
+
+/* A look edited while it plays is re-painted by the same rules. */
+void LookStack_Test::editingALookWhileItPlaysKeepsTheOrder()
+{
+    QLCPalette *low = dimmer(128);
+    QByteArray d = play({ colour(kBlue), dimmer(255), low });
+    IS(dimmerOf(d, m_par), 128);
+    IS(rgbOf(d, m_batten).blue(), 128);
+    low->setValue(64);
+    m_playing->requestPaletteRefresh();
+    d = tickAndRead();
+    IS(dimmerOf(d, m_par), 64);                 // still the lower, now 64
+    IS(dimmerOf(d, m_mover), 64);
+    IS(rgbOf(d, m_batten).blue(), 64);          // and the batten's colour with it
+}
+
+QTEST_MAIN(LookStack_Test)

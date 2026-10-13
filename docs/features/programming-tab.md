@@ -69,13 +69,18 @@ that scene first, with the effect showing.
 5. **Drag a palette from the right onto the Looks list.** Dropped on empty
    space, it becomes a base look (painted directly onto the targets).
    Dropped onto an Effect look, a Color/Dimmer palette instead nests
-   *under* it, feeding that effect's gradient or master level.
+   *under* it and belongs to that effect only — its colours, its level;
+   the ones above every effect are the look's own and feed every effect
+   that has none of its own. See
+   [How a look stacks](effects.md#how-a-look-stacks).
 6. Click a look to edit it live in the Look Editor at the bottom — see
    below. Every edit there applies immediately; there's no separate "apply"
    step.
-7. Reorder looks with the up/down buttons (list order is paint precedence —
-   later entries win on shared channels); remove a look or target with its
-   panel's **Remove** button.
+7. Reorder looks with the up/down buttons — the list is a stack read top
+   to bottom, and the lower look wins on what two of them set (two Colours
+   are colour 1 and colour 2 instead; see
+   [How a look stacks](effects.md#how-a-look-stacks)). Remove a look or
+   target with its panel's **Remove** button.
 8. Save the workspace normally (⌘S / Ctrl+S).
 
 If some of a scene's targets are still in the inventory (not patched), an

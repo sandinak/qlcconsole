@@ -12,22 +12,8 @@ Colours come from the **look**: an effect that uses a colour takes the
 look's Colour palettes (first, second…) and its Dimmer, so the same effect
 works in any colour.
 
-**How a look's parts layer** on a head, as on a desk:
-
-- The look's **static colour** is the base.
-- A **colour effect** replaces it on the heads it lights — it doesn't add
-  to it (Cyan under a rainbow no longer turns every hue pale). White and
-  any channel the effect doesn't name go dark under it. Heads the effect
-  leaves black keep the look's colour.
-- A **dimmer effect** (Wave, Dimmer Phaser, Breathe, Candle…) dims whatever
-  ends up there: on the fixture's master dimmer, else the head's own dimmer
-  (a mover whose definition puts its Dimmer in its head). On a head with no
-  dimmer channel at all it scales the colour — the colour effect's, else
-  the look's.
-- On a **colour-wheel** fixture an effect's colour picks the nearest slot
-  by its **hue**, not its brightness — a breathing blue stays on the blue
-  slot while the dimmer does the breathing.
-- Two colour effects on the same head: the later one in the look wins.
+See [How a look stacks](#how-a-look-stacks) for exactly how a look's
+colours, dimmers, positions and effects combine, and which wins.
 
 ## Colour
 
@@ -221,6 +207,101 @@ A **chase that counts in beats** (its tempo set to Beats) on a master
 steps on that master's beats — tap the master and the chase follows; pause
 it and the chase holds on its step. A chase counting in time keeps its
 times; only the effects in its looks follow the master.
+
+## How a look stacks
+
+A look's **Looks list** is a stack, read **top to bottom**. The same rules
+hold for every fixture, every look and every effect, whether the look is on
+fixtures or on a fixture group, and while you edit it live.
+
+### 1. Static looks set the base
+
+Colour, Dimmer, Pan/Tilt, Aim, Gobo and the rest paint the look's base.
+
+- **The lower one wins** on what two of them both set: two Dimmers, the
+  lower one's level; two Pan/Tilts, the lower one's position — never "the
+  higher value", never a mix.
+- **Colours are numbered, not stacked.** The first Colour look is the look's
+  **colour 1**, the next **colour 2**, and so on. A fixture with one colour
+  shows colour 1, whole. A fixture with more colour sets (a bar with two RGB
+  cells per head) takes colour 2 on its second set. Effects use them as
+  their first, second, third colours. A colour wheel, CMY and a white LED
+  follow colour 1.
+- **A Dimmer on a fixture with no dimmer channel** (an RGB batten) dims its
+  colour instead — the same way it dims an effect's colour on it.
+
+### 2. Effects play on top of the base
+
+Effects run over the base, in list order:
+
+- A **colour effect** (Rainbow, a chase, a WLED effect…) **replaces** the
+  base colour on the heads it lights — it doesn't add to it: Cyan under a
+  rainbow doesn't wash every hue pale, Blue under a red effect isn't
+  magenta. White, and any emitter the effect doesn't name, go dark under it.
+  Heads it leaves black keep the base colour.
+- A **dimmer effect** (Breathe, Dimmer Phaser, Wave, Candle…) **scales**
+  whatever is there: the fixture's master dimmer; else the head's own dimmer
+  (a mover whose definition puts its Dimmer in its head); else, with no
+  dimmer at all, its colour. Half of a look at 50 % is 25 %.
+- A **movement effect** (Ballyhoo, Orbit, Figure 8…) moves round where the
+  look's Aim or Pan/Tilt points each head ([Position](#position-moving-heads)),
+  and leaves the colour and dimmer alone.
+- On a **colour-wheel** fixture an effect's colour picks the nearest slot by
+  its **hue**, not its brightness — a breathing blue stays on the blue slot
+  while the dimmer breathes.
+
+**Two effects on the same thing:** the **lower one wins** (a colour, a
+position, a gobo); **dimmer effects multiply** (two at half: a quarter); a
+colour that only adds to what's there (sparkle over a pulse) combines with
+it, the brighter showing.
+
+### 3. What belongs to an effect
+
+A **Colour or Dimmer placed under an effect** — after it in the list, before
+the next effect; dropping one onto an effect nests it there — **belongs to
+that effect and applies to it only**:
+
+- An effect that uses colours takes them as **its** colours and level,
+  whatever the look's are.
+- An effect that doesn't (a ballyhoo, a gobo chase) has them applied **with
+  its output, on the heads it drives**, for as long as it plays.
+- They are **not** part of the look's base: the heads the effect doesn't
+  drive don't get them.
+
+An **Aim, Pan/Tilt, Gobo** (anything that isn't a Colour or Dimmer) is never
+an effect's: wherever it sits in the list, it is the look's.
+
+### 4. The look's own apply across all its effects
+
+The Colours and Dimmers **above every effect** are the **look's own**:
+they're the base, and every effect that has **no** colour or dimmer of its
+own uses them. An effect with its own uses its own.
+
+### Examples
+
+On a par (master dimmer), an RGB batten (no dimmer), a colour-wheel mover
+(its dimmer in its head) and an RGB mover:
+
+| Looks, top to bottom | What you get |
+|---|---|
+| Blue · Red | Blue (colour 1); a two-cell fixture: blue and red |
+| Full · Dimmer 50 % | 50 % — the lower |
+| Blue · Dimmer 50 % | Blue at 50 %; the batten's blue itself at half |
+| Blue · Full · colour effect | The effect takes the look's Blue |
+| Blue · Full · effect · **Red** | The effect's own Red; Blue doesn't show through |
+| Blue · Full · red effect | Red — replaced, not mixed |
+| Full · effect · Green · effect · **Blue** | Blue — the lower effect, each with its own colour |
+| Blue · Full · Breathe | Blue, its level breathing (master, head or colour dimmer) |
+| Blue · Full · Breathe · Breathe | The two multiply |
+| Blue · Full · Ballyhoo | Movers sweep round the look's aim, blue at full |
+| Blue · Full · Ballyhoo · **Red · 50 %** | The movers red at 50 % while it sweeps; the pars stay blue at full |
+| Blue · Ballyhoo · **Full** | The movers at full; the pars dark — Full is the ballyhoo's, not the look's |
+| Blue · effect · **Pan/Tilt** | The Pan/Tilt still points the heads: it's always the look's |
+| Full · Ballyhoo · Orbit | The Orbit moves them — the lower |
+| Green · Full · colour effect · Breathe · Ballyhoo | Every effect uses the look's Green and Full |
+
+These are the look-stack tests (`engine/test/lookstack`): every row above
+is checked end to end, through to DMX, on all four kinds of fixture.
 
 ## Diagnostics
 

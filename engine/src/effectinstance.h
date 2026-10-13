@@ -53,6 +53,9 @@ public:
                                  //       another effect's colour on the channel is
                                  //       scaled instead (EffectScriptRunner composes)
         uchar   base = 0;
+        int     layer = 0;       // the effect's place in its look's list: lower wins
+        bool    htp = false;     // a colour that only adds to what's there (a sparkle
+                                 // over a pulse): combined highest-wins, not by layer
     };
 
     EffectInstance(Doc *doc, quint32 sceneId, quint32 effectPaletteId);
@@ -208,6 +211,9 @@ private:
     /** The look's colours, in its order (those after this effect, else all),
      *  and its master dimmer (1 when it has none) -- what the effect's colour
      *  slots and palettes.look are filled from. */
+    /** The Colour/Dimmer palettes under this effect (its own); @p dimmer
+     *  -1 when it has none. */
+    void ownLook(QList<QColor> &colours, double &dimmer) const;
     void lookColours(QList<QColor> &colours, double &dimmer, bool *haveDimmer = nullptr) const;
     /** The fixtures and groups the look is on, before any type filter. */
     QList<quint32> lookFixtureIds() const;

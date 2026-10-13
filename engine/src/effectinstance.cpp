@@ -254,7 +254,44 @@ void EffectInstance::runTick()
         return;
     }
 
+    /* An effect that doesn't take the look's colours (a ballyhoo, a gobo
+       chase) with a Colour or Dimmer of its own under it: the host applies
+       them with its output, on its heads, for as long as it plays -- they are
+       that effect's ("only apply to that effect"), not the look's base. */
+    if (!QLCPalette::effectUsesLookColours(m_doc->palette(m_effectPaletteId)))
+    {
+        QList<QColor> own;
+        double ownDimmer = -1.0;
+        ownLook(own, ownDimmer);
+        if (!own.isEmpty() || ownDimmer >= 0.0)
+        {
+            const int len = result.property("length").toInt();
+            for (int i = 0; i < len; ++i)
+            {
+                QJSValue o = result.property(quint32(i));
+                if (!o.isObject())
+                    continue;
+                if (!own.isEmpty() && !o.hasProperty("r") && !o.hasProperty("g") && !o.hasProperty("b"))
+                {
+                    o.setProperty("r", own.first().red());
+                    o.setProperty("g", own.first().green());
+                    o.setProperty("b", own.first().blue());
+                }
+                if (ownDimmer >= 0.0 && !o.hasProperty("dimmer"))
+                    o.setProperty("dimmer", ownDimmer);
+            }
+        }
+    }
+
     QList<DmxWrite> writes = parseIntents(result, cells);
+    // Where this effect sits in its look: two effects on one channel, the
+    // lower in the list wins (EffectScriptRunner::composeWrites()).
+    if (Scene *sc = qobject_cast<Scene *>(m_doc->function(m_sceneId)))
+    {
+        const int layer = sc->palettes().indexOf(m_effectPaletteId);
+        for (DmxWrite &w : writes)
+            w.layer = layer;
+    }
 
     // One-shot lifecycle: finished when phase reaches 1 or the script sets
     // state.done (it can finish early). On finish, "release" stops driving now
@@ -437,6 +474,13 @@ void EffectInstance::buildSceneBaseValues()
         for (const SceneValue &sv : p->valuesFromFixtures(m_doc, fixtures, scene, cOff))
             m_sceneBaseValues[key(sv.fxi, sv.channel)] = sv.value;
     }
+    // As the scene paints them: a fixture with no dimmer has the look's
+    // Dimmer in its colour.
+    const int lookDim = QLCPalette::lookDimmerValue(m_doc, orderedPalettes);
+    if (lookDim >= 0)
+        for (auto it = m_sceneBaseValues.begin(); it != m_sceneBaseValues.end(); ++it)
+            it.value() = QLCPalette::dimScaleWithoutDimmer(m_doc->fixture(quint32(it.key() >> 32)),
+                                                           quint32(it.key() & 0xFFFFFFFF), it.value(), lookDim);
 }
 
 uchar EffectInstance::sceneBaseValue(quint32 fid, quint32 channel, uchar dflt) const
@@ -1472,46 +1516,71 @@ QJSValue EffectInstance::buildPalettesObject() const
     return obj;
 }
 
+void EffectInstance::ownLook(QList<QColor> &colours, double &dimmer) const
+{
+    // The Colour/Dimmer palettes under this effect, before the next one.
+    colours.clear();
+    dimmer = -1.0;
+    Scene *scene = qobject_cast<Scene *>(m_doc->function(m_sceneId));
+    if (scene == nullptr)
+        return;
+    bool underThis = false;
+    foreach (quint32 pid, scene->palettes())
+    {
+        QLCPalette *p = m_doc->palette(pid);
+        if (p == nullptr)
+            continue;
+        if (p->type() == QLCPalette::Effect)
+            underThis = (pid == m_effectPaletteId);
+        else if (underThis && p->type() == QLCPalette::Color)
+            colours.append(p->colorValue());
+        else if (underThis && p->type() == QLCPalette::Dimmer)
+            dimmer = p->value().toDouble() / 255.0;
+    }
+}
+
 void EffectInstance::lookColours(QList<QColor> &colours, double &dimmer, bool *haveDimmer) const
 {
     double lookDimmer = 1.0;
     bool   haveLookDimmer = false;
-    QList<QColor> afterColors;   // colours positioned after this effect
-    QList<QColor> allColors;     // every colour in the look (fallback)
+    /* The same rule the scene paints by (QLCPalette::isEffectScoped()): the
+       Colour/Dimmer under this effect are its own; with none of its own it
+       takes the look's static ones -- never another effect's. Read top to
+       bottom, the lowest dimmer wins. */
+    QList<QColor> ownColors;     // colours under this effect, its own
+    QList<QColor> baseColors;    // the look's static colours (fallback)
+    double ownDimmer = -1.0, baseDimmer = -1.0;
     if (Scene *scene = qobject_cast<Scene *>(m_doc->function(m_sceneId)))
     {
-        bool pastThisEffect = false;
-        foreach (quint32 pid, scene->palettes())
+        const QList<quint32> pals = scene->palettes();
+        bool underThis = false;
+        foreach (quint32 pid, pals)
         {
             QLCPalette *p = m_doc->palette(pid);
             if (!p)
                 continue;
-            if (pid == m_effectPaletteId)
-            {
-                pastThisEffect = true;
-                continue;
-            }
-            // The NEXT effect ends this effect's run of child colours (in the tree
-            // view, those colours are nested under the other effect).
             if (p->type() == QLCPalette::Effect)
             {
-                pastThisEffect = false;
+                underThis = (pid == m_effectPaletteId);
                 continue;
             }
+            if (p->type() != QLCPalette::Color && p->type() != QLCPalette::Dimmer)
+                continue;
+            const bool scoped = QLCPalette::isEffectScoped(m_doc, pals, pid);
+            if (scoped && !underThis)
+                continue;                       // another effect's
             if (p->type() == QLCPalette::Color)
-            {
-                allColors.append(p->colorValue());
-                if (pastThisEffect)
-                    afterColors.append(p->colorValue());
-            }
-            else if (p->type() == QLCPalette::Dimmer)
-            {
-                lookDimmer = p->value().toDouble() / 255.0;
-                haveLookDimmer = true;
-            }
+                (scoped ? ownColors : baseColors).append(p->colorValue());
+            else
+                (scoped ? ownDimmer : baseDimmer) = p->value().toDouble() / 255.0;
         }
     }
-    colours = afterColors.isEmpty() ? allColors : afterColors;
+    colours = ownColors.isEmpty() ? baseColors : ownColors;
+    if (ownDimmer >= 0.0 || baseDimmer >= 0.0)
+    {
+        lookDimmer = ownDimmer >= 0.0 ? ownDimmer : baseDimmer;
+        haveLookDimmer = true;
+    }
     dimmer = lookDimmer;
     if (haveDimmer != nullptr)
         *haveDimmer = haveLookDimmer;
@@ -1809,10 +1878,11 @@ EffectInstance::parseIntents(const QJSValue &intents,
             if (miCh != QLCChannel::invalid())
             {
                 // Base from the scene's Dimmer look; full if the scene sets none.
+                // A scale, not a set: two dimmer effects on it multiply.
                 const uchar base = sceneBaseValue(fid, miCh, 255);
                 const uchar out  = (uchar)qBound(0, (int)qRound(base * mul), 255);
                 writes.append({uniIdx, (int)fxi->address() + (int)miCh,
-                               out, fxi->id(), miCh, /*replace=*/true});
+                               out, fxi->id(), miCh, /*replace=*/true, mul, base});
             }
             else if (carriesColour)
             {
@@ -1892,7 +1962,11 @@ EffectInstance::parseIntents(const QJSValue &intents,
                         writes.append({uniIdx, (int)fxi->address() + (int)c, dmxVal, fxi->id(), c,
                                        /*replace=*/true});
                     else if (dmxVal != 0)
-                        writes.append({uniIdx, (int)fxi->address() + (int)c, dmxVal, fxi->id(), c});
+                    {
+                        DmxWrite w{uniIdx, (int)fxi->address() + (int)c, dmxVal, fxi->id(), c};
+                        w.htp = true;
+                        writes.append(w);
+                    }
                     matched = true;   // the emitter exists regardless of this value
                 }
             }
