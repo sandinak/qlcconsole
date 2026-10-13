@@ -553,11 +553,13 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     m_canvasLayout->addWidget(m_canvasPlaceholder, 1);
 
     /* Once, on a first run -- queued, so it lands after the window is up rather
-       than during construction. Never on the offscreen platform (tests, a
-       headless run): nobody can read or dismiss a dialog there, and it hung
-       a test on a fresh CI runner for five minutes waiting for a click. The
-       flag isn't consumed there, so the first real run still shows it. */
-    if (QGuiApplication::platformName() != QLatin1String("offscreen")
+       than during construction. Never on a headless platform ("offscreen", or
+       "minimal", which the Linux test runner uses under xvfb): nobody can read
+       or dismiss a dialog there, and it hung a test on a fresh CI runner for
+       five minutes waiting for a click. The flag isn't consumed there, so the
+       first real run still shows it. */
+    const QString platform = QGuiApplication::platformName();
+    if (platform != QLatin1String("offscreen") && platform != QLatin1String("minimal")
         && takeFirstRunGuideFlag())
         QMetaObject::invokeMethod(this, [this]() { showProgrammingGuide(); },
                                   Qt::QueuedConnection);

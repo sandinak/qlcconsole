@@ -20,6 +20,7 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QtTest>
+#include <QElapsedTimer>
 
 #include <cmath>
 
@@ -634,16 +635,22 @@ void SpeedMasters_Test::aControlSurfaceDrivesAMaster()
     emit m_doc->inputOutputMap()->inputValueChanged(0, 12, 0);
     QVERIFY(!sm->isPaused(1));
 
-    // Tap: presses half a second apart are 120 BPM; releases aren't taps.
+    // Tap: the tempo of the presses as they really came (a busy CI runner
+    // stretches a qWait(500)); releases aren't taps.
     sm->setBpm(1, 60);
+    QElapsedTimer taps;
     for (int i = 0; i < 3; ++i)
     {
         if (i > 0)
             QTest::qWait(500);
+        else
+            taps.start();
         emit m_doc->inputOutputMap()->inputValueChanged(0, 10, 127);
         emit m_doc->inputOutputMap()->inputValueChanged(0, 10, 0);
     }
-    QVERIFY2(qAbs(sm->setBpm(1) - 120.0) < 8.0, qPrintable(QString::number(sm->setBpm(1))));
+    const double tapped = 60000.0 * 2 / double(taps.elapsed());
+    QVERIFY2(qAbs(sm->setBpm(1) - tapped) < tapped * 0.05,
+             qPrintable(QString("%1 for taps at %2").arg(sm->setBpm(1)).arg(tapped)));
     QCOMPARE(sm->isPaused(1), false);                // the tap channel only taps
     QCOMPARE(sm->rate(0), 1.0);                      // and only master 2 moved
 

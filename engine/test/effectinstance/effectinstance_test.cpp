@@ -1410,7 +1410,7 @@ void EffectInstance_Test::aMovementEffectMovesRoundWhereTheLookPoints()
     m_doc->addFunction(free);
     free->addFixture(mover->id());
     free->addPalette(bally->id());
-    int pan, tilt;
+    int pan = -1, tilt = -1;
     centre(free, pan, tilt);
     QVERIFY2(qAbs(pan - 128) <= 1 && qAbs(tilt - 128) <= 1,
              qPrintable(QString("pan %1 tilt %2").arg(pan).arg(tilt)));
