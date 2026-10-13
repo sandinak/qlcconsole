@@ -130,10 +130,13 @@ void PatchListDialog_Test::savePdfAsksWhereAndWrites()
     QPushButton *pdf = dlg.findChild<QPushButton *>("patchListPdf");
     QVERIFY(pdf != nullptr);
 
-    const QString path = dir.filePath("patch.pdf");
+    // The suggested name, accepted directly: on Linux the file dialog puts
+    // its suggested name back over one typed in.
+    const QString path = dir.filePath("patch-list.pdf");
     whenModal<QFileDialog>([path](QFileDialog *fd) {
+        fd->setDirectory(QFileInfo(path).absolutePath());
         fd->selectFile(path);
-        QMetaObject::invokeMethod(fd, "accept");
+        static_cast<QDialog *>(fd)->done(QDialog::Accepted);
     });
     pdf->click();
     QFile f(path);
