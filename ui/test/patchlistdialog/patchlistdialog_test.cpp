@@ -71,6 +71,10 @@ Fixture *dimmer(Doc *doc, const QString &name, quint32 universe, quint32 address
 
 void PatchListDialog_Test::init()
 {
+    /* Qt's own file dialog, which the test can drive: on Linux the native
+       one can't show under the offscreen platform, returns at once with no
+       file, and the save "fails" (the Linux CI). */
+    QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
     m_doc = new Doc(this);
     dimmer(m_doc, "Spare", 0, 0, false);
     dimmer(m_doc, "Back", 0, 20);
@@ -126,10 +130,13 @@ void PatchListDialog_Test::savePdfAsksWhereAndWrites()
     QPushButton *pdf = dlg.findChild<QPushButton *>("patchListPdf");
     QVERIFY(pdf != nullptr);
 
-    const QString path = dir.filePath("patch.pdf");
+    // The suggested name, accepted directly: on Linux the file dialog puts
+    // its suggested name back over one typed in.
+    const QString path = dir.filePath("patch-list.pdf");
     whenModal<QFileDialog>([path](QFileDialog *fd) {
+        fd->setDirectory(QFileInfo(path).absolutePath());
         fd->selectFile(path);
-        QMetaObject::invokeMethod(fd, "accept");
+        static_cast<QDialog *>(fd)->done(QDialog::Accepted);
     });
     pdf->click();
     QFile f(path);

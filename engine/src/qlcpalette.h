@@ -26,6 +26,7 @@
 #include <QHash>
 #include <QSet>
 
+class Fixture;
 class QXmlStreamReader;
 class QXmlStreamWriter;
 class SceneValue;
@@ -184,11 +185,26 @@ public:
     static int colorSetOffset(Doc *doc, const QList<quint32> &orderedPalettes, quint32 paletteId);
 
     /**
-     * Look-list ordering rule: true if @a paletteId appears AFTER an Effect
-     * palette in @a orderedPalettes, meaning it belongs to the effect (feeds its
-     * colours) and must NOT be painted onto the fixtures as a static base.
-     * Palettes before the first Effect are the static base and return false.
+     * Look-list ordering rule: true if @a paletteId is a Colour or Dimmer
+     * palette placed under an Effect palette (before the next effect) -- it
+     * belongs to that effect, applies to it only, and must NOT be painted onto
+     * the fixtures as the look's static base. Anything else (and everything
+     * above the first effect) is the look's own.
      */
+    /** Whether @p fixture has a dimmer channel -- a master, or one in a head
+     *  -- for a Dimmer look to set. Without one, the look's dimmer scales
+     *  its colour instead (dimScaleWithoutDimmer()). */
+    static bool fixtureHasDimmer(const Fixture *fixture);
+    /** The look's own dimmer (0..255): the lowest Dimmer palette in
+     *  @p orderedPalettes not under an effect, or -1 when there is none. */
+    static int lookDimmerValue(Doc *doc, const QList<quint32> &orderedPalettes);
+    /** @p value of @p channel on @p fixture with the look's dimmer
+     *  @p lookDimmer applied when the fixture has no dimmer and the channel
+     *  is a colour emitter; else @p value as is. */
+    static uchar dimScaleWithoutDimmer(const Fixture *fixture, quint32 channel, uchar value, int lookDimmer);
+    /** Whether @p effect takes the look's colours and dimmer as its input
+     *  (reads palettes.look), so the Colour/Dimmer under it are its own. */
+    static bool effectUsesLookColours(const QLCPalette *effect);
     static bool isEffectScoped(Doc *doc, const QList<quint32> &orderedPalettes, quint32 paletteId);
 
 protected:

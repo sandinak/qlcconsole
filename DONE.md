@@ -6,6 +6,39 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-12 — How a look stacks: one set of rules, tested end to end *(SHIPPED)*
+
+Branson: "make sure that stacked effects and colors and such always applied
+in order stacked and it works consistently"; "colors, dimmers, etc. assigned
+to effects only apply to that effect, whereas [those] above have precedence
+across all the effects". The rules (docs/features/effects.md, "How a look
+stacks"):
+
+- **Static looks, top to bottom, the lower wins** -- resolved per channel in
+  `Scene::write` before the fader (it was `GenericFader::add`'s highest-wins
+  for every channel: two Pan/Tilts kept the bigger pan). Colour looks are
+  colour 1, 2, 3; a wheel / CMY / white follow colour 1 only (colour 2 moved
+  the wheel). A Dimmer on a fixture with no dimmer dims its colour
+  (`QLCPalette::lookDimmerValue()` / `dimScaleWithoutDimmer()`), in the
+  scene and in the base effects build on.
+- **Effects:** a colour effect owns its heads' colour (replace, zeros too,
+  white dark) while it plays; dimmer effects scale and multiply (master,
+  else the head's own dimmer, else colour); two effects on a channel, the
+  lower in the list wins (`DmxWrite::layer`, `composeWrites()`); additive
+  colours (`htp`) combine.
+- **What is an effect's:** a Colour/Dimmer under an effect
+  (`QLCPalette::isEffectScoped()`, Colour/Dimmer only -- an Aim after an
+  effect never aimed). A colour effect takes them as its own; a movement or
+  beam effect has them applied with its output on its heads
+  (`EffectInstance::ownLook()`). The look's own (above every effect) feed
+  every effect without its own (`lookColours()`).
+- Movement effects centre on the look's aim (`fixture.lookAim`); dimmer
+  intents reach a head's own dimmer; a wheel matches hue, not level.
+- The Looks tree nests by the same rule; a palette tried on in the look
+  editor shows by it (`Scene::runtimePalettes()`).
+- Tests: **engine/test/lookstack** (19 cases, four kinds of fixture, to DMX
+  -- every row of the doc's examples), effectinstance (+4), looksdrop (+1).
+
 ### 2026-10-11 — S2/S3 finished: chases on a master, spread round a target, preview *(SHIPPED)*
 
 - A Beats chase on a speed master steps on the master's beats

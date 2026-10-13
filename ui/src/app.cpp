@@ -20,6 +20,9 @@
   limitations under the License.
 */
 
+#include <QContextMenuEvent>
+#include <QMenu>
+#include <QActionGroup>
 #include <QToolButton>
 #include <QTableWidget>
 #include <QtWidgets>
@@ -64,6 +67,7 @@
 #include "studiotemplate.h"
 #include "monitorproperties.h"
 #include "vcframe.h"
+#include "speedmastersfooter.h"
 #include "app.h"
 #include "effectscriptrunner.h"
 #include <QPointer>
@@ -137,6 +141,7 @@ typedef BOOL (WINAPI *SetProcessInformationType)(
 #define SETTINGS_SHOW_FOOTER_LOAD  QStringLiteral("workspace/showFooterLoad")
 #define SETTINGS_SHOW_FOOTER_POWER QStringLiteral("workspace/showFooterPower")
 #define SETTINGS_SHOW_FOOTER_GM    QStringLiteral("workspace/showFooterGM")
+#define SETTINGS_SHOW_FOOTER_SPEED QStringLiteral("workspace/showFooterSpeedMasters")
 #define KXMLQLCWorkspaceWindow QStringLiteral("CurrentWindow")
 
 #define MAX_RECENT_FILES    10
@@ -593,6 +598,7 @@ void App::init()
         m_showFooterLoad = settings.value(SETTINGS_SHOW_FOOTER_LOAD, true).toBool();
         m_showFooterPower = settings.value(SETTINGS_SHOW_FOOTER_POWER, true).toBool();
         m_showFooterGM = settings.value(SETTINGS_SHOW_FOOTER_GM, true).toBool();
+        m_showFooterSpeed = settings.value(SETTINGS_SHOW_FOOTER_SPEED, true).toBool();
     }
 
     if (m_startupWindow != NULL)
@@ -1902,6 +1908,61 @@ void App::initMenuBar()
             m_statusGrandMasterBox->setVisible(on);
     });
 
+    m_showFooterSpeedAction = viewMenu->addAction(tr("Show Speed Masters in Footer"));
+    m_showFooterSpeedAction->setObjectName(QStringLiteral("showFooterSpeedMasters"));
+    m_showFooterSpeedAction->setCheckable(true);
+    m_showFooterSpeedAction->setChecked(m_showFooterSpeed);
+    connect(m_showFooterSpeedAction, &QAction::toggled, this, [this](bool on) {
+        m_showFooterSpeed = on;
+        QSettings settings;
+        settings.setValue(SETTINGS_SHOW_FOOTER_SPEED, on);
+        if (m_statusSpeedMasters != NULL)
+            m_statusSpeedMasters->setVisible(on);
+    });
+    /* How the masters in the footer show their beat: a blink, a bar across
+       each beat, or not at all -- always, or only while something on that
+       master is playing. */
+    {
+        QMenu *beat = viewMenu->addMenu(tr("Speed Master Beat in Footer"));
+        beat->setObjectName(QStringLiteral("speedFooterBeatMenu"));
+        QActionGroup *styles = new QActionGroup(beat);
+        const QList<QPair<QString, SpeedMasterButton::BeatStyle> > styleItems = {
+            { tr("Blink"), SpeedMasterButton::Blink },
+            { tr("Bar Across Each Beat"), SpeedMasterButton::Bar },
+            { tr("No Beat"), SpeedMasterButton::NoBeat } };
+        for (const auto &it : styleItems)
+        {
+            QAction *a = beat->addAction(it.first);
+            a->setCheckable(true);
+            a->setChecked(SpeedMastersFooter::beatStyle() == it.second);
+            a->setData(int(it.second));
+            styles->addAction(a);
+        }
+        beat->addSeparator();
+        QActionGroup *whens = new QActionGroup(beat);
+        const QList<QPair<QString, SpeedMastersFooter::BeatWhen> > whenItems = {
+            { tr("Always"), SpeedMastersFooter::Always },
+            { tr("Only While Something on It Plays"), SpeedMastersFooter::WhilePlaying } };
+        for (const auto &it : whenItems)
+        {
+            QAction *a = beat->addAction(it.first);
+            a->setCheckable(true);
+            a->setChecked(SpeedMastersFooter::beatWhen() == it.second);
+            a->setData(int(it.second));
+            whens->addAction(a);
+        }
+        connect(styles, &QActionGroup::triggered, this, [this](QAction *a) {
+            SpeedMastersFooter::setBeatStyle(SpeedMasterButton::BeatStyle(a->data().toInt()));
+            if (m_statusSpeedMasters != NULL)
+                m_statusSpeedMasters->reloadBeatOptions();
+        });
+        connect(whens, &QActionGroup::triggered, this, [this](QAction *a) {
+            SpeedMastersFooter::setBeatWhen(SpeedMastersFooter::BeatWhen(a->data().toInt()));
+            if (m_statusSpeedMasters != NULL)
+                m_statusSpeedMasters->reloadBeatOptions();
+        });
+    }
+
     /* ---- Fixtures: document-wide fixture actions ----
      * Import/Export/Remap and Channels Fade Configuration used to live on
      * Fixture Manager's own toolbar, but none of them act on a specific
@@ -2941,7 +3002,7 @@ void App::slotDetachContext(int index)
         tabLabel = m_tab->tabText(index);
     context->setProperty("tabLabel", tabLabel);
 
-    qDebug() << "Detaching context" << context;
+    qDebug() << "[TabBreakOut] detaching" << context << "tab" << index;
 
     // Remove the tab-bar entry (the widget itself isn't deleted) — without
     // this, the tab strip is left with a dangling entry for a page that no
@@ -2969,6 +3030,10 @@ void App::openContextWindow(QWidget *context, const QString &tabLabel)
     detachedWindow->setWindowTitle(title);
     detachedWindow->show();
     context->show();
+    // In front, not opened behind the main window (where it looks as if the
+    // Shift-click did nothing).
+    detachedWindow->raise();
+    detachedWindow->activateWindow();
 
     connect(detachedWindow, SIGNAL(closing()),
             this, SLOT(slotReattachContext()));
@@ -4228,6 +4293,7 @@ void App::initStatusBar()
     // Create mode label (far left). No stretch: a dedicated spacer centres the
     // global MTC/Load chips between the mode label and the right-hand chips.
     m_statusModeLabel = new QLabel(this);
+    m_statusModeLabel->setObjectName("footerReadiness");
     m_statusModeLabel->setMinimumWidth(160);
     m_statusModeLabel->installEventFilter(this);   // click → full ShowStatus details
     sb->addWidget(m_statusModeLabel, 0);
@@ -4244,6 +4310,7 @@ void App::initStatusBar()
     // showMessage(), which this app doesn't currently use.
     {
         QWidget *gmBox = new QWidget(this);
+        gmBox->setObjectName("footerGrandMaster");
         m_statusGrandMasterBox = gmBox;
         QHBoxLayout *gmLayout = new QHBoxLayout(gmBox);
         gmLayout->setContentsMargins(0, 0, 4, 0);
@@ -4282,6 +4349,15 @@ void App::initStatusBar()
         sb->addWidget(gmBox, 0);
     }
 
+    // The speed masters beside the GM: each master's tempo, lit on its beat;
+    // a click opens the Speed Masters window at it.
+    if (m_doc != NULL)
+    {
+        m_statusSpeedMasters = new SpeedMastersFooter(m_doc, this);
+        m_statusSpeedMasters->setVisible(m_showFooterSpeed);   // View menu preference
+        sb->addWidget(m_statusSpeedMasters, 0);
+    }
+
     // Spacer that pushes the centred health chips (MTC/Load, created below)
     // rightward off the mode label. The status bar's built-in message area
     // supplies the balancing stretch on their right, so the two chips sit
@@ -4300,6 +4376,7 @@ void App::initStatusBar()
     chipFont.setFamily(QFontDatabase::systemFont(QFontDatabase::FixedFont).family());
 
     m_statusTimecodeLabel = new QLabel(this);
+    m_statusTimecodeLabel->setObjectName("footerTimecode");
     m_statusTimecodeLabel->setFont(chipFont);
     m_statusTimecodeLabel->setToolTip(tr("MIDI Time Code. Grey: no source. "
         "Amber: connected but not advancing (spoken scene / manual GO). "
@@ -4309,6 +4386,7 @@ void App::initStatusBar()
     sb->addWidget(m_statusTimecodeLabel, 0);
 
     m_statusLoadLabel = new QLabel(this);
+    m_statusLoadLabel->setObjectName("footerLoad");
     m_statusLoadLabel->setFont(chipFont);
     m_statusLoadLabel->setAlignment(Qt::AlignCenter);
     // Fixed width sized to the widest reading, so the % / ms changing never
@@ -4435,6 +4513,7 @@ void App::initStatusBar()
     // separate from the mode-toggle button (which shows the destination
     // mode, not the current one). Always visible.
     m_statusModeChipLabel = new QLabel(this);
+    m_statusModeChipLabel->setObjectName("footerMode");
     m_statusModeChipLabel->setAlignment(Qt::AlignRight);
     m_statusModeChipLabel->setCursor(Qt::PointingHandCursor);
     m_statusModeChipLabel->setToolTip(tr("Click to switch Design/Operate mode."));
@@ -4511,8 +4590,44 @@ void App::initStatusBar()
     updateStatusBar();
 }
 
+QMenu *App::tabContextMenu(int index)
+{
+    QMenu *menu = new QMenu(this);
+    menu->setObjectName(QStringLiteral("tabContextMenu"));
+    QWidget *view = m_tab->widget(index);
+    if (view == nullptr)
+        return menu;
+    QAction *open = menu->addAction(tr("Open in Its Own Window"));
+    open->setObjectName(QStringLiteral("tabOpenInWindow"));
+    connect(open, &QAction::triggered, this, [this, view]() {
+        // After the menu has gone: detaching removes the tab under it.
+        QTimer::singleShot(0, this, [this, view]() {
+            const int at = m_tab->indexOf(view);
+            if (at >= 0)
+                slotDetachContext(at);
+        });
+    });
+    return menu;
+}
+
 bool App::eventFilter(QObject *watched, QEvent *event)
 {
+    /* Right-click a tab: Open in Its Own Window. A Shift-click does the same,
+       but on a Mac the first click on a window that isn't in front only
+       brings it forward -- the Shift-click is lost. */
+    if (m_tab != NULL && watched == m_tab->tabBar() && event->type() == QEvent::ContextMenu)
+    {
+        QContextMenuEvent *ce = static_cast<QContextMenuEvent *>(event);
+        const int idx = m_tab->tabBar()->tabAt(ce->pos());
+        if (idx >= 0)
+        {
+            QMenu *menu = tabContextMenu(idx);
+            menu->exec(ce->globalPos());
+            menu->deleteLater();
+            return true;
+        }
+    }
+
     if (m_tab != NULL && watched == m_tab->tabBar() && event->type() == QEvent::MouseButtonPress)
     {
         QMouseEvent *me = static_cast<QMouseEvent *>(event);

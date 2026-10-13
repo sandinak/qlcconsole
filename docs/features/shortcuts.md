@@ -20,8 +20,11 @@
 | ⌘M | Minimize |
 | ⇧F1 | The stock QLC+ reference (online) |
 
-**Shift-click** a **tab** to break it out into its own window (or **Window
-→ Move … to Its Own Window**); **Window → Put Back in Main Window** returns
+**Right-click** a **tab** → **Open in Its Own Window**, or **Shift-click**
+it, to break it out into its own window (or **Window → Move … to Its Own
+Window**). On a Mac, if the app isn't in front, the first click only brings
+it forward — Shift-click again, or use the right-click menu, which works
+either way; **Window → Put Back in Main Window** returns
 it. **Window → Shift-Click a Tab to Open It in a Window** turns the
 Shift-click off, if it gets in the way.
 

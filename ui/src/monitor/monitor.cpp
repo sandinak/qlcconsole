@@ -1186,6 +1186,14 @@ void Monitor::fillGraphicsView(bool keepView)
         m_layersPanel->reload();
 }
 
+/* A generic dimmer: its "mode" is a channel count, not a named mode. */
+static bool isGenericDimmer(const Fixture *fx)
+{
+    return fx->fixtureDef() == nullptr
+           || (fx->fixtureDef()->manufacturer() == KXMLFixtureGeneric
+               && fx->fixtureDef()->model() == KXMLFixtureGeneric);
+}
+
 QByteArray Monitor::rigSnapshot() const
 {
     QHash<quint32, QString> names;
@@ -1208,9 +1216,19 @@ QByteArray Monitor::rigSnapshot() const
     QHash<quint32, QList<quint32> > patch;
     foreach (Fixture *fx, m_doc->fixtures())
         patch.insert(fx->id(), { fx->isPatched() ? 1u : 0u, fx->universe(), fx->address() });
+    // And each fixture's mode: the Patch dialog can change it to fit.
+    QHash<quint32, QString> modes;
+    QHash<quint32, quint32> dimmerChannels;
+    foreach (Fixture *fx, m_doc->fixtures())
+    {
+        if (isGenericDimmer(fx))
+            dimmerChannels.insert(fx->id(), fx->channels());
+        else if (fx->fixtureMode() != nullptr)
+            modes.insert(fx->id(), fx->fixtureMode()->name());
+    }
     QByteArray out;
     QDataStream ds(&out, QIODevice::WriteOnly);
-    ds << m_props->snapshot(m_doc) << names << power << network << patch;
+    ds << m_props->snapshot(m_doc) << names << power << network << patch << modes << dimmerChannels;
     return out;
 }
 
@@ -1229,12 +1247,43 @@ void Monitor::restoreRig(const QByteArray &snap)
     QHash<quint32, QList<quint32> > patch;
     if (!ds.atEnd())
         ds >> patch;
+    QHash<quint32, QString> modes;
+    QHash<quint32, quint32> dimmerChannels;
+    if (!ds.atEnd())
+        ds >> modes >> dimmerChannels;
     if (props.isEmpty())
         return;
     /* The patch: unpatch what wasn't, then put the rest back where it was --
-       as one step, so fixtures can swap or shift onto each other's channels. */
+       as one step, so fixtures can swap or shift onto each other's channels.
+       Modes first: they decide the footprints being put back. */
     {
         QList<Doc::FixturePatch> back;
+        QSet<quint32> remoded;
+        for (auto it = modes.constBegin(); it != modes.constEnd(); ++it)
+        {
+            Fixture *fx = m_doc->fixture(it.key());
+            if (fx == nullptr || fx->fixtureDef() == nullptr || fx->fixtureMode() == nullptr
+                || fx->fixtureMode()->name() == it.value())
+                continue;
+            if (QLCFixtureMode *m = fx->fixtureDef()->mode(it.value()))
+            {
+                fx->blockSignals(true);
+                fx->setFixtureDefinition(fx->fixtureDef(), m);
+                fx->blockSignals(false);
+                remoded.insert(fx->id());
+            }
+        }
+        for (auto it = dimmerChannels.constBegin(); it != dimmerChannels.constEnd(); ++it)
+        {
+            Fixture *fx = m_doc->fixture(it.key());
+            if (fx == nullptr || fx->channels() == it.value() || it.value() == 0 || !isGenericDimmer(fx))
+                continue;
+            QLCFixtureDef *def = fx->genericDimmerDef(int(it.value()));
+            fx->blockSignals(true);
+            fx->setFixtureDefinition(def, fx->genericDimmerMode(def, int(it.value())));
+            fx->blockSignals(false);
+            remoded.insert(fx->id());
+        }
         for (auto it = patch.constBegin(); it != patch.constEnd(); ++it)
         {
             Fixture *fx = m_doc->fixture(it.key());
@@ -1244,7 +1293,7 @@ void Monitor::restoreRig(const QByteArray &snap)
             if (!wasPatched && fx->isPatched())
                 m_doc->unpatchFixture(fx->id());
             else if (wasPatched && (!fx->isPatched() || fx->universe() != it.value().at(1)
-                                    || fx->address() != it.value().at(2)))
+                                    || fx->address() != it.value().at(2) || remoded.contains(fx->id())))
                 back << Doc::FixturePatch{ fx->id(), it.value().at(1), it.value().at(2) };
         }
         if (!back.isEmpty())
@@ -2311,6 +2360,8 @@ void Monitor::showStageOverview()
     StructureStudioView *view =
         new StructureStudioView(m_doc, StructureStudioView::StageKind, 0, &dlg);
     view->setPlane(StructureStudioView::Angled);
+    // Stand on the floor at centre stage and turn about it.
+    view->setStandOnCentreStage(true);
     view->setLocked(true);
     m_overviewView = view;
     view->setActiveScene(m_activeSceneId);

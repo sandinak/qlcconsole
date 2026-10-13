@@ -26,6 +26,10 @@
 
 #include "speedmasters.h"
 #include "mastertimer.h"
+#include "show.h"
+#include "chaser.h"
+#include "scene.h"
+#include "qlcpalette.h"
 #include "doc.h"
 
 #define KXMLMaster  QStringLiteral("Master")
@@ -44,20 +48,40 @@ SpeedMasters::SpeedMasters(Doc *doc, QObject *parent)
 {
     m_clock.start();
     reset();
+    connect(this, &SpeedMasters::changed, this, [this](int) { markUsageDirty(); });
+}
+
+int SpeedMasters::count() const
+{
+    QMutexLocker locker(&m_mutex);
+    return m_count;
+}
+
+void SpeedMasters::setCount(int count)
+{
+    count = qBound(int(DefaultCount), count, int(MaxCount));
+    {
+        QMutexLocker locker(&m_mutex);
+        if (count == m_count)
+            return;
+        m_count = count;
+    }
+    emit countChanged(count);
 }
 
 void SpeedMasters::reset()
 {
     {
         QMutexLocker locker(&m_mutex);
+        m_count = DefaultCount;
         const qint64 now = m_clock.nsecsElapsed();
-        for (int i = 0; i < Count; ++i)
+        for (int i = 0; i < MaxCount; ++i)
         {
             m_masters[i] = Master();
             m_masters[i].anchorNs = now;
         }
     }
-    for (int i = 0; i < Count; ++i)
+    for (int i = 0; i < MaxCount; ++i)
         emit changed(i);
 }
 
@@ -144,12 +168,16 @@ double SpeedMasters::ratio(int index) const
 
 bool SpeedMasters::setFollow(int index, int source, double ratio)
 {
-    if (!valid(index) || !(ratio > 0) || (source != MainClock && !valid(source)))
+    if (!valid(index) || !(ratio > 0)
+        || (source != MainClock && source != ShowTimeline && !valid(source)))
         return false;
     {
         QMutexLocker locker(&m_mutex);
+        // Only another master the show uses.
+        if (source != MainClock && source != ShowTimeline && source >= m_count)
+            return false;
         // Following itself, or something that (eventually) follows it: a loop.
-        for (int s = source; s != MainClock; )
+        for (int s = source; s != MainClock && s != ShowTimeline; )
         {
             if (s == index)
                 return false;
@@ -294,6 +322,44 @@ void SpeedMasters::mainClock(double *pos, double *bpm) const
     MasterTimer *mt = m_doc != nullptr ? m_doc->masterTimer() : nullptr;
     *pos = mt != nullptr ? mt->beatPosition() : 0.0;
     *bpm = mt != nullptr ? mt->bpm() : 0.0;
+
+    /* The show timeline, read here -- outside m_mutex -- for the masters
+       that follow it: its playhead in beats of the show's grid. */
+    bool wanted;
+    {
+        QMutexLocker locker(&m_mutex);
+        wanted = anyFollowsTimelineLocked();
+    }
+    double tp = 0, tb = 0;
+    const bool running = wanted && timelineClock(&tp, &tb);
+    QMutexLocker locker(&m_mutex);
+    const_cast<SpeedMasters *>(this)->m_timelinePos = running ? tp : *pos;
+    const_cast<SpeedMasters *>(this)->m_timelineBpm = running ? tb : *bpm;
+}
+
+bool SpeedMasters::anyFollowsTimelineLocked() const
+{
+    for (int i = 0; i < m_count; ++i)
+        if (m_masters[i].mode == Follow && m_masters[i].follows == ShowTimeline)
+            return true;
+    return false;
+}
+
+bool SpeedMasters::timelineClock(double *pos, double *bpm) const
+{
+    if (m_doc == nullptr)
+        return false;
+    foreach (Function *f, m_doc->functions())
+    {
+        Show *show = qobject_cast<Show *>(f);
+        if (show == nullptr || !show->isRunning() || show->timeDivisionType() == Show::Time
+            || show->timeDivisionBPM() <= 0)
+            continue;
+        *bpm = show->timeDivisionBPM();
+        *pos = double(show->runningTime()) / (60000.0 / *bpm);
+        return true;
+    }
+    return false;
 }
 
 double SpeedMasters::positionLocked(int index, qint64 now, double mainPos, int depth) const
@@ -301,10 +367,11 @@ double SpeedMasters::positionLocked(int index, qint64 now, double mainPos, int d
     const Master &m = m_masters[index];
     if (m.paused)
         return m.anchorBeats;
-    if (m.mode == Own || depth > Count)
+    if (m.mode == Own || depth > MaxCount)
         return m.anchorBeats + double(now - m.anchorNs) / 1e9 * m.bpm * m.rate / 60.0;
     const double src = m.follows == MainClock ? mainPos
-                                              : positionLocked(m.follows, now, mainPos, depth + 1);
+                     : m.follows == ShowTimeline ? m_timelinePos
+                     : positionLocked(m.follows, now, mainPos, depth + 1);
     return src * m.ratio;
 }
 
@@ -313,9 +380,11 @@ double SpeedMasters::bpmLocked(int index, double mainBpm, int depth) const
     const Master &m = m_masters[index];
     if (m.paused)
         return 0;
-    if (m.mode == Own || depth > Count)
+    if (m.mode == Own || depth > MaxCount)
         return m.bpm * m.rate;
-    const double src = m.follows == MainClock ? mainBpm : bpmLocked(m.follows, mainBpm, depth + 1);
+    const double src = m.follows == MainClock ? mainBpm
+                     : m.follows == ShowTimeline ? m_timelineBpm
+                     : bpmLocked(m.follows, mainBpm, depth + 1);
     return src * m.ratio;
 }
 
@@ -368,19 +437,225 @@ bool SpeedMasters::clockFor(int assignment, double *beatPos, double *bpm) const
 }
 
 /*********************************************************************
+ * In use
+ *********************************************************************/
+
+quint32 SpeedMasters::usedMask() const
+{
+    // A show of thousands of functions is too many to walk on every poll:
+    // only after something changed (Doc marks it dirty on every edit).
+    if (m_usageDirty.loadRelaxed() == 0 && m_usedCount == count())
+        return m_usedCache;
+    m_usageDirty.storeRelaxed(0);
+    quint32 mask = 0;
+    auto mark = [&mask](int assignment) {
+        if (isMaster(assignment))
+            mask |= 1u << (assignment - Master1);
+    };
+    if (m_doc != nullptr)
+    {
+        foreach (Function *f, m_doc->functions())
+        {
+            mark(f->speedMaster());
+            if (Chaser *c = qobject_cast<Chaser *>(f))
+            {
+                foreach (const ChaserStep &step, c->steps())
+                    mark(step.speedMaster);
+            }
+        }
+        foreach (QLCPalette *p, m_doc->palettes())
+        {
+            if (p->type() != QLCPalette::Effect)
+                continue;
+            const QMap<QString, double> pp = p->effectParamValues();
+            auto it = pp.constFind(QStringLiteral("__speedMaster"));
+            if (it != pp.constEnd())
+                mark(int(it.value()));
+        }
+    }
+
+    QMutexLocker locker(&m_mutex);
+    for (int i = 0; i < m_count; ++i)
+        for (int c = 0; c < ControlCount; ++c)
+            if (m_masters[i].inUniverse[c] != UINT_MAX)
+                mask |= 1u << i;
+    // What a used master follows is used too: its tempo drives it.
+    for (bool grew = true; grew; )
+    {
+        grew = false;
+        for (int i = 0; i < m_count; ++i)
+        {
+            const Master &m = m_masters[i];
+            if (!((mask >> i) & 1u) || m.mode != Follow || !valid(m.follows))
+                continue;
+            if (!((mask >> m.follows) & 1u))
+            {
+                mask |= 1u << m.follows;
+                grew = true;
+            }
+        }
+    }
+    m_usedCount = m_count;
+    m_usedCache = m_count >= 32 ? mask : mask & ((1u << m_count) - 1);
+    return m_usedCache;
+}
+
+quint32 SpeedMasters::playingMask() const
+{
+    quint32 mask = 0;
+    auto mark = [&mask](int assignment) {
+        if (isMaster(assignment))
+            mask |= 1u << (assignment - Master1);
+    };
+    if (m_doc != nullptr)
+    {
+        foreach (Function *f, m_doc->functions())
+        {
+            if (!f->isRunning())
+                continue;
+            const int own = f->effectiveSpeedMaster();
+            mark(own);
+            if (Scene *sc = qobject_cast<Scene *>(f))
+            {
+                foreach (quint32 pid, sc->palettes())
+                {
+                    QLCPalette *p = m_doc->palette(pid);
+                    if (p == nullptr || p->type() != QLCPalette::Effect)
+                        continue;
+                    const int fx = int(p->effectParamValues().value(QStringLiteral("__speedMaster"),
+                                                                    SpeedMasters::Inherit));
+                    mark(fx != SpeedMasters::Inherit ? fx : own);
+                }
+            }
+        }
+    }
+    QMutexLocker locker(&m_mutex);
+    for (bool grew = true; grew; )
+    {
+        grew = false;
+        for (int i = 0; i < m_count; ++i)
+        {
+            const Master &m = m_masters[i];
+            if (((mask >> i) & 1u) && m.mode == Follow && valid(m.follows) && !((mask >> m.follows) & 1u))
+            {
+                mask |= 1u << m.follows;
+                grew = true;
+            }
+        }
+    }
+    return m_count >= 32 ? mask : mask & ((1u << m_count) - 1);
+}
+
+/*********************************************************************
+ * Control surface inputs
+ *********************************************************************/
+
+QString SpeedMasters::controlToString(Control control)
+{
+    switch (control)
+    {
+        case TapControl:   return QStringLiteral("Tap");
+        case RateControl:  return QStringLiteral("Rate");
+        case PauseControl: return QStringLiteral("Pause");
+        default:           return QString();
+    }
+}
+
+void SpeedMasters::setInput(int index, Control control, quint32 universe, quint32 channel)
+{
+    if (!valid(index) || control < 0 || control >= ControlCount)
+        return;
+    {
+        QMutexLocker locker(&m_mutex);
+        Master &m = m_masters[index];
+        m.inUniverse[control] = universe;
+        m.inChannel[control] = channel;
+        m.inLast[control] = 0;
+    }
+    emit changed(index);
+}
+
+void SpeedMasters::clearInput(int index, Control control)
+{
+    setInput(index, control, UINT_MAX, UINT_MAX);
+}
+
+bool SpeedMasters::input(int index, Control control, quint32 *universe, quint32 *channel) const
+{
+    if (!valid(index) || control < 0 || control >= ControlCount)
+        return false;
+    QMutexLocker locker(&m_mutex);
+    const Master &m = m_masters[index];
+    if (universe != nullptr) *universe = m.inUniverse[control];
+    if (channel != nullptr) *channel = m.inChannel[control];
+    return m.inUniverse[control] != UINT_MAX;
+}
+
+void SpeedMasters::slotInputValue(quint32 universe, quint32 channel, uchar value)
+{
+    // Find what this channel drives first, then act outside the lock: tap(),
+    // setRate() and setPaused() take it themselves.
+    struct Hit { int index; Control control; bool pressed; };
+    QList<Hit> hits;
+    {
+        QMutexLocker locker(&m_mutex);
+        for (int i = 0; i < m_count; ++i)
+        {
+            Master &m = m_masters[i];
+            for (int c = 0; c < ControlCount; ++c)
+            {
+                if (m.inUniverse[c] != universe || m.inChannel[c] != channel)
+                    continue;
+                hits << Hit{ i, Control(c), m.inLast[c] == 0 && value > 0 };
+                m.inLast[c] = value;
+            }
+        }
+    }
+    foreach (const Hit &h, hits)
+    {
+        switch (h.control)
+        {
+            case TapControl:
+                if (h.pressed)
+                    tap(h.index);
+            break;
+            case RateControl:
+            {
+                // A fader's middle is 100 %: snap there, so a fader parked
+                // near the centre detent runs the master at its tempo.
+                double rate = value / 127.5;
+                if (qAbs(rate - 1.0) < 0.02)
+                    rate = 1.0;
+                setRate(h.index, rate);
+            }
+            break;
+            case PauseControl:
+                if (h.pressed)
+                    setPaused(h.index, !isPaused(h.index));
+            break;
+            default:
+            break;
+        }
+    }
+}
+
+/*********************************************************************
  * Load & save
  *********************************************************************/
 
 bool SpeedMasters::isDefault() const
 {
     QMutexLocker locker(&m_mutex);
-    for (int i = 0; i < Count; ++i)
+    for (int i = 0; i < MaxCount; ++i)
     {
         const Master &m = m_masters[i];
         if (!m.name.isEmpty() || m.mode != Own || m.bpm != 120.0 || m.rate != 1.0 || m.paused)
             return false;
+        for (int c = 0; c < ControlCount; ++c)
+            if (m.inUniverse[c] != UINT_MAX)
+                return false;
     }
-    return true;
+    return m_count == DefaultCount;
 }
 
 bool SpeedMasters::saveXML(QXmlStreamWriter *doc) const
@@ -389,7 +664,9 @@ bool SpeedMasters::saveXML(QXmlStreamWriter *doc) const
         return true;
     QMutexLocker locker(&m_mutex);
     doc->writeStartElement(KXMLQLCSpeedMasters);
-    for (int i = 0; i < Count; ++i)
+    if (m_count != DefaultCount)
+        doc->writeAttribute(QStringLiteral("Count"), QString::number(m_count));
+    for (int i = 0; i < m_count; ++i)
     {
         const Master &m = m_masters[i];
         doc->writeStartElement(KXMLMaster);
@@ -400,7 +677,8 @@ bool SpeedMasters::saveXML(QXmlStreamWriter *doc) const
         if (m.mode == Follow)
         {
             doc->writeAttribute(KXMLFollows, m.follows == MainClock ? QStringLiteral("Main")
-                                                                    : QString::number(m.follows + 1));
+                                           : m.follows == ShowTimeline ? QStringLiteral("Timeline")
+                                           : QString::number(m.follows + 1));
             doc->writeAttribute(KXMLRatio, QString::number(m.ratio));
         }
         doc->writeAttribute(KXMLBpm, QString::number(m.bpm));
@@ -408,6 +686,16 @@ bool SpeedMasters::saveXML(QXmlStreamWriter *doc) const
             doc->writeAttribute(KXMLRate, QString::number(m.rate));
         if (m.paused)
             doc->writeAttribute(KXMLPaused, QStringLiteral("1"));
+        for (int c = 0; c < ControlCount; ++c)
+        {
+            if (m.inUniverse[c] == UINT_MAX)
+                continue;
+            doc->writeStartElement(QStringLiteral("Input"));
+            doc->writeAttribute(QStringLiteral("Control"), controlToString(Control(c)));
+            doc->writeAttribute(QStringLiteral("Universe"), QString::number(m.inUniverse[c]));
+            doc->writeAttribute(QStringLiteral("Channel"), QString::number(m.inChannel[c]));
+            doc->writeEndElement();
+        }
         doc->writeEndElement();
     }
     doc->writeEndElement();
@@ -419,6 +707,7 @@ bool SpeedMasters::loadXML(QXmlStreamReader &root)
     if (root.name() != KXMLQLCSpeedMasters)
         return false;
     reset();
+    setCount(root.attributes().value(QStringLiteral("Count")).toString().toInt());
     struct Pending { int index; int follows; double ratio; };
     QList<Pending> follows;
     while (root.readNextStartElement())
@@ -449,18 +738,31 @@ bool SpeedMasters::loadXML(QXmlStreamReader &root)
             if (a.value(KXMLMode).toString() == QLatin1String("Follow"))
             {
                 const QString f = a.value(KXMLFollows).toString();
-                const int src = f == QLatin1String("Main") ? int(MainClock) : f.toInt() - 1;
+                const int src = f == QLatin1String("Main") ? int(MainClock)
+                              : f == QLatin1String("Timeline") ? int(ShowTimeline)
+                              : f.toInt() - 1;
                 follows << Pending{ i, src, a.value(KXMLRatio).toString().toDouble() };
             }
         }
-        root.skipCurrentElement();
+        while (root.readNextStartElement())
+        {
+            if (root.name() == QLatin1String("Input") && valid(i))
+            {
+                const QXmlStreamAttributes in = root.attributes();
+                for (int c = 0; c < ControlCount; ++c)
+                    if (in.value(QStringLiteral("Control")) == controlToString(Control(c)))
+                        setInput(i, Control(c), in.value(QStringLiteral("Universe")).toString().toUInt(),
+                                 in.value(QStringLiteral("Channel")).toString().toUInt());
+            }
+            root.skipCurrentElement();
+        }
     }
     // Follows last, once every master exists -- setFollow() refuses loops a
     // hand-edited file might have.
     foreach (const Pending &p, follows)
         if (!setFollow(p.index, p.follows, p.ratio))
             qWarning() << "[SpeedMasters] master" << p.index + 1 << "can't follow" << p.follows;
-    for (int i = 0; i < Count; ++i)
+    for (int i = 0; i < MaxCount; ++i)
         emit changed(i);
     return true;
 }

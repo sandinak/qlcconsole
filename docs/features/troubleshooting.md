@@ -36,7 +36,7 @@ Fixture Properties → **Max draw** → **Measure…**, then **Copy to Same
 Fixtures…**. See
 [A fixture's maximum draw](other-improvements.md#a-fixtures-maximum-draw).
 
-## The rig view
+## The Lighting Studio and the Rig Overview
 
 **A fixture floats above a deck, or sinks into it, in Front view.**
 Either it isn't on the deck (it's free-standing at some height — Fixture
@@ -60,7 +60,7 @@ face of what it hung on before; it is straightened when the show loads
 **Something is missing from the Rig Overview.** Its layer is hidden in the
 Lighting Studio's Layers panel — the overview hides what the Studio hides.
 
-**The rig view is slow.** **Quality: Fast**, hide layers you don't need,
+**The Rig Overview is slow.** **Quality: Fast**, hide layers you don't need,
 and use a release build. See [Keeping it quick](getting-started.md#keeping-it-quick).
 
 **I can't click a truss for the fixtures on it.** Show → untick

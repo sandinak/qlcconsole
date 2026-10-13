@@ -34,6 +34,7 @@ private slots:
     void cleanup();
 
     /* Construction and the rebuild contract */
+    void byUniverseShowsOnlyTheUniversesInUse();
     void initial();
     void refreshLeavesEditingEnabled();
 

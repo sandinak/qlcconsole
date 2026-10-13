@@ -46,10 +46,16 @@ private slots:
     void aBarsHeadsAreAlongItsLength();
     void aLanternIsBuiltOfItsLeds();
     void wledPortsRunAsWledDoes();
+    void everyWledPortRuns();
     void aWledLookRunsOnTheDeviceAndThePortElsewhere();
     void bothFiresAreOfferedAndEachComesBackAsItself();
     void anEffectArrivesByItsScenesTransition();
     void anEffectRunsOnUnpatchedFixturesToo();
+    void aRainbowOnRgbwWithNoDimmerIsAHueNotWhite();
+    void aRainbowWithALookColourSweepsThatColour();
+    void effectsOnOneChannelLayerAsADeskDoes();
+    void aMovementEffectMovesRoundWhereTheLookPoints();
+    void aDimmerInTheHeadBreathesAndTheWheelHoldsItsColour();
     /** A follow-spot with Fade Near Limit takes a head's dimmer down when its
      *  target is out of that head's reach, and leaves the dimmer to the scene
      *  when it is comfortably within it. */

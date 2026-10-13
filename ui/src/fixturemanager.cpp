@@ -3289,6 +3289,7 @@ void FixtureManager::deleteUniverse(quint32 universe)
 
 void FixtureManager::slotChannelGroupContextMenuRequested(const QPoint &pos)
 {
+    Q_UNUSED(pos);                  // the menu opens at the cursor
     QMenu menu(this);
 
     // Creation is always offered, same as the fixtures tree's Add actions.

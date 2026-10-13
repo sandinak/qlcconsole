@@ -23,6 +23,7 @@
 #include <QResizeEvent>
 #include <QShowEvent>
 
+#include "naturalcompare.h"
 #include "riserfaceeditor.h"
 #include "monitorproperties.h"
 #include "stageplatform.h"
@@ -268,40 +269,6 @@ void RiserFaceEditor::slotRemoveSelected()
     }
 }
 
-/** Natural (human) string compare: runs of digits are compared as numbers, so
- *  "US #2" < "US #10". Case-insensitive on the non-digit parts. Returns
- *  <0 / 0 / >0 like strcmp. */
-static int naturalCompare(const QString &a, const QString &b)
-{
-    int i = 0, j = 0;
-    const int na = a.size(), nb = b.size();
-    while (i < na && j < nb)
-    {
-        const QChar ca = a.at(i);
-        const QChar cb = b.at(j);
-        if (ca.isDigit() && cb.isDigit())
-        {
-            int i2 = i, j2 = j;
-            while (i2 < na && a.at(i2).isDigit()) i2++;
-            while (j2 < nb && b.at(j2).isDigit()) j2++;
-            const qulonglong va = a.mid(i, i2 - i).toULongLong();
-            const qulonglong vb = b.mid(j, j2 - j).toULongLong();
-            if (va != vb)
-                return va < vb ? -1 : 1;
-            i = i2;
-            j = j2;
-        }
-        else
-        {
-            const int c = QString::compare(QString(ca), QString(cb), Qt::CaseInsensitive);
-            if (c != 0)
-                return c;
-            i++;
-            j++;
-        }
-    }
-    return (na - i) - (nb - j);
-}
 
 /** The last contiguous run of digits in @p s parsed as a number (e.g.
  *  "US1 #12" → 12), or -1 if the name contains no digits. Used to order

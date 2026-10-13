@@ -18,17 +18,26 @@
 */
 
 #include <QtTest>
+#include <QElapsedTimer>
 #include <QDoubleSpinBox>
+#include <QSpinBox>
 #include <QTreeWidget>
 #include <QPushButton>
 #include <QComboBox>
 #include <QLineEdit>
 #include <QSlider>
+#include <QToolButton>
+#include <QApplication>
+#include <QDialog>
 
 #define private public
 #include "chasereditor.h"
 #undef private
 #include "speedmasterspanel.h"
+#include "speedmastersfooter.h"
+#include "inputselectionwidget.h"
+#include "qlcinputsource.h"
+#include "inputoutputmap.h"
 #include "collectioneditor.h"
 #include "speedmasters.h"
 #include "collection.h"
@@ -112,10 +121,16 @@ void SpeedMastersPanel_Test::tapRateAndPauseReachTheMaster()
     r.pause->setChecked(false);
     r.bpm->setValue(90);
     QCOMPARE(sm->setBpm(3), 90.0);
+    // The tempo the two taps really were: a busy CI runner stretches a
+    // qWait(500), and the master should follow the taps, not the plan.
+    QElapsedTimer between;
     r.tap->click();
+    between.start();
     QTest::qWait(500);
     r.tap->click();
-    QVERIFY2(qAbs(sm->bpm(3) - 120.0) < 15, qPrintable(QString::number(sm->bpm(3))));
+    const double tapped = 60000.0 / double(between.elapsed());
+    QVERIFY2(qAbs(sm->bpm(3) - tapped) < tapped * 0.05,
+             qPrintable(QString("%1 for taps at %2").arg(sm->bpm(3)).arg(tapped)));
     QTRY_VERIFY(qAbs(r.bpm->value() * 1.5 - sm->bpm(3)) < 1.0);   // the panel shows it
 }
 
@@ -140,12 +155,19 @@ void SpeedMastersPanel_Test::aChaseAndItsStepsAreGivenAMaster()
     QTreeWidgetItem *second = tree->topLevelItem(1);
     QVERIFY(second->text(7).isEmpty());                    // as the chase
     // The Speed column's choice, as its drop-down sets it.
-    const int idx = SpeedMastersPanel::choiceValues().indexOf(SpeedMasters::MainClock);
+    const int idx = SpeedMastersPanel::choiceValues(m_doc).indexOf(SpeedMasters::MainClock);
     second->setData(7, Qt::UserRole, idx);
     second->setData(7, Qt::DisplayRole, QString("Main clock"));
     QCOMPARE(chase->steps().at(1).speedMaster, int(SpeedMasters::MainClock));
     QCOMPARE(chase->steps().at(0).speedMaster, int(SpeedMasters::Inherit));
     QCOMPARE(second->text(7), QString("Main clock"));
+
+    // When a GO lands.
+    QComboBox *goLands = ed.findChild<QComboBox *>("chaserGoQuantize");
+    QVERIFY(goLands != nullptr);
+    QCOMPARE(goLands->currentData().toInt(), int(Chaser::GoNow));
+    goLands->setCurrentIndex(goLands->findData(int(Chaser::GoOnBar)));
+    QCOMPARE(chase->goQuantize(), Chaser::GoOnBar);
 }
 
 void SpeedMastersPanel_Test::aCollectionIsGivenAMaster()
@@ -158,6 +180,200 @@ void SpeedMastersPanel_Test::aCollectionIsGivenAMaster()
     QCOMPARE(speed->currentData().toInt(), int(SpeedMasters::Inherit));
     speed->setCurrentIndex(speed->findData(SpeedMasters::Master1 + 3));
     QCOMPARE(col->speedMaster(), int(SpeedMasters::Master1 + 3));
+}
+
+void SpeedMastersPanel_Test::theCountShowsTheMastersInUse()
+{
+    SpeedMasters *sm = m_doc->speedMasters();
+    SpeedMastersPanel panel(m_doc);
+    panel.show();
+    QSpinBox *count = panel.findChild<QSpinBox *>("speedMasterCount");
+    QVERIFY(count != nullptr);
+    QCOMPARE(count->value(), 4);
+    QVERIFY(panel.row(3).name->isVisible());
+    QVERIFY(!panel.row(4).name->isVisible());
+
+    count->setValue(8);
+    QCOMPARE(sm->count(), 8);
+    QVERIFY(panel.row(7).name->isVisible());
+    QVERIFY(!panel.row(8).name->isVisible());
+    // Any of the eight can follow another of them, the main clock or the show.
+    QVERIFY(panel.row(0).source->findData(7) >= 0);
+    QVERIFY(panel.row(0).source->findData(8) < 0);
+    QVERIFY(panel.row(0).source->findData(int(SpeedMasters::ShowTimeline)) >= 0);
+    // ...and everywhere a master is chosen offers the eight.
+    QCOMPARE(SpeedMastersPanel::choiceValues(m_doc).size(), 3 + 8);
+
+    // A typed tempo applies as it's typed.
+    QDoubleSpinBox *bpm = panel.row(0).bpm;
+    bpm->selectAll();
+    QTest::keyClicks(bpm, "95");
+    QCOMPARE(sm->setBpm(0), 95.0);
+
+    // Back down to six: the rows go, the show remembers.
+    count->setValue(6);
+    QCOMPARE(sm->count(), 6);
+    QVERIFY(!panel.row(6).name->isVisible());
+}
+
+/* "put the masters in the footer as a set of buttons that show the bpm ..
+   and clickable opens the window" */
+void SpeedMastersPanel_Test::theFooterShowsEachMastersTempo()
+{
+    SpeedMasters *sm = m_doc->speedMasters();
+    sm->setName(0, "Pars");
+    sm->setBpm(0, 128);
+    SpeedMastersFooter footer(m_doc);
+    footer.show();
+    // Nothing on any master: nothing in the footer, nothing flashing.
+    for (int i = 0; i < SpeedMasters::MaxCount; ++i)
+        QVERIFY(!footer.button(i)->isVisible());
+
+    Scene *look = new Scene(m_doc);
+    m_doc->addFunction(look);
+    look->setSpeedMaster(SpeedMasters::Master1);
+    Scene *other = new Scene(m_doc);
+    m_doc->addFunction(other);
+    other->setSpeedMaster(SpeedMasters::Master1 + 1);
+    QTRY_VERIFY(footer.button(0)->isVisible());      // looks are on Speed 1 and 2
+    QTRY_COMPARE(footer.button(0)->text(), QString("Pars 128"));
+    QVERIFY(footer.button(1)->isVisible());
+    QVERIFY(!footer.button(2)->isVisible());          // the others stay out of the way
+    QVERIFY(!footer.button(3)->isVisible());
+    sm->setPaused(1, true);
+    QTRY_COMPARE(footer.button(1)->text(), QString("Speed 2 paused"));
+    other->setSpeedMaster(SpeedMasters::Inherit);
+    QTRY_VERIFY(!footer.button(1)->isVisible());      // taken off: gone again
+
+    // The blink is the beat; the green level only while the rate moves.
+    QTRY_VERIFY(footer.button(0)->isFired());
+    QTRY_VERIFY(!footer.button(0)->isFired());
+    QCOMPARE(footer.button(0)->levelWidth(), 0);
+    sm->setRate(0, 0.5);                             // 50 %: a quarter of the bar
+    QTRY_VERIFY(footer.button(0)->levelWidth() > 0);
+    QVERIFY(qAbs(footer.button(0)->levelWidth() - (footer.button(0)->width() - 4) / 4) <= 1);
+    QTRY_VERIFY_WITH_TIMEOUT(footer.button(0)->levelWidth() == 0
+                             || !footer.button(0)->isVisible(), 4000);
+    QCOMPARE(SpeedMastersFooter::buttonText("A very long name", 90, false),
+             QString("A very lo%1 90").arg(QChar(0x2026)));
+
+    footer.button(0)->click();                       // opens the window
+    SpeedMastersPanel *panel = nullptr;
+    foreach (QWidget *w, QApplication::topLevelWidgets())
+        if (qobject_cast<SpeedMastersPanel *>(w) != nullptr && w->isVisible())
+            panel = qobject_cast<SpeedMastersPanel *>(w);
+    QVERIFY(panel != nullptr);
+    panel->close();
+}
+
+/* "in the windows have mapping to midi targets" */
+void SpeedMastersPanel_Test::aMastersInputsAreMappedInItsWindow()
+{
+    SpeedMasters *sm = m_doc->speedMasters();
+    SpeedMastersPanel panel(m_doc);
+    QCOMPARE(panel.row(0).inputs->text(), SpeedMastersPanel::inputsText(0));
+
+    bool sawDialog = false;
+    QTimer::singleShot(0, this, [&sawDialog]() {
+        QDialog *dlg = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+        QVERIFY(dlg != nullptr);
+        sawDialog = dlg->objectName() == QLatin1String("speedMasterInputsDialog");
+        InputSelectionWidget *rate = dlg->findChild<InputSelectionWidget *>("speedMasterInputRate");
+        InputSelectionWidget *pause = dlg->findChild<InputSelectionWidget *>("speedMasterInputPause");
+        QVERIFY(rate != nullptr && pause != nullptr);
+        rate->setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(0, 7)));
+        pause->setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(0, 8)));
+        dlg->accept();
+    });
+    panel.row(0).inputs->click();
+    QVERIFY(sawDialog);
+    quint32 u = 99, c = 99;
+    QVERIFY(sm->input(0, SpeedMasters::RateControl, &u, &c));
+    QCOMPARE(u, quint32(0));
+    QCOMPARE(c, quint32(7));
+    QVERIFY(!sm->input(0, SpeedMasters::TapControl, nullptr, nullptr));
+    QCOMPARE(panel.row(0).inputs->text(), SpeedMastersPanel::inputsText(2));
+
+    // And the controller drives it.
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 7, 255);
+    QCOMPARE(sm->rate(0), 2.0);
+    QCOMPARE(panel.row(0).rate->value(), 200);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 8, 127);
+    QVERIFY(sm->isPaused(0));
+
+    // Cancel leaves them as they were.
+    QTimer::singleShot(0, this, []() {
+        QDialog *dlg = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+        InputSelectionWidget *rate = dlg->findChild<InputSelectionWidget *>("speedMasterInputRate");
+        rate->setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(0, 99)));
+        dlg->reject();
+    });
+    panel.row(0).inputs->click();
+    QVERIFY(sm->input(0, SpeedMasters::RateControl, &u, &c));
+    QCOMPARE(c, quint32(7));
+}
+
+/* "vs a blink can we have a bar that goes across the bug(s) in time .. a
+   configurable option? No Blink, Blink, Bar" and "show action on that bug
+   only when relevant .. all the time or not at all" */
+void SpeedMastersPanel_Test::theBeatIsABlinkABarOrNothingAlwaysOrWhilePlaying()
+{
+    SpeedMasters *sm = m_doc->speedMasters();
+    sm->setBpm(0, 120);
+    Scene *look = new Scene(m_doc);
+    m_doc->addFunction(look);
+    look->setSpeedMaster(SpeedMasters::Master1);
+    const SpeedMasterButton::BeatStyle wasStyle = SpeedMastersFooter::beatStyle();
+    const SpeedMastersFooter::BeatWhen wasWhen = SpeedMastersFooter::beatWhen();
+    auto restore = qScopeGuard([&]() {
+        SpeedMastersFooter::setBeatStyle(wasStyle);
+        SpeedMastersFooter::setBeatWhen(wasWhen);
+    });
+    SpeedMastersFooter footer(m_doc);
+    footer.show();
+    SpeedMasterButton *b = footer.button(0);
+    QTRY_VERIFY(b->isVisible());
+
+    // A bar across each beat: it grows through the beat; no blink.
+    SpeedMastersFooter::setBeatStyle(SpeedMasterButton::Bar);
+    SpeedMastersFooter::setBeatWhen(SpeedMastersFooter::Always);
+    footer.reloadBeatOptions();
+    int least = INT_MAX, most = 0;
+    QElapsedTimer t;
+    t.start();
+    while (t.elapsed() < 700)                       // more than a beat at 120
+    {
+        QTest::qWait(20);
+        least = qMin(least, b->beatBarWidth());
+        most = qMax(most, b->beatBarWidth());
+        QVERIFY(!b->isFired());
+    }
+    QVERIFY2(most > b->width() / 2 && least < b->width() / 4,
+             qPrintable(QString("the bar went from %1 to %2 px").arg(least).arg(most)));
+
+    // No beat: neither.
+    SpeedMastersFooter::setBeatStyle(SpeedMasterButton::NoBeat);
+    footer.reloadBeatOptions();
+    QTest::qWait(100);                              // the next frames repaint without it
+    for (int k = 0; k < 30; ++k)
+    {
+        QTest::qWait(20);
+        QVERIFY(!b->isFired() && b->beatBarWidth() == 0);
+    }
+
+    // Blink, but only while something on it plays: nothing until the look runs.
+    SpeedMastersFooter::setBeatStyle(SpeedMasterButton::Blink);
+    SpeedMastersFooter::setBeatWhen(SpeedMastersFooter::WhilePlaying);
+    footer.reloadBeatOptions();
+    QTest::qWait(600);
+    for (int k = 0; k < 30; ++k)
+    {
+        QTest::qWait(20);
+        QVERIFY(!b->isFired());
+    }
+    look->m_running = true;                         // as preRun() marks it
+    QTRY_VERIFY_WITH_TIMEOUT(b->isFired(), 2000);
+    look->m_running = false;
 }
 
 QTEST_MAIN(SpeedMastersPanel_Test)

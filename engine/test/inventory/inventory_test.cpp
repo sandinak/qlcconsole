@@ -36,6 +36,7 @@
 #include "monitorproperties.h"
 #include "networktopology.h"
 #include "outputpatch.h"
+#include "fixturegroup.h"
 #include "doc.h"
 
 #include "inventory_test.h"
@@ -563,7 +564,7 @@ static Fixture *stagedTwoMode(Doc *doc, int nCh1, int nCh2, int heads2, QLCFixtu
 
 void Inventory_Test::modeCanChangeWhenNothingReferencesItsChannels()
 {
-    QLCFixtureMode *basic, *ext;
+    QLCFixtureMode *basic = nullptr, *ext = nullptr;
     Fixture *f = stagedTwoMode(g_doc, 4, 8, 1, &basic, &ext);
     QVERIFY(f != nullptr);
     QString why;
@@ -573,7 +574,7 @@ void Inventory_Test::modeCanChangeWhenNothingReferencesItsChannels()
 
 void Inventory_Test::aSceneThatSetsChannelsDirectlyLocksTheMode()
 {
-    QLCFixtureMode *basic, *ext;
+    QLCFixtureMode *basic = nullptr, *ext = nullptr;
     Fixture *f = stagedTwoMode(g_doc, 4, 8, 1, &basic, &ext);
     QVERIFY(f != nullptr);
 
@@ -587,20 +588,39 @@ void Inventory_Test::aSceneThatSetsChannelsDirectlyLocksTheMode()
     QVERIFY2(why.contains("Hand Built"), qPrintable(why));
 }
 
-void Inventory_Test::aModeWithADifferentHeadCountIsRefused()
+void Inventory_Test::aModeLosingHeadsAGroupUsesIsRefused()
 {
-    QLCFixtureMode *basic, *ext;
+    QLCFixtureMode *basic = nullptr, *ext = nullptr;
     Fixture *f = stagedTwoMode(g_doc, 4, 8, 8, &basic, &ext);    // Extended has 8 heads, Basic 1
     QVERIFY(f != nullptr);
     QString why;
-    QVERIFY(!g_doc->canChangeFixtureMode(f->id(), ext, &why));
-    QVERIFY2(why.contains("head"), qPrintable(why));
+    // In no group: a different head count hurts nothing ("change the mode to
+    // accommodate where possible").
+    QVERIFY2(g_doc->canChangeFixtureMode(f->id(), ext, &why), qPrintable(why));
+
+    // On Extended, in a group that lays out its 8 heads: back to Basic's one
+    // would leave the group pointing at heads 2..8.
+    f->setFixtureDefinition(f->fixtureDef(), ext);
+    FixtureGroup *grp = new FixtureGroup(g_doc);
+    grp->setName("Pixels");
+    QVERIFY(g_doc->addFixtureGroup(grp));
+    grp->setSize(QSize(8, 1));
+    for (int h = 0; h < 8; ++h)
+        grp->assignHead(QLCPoint(h, 0), GroupHead(f->id(), h));
+    QVERIFY(!g_doc->canChangeFixtureMode(f->id(), basic, &why));
+    QVERIFY2(why.contains("Pixels") && why.contains("head"), qPrintable(why));
+
+    // Only its first head in the group: Basic keeps that one.
+    for (int h = 1; h < 8; ++h)
+        grp->resignHead(QLCPoint(h, 0));
+    QVERIFY2(g_doc->canChangeFixtureMode(f->id(), basic, &why), qPrintable(why));
+    g_doc->deleteFixtureGroup(grp->id());
 }
 
 void Inventory_Test::patchTimeModeChangeSetsTheFootprintBeforePatching()
 {
     makeDimmer(g_doc, 10, 0, 0);                       // 1-10 taken
-    QLCFixtureMode *basic, *ext;
+    QLCFixtureMode *basic = nullptr, *ext = nullptr;
     Fixture *f = stagedTwoMode(g_doc, 4, 8, 1, &basic, &ext);
     QVERIFY(f != nullptr);
     QCOMPARE(f->channels(), quint32(4));
@@ -642,7 +662,7 @@ void Inventory_Test::patchTimeDimmerChannelsCanChange()
 
 void Inventory_Test::aRefusedModeChangeLeavesTheFixtureUnpatched()
 {
-    QLCFixtureMode *basic, *ext;
+    QLCFixtureMode *basic = nullptr, *ext = nullptr;
     Fixture *f = stagedTwoMode(g_doc, 4, 8, 1, &basic, &ext);
     QVERIFY(f != nullptr);
     Scene *sc = new Scene(g_doc);

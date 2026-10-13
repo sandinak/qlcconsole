@@ -44,6 +44,7 @@
 #include "qlcchannel.h"
 #include "qlcfixturehead.h"
 #include "fixture.h"
+#include "fixturegroup.h"
 #include "doc.h"
 
 #include "patchinventorydialog_test.h"
@@ -266,15 +267,23 @@ void PatchInventoryDialog_Test::modesTheFixtureCannotMoveToAreOfferedButDisabled
     QLCFixtureMode *basic, *ext;
     Fixture *f = stagedTwoMode(m_doc, 4, 8, 8, &basic, &ext);   // Extended: 8 heads vs 1
     QVERIFY(f != nullptr);
+    // On Extended, with a group laying out its 8 heads: Basic would lose 2..8.
+    f->setFixtureDefinition(f->fixtureDef(), ext);
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    grp->setName("Pixels");
+    QVERIFY(m_doc->addFixtureGroup(grp));
+    grp->setSize(QSize(8, 1));
+    for (int h = 0; h < 8; ++h)
+        grp->assignHead(QLCPoint(h, 0), GroupHead(f->id(), h));
 
     PatchInventoryDialog dlg(m_doc);
     QComboBox *cb = qobject_cast<QComboBox *>(dlg.m_table->cellWidget(0, 2));
     QVERIFY(cb != nullptr);
     QStandardItemModel *cm = qobject_cast<QStandardItemModel *>(cb->model());
     QVERIFY(cm != nullptr);
-    QVERIFY(cm->item(0)->isEnabled());                          // where it already is
-    QVERIFY2(!cm->item(1)->isEnabled(), "a mode with a different head count must be disabled");
-    QVERIFY(cm->item(1)->toolTip().contains("head"));
+    QVERIFY(cm->item(1)->isEnabled());                          // where it already is
+    QVERIFY2(!cm->item(0)->isEnabled(), "a mode losing heads a group uses must be disabled");
+    QVERIFY(cm->item(0)->toolTip().contains("Pixels"));
 }
 
 void PatchInventoryDialog_Test::aSceneThatSetsChannelsLocksTheChannelCount()
@@ -621,8 +630,8 @@ void PatchInventoryDialog_Test::patchedFixturesStartWhereTheyAre()
     QCOMPARE(plan[1].fixtureId, b->id());
     QCOMPARE(plan[2].fixtureId, s->id());
     QCOMPARE(dlg.m_table->item(0, COL_STATUS)->text(), QString("unchanged"));
-    // Their mode is not a patch-time choice: no editor in that cell.
-    QVERIFY(dlg.m_table->cellWidget(0, COL_MODE) == nullptr);
+    // Their mode can change here too ("change the mode to accommodate").
+    QVERIFY(dlg.m_table->cellWidget(0, COL_MODE) != nullptr);
     // The staged one still has somewhere to go, so there is something to apply.
     QVERIFY(dlg.m_apply->isEnabled());
 
@@ -737,4 +746,200 @@ void PatchInventoryDialog_Test::placeCountingUpGivesEachTheNextUniverse()
     dlg.accept();
     QCOMPARE(lanterns.at(2)->universe(), quint32(21));
     QVERIFY(lanterns.at(2)->isPatched());
+}
+
+/* "when I tried to patch the rest of the lights on T1 to the t1-int universe
+   .. it tried to create conflicts vs using what was available": two bars in
+   it already, two more lights to come, one of them patched elsewhere. */
+void PatchInventoryDialog_Test::fitKeepsWhatIsThereAndFillsTheGaps()
+{
+    Fixture *b1 = patched(m_doc, 90, 5, 0, "T1-B1");
+    Fixture *b2 = patched(m_doc, 90, 5, 90, "T1-B2");
+    Fixture *sw = patched(m_doc, 165, 0, 106, "T1-SW");
+    Fixture *cw = staged(m_doc, 165, "T1-CW");
+    m_doc->inputOutputMap()->addUniverse();          // enough universes for 5
+    while (m_doc->inputOutputMap()->universesCount() < 7)
+        m_doc->inputOutputMap()->addUniverse();
+    PatchInventoryDialog dlg(m_doc, { b1->id(), b2->id(), sw->id(), cw->id() });
+
+    QComboBox *how = dlg.findChild<QComboBox *>("placeHow");
+    QVERIFY(how != nullptr);
+    QCOMPARE(how->currentIndex(), 0);                // into the free space, by default
+    QCOMPARE(dlg.fitRows(5, 0), 0);
+    QHash<quint32, PatchPlanner::Assignment> at;
+    foreach (const PatchPlanner::Assignment &a, dlg.currentPlan())
+        at.insert(a.fixtureId, a);
+    QCOMPARE(at[b1->id()].address, quint32(0));      // the bars stay put
+    QCOMPARE(at[b2->id()].address, quint32(90));
+    QCOMPARE(at[sw->id()].universe, quint32(5));     // the rest fill the gap
+    QCOMPARE(at[cw->id()].universe, quint32(5));
+    QList<quint32> starts = { at[sw->id()].address, at[cw->id()].address };
+    std::sort(starts.begin(), starts.end());
+    QCOMPARE(starts, QList<quint32>({ 180, 345 }));
+    QVERIFY(dlg.findChild<QWidget *>("fitBar")->isHidden());
+    QVERIFY2(dlg.m_apply->isEnabled(), "no conflicts: it can be applied");
+    dlg.accept();
+    QCOMPARE(sw->universe(), quint32(5));
+    QCOMPARE(b1->address(), quint32(0));
+}
+
+/* "flag if it goes over 1 U .. tho I want the option to continue that patch" */
+void PatchInventoryDialog_Test::whatHasNoRoomIsFlaggedAndCanCarryOn()
+{
+    patched(m_doc, 400, 1, 0, "Big");                // not in the dialog: stays
+    Fixture *a = staged(m_doc, 60, "A");
+    Fixture *b = staged(m_doc, 80, "B");
+    while (m_doc->inputOutputMap()->universesCount() < 3)
+        m_doc->inputOutputMap()->addUniverse();
+    PatchInventoryDialog dlg(m_doc, { a->id(), b->id() });
+    const QList<PatchPlanner::Assignment> before = dlg.currentPlan();
+
+    QCOMPARE(dlg.fitRows(1, 0), 1);                  // 112 free: A fits, B doesn't
+    QWidget *bar = dlg.findChild<QWidget *>("fitBar");
+    QVERIFY(!bar->isHidden());
+    QHash<quint32, PatchPlanner::Assignment> at;
+    foreach (const PatchPlanner::Assignment &p, dlg.currentPlan())
+        at.insert(p.fixtureId, p);
+    QCOMPARE(at[a->id()].universe, quint32(1));
+    QCOMPARE(at[a->id()].address, quint32(400));
+    foreach (const PatchPlanner::Assignment &p, before)
+        if (p.fixtureId == b->id())
+        {
+            QCOMPARE(at[b->id()].universe, p.universe);   // left where it was
+            QCOMPARE(at[b->id()].address, p.address);
+        }
+    int row = -1;
+    for (int r = 0; r < dlg.m_table->rowCount(); r++)
+        if (dlg.m_table->item(r, 0)->data(Qt::UserRole).toUInt() == b->id())
+            row = r;
+    QVERIFY(dlg.m_table->item(row, COL_STATUS)->text().contains("no room"));
+
+    dlg.findChild<QPushButton *>("fitCarryOn")->click();
+    at.clear();
+    foreach (const PatchPlanner::Assignment &p, dlg.currentPlan())
+        at.insert(p.fixtureId, p);
+    QCOMPARE(at[b->id()].universe, quint32(2));      // on into the next
+    QCOMPARE(at[b->id()].address, quint32(0));
+    QCOMPARE(at[a->id()].address, quint32(400));     // A stays
+    QVERIFY(bar->isHidden());
+}
+
+/* "I want to be able to change the mode to accommodate where possible. That
+   should update the fixture" */
+void PatchInventoryDialog_Test::fitByChangingModesShrinksTheBiggestFirst()
+{
+    QLCFixtureMode *big1, *small1, *big2, *small2;
+    Fixture *p = stagedTwoMode(m_doc, 200, 50, 1, &big1, &small1);   // Basic 200, Extended 50
+    Fixture *q = stagedTwoMode(m_doc, 180, 40, 1, &big2, &small2);
+    QVERIFY(p != nullptr && q != nullptr);
+    QVERIFY(m_doc->patchFixtures({ { q->id(), 0, 300 } }));          // q already patched
+    patched(m_doc, 200, 1, 0, "Taken");              // 312 free in universe 2
+    while (m_doc->inputOutputMap()->universesCount() < 2)
+        m_doc->inputOutputMap()->addUniverse();
+    PatchInventoryDialog dlg(m_doc, { p->id(), q->id() });
+
+    QCOMPARE(dlg.fitRows(1, 0), 1);                  // 200 + 180 > 312
+    QCOMPARE(dlg.fitByChangingModes(), 0);           // the biggest (p) steps down: 50 + 180
+    QHash<quint32, PatchPlanner::Assignment> at;
+    foreach (const PatchPlanner::Assignment &a, dlg.currentPlan())
+        at.insert(a.fixtureId, a);
+    QCOMPARE(at[p->id()].mode, small1);
+    QVERIFY(at[q->id()].mode == big2 || at[q->id()].mode == nullptr);
+    QVERIFY(dlg.findChild<QWidget *>("fitBar")->isHidden());
+    QVERIFY(dlg.m_apply->isEnabled());
+
+    dlg.accept();                                    // the fixtures change
+    QCOMPARE(p->fixtureMode(), small1);
+    QCOMPARE(p->channels(), quint32(50));
+    QCOMPARE(q->fixtureMode(), big2);
+    QCOMPARE(q->universe(), quint32(1));
+
+    // A patched fixture's mode is chosen here too, and applied.
+    PatchInventoryDialog again(m_doc, { q->id() });
+    QComboBox *cb = qobject_cast<QComboBox *>(again.m_table->cellWidget(0, COL_MODE));
+    QVERIFY(cb != nullptr);
+    cb->setCurrentIndex(cb->findText("Extended", Qt::MatchStartsWith));
+    QCOMPARE(again.m_table->item(0, COL_STATUS)->text(), QString("mode changes"));
+    QVERIFY(again.m_apply->isEnabled());
+    again.accept();
+    QCOMPARE(q->fixtureMode(), small2);
+    QCOMPARE(q->channels(), quint32(40));
+}
+
+/* "still not patching the same all the time .. ordered by fixture name ..
+   then the addressing should be in that order as well" */
+void PatchInventoryDialog_Test::theSameGroupLandsTheSameWayInNameOrder()
+{
+    while (m_doc->inputOutputMap()->universesCount() < 3)
+        m_doc->inputOutputMap()->addUniverse();
+    // Scattered to start with: one in the target already, out of order.
+    Fixture *sw = patched(m_doc, 30, 2, 0, "T1-SW");
+    Fixture *b10 = patched(m_doc, 20, 2, 200, "T1-B10");
+    Fixture *b2 = staged(m_doc, 20, "T1-B2");
+    Fixture *cw = patched(m_doc, 30, 0, 50, "T1-CW");
+    patched(m_doc, 10, 2, 100, "Other");             // not in the group: worked around
+
+    auto run = [&]() {
+        PatchInventoryDialog dlg(m_doc, { sw->id(), cw->id(), b10->id(), b2->id() });
+        dlg.setAddressOrder(PatchPlanner::ByName);
+        QStringList rows;
+        for (int r = 0; r < dlg.m_table->rowCount(); r++)
+            rows << dlg.m_table->item(r, 0)->text();
+        QCOMPARE(rows, QStringList({ "T1-B2", "T1-B10", "T1-CW", "T1-SW" }));   // numbers as numbers
+        QCOMPARE(dlg.fitRows(2, 0), 0);
+        QHash<quint32, quint32> at;
+        foreach (const PatchPlanner::Assignment &a, dlg.currentPlan())
+            at.insert(a.fixtureId, a.address);
+        QCOMPARE(at[b2->id()], quint32(0));          // in name order, around "Other" at 100
+        QCOMPARE(at[b10->id()], quint32(20));
+        QCOMPARE(at[cw->id()], quint32(40));
+        QCOMPARE(at[sw->id()], quint32(70));
+        dlg.accept();
+    };
+    run();
+    // Shuffle them about and do it again: the same.
+    QVERIFY(m_doc->patchFixtures({ { sw->id(), 2, 300 }, { cw->id(), 2, 400 }, { b2->id(), 1, 7 } }));
+    run();
+}
+
+void PatchInventoryDialog_Test::moversFirstThenByKind()
+{
+    auto typed = [this](QLCFixtureDef::FixtureType type, const QString &name) {
+        QLCFixtureDef *def = new QLCFixtureDef();
+        def->setManufacturer("Test");
+        def->setModel(name + " model");
+        def->setType(type);
+        QLCFixtureMode *mode = new QLCFixtureMode(def);
+        mode->setName("Mode");
+        QLCChannel *ch = new QLCChannel();
+        ch->setName("Dimmer");
+        def->addChannel(ch);
+        mode->insertChannel(ch, 0);
+        def->addMode(mode);
+        Fixture *f = new Fixture(m_doc);
+        f->setFixtureDefinition(def, mode);
+        f->setName(name);
+        f->setPatched(false);
+        m_doc->addFixture(f);
+        return f;
+    };
+    Fixture *wash = typed(QLCFixtureDef::ColorChanger, "A Wash");
+    Fixture *bar = typed(QLCFixtureDef::LEDBarPixels, "B Bar");
+    Fixture *spot = typed(QLCFixtureDef::MovingHead, "Z Spot");
+    Fixture *beam = typed(QLCFixtureDef::MovingHead, "C Beam");
+    PatchInventoryDialog dlg(m_doc, { wash->id(), bar->id(), spot->id(), beam->id() });
+    dlg.setAddressOrder(PatchPlanner::ByKind);
+    QStringList rows;
+    for (int r = 0; r < dlg.m_table->rowCount(); r++)
+        rows << dlg.m_table->item(r, 0)->text();
+    QCOMPARE(rows, QStringList({ "C Beam", "Z Spot", "B Bar", "A Wash" }));
+    QCOMPARE(dlg.fitRows(0, 0), 0);
+    QHash<quint32, quint32> at;
+    foreach (const PatchPlanner::Assignment &a, dlg.currentPlan())
+        at.insert(a.fixtureId, a.address);
+    QCOMPARE(at[beam->id()], quint32(0));
+    QCOMPARE(at[spot->id()], quint32(1));
+    QCOMPARE(at[bar->id()], quint32(2));
+    QCOMPARE(at[wash->id()], quint32(3));
+    dlg.setAddressOrder(PatchPlanner::ByName);       // back, for the next test's dialog
 }

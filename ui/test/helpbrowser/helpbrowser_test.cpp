@@ -169,4 +169,44 @@ void HelpBrowser_Test::headingsAreSluggedTheWayGitHubDoes()
     QCOMPARE(HelpBrowser::headingSlug("Patching: the Patch dialog"), QString("patching-the-patch-dialog"));
 }
 
+/* A picture is shown no wider than the page -- a narrow page shrinks it,
+   a wider one gives it back, up to its own size (taken at 2x, shown at
+   half) -- and a click on it opens it full size. */
+void HelpBrowser_Test::aPictureFitsThePageAndOpensFullSize()
+{
+    HelpBrowser help;
+    help.resize(560, 600);
+    help.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&help));
+    help.showTopic(QStringLiteral("getting-started.md"));
+
+    auto picture = [&help]() {
+        QTextDocument *doc = help.browser()->document();
+        for (QTextBlock b = doc->begin(); b.isValid(); b = b.next())
+            for (QTextBlock::iterator it = b.begin(); !it.atEnd(); ++it)
+                if (it.fragment().charFormat().isImageFormat())
+                    return it.fragment().charFormat().toImageFormat();
+        return QTextImageFormat();
+    };
+
+    QTextImageFormat img = picture();
+    QVERIFY(img.isValid());
+    const QString href = img.anchorHref();
+    QVERIFY2(href.startsWith(QLatin1String("picture::/images/")), qPrintable(href));
+    const QSize full = QImage(href.mid(8)).size() / 2;
+    QVERIFY(!full.isEmpty());
+    QVERIFY2(img.width() <= help.browser()->viewport()->width(),
+             qPrintable(QString("%1 wide on a %2 page").arg(img.width()).arg(help.browser()->viewport()->width())));
+    const qreal narrow = img.width();
+
+    help.resize(1800, 900);
+    QTRY_VERIFY(picture().width() > narrow);
+    QVERIFY(picture().width() <= full.width());
+
+    help.followLink(QUrl(href));
+    QWidget *shown = help.findChild<QWidget *>(QStringLiteral("helpPicture"));
+    QVERIFY(shown != nullptr);
+    QVERIFY(shown->isVisible());
+}
+
 QTEST_MAIN(HelpBrowser_Test)

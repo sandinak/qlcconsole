@@ -759,11 +759,51 @@ FunctionParent ChaserRunner::functionParent() const
     return FunctionParent(FunctionParent::Function, m_chaser->id());
 }
 
+double ChaserRunner::goClockUnits() const
+{
+    double pos = 0, bpm = 0;
+    const int master = m_chaser->effectiveSpeedMaster();
+    if (!(SpeedMasters::isMaster(master) && m_doc->speedMasters()->clockFor(master, &pos, &bpm)))
+        pos = m_doc->masterTimer() != nullptr ? m_doc->masterTimer()->beatPosition() : 0.0;
+    return m_chaser->goQuantize() == Chaser::GoOnBar ? pos / 4.0 : pos;
+}
+
 bool ChaserRunner::write(MasterTimer *timer, QList<Universe *> universes)
 {
     // Nothing to do
     if (m_chaser->stepsCount() == 0)
         return false;
+
+    /* GO on the beat (PLAYBACK_TIMING_DESIGN.md, P1): a step change waits for
+       the next whole beat or bar of the chaser's clock. The chase carries on
+       as it is meanwhile; a second GO in the same beat replaces the first
+       rather than adding a step. Never for a show-driven chaser -- the
+       timeline says when. */
+    ChaserAction held;
+    held.m_action = ChaserNoAction;
+    const bool stepChange = m_pendingAction.m_action == ChaserNextStep
+                            || m_pendingAction.m_action == ChaserPreviousStep
+                            || (m_pendingAction.m_action == ChaserSetStepIndex
+                                && m_pendingAction.m_stepIndex != -1);
+    if (stepChange && m_chaser->goQuantize() != Chaser::GoNow && !m_externalClock)
+    {
+        const qint64 unit = qint64(std::floor(goClockUnits()));
+        if (!goHeld())
+            m_goHeldIn = unit;
+        if (unit <= m_goHeldIn)
+        {
+            held = m_pendingAction;                 // not yet: run on as we are
+            m_pendingAction.m_action = ChaserNoAction;
+        }
+        else
+        {
+            m_goHeldIn = std::numeric_limits<qint64>::min();
+        }
+    }
+    else if (!stepChange)
+    {
+        m_goHeldIn = std::numeric_limits<qint64>::min();
+    }
 
     switch (m_pendingAction.m_action)
     {
@@ -866,6 +906,14 @@ bool ChaserRunner::write(MasterTimer *timer, QList<Universe *> universes)
         }
     }
 
+    if (m_runnerSteps.isEmpty() && held.m_action != ChaserNoAction)
+    {
+        // Nothing playing yet (a GO from stopped): the first step lands on
+        // the beat too, rather than starting now and jumping on the beat.
+        m_pendingAction = held;
+        return true;
+    }
+
     if (m_runnerSteps.isEmpty())
     {
         m_lastRunStepIdx = getNextStepIndex();
@@ -885,6 +933,8 @@ bool ChaserRunner::write(MasterTimer *timer, QList<Universe *> universes)
     }
 
     m_pendingAction.m_action = ChaserNoAction;
+    if (held.m_action != ChaserNoAction && m_pendingAction.m_action == ChaserNoAction)
+        m_pendingAction = held;                     // still waiting for the beat
     return true;
 }
 

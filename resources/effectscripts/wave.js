@@ -55,6 +55,10 @@
             waveT = t * speed;
 
         return fixtures.map(function(f, i) {
+            // Round where the look points this head (its Aim or Pan/Tilt), the
+            // centre setting nudging from there; else the centre setting.
+            var ax = f.lookAim ? f.lookAim.pan  + (panCenter - 0.5) : panCenter;
+            var ay = f.lookAim ? f.lookAim.tilt + (tiltCenter - 0.5) : tiltCenter;
             if (!f.hasPanTilt) return {};
 
             // Phase for this fixture: spatial offset proportional to index,
@@ -62,8 +66,8 @@
             var spatialPhase = inputs._spread ? f.phase : (n > 1) ? (i / (n - 1)) / wavelength : 0;
             var phase = (waveT - spatialPhase) * 2 * Math.PI;
 
-            var pan  = (panCenter  + panAmp  * Math.sin(phase)) * f.panRange;
-            var tilt = (tiltCenter + tiltAmp * Math.cos(phase)) * f.tiltRange;
+            var pan  = (ax  + panAmp  * Math.sin(phase)) * f.panRange;
+            var tilt = (ay + tiltAmp * Math.cos(phase)) * f.tiltRange;
 
             var intent = {
                 pan:  Math.max(0, Math.min(f.panRange,  pan)),

@@ -254,7 +254,44 @@ void EffectInstance::runTick()
         return;
     }
 
+    /* An effect that doesn't take the look's colours (a ballyhoo, a gobo
+       chase) with a Colour or Dimmer of its own under it: the host applies
+       them with its output, on its heads, for as long as it plays -- they are
+       that effect's ("only apply to that effect"), not the look's base. */
+    if (!QLCPalette::effectUsesLookColours(m_doc->palette(m_effectPaletteId)))
+    {
+        QList<QColor> own;
+        double ownDimmer = -1.0;
+        ownLook(own, ownDimmer);
+        if (!own.isEmpty() || ownDimmer >= 0.0)
+        {
+            const int len = result.property("length").toInt();
+            for (int i = 0; i < len; ++i)
+            {
+                QJSValue o = result.property(quint32(i));
+                if (!o.isObject())
+                    continue;
+                if (!own.isEmpty() && !o.hasProperty("r") && !o.hasProperty("g") && !o.hasProperty("b"))
+                {
+                    o.setProperty("r", own.first().red());
+                    o.setProperty("g", own.first().green());
+                    o.setProperty("b", own.first().blue());
+                }
+                if (ownDimmer >= 0.0 && !o.hasProperty("dimmer"))
+                    o.setProperty("dimmer", ownDimmer);
+            }
+        }
+    }
+
     QList<DmxWrite> writes = parseIntents(result, cells);
+    // Where this effect sits in its look: two effects on one channel, the
+    // lower in the list wins (EffectScriptRunner::composeWrites()).
+    if (Scene *sc = qobject_cast<Scene *>(m_doc->function(m_sceneId)))
+    {
+        const int layer = sc->runtimePalettes().indexOf(m_effectPaletteId);
+        for (DmxWrite &w : writes)
+            w.layer = layer;
+    }
 
     // One-shot lifecycle: finished when phase reaches 1 or the script sets
     // state.done (it can finish early). On finish, "release" stops driving now
@@ -417,7 +454,7 @@ void EffectInstance::buildSceneBaseValues()
     // matching Scene::write). Effect palettes are skipped — that's us.
     const QList<quint32> groups = scene->fixtureGroups();
     const QList<quint32> fixtures = scene->fixtures();
-    const QList<quint32> orderedPalettes = scene->palettes();
+    const QList<quint32> orderedPalettes = scene->runtimePalettes();
     for (quint32 pid : orderedPalettes)
     {
         QLCPalette *p = m_doc->palette(pid);
@@ -437,6 +474,13 @@ void EffectInstance::buildSceneBaseValues()
         for (const SceneValue &sv : p->valuesFromFixtures(m_doc, fixtures, scene, cOff))
             m_sceneBaseValues[key(sv.fxi, sv.channel)] = sv.value;
     }
+    // As the scene paints them: a fixture with no dimmer has the look's
+    // Dimmer in its colour.
+    const int lookDim = QLCPalette::lookDimmerValue(m_doc, orderedPalettes);
+    if (lookDim >= 0)
+        for (auto it = m_sceneBaseValues.begin(); it != m_sceneBaseValues.end(); ++it)
+            it.value() = QLCPalette::dimScaleWithoutDimmer(m_doc->fixture(quint32(it.key() >> 32)),
+                                                           quint32(it.key() & 0xFFFFFFFF), it.value(), lookDim);
 }
 
 uchar EffectInstance::sceneBaseValue(quint32 fid, quint32 channel, uchar dflt) const
@@ -852,7 +896,7 @@ bool EffectInstance::aimCentre(QVector3D *centre) const
     Scene *sc = qobject_cast<Scene*>(m_doc->function(m_sceneId));
     if (mp == nullptr || sc == nullptr)
         return false;
-    for (quint32 spid : sc->palettes())
+    for (quint32 spid : sc->runtimePalettes())
     {
         QLCPalette *ap = m_doc->palette(spid);
         if (ap == nullptr || ap->type() != QLCPalette::Aim)
@@ -885,9 +929,11 @@ QList<EffectInstance::SpreadDot> EffectInstance::spreadPreview(QPointF *centre, 
         p.pos = mp != nullptr ? mp->fixtureRigPosition(cells.at(i).fixtureId) : QVector3D();
         pts << p;
     }
-    QVector3D c;
+    QVector3D c = mp != nullptr ? mp->stageCentre() : QVector3D();
     const bool hc = SpreadLayer::needsCentre(spread.axis) && aimCentre(&c);
-    const QVector<double> ph = SpreadLayer::phases(pts, spread, hc ? &c : nullptr);
+    if (!hc && mp != nullptr)
+        c = mp->stageCentre();
+    const QVector<double> ph = SpreadLayer::phases(pts, spread, &c);
     for (int i = 0; i < pts.size(); ++i)
     {
         SpreadDot d;
@@ -1024,9 +1070,12 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
         const bool onStage = spread.axis >= SpreadLayer::StageX;
         /* Out from / around a target: the look's Aim target (the one Stage
            Shape centres on); without one, the middle of the heads. */
-        QVector3D centre;
+        // No Aim target: centre stage.
+        QVector3D centre = mp != nullptr ? mp->stageCentre() : QVector3D();
         const bool hasCentre = spread.isActive() && SpreadLayer::needsCentre(spread.axis)
                                && aimCentre(&centre);
+        if (!hasCentre && mp != nullptr)
+            centre = mp->stageCentre();
         const bool centreMoved = hasCentre != m_spreadHadCentre || centre != m_spreadCentre;
         if (rebuild || spread != m_spreadBuilt
             || (onStage && spread.isActive() && (moved || centreMoved)))
@@ -1042,7 +1091,7 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
                 p.pos = m_facts.value(cells.at(i).fixtureId).pos;
                 pts << p;
             }
-            const QVector<double> ph = SpreadLayer::phases(pts, spread, hasCentre ? &centre : nullptr);
+            const QVector<double> ph = SpreadLayer::phases(pts, spread, &centre);
             m_spreadCentre = centre;
             m_spreadHadCentre = hasCentre;
             for (int i = 0; i < m_cellObjects.size() && i < ph.size(); ++i)
@@ -1064,7 +1113,7 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
         // the host's converged aim whenever it is present.
         if (Scene *sc = qobject_cast<Scene*>(m_doc->function(m_sceneId)))
         {
-            for (quint32 spid : sc->palettes())
+            for (quint32 spid : sc->runtimePalettes())
             {
                 QLCPalette *ap = m_doc->palette(spid);
                 if (ap == NULL || ap->type() != QLCPalette::Aim)
@@ -1121,6 +1170,36 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
         {
             obj.deleteProperty("sceneTarget");
             sceneTargetCleared.insert(fid);
+        }
+        /* lookAim: where the look's own Aim / Pan-Tilt points this head, as
+           fractions of its pan and tilt range (the scripts' own units) -- the
+           centre a movement effect moves round ("should I expect the lights
+           to ballyhoo over the point of target 2?"). Absent when the look
+           doesn't point it. */
+        if (f.fixture != nullptr)
+        {
+            const quint32 panCh = f.fixture->channelNumber(QLCChannel::Pan, QLCChannel::MSB);
+            const quint32 tiltCh = f.fixture->channelNumber(QLCChannel::Tilt, QLCChannel::MSB);
+            const quint32 panFine = f.fixture->channelNumber(QLCChannel::Pan, QLCChannel::LSB);
+            const quint32 tiltFine = f.fixture->channelNumber(QLCChannel::Tilt, QLCChannel::LSB);
+            auto has = [this, fid](quint32 ch) {
+                return ch != QLCChannel::invalid()
+                       && m_sceneBaseValues.contains((quint64(fid) << 32) | ch);
+            };
+            if (has(panCh) || has(tiltCh))
+            {
+                auto frac = [this, fid](quint32 msb, quint32 lsb) {
+                    const int hi = sceneBaseValue(fid, msb, 128);
+                    const int lo = lsb != QLCChannel::invalid() ? sceneBaseValue(fid, lsb, 0) : 0;
+                    return double((hi << 8) | lo) / 65535.0;
+                };
+                QJSValue la = engine->newObject();
+                la.setProperty("pan", has(panCh) ? frac(panCh, panFine) : 0.5);
+                la.setProperty("tilt", has(tiltCh) ? frac(tiltCh, tiltFine) : 0.5);
+                obj.setProperty("lookAim", la);
+            }
+            else if (obj.hasOwnProperty("lookAim"))
+                obj.deleteProperty("lookAim");
         }
         if (lastSpotOf.contains(fid))
             obj.setProperty("lastSpot", lastSpotOf.value(fid));
@@ -1437,46 +1516,71 @@ QJSValue EffectInstance::buildPalettesObject() const
     return obj;
 }
 
+void EffectInstance::ownLook(QList<QColor> &colours, double &dimmer) const
+{
+    // The Colour/Dimmer palettes under this effect, before the next one.
+    colours.clear();
+    dimmer = -1.0;
+    Scene *scene = qobject_cast<Scene *>(m_doc->function(m_sceneId));
+    if (scene == nullptr)
+        return;
+    bool underThis = false;
+    foreach (quint32 pid, scene->runtimePalettes())
+    {
+        QLCPalette *p = m_doc->palette(pid);
+        if (p == nullptr)
+            continue;
+        if (p->type() == QLCPalette::Effect)
+            underThis = (pid == m_effectPaletteId);
+        else if (underThis && p->type() == QLCPalette::Color)
+            colours.append(p->colorValue());
+        else if (underThis && p->type() == QLCPalette::Dimmer)
+            dimmer = p->value().toDouble() / 255.0;
+    }
+}
+
 void EffectInstance::lookColours(QList<QColor> &colours, double &dimmer, bool *haveDimmer) const
 {
     double lookDimmer = 1.0;
     bool   haveLookDimmer = false;
-    QList<QColor> afterColors;   // colours positioned after this effect
-    QList<QColor> allColors;     // every colour in the look (fallback)
+    /* The same rule the scene paints by (QLCPalette::isEffectScoped()): the
+       Colour/Dimmer under this effect are its own; with none of its own it
+       takes the look's static ones -- never another effect's. Read top to
+       bottom, the lowest dimmer wins. */
+    QList<QColor> ownColors;     // colours under this effect, its own
+    QList<QColor> baseColors;    // the look's static colours (fallback)
+    double ownDimmer = -1.0, baseDimmer = -1.0;
     if (Scene *scene = qobject_cast<Scene *>(m_doc->function(m_sceneId)))
     {
-        bool pastThisEffect = false;
-        foreach (quint32 pid, scene->palettes())
+        const QList<quint32> pals = scene->runtimePalettes();
+        bool underThis = false;
+        foreach (quint32 pid, pals)
         {
             QLCPalette *p = m_doc->palette(pid);
             if (!p)
                 continue;
-            if (pid == m_effectPaletteId)
-            {
-                pastThisEffect = true;
-                continue;
-            }
-            // The NEXT effect ends this effect's run of child colours (in the tree
-            // view, those colours are nested under the other effect).
             if (p->type() == QLCPalette::Effect)
             {
-                pastThisEffect = false;
+                underThis = (pid == m_effectPaletteId);
                 continue;
             }
+            if (p->type() != QLCPalette::Color && p->type() != QLCPalette::Dimmer)
+                continue;
+            const bool scoped = QLCPalette::isEffectScoped(m_doc, pals, pid);
+            if (scoped && !underThis)
+                continue;                       // another effect's
             if (p->type() == QLCPalette::Color)
-            {
-                allColors.append(p->colorValue());
-                if (pastThisEffect)
-                    afterColors.append(p->colorValue());
-            }
-            else if (p->type() == QLCPalette::Dimmer)
-            {
-                lookDimmer = p->value().toDouble() / 255.0;
-                haveLookDimmer = true;
-            }
+                (scoped ? ownColors : baseColors).append(p->colorValue());
+            else
+                (scoped ? ownDimmer : baseDimmer) = p->value().toDouble() / 255.0;
         }
     }
-    colours = afterColors.isEmpty() ? allColors : afterColors;
+    colours = ownColors.isEmpty() ? baseColors : ownColors;
+    if (ownDimmer >= 0.0 || baseDimmer >= 0.0)
+    {
+        lookDimmer = ownDimmer >= 0.0 ? ownDimmer : baseDimmer;
+        haveLookDimmer = true;
+    }
     dimmer = lookDimmer;
     if (haveDimmer != nullptr)
         *haveDimmer = haveLookDimmer;
@@ -1750,17 +1854,39 @@ EffectInstance::parseIntents(const QJSValue &intents,
         // (HTP could only push it up).  Per-fixture phase (script `spread`) makes
         // fixtures flicker independently rather than in unison.
         QJSValue dimVal = iv("dimmer");
+        // An intent that brings its own colour (a rainbow's hue) and a dimmer
+        // on a fixture with no master dimmer: the dimmer dims THAT colour.
+        // Scaling the emitters from the look's base instead put every one --
+        // white too -- at full under the hue, and a rainbow came out white.
+        const bool carriesColour = !iv("r").isUndefined() || !iv("g").isUndefined()
+                                || !iv("b").isUndefined() || !iv("w").isUndefined();
+        float ownColourMul = 1.0f;
         if (!dimVal.isUndefined())
         {
             const float mul = qBound(0.0f, (float)dimVal.toNumber(), 1.0f) * envelope;
             quint32 miCh = fxi->masterIntensityChannel();
+            /* No master dimmer, but this head has a dimmer of its own (a mover
+               whose definition puts its Dimmer in its head): that is the
+               dimmer ("breathe isn't applying to this set"). */
+            if (miCh == QLCChannel::invalid())
+            {
+                const quint32 hd = fxi->channelNumber(QLCChannel::Intensity, QLCChannel::MSB, head);
+                const QLCChannel *hc = hd != QLCChannel::invalid() ? fxi->channel(hd) : nullptr;
+                if (hc != nullptr && hc->colour() == QLCChannel::NoColour)
+                    miCh = hd;
+            }
             if (miCh != QLCChannel::invalid())
             {
                 // Base from the scene's Dimmer look; full if the scene sets none.
+                // A scale, not a set: two dimmer effects on it multiply.
                 const uchar base = sceneBaseValue(fid, miCh, 255);
                 const uchar out  = (uchar)qBound(0, (int)qRound(base * mul), 255);
                 writes.append({uniIdx, (int)fxi->address() + (int)miCh,
-                               out, fxi->id(), miCh, /*replace=*/true});
+                               out, fxi->id(), miCh, /*replace=*/true, mul, base});
+            }
+            else if (carriesColour)
+            {
+                ownColourMul = qBound(0.0f, (float)dimVal.toNumber(), 1.0f);
             }
             else if (fxi->fixtureMode() != nullptr)
             {
@@ -1784,7 +1910,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
                     const uchar base = sceneBaseValue(fid, c, 255);
                     const uchar out = (uchar)qBound(0, (int)qRound(base * mul), 255);
                     writes.append({uniIdx, (int)fxi->address() + (int)c,
-                                   out, fxi->id(), c, /*replace=*/true});
+                                   out, fxi->id(), c, /*replace=*/true, mul, base});
                 }
             }
         }
@@ -1799,10 +1925,18 @@ EffectInstance::parseIntents(const QJSValue &intents,
             (fxi->masterIntensityChannel() == QLCChannel::invalid()) ? m_lookDimmer : 1.0f;
         // Write DMX @value onto every channel carrying primary @colour.
         // Returns true if the fixture actually has such an emitter.
+        // An intent with a colour in it OWNS its head's colour: written over
+        // the look's static colour, not merged highest-wins with it (cyan
+        // under a rainbow turned every hue pastel), zeros and all. One that's
+        // all black writes nothing and leaves the head to the look.
+        // Only while it's on: an effect whose look has stopped (envelope 0)
+        // must not hold its heads black over whatever plays there next.
+        const bool ownsColour = carriesColour && envelope > 0.0f
+            && (iv("r").toInt() > 0 || iv("g").toInt() > 0 || iv("b").toInt() > 0 || iv("w").toInt() > 0);
         auto writeEmitter = [&](QLCChannel::PrimaryColour colour, uchar dmxValRaw) -> bool {
             // Scale colour output by the scene's actuation envelope (so the effect
             // ramps in/holds with the scene) and by the look's master Dimmer.
-            uchar dmxVal = (uchar)qBound(0, (int)qRound(dmxValRaw * envelope * lookColorMul), 255);
+            uchar dmxVal = (uchar)qBound(0, (int)qRound(dmxValRaw * envelope * lookColorMul * ownColourMul), 255);
             bool matched = false;
             // Only THIS head's channels — so a pixel effect colours one pixel, not
             // the whole (multi-head) fixture.
@@ -1824,8 +1958,15 @@ EffectInstance::parseIntents(const QJSValue &intents,
                     // churns the fader and, more importantly, keeps an idle frame
                     // looking "busy". Dropping them lets a note effect with nothing
                     // lit produce an EMPTY frame, which the runner uses to idle.
-                    if (dmxVal != 0)
-                        writes.append({uniIdx, (int)fxi->address() + (int)c, dmxVal, fxi->id(), c});
+                    if (ownsColour)
+                        writes.append({uniIdx, (int)fxi->address() + (int)c, dmxVal, fxi->id(), c,
+                                       /*replace=*/true});
+                    else if (dmxVal != 0)
+                    {
+                        DmxWrite w{uniIdx, (int)fxi->address() + (int)c, dmxVal, fxi->id(), c};
+                        w.htp = true;
+                        writes.append(w);
+                    }
                     matched = true;   // the emitter exists regardless of this value
                 }
             }
@@ -1859,6 +2000,10 @@ EffectInstance::parseIntents(const QJSValue &intents,
         // the intent onto RGB(W) so it still works on fixtures that lack it.
         if (!writeColour("w", QLCChannel::White))
             writeAsRGB("w", 1.0f, 1.0f, 1.0f, 0.0f);
+        // A colour that says nothing of white means none: the look's white
+        // mustn't wash it out on an RGBW head.
+        if (ownsColour && iv("w").isUndefined())
+            writeEmitter(QLCChannel::White, 0);
         if (!writeColour("a", QLCChannel::Amber))
         {
             // Fixture has no discrete amber emitter.  A colour-only warmth pulse
@@ -1893,7 +2038,17 @@ EffectInstance::parseIntents(const QJSValue &intents,
             int tR = qBound(0, iv("r").toInt(), 255);
             int tG = qBound(0, iv("g").toInt(), 255);
             int tB = qBound(0, iv("b").toInt(), 255);
-            quint32 nCh = fxi->channels();
+            // A wheel has a colour, not a level: match the hue at full, so a
+            // breathing blue stays on the blue slot instead of hopping to
+            // whichever slot is nearest a darker blue. Black: leave the wheel.
+            const int top = qMax(tR, qMax(tG, tB));
+            if (top > 0)
+            {
+                tR = tR * 255 / top;
+                tG = tG * 255 / top;
+                tB = tB * 255 / top;
+            }
+            quint32 nCh = top > 0 ? fxi->channels() : 0;
             for (quint32 c = 0; c < nCh; ++c)
             {
                 if (!fxi->fixtureMode()) break;
@@ -2081,4 +2236,9 @@ EffectInstance::parseIntents(const QJSValue &intents,
     }
 
     return writes;
+}
+
+QStringList EffectInstance::scriptFixtureTypes() const
+{
+    return m_script.fixtureTypes();
 }

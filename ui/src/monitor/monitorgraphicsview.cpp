@@ -7911,7 +7911,7 @@ void MonitorGraphicsView::attachFixtureToTower(quint32 fid, quint32 towerId)
         leaveMountGroupsOf(fid);
     const bool alreadyOnAShelf = (rp.towerId == towerId
                                    && rp.towerMountSide == FixtureRigProps::TowerShelf
-                                   && rp.towerShelf < quint32(t->shelfCount()));
+                                   && rp.towerShelf < t->shelfCount());
     // Structural mounts are mutually exclusive.
     rp.trussId = Truss::invalidId();
     rp.pipeId = Pipe::invalidId();

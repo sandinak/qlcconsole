@@ -10,6 +10,7 @@
 #include <QHBoxLayout>
 #include <QListWidget>
 #include <QTreeWidget>
+#include <QStyle>
 #include <QTreeWidgetItemIterator>
 #include <QHeaderView>
 #include <QPushButton>
@@ -36,6 +37,8 @@
 #include "speedmasterspanel.h"
 #include "speedmasters.h"
 #include "scenegrouplooks.h"
+#include "lookstackcheck.h"
+#include "flowlayout.h"
 #include "fadetimespin.h"
 #include "scenetransition.h"
 #include <QSpinBox>
@@ -70,6 +73,8 @@ enum { LookColName = 0, LookColIn = 1, LookColOut = 2, LookColCount = 3 };
 // and BOTH fades of a colour/dimmer nested under an effect (it feeds the effect's
 // gradient — a value, not a painted look — so it has no fade of its own).
 static const int LookFadeInertRole = Qt::UserRole + 3;
+// What LookStackCheck says about a look (empty: nothing).
+static const int LookStackNoteRole = Qt::UserRole + 6;
 
 /* What a fade's default (-1) means for this look: "scene" -- follow the
    scene's fade (or a chaser step's) -- or, for an effect's release, "snap".
@@ -152,7 +157,19 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
        looked past forever after. Its content now lives in the Programming
        guide, which this reaches; the explanation is still one click away
        without standing in front of the work. */
-    QHBoxLayout *helpRow = new QHBoxLayout();
+    /* Wraps when the panel is narrow: as one row it set the whole canvas's
+       minimum width (1300 px), so the Programming tab's handles couldn't
+       narrow it and squeezed the panels beside it instead. Each group keeps
+       its label with its controls. */
+    FlowLayout *helpRow = new FlowLayout(0, 12, 4);
+    auto group = [this](const QList<QWidget *> &parts) {
+        QWidget *g = new QWidget(this);
+        QHBoxLayout *gl = new QHBoxLayout(g);
+        gl->setContentsMargins(0, 0, 0, 0);
+        for (QWidget *w : parts)
+            gl->addWidget(w);
+        return g;
+    };
 
     /* How the whole look arrives and leaves: each fixture at its own moment
        -- a wipe across the stage, from the centre, a dissolve, along each
@@ -259,21 +276,11 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
         outShape->setObjectName(QStringLiteral("transitionOutShape"));
         inTime->setObjectName(QStringLiteral("transitionInTime"));
         edge->setObjectName(QStringLiteral("transitionEdge"));
-        helpRow->addWidget(new QLabel(tr("Fade in"), this));
-        helpRow->addWidget(fadeIn);
-        helpRow->addWidget(new QLabel(tr("out"), this));
-        helpRow->addWidget(fadeOut);
-        helpRow->addSpacing(12);
-        helpRow->addWidget(new QLabel(tr("Transition in:"), this));
-        helpRow->addWidget(inShape);
-        helpRow->addWidget(inTime);
-        helpRow->addSpacing(8);
-        helpRow->addWidget(new QLabel(tr("out:"), this));
-        helpRow->addWidget(outShape);
-        helpRow->addWidget(outTime);
-        helpRow->addSpacing(8);
-        helpRow->addWidget(new QLabel(tr("Edge:"), this));
-        helpRow->addWidget(edge);
+        helpRow->addWidget(group({ new QLabel(tr("Fade in"), this), fadeIn,
+                                   new QLabel(tr("out"), this), fadeOut }));
+        helpRow->addWidget(group({ new QLabel(tr("Transition in:"), this), inShape, inTime }));
+        helpRow->addWidget(group({ new QLabel(tr("out:"), this), outShape, outTime }));
+        helpRow->addWidget(group({ new QLabel(tr("Edge:"), this), edge }));
 
         /* What this look's effects run on (SPEED_SPREAD_DESIGN.md, S2): a
            speed master, the main clock, their own speed -- or whatever the
@@ -292,11 +299,8 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
                 m_doc->setModified();
             emit sceneModified();
         });
-        helpRow->addSpacing(8);
-        helpRow->addWidget(new QLabel(tr("Speed:"), this));
-        helpRow->addWidget(speed);
+        helpRow->addWidget(group({ new QLabel(tr("Speed:"), this), speed }));
     }
-    helpRow->addStretch();
     QPushButton *guideBtn = new QPushButton(tr("How this works"), this);
     guideBtn->setFlat(true);
     guideBtn->setCursor(Qt::PointingHandCursor);
@@ -360,6 +364,7 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
     QLabel *scopeLabel = new QLabel(tr("Scope:"), this);
     scopeRow->addWidget(scopeLabel);
     m_scopeCombo = new QComboBox(this);
+    m_scopeCombo->setObjectName("sceneScope");
     m_scopeCombo->setToolTip(tr("What this look is FOR (a statement of intent) — "
         "not what it paints. Whole Stage, or a specific fixture group/zone."));
     scopeRow->addWidget(m_scopeCombo, 1);
@@ -369,6 +374,7 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
     connect(m_scopeCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(slotScopeChanged(int)));
 
     m_targetList = new QTreeWidget(this);
+    m_targetList->setObjectName("sceneTargets");
     m_targetList->setHeaderHidden(true);
     m_targetList->setRootIsDecorated(true);
     m_targetList->setSelectionMode(QAbstractItemView::ExtendedSelection);
@@ -385,6 +391,7 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
     QVBoxLayout *lookCol = new QVBoxLayout();
     lookCol->addWidget(new QLabel(tr("Looks"), this));
     m_lookList = new QTreeWidget(this);
+    m_lookList->setObjectName("sceneLooks");
     m_lookList->setColumnCount(LookColCount);
     m_lookList->setHeaderLabels(QStringList() << tr("Look") << tr("Fade In") << tr("Fade Out"));
     if (QTreeWidgetItem *hdr = m_lookList->headerItem())
@@ -424,6 +431,15 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
            "0 = snap instantly; \"step\" = follow the chaser step / scene fade "
            "(spin below 0, or right-click → Reset, to return to \"step\")."));
     lookCol->addWidget(m_lookList);
+    /* What in this stack won't do what it looks like it does (a look the one
+       below always covers, an effect for fixtures the look hasn't...): the
+       rows are marked, this line says how many. LookStackCheck. */
+    m_stackNotes = new QLabel(this);
+    m_stackNotes->setObjectName(QStringLiteral("lookStackNotes"));
+    m_stackNotes->setWordWrap(true);
+    m_stackNotes->setStyleSheet(QStringLiteral("QLabel { color: #d08a2a; }"));
+    m_stackNotes->hide();
+    lookCol->addWidget(m_stackNotes);
     QHBoxLayout *lookBtns = new QHBoxLayout();
     m_removeLookButton = new QPushButton(tr("Remove"), this);
     lookBtns->addWidget(m_removeLookButton);
@@ -804,9 +820,9 @@ void SceneGroupLooks::reload()
     if (unpatched > 0)
         m_unpatchedNote->setText(unpatched == allFixtures.count()
             ? tr("⚠ None of these fixtures is patched: they send no DMX. The look shows in the "
-                 "rig view only. Patch them in the Fixture Manager.")
+                 "Lighting Studio only. Patch them in the Fixture Manager.")
             : tr("⚠ %1 of these %2 fixtures are not patched: they send no DMX. They show in "
-                 "the rig view only. Patch them in the Fixture Manager.")
+                 "the Lighting Studio only. Patch them in the Fixture Manager.")
                   .arg(unpatched).arg(allFixtures.count()));
 
     // Declared scope: (re)populate from every group in the doc (not just this
@@ -851,26 +867,38 @@ void SceneGroupLooks::reload()
     // source of truth (see QLCPalette::isEffectScoped); the tree is derived from
     // it and re-derived after every reorder, so nesting == "after this effect".
     QTreeWidgetItem *currentEffectParent = NULL;
-    foreach (quint32 pid, m_scene->palettes())
+    QLCPalette *currentEffect = NULL;
+    const QList<quint32> pals = m_scene->palettes();
+    foreach (quint32 pid, pals)
     {
         QLCPalette *p = m_doc->palette(pid);
         const bool isEffect = (p != NULL && p->type() == QLCPalette::Effect);
 
-        // Effects (and any look before the first effect) are top-level; a
-        // non-effect after an effect nests under it.
-        QTreeWidgetItem *it = (isEffect || currentEffectParent == NULL)
-                                  ? new QTreeWidgetItem(m_lookList)
-                                  : new QTreeWidgetItem(currentEffectParent);
+        // Effects, and everything that is the look's own, are top-level; a
+        // Colour/Dimmer under an effect nests under it -- the engine's rule
+        // (an Aim or Pan/Tilt after an effect is still the look's).
+        const bool scoped = !isEffect && currentEffectParent != NULL
+                            && QLCPalette::isEffectScoped(m_doc, pals, pid);
+        QTreeWidgetItem *it = scoped ? new QTreeWidgetItem(currentEffectParent)
+                                     : new QTreeWidgetItem(m_lookList);
         it->setText(LookColName, lookLabel(pid));
         it->setData(LookColName, Qt::UserRole, pid);
         if (p != NULL)
             it->setIcon(LookColName, QIcon(p->iconResource()));
 
-        const bool feedsEffect = (!isEffect && currentEffectParent != NULL);
+        const bool feedsEffect = scoped;
+        // What a nested one does depends on the effect: one that takes
+        // colours uses it as its own; one that doesn't (a ballyhoo) has it
+        // applied with its output, on the heads it moves.
+        const bool takesColours = QLCPalette::effectUsesLookColours(currentEffect);
         it->setToolTip(LookColName,
-            isEffect    ? tr("Effect. Nest colours/dimmers under it to feed its gradient and master.")
-            : feedsEffect ? tr("Feeds the effect above — not painted on the fixtures directly.")
-                          : tr("Lights the fixtures directly (static base)."));
+            isEffect    ? tr("Effect. Colours/dimmers nested under it are its own.")
+            : !feedsEffect ? tr("The look's own: lights the fixtures directly, and feeds every "
+                                "effect that has no colour or dimmer of its own.")
+            : takesColours ? tr("The effect above's own colour/level — not painted on the "
+                                "fixtures directly, and not the look's.")
+                           : tr("Applied with the effect above, on the heads it drives, while it "
+                                "plays — not the look's."));
 
         // In/Out fade cells (ms at Qt::UserRole; -1 = "step").
         //  • Effect: Fade In is the scene envelope (inert); Fade Out is a real
@@ -901,9 +929,8 @@ void SceneGroupLooks::reload()
                    "Per-key attack/decay comes from the effect's own parameters "
                    "(e.g. Glow / Release), not this column."));
         else if (feedsEffect)
-            it->setToolTip(LookColName,
-                tr("Feeds the effect above (its colour) — not painted on the "
-                   "fixtures, so it has no fade of its own."));
+            it->setToolTip(LookColName, it->toolTip(LookColName) + QLatin1Char(' ')
+                                        + tr("It has no fade of its own."));
 
         // Draggable + (In/Out) editable. Only EFFECT items accept drops, so
         // dropping a colour onto one nests it (feeds the effect); dropping between
@@ -919,12 +946,16 @@ void SceneGroupLooks::reload()
         it->setFlags(f);
 
         if (isEffect)
+        {
             currentEffectParent = it;
+            currentEffect = p;
+        }
 
         if (selPid != QLCPalette::invalidId() && pid == selPid)
             it->setSelected(true);
     }
     m_lookList->expandAll();
+    markStackIssues();
     m_lookList->blockSignals(false);
 }
 
@@ -1662,4 +1693,50 @@ void SceneGroupLooks::applyLookOrderFromList()
         // colour dropped between two effects re-homes under the effect above it).
         reload();
     }
+}
+
+void SceneGroupLooks::markStackIssues()
+{
+    if (m_stackNotes == nullptr || m_scene == nullptr)
+        return;
+    const QList<LookStackCheck::Issue> issues = LookStackCheck::check(m_doc, m_scene);
+    QHash<quint32, QStringList> byLook;
+    QStringList whole;
+    int warnings = 0;
+    for (const LookStackCheck::Issue &i : issues)
+    {
+        if (i.level == LookStackCheck::Issue::Warning)
+            ++warnings;
+        if (i.paletteId == QLCPalette::invalidId())
+            whole << i.text;
+        else
+            byLook[i.paletteId] << i.text;
+    }
+    const QIcon warn = style()->standardIcon(QStyle::SP_MessageBoxWarning);
+    QTreeWidgetItemIterator it(m_lookList);
+    for (; *it; ++it)
+    {
+        QTreeWidgetItem *item = *it;
+        const quint32 pid = item->data(LookColName, Qt::UserRole).toUInt();
+        if (!byLook.contains(pid))
+            continue;
+        item->setIcon(LookColIn, warn);
+        const QString tip = byLook.value(pid).join(QStringLiteral("\n\n"));
+        const QString was = item->toolTip(LookColName);
+        item->setToolTip(LookColName, was.isEmpty() ? tip : tip + QStringLiteral("\n\n") + was);
+        item->setToolTip(LookColIn, tip);
+        item->setData(LookColName, LookStackNoteRole, tip);
+    }
+    if (issues.isEmpty())
+    {
+        m_stackNotes->hide();
+        return;
+    }
+    QString text = warnings > 0
+        ? tr("%n thing(s) in this look won't do what they seem -- hover the marked looks.", "", issues.size())
+        : tr("%n note(s) on this look -- hover the marked looks.", "", issues.size());
+    if (!whole.isEmpty())
+        text = whole.join(QStringLiteral(" ")) + QLatin1Char(' ') + text;
+    m_stackNotes->setText(text);
+    m_stackNotes->show();
 }

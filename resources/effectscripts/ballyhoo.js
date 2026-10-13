@@ -59,6 +59,10 @@
         var mix = 1.0 + chaos; // normalise so amplitude stays ~constant
 
         return fixtures.map(function(f, i) {
+            // Round where the look points this head (its Aim or Pan/Tilt), the
+            // centre setting nudging from there; else the centre setting.
+            var ax = f.lookAim ? f.lookAim.pan  + (cx - 0.5) : cx;
+            var ay = f.lookAim ? f.lookAim.tilt + (cy - 0.5) : cy;
             if (!f.hasPanTilt) return {};
 
             // Each fixture gets its own phase offset so the group scatters.
@@ -70,8 +74,8 @@
             var tiltW = (Math.sin(w * 0.8 * t + ph * 1.3 + 1.1)
                          + chaos * Math.sin(w * PHI * 1.2 * t + ph)) / mix;
 
-            var pan  = (cx + panSize  * panW)  * f.panRange;
-            var tilt = (cy + tiltSize * tiltW) * f.tiltRange;
+            var pan  = (ax + panSize  * panW)  * f.panRange;
+            var tilt = (ay + tiltSize * tiltW) * f.tiltRange;
 
             var intent = {
                 pan:  Math.max(0, Math.min(f.panRange,  pan)),

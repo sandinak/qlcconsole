@@ -23,15 +23,26 @@ Manager / Scene Editor.
 
 ## Layout
 
-![Programming tab with a scene's Targets and Looks open](../images/programming-tab-targets-looks.png)
+![The Programming tab with a scene open and a look selected](../images/programming-tab-layout.png)
+
+1. **Scenes / functions** — double-click one to open it.
+2. **Targets** — the fixtures and groups the open scene lights.
+3. **Looks** — what it does to them, top to bottom; select one to edit it.
+4. **The Look Editor**, for the selected look.
+5. **Palettes** and **Bundles** — drag a palette onto Looks.
+6. **Fixtures &amp; groups** — drag them onto Targets.
 
 Three panes:
 
 - **Left — Scenes / functions.** A filterable tree of every function
   (Scene/Chaser/Collection/EFX/RGB Matrix/Show) in folders. Single-click
   selects; double-click opens it in the canvas.
-- **Center — canvas.** A toolbar (Highlight/Flash/Park/Mark/Auto‑MIB, BPM,
-  Snapshot), then either an empty-state placeholder or the loaded editor. For
+- **Center — canvas.** A toolbar — **Highlight**, **Flash**, **Tap** and
+  **Save Positions** as buttons; **Park** (park selected, unpark all),
+  **Move in black** (mark, unmark, auto move-in-black and its lead time),
+  **Beat** (internal beat on, BPM, speed masters — the button reads the
+  tempo) and **More** (snapshot live output, jog speed) as drop-downs —
+  then either an empty-state placeholder or the loaded editor. For
   a Scene, that's the **Targets** panel (left half) and **Looks** panel
   (right half) shown above. Other function types (Chaser, Collection, EFX,
   RGB Matrix, Show) open their own stock editors here instead. Below the
@@ -42,6 +53,13 @@ Three panes:
   sits over that tree: a row stays when it or anything under it matches,
   the folders on the way down open, and a matching group keeps all its
   fixtures. Clear the search and the tree closes back up.
+
+**Resizing:** drag the handles between the three panes, and the one
+between the canvas and the Look Editor below it. A handle moves its edge
+and stops where a pane reaches its smallest — no pane snaps shut. The
+fades-and-transitions line wraps when the canvas is narrow; the Look Editor
+scrolls when you make it shorter than it is. Where you leave the handles
+is remembered.
 
 Double-clicking a fixture group opens its layout view in the canvas. A
 **← Back to &lt;scene&gt;** button there returns you to the scene you came
@@ -65,18 +83,23 @@ that scene first, with the effect showing.
 5. **Drag a palette from the right onto the Looks list.** Dropped on empty
    space, it becomes a base look (painted directly onto the targets).
    Dropped onto an Effect look, a Color/Dimmer palette instead nests
-   *under* it, feeding that effect's gradient or master level.
+   *under* it and belongs to that effect only — its colours, its level;
+   the ones above every effect are the look's own and feed every effect
+   that has none of its own. See
+   [How a look stacks](effects.md#how-a-look-stacks).
 6. Click a look to edit it live in the Look Editor at the bottom — see
    below. Every edit there applies immediately; there's no separate "apply"
    step.
-7. Reorder looks with the up/down buttons (list order is paint precedence —
-   later entries win on shared channels); remove a look or target with its
-   panel's **Remove** button.
+7. Reorder looks with the up/down buttons — the list is a stack read top
+   to bottom, and the lower look wins on what two of them set (two Colours
+   are colour 1 and colour 2 instead; see
+   [How a look stacks](effects.md#how-a-look-stacks)). Remove a look or
+   target with its panel's **Remove** button.
 8. Save the workspace normally (⌘S / Ctrl+S).
 
 If some of a scene's targets are still in the inventory (not patched), an
 amber warning under Targets says so: they send no DMX, and the look shows in
-the rig view only until you patch them in the Fixture Manager. Unpatched
+the Lighting Studio and the Rig Overview only until you patch them in the Fixture Manager. Unpatched
 target rows are also marked "(unpatched)".
 
 A **Bundle** is a related, separate shortcut: a portable, shareable snapshot
@@ -149,20 +172,55 @@ palettes so you can see it on the rig, but it's never saved into the look.
 The editor says "Trying it on “&lt;look&gt;” — not saved into it"; drag the
 palette onto the look to keep it. With no look open it says "Not in a look".
 
+![The Look Editor on an Effect look](../images/programming-tab-look-editor-effect.png)
+
+1. **Change effect…** opens the effect browser (below).
+2. **Spread** — how the effect is spread across the heads
+   ([Spread](effects.md#spread)).
+3. **Speed** — the speed master it runs on
+   ([Speed masters](effects.md#speed-masters)).
+
 ### The effect browser
 
+![The effect browser](../images/programming-tab-effect-browser.png)
+
+1. **Search effects…** — every category at once.
+2. **The tabs**: Recent, Color, Dimmer, Position, Beam, Other, WLED.
+3. **The effects**, each with a live preview; the one picked is playing.
+4. **What the picked effect does**, what it works with and its settings.
+5. **Done** keeps it; **Cancel** puts back what the look had.
+
 An Effect look picks its effect from a browser rather than a dropdown. The
-browser takes the editor's full height on the left and the picked effect's
-settings sit **beside it** on the right (as the colour picker's controls
-do), so a normal-sized screen shows the whole list and every setting at
-once:
+browser is a **window of its own**, so once an effect is picked its
+settings have the look editor's whole width. Over the settings, one line
+names the effect, with **Change effect…** to open the browser again:
+
+- **Every effect you pick plays at once**, with its own settings, so the
+  rig shows it while you browse; the **arrow keys** step through the list,
+  playing each as they go.
+- **Done** (or Enter, or closing the window) keeps what is picked;
+  **Cancel** (or Esc) puts back the effect the look had — its settings and
+  name too.
+- A new effect look, with nothing picked yet, opens the browser by itself.
+- The window remembers where you put it.
 
 - A **Search effects…** box searches every category at once, whichever tab
   is open.
 - Tabs: **Recent**, **Color**, **Dimmer**, **Position**, **Beam**, **Other**
   and **WLED**. Recent is remembered between sessions.
-- Each row shows the effect's name, what it does, and a live strip of 16
-  lights running it. Presets sit under the effect they're built from.
+- Each row shows the effect's name, what it does, and a live preview of
+  what it does:
+  - a **colour or dimmer** effect: a strip of 16 lights running it (amber
+    and UV in their own colours, a shutter strobe blinking);
+  - a **position** effect: where the heads point — the shape it traces (a
+    diamond, an orbit, a figure 8, Stage Shape's outline round its target)
+    as a faint line, every head as a dot along it, four of them bright —
+    zoomed to fit its movement. One that only follows a joystick (a
+    follow-spot) is shown being steered;
+  - a **gobo, iris or zoom** effect: a row of beams seen end-on — their
+    gobo pattern, or their size opening and closing.
+
+  Presets sit under the effect they're built from.
 
 Two effects are called fire-something:
 
@@ -231,7 +289,7 @@ tick in a release build (it was 68). Renaming or moving a fixture shows up
 on the next tick.
 
 An effect run across two or more groups is laid out **as the rig stands on
-stage**: one grid with every head where the rig view draws it — across is
+stage**: one grid with every head where the Lighting Studio draws it — across is
 stage left to right, up is height (or upstage, when everything is at one
 height). A sine over the towers, bars and steps then moves across the stage
 as one, instead of group by group. An effect on a single group still uses
@@ -243,9 +301,13 @@ Picking an effect from the **WLED** tab has the WLED fixtures in the look
 run it **on the device itself**: they're sent the effect, its speed,
 intensity, palette and option, the look's three colours and the look's
 dimmer. Every other fixture in the look runs qlcconsole's own port of that
-effect where one exists (so far **Breathe** and **Chase**). A WLED effect
-with no port ("no preview yet" in the browser) leaves the other fixtures as
-the rest of the look sets them.
+effect where one exists — so far 92 of them: Android, Aurora, Blink, Blink Rainbow, Bouncing Balls, Bpm, Breathe, Candle, Candle Multi, Chase, Chase Flash, Chase Rainbow, Chunchun, Colorful, Colorloop, Colortwinkles, Colorwaves, Dancing Shadows, Dissolve, Drip, Dynamic, Dynamic Smooth, Fade, Fairy, Fill Noise, Fire 2012, Fire Flicker, Fireworks 1D, Flow, Glitter, Gradient, Halloween Eyes, Heartbeat, Hyper Sparkle, Juggle, Lake, Lightning, Loading, Meteor, Multi Comet, Noise Pal, Oscillate, Pacifica, Palette, Phased, Plasma, Police, Popcorn, Pride 2015, Railway, Rain, Rainbow, Rainbow Runner, Random Colors, Ripple, Ripple Rainbow, Rolling Balls, Running, Running Dual, Saw, Scan, Scanner, Sine, Sinelon, Sinelon Dual, Sinelon Rainbow, Solid, Solid Glitter, Sparkle, Sparkle Dark, Spots, Spots Fade, Stream, Strobe, Strobe Rainbow, Sunrise, Sweep, Tetrix, Theater, Theater Rainbow, Traffic Light, Tri Fade, Tri Wipe, TV Simulator, Twinkle, Twinklecat, Twinklefox, Two Areas, Two Dots, Washing Machine, Wavesins, Wipe — written from what each does on a device (not from WLED's
+code), so they look the same on the WLED fixtures and the rest.
+
+A WLED effect with no port runs on a WLED device and nowhere else, so the
+browser only offers it when the look's targets include a WLED device;
+otherwise the WLED tab lists just the ported ones. (An effect the look
+already runs stays listed either way.)
 
 The WLED list comes from a WLED fixture in the show, or from the installed
 WLED fixture definition if there isn't one.

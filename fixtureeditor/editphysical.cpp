@@ -59,9 +59,9 @@ EditPhysical::EditPhysical(QLCPhysical physical, QWidget *parent)
     m_powerConsumptionSpin->setValue(m_physical.powerConsumption());
     m_dmxConnectorCombo->setEditText(m_physical.dmxConnector());
 
-    /* What the rig view draws, and how its light leaves it: a lantern in a
+    /* What the Lighting Studio draws, and how its light leaves it: a lantern in a
        cage glowing all round, not a box throwing a beam. */
-    QGroupBox *look = new QGroupBox(tr("Look in the rig view"), this);
+    QGroupBox *look = new QGroupBox(tr("Look in the Lighting Studio"), this);
     QFormLayout *lookLay = new QFormLayout(look);
     m_bodyCombo = new QComboBox(look);
     m_bodyCombo->addItem(tr("Box"), int(QLCPhysical::BoxBody));
@@ -95,7 +95,7 @@ EditPhysical::EditPhysical(QLCPhysical physical, QWidget *parent)
     m_ledsSpin->setSuffix(tr(" LEDs"));
     m_ledsSpin->setValue(m_physical.leds());
     m_ledsSpin->setToolTip(tr("One point of light, or that many LEDs drawn one by one in "
-                              "the rig view -- an effect on a WLED shows along them. A "
+                              "the Lighting Studio -- an effect on a WLED shows along them. A "
                               "fixture can say otherwise for its own build."));
     m_ledLayoutCombo = new QComboBox(ledsBox);
     m_ledLayoutCombo->addItem(tr("Hanging LED cluster"), int(QLCPhysical::ClusterLeds));

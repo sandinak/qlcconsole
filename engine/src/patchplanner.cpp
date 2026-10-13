@@ -25,7 +25,9 @@
 #include <QSet>
 #include <QRegularExpression>
 #include <algorithm>
+#include <climits>
 
+#include "naturalcompare.h"
 #include "patchplanner.h"
 #include "qlcioplugin.h"
 #include "ioplugincache.h"
@@ -110,9 +112,6 @@ QList<PatchPlanner::Assignment> PatchPlanner::plan(const QList<quint32> &fixture
     // order they happened to be added, so identical fixtures land in contiguous
     // addresses and the plan reads the way the inventory tree does. Numbers in
     // names compare as numbers ("Pointe 2" before "Pointe 10").
-    QCollator collator;
-    collator.setNumericMode(true);
-    collator.setCaseSensitivity(Qt::CaseInsensitive);
     QList<Fixture *> ordered;
     foreach (quint32 fid, fixtureIds)
     {
@@ -120,12 +119,12 @@ QList<PatchPlanner::Assignment> PatchPlanner::plan(const QList<quint32> &fixture
         if (f != NULL && !f->isPatched())
             ordered << f;
     }
-    std::sort(ordered.begin(), ordered.end(), [&collator](Fixture *x, Fixture *y) {
-        int c = collator.compare(x->groupingManufacturer(), y->groupingManufacturer());
+    std::sort(ordered.begin(), ordered.end(), [](Fixture *x, Fixture *y) {
+        int c = naturalCompare(x->groupingManufacturer(), y->groupingManufacturer());
         if (c == 0)
-            c = collator.compare(x->groupingModel(), y->groupingModel());
+            c = naturalCompare(x->groupingModel(), y->groupingModel());
         if (c == 0)
-            c = collator.compare(x->name(), y->name());
+            c = naturalCompare(x->name(), y->name());
         return c != 0 ? c < 0 : x->id() < y->id();
     });
     /* A universe of its own -- for a lantern's IP, a free node port, a DMX
@@ -503,6 +502,239 @@ QList<PatchPlanner::Assignment> PatchPlanner::place(const QList<quint32> &fixtur
     return out;
 }
 
+QList<quint32> PatchPlanner::ordered(Doc *doc, const QList<quint32> &fixtureIds, AddressOrder order)
+{
+    QList<Fixture *> fixtures;
+    foreach (quint32 fid, fixtureIds)
+        if (Fixture *fx = doc->fixture(fid))
+            fixtures << fx;
+
+    auto kindRank = [](Fixture *fx) -> int {
+        if (fx->fixtureDef() == NULL)
+            return 6;                                   // a generic dimmer
+        switch (fx->fixtureDef()->type())
+        {
+            case QLCFixtureDef::MovingHead:   return 0;
+            case QLCFixtureDef::Scanner:      return 1;
+            case QLCFixtureDef::LEDBarPixels: return 2;
+            case QLCFixtureDef::LEDBarBeams:  return 3;
+            case QLCFixtureDef::ColorChanger: return 4;
+            case QLCFixtureDef::Strobe:       return 5;
+            case QLCFixtureDef::Dimmer:       return 6;
+            case QLCFixtureDef::Laser:
+            case QLCFixtureDef::Effect:
+            case QLCFixtureDef::Flower:       return 7;
+            case QLCFixtureDef::Fan:
+            case QLCFixtureDef::Hazer:
+            case QLCFixtureDef::Smoke:        return 8;
+            default:                          return 9;
+        }
+    };
+    // As they hang: each structure's place in name order, and each
+    // fixture's place on it.
+    QHash<quint32, QPair<int, int> > hung;
+    if (order == AsTheyHang)
+    {
+        QStringList keys;
+        foreach (Fixture *fx, fixtures)
+        {
+            const QString key = mountKey(doc, fx->id());
+            if (!key.isEmpty() && !keys.contains(key))
+                keys << key;
+        }
+        std::stable_sort(keys.begin(), keys.end(), [doc](const QString &a, const QString &b) {
+            return naturalCompare(structureName(doc, a), structureName(doc, b)) < 0;
+        });
+        for (int k = 0; k < keys.size(); k++)
+        {
+            const QList<quint32> on = fixturesOn(doc, keys.at(k));
+            for (int i = 0; i < on.size(); i++)
+                hung.insert(on.at(i), qMakePair(k, i));
+        }
+    }
+
+    std::stable_sort(fixtures.begin(), fixtures.end(), [&](Fixture *a, Fixture *b) {
+        if (order == ByKind && kindRank(a) != kindRank(b))
+            return kindRank(a) < kindRank(b);
+        if (order == AsTheyHang)
+        {
+            const QPair<int, int> ha = hung.value(a->id(), qMakePair(INT_MAX, 0));
+            const QPair<int, int> hb = hung.value(b->id(), qMakePair(INT_MAX, 0));
+            if (ha != hb)
+                return ha < hb;                 // unmounted ones after, by name
+        }
+        return naturalCompare(a->name(), b->name()) < 0;
+    });
+    QList<quint32> out;
+    foreach (Fixture *fx, fixtures)
+        out << fx->id();
+    return out;
+}
+
+QList<PatchPlanner::Assignment> PatchPlanner::fit(const QList<quint32> &fixtureIds,
+                                                  quint32 universe, quint32 address, bool carryOn,
+                                                  const QHash<quint32, quint32> &channelOverride,
+                                                  const QHash<quint32, QPair<quint32, quint32> > &elsewhere) const
+{
+    QList<Fixture *> fixtures;
+    QSet<quint32> moving;
+    foreach (quint32 fid, fixtureIds)
+    {
+        Fixture *fx = m_doc->fixture(fid);
+        if (fx != NULL && !moving.contains(fid))
+        {
+            fixtures << fx;
+            moving.insert(fid);
+        }
+    }
+    auto chans = [&channelOverride](Fixture *fx) {
+        return channelOverride.value(fx->id(), fx->channels());
+    };
+
+    // What stays put, and where the rest of the plan is going.
+    QHash<quint32, QBitArray> base;
+    auto usedIn = [&base](quint32 uni) -> QBitArray & {
+        if (!base.contains(uni))
+            base[uni] = QBitArray(UNI_SIZE);
+        return base[uni];
+    };
+    foreach (Fixture *fx, m_doc->fixtures())
+        if (fx != NULL && fx->isPatched() && !moving.contains(fx->id()) && !elsewhere.contains(fx->id()))
+            mark(usedIn(fx->universe()), fx->address(), fx->channels());
+    QHashIterator<quint32, QPair<quint32, quint32> > ew(elsewhere);
+    while (ew.hasNext())
+    {
+        ew.next();
+        if (!moving.contains(ew.key()))
+            mark(usedIn(ew.value().first >> 9), ew.value().first & 0x1FF, ew.value().second);
+    }
+
+    /* In the order given, one after another: each takes the first free run
+       at or after the end of the one before it, around everything else. The
+       same fixtures in the same order always land the same way ("still not
+       patching the same all the time"), at addresses that read in order. */
+    QHash<quint32, Assignment> planned;
+    const quint32 existing = m_doc->inputOutputMap()->universesCount();
+    quint32 uni = universe, from = address;
+    bool spilled = false;
+    foreach (Fixture *fx, fixtures)
+    {
+        const quint32 n = chans(fx);
+        Assignment a;
+        a.fixtureId = fx->id();
+        int at = -1;
+        if (n > 0 && n <= UNI_SIZE)
+        {
+            for (int guard = 0; guard < 4096; guard++)
+            {
+                QBitArray probe = usedIn(uni);
+                for (quint32 i = 0; i < from && i < UNI_SIZE; i++)
+                    probe.setBit(int(i));       // only at or after the cursor
+                at = firstFree(probe, n);
+                if (at >= 0 || !carryOn)
+                    break;
+                uni++;                          // full: on to the next one
+                from = 0;
+                spilled = true;
+            }
+        }
+        if (at < 0)
+        {
+            // No room after the ones before it: flagged, left where it was.
+            int freeCount = 0, widest = 0, run = 0;
+            const QBitArray &room = usedIn(uni);
+            for (int i = int(spilled ? 0 : address); i < UNI_SIZE; i++)
+            {
+                run = room.testBit(i) ? 0 : run + 1;
+                freeCount += room.testBit(i) ? 0 : 1;
+                widest = qMax(widest, run);
+            }
+            a.unfitted = true;
+            a.universe = fx->isPatched() ? fx->universe() : 0;
+            a.address = fx->isPatched() ? fx->address() : 0;
+            a.note = QStringLiteral("no room in universe %1: needs %2 channels, the widest gap is %3 "
+                                    "(%4 free)").arg(uni + 1).arg(n).arg(widest).arg(freeCount);
+            planned.insert(fx->id(), a);
+            continue;
+        }
+        a.universe = uni;
+        a.address = quint32(at);
+        mark(usedIn(uni), a.address, n);
+        from = a.address + n;
+        planned.insert(fx->id(), a);
+    }
+
+    QList<Assignment> out;
+    foreach (Fixture *fx, fixtures)
+    {
+        Assignment a = planned.value(fx->id());
+        a.newUniverse = (a.universe >= existing);
+        out << a;
+    }
+    return out;
+}
+
+QHash<quint32, QLCFixtureMode *> PatchPlanner::modesToFit(const QList<quint32> &fixtureIds, quint32 universe,
+                                                          quint32 address,
+                                                          const QHash<quint32, QLCFixtureMode *> &current,
+                                                          const QHash<quint32, quint32> &channelOverride,
+                                                          const QHash<quint32, QPair<quint32, quint32> > &elsewhere,
+                                                          bool *allFit) const
+{
+    QHash<quint32, QLCFixtureMode *> chosen = current;
+    QHash<quint32, quint32> chans = channelOverride;
+    QHash<quint32, QLCFixtureMode *> changed;
+    for (int step = 0; step < 1000; step++)
+    {
+        int without = 0;
+        foreach (const Assignment &a, fit(fixtureIds, universe, address, false, chans, elsewhere))
+            without += a.unfitted ? 1 : 0;
+        if (without == 0)
+        {
+            if (allFit != NULL) *allFit = true;
+            return changed;
+        }
+        // The biggest that has a smaller mode it may take steps down one.
+        Fixture *pick = NULL;
+        QLCFixtureMode *next = NULL;
+        quint32 pickN = 0;
+        foreach (quint32 fid, fixtureIds)
+        {
+            Fixture *fx = m_doc->fixture(fid);
+            if (fx == NULL || fx->fixtureDef() == NULL)
+                continue;
+            QLCFixtureMode *now = chosen.value(fid, fx->fixtureMode());
+            const quint32 n = chans.value(fid, now != NULL ? quint32(now->channels().size()) : fx->channels());
+            QLCFixtureMode *smaller = NULL;
+            foreach (QLCFixtureMode *m, fx->fixtureDef()->modes())
+            {
+                const quint32 mn = quint32(m->channels().size());
+                if (mn == 0 || mn >= n || (smaller != NULL && mn <= quint32(smaller->channels().size())))
+                    continue;
+                if (m != fx->fixtureMode() && !m_doc->canChangeFixtureMode(fid, m))
+                    continue;
+                smaller = m;                    // the largest mode smaller than now
+            }
+            if (smaller != NULL && n > pickN)
+            {
+                pick = fx;
+                next = smaller;
+                pickN = n;
+            }
+        }
+        if (pick == NULL)
+            break;                              // nothing left to shrink
+        chosen.insert(pick->id(), next);
+        chans.insert(pick->id(), quint32(next->channels().size()));
+        if (next == pick->fixtureMode())
+            changed.remove(pick->id());
+        else
+            changed.insert(pick->id(), next);
+    }
+    if (allFit != NULL) *allFit = false;
+    return changed;
+}
+
 int PatchPlanner::apply(const QList<Assignment> &assignments, QStringList *problems)
 {
     InputOutputMap *io = m_doc->inputOutputMap();
@@ -856,14 +1088,12 @@ QList<quint32> PatchPlanner::fixturesOn(Doc *doc, const QString &key)
     foreach (Fixture *fx, doc->fixtures())
         if (fx != nullptr && mountKey(doc, fx->id()) == key)
             out << fx->id();
-    QCollator byName;
-    byName.setNumericMode(true);
-    std::sort(out.begin(), out.end(), [doc, &byName](quint32 a, quint32 b) {
+    std::sort(out.begin(), out.end(), [doc](quint32 a, quint32 b) {
         const QList<double> pa = placeOn(doc, a), pb = placeOn(doc, b);
         for (int i = 0; i < qMin(pa.size(), pb.size()); ++i)
             if (qAbs(pa.at(i) - pb.at(i)) > 0.005)
                 return pa.at(i) < pb.at(i);
-        return byName.compare(doc->fixture(a)->name(), doc->fixture(b)->name()) < 0;
+        return naturalCompare(doc->fixture(a)->name(), doc->fixture(b)->name()) < 0;
     });
     return out;
 }
@@ -905,10 +1135,8 @@ QStringList PatchPlanner::likeStructures(Doc *doc, const QString &key)
         if (theirs == kinds)
             out << other;
     }
-    QCollator byName;
-    byName.setNumericMode(true);
-    std::sort(out.begin(), out.end(), [doc, &byName](const QString &a, const QString &b) {
-        return byName.compare(structureName(doc, a), structureName(doc, b)) < 0;
+    std::sort(out.begin(), out.end(), [doc](const QString &a, const QString &b) {
+        return naturalCompare(structureName(doc, a), structureName(doc, b)) < 0;
     });
     return out;
 }

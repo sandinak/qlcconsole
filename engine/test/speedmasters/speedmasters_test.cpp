@@ -20,6 +20,7 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QtTest>
+#include <QElapsedTimer>
 
 #include <cmath>
 
@@ -27,8 +28,12 @@
 #include "mastertimer.h"
 #undef private
 #include "speedmasters.h"
+#include "qlcpalette.h"
 #include "chaserstep.h"
 #include "collection.h"
+#include "show.h"
+#include "track.h"
+#include "showfunction.h"
 #include "chaser.h"
 #include "scene.h"
 #include "doc.h"
@@ -50,7 +55,7 @@ void SpeedMasters_Test::cleanup()
 void SpeedMasters_Test::freshMastersRunOnTheirOwnAt120()
 {
     SpeedMasters *sm = m_doc->speedMasters();
-    for (int i = 0; i < SpeedMasters::Count; ++i)
+    for (int i = 0; i < SpeedMasters::MaxCount; ++i)
     {
         QCOMPARE(sm->mode(i), SpeedMasters::Own);
         QCOMPARE(sm->bpm(i), 120.0);
@@ -381,6 +386,335 @@ void SpeedMasters_Test::aBeatChaseStepsOnItsMastersBeats()
     chase->stop(FunctionParent::master());
     for (int i = 0; i < 5; ++i)
         timer->timerTick();
+}
+
+/* PLAYBACK_TIMING_DESIGN.md, P1. A chase of four manual steps (held until a
+   GO), started; GOs asked for between beats. */
+static Chaser *manualChase(Doc *doc, QList<Scene *> *looks = nullptr)
+{
+    Chaser *chase = new Chaser(doc);
+    for (int i = 0; i < 4; ++i)
+    {
+        Scene *s = new Scene(doc);
+        doc->addFunction(s);
+        if (looks)
+            *looks << s;
+        chase->addStep(ChaserStep(s->id(), 0, Function::infiniteSpeed(), 0));
+    }
+    chase->setDurationMode(Chaser::PerStep);
+    doc->addFunction(chase);
+    return chase;
+}
+
+static void go(Chaser *chase)
+{
+    ChaserAction next;
+    next.m_action = ChaserNextStep;
+    next.m_masterIntensity = 1.0;
+    next.m_stepIntensity = 1.0;
+    next.m_fadeMode = Chaser::FromFunction;
+    next.m_stepIndex = -1;
+    chase->setAction(next);
+}
+
+void SpeedMasters_Test::aGoLandsOnTheNextBeat()
+{
+    MasterTimer *timer = m_doc->masterTimer();
+    timer->setBpm(60);                               // a beat a second
+    Chaser *chase = manualChase(m_doc);
+    chase->setGoQuantize(Chaser::GoOnBeat);
+    chase->start(timer, FunctionParent::master());
+    for (int i = 0; i < 3; ++i)
+        timer->timerTick();
+    QCOMPARE(chase->currentStepIndex(), 0);
+
+    // Just after a beat: the GO waits about a second.
+    timer->alignBeat(1.0);
+    QTest::qWait(150);
+    go(chase);
+    go(chase);                                       // twice in one beat: one step
+    QElapsedTimer t;
+    t.start();
+    double pos = 0;
+    qint64 landed = 0;
+    while (t.elapsed() < 2000)
+    {
+        timer->timerTick();
+        if (chase->currentStepIndex() != 0)
+        {
+            pos = timer->beatPosition();             // the moment it moved
+            landed = t.elapsed();
+            break;
+        }
+        QTest::qWait(10);
+    }
+    QCOMPARE(chase->currentStepIndex(), 1);
+    QVERIFY2(landed > 650 && landed < 1100,
+             qPrintable(QString("landed %1 ms after the GO, the beat was ~850 away").arg(landed)));
+    // ...and on the beat.
+    QVERIFY2(pos - std::floor(pos) < 0.1, qPrintable(QString::number(pos)));
+    for (int i = 0; i < 20; ++i)
+        timer->timerTick();
+    QCOMPARE(chase->currentStepIndex(), 1);          // not two steps
+
+    // At once: as before.
+    chase->setGoQuantize(Chaser::GoNow);
+    go(chase);
+    timer->timerTick();
+    QCOMPARE(chase->currentStepIndex(), 2);
+
+    chase->stop(FunctionParent::master());
+    for (int i = 0; i < 5; ++i)
+        timer->timerTick();
+}
+
+void SpeedMasters_Test::aGoOnTheBarWaitsForTheBar()
+{
+    MasterTimer *timer = m_doc->masterTimer();
+    timer->setBpm(240);                              // a bar a second
+    Chaser *chase = manualChase(m_doc);
+    chase->setGoQuantize(Chaser::GoOnBar);
+    chase->start(timer, FunctionParent::master());
+    for (int i = 0; i < 3; ++i)
+        timer->timerTick();
+    QTest::qWait(30);
+    go(chase);
+    QElapsedTimer t;
+    t.start();
+    double bars = 0;
+    while (t.elapsed() < 2500)
+    {
+        timer->timerTick();
+        if (chase->currentStepIndex() != 0)
+        {
+            bars = timer->beatPosition() / 4.0;      // the moment it moved
+            break;
+        }
+        QTest::qWait(10);
+    }
+    QCOMPARE(chase->currentStepIndex(), 1);
+    // It landed on a bar line: a whole number of bars (4 beats).
+    QVERIFY2(bars - std::floor(bars) < 0.1, qPrintable(QString::number(bars)));
+    chase->stop(FunctionParent::master());
+    for (int i = 0; i < 5; ++i)
+        timer->timerTick();
+}
+
+void SpeedMasters_Test::goQuantizeIsSavedWithTheChase()
+{
+    Chaser *chase = manualChase(m_doc);
+    QByteArray xml;
+    {
+        QXmlStreamWriter w(&xml);
+        QVERIFY(chase->saveXML(&w));
+    }
+    QVERIFY(!xml.contains("GoQuantize"));            // at once: not written
+    chase->setGoQuantize(Chaser::GoOnBar);
+    xml.clear();
+    {
+        QXmlStreamWriter w(&xml);
+        QVERIFY(chase->saveXML(&w));
+    }
+    QVERIFY(xml.contains("GoQuantize=\"Bar\""));
+    Chaser back(m_doc);
+    QXmlStreamReader r(xml);
+    r.readNextStartElement();
+    QVERIFY(back.loadXML(r));
+    QCOMPARE(back.goQuantize(), Chaser::GoOnBar);
+}
+
+/* "yes .. 4-16 seems right" */
+void SpeedMasters_Test::aShowUsesFourToSixteen()
+{
+    SpeedMasters *sm = m_doc->speedMasters();
+    QCOMPARE(sm->count(), 4);
+    sm->setCount(8);
+    QCOMPARE(sm->count(), 8);
+    sm->setCount(2);
+    QCOMPARE(sm->count(), 4);                        // no fewer than four
+    sm->setCount(40);
+    QCOMPARE(sm->count(), 16);                       // no more than sixteen
+    QVERIFY(!sm->isDefault());
+    // Master 12 is a master like any other.
+    QVERIFY(SpeedMasters::isMaster(SpeedMasters::Master1 + 11));
+    sm->setBpm(11, 90);
+    QCOMPARE(sm->bpm(11), 90.0);
+
+    sm->setCount(6);
+    sm->setName(5, "Six");
+    QByteArray xml;
+    {
+        QXmlStreamWriter w(&xml);
+        QVERIFY(sm->saveXML(&w));
+    }
+    QVERIFY(xml.contains("Count=\"6\""));
+    QVERIFY(!xml.contains("Index=\"6\""));           // only the ones in use
+    Doc other(this);
+    QXmlStreamReader r(xml);
+    r.readNextStartElement();
+    QVERIFY(other.speedMasters()->loadXML(r));
+    QCOMPARE(other.speedMasters()->count(), 6);
+    QCOMPARE(other.speedMasters()->name(5), QString("Six"));
+}
+
+/* "I don't see timecode in there": a master can follow the show timeline --
+   its BPM grid at its playhead -- so whatever drives the show (timecode)
+   drives the master. */
+void SpeedMasters_Test::aMasterFollowsTheShowTimeline()
+{
+    SpeedMasters *sm = m_doc->speedMasters();
+    MasterTimer *timer = m_doc->masterTimer();
+    QVERIFY(sm->setFollow(0, SpeedMasters::ShowTimeline, 1.0));
+    // No show running: the main clock.
+    QVERIFY(qAbs(sm->beatPosition(0) - timer->beatPosition()) < 0.02);
+    QCOMPARE(sm->bpm(0), timer->bpm());
+
+    // A show with something on it (an empty one stops at once).
+    Scene *look = new Scene(m_doc);
+    m_doc->addFunction(look);
+    Show *show = new Show(m_doc);
+    show->setTimeDivision(Show::BPM_4_4, 150);       // 400 ms a beat
+    QVERIFY(m_doc->addFunction(show));
+    Track *track = new Track(Function::invalidId(), show);
+    ShowFunction *item = new ShowFunction(show->getLatestShowFunctionId());
+    item->setFunctionID(look->id());
+    item->setStartTime(0);
+    item->setDuration(60000);
+    track->addShowFunction(item);
+    show->addTrack(track);
+    show->start(timer, FunctionParent::master());
+    for (int i = 0; i < 60; ++i)                     // 1.2 s of ticks
+        timer->timerTick();
+    QVERIFY(show->isRunning());
+    const double expect = double(show->runningTime()) / 400.0;
+    QVERIFY2(expect > 1.0, qPrintable(QString::number(show->runningTime())));
+    QVERIFY2(qAbs(sm->beatPosition(0) - expect) < 0.01,
+             qPrintable(QString("%1 vs %2").arg(sm->beatPosition(0)).arg(expect)));
+    QCOMPARE(sm->bpm(0), 150.0);
+    // Saved as following the timeline.
+    QByteArray xml;
+    {
+        QXmlStreamWriter w(&xml);
+        sm->saveXML(&w);
+    }
+    QVERIFY(xml.contains("Follows=\"Timeline\""));
+    show->stop(FunctionParent::master());
+    for (int i = 0; i < 5; ++i)
+        timer->timerTick();
+}
+
+/* "in the window have mapping to midi targets": Tap, Rate and Pause, each
+   from an input channel, saved with the show. */
+void SpeedMasters_Test::aControlSurfaceDrivesAMaster()
+{
+    SpeedMasters *sm = m_doc->speedMasters();
+    sm->setInput(1, SpeedMasters::TapControl, 0, 10);
+    sm->setInput(1, SpeedMasters::RateControl, 0, 11);
+    sm->setInput(1, SpeedMasters::PauseControl, 0, 12);
+    quint32 u = 0, c = 0;
+    QVERIFY(sm->input(1, SpeedMasters::RateControl, &u, &c));
+    QCOMPARE(u, quint32(0));
+    QCOMPARE(c, quint32(11));
+    QVERIFY(!sm->input(0, SpeedMasters::RateControl, nullptr, nullptr));
+
+    // The fader: top is 200 %, the middle 100 %, the bottom stopped.
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 11, 255);
+    QCOMPARE(sm->rate(1), 2.0);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 11, 128);
+    QCOMPARE(sm->rate(1), 1.0);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 11, 0);
+    QCOMPARE(sm->rate(1), 0.0);
+    sm->setRate(1, 1.0);
+
+    // Pause: a press toggles it, the release does nothing.
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 12, 127);
+    QVERIFY(sm->isPaused(1));
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 12, 0);
+    QVERIFY(sm->isPaused(1));
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 12, 127);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 12, 0);
+    QVERIFY(!sm->isPaused(1));
+
+    // Tap: the tempo of the presses as they really came (a busy CI runner
+    // stretches a qWait(500)); releases aren't taps.
+    sm->setBpm(1, 60);
+    QElapsedTimer taps;
+    for (int i = 0; i < 3; ++i)
+    {
+        if (i > 0)
+            QTest::qWait(500);
+        else
+            taps.start();
+        emit m_doc->inputOutputMap()->inputValueChanged(0, 10, 127);
+        emit m_doc->inputOutputMap()->inputValueChanged(0, 10, 0);
+    }
+    const double tapped = 60000.0 * 2 / double(taps.elapsed());
+    QVERIFY2(qAbs(sm->setBpm(1) - tapped) < tapped * 0.05,
+             qPrintable(QString("%1 for taps at %2").arg(sm->setBpm(1)).arg(tapped)));
+    QCOMPARE(sm->isPaused(1), false);                // the tap channel only taps
+    QCOMPARE(sm->rate(0), 1.0);                      // and only master 2 moved
+
+    // Saved with the show.
+    QByteArray xml;
+    {
+        QXmlStreamWriter w(&xml);
+        QVERIFY(sm->saveXML(&w));
+    }
+    Doc other(this);
+    QXmlStreamReader r(xml);
+    r.readNextStartElement();
+    QVERIFY(other.speedMasters()->loadXML(r));
+    QVERIFY(other.speedMasters()->input(1, SpeedMasters::PauseControl, &u, &c));
+    QCOMPARE(c, quint32(12));
+    QVERIFY(other.speedMasters()->input(1, SpeedMasters::TapControl, &u, &c));
+    QCOMPARE(c, quint32(10));
+
+    sm->clearInput(1, SpeedMasters::TapControl);
+    QVERIFY(!sm->input(1, SpeedMasters::TapControl, nullptr, nullptr));
+}
+
+/* "If the masters are not used .. they should not fire or be visible" */
+void SpeedMasters_Test::onlyTheMastersSomethingIsOnAreUsed()
+{
+    SpeedMasters *sm = m_doc->speedMasters();
+    QCOMPARE(sm->usedMask(), quint32(0));            // a fresh show: none
+
+    Scene *look = new Scene(m_doc);
+    m_doc->addFunction(look);
+    look->setSpeedMaster(SpeedMasters::Master1);     // a look on Speed 1
+    QCOMPARE(sm->usedMask(), quint32(0x1));
+    look->setSpeedMaster(SpeedMasters::MainClock);   // the main clock isn't a master
+    QCOMPARE(sm->usedMask(), quint32(0));
+
+    Chaser *chase = new Chaser(m_doc);
+    ChaserStep step(look->id());
+    step.speedMaster = SpeedMasters::Master1 + 2;    // a chase step on Speed 3
+    chase->addStep(step);
+    m_doc->addFunction(chase);
+    QCOMPARE(sm->usedMask(), quint32(0x4));
+
+    QLCPalette *fx = new QLCPalette(QLCPalette::Effect, m_doc);
+    fx->setEffectParamValue(QStringLiteral("__speedMaster"), SpeedMasters::Master1 + 1);
+    QVERIFY(m_doc->addPalette(fx));                  // an effect on Speed 2
+    QCOMPARE(sm->usedMask(), quint32(0x6));
+    fx->setEffectParamValue(QStringLiteral("__speedMaster"), SpeedMasters::Inherit);
+    QCOMPARE(sm->usedMask(), quint32(0x6));          // cached: no edit was signalled...
+    m_doc->setModified();                            // ...as the look editor does
+    QCOMPARE(sm->usedMask(), quint32(0x4));
+
+    QVERIFY(sm->setFollow(2, 3, 2.0));               // Speed 3 follows Speed 4: both
+    QCOMPARE(sm->usedMask(), quint32(0xC));
+    QVERIFY(sm->setFollow(1, 0, 1.0));               // a follower nothing uses: neither
+    QCOMPARE(sm->usedMask(), quint32(0xC));
+
+    sm->setInput(1, SpeedMasters::TapControl, 0, 3); // a surface drives Speed 2
+    QCOMPARE(sm->usedMask(), quint32(0xF));          // and so Speed 1, which it follows
+    QVERIFY(sm->isUsed(0));
+
+    look->setSpeedMaster(SpeedMasters::Master1 + 7); // Speed 8, with 4 in use: not counted
+    QCOMPARE(sm->usedMask() & 0x80u, quint32(0));
+    sm->setCount(8);
+    QCOMPARE(sm->usedMask() & 0x80u, quint32(0x80));
 }
 
 QTEST_MAIN(SpeedMasters_Test)

@@ -68,6 +68,10 @@
             baseTheta = t * speed * 2 * Math.PI;
 
         return fixtures.map(function(f, i) {
+            // Round where the look points this head (its Aim or Pan/Tilt), the
+            // centre setting nudging from there; else the centre setting.
+            var ax = f.lookAim ? f.lookAim.pan  + (cx - 0.5) : cx;
+            var ay = f.lookAim ? f.lookAim.tilt + (cy - 0.5) : cy;
             if (!f.hasPanTilt) return {};
 
             var fixturePhase = inputs._spread ? f.phase * 2 * Math.PI
@@ -75,8 +79,8 @@
                 : 0;
             var theta = baseTheta - fixturePhase;
 
-            var pan  = (cx + panRadius  * Math.sin(pFreq * theta + delta)) * f.panRange;
-            var tilt = (cy + tiltRadius * Math.sin(tFreq * theta))          * f.tiltRange;
+            var pan  = (ax + panRadius  * Math.sin(pFreq * theta + delta)) * f.panRange;
+            var tilt = (ay + tiltRadius * Math.sin(tFreq * theta))          * f.tiltRange;
 
             var intent = {
                 pan:  Math.max(0, Math.min(f.panRange,  pan)),

@@ -422,7 +422,7 @@ void AppUtil::updateFixtureReadiness(Doc *doc)
         status->setStatus("fixtures.unpatched", ShowStatus::Warning,
             QCoreApplication::translate("AppUtil", "%n fixture(s) not patched: they send no DMX",
                                         "", unpatched.count()),
-            QCoreApplication::translate("AppUtil", "They show in the rig view only. Select "
+            QCoreApplication::translate("AppUtil", "They show in the Lighting Studio only. Select "
                                         "them and Patch."),
             items, ids);
     }
@@ -446,7 +446,7 @@ void AppUtil::updateFixtureReadiness(Doc *doc)
         status->setStatus("fixtures.output", ShowStatus::Warning,
             QCoreApplication::translate("AppUtil", "%n fixture type(s) declare no light output",
                                         "", silentTypes.count()),
-            QCoreApplication::translate("AppUtil", "The rig view draws these %n fixture(s) at a "
+            QCoreApplication::translate("AppUtil", "The Lighting Studio and the Rig Overview draw these %n fixture(s) at a "
                                         "guess. Edit the definition and set its lumens (or "
                                         "power) on the Physical tab.", "", fixtures),
             items, files);

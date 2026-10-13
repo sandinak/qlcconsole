@@ -605,7 +605,23 @@ QList<quint32> Scene::runtimePalettes() const
     {
         QLCPalette *p = doc() != NULL ? doc()->palette(m_trialPalette) : NULL;
         if (p != NULL && p->type() != QLCPalette::Effect)
-            out.append(m_trialPalette);
+        {
+            /* Tried on so it shows, by the stacking rules: a Colour as the
+               look's colour 1; anything else as the lowest of the look's own,
+               above the first effect -- appended, it went under an effect
+               (and was the effect's) or was only colour 2. */
+            int at = out.size();
+            for (int i = 0; i < out.size(); ++i)
+            {
+                QLCPalette *q = doc()->palette(out.at(i));
+                if (q != NULL && q->type() == QLCPalette::Effect)
+                {
+                    at = i;
+                    break;
+                }
+            }
+            out.insert(p->type() == QLCPalette::Color ? 0 : at, m_trialPalette);
+        }
     }
     return out;
 }
@@ -1304,11 +1320,29 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
             // channel (processValue applied later wins). The Programming tab
             // also strips baked values a palette covers when it's applied, so
             // conflicts are rare; this is the runtime safety net.
+            /* Read top to bottom, the lowest wins: baked values, then each
+               look in the list order, each channel taking the LAST value set
+               for it -- resolved here, so the fader is handed one value a
+               channel and never merges two looks highest-wins (Blue then Red
+               was magenta; two Pan/Tilt looks kept the bigger pan). */
+            QList<QPair<SceneValue, uint> > stack;
+            QHash<quint64, int> stackAt;
+            auto put = [&stack, &stackAt](const SceneValue &scv, uint fade) {
+                const quint64 k = (quint64(scv.fxi) << 32) | scv.channel;
+                auto at = stackAt.constFind(k);
+                if (at == stackAt.constEnd())
+                {
+                    stackAt.insert(k, stack.size());
+                    stack << qMakePair(scv, fade);
+                }
+                else
+                    stack[at.value()] = qMakePair(scv, fade);
+            };
             QMapIterator <SceneValue, uchar> it(m_values);
             while (it.hasNext() == true)
             {
                 SceneValue scv(it.next().key());
-                processValue(timer, ua, fadeIn, scv);
+                put(scv, fadeIn);
             }
 
             // Per-look fade-IN overrides: a palette with its own explicit fade-in
@@ -1336,10 +1370,20 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
                 const int cOff = QLCPalette::colorSetOffset(doc(), pals, paletteID);
 
                 foreach (SceneValue scv, palette->valuesFromFixtureGroups(doc(), fixtureGroups(), this, cOff))
-                    processValue(timer, ua, pFade, scv);
+                    put(scv, pFade);
 
                 foreach (SceneValue scv, palette->valuesFromFixtures(doc(), fixtures(), this, cOff))
-                    processValue(timer, ua, pFade, scv);
+                    put(scv, pFade);
+            }
+            // A fixture with no dimmer of its own: the look's Dimmer dims its
+            // colour (as it does an effect's colour on it).
+            const int lookDim = QLCPalette::lookDimmerValue(doc(), pals);
+            for (int i = 0; i < stack.size(); ++i)
+            {
+                SceneValue &scv = stack[i].first;
+                scv.value = QLCPalette::dimScaleWithoutDimmer(doc()->fixture(scv.fxi), scv.channel,
+                                                              scv.value, lookDim);
+                processValue(timer, ua, stack.at(i).second, scv);
             }
             m_applyTransitionIn = false;   // the start only, not a later re-aim
         }
@@ -1359,15 +1403,17 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
             m_reaimRequested = false;
             m_repaletteRequested = false;
 
+            const int lookDim = QLCPalette::lookDimmerValue(doc(), runtimePalettes());
             auto replaceOne = [&](const SceneValue &scv) {
                 Fixture *fixture = doc()->fixture(scv.fxi);
                 if (fixture == NULL) return;
                 quint32 universe = fixture->universe();
                 if (!m_fadersMap.contains(universe)) return;
+                const uchar v = QLCPalette::dimScaleWithoutDimmer(fixture, scv.channel, scv.value, lookDim);
                 FadeChannel fc(doc(), scv.fxi, scv.channel);
-                fc.setStart(scv.value);
-                fc.setTarget(scv.value);
-                fc.setCurrent(scv.value);
+                fc.setStart(v);
+                fc.setTarget(v);
+                fc.setCurrent(v);
                 fc.setFadeTime(0);
                 m_fadersMap[universe]->replace(fc);
             };

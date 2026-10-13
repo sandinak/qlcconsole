@@ -176,6 +176,17 @@ private:
     QElapsedTimer *m_roundTime;             //! Counts the time between steps
     /** On a speed master: its last whole beat counted (none yet: min). */
     qint64 m_masterBeat = std::numeric_limits<qint64>::min();
+
+    /** GO on the beat: the beat (or bar) a held step change was asked in;
+     *  it lands when the clock passes it. min = nothing held. */
+    qint64 m_goHeldIn = std::numeric_limits<qint64>::min();
+    /** The clock a held GO waits on, in beats (or bars). */
+    double goClockUnits() const;
+
+public:
+    /** A GO is being held for the beat (the cue list shows it). */
+    bool goHeld() const { return m_goHeldIn != std::numeric_limits<qint64>::min(); }
+private:
     QVector<int> m_order;                   //! Array of step indices in a randomized order
 
     /************************************************************************

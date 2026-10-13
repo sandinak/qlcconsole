@@ -26,6 +26,10 @@
 #include <QTextDocumentFragment>
 #include <QTimer>
 #include <QImageReader>
+#include <QScrollArea>
+#include <QPixmap>
+#include <QScreen>
+#include <QDialog>
 #include <QListWidget>
 #include <QToolButton>
 #include <QScrollBar>
@@ -131,6 +135,7 @@ HelpBrowser::HelpBrowser(QWidget *parent)
     });
     connect(m_search, &QLineEdit::textChanged, this, &HelpBrowser::search);
     connect(m_browser, &QTextBrowser::anchorClicked, this, &HelpBrowser::followLink);
+    m_browser->viewport()->installEventFilter(this);
     connect(home, &QToolButton::clicked, this, [this]() { showTopic(QStringLiteral("getting-started.md")); });
     connect(m_back, &QToolButton::clicked, this, [this]() {
         if (m_at <= 0)
@@ -196,26 +201,8 @@ void HelpBrowser::load(const QString &file, const QString &fragment, bool record
         m_browser->setMarkdown(readGuide(file));
         m_file = file;
 
-        /* The screenshots are taken at full size: fit each to the page. */
-        const int room = qMax(400, m_browser->viewport()->width() - 40);
-        for (QTextBlock b = doc->begin(); b.isValid(); b = b.next())
-            for (QTextBlock::iterator it = b.begin(); !it.atEnd(); ++it)
-            {
-                QTextFragment frag = it.fragment();
-                if (!frag.isValid() || !frag.charFormat().isImageFormat())
-                    continue;
-                QTextImageFormat img = frag.charFormat().toImageFormat();
-                const QUrl src = doc->baseUrl().resolved(QUrl(img.name()));
-                const QSize size = QImageReader(QLatin1Char(':') + src.path()).size();
-                if (!size.isValid() || size.width() <= room)
-                    continue;
-                img.setWidth(room);
-                img.setHeight(double(size.height()) * room / size.width());
-                QTextCursor c(doc);
-                c.setPosition(frag.position());
-                c.setPosition(frag.position() + frag.length(), QTextCursor::KeepAnchor);
-                c.setCharFormat(img);
-            }
+        m_fittedTo = 0;
+        fitImages();
 
         /* Each heading an anchor, named as GitHub names it, for
            scrollToHeading(). */
@@ -256,6 +243,77 @@ void HelpBrowser::load(const QString &file, const QString &fragment, bool record
     }
     m_back->setEnabled(m_at > 0);
     m_forward->setEnabled(m_at + 1 < m_history.size());
+}
+
+/* The pictures are taken at twice their size (tools: help-shots.sh), as a
+   Retina screen shows them: each is shown at half its pixels, or narrower to
+   fit the page. Every one is a link to itself at full size -- a whole window
+   fitted into a narrow page is a map, not something to read. */
+void HelpBrowser::fitImages()
+{
+    const int room = qMax(240, m_browser->viewport()->width() - 40);
+    if (qAbs(room - m_fittedTo) < 8)
+        return;                         // a scroll bar coming and going
+    m_fittedTo = room;
+
+    QTextDocument *doc = m_browser->document();
+    for (QTextBlock b = doc->begin(); b.isValid(); b = b.next())
+        for (QTextBlock::iterator it = b.begin(); !it.atEnd(); ++it)
+        {
+            QTextFragment frag = it.fragment();
+            if (!frag.isValid() || !frag.charFormat().isImageFormat())
+                continue;
+            QTextImageFormat img = frag.charFormat().toImageFormat();
+            const QString path = QLatin1Char(':') + doc->baseUrl().resolved(QUrl(img.name())).path();
+            const QSize size = QImageReader(path).size() / 2;
+            if (!size.isValid() || size.isEmpty())
+                continue;
+            const int w = qMin(size.width(), room);
+            img.setWidth(w);
+            img.setHeight(double(size.height()) * w / size.width());
+            img.setAnchor(true);
+            img.setAnchorHref(QStringLiteral("picture:") + path);
+            img.setToolTip(tr("Click to see it full size"));
+            QTextCursor cur(doc);
+            cur.setPosition(frag.position());
+            cur.setPosition(frag.position() + frag.length(), QTextCursor::KeepAnchor);
+            cur.setCharFormat(img);
+        }
+}
+
+bool HelpBrowser::eventFilter(QObject *watched, QEvent *event)
+{
+    if (watched == m_browser->viewport() && event->type() == QEvent::Resize)
+        QTimer::singleShot(0, this, &HelpBrowser::fitImages);
+    return QWidget::eventFilter(watched, event);
+}
+
+void HelpBrowser::showImage(const QString &path)
+{
+    QPixmap pm(path);
+    if (pm.isNull())
+        return;
+    pm.setDevicePixelRatio(2);
+
+    QDialog *d = new QDialog(this);
+    d->setAttribute(Qt::WA_DeleteOnClose);
+    d->setObjectName(QStringLiteral("helpPicture"));
+    d->setWindowTitle(windowTitle());
+    QVBoxLayout *lay = new QVBoxLayout(d);
+    lay->setContentsMargins(0, 0, 0, 0);
+    QScrollArea *sa = new QScrollArea(d);
+    QLabel *pic = new QLabel(sa);
+    pic->setPixmap(pm);
+    sa->setWidget(pic);
+    sa->setAlignment(Qt::AlignCenter);
+    lay->addWidget(sa);
+
+    // As big as the picture, as far as the screen allows.
+    QSize want = pm.size() / 2 + QSize(4, 4);
+    if (QScreen *scr = screen())
+        want = want.boundedTo(scr->availableSize() * 0.95);
+    d->resize(want);
+    d->show();
 }
 
 void HelpBrowser::scrollToHeading(const QString &fragment)
@@ -312,6 +370,11 @@ void HelpBrowser::search(const QString &text)
 void HelpBrowser::followLink(const QUrl &url)
 {
     const QString scheme = url.scheme();
+    if (scheme == QLatin1String("picture"))
+    {
+        showImage(url.path());
+        return;
+    }
     if (scheme == QLatin1String("http") || scheme == QLatin1String("https")
         || scheme == QLatin1String("mailto"))
     {

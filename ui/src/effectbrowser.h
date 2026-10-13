@@ -15,6 +15,10 @@
 #include <QSharedPointer>
 #include <QElapsedTimer>
 #include <QWidget>
+#include <QPointF>
+#include <QSet>
+#include <QVector>
+#include <QColor>
 #include <QColor>
 #include <QHash>
 
@@ -64,6 +68,23 @@ public:
     /** Most recently picked first; remembered between sessions. */
     static QStringList recent();
 
+    /** Moving through the list with the arrow keys picks as it goes (the
+     *  picker window: browse and watch each one on the rig). Off, only a
+     *  click or Enter picks. */
+    void setPickWhileBrowsing(bool on) { m_pickWhileBrowsing = on; }
+
+    /** Whether the look has a WLED device to run on. Without one, a WLED
+     *  effect that has no port (it runs on the device only) isn't offered.
+     *  Default true: nothing known, everything listed. */
+    void setWledTargets(bool any)
+    {
+        if (any == m_wledTargets)
+            return;
+        m_wledTargets = any;
+        reload();
+    }
+    bool wledTargets() const { return m_wledTargets; }
+
 protected:
     void showEvent(QShowEvent *e) override;
     void hideEvent(QHideEvent *e) override;
@@ -85,11 +106,32 @@ private:
         QString key() const;    ///< for Recent: kind and name
     };
 
+    bool m_pickWhileBrowsing = false;
+    bool m_wledTargets = true;
     void refill();
     void pick(QListWidgetItem *item);
     void tickPreviews();
-    /** The colours of a strip of 16 for @p scriptPath, now. */
-    QVector<QColor> previewFrame(const QString &scriptPath);
+public:
+    /** What a row's preview shows: what the effect does, now. */
+    struct Preview
+    {
+        enum Kind { Lights, Position, Gobo, Beam };
+        Kind kind = Lights;
+        QVector<QColor> lights;     ///< Lights: the strip of 16
+        QVector<QPointF> spots;     ///< Position: where each head points, 0..1 (pan, tilt)
+        QVector<double> beams;      ///< Beam: each head's beam size 0..1; Gobo: the slot
+    };
+    /** A preview for @p scriptPath, now (and its trail, for a position one). */
+    Preview previewFrame(const QString &scriptPath);
+    Preview frame(const QString &scriptPath) const { return m_frames.value(scriptPath); }
+
+private:
+    /** A preview's script and its run (state), defined in the .cpp. */
+    struct Run;
+    /** The preview of @p run at @p t seconds. */
+    Preview previewWith(Run *run, double t, bool steer = false);
+    /** A position effect's shape: four heads' paths over eight seconds. */
+    QVector<QVector<QPointF> > samplePaths(const QString &scriptPath);
 
     Doc *m_doc;
     QComboBox *m_source;
@@ -101,10 +143,12 @@ private:
     QList<Entry> m_entries;
     QList<QColor> m_previewColours;
 
-    /** A preview's script and its run (state), defined in the .cpp. */
-    struct Run;
     QHash<QString, QSharedPointer<Run> > m_runs;   ///< by script path; null = would not load
-    QHash<QString, QVector<QColor> > m_frames;     ///< last frame per script path
+    QHash<QString, Preview> m_frames;             ///< last frame per script path
+    /** A position effect's shape, sampled once (samplePaths()). */
+    QHash<QString, QVector<QVector<QPointF> > > m_paths;
+    /** Position effects that only follow a joystick: previewed steered. */
+    QSet<QString> m_steered;
     friend class EffectRowDelegate;
     bool m_filling = false;
 };

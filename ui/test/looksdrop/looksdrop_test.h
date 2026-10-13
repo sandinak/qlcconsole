@@ -39,6 +39,8 @@ private slots:
     /** A scene that aims a head at a target it cannot reach says so on that
      *  head, and stops saying so when the head is re-rigged to reach. */
     void aHeadAimedOutOfReachIsFlagged();
+    void theTreeNestsWhatTheEngineGivesAnEffect();
+    void whatWontWorkIsMarkedInTheList();
 
 private:
     Doc *m_doc;

@@ -93,6 +93,12 @@ run_gate "Qt6-Release" build-qt6-rel /opt/homebrew/opt/qt6 "-DCMAKE_BUILD_TYPE=R
 WERROR_SET="-Werror=reorder-ctor -Werror=dangling-else -Werror=misleading-indentation"
 WERROR_SET="$WERROR_SET -Werror=format -Werror=macro-redefined -Werror=unused-function"
 WERROR_SET="$WERROR_SET -Werror=unused-variable -Werror=deprecated-declarations"
+# CI's Linux job is gcc with -Wall -Wextra -Werror. These are the classes it
+# shares with clang that slipped through the set above and broke it
+# (2026-10-12: an unused parameter, an ignored [[nodiscard]], a switch
+# missing an enum value, a set-but-unused variable, a sign-compare).
+WERROR_SET="$WERROR_SET -Werror=unused-parameter -Werror=unused-result -Werror=switch"
+WERROR_SET="$WERROR_SET -Werror=unused-but-set-variable -Werror=sign-compare"
 run_gate "Qt6-Werror" build-qt6-werror /opt/homebrew/opt/qt6 "-DCMAKE_CXX_FLAGS=$WERROR_SET" || true
 
 echo

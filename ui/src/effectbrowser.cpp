@@ -19,11 +19,14 @@
 #include <QLineEdit>
 #include <QSettings>
 #include <QPainter>
+#include <QPolygonF>
+#include <QRadialGradient>
 #include <QTabBar>
 #include <QTimer>
 #include <QtMath>
 #include <cmath>
 
+#include "naturalcompare.h"
 #include "effectscriptrunner.h"
 #include "effectscriptcache.h"
 #include "effectbrowser.h"
@@ -86,18 +89,28 @@ public:
         const int indent = e.isPreset ? 18 : 0;
         const QRect r = opt.rect.adjusted(6 + indent, 4, -6, -4);
 
-        // The strip: sixteen lights running it now.
-        const QVector<QColor> frame = m_browser->m_frames.value(index.data(PathRole).toString());
+        // What it does, running now: a strip of lights; where heads point,
+        // with their trails; or a row of beams.
+        const QString path = index.data(PathRole).toString();
+        const EffectBrowser::Preview pv = m_browser->m_frames.value(path);
         const int cell = kStripW / kLights;
         const QRect strip(r.left(), r.center().y() - cell / 2 - 1, kStripW, cell + 2);
-        p->setPen(Qt::NoPen);
-        p->setBrush(QColor(20, 20, 24));
-        p->drawRoundedRect(strip.adjusted(-2, -2, 2, 2), 3, 3);
-        for (int i = 0; i < kLights; ++i)
+        if (pv.kind == EffectBrowser::Preview::Position)
+            paintPosition(p, QRect(r.left(), r.top() + 1, kStripW, r.height() - 2), pv,
+                          m_browser->m_paths.value(path));
+        else if (pv.kind == EffectBrowser::Preview::Gobo || pv.kind == EffectBrowser::Preview::Beam)
+            paintBeams(p, QRect(r.left(), r.top() + 1, kStripW, r.height() - 2), pv);
+        else
         {
-            const QColor c = frame.isEmpty() ? QColor(50, 50, 56) : frame.value(i);
-            p->setBrush(c);
-            p->drawEllipse(QRectF(strip.left() + i * cell + 0.5, strip.top() + 1.5, cell - 1, cell - 1));
+            p->setPen(Qt::NoPen);
+            p->setBrush(QColor(20, 20, 24));
+            p->drawRoundedRect(strip.adjusted(-2, -2, 2, 2), 3, 3);
+            for (int i = 0; i < kLights; ++i)
+            {
+                const QColor c = pv.lights.isEmpty() ? QColor(50, 50, 56) : pv.lights.value(i);
+                p->setBrush(c);
+                p->drawEllipse(QRectF(strip.left() + i * cell + 0.5, strip.top() + 1.5, cell - 1, cell - 1));
+            }
         }
 
         // Its name, and what it does.
@@ -127,6 +140,115 @@ public:
     }
 
 private:
+    /* The shape the effect draws (four heads' paths over a few seconds,
+       faint), every head where it is now, and those four bright on top --
+       a circle reads as a circle, and the spread as heads along it. */
+    static void paintPosition(QPainter *p, const QRect &box, const EffectBrowser::Preview &pv,
+                              const QVector<QVector<QPointF> > &paths)
+    {
+        p->setPen(Qt::NoPen);
+        p->setBrush(QColor(20, 20, 24));
+        p->drawRoundedRect(box, 3, 3);
+        p->setPen(QPen(QColor(44, 44, 52), 1, Qt::DotLine));
+        p->drawLine(box.center().x(), box.top() + 2, box.center().x(), box.bottom() - 2);
+        p->drawLine(box.left() + 2, box.center().y(), box.right() - 2, box.center().y());
+        p->setRenderHint(QPainter::Antialiasing, true);
+        const QRectF in = QRectF(box).adjusted(5, 4, -5, -4);
+        static const QColor tints[4] = { QColor(255, 210, 90), QColor(110, 200, 255),
+                                         QColor(255, 120, 170), QColor(140, 240, 140) };
+        static const int tracked[4] = { 0, 5, 10, 15 };
+        const int n = pv.spots.size();
+
+        /* Zoomed to the movement -- a small orbit in 540 degrees of pan would
+           be a speck -- one scale both ways, so a circle stays a circle, and
+           never closer than a twentieth of the range. */
+        QRectF seen;
+        auto take = [&seen](const QPointF &q) {
+            const QRectF pt(q, QSizeF(1e-6, 1e-6));
+            seen = seen.isNull() ? pt : seen.united(pt);
+        };
+        if (!paths.isEmpty())
+        {
+            foreach (const QPointF &q, paths.at(0))
+                take(q);
+        }
+        foreach (const QPointF &q, pv.spots)
+            take(q);
+        const double span = qMax(0.05, qMax(seen.width() / in.width() * in.height(), seen.height()));
+        const double scale = in.height() / span;
+        const QPointF mid = seen.isNull() ? QPointF(0.5, 0.5) : seen.center();
+        auto at = [&](const QPointF &q) {
+            return QPointF(in.center().x() + (q.x() - mid.x()) * scale,
+                           in.center().y() + (q.y() - mid.y()) * scale);
+        };
+
+        // One head's path is the shape (the others run it at their own
+        // moment): four of them drawn over each other only scribble.
+        if (!paths.isEmpty())
+        {
+            p->setPen(QPen(QColor(200, 200, 215, 110), 1.2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+            QPolygonF line;
+            foreach (const QPointF &q, paths.at(0))
+                line << at(q);
+            p->drawPolyline(line);
+        }
+        p->setPen(Qt::NoPen);
+        p->setBrush(QColor(170, 170, 185, 120));
+        for (int h = 0; h < n; ++h)
+            p->drawEllipse(at(pv.spots.at(h)), 1.3, 1.3);
+        for (int k = 0; k < 4; ++k)
+        {
+            if (tracked[k] >= n)
+                continue;
+            p->setBrush(tints[k]);
+            p->drawEllipse(at(pv.spots.at(tracked[k])), 2.6, 2.6);
+        }
+        p->setRenderHint(QPainter::Antialiasing, false);
+    }
+
+    /* Eight beams seen end-on: their size (iris, zoom), or which gobo slot
+       (its pattern). */
+    static void paintBeams(QPainter *p, const QRect &box, const EffectBrowser::Preview &pv)
+    {
+        p->setPen(Qt::NoPen);
+        p->setBrush(QColor(20, 20, 24));
+        p->drawRoundedRect(box, 3, 3);
+        p->setRenderHint(QPainter::Antialiasing, true);
+        const int n = qMin(8, pv.beams.size());
+        if (n == 0)
+            return;
+        const double w = double(box.width() - 4) / n;
+        const double rMax = qMin(w, double(box.height())) / 2.0 - 1.5;
+        for (int i = 0; i < n; ++i)
+        {
+            const int src = pv.beams.size() <= 8 ? i : i * pv.beams.size() / n;
+            const QPointF c(box.left() + 2 + w * (i + 0.5), box.center().y() + 0.5);
+            if (pv.kind == EffectBrowser::Preview::Beam)
+            {
+                const double rr = 1.5 + qBound(0.0, pv.beams.at(src), 1.0) * (rMax - 1.5);
+                QRadialGradient g(c, rr);
+                g.setColorAt(0.0, QColor(255, 250, 235));
+                g.setColorAt(1.0, QColor(255, 240, 210, 60));
+                p->setBrush(g);
+                p->drawEllipse(c, rr, rr);
+                continue;
+            }
+            // A gobo: the slot's pattern, so a chase reads as patterns moving.
+            p->setBrush(QColor(255, 248, 230));
+            p->drawEllipse(c, rMax, rMax);
+            p->setBrush(QColor(20, 20, 24));
+            const int slot = qMax(0, int(std::lround(pv.beams.at(src))));
+            const int spokes = 2 + slot % 5;
+            for (int k = 0; k < spokes; ++k)
+            {
+                const double a = (2.0 * M_PI * k) / spokes + slot * 0.4;
+                const QPointF d(std::cos(a) * rMax * 0.55, std::sin(a) * rMax * 0.55);
+                p->drawEllipse(c + d, rMax * 0.28, rMax * 0.28);
+            }
+        }
+        p->setRenderHint(QPainter::Antialiasing, false);
+    }
+
     EffectBrowser *m_browser;
 };
 
@@ -152,6 +274,9 @@ EffectBrowser::EffectBrowser(Doc *doc, QComboBox *source, QWidget *parent)
     m_tabs = new QTabBar(this);
     m_tabs->setExpanding(false);
     m_tabs->setDrawBase(false);
+    // Whole names ("Position", not "Positi…"): scroll arrows if they don't fit.
+    m_tabs->setElideMode(Qt::ElideNone);
+    m_tabs->setUsesScrollButtons(true);
     v->addWidget(m_tabs);
 
     m_list = new QListWidget(this);
@@ -174,6 +299,13 @@ EffectBrowser::EffectBrowser(Doc *doc, QComboBox *source, QWidget *parent)
     });
     connect(m_list, &QListWidget::itemClicked, this, &EffectBrowser::pick);
     connect(m_list, &QListWidget::itemActivated, this, &EffectBrowser::pick);
+    // Moving the current row picks it (arrow keys). A refill moves it too,
+    // but pick() ignores those (m_filling); re-picking what is already
+    // picked changes nothing.
+    connect(m_list, &QListWidget::currentItemChanged, this, [this](QListWidgetItem *now, QListWidgetItem *) {
+        if (m_pickWhileBrowsing)
+            pick(now);
+    });
     // The combo changed by other means (the Browse dialog, a look loading).
     connect(m_source, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
         if (m_filling)
@@ -261,6 +393,13 @@ void EffectBrowser::reload()
                     e.description = tr("Runs on WLED fixtures; others run its port");
             }
         }
+        /* A WLED effect with no port runs on a WLED device and nowhere else:
+           listed only when the look has one to run on ("not show the effects
+           that won't work if a wled instance isn't in the targets") -- or when
+           it is what the look already runs, so the list never loses it. */
+        if (kind == KindWled && e.scriptPath.isEmpty() && !m_wledTargets
+            && i != m_source->currentIndex())
+            continue;
         if (kind == KindScript && e.description.isEmpty() && cache != nullptr)
             e.description = cache->scriptMeta(name).description;
         if (kind == KindScript)
@@ -275,7 +414,15 @@ void EffectBrowser::reload()
         m_tabs->removeTab(0);
     m_tabs->addTab(tr("Recent"));
     foreach (const QString &c, categories)
-        m_tabs->addTab(c);
+    {
+        bool any = false;                   // a tab with nothing left to pick goes
+        for (const Entry &e : m_entries)
+            any = any || e.category == c;
+        if (any)
+            m_tabs->addTab(c);
+        else
+            categories.removeAll(c);
+    }
 
     // Open on the tab of what the look has now; else where it was; else the first.
     int open = -1;
@@ -333,11 +480,8 @@ void EffectBrowser::refill()
        stays in the order it was used. */
     if (!recentTab || !q.isEmpty())
     {
-        QCollator collator;
-        collator.setNumericMode(true);
-        collator.setCaseSensitivity(Qt::CaseInsensitive);
-        std::stable_sort(shown.begin(), shown.end(), [this, &collator](int a, int b) {
-            return collator.compare(m_entries.at(a).sortName, m_entries.at(b).sortName) < 0;
+        std::stable_sort(shown.begin(), shown.end(), [this](int a, int b) {
+            return naturalCompare(m_entries.at(a).sortName, m_entries.at(b).sortName) < 0;
         });
     }
 
@@ -402,18 +546,22 @@ void EffectBrowser::tickPreviews()
         if (path.isEmpty() || done.contains(path))
             continue;
         done.insert(path);
-        m_frames.insert(path, previewFrame(path));
+        const Preview pv = previewFrame(path);
+        m_frames.insert(path, pv);
+        if (pv.kind == Preview::Position && !m_paths.contains(path))
+            m_paths.insert(path, samplePaths(path));       // once: the shape it draws
     }
     // A cache of runs, not of every script ever scrolled past.
     if (m_runs.size() > 48)
+    {
         for (auto it = m_runs.begin(); it != m_runs.end(); )
             it = done.contains(it.key()) ? std::next(it) : m_runs.erase(it);
+    }
     m_list->viewport()->update();
 }
 
-QVector<QColor> EffectBrowser::previewFrame(const QString &path)
+EffectBrowser::Preview EffectBrowser::previewFrame(const QString &path)
 {
-    QVector<QColor> out;
     QSharedPointer<Run> run = m_runs.value(path);
     if (!m_runs.contains(path))
     {
@@ -425,8 +573,74 @@ QVector<QColor> EffectBrowser::previewFrame(const QString &path)
         m_runs.insert(path, run);       // a broken one is not retried every frame
     }
     if (run.isNull())
-        return out;
+        return Preview();
+    Preview pv = previewWith(run.data(), m_clock.elapsed() / 1000.0, m_steered.contains(path));
+    if (pv.kind == Preview::Lights && pv.lights.isEmpty())
+    {
+        m_runs.insert(path, QSharedPointer<Run>());     // it gave nothing usable
+        return pv;
+    }
+    /* Nothing at all with the joystick held still, and it takes one: a
+       follow-spot, waiting to be steered. Steer it. */
+    bool dark = pv.kind == Preview::Lights;
+    foreach (const QColor &c, pv.lights)
+        dark = dark && c == QColor(30, 30, 34);
+    if (dark && !m_steered.contains(path))
+    {
+        bool joystick = false;
+        for (const EffectScript::InputDef &d : run->script.inputDefs())
+            joystick = joystick || d.name == QLatin1String("x");
+        if (joystick)
+        {
+            m_steered.insert(path);
+            pv = previewWith(run.data(), m_clock.elapsed() / 1000.0, true);
+        }
+    }
+    return pv;
+}
 
+QVector<QVector<QPointF> > EffectBrowser::samplePaths(const QString &path)
+{
+    /* Where four heads go over the next eight seconds, from a run of its
+       own (the live one keeps its state): the shape the effect draws. */
+    static const int tracked[4] = { 0, 5, 10, 15 };
+    auto sample = [&](bool steer) {
+        QVector<QVector<QPointF> > paths(4);
+        Run run;
+        if (!run.script.load(path))
+            return QVector<QVector<QPointF> >();
+        run.state = run.script.newState();
+        for (int k = 0; k <= 160; ++k)
+        {
+            const Preview pv = previewWith(&run, k * 0.05, steer);
+            if (pv.kind != Preview::Position)
+                return QVector<QVector<QPointF> >();
+            for (int h = 0; h < 4; ++h)
+                if (tracked[h] < pv.spots.size())
+                    paths[h] << pv.spots.at(tracked[h]);
+        }
+        return paths;
+    };
+    // The joystick held still: the effect's own shape. Nothing moving then?
+    // It is the joystick's (a follow-spot): steer it, there and live.
+    QVector<QVector<QPointF> > paths = sample(m_steered.contains(path));
+    QRectF seen;
+    if (!paths.isEmpty())
+    {
+        foreach (const QPointF &q, paths.at(0))
+            seen = seen.isNull() ? QRectF(q, QSizeF(1e-9, 1e-9)) : seen.united(QRectF(q, QSizeF(1e-9, 1e-9)));
+    }
+    if (!paths.isEmpty() && seen.width() < 1e-3 && seen.height() < 1e-3)
+    {
+        m_steered.insert(path);
+        paths = sample(true);
+    }
+    return paths;
+}
+
+EffectBrowser::Preview EffectBrowser::previewWith(Run *run, double t, bool steer)
+{
+    Preview pv;
     QJSEngine *eng = run->script.engine();
     QJSValue fixtures = eng->newArray(kLights);
     for (int i = 0; i < kLights; ++i)
@@ -451,12 +665,26 @@ QVector<QColor> EffectBrowser::previewFrame(const QString &path)
         grid.setProperty(QStringLiteral("rows"), 1);
         o.setProperty(QStringLiteral("grid"), grid);
         o.setProperty(QStringLiteral("aimAt"), eng->newObject());
+        // An Aim look's target, downstage of the rig: Stage Shape builds on it.
+        QJSValue target = eng->newObject();
+        target.setProperty(QStringLiteral("x"), 0.0);
+        target.setProperty(QStringLiteral("y"), 3.0);
+        target.setProperty(QStringLiteral("z"), 0.0);
+        o.setProperty(QStringLiteral("sceneTarget"), target);
         fixtures.setProperty(quint32(i), o);
     }
-    const double t = m_clock.elapsed() / 1000.0;
     QJSValue inputs = eng->newObject();
     for (const EffectScript::InputDef &d : run->script.inputDefs())
-        inputs.setProperty(d.name, double(d.defaultValue));
+    {
+        // A joystick's X/Y: held in the middle, or -- for an effect that
+        // does nothing else (a follow-spot) -- someone steering it slowly.
+        if (steer && d.name == QLatin1String("x"))
+            inputs.setProperty(d.name, 0.5 + 0.3 * std::sin(t * 0.9 + 1.0));
+        else if (steer && d.name == QLatin1String("y"))
+            inputs.setProperty(d.name, 0.5 + 0.25 * std::sin(t * 1.4));
+        else
+            inputs.setProperty(d.name, double(d.defaultValue));
+    }
     inputs.setProperty(QStringLiteral("_time"), t);
     inputs.setProperty(QStringLiteral("_bpm"), 120.0);
     inputs.setProperty(QStringLiteral("_beat"), std::fmod(t * 2.0, 1.0));
@@ -490,12 +718,49 @@ QVector<QColor> EffectBrowser::previewFrame(const QString &path)
     const QJSValue result = run->script.callTick(fixtures, inputs, palettes, params, run->state,
                                                  eng->newObject());
     if (!result.isArray())
+        return pv;
+
+    /* What kind of effect it is, from what it sends: pan/tilt or an aim
+       point is a position effect, a gobo slot a gobo one, an iris or zoom a
+       beam one; anything else lights. */
+    const QJSValue first = result.property(0);
+    const auto has = [&first](const char *k) { return first.isObject() && first.hasProperty(QLatin1String(k)); };
+    if (has("pan") || has("tilt") || has("aimX"))
     {
-        m_runs.insert(path, QSharedPointer<Run>());
-        return out;
+        pv.kind = Preview::Position;
+        for (int i = 0; i < kLights; ++i)
+        {
+            const QJSValue o = result.property(quint32(i));
+            QPointF n(0.5, 0.5);
+            if (o.isObject() && o.hasProperty(QStringLiteral("aimX")))
+                // The heads hang along x, 3 m up: a few metres either way.
+                n = QPointF(0.5 + num(o.property(QStringLiteral("aimX"))) / 12.0,
+                            0.5 + num(o.property(QStringLiteral("aimY"))) / 12.0);
+            else if (o.isObject())
+            {
+                if (o.hasProperty(QStringLiteral("pan")))
+                    n.setX(num(o.property(QStringLiteral("pan"))) / 540.0);
+                if (o.hasProperty(QStringLiteral("tilt")))
+                    n.setY(num(o.property(QStringLiteral("tilt"))) / 270.0);
+            }
+            pv.spots << n;
+        }
+        return pv;
     }
+    if (has("gobo") || has("iris") || has("zoom"))
+    {
+        pv.kind = has("gobo") ? Preview::Gobo : Preview::Beam;
+        const char *key = has("gobo") ? "gobo" : has("iris") ? "iris" : "zoom";
+        for (int i = 0; i < kLights; ++i)
+        {
+            const QJSValue o = result.property(quint32(i));
+            pv.beams << (o.isObject() ? num(o.property(QLatin1String(key))) : 0.0);
+        }
+        return pv;
+    }
+
+    QVector<QColor> &out = pv.lights;
     out.resize(kLights);
-    QList<int> aimedAt;                 // position effects: where each points
     for (int i = 0; i < kLights; ++i)
     {
         const QJSValue o = result.property(quint32(i));
@@ -517,17 +782,25 @@ QVector<QColor> EffectBrowser::previewFrame(const QString &path)
         }
         else if (dim >= 0.0)
             out[i] = QColor(qRound(255 * dim), qRound(235 * dim), qRound(200 * dim));
-        else if (o.hasProperty(QStringLiteral("pan")))
+        else if (o.hasProperty(QStringLiteral("a")) || o.hasProperty(QStringLiteral("uv"))
+                 || o.hasProperty(QStringLiteral("w")))
         {
-            // A position effect: where it points, as a light along the strip.
-            const double pan = qBound(-1e6, num(o.property(QStringLiteral("pan"))), 1e6);
-            aimedAt << qBound(0, qRound((pan / 540.0) * (kLights - 1)), kLights - 1);
-            out[i] = QColor(30, 30, 34);
+            // Amber, UV or white emitters, in their own colours.
+            const double a = qBound(0.0, num(o.property(QStringLiteral("a"))) / 255.0, 1.0);
+            const double uv = qBound(0.0, num(o.property(QStringLiteral("uv"))) / 255.0, 1.0);
+            const double w = qBound(0.0, num(o.property(QStringLiteral("w"))) / 255.0, 1.0);
+            out[i] = QColor(qBound(0, qRound(255 * a + 120 * uv + 255 * w), 255),
+                            qBound(0, qRound(150 * a + 255 * w), 255),
+                            qBound(0, qRound(255 * uv + 255 * w), 255));
+        }
+        else if (o.hasProperty(QStringLiteral("shutterOpen")))
+        {
+            // A shutter: open is lit, closed dark.
+            const double open = qBound(0.0, num(o.property(QStringLiteral("shutterOpen"))), 1.0);
+            out[i] = QColor(qRound(255 * open), qRound(250 * open), qRound(235 * open));
         }
         else
             out[i] = QColor(30, 30, 34);
     }
-    foreach (int at, aimedAt)
-        out[at] = QColor(220, 220, 240);
-    return out;
+    return pv;
 }

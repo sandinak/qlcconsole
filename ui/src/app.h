@@ -82,6 +82,7 @@ class App final : public QMainWindow
 {
     Q_OBJECT
     Q_DISABLE_COPY(App)
+    friend class HelpShots;     // sets up views for the help's pictures
 
     /*********************************************************************
      * Initialization
@@ -348,6 +349,8 @@ public slots:
      *  menu toggle, remembered). A plain double-click no longer does: it
      *  tore views off the tab bar by accident. */
     bool shiftClickBreaksOut() const;
+    /** A tab's right-click menu (Open in Its Own Window). */
+    QMenu *tabContextMenu(int index);
     void setShiftClickBreaksOut(bool on);
 private:
     /** Show @p context in a window of its own, titled for @p tabLabel. */
@@ -618,6 +621,9 @@ private:
     bool m_showFooterLoad = true;
     bool m_showFooterPower = true;
     bool m_showFooterGM = true;
+    bool m_showFooterSpeed = true;
+    QAction* m_showFooterSpeedAction = nullptr;
+    class SpeedMastersFooter* m_statusSpeedMasters = nullptr;
     QAction* m_showFooterLoadAction = nullptr;
     QAction* m_showFooterPowerAction = nullptr;
     QAction* m_showFooterGMAction = nullptr;

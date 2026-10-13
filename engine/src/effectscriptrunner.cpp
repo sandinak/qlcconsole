@@ -5,6 +5,7 @@
   Licensed under the Apache License, Version 2.0 (the "License");
 */
 
+#include <algorithm>
 #include "effectscriptrunner.h"
 #include "effectinstance.h"
 
@@ -705,6 +706,8 @@ void EffectScriptRunner::writeDMX(MasterTimer *timer, QList<Universe*> universes
         writes = m_publishedWrites;
     }
 
+    writes = composeWrites(writes);
+
     for (const auto &w : writes)
     {
         if (w.universeId < 0 || w.universeId >= universes.size())
@@ -758,6 +761,69 @@ void EffectScriptRunner::writeDMX(MasterTimer *timer, QList<Universe*> universes
         if (!fader.isNull())
             fader->replaceAll(it.value());
     }
+}
+
+QList<EffectInstance::DmxWrite> EffectScriptRunner::composeWrites(const QList<EffectInstance::DmxWrite> &unordered)
+{
+    // In the look's order, top to bottom: what comes later is lower in the
+    // list, and wins.
+    QList<EffectInstance::DmxWrite> writes = unordered;
+    std::stable_sort(writes.begin(), writes.end(),
+                     [](const EffectInstance::DmxWrite &a, const EffectInstance::DmxWrite &b) {
+                         return a.layer < b.layer;
+                     });
+    // What several effects write to one channel, layered as a desk does: a
+    // colour sets it (the last effect's, if two do; the highest, if both only
+    // add), and a dimmer on a no-dimmer head then scales whatever is there --
+    // the effects' colour, else the look's own.
+    QHash<qint64, int> at;                 // (universe, address) -> index in composed
+    QList<EffectInstance::DmxWrite> composed;
+    QList<float> mul;
+    QList<bool> haveSet;
+    for (const auto &w : writes)
+    {
+        const qint64 key = (qint64(w.universeId) << 32) | quint32(w.addr);
+        auto it = at.constFind(key);
+        if (it == at.constEnd())
+        {
+            at.insert(key, composed.size());
+            composed << w;
+            mul << (w.scale >= 0 ? w.scale : 1.0f);
+            haveSet << (w.scale < 0);
+            continue;
+        }
+        const int i = it.value();
+        EffectInstance::DmxWrite &c = composed[i];
+        if (w.scale >= 0)
+        {
+            mul[i] *= w.scale;
+            if (!haveSet.at(i))
+                c.base = w.base;
+        }
+        else if (haveSet.at(i) && c.htp && w.htp)
+        {
+            c.value = qMax(c.value, w.value);  // both only add: the higher
+        }
+        else
+        {
+            // The lower in the list sets it -- a pan, a wheel slot, a colour
+            // that owns its head -- whatever was above.
+            c.value = w.value;
+            c.replace = c.replace || w.replace;
+            c.htp = c.htp && w.htp;
+            haveSet[i] = true;
+        }
+    }
+    for (int i = 0; i < composed.size(); ++i)
+    {
+        EffectInstance::DmxWrite &c = composed[i];
+        if (mul.at(i) == 1.0f && haveSet.at(i))
+            continue;
+        const int from = haveSet.at(i) ? c.value : c.base;
+        c.value = uchar(qBound(0, qRound(from * mul.at(i)), 255));
+        c.replace = true;
+    }
+    return composed;
 }
 
 QHash<quint32, QString> EffectScriptRunner::failures() const

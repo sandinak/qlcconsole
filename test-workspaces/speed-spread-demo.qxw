@@ -612,30 +612,30 @@
             <Master Index="3" Mode="Own" BPM="120"/>
         </SpeedMasters>
         <MoveInBlack Auto="0" DarkGapMs="800"/>
-        <Monitor DisplayMode="0" ShowLabels="1" AimSubjectHeight="1.4">
+        <Monitor DisplayMode="0" ShowLabels="1" AimSubjectHeight="1.4" OriginX="7" OriginY="5">
             <Font>Arial,12,-1,5,400,0,0,0,0,0,0,0,0,0,0,1,,0,0</Font>
             <ChannelStyle>0</ChannelStyle>
             <ValueStyle>0</ValueStyle>
-            <Grid Width="5" Height="3" Depth="5" Units="0"/>
-            <FxItem ID="0" Hidden="True" XPos="-4200" YPos="4000" ZPos="5.855" FixedZoom="2490580"/>
-            <FxItem ID="1" Hidden="True" XPos="-3000" YPos="4000" ZPos="5.855" FixedZoom="2490580"/>
-            <FxItem ID="2" Hidden="True" XPos="-1800" YPos="4000" ZPos="5.855" FixedZoom="2490580"/>
-            <FxItem ID="3" Hidden="True" XPos="-600" YPos="4000" ZPos="5.855" FixedZoom="2490580"/>
-            <FxItem ID="4" Hidden="True" XPos="600" YPos="4000" ZPos="5.855" FixedZoom="2490580"/>
-            <FxItem ID="5" Hidden="True" XPos="1800" YPos="4000" ZPos="5.855" FixedZoom="2490580"/>
-            <FxItem ID="6" Hidden="True" XPos="3000" YPos="4000" ZPos="5.855" FixedZoom="2490580"/>
-            <FxItem ID="7" Hidden="True" XPos="4200" YPos="4000" ZPos="5.855" FixedZoom="2490580"/>
-            <FxItem ID="8" Hidden="True" XPos="-4200" YPos="-1000" ZPos="4.855" FixedZoom="2490580"/>
-            <FxItem ID="9" Hidden="True" XPos="-3000" YPos="-1000" ZPos="4.855" FixedZoom="2490580"/>
-            <FxItem ID="10" Hidden="True" XPos="-1800" YPos="-1000" ZPos="4.855" FixedZoom="2490580"/>
-            <FxItem ID="11" Hidden="True" XPos="-600" YPos="-1000" ZPos="4.855" FixedZoom="2490580"/>
-            <FxItem ID="12" Hidden="True" XPos="600" YPos="-1000" ZPos="4.855" FixedZoom="2490580"/>
-            <FxItem ID="13" Hidden="True" XPos="1800" YPos="-1000" ZPos="4.855" FixedZoom="2490580"/>
-            <FxItem ID="14" Hidden="True" XPos="3000" YPos="-1000" ZPos="4.855" FixedZoom="2490580"/>
-            <FxItem ID="15" Hidden="True" XPos="4200" YPos="-1000" ZPos="4.855" FixedZoom="2490580"/>
-            <Truss ID="0" Name="US Truss" Type="Horizontal" Profile="Square" Length="10.000" Width="0.290" OriginX="-5.000" OriginY="4.000" OriginZ="6.000" DirX="1.000000" DirY="0.000000"/>
-            <Truss ID="1" Name="DS Truss" Type="Horizontal" Profile="Square" Length="10.000" Width="0.290" OriginX="-5.000" OriginY="-1.000" OriginZ="5.000" DirX="1.000000" DirY="0.000000"/>
-            <StageTarget ID="0" Name="Centre" X="0.000" Y="1.500" Z="0.000" Color="#ffb400"/>
+            <Grid Width="14" Height="8" Depth="10" Units="0"/>
+            <FxItem ID="0" Hidden="True" XPos="2800" YPos="2500" ZPos="5.855" FixedZoom="2622304"/>
+            <FxItem ID="1" Hidden="True" XPos="4000" YPos="2500" ZPos="5.855" FixedZoom="2622304"/>
+            <FxItem ID="2" Hidden="True" XPos="5200" YPos="2500" ZPos="5.855" FixedZoom="2622304"/>
+            <FxItem ID="3" Hidden="True" XPos="6400" YPos="2500" ZPos="5.855" FixedZoom="2622304"/>
+            <FxItem ID="4" Hidden="True" XPos="7600" YPos="2500" ZPos="5.855" FixedZoom="2622304"/>
+            <FxItem ID="5" Hidden="True" XPos="8800" YPos="2500" ZPos="5.855" FixedZoom="2622304"/>
+            <FxItem ID="6" Hidden="True" XPos="10000" YPos="2500" ZPos="5.855" FixedZoom="2622304"/>
+            <FxItem ID="7" Hidden="True" XPos="11200" YPos="2500" ZPos="5.855" FixedZoom="2622304"/>
+            <FxItem ID="8" Hidden="True" XPos="2800" YPos="8000" ZPos="4.855" FixedZoom="2622304"/>
+            <FxItem ID="9" Hidden="True" XPos="4000" YPos="8000" ZPos="4.855" FixedZoom="2622304"/>
+            <FxItem ID="10" Hidden="True" XPos="5200" YPos="8000" ZPos="4.855" FixedZoom="2622304"/>
+            <FxItem ID="11" Hidden="True" XPos="6400" YPos="8000" ZPos="4.855" FixedZoom="2622304"/>
+            <FxItem ID="12" Hidden="True" XPos="7600" YPos="8000" ZPos="4.855" FixedZoom="2622304"/>
+            <FxItem ID="13" Hidden="True" XPos="8800" YPos="8000" ZPos="4.855" FixedZoom="2622304"/>
+            <FxItem ID="14" Hidden="True" XPos="10000" YPos="8000" ZPos="4.855" FixedZoom="2622304"/>
+            <FxItem ID="15" Hidden="True" XPos="11200" YPos="8000" ZPos="4.855" FixedZoom="2622304"/>
+            <Truss ID="0" Name="US Truss" Type="Horizontal" Profile="Square" Length="10.000" Width="0.290" OriginX="2.000" OriginY="2.500" OriginZ="6.000" DirX="1.000000" DirY="0.000000"/>
+            <Truss ID="1" Name="DS Truss" Type="Horizontal" Profile="Square" Length="10.000" Width="0.290" OriginX="2.000" OriginY="8.000" OriginZ="5.000" DirX="1.000000" DirY="0.000000"/>
+            <StageTarget ID="0" Name="Centre" X="7.000" Y="5.000" Z="0.000" Color="#ffb400"/>
             <FixtureRig FID="0" Truss="0" Offset="0.800" Mounting="TopHung" PanZero="0.0"/>
             <FixtureRig FID="1" Truss="0" Offset="2.000" Mounting="TopHung" PanZero="0.0"/>
             <FixtureRig FID="2" Truss="0" Offset="3.200" Mounting="TopHung" PanZero="0.0"/>

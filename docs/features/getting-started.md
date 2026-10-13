@@ -6,7 +6,8 @@ from a show file you're bringing to a venue. Each step links to the guide
 with the detail.
 
 Press **F1** anywhere for the help on what you're looking at; **Help →
-qlcconsole Help** opens this guide set.
+qlcconsole Help** opens this guide set. The numbered pictures are shrunk to fit the
+page — click one to see it full size.
 
 ## Starting the app
 
@@ -46,6 +47,15 @@ not opened — and saving then can write an empty workspace over it.
 
 ## Finding your way around
 
+![The main window: toolbar, the open tab, the tabs, the footer](../images/getting-started-main-window.png)
+
+1. **The toolbar** — **Stop ALL functions** (the panic button), **Blackout**,
+   **Blind**, and **Operate** to run the show.
+2. **The open tab** — here Programming, with a scene open.
+3. **The tabs**, along the bottom.
+4. **The footer** — is the show ready to run, how busy the output is, Design
+   or Operate (below).
+
 The tabs follow the order a show is built in:
 
 | Tab | What it's for | Guide |
@@ -70,6 +80,17 @@ open scene plays live so you can see it, and nothing runs that you didn't
 start. **Operate** (⌘F12) runs the show for real — and locks the editing
 that would disturb it (moving fixtures, re-patching). The mode shows in
 the footer.
+
+![The footer: readiness, grand master, speed masters, timecode, load, mode](../images/footer.png)
+
+1. **Ready** / **Not ready (N)** — click it for the list.
+2. **GM** — the grand master, over everything that's sent.
+3. **Speed masters** — one button per master the show uses, showing its
+   tempo; click one to set it
+   ([Speed masters](effects.md#speed-masters)).
+4. **MTC** — the timecode the Shows timeline follows.
+5. **Load** — how much of each DMX tick the show uses.
+6. **DESIGN** / **OPERATE** — click to switch.
 
 **The footer** says whether the show is ready to run: **Ready**, or **Not
 ready (N)** in red — click it for the list (unpatched or clashing
@@ -186,6 +207,17 @@ Steps, towers and booms usually come in sets that should all be the same:
 - The Virtual Console, Simple Desk and Shows timeline work as in stock
   QLC+; the **Programming** tab's toolbar has Highlight / Flash / Park /
   Blind for working on a running show.
+
+### GO on the beat
+
+A chase (and the cue list that plays it) can hold its GO for the music:
+the chaser editor's **GO at once / GO on the beat / GO on the bar**. Press
+GO a little early and the next cue lands on the next beat (or bar — four
+beats) of the chase's speed master, or the main beat when it has none.
+While a GO is waiting, the cue list's **Next** button turns amber; two
+presses in one beat are still one cue. Starting a stopped chase waits for
+the beat too. A chase played by the Shows timeline goes when the timeline
+says, whatever this is set to.
 
 ## Keeping it quick
 

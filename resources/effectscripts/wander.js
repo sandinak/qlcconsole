@@ -44,11 +44,15 @@
         var diverge = params.diverge !== undefined ? params.diverge : 1.0;
 
         return fixtures.map(function(f, i) {
+            // Round where the look points this head (its Aim or Pan/Tilt), the
+            // centre setting nudging from there; else the centre setting.
+            var ax = f.lookAim ? f.lookAim.pan  + (center - 0.5) : center;
+            var ay = f.lookAim ? f.lookAim.tilt + (tcenter - 0.5) : tcenter;
             if (!f.hasPanTilt) return {};
 
             var seed = inputs._spread ? f.phase * 2 * 3.14159 : i * diverge * 3.14159;
-            var pan  = (center + radius * drift(t, seed,           speed)) * f.panRange;
-            var tilt = (tcenter + radius * drift(t, seed + 100.0,  speed)) * f.tiltRange;
+            var pan  = (ax + radius * drift(t, seed,           speed)) * f.panRange;
+            var tilt = (ay + radius * drift(t, seed + 100.0,  speed)) * f.tiltRange;
 
             var intent = {
                 pan:  Math.max(0, Math.min(f.panRange,  pan)),

@@ -63,7 +63,7 @@ and group it in the Lighting Studio, build looks on it, and only then give
 it real addresses, guided by which node actually serves that part of the rig.
 
 An unpatched fixture is a full member of the show — it can be placed on the
-plot, mounted, grouped and used in looks, and the rig view shows what it
+plot, mounted, grouped and used in looks, and the Lighting Studio shows what it
 would do — it just sends no DMX until it's patched. The footer's "Not
 ready" list counts unpatched fixtures, and a Programming-tab look warns when
 any of its targets are unpatched.
@@ -88,6 +88,16 @@ any of its targets are unpatched.
 a manufacturer/model folder stands for everything under it) — opens the **Patch** dialog. It
 opens on a proposal, which you review and edit before anything changes:
 
+![The Patch dialog, proposing addresses for the show's fixtures](../images/patch-dialog.png)
+
+1. **How to place** the selected rows (into the free space, keeping their
+   spacing, packed, one universe each).
+2. **In what order** — by name, movers first then by kind, or as they hang.
+3. **The proposal** — one row per fixture; edit any mode, universe or
+   address.
+4. **What Apply will do**, and any conflicts.
+5. **Apply** — off while there are conflicts.
+
 - One row per fixture: model, **Mode** (the mode decides the DMX
   footprint, so it's chosen here — a generic dimmer gets a channel count),
   channels, **Connection**, **Universe**, **Address**, **Via** (the node port
@@ -104,16 +114,36 @@ opens on a proposal, which you review and edit before anything changes:
   on contiguous addresses.
 - A **Network** fixture gets a universe of its own at its IP (unicast);
   fixtures behind one IP share it.
-- **"Place selected at universe / address"**, **keeping their spacing**
-  (move a block as is, gaps and all), **packed together** (first free
-  channels from there, spilling into the next universe) or **one universe
-  each, counting up** (the first row that universe, the next the one after,
-  each at that address — a row of lanterns, a node's ports), puts the
-  selected rows — or all of them — where you say.
-- Already-patched fixtures start where they are; their mode is read-only
-  here (change it in the fixture's properties). A fixture a scene sets
-  channel by channel keeps its mode, and a mode with a different head count
-  is refused — both shown disabled, with the reason.
+- **"Place selected at universe / address … in order …"** puts the
+  selected rows — or all of them — where you say, in one **addressing
+  order**, the same every time: **by name** (numbers count as numbers, so
+  B2 before B10), **movers first, then by kind** (movers, scanners, pixel
+  bars, beam bars, washes, strobes, dimmers, effects, atmospherics — each
+  by name), or **as they hang** (structure by structure, in their order
+  along it). The table lists the rows in that order, and the choice is
+  remembered.
+  - **into the free space** (the default) addresses them one after another
+    in that order, around whatever else is in the universe — so the
+    addresses read in order, and the same group always lands the same way,
+    wherever its fixtures were before. Any with no room are **flagged** — "no room in U06:
+    needs 165 channels, the widest gap is 47" — and left where they were,
+    and a bar under the table offers two ways on: **Carry on into the next
+    universe** (the patch continues there, packed) or **Fit by changing
+    modes** (the biggest fixtures step down to a smaller mode, one at a
+    time, until everything fits — only to modes they can take; it says so
+    if even their smallest modes don't fit);
+  - **keeping their spacing** (move a block as is, gaps and all);
+  - **packed together** (in the order too, first free channels from there,
+    spilling into the next universe);
+  - **one universe each, counting up** (the first row that universe, the
+    next the one after, each at that address — a row of lanterns, a node's
+    ports).
+- **Mode** can be changed for any row, patched or not — to fit a group into
+  a universe, say; Status reads **mode changes**, and Apply changes the
+  fixture. A mode is shown disabled, with why, when the fixture can't take
+  it: a scene sets its channels by number, or the mode has fewer heads than
+  a fixture group lays out (a fixture in no group can change its head
+  count).
 - **Patch the others like [structure] → Match** — offered when the
   fixtures in the dialog hang on more than one structure (four towers, four
   step trusses). Pick one as the pattern: every fixture on the others takes
@@ -132,8 +162,8 @@ opens on a proposal, which you review and edit before anything changes:
 
 Moving an already-patched fixture is Design mode only. **Apply is one undo
 step**: ⌘Z — on the Fixtures tab or in the Lighting Studio — puts every
-fixture it moved back where it was, and returns any it patched from the
-inventory to it.
+fixture it moved back where it was, with the mode it had, and returns any
+it patched from the inventory to it.
 
 **Dropping on a universe.** Drag fixtures, or a fixture group, onto a
 universe row: the Patch dialog opens with them packed into that universe,
@@ -386,8 +416,8 @@ editor on its definition. On top of stock QLC+'s editor:
   angle, no pan/tilt range, a pixel layout that doesn't hold the heads,
   values no capability covers. Double-click one to jump to it. Saving with
   errors asks first.
-- **Physical tab → "Look in the rig view"** — what the Lighting Studio's rig
-  view draws:
+- **Physical tab → "Look in the Lighting Studio"** — how the Lighting Studio and
+  the Rig Overview draw it:
   - **Body**: Box, or Lantern (a cage glowing all round).
   - **Light**: Beam (a cone at the lens angle), or All round (a bare source
     lighting what's near it).

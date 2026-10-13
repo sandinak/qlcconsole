@@ -38,6 +38,10 @@ private slots:
     void tapRateAndPauseReachTheMaster();
     void aChaseAndItsStepsAreGivenAMaster();
     void aCollectionIsGivenAMaster();
+    void theCountShowsTheMastersInUse();
+    void theFooterShowsEachMastersTempo();
+    void aMastersInputsAreMappedInItsWindow();
+    void theBeatIsABlinkABarOrNothingAlwaysOrWhilePlaying();
 
 private:
     Doc *m_doc = nullptr;

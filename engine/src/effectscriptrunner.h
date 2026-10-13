@@ -38,6 +38,11 @@ class EffectScriptRunner final : public QObject, public DMXSource
     Q_OBJECT
 
 public:
+    /** Several effects' writes to one channel, layered: colours set it, a
+     *  dimmer on a head with no dimmer channel scales what's set (see
+     *  EffectInstance::DmxWrite::scale). One write per channel back. */
+    static QList<EffectInstance::DmxWrite> composeWrites(const QList<EffectInstance::DmxWrite> &writes);
+
     explicit EffectScriptRunner(Doc *doc);
     ~EffectScriptRunner() override;
 

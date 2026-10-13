@@ -291,6 +291,13 @@ private:
      *  is a single degree of freedom. Refuses on a locked bar or in Angled. */
     bool dragPipeBarTo(quint32 barId, const QPointF &px);
     void refit();                                    ///< scale/centre to fit everything
+public:
+    /** The angled view stands on the floor at centre stage -- the point it
+     *  turns about, across the middle and a little below half way -- rather
+     *  than centring what is there. The Rig Overview does. */
+    void setStandOnCentreStage(bool on) { m_standOnCentreStage = on; refit(); update(); }
+private:
+    bool m_standOnCentreStage = false;
     void collectPoints(QList<QVector3D> &pts) const; ///< every point the fit should frame
     /** Whether the Lighting Studio shows layer @p layerId -- the whole-rig
      *  view hides what it hides; an editor shows its own object regardless. */

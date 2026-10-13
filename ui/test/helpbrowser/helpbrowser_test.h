@@ -32,6 +32,7 @@ private slots:
     void aLinkToAHeadingScrollsToIt();
     void searchFindsTheGuidesThatSayIt();
     void headingsAreSluggedTheWayGitHubDoes();
+    void aPictureFitsThePageAndOpensFullSize();
 };
 
 #endif

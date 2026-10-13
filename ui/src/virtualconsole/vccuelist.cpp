@@ -947,6 +947,19 @@ void VCCueList::slotProgressTimeout()
     if (ch == NULL || !ch->isRunning())
         return;
 
+    /* A GO waiting for its beat (the chaser's "GO lands on the beat/bar"):
+       say so on the Next button, so a press that hasn't happened YET doesn't
+       read as a press that didn't take. */
+    const bool held = ch->goHeld();
+    if (m_nextButton != NULL && m_nextButton->property("goHeld").toBool() != held)
+    {
+        m_nextButton->setProperty("goHeld", held);
+        m_nextButton->setStyleSheet(held ? QStringLiteral("QToolButton { background: #c78a1a; }")
+                                         : QString());
+        m_nextButton->setToolTip(held ? tr("GO pressed: lands on the next beat")
+                                      : QString());
+    }
+
     ChaserRunnerStep step(ch->currentRunningStep());
     if (step.m_function != NULL)
     {

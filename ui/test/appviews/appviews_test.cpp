@@ -196,6 +196,33 @@ void AppViews_Test::shiftClickBreaksATabOutDoubleClickDoesNot()
     reattach(m_app, label);
     QTRY_COMPARE(tabs->count(), count);
 
+    // Every tab, Programming included ("1 programming 2. nothing at all").
+    for (int i = 0; i < count; ++i)
+    {
+        const QString each = bar->tabData(i).toString();
+        tabs->setCurrentIndex(i);                    // the tab you're on, too
+        QTest::mouseClick(bar, Qt::LeftButton, Qt::ShiftModifier, bar->tabRect(i).center());
+        QTRY_VERIFY2(m_app->detachedContexts().contains(each), qPrintable(each + " did not break out"));
+        reattach(m_app, each);
+        QTRY_COMPARE(tabs->count(), count);
+    }
+
+    // Right-click a tab: Open in Its Own Window -- every tab, and whether or
+    // not Shift-click is on ("can we have a right hand click menu on the tab").
+    for (int i = 0; i < count; ++i)
+    {
+        const QString each = bar->tabData(i).toString();
+        QMenu *menu = m_app->tabContextMenu(i);
+        QAction *open = menu->findChild<QAction *>("tabOpenInWindow");
+        QVERIFY(open != nullptr);
+        QCOMPARE(open->text(), QString("Open in Its Own Window"));
+        open->trigger();
+        delete menu;
+        QTRY_VERIFY2(m_app->detachedContexts().contains(each), qPrintable(each + " did not open in a window"));
+        reattach(m_app, each);
+        QTRY_COMPARE(tabs->count(), count);
+    }
+
     // Turned off from the Window menu: a Shift-click is just a click.
     QAction *toggle = m_app->menuBar()->findChild<QAction *>("windowShiftClick");
     QVERIFY(toggle != nullptr);

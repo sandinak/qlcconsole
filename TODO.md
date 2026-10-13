@@ -20,8 +20,9 @@ under `~/.claude/.../memory/`.
   probably the WLED controller rather than the interface; needs more
   testing. Still to do: the live view included;
   effect / palette names read from the device (`/json/eff`, `/json/pal`);
-  the WLED effect import (Branson considering); check the Breathe/Chase ports
-  against WLED's FX.cpp.
+  92 WLED effects ported, written from behaviour (WLED is EUPL -- never
+  from FX.cpp); the rest of the 1D list next, 2D / sound-reactive only if
+  wanted; compare the ports side by side with a real device.
 - **Control surfaces** — PMJ (OpenDeck) mapping as the show's operating
   surface; the control-surface engine (PMJ + APC40 mk2 + Xbox) was last
   "in progress, at the rig".
@@ -43,9 +44,12 @@ before building):
 
 1. **The spread layer, with speed masters and Link** — S1 beat clock, S2
    speed masters, S3 spread layer **done** (DONE.md 2026-10-11; demo in
-   test-workspaces/speed-spread-demo.qxw). Left: **S4** control-surface
+   test-workspaces/speed-spread-demo.qxw). **S4** control-surface
    automapping (a Speed page: masters on faders, taps, beat LEDs; PMJ
-   `Favorites` → Tap). **S5** Ableton Link deferred (GPL licence).
+   `Favorites` → Tap) is **backlogged until Branson is at the surface**
+   (2026-10-12) -- but each master's Tap / Rate / Pause can already be
+   mapped by hand (Speed Masters → Inputs..., 2026-10-12), and the masters
+   sit in the footer; S4 is the automatic page on top of that. **S5** Ableton Link deferred (GPL licence).
    [SPEED_SPREAD_DESIGN.md](SPEED_SPREAD_DESIGN.md).
 2. **Field generators sampled at positions, plus fire** — generators that
    are a field over the stage, each fixture taking its value from where it

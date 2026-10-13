@@ -5,6 +5,8 @@
   Licensed under the Apache License, Version 2.0 (the "License");
 */
 
+#include <QGuiApplication>
+#include <QWidgetAction>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QSplitter>
@@ -98,6 +100,12 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
 {
     QHBoxLayout *root = new QHBoxLayout(this);
     QSplitter *splitter = new QSplitter(Qt::Horizontal, this);
+    splitter->setObjectName(QStringLiteral("programmingSplitter"));
+    /* A handle moves the edge and stops at a panel's minimum: never snaps a
+       panel shut ("it jumps and ... only shows that"), which a collapsible
+       splitter does the moment a drag passes a minimum. */
+    splitter->setChildrenCollapsible(false);
+    m_mainSplit = splitter;
     root->addWidget(splitter);
 
     // --- Left: function tree (folders) of what you build ---
@@ -107,6 +115,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     navCol->addWidget(new QLabel(tr("Scenes / functions"), this));
 
     m_funcTree = new FunctionsTreeWidget(m_doc, this);
+    m_funcTree->setObjectName("programmingFunctions");
     m_funcTree->setDisplayFilter(FunctionsTreeWidget::FunctionsOnly);
     m_funcTree->setHeaderHidden(true);
     m_funcTree->setColumnHidden(1, true);
@@ -140,6 +149,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     // window — see App::slotDetachContext, which gives a detached tab no
     // menu bar of its own, only whatever the tab widget itself carries.
     m_addFuncBtn = new QToolButton(this);
+    m_addFuncBtn->setObjectName("programmingAddFunction");
     m_addFuncBtn->setText(tr("Add"));
     m_addFuncBtn->setIcon(QIcon(":/edit_add.png"));
     m_addFuncBtn->setPopupMode(QToolButton::InstantPopup);
@@ -187,6 +197,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
         toolbar->setContentsMargins(0, 0, 0, 0);
 
         m_highlightBtn = new QPushButton(tr("Highlight"), this);
+        m_highlightBtn->setObjectName("programmingHighlight");
         m_highlightBtn->setCheckable(true);
         m_highlightBtn->setToolTip(tr("Drive selected fixtures to full white so you can identify them in the rig"));
         toolbar->addWidget(m_highlightBtn);
@@ -200,12 +211,10 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
         m_parkBtn->setToolTip(tr("Hold the selected fixtures at their current values, out of cue "
                                  "output, until unparked (saved with the workspace)"));
         m_parkBtn->setEnabled(false);
-        toolbar->addWidget(m_parkBtn);
 
         m_unparkBtn = new QPushButton(tr("Unpark all"), this);
         m_unparkBtn->setToolTip(tr("Release every parked fixture"));
         m_unparkBtn->setEnabled(false);
-        toolbar->addWidget(m_unparkBtn);
 
         m_markBtn = new QPushButton(tr("Mark"), this);
         m_markBtn->setToolTip(tr("Move-in-black: pre-position the selected DARK fixtures "
@@ -213,12 +222,10 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
                                  "held out of cue output. Auto-releases when a cue lights them; "
                                  "saved with the workspace."));
         m_markBtn->setEnabled(false);
-        toolbar->addWidget(m_markBtn);
 
         m_unmarkBtn = new QPushButton(tr("Unmark all"), this);
         m_unmarkBtn->setToolTip(tr("Release every marked fixture"));
         m_unmarkBtn->setEnabled(false);
-        toolbar->addWidget(m_unmarkBtn);
 
         m_autoMibBtn = new QPushButton(tr("Auto MIB"), this);
         m_autoMibBtn->setCheckable(true);
@@ -226,7 +233,6 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
                                     "timeline runs, look ahead to the next cue and pre-position "
                                     "any dark mover it will reveal — as long as there's enough "
                                     "lead time. Releases each fixture as its cue lights it."));
-        toolbar->addWidget(m_autoMibBtn);
 
         m_mibGapSpin = new QDoubleSpinBox(this);
         m_mibGapSpin->setRange(0.1, 10.0);
@@ -236,25 +242,19 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
         m_mibGapSpin->setToolTip(tr("Move-in-black lead time: the next cue must be at least this "
                                     "far away for a dark mover to be pre-set. Below it there's no "
                                     "time to move in black, so it's skipped."));
-        toolbar->addWidget(m_mibGapSpin);
 
         m_snapshotBtn = new QPushButton(tr("Snapshot"), this);
         m_snapshotBtn->setToolTip(tr("Bake the current live DMX output into the open "
             "scene as static values — capture a look built on an external console."));
         connect(m_snapshotBtn, SIGNAL(clicked()), this, SLOT(slotSnapshotLive()));
-        toolbar->addWidget(m_snapshotBtn);
-
-        toolbar->addStretch(1);
 
         // BPM / internal beat generator
-        toolbar->addWidget(new QLabel(tr("BPM:"), this));
 
         m_bpmSpin = new QSpinBox(this);
         m_bpmSpin->setRange(20, 400);
         m_bpmSpin->setValue(120);
         m_bpmSpin->setToolTip(tr("Beats per minute for internal beat generator"));
         m_bpmSpin->setEnabled(false);
-        toolbar->addWidget(m_bpmSpin);
 
         m_tapBtn = new QPushButton(tr("Tap"), this);
         m_tapBtn->setToolTip(tr("Tap to set BPM from live tempo"));
@@ -264,7 +264,6 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
         m_bpmBtn = new QPushButton(tr("Beat On"), this);
         m_bpmBtn->setCheckable(true);
         m_bpmBtn->setToolTip(tr("Enable QLC+ internal beat generator (drives _beat/_bpm in generators)"));
-        toolbar->addWidget(m_bpmBtn);
 
         QPushButton *mastersBtn = new QPushButton(tr("Masters"), this);
         mastersBtn->setObjectName(QStringLiteral("speedMastersButton"));
@@ -273,9 +272,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
         connect(mastersBtn, &QPushButton::clicked, this, [this]() {
             SpeedMastersPanel::open(m_doc, this);
         });
-        toolbar->addWidget(mastersBtn);
 
-        toolbar->addWidget(new QLabel(tr("Jog:"), this));
 
         m_speedSpin = new QSpinBox(this);
         m_speedSpin->setRange(10, 500);
@@ -283,7 +280,6 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
         m_speedSpin->setValue(100);
         m_speedSpin->setSuffix(tr("%"));
         m_speedSpin->setToolTip(tr("Joystick speed for position editing (100% = 2 m/s at full deflection)"));
-        toolbar->addWidget(m_speedSpin);
 
         m_saveBtn = new QPushButton(tr("Save Positions"), this);
         m_saveBtn->setEnabled(false);
@@ -292,6 +288,96 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
             "Only these joystick edits need this button — every other look edit "
             "here (color, dimmer, gradient, …) is already live; the footer's "
             "● Unsaved changes indicator tracks those."));
+        toolbar->addWidget(m_saveBtn);
+
+        /* One row, no scrolling ("can we make this row more useful using a
+           dropdown paradigm like we did for the studio options? right now
+           scrolling is a bit obnoxious"): what is pressed all the time stays a
+           button -- Highlight, Flash, Tap, Save Positions -- and the rest sits
+           in drop-downs, as the Lighting Studio's footer does. The buttons
+           behind the menu items are kept (hidden): their state, slots and
+           enabling carry on exactly as before, and each item mirrors its
+           button when the menu opens. */
+        auto dropDown = [this](const QString &text, const QString &name) {
+            QToolButton *b = new QToolButton(this);
+            b->setObjectName(name);
+            b->setText(text);
+            b->setPopupMode(QToolButton::InstantPopup);
+            b->setToolButtonStyle(Qt::ToolButtonTextOnly);
+            QMenu *m = new QMenu(b);
+            m->setToolTipsVisible(true);
+            b->setMenu(m);
+            return b;
+        };
+        auto mirror = [](QMenu *m, QPushButton *btn, const QString &text) {
+            btn->hide();
+            QAction *a = m->addAction(text);
+            a->setToolTip(btn->toolTip());
+            a->setCheckable(btn->isCheckable());
+            QObject::connect(a, &QAction::triggered, btn, [btn]() { btn->click(); });
+            QObject::connect(m, &QMenu::aboutToShow, a, [a, btn]() {
+                a->setEnabled(btn->isEnabled());
+                a->setChecked(btn->isChecked());
+            });
+            return a;
+        };
+        auto fieldAction = [this](QMenu *m, const QString &label, QWidget *field) {
+            QWidget *row = new QWidget(this);
+            QHBoxLayout *rl = new QHBoxLayout(row);
+            rl->setContentsMargins(24, 2, 12, 2);
+            rl->addWidget(new QLabel(label, row));
+            rl->addStretch(1);
+            field->setParent(row);
+            rl->addWidget(field);
+            QWidgetAction *wa = new QWidgetAction(m);
+            wa->setDefaultWidget(row);
+            m->addAction(wa);
+        };
+
+        QToolButton *parkMenu = dropDown(tr("Park"), QStringLiteral("parkMenu"));
+        mirror(parkMenu->menu(), m_parkBtn, tr("Park selected fixtures"));
+        mirror(parkMenu->menu(), m_unparkBtn, tr("Unpark all"));
+
+        QToolButton *markMenu = dropDown(tr("Move in black"), QStringLiteral("markMenu"));
+        mirror(markMenu->menu(), m_markBtn, tr("Mark selected (pre-position in black)"));
+        mirror(markMenu->menu(), m_unmarkBtn, tr("Unmark all"));
+        markMenu->menu()->addSeparator();
+        mirror(markMenu->menu(), m_autoMibBtn, tr("Auto move-in-black"));
+        fieldAction(markMenu->menu(), tr("Lead time"), m_mibGapSpin);
+
+        QToolButton *beatMenu = dropDown(tr("Beat"), QStringLiteral("beatMenu"));
+        mirror(beatMenu->menu(), m_bpmBtn, tr("Internal beat on"));
+        fieldAction(beatMenu->menu(), tr("BPM"), m_bpmSpin);
+        beatMenu->menu()->addSeparator();
+        mastersBtn->hide();
+        QAction *mastersAct = beatMenu->menu()->addAction(tr("Speed masters…"));
+        mastersAct->setToolTip(mastersBtn->toolTip());
+        connect(mastersAct, &QAction::triggered, mastersBtn, &QPushButton::click);
+        // The button says the tempo, so it needn't be opened to read it.
+        auto beatText = [beatMenu, this]() {
+            beatMenu->setText(m_bpmBtn->isChecked() ? tr("Beat %1").arg(m_bpmSpin->value())
+                                                    : tr("Beat off"));
+        };
+        connect(m_bpmBtn, &QPushButton::toggled, beatMenu, [beatText](bool) { beatText(); });
+        connect(m_bpmSpin, QOverload<int>::of(&QSpinBox::valueChanged), beatMenu,
+                [beatText](int) { beatText(); });
+        beatText();
+
+        QToolButton *moreMenu = dropDown(tr("More"), QStringLiteral("programmingMoreMenu"));
+        mirror(moreMenu->menu(), m_snapshotBtn, tr("Snapshot live output into the scene"));
+        fieldAction(moreMenu->menu(), tr("Jog speed"), m_speedSpin);
+
+        // Highlight, Flash | Park, Move in black ... Beat, Tap | More, Save Positions
+        while (toolbar->count() > 0)
+            delete toolbar->takeAt(0);                 // the items, not the widgets
+        toolbar->addWidget(m_highlightBtn);
+        toolbar->addWidget(m_flashBtn);
+        toolbar->addWidget(parkMenu);
+        toolbar->addWidget(markMenu);
+        toolbar->addStretch(1);
+        toolbar->addWidget(beatMenu);
+        toolbar->addWidget(m_tapBtn);
+        toolbar->addWidget(moreMenu);
         toolbar->addWidget(m_saveBtn);
 
         // The row above packs ~15 controls (Highlight/Flash/Park/Unpark/Mark/
@@ -473,23 +559,53 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     bl->addStretch();
     phl->addLayout(bl);
     phl->addStretch();
-    m_canvasLayout->addWidget(m_canvasPlaceholder, 1);
+    /* The canvas (targets and looks) over the editor of what's selected
+       (look editor / fixture console), with a handle between them. */
+    m_canvasSplit = new QSplitter(Qt::Vertical, this);
+    m_canvasSplit->setObjectName(QStringLiteral("programmingCanvasSplitter"));
+    m_canvasSplit->setChildrenCollapsible(false);
+    QWidget *canvasTop = new QWidget(m_canvasSplit);
+    m_canvasTopLayout = new QVBoxLayout(canvasTop);
+    m_canvasTopLayout->setContentsMargins(0, 0, 0, 0);
+    // Scrolls when the handle makes it shorter than the editor in it.
+    QScrollArea *editorScroll = new QScrollArea(m_canvasSplit);
+    editorScroll->setWidgetResizable(true);
+    editorScroll->setFrameShape(QFrame::NoFrame);
+    editorScroll->setMinimumHeight(80);
+    QWidget *editorInner = new QWidget(editorScroll);
+    m_editorLayout = new QVBoxLayout(editorInner);
+    m_editorLayout->setContentsMargins(0, 0, 0, 0);
+    editorScroll->setWidget(editorInner);
+    m_editorPane = editorScroll;
+    m_canvasSplit->addWidget(canvasTop);
+    m_canvasSplit->addWidget(m_editorPane);
+    m_canvasSplit->setStretchFactor(0, 1);
+    m_canvasSplit->setStretchFactor(1, 0);
+    m_canvasLayout->addWidget(m_canvasSplit, 1);
+    m_canvasTopLayout->addWidget(m_canvasPlaceholder, 1);
 
     /* Once, on a first run -- queued, so it lands after the window is up rather
-       than during construction. */
-    if (takeFirstRunGuideFlag())
+       than during construction. Never on a headless platform ("offscreen", or
+       "minimal", which the Linux test runner uses under xvfb): nobody can read
+       or dismiss a dialog there, and it hung a test on a fresh CI runner for
+       five minutes waiting for a click. The flag isn't consumed there, so the
+       first real run still shows it. */
+    const QString platform = QGuiApplication::platformName();
+    if (platform != QLatin1String("offscreen") && platform != QLatin1String("minimal")
+        && takeFirstRunGuideFlag())
         QMetaObject::invokeMethod(this, [this]() { showProgrammingGuide(); },
                                   Qt::QueuedConnection);
     // Inline look editor pinned to the bottom of the center panel. It is NOT
     // scrolled: it always renders fully at its preferred height (Fixed
     // vertical), and the canvas above (stretch) shrinks to make room.
     m_lookEditor = new LookEditor(m_doc, this);
+    m_lookEditor->setObjectName("lookEditor");
     // Take the look editor's full preferred height; the canvas above (Expanding)
     // shrinks first to make room. Maximum (not Fixed) so the window can still be
     // resized very short if needed (the canvas hits its min first).
-    m_lookEditor->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
-    m_lookEditor->setMaximumHeight(340); // matches the capped picker/XY pad
-    m_canvasLayout->addWidget(m_lookEditor);
+    // In the lower pane of the canvas splitter: its handle sets the height.
+    m_lookEditor->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
+    m_editorLayout->addWidget(m_lookEditor);
 
     // Per-fixture DMX channel editor, shown at the bottom when fixed-fixture
     // targets are selected (instead of the look editor). Height-bounded so a
@@ -515,7 +631,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     m_fixtureScroll->setMinimumWidth(150);
     m_fixtureScroll->setWidget(m_fixtureConsole);
     m_fixtureScroll->hide();
-    m_canvasLayout->addWidget(m_fixtureScroll);
+    m_editorLayout->addWidget(m_fixtureScroll);
 
     // Shown instead of the console when several selected fixed fixtures are of
     // different types (editing them by channel index would be meaningless).
@@ -525,7 +641,12 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     m_fixtureMixedNote->setMinimumHeight(120);
     m_fixtureMixedNote->setStyleSheet("QLabel { color: gray; }");
     m_fixtureMixedNote->hide();
-    m_canvasLayout->addWidget(m_fixtureMixedNote);
+    m_editorLayout->addWidget(m_fixtureMixedNote);
+
+    // The lower pane only while it has something to show.
+    for (QWidget *w : { (QWidget *)m_lookEditor, (QWidget *)m_fixtureScroll, (QWidget *)m_fixtureMixedNote })
+        w->installEventFilter(this);
+    syncEditorPane();
 
     // Estimated electrical load of the previewed look (Design mode only);
     // the readout is the app status-bar chip, this just drives the timer.
@@ -540,6 +661,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     // --- Right: drag sources (palette tree + fixtures & groups tree) ---
     // ── Source panel: tabbed (Palettes | Bundles | Fixtures) ─────────────
     auto *sourceTab = new QTabWidget(this);
+    sourceTab->setObjectName("programmingSources");
     sourceTab->setDocumentMode(true);
 
     // ── Palettes tab ──────────────────────────────────────────────────────
@@ -551,6 +673,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     paletteFilter->setClearButtonEnabled(true);
     palCol->addWidget(paletteFilter);
     m_paletteTree = new FunctionsTreeWidget(m_doc, palTab);
+    m_paletteTree->setObjectName("programmingPalettes");
     m_paletteTree->setDisplayFilter(FunctionsTreeWidget::PalettesOnly);
     m_paletteTree->setHeaderHidden(true);
     m_paletteTree->setColumnHidden(1, true);
@@ -594,6 +717,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     fixGroupFilter->setClearButtonEnabled(true);
     srcCol->addWidget(fixGroupFilter);
     m_fixGroupSource = new FixtureGroupSource(m_doc, sourcePanel);
+    m_fixGroupSource->setObjectName("programmingFixturesGroups");
     srcCol->addWidget(m_fixGroupSource, 2);
     connect(fixGroupFilter, &QLineEdit::textChanged,
             m_fixGroupSource, &FixtureGroupSource::setFilterText);
@@ -609,6 +733,19 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     splitter->setStretchFactor(0, 2); // nav
     splitter->setStretchFactor(1, 3); // canvas
     splitter->setStretchFactor(2, 2); // sources
+
+    // Where the handles were left, next time.
+    {
+        QSettings st;
+        splitter->restoreState(st.value(QStringLiteral("programming/splitter")).toByteArray());
+        m_canvasSplit->restoreState(st.value(QStringLiteral("programming/canvasSplitter")).toByteArray());
+    }
+    connect(splitter, &QSplitter::splitterMoved, this, [splitter]() {
+        QSettings().setValue(QStringLiteral("programming/splitter"), splitter->saveState());
+    });
+    connect(m_canvasSplit, &QSplitter::splitterMoved, this, [this]() {
+        QSettings().setValue(QStringLiteral("programming/canvasSplitter"), m_canvasSplit->saveState());
+    });
 
     // Open on DOUBLE-click only; single-click just selects, so a function
     // can be click-dragged from the tree into a collection/chaser canvas
@@ -814,7 +951,7 @@ void ProgrammingManager::loadCanvas(quint32 sceneId)
         if (pid != QLCPalette::invalidId()) { m_fixtureScroll->hide(); m_fixtureMixedNote->hide(); m_lookEditor->show(); }
     });
     // Insert above the bottom editors.
-    m_canvasLayout->insertWidget(m_canvasLayout->indexOf(m_lookEditor), m_canvas, 1);
+    m_canvasTopLayout->addWidget(m_canvas, 1);
 
     stopOperateScene();  // stop the previous scene before starting the new one
     startPreview();
@@ -922,7 +1059,7 @@ void ProgrammingManager::loadFunctionEditor(Function *f)
     }
 
     m_funcEditor = ed;
-    m_canvasLayout->insertWidget(m_canvasLayout->indexOf(m_lookEditor), m_funcEditor, 1);
+    m_canvasTopLayout->addWidget(m_funcEditor, 1);
     m_funcEditor->show();
     // A Show owns its own transport (Play/Stop in the timeline editor) — never
     // auto-play it on open. Other editors preview live so the view reflects them.
@@ -963,7 +1100,7 @@ void ProgrammingManager::loadGroupEditor(quint32 groupId)
     // Reuse the func-editor slot as the hosted canvas widget so clearEditors()
     // tears it down on the next selection.
     m_funcEditor = new FixtureGroupEditor(grp, m_doc, this);
-    m_canvasLayout->insertWidget(m_canvasLayout->indexOf(m_lookEditor), m_funcEditor, 1);
+    m_canvasTopLayout->addWidget(m_funcEditor, 1);
     m_funcEditor->show();
 
     m_canvasTitle->setText(tr("Fixture group: %1   —   %n head(s)", "", grp->headList().count())
@@ -1062,13 +1199,31 @@ void ProgrammingManager::slotLookEdited(quint32 paletteId)
     }
 }
 
+bool ProgrammingManager::eventFilter(QObject *watched, QEvent *event)
+{
+    if ((event->type() == QEvent::Show || event->type() == QEvent::Hide)
+        && (watched == m_lookEditor || watched == m_fixtureScroll || watched == m_fixtureMixedNote))
+        QMetaObject::invokeMethod(this, [this]() { syncEditorPane(); }, Qt::QueuedConnection);
+    return QWidget::eventFilter(watched, event);
+}
+
+void ProgrammingManager::syncEditorPane()
+{
+    // The editor pane under the canvas shows while one of its editors does.
+    if (m_editorPane == nullptr)
+        return;
+    const bool any = !m_lookEditor->isHidden() || !m_fixtureScroll->isHidden()
+                     || !m_fixtureMixedNote->isHidden();
+    m_editorPane->setVisible(any);
+}
+
 void ProgrammingManager::updateTrialPalette(quint32 paletteId)
 {
     /* "I just tried a new pan/tilt ... moved it around and the rig isn't
        following." A palette only reaches the rig through a look that plays
        it, and a new one is in none -- so the pad moved a value nothing sent.
        While it is being edited, it is tried on the look on the canvas: played
-       after the look's own palettes, never saved into it. */
+       over the look's own (Scene::runtimePalettes()), never saved into it. */
     Scene *old = qobject_cast<Scene*>(m_doc->function(m_trialScene));
     if (old != nullptr)
     {

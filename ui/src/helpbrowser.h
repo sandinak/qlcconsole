@@ -77,6 +77,10 @@ private:
     void scrollToHeading(const QString &fragment);
     void search(const QString &text);
     void followLink(const QUrl &url);
+    void fitImages();
+    void showImage(const QString &path);
+
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
     QTextBrowser *m_browser;
     QListWidget *m_topics;
@@ -86,6 +90,7 @@ private:
     QString m_file, m_heading;
     QStringList m_history;
     int m_at = -1;
+    int m_fittedTo = 0;                 ///< page width the pictures were fitted to
 };
 
 /** @} */

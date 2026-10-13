@@ -26,7 +26,11 @@
 #include "monitorproperties.h"
 #include "effectscriptrunner.h"
 #include "aimsolver.h"
+#include <QMutex>
+#include <QFile>
+#include <QHash>
 #include "qlcpalette.h"
+#include "fixture.h"
 #include "grouphead.h"
 #include "effectscriptcache.h"
 #include "qlcchannel.h"
@@ -555,8 +559,13 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                         list << SceneValue(id, set.at(1), uchar(qMax(0, c.green() - wsub)));
                         list << SceneValue(id, set.at(2), uchar(qMax(0, c.blue()  - wsub)));
                     }
+                    /* CMY, a colour wheel and the white/amber/UV emitters are
+                       the fixture's ONE colour: colour 1's. A second Colour look
+                       (colour 2, for a second RGB set) left them alone -- it
+                       used to move the wheel to its own slot. */
+                    const bool primary = (colorSetOffset == 0);
                     QVector<quint32> cmyCh = fixture->cmyChannels(i);
-                    if (cmyCh.size() == 3)
+                    if (primary && cmyCh.size() == 3)
                     {
                         list << SceneValue(id, cmyCh.at(0), uchar(col.cyan()));
                         list << SceneValue(id, cmyCh.at(1), uchar(col.magenta()));
@@ -566,7 +575,7 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                     // Color-wheel fixtures: snap to the nearest wheel slot.
                     // Only applies when the fixture has no RGB/CMY channels
                     // (those are already handled above with exact mixing).
-                    if (rgbSets.isEmpty() && cmyCh.size() < 3)
+                    if (primary && rgbSets.isEmpty() && cmyCh.size() < 3)
                     {
                         QLCFixtureMode *mode = fixture->fixtureMode();
                         QLCFixtureHead fHead = fixture->head(i);
@@ -600,7 +609,7 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                                 if (dist < bestDist)
                                 {
                                     bestDist = dist;
-                                    bestDmx  = v;
+                                    bestDmx  = cap->middle();   // the slot's middle, as effects pick it
                                 }
                                 // Advance v to skip identical caps in the range
                                 if (cap->max() > uchar(v))
@@ -614,8 +623,9 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                     // Extra emitter channels. White carries the value extracted
                     // from RGB above (so R'+W reconstructs the picked colour);
                     // Amber/UV are additive and default to 0.
-                    if (whiteCh != QLCChannel::invalid())
+                    if (primary && whiteCh != QLCChannel::invalid())
                         list << SceneValue(id, whiteCh, uchar(emitters.red()));
+                    if (primary)
                     {
                         quint32 channel = fixture->channelNumber(QLCChannel::Amber, QLCChannel::MSB, i);
                         if (channel != QLCChannel::invalid())
@@ -984,23 +994,96 @@ int QLCPalette::colorSetOffset(Doc *doc, const QList<quint32> &orderedPalettes, 
     return offset;
 }
 
+bool QLCPalette::fixtureHasDimmer(const Fixture *fixture)
+{
+    if (fixture == NULL)
+        return false;
+    if (fixture->masterIntensityChannel() != QLCChannel::invalid())
+        return true;
+    for (int h = 0; h < fixture->heads(); h++)
+    {
+        const quint32 ch = fixture->channelNumber(QLCChannel::Intensity, QLCChannel::MSB, h);
+        const QLCChannel *c = ch != QLCChannel::invalid() ? fixture->channel(ch) : NULL;
+        if (c != NULL && c->colour() == QLCChannel::NoColour)
+            return true;
+    }
+    return false;
+}
+
+int QLCPalette::lookDimmerValue(Doc *doc, const QList<quint32> &orderedPalettes)
+{
+    int value = -1;
+    for (quint32 pid : orderedPalettes)
+    {
+        QLCPalette *p = doc->palette(pid);
+        if (p != NULL && p->type() == Dimmer && !isEffectScoped(doc, orderedPalettes, pid))
+            value = qBound(0, p->value().toInt(), 255);     // the lowest wins
+    }
+    return value;
+}
+
+uchar QLCPalette::dimScaleWithoutDimmer(const Fixture *fixture, quint32 channel, uchar value, int lookDimmer)
+{
+    if (lookDimmer < 0 || fixture == NULL || fixtureHasDimmer(fixture))
+        return value;
+    const QLCChannel *c = fixture->channel(channel);
+    if (c == NULL || c->group() != QLCChannel::Intensity || c->colour() == QLCChannel::NoColour)
+        return value;                       // not a colour emitter
+    return uchar(qRound(double(value) * lookDimmer / 255.0));
+}
+
+bool QLCPalette::effectUsesLookColours(const QLCPalette *effect)
+{
+    /* Whether an effect takes the look's colours and dimmer as its own input:
+       a script reading palettes.look (directly, or through the WLED library),
+       or the WLED device effect, which the host hands the look's colours. A
+       movement, beam or fixed-colour effect (ballyhoo, gobo chase, amber
+       pulse) doesn't -- a colour under it is just part of the look. Read once
+       a script; asked from the DMX thread too, hence the lock. */
+    if (effect == NULL || effect->type() != Effect)
+        return false;
+    const QString path = effect->scriptPath();
+    if (path.isEmpty())
+        return false;
+    static QMutex lock;
+    static QHash<QString, bool> known;
+    QMutexLocker locker(&lock);
+    auto it = known.constFind(path);
+    if (it != known.constEnd())
+        return it.value();
+    bool uses = path.endsWith(QLatin1String("wled-device.js"));
+    QFile f(path);
+    if (!uses && f.open(QIODevice::ReadOnly))
+    {
+        const QByteArray src = f.readAll();
+        uses = src.contains("palettes.look") || src.contains("WLED.segment");
+    }
+    known.insert(path, uses);
+    return uses;
+}
+
 bool QLCPalette::isEffectScoped(Doc *doc, const QList<quint32> &orderedPalettes, quint32 paletteId)
 {
-    // Ordering paradigm for a look's palette list: a Colour/Dimmer palette placed
-    // AFTER an Effect palette "belongs to the effect" — it feeds the effect's
-    // colours (palettes.look) and must NOT be painted onto the fixtures as a
-    // static base. Otherwise the effect's output (which uses those same colours)
-    // is HTP-merged over an identical base and vanishes — e.g. the left, blue end
-    // of a note-effect gradient landing on an already-blue fixture. Palettes
-    // BEFORE the first Effect are the ordinary static base.
-    bool sawEffect = false;
+    /* Ordering paradigm for a look's palette list, read top to bottom: a
+       Colour or Dimmer palette placed under an Effect (until the next effect)
+       "belongs to the effect" -- it applies to that effect only ("colors,
+       dimmers, etc. assigned to effects only apply to that effect"), so it is
+       NOT painted onto the fixtures as the look's static base. An effect that
+       takes the look's colours uses them as its colours; one that doesn't (a
+       ballyhoo) has the host apply them with its output (EffectInstance).
+       Those above every effect are the look's own, across all its effects.
+       An Aim, Pan/Tilt, Gobo... is never an effect's: an Aim after an effect
+       never aimed. */
+    QLCPalette *self = doc->palette(paletteId);
+    if (self == NULL || (self->type() != Color && self->type() != Dimmer))
+        return false;
     for (quint32 pid : orderedPalettes)
     {
         if (pid == paletteId)
-            return sawEffect;
+            return false;
         QLCPalette *p = doc->palette(pid);
         if (p != NULL && p->type() == Effect)
-            sawEffect = true;
+            return true;                    // under an effect
     }
     return false;
 }

@@ -20,6 +20,7 @@
 #include <QCollator>
 #include <algorithm>
 
+#include "naturalcompare.h"
 #include "universecombo.h"
 #include "inputoutputmap.h"
 #include "doc.h"
@@ -37,11 +38,8 @@ UniverseCombo::UniverseCombo(Doc *doc, int newOnes, QWidget *parent)
             name = tr("Universe %1").arg(i + 1);
         entries << Entry{ name, i };
     }
-    QCollator collator;
-    collator.setNumericMode(true);
-    collator.setCaseSensitivity(Qt::CaseInsensitive);
-    std::stable_sort(entries.begin(), entries.end(), [&collator](const Entry &a, const Entry &b) {
-        return collator.compare(a.name, b.name) < 0;
+    std::stable_sort(entries.begin(), entries.end(), [](const Entry &a, const Entry &b) {
+        return naturalCompare(a.name, b.name) < 0;
     });
 
     foreach (const Entry &e, entries)

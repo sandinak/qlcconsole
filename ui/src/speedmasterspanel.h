@@ -48,15 +48,21 @@ class SpeedMastersPanel final : public QWidget
 public:
     explicit SpeedMastersPanel(Doc *doc, QWidget *parent = nullptr);
 
-    /** The one panel, made on first use and raised after. */
-    static SpeedMastersPanel *open(Doc *doc, QWidget *parent);
+    /** The one panel, made on first use and raised after; @p focus, a
+     *  master's index, puts the cursor on its tempo. */
+    static SpeedMastersPanel *open(Doc *doc, QWidget *parent, int focus = -1);
+
+    /** Map a master's Tap, Rate and Pause to control-surface inputs. */
+    void editInputs(int index);
+    /** What a row's Inputs button reads: how many are mapped. */
+    static QString inputsText(int mapped);
 
     /** The ratios offered for following ("×½", "×2"...). */
     static QList<double> ratios();
 
     /** The speed choices every editor offers, in order: @p inheritText
      *  (Inherit), Own speed, Main clock, the four masters by name. */
-    static QList<int> choiceValues();
+    static QList<int> choiceValues(Doc *doc);
     static QStringList choiceNames(Doc *doc, const QString &inheritText);
     /** Fill @p cb with them, @p current selected. */
     static void fillCombo(QComboBox *cb, Doc *doc, const QString &inheritText, int current);
@@ -72,18 +78,24 @@ public:
         QLabel *rateText = nullptr;
         QPushButton *pause = nullptr;
         QLabel *light = nullptr;
+        QPushButton *inputs = nullptr;
     };
     const Row &row(int index) const { return m_rows[index]; }
 
 private:
     void refresh(int index);
+    /** Show the rows the show uses and fill the "Follows" lists to match. */
+    void applyCount();
     void applySource(int index);
     void tickLights();
 
     Doc *m_doc;
-    Row m_rows[4];
+    Row m_rows[16];                 // SpeedMasters::MaxCount
+    class QSpinBox *m_countSpin = nullptr;
     QTimer *m_lightTimer;
     bool m_refreshing = false;
+    quint32 m_used = 0;             // SpeedMasters::usedMask()
+    int m_ticks = 0;
 };
 
 /** @} */

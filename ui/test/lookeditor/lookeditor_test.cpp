@@ -19,6 +19,9 @@
 
 #include <QtTest>
 #include <QScrollArea>
+#include <QToolButton>
+#include <QTextBrowser>
+#include <QDialog>
 #include <QPushButton>
 #include <QCheckBox>
 #include <QCollator>
@@ -327,24 +330,72 @@ void LookEditor_Test::effectsArePickedFromABrowserWithWledsOwn()
     browser->show();
     QCoreApplication::processEvents();
     browser->tickPreviews();
-    QCOMPARE(browser->m_frames.value(rowNamed("WLED Chase")->data(Qt::UserRole + 11).toString()).size(), 16);
+    QCOMPARE(browser->m_frames.value(rowNamed("WLED Chase")->data(Qt::UserRole + 11).toString()).lights.size(), 16);
     if (!qEnvironmentVariableIsEmpty("BROWSER_PNG"))
     {
         browser->search()->clear();
-        browser->tabs()->setCurrentIndex(browser->tabNames().indexOf("Color"));
-        for (int k = 0; k < 6; ++k)
-        {
-            QTest::qWait(90);
-            browser->tickPreviews();
-        }
+        const QString tab = qEnvironmentVariableIsEmpty("BROWSER_TAB")
+                                ? QStringLiteral("Color") : qEnvironmentVariable("BROWSER_TAB");
+        browser->tabs()->setCurrentIndex(browser->tabNames().indexOf(tab));
         browser->setParent(nullptr);
-        browser->resize(560, 420);
+        browser->resize(560, 760);
         browser->show();
         QCoreApplication::processEvents();
-        browser->tickPreviews();
+        for (int k = 0; k < 32; ++k)            // a position effect's trail fills in
+        {
+            QTest::qWait(80);
+            browser->tickPreviews();
+        }
         browser->grab().save(qEnvironmentVariable("BROWSER_PNG"));
         browser->setParent(&ed);
     }
+}
+
+/* "position based effects shouldn't show matrix lines but show what the
+   effect does": a position effect's preview is where the heads point and the
+   shape they trace; a gobo, iris or zoom one is a row of beams. */
+void LookEditor_Test::previewsShowWhatEachEffectDoes()
+{
+    Doc doc(this);
+    doc.effectScriptRunner()->cache()->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    QLCPalette *look = new QLCPalette(QLCPalette::Effect, &doc);
+    look->setName("Look");
+    QVERIFY(doc.addPalette(look));
+    LookEditor ed(&doc);
+    ed.setPalette(look->id());
+    EffectBrowser *browser = ed.m_effectBrowser;
+    QVERIFY(browser != nullptr);
+    EffectScriptCache *cache = doc.effectScriptRunner()->cache();
+
+    const EffectBrowser::Preview diamond = browser->previewFrame(cache->scriptPath("Diamond"));
+    QCOMPARE(diamond.kind, EffectBrowser::Preview::Position);
+    QCOMPARE(diamond.spots.size(), 16);
+    const QVector<QVector<QPointF> > shape = browser->samplePaths(cache->scriptPath("Diamond"));
+    QVERIFY(!shape.isEmpty());
+    QRectF seen;
+    foreach (const QPointF &q, shape.at(0))
+        seen = seen.isNull() ? QRectF(q, QSizeF(1e-9, 1e-9)) : seen.united(QRectF(q, QSizeF(1e-9, 1e-9)));
+    QVERIFY2(seen.width() > 0.01 && seen.height() > 0.01, "a diamond moves both ways");
+
+    QCOMPARE(browser->previewFrame(cache->scriptPath("Stage Shape")).kind,
+             EffectBrowser::Preview::Position);       // aims at the look's target
+    QCOMPARE(browser->previewFrame(cache->scriptPath("Gobo Chase")).kind, EffectBrowser::Preview::Gobo);
+    QCOMPARE(browser->previewFrame(cache->scriptPath("Iris Pulse")).kind, EffectBrowser::Preview::Beam);
+    QCOMPARE(browser->previewFrame(cache->scriptPath("Zoom Pulse")).kind, EffectBrowser::Preview::Beam);
+
+    // A follow-spot does nothing held still: it is previewed steered.
+    EffectBrowser::Preview follow;
+    for (int k = 0; k < 3 && follow.kind != EffectBrowser::Preview::Position; ++k)
+        follow = browser->previewFrame(cache->scriptPath("Followspot"));
+    QCOMPARE(follow.kind, EffectBrowser::Preview::Position);
+
+    // Amber lights in amber, not dark.
+    const EffectBrowser::Preview amber = browser->previewFrame(cache->scriptPath("Amber Pulse"));
+    QCOMPARE(amber.kind, EffectBrowser::Preview::Lights);
+    int lit = 0;
+    foreach (const QColor &c, amber.lights)
+        lit += (c.red() > 60 && c.blue() < c.red()) ? 1 : 0;
+    QVERIFY2(lit > 0, "amber pulse should light amber");
 }
 
 /* An effect with words to show (the Text effect) gets a box to type them in,
@@ -535,11 +586,12 @@ void LookEditor_Test::theSpreadIsPreviewed()
     preview->grab();                                     // it paints
 }
 
-void LookEditor_Test::theEffectListAndItsSettingsSitSideBySide()
+/* "the effect search and listing with tabs is taking up too much space when
+   working WITH an effect .. we still need to be able to access it .. a
+   selection should apply immediately": the browser is a window of its own,
+   the settings have the width, and every pick plays at once. */
+void LookEditor_Test::theEffectPickerIsAWindowOfItsOwn()
 {
-    /* "on a regular sized screen we're running out of space in the bottom ..
-       move the effect list to the left side and options on the right": the
-       list keeps the height, the picked effect's settings sit beside it. */
     Doc doc(this);
     doc.effectScriptRunner()->cache()->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
     QLCPalette *look = new QLCPalette(QLCPalette::Effect, &doc);
@@ -548,33 +600,174 @@ void LookEditor_Test::theEffectListAndItsSettingsSitSideBySide()
     LookEditor ed(&doc);
     ed.resize(1000, 640);
     ed.show();
-    ed.setPalette(look->id());
-    EffectBrowser *browser = ed.m_effectBrowser;
-    QVERIFY(browser->list()->count() > 1);
-    // Pick one with settings, the way a click does.
-    QListWidgetItem *withParams = nullptr;
-    for (int i = 0; i < browser->list()->count() && withParams == nullptr; ++i)
-        if (browser->list()->item(i)->text() == QLatin1String("Fireworks"))
-            withParams = browser->list()->item(i);
-    if (withParams == nullptr)
-        withParams = browser->list()->item(1);
-    browser->pick(withParams);
-    QApplication::processEvents();
-    QVERIFY2(ed.m_effectDynWidget->findChildren<QSlider *>().size()
-                 + ed.m_effectDynWidget->findChildren<QAbstractSpinBox *>().size() > 0,
-             "the picked effect's settings should be shown beside the list");
+    auto pickNamed = [&](const QString &name) {
+        EffectBrowser *browser = ed.m_effectBrowser;
+        browser->search()->setText(name);
+        QApplication::processEvents();
+        for (int i = 0; i < browser->list()->count(); ++i)
+            if (browser->list()->item(i)->text() == name)
+            {
+                browser->pick(browser->list()->item(i));
+                QApplication::processEvents();
+                return true;
+            }
+        return false;
+    };
 
+    // A new effect look: the picker opens by itself -- choosing is the first thing.
+    ed.setPalette(look->id());
+    QTRY_VERIFY(ed.effectPickerOpen());
+    QVERIFY(!ed.isAncestorOf(ed.m_effectBrowser));      // its own window
+    QVERIFY(pickNamed("Dimmer Phaser"));
+    QVERIFY(look->scriptPath().endsWith("dimmer-phaser.js"));          // applied at once
+    QVERIFY(ed.m_effectDynWidget->findChildren<QSlider *>().size() > 0); // its settings shown
+    ed.m_effectPicker->findChild<QPushButton *>("effectPickerDone")->click();
+    QVERIFY(!ed.effectPickerOpen());
+
+    // The settings have the width; the header names the effect.
     QScrollArea *details = ed.findChild<QScrollArea *>("effectDetails");
     QVERIFY(details != nullptr);
     QVERIFY(details->isAncestorOf(ed.m_effectPersistentCb));
     QVERIFY(details->isAncestorOf(ed.m_saveAsEffectButton));
-    const QRect b = browser->geometry(), d = details->geometry();
-    QVERIFY2(b.right() < d.left(), "the list and its settings should be side by side");
-    QVERIFY2(qAbs(b.top() - d.top()) < 4, "side by side, from the same top");
-    // The list has the page's height, not what the settings leave of it.
-    QVERIFY2(b.height() > details->height() - 4, qPrintable(QString("%1 vs %2").arg(b.height()).arg(details->height())));
-    if (!qEnvironmentVariableIsEmpty("LOOKEDITOR_SHOT"))
-        ed.grab().save(qEnvironmentVariable("LOOKEDITOR_SHOT"));
+    QVERIFY2(details->width() > ed.width() * 0.8,
+             qPrintable(QString("settings %1 wide of %2").arg(details->width()).arg(ed.width())));
+    QCOMPARE(ed.m_effectPickedLabel->text(), QString("Dimmer Phaser"));
+    QCOMPARE(ed.m_effectChangeButton->text(), QString("Change effect…"));
+
+    // What it is lives behind "?" and in the picker, not over the settings.
+    QVERIFY(!details->isAncestorOf(ed.m_effectDescLabel) || !ed.m_effectDescLabel->isVisible());
+    QVERIFY(ed.m_effectInfoButton->isVisible());
+    QVERIFY(ed.m_effectInfoButton->toolTip().contains("Dimmer Phaser"));
+    QVERIFY(ed.m_effectInfoButton->toolTip().contains("Works with"));
+    ed.m_effectInfoButton->click();
+    QVERIFY(ed.m_effectDetails != nullptr && ed.m_effectDetails->isVisible());
+    const QString about = ed.m_effectDetails->findChild<QTextBrowser *>("effectDetailsText")->toPlainText();
+    QVERIFY2(about.contains("rate") && about.contains("Cycles per second"), qPrintable(about));
+    ed.m_effectDetails->hide();
+    QVERIFY(ed.m_effectPickerInfo->toPlainText().contains("Cycles per second"));
+
+    // The picker is wide enough for its tabs, whole.
+    ed.openEffectPicker();
+    QApplication::processEvents();
+    QTabBar *tabs = ed.m_effectBrowser->tabs();
+    QVERIFY(tabs->tabRect(tabs->count() - 1).right() <= tabs->width());
+    for (int i = 0; i < tabs->count(); ++i)
+        QVERIFY(!tabs->tabText(i).contains(QChar(0x2026)));
+    if (!qEnvironmentVariableIsEmpty("PICKER_SHOT"))
+        ed.m_effectPicker->grab().save(qEnvironmentVariable("PICKER_SHOT"));
+    ed.closeEffectPicker(true);
+
+    // Change, try two, Cancel: the phaser is back with its settings and name.
+    look->setEffectParamValue("rate", 3.5);
+    const QString name = look->name();
+    ed.m_effectChangeButton->click();
+    QVERIFY(ed.effectPickerOpen());
+    QVERIFY(pickNamed("Rainbow"));
+    QVERIFY(look->scriptPath().endsWith("rainbow.js"));
+    QCOMPARE(ed.m_effectPickedLabel->text(), QString("Rainbow"));
+    QVERIFY(pickNamed("Orbit"));
+    ed.m_effectPicker->findChild<QPushButton *>("effectPickerCancel")->click();
+    QVERIFY(!ed.effectPickerOpen());
+    QVERIFY(look->scriptPath().endsWith("dimmer-phaser.js"));
+    QCOMPARE(look->effectParamValues().value("rate"), 3.5);
+    QCOMPARE(look->name(), name);
+    QCOMPARE(ed.m_effectPickedLabel->text(), QString("Dimmer Phaser"));
+
+    // Esc is Cancel too.
+    ed.openEffectPicker();
+    QVERIFY(pickNamed("Rainbow"));
+    QTest::keyClick(ed.m_effectBrowser->search(), Qt::Key_Escape);
+    QVERIFY(!ed.effectPickerOpen());
+    QVERIFY(look->scriptPath().endsWith("dimmer-phaser.js"));
+
+    // Arrow keys pick as they go.
+    ed.openEffectPicker();
+    EffectBrowser *browser = ed.m_effectBrowser;
+    browser->search()->clear();
+    QApplication::processEvents();
+    QVERIFY(browser->list()->count() > 2);
+    browser->list()->setFocus();
+    browser->list()->setCurrentRow(0);
+    const QString before = look->scriptPath() + look->wledEffect() + look->effectPreset();
+    QTest::keyClick(browser->list(), Qt::Key_Down);
+    QApplication::processEvents();
+    QVERIFY2(look->scriptPath() + look->wledEffect() + look->effectPreset() != before,
+             "an arrow key should pick the next one");
+
+    // Closing the window keeps what's picked.
+    QTest::keyClick(browser->list(), Qt::Key_Down);
+    const QString kept = look->scriptPath() + look->wledEffect() + look->effectPreset();
+    ed.m_effectPicker->close();
+    QVERIFY(!ed.effectPickerOpen());
+    QCOMPARE(look->scriptPath() + look->wledEffect() + look->effectPreset(), kept);
+}
+
+/* "If they're not cross compatible I'd like to not show the effects that
+   won't work if a wled instance isn't in the targets .. and make sure it
+   does show it": a WLED effect with no port runs on a WLED device only. */
+void LookEditor_Test::wledOnlyEffectsNeedAWledTarget()
+{
+    Doc doc(this);
+    doc.effectScriptRunner()->cache()->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    // The WLED list comes from a WLED fixture in the show.
+    QLCFixtureDef *def = new QLCFixtureDef();
+    QCOMPARE(def->loadXML(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures/WLED/WLED-Lantern.qxf"),
+             QFile::NoError);
+    Fixture *lantern = new Fixture(&doc);
+    lantern->setFixtureDefinition(def, def->mode("Effect (15ch)"));
+    lantern->setConnection(Fixture::Network);
+    lantern->setIPAddress("172.18.2.60");
+    QVERIFY(doc.addFixture(lantern));
+    Fixture *par = new Fixture(&doc);
+    par->setName("Par");
+    par->setChannels(3);
+    par->setAddress(100);
+    QVERIFY(doc.addFixture(par));
+
+    Scene *scene = new Scene(&doc);
+    scene->addFixture(par->id());                  // a plain fixture only
+    doc.addFunction(scene);
+    QLCPalette *look = new QLCPalette(QLCPalette::Effect, &doc);
+    look->setName("Look");
+    QVERIFY(doc.addPalette(look));
+    scene->addPalette(look->id());
+
+    LookEditor ed(&doc);
+    ed.resize(1000, 640);
+    ed.show();
+    ed.setContextScene(scene);
+    ed.setPalette(look->id());
+    QTRY_VERIFY(ed.effectPickerOpen());
+    EffectBrowser *browser = ed.m_effectBrowser;
+    auto inWledTab = [browser]() {
+        QStringList names;
+        const int t = browser->tabNames().indexOf("WLED");
+        if (t < 0)
+            return names;
+        browser->tabs()->setCurrentIndex(t);
+        QApplication::processEvents();
+        for (int i = 0; i < browser->list()->count(); ++i)
+            names << browser->list()->item(i)->text();
+        return names;
+    };
+    QVERIFY(!browser->wledTargets());
+    // Only what runs here too: the ported ones.
+    const QStringList without = inWledTab();
+    QVERIFY2(!without.isEmpty(), "the ported WLED effects still run on the par");
+    // ...each one a port: an effect script that says it is WLED's.
+    EffectScriptCache *cache = doc.effectScriptRunner()->cache();
+    for (const QString &n : without)
+        QVERIFY2(!cache->scriptPathForWled(n).isEmpty(), qPrintable(n + " has no port"));
+    ed.closeEffectPicker(true);
+
+    // A WLED device among the targets: all of WLED's own.
+    scene->addFixture(lantern->id());
+    ed.openEffectPicker();
+    QVERIFY(browser->wledTargets());
+    const QStringList with = inWledTab();
+    QVERIFY2(with.size() > without.size() + 10,
+             qPrintable(QString("%1 with a WLED target, %2 without").arg(with.size()).arg(without.size())));
+    ed.closeEffectPicker(true);
 }
 
 void LookEditor_Test::theBrowsersListsAreAToZ()

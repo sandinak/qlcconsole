@@ -16,10 +16,21 @@ The latest changes, newest first. Each links to the guide with the detail.
   cues and the show end are; [Getting started](getting-started.md) (starting the app and
   the ways a show comes together), [Keyboard and mouse](shortcuts.md),
   [Effects](effects.md) and [Troubleshooting](troubleshooting.md).
+- **Pictures with numbered marks** on the parts each guide talks about:
+  the main window and the footer ([Getting started](getting-started.md#finding-your-way-around)),
+  the [Programming tab](programming-tab.md#layout), the effect look editor
+  and the [effect browser](programming-tab.md#the-effect-browser), the
+  [stack checker](effects.md#the-stack-checker),
+  [Connections by universe](other-improvements.md#connections--patch) and the
+  [Patch dialog](fixture-manager.md#patching-the-patch-dialog).
 
 ### Lighting Studio
 
-- **The rig view shows a running position effect on an Aim look.** A head
+- **The Rig Overview stands on centre stage** — on the floor, in the
+  middle of the stage grid — and turns about it, instead of centring
+  whatever the rig's bounding box was (which floated the floor half a
+  truss-height below the middle).
+- **The Lighting Studio and the Rig Overview show a running position effect on an Aim look.** A head
   under a look with an Aim target was always drawn pointing at the target —
   so Stage Shape, or an orbit round a target, never showed. Selected, a
   look still shows where its target is; running, the heads are drawn where
@@ -48,7 +59,7 @@ The latest changes, newest first. Each links to the guide with the detail.
   mount drew some on their side; it's cleared when the show loads.
 - **Rig Overview** (⇧⌘R) **follows the Studio's layers** — hide a layer,
   it leaves the overview — and the same shortcut, or ⌘W, closes it.
-- **Faster rig view**: a 200-fixture show draws in about 9 ms a frame (it
+- **Faster drawing of the rig**: a 200-fixture show draws in about 9 ms a frame (it
   was 51).
 
 - **A truss between two stands** — the truss editor's **Other end on
@@ -65,6 +76,20 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Patching
 
+- **Patching fits fixtures into what's free, in one order.** The Patch
+  dialog's Place now defaults to **into the free space**: the fixtures are
+  addressed one after another around whatever else is in the universe —
+  no more conflicts from moving a patched fixture's block onto its
+  neighbours — in one **addressing order** you choose: by name, movers
+  first then by kind, or as they hang. The same group always lands the
+  same way. Any
+  with no room are flagged and left where they were, with **Carry on into
+  the next universe** or **Fit by changing modes** to finish the patch.
+  ([Patching](fixture-manager.md#patching-the-patch-dialog))
+- **Change a mode in the Patch dialog**, patched fixture or not; Apply
+  changes it, and ⌘Z puts it back. A different head count is allowed
+  unless a fixture group lays out heads the new mode doesn't have.
+
 - **Patch list** — every fixture's patch, where its universe goes and what
   it hangs on, to save as **CSV** or a printable **PDF** for the crew.
   **Fixtures → Patch List…**, or the Studio's **More** menu.
@@ -76,8 +101,91 @@ The latest changes, newest first. Each links to the guide with the detail.
   span several structures.
   ([Patching](fixture-manager.md#patching-the-patch-dialog))
 
+### Programming
+
+- **92 WLED effects run on any fixture** — Android, Aurora, Blink, Blink Rainbow, Bouncing Balls, Bpm, Breathe, Candle, Candle Multi, Chase, Chase Flash, Chase Rainbow, Chunchun, Colorful, Colorloop, Colortwinkles, Colorwaves, Dancing Shadows, Dissolve, Drip, Dynamic, Dynamic Smooth, Fade, Fairy, Fill Noise, Fire 2012, Fire Flicker, Fireworks 1D, Flow, Glitter, Gradient, Halloween Eyes, Heartbeat, Hyper Sparkle, Juggle, Lake, Lightning, Loading, Meteor, Multi Comet, Noise Pal, Oscillate, Pacifica, Palette, Phased, Plasma, Police, Popcorn, Pride 2015, Railway, Rain, Rainbow, Rainbow Runner, Random Colors, Ripple, Ripple Rainbow, Rolling Balls, Running, Running Dual, Saw, Scan, Scanner, Sine, Sinelon, Sinelon Dual, Sinelon Rainbow, Solid, Solid Glitter, Sparkle, Sparkle Dark, Spots, Spots Fade, Stream, Strobe, Strobe Rainbow, Sunrise, Sweep, Tetrix, Theater, Theater Rainbow, Traffic Light, Tri Fade, Tri Wipe, TV Simulator, Twinkle, Twinklecat, Twinklefox, Two Areas, Two Dots, Washing Machine, Wavesins, Wipe — so a look with one runs it on its WLED
+  devices and its other fixtures alike.
+- **Effect previews show what the effect does.** A position effect draws
+  the shape its heads trace, with the heads along it, instead of a strip
+  of lights; gobo, iris and zoom effects show a row of beams; amber and UV
+  pulses light in their own colours. ([The effect browser](programming-tab.md#the-effect-browser))
+- **WLED effects only where they can run.** A WLED effect that only runs on
+  a WLED device is offered only when the look's targets include one;
+  without, the WLED tab lists the ones that run on any fixture.
+- **A Programming toolbar that fits.** Highlight, Flash, Tap and Save
+  Positions stay buttons; Park, Move in black, Beat (it reads the tempo)
+  and More are drop-downs — one row, no scrolling.
+- **The effect browser is a window of its own.** Once an effect is picked,
+  its settings have the look editor's full width; **Change effect…** opens
+  the browser, where every pick (and every arrow-key step) plays at once,
+  and **Cancel** or Esc puts back the effect you had.
+  ([The effect browser](programming-tab.md#the-effect-browser))
+
+### Playback
+
+- **GO on the beat.** A chase or cue list can hold a GO to the next beat
+  or bar — of its speed master, or the main beat — so a cue pressed a
+  little early lands on the music. The Next button shows a GO waiting.
+  ([GO on the beat](getting-started.md#go-on-the-beat))
+
+### Programming tab
+
+- **The Looks list checks the stack** — a look the one below always covers,
+  an effect another covers, a dimmer only some heads get, an effect for
+  fixtures the look hasn't… are marked in the list with why, and counted
+  under it. ([The stack checker](effects.md#the-stack-checker))
+
+- **The handles move the edges you drag** — no pane snaps shut, and the
+  canvas can be narrowed (its fades-and-transitions line wraps; it was 1300
+  px at its narrowest, so a handle squeezed the panes beside it instead).
+  A new handle sits **between the looks and the Look Editor**, which
+  scrolls when made short. Positions are remembered.
+  ([Layout](programming-tab.md#layout))
+
 ### Effects
 
+- **A look stacks the same way every time** — top to bottom, the lower
+  wins; colours are colour 1, 2, 3; an effect's colour replaces the base
+  instead of mixing with it; dimmer effects scale and multiply; a Colour or
+  Dimmer under an effect is that effect's only, and the ones above are the
+  look's own, for every effect. Fixed along the way: two static looks on a
+  channel kept the *higher* value (Blue then Red came out magenta-ish, two
+  Pan/Tilts kept the bigger pan); a second Colour look moved a colour
+  wheel; an Aim or a Dimmer placed after a movement effect did nothing;
+  a Dimmer look didn't dim a fixture with no dimmer; two effects on one
+  channel went by which started first, not their order in the list.
+  ([How a look stacks](effects.md#how-a-look-stacks))
+
+- **Breathe and the other dimmer effects work on movers with a head
+  dimmer** (no master dimmer in their definition), and a colour-wheel
+  fixture's wheel holds its colour while they breathe instead of hopping
+  slots.
+- **Movement effects run round the look's aim.** With an Aim or Pan/Tilt
+  look in it, a ballyhoo, orbit, figure 8 and the rest move over that point
+  instead of the middle of the heads' range (straight down, on a hung
+  mover). ([Position](effects.md#position-moving-heads))
+
+- **How the footer shows a master's beat** — a blink, a bar across each
+  beat, or nothing; always, or only while something on that master plays
+  (**View → Speed Master Beat in Footer**).
+- **Speed masters in the footer** — a button for each master something is
+  on (an unused one neither shows nor flashes, there or in its window),
+  reading its tempo and lit on its beat, with a green level bar while its
+  rate is moved; a click opens the Speed Masters window at it
+  (**View → Show Speed Masters in Footer**). Each master's **Inputs…**
+  maps its Tap, Rate and Pause to a MIDI controller.
+  ([Speed masters](effects.md#speed-masters))
+- **Effects layer as on a desk.** A colour effect replaces the look's
+  colour on its heads instead of adding to it (Cyan under a rainbow washed
+  every hue pale); a dimmer effect dims what's there, the colour effect's
+  included. ([Effects](effects.md))
+- **Rainbow with a colour in the look sweeps that colour** — a wave of
+  Cyan across the heads, no rainbow; with two or more, it sweeps through
+  them.
+- **A rainbow on a wash with no dimmer is a rainbow.** On an RGBW head with
+  no master dimmer (a Cobra Wash in 13-channel mode, say) an effect's own
+  dimmer put red, green, blue and white all at full under its colour — a
+  rainbow came out white.
 - **Spread.** One Spread row for every chasing effect — amount in cycles,
   in look order or across columns, rows or the stage, **out from or round
   the look's target**, forward, reverse, centre out or ends in, with wings
@@ -86,8 +194,9 @@ The latest changes, newest first. Each links to the guide with the detail.
   wander, fan, spotlight chase…), and **Stage Shape** uses it for which
   head goes where on the line or shape.
   ([Spread](effects.md#spread))
-- **Speed masters.** Four tempo masters (Programming toolbar →
-  **Masters**): each its own tempo, tap, rate and pause, or following the
+- **Speed masters.** 4 to 16 tempo masters (Programming toolbar →
+  **Beat → Speed masters…**), one of which can follow the **show timeline**
+  (and so timecode): each its own tempo, tap, rate and pause, or following the
   main clock or another master at ×¼ … ×4. Put an effect, a look, a chase
   step, a chase or a collection on one; on a master an effect's rate counts
   per beat; a chase counting in beats steps on its master's beats.
@@ -111,10 +220,17 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Views and windows
 
+- **Connections → By universe lists the universes in use** — fixtures
+  patched in, an output or an input — and says how many it hides; **Show
+  unused universes** shows them all.
+
 - **Connections holds still.** The list refreshes every few seconds to
   catch nodes coming and going; it no longer drops the universe you picked
   or scrolls back to the top when it does, and it waits while a right-click
   menu or dialog is open, so **Patch…** acts on the row you chose.
+- **Right-click a tab → Open in Its Own Window.** Works on the first
+  click, even when the app isn't in front (a Mac spends that click
+  bringing the window forward, so a Shift-click there did nothing).
 - **Shift-click a tab** to put it in a window of its own — a double-click
   no longer does it by accident. **Window → Move … to Its Own Window** does
   the same for the view in front, and the Window menu can turn the

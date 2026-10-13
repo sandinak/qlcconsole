@@ -21,6 +21,8 @@
 #include "scenetransition.h"
 #include <QSpinBox>
 #include <QSlider>
+#include <QToolButton>
+#include <QMenu>
 #include <QDoubleSpinBox>
 #include <QComboBox>
 #include <QLineEdit>
@@ -1280,6 +1282,116 @@ void ProgrammingManager_Test::editingARunningEffectChangesItsOutput()
     m_doc->masterTimer()->stop();
 }
 
+/* "can we make this row more useful using a dropdown paradigm like we did for
+   the studio options? right now scrolling is a bit obnoxious" */
+/* "resizing handles in the programming page don't really move things right
+   .. it jumps and either picks one of the associated panels and only shows
+   that .. and we need one between the look stack and editing panel" */
+void ProgrammingManager_Test::theHandlesMoveEdgesAndNeverHideAPanel()
+{
+    Scene *look = new Scene(m_doc);
+    look->setName("Handles");
+    QVERIFY(m_doc->addFunction(look));
+    ProgrammingManager mgr(nullptr, m_doc);
+    mgr.resize(1400, 900);
+    mgr.show();
+    QVERIFY(openCanvas(mgr, look->id()) != nullptr);
+    QApplication::processEvents();
+
+    auto drag = [](QSplitter *sp, int handle, const QPoint &by) {
+        QSplitterHandle *h = sp->handle(handle);
+        const QPoint from = h->rect().center();
+        QTest::mousePress(h, Qt::LeftButton, Qt::NoModifier, from);
+        QMouseEvent move(QEvent::MouseMove, QPointF(from + by), QPointF(h->mapToGlobal(from + by)),
+                         Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(h, &move);
+        QTest::mouseRelease(h, Qt::LeftButton, Qt::NoModifier, from + by);
+        QApplication::processEvents();
+    };
+
+    QSplitter *main = mgr.findChild<QSplitter *>("programmingSplitter");
+    QVERIFY(main != nullptr);
+    QVERIFY(!main->childrenCollapsible());
+    // Drag the left handle all the way right, then the right one all the way
+    // left: every panel stays, at its minimum at worst.
+    drag(main, 1, QPoint(3000, 0));
+    for (int w : main->sizes())
+        QVERIFY2(w > 0, "a panel was snapped shut");
+    drag(main, 2, QPoint(-3000, 0));
+    for (int w : main->sizes())
+        QVERIFY2(w > 0, "a panel was snapped shut");
+    QVERIFY(main->widget(1)->isVisible() && main->widget(1)->width() > 100);
+
+    // The look stack over the look editor, a handle between them.
+    QSplitter *canvas = mgr.findChild<QSplitter *>("programmingCanvasSplitter");
+    QVERIFY(canvas != nullptr);
+    QVERIFY(canvas->widget(1)->isAncestorOf(mgr.m_lookEditor));
+    QVERIFY(canvas->widget(0)->isAncestorOf(mgr.m_canvas));
+    QVERIFY(!canvas->childrenCollapsible());
+    const int before = canvas->sizes().at(1);
+    drag(canvas, 1, QPoint(0, -120));               // up: a taller editor
+    QVERIFY2(canvas->sizes().at(1) > before + 60,
+             qPrintable(QString("%1 -> %2").arg(before).arg(canvas->sizes().at(1))));
+    drag(canvas, 1, QPoint(0, 3000));               // all the way down: still there
+    QVERIFY(canvas->sizes().at(1) > 0 && canvas->sizes().at(0) > 0);
+    // The editor can be made short (it scrolls), the canvas narrow (its
+    // fade/transition row wraps): a handle has room to move both ways.
+    QVERIFY2(canvas->sizes().at(1) < 150, qPrintable(QString::number(canvas->sizes().at(1))));
+    // In characters of its own font (Linux's draws everything wider).
+    const double canvasChars = double(main->widget(1)->minimumSizeHint().width())
+                               / main->widget(1)->fontMetrics().averageCharWidth();
+    QVERIFY2(canvasChars < 75, qPrintable(QString("%1 px, %2 characters")
+                                              .arg(main->widget(1)->minimumSizeHint().width())
+                                              .arg(canvasChars)));
+    mgr.resize(1000, 800);
+    QApplication::processEvents();
+    if (!qEnvironmentVariableIsEmpty("HANDLES_SHOT"))
+        mgr.grab().save(qEnvironmentVariable("HANDLES_SHOT"));
+}
+
+void ProgrammingManager_Test::theToolbarFitsWithItsMenus()
+{
+    ProgrammingManager mgr(nullptr, m_doc);
+    mgr.resize(1200, 800);
+    mgr.show();
+    QApplication::processEvents();
+    QToolButton *park = mgr.findChild<QToolButton *>("parkMenu");
+    QToolButton *mark = mgr.findChild<QToolButton *>("markMenu");
+    QToolButton *beat = mgr.findChild<QToolButton *>("beatMenu");
+    QToolButton *more = mgr.findChild<QToolButton *>("programmingMoreMenu");
+    QVERIFY(park && mark && beat && more);
+    QVERIFY(mgr.m_highlightBtn->isVisible() && mgr.m_flashBtn->isVisible());
+    QVERIFY(!mgr.m_parkBtn->isVisible() && !mgr.m_snapshotBtn->isVisible());
+    /* One row that fits without scrolling, measured in ordinary buttons of
+       the platform's own style (Linux draws it all wider than the Mac, so a
+       pixel limit fit one and not the other). */
+    QWidget *row = mgr.m_highlightBtn->parentWidget();
+    QPushButton ref(QStringLiteral("Highlight"), row);
+    const double buttons = double(row->sizeHint().width()) / ref.sizeHint().width();
+    QVERIFY2(buttons < 12, qPrintable(QString("%1 px: %2 buttons wide")
+                                         .arg(row->sizeHint().width()).arg(buttons)));
+
+    // The Beat menu turns the beat on, and the button says the tempo.
+    QCOMPARE(beat->text(), QString("Beat off"));
+    QAction *on = nullptr;
+    foreach (QAction *a, beat->menu()->actions())
+        if (a->text() == QLatin1String("Internal beat on"))
+            on = a;
+    QVERIFY(on != nullptr);
+    on->trigger();
+    QVERIFY(mgr.m_bpmBtn->isChecked());
+    QCOMPARE(beat->text(), QString("Beat 120"));
+    mgr.m_bpmSpin->setValue(128);
+    QCOMPARE(beat->text(), QString("Beat 128"));
+    on->trigger();
+    QVERIFY(!mgr.m_bpmBtn->isChecked());
+
+    // Jog speed lives in More.
+    QVERIFY(more->menu()->isAncestorOf(mgr.m_speedSpin));
+    if (!qEnvironmentVariableIsEmpty("TOOLBAR_SHOT"))
+        row->grab().save(qEnvironmentVariable("TOOLBAR_SHOT"));
+}
+
 /* "not seeing output on farts .. we need a warning in programming view for
    unpatched fixtures": a group whose fixtures are in the inventory looked
    like any other target. */
@@ -1588,10 +1700,12 @@ void ProgrammingManager_Test::duplicateDefinitionsAreListedWithWhatIsUsed()
         "</FixtureDefinition>\n");
     auto write = [&](const QString &name, QByteArray data, int age) {
         QFile f(dir.filePath(name));
-        f.open(QIODevice::WriteOnly);
+        if (!f.open(QIODevice::WriteOnly))
+            return;
         f.write(data);
         f.close();
-        f.open(QIODevice::ReadWrite);
+        if (!f.open(QIODevice::ReadWrite))
+            return;
         f.setFileTime(QDateTime::currentDateTime().addSecs(-age), QFileDevice::FileModificationTime);
     };
     QByteArray newer = xml;

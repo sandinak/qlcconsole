@@ -128,6 +128,17 @@ Doc::Doc(QObject* parent, int universes)
 
     // Speed masters read the main beat clock, so after m_masterTimer too.
     m_speedMasters = new SpeedMasters(this, this);
+    connect(m_ioMap, &InputOutputMap::inputValueChanged,
+            m_speedMasters, &SpeedMasters::slotInputValue);
+    // Which masters are used changes only with an edit: let them know.
+    // (modified() can come from the DMX thread; marking is atomic.)
+    auto usage = [this]() { m_speedMasters->markUsageDirty(); };
+    connect(this, &Doc::modified, m_speedMasters, usage, Qt::DirectConnection);
+    connect(this, &Doc::functionAdded, m_speedMasters, usage);
+    connect(this, &Doc::functionRemoved, m_speedMasters, usage);
+    connect(this, &Doc::functionChanged, m_speedMasters, usage);
+    connect(this, &Doc::paletteAdded, m_speedMasters, usage);
+    connect(this, &Doc::paletteRemoved, m_speedMasters, usage);
 
     // Fixtures held to a maximum draw: kept in step with the show.
     m_powerLimiter = new PowerLimiter(this);
@@ -1363,14 +1374,29 @@ bool Doc::canChangeFixtureMode(quint32 id, const QLCFixtureMode *newMode, QStrin
         return false;
     }
 
+    /* Fixture groups lay out heads by number: a mode with fewer heads would
+       leave a group pointing at heads that are gone. Only then -- a fixture
+       in no group, or one whose groups use only heads the new mode keeps,
+       can change ("change the mode to accommodate where possible"). */
     if (newMode != NULL && fxi->fixtureMode() != NULL
         && newMode->heads().size() != fxi->fixtureMode()->heads().size())
     {
-        if (why != NULL)
-            *why = QStringLiteral("that mode has %1 head(s), this one has %2 -- fixture groups "
-                                  "lay out heads by number")
-                       .arg(newMode->heads().size()).arg(fxi->fixtureMode()->heads().size());
-        return false;
+        const int keeps = qMax(1, int(newMode->heads().size()));
+        foreach (FixtureGroup *grp, fixtureGroups())
+        {
+            foreach (const GroupHead &h, grp->headList())
+            {
+                if (h.fxi == id && h.head >= keeps)
+                {
+                    if (why != NULL)
+                        *why = QStringLiteral("that mode has %1 head(s), this one has %2, and group "
+                                              "\"%3\" lays out head %4")
+                                   .arg(newMode->heads().size()).arg(fxi->fixtureMode()->heads().size())
+                                   .arg(grp->name()).arg(h.head + 1);
+                    return false;
+                }
+            }
+        }
     }
 
     foreach (Function *f, functionsByType(Function::SceneType))

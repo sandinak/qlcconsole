@@ -141,6 +141,14 @@ public:
     /** Get/Set the size of the grid in 2D display mode */
     inline void setGridSize(QVector3D size) { m_gridSize = size; }
     inline QVector3D gridSize() const { return m_gridSize; }
+    /** Centre stage, on the floor, in world metres: the middle of the stage
+     *  grid. (World 0,0 is the grid's corner; stageOrigin() only moves where
+     *  the rulers count from.) */
+    QVector3D stageCentre() const
+    {
+        const float mpu = m_gridUnits == Feet ? 0.3048f : 1.0f;
+        return QVector3D(m_gridSize.x() * mpu / 2.0f, m_gridSize.z() * mpu / 2.0f, 0.0f);
+    }
 
     /** Get/Set the grid measurement units to use in 2D display mode */
     inline void setGridUnits(GridUnits units) { m_gridUnits = units; }

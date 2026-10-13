@@ -235,4 +235,76 @@ void LooksDrop_Test::aHeadAimedOutOfReachIsFlagged()
     delete looks;
 }
 
+/* The Looks tree shows the stack as it plays (QLCPalette::isEffectScoped):
+   a Colour or Dimmer under an effect nests in it; an Aim or Pan/Tilt after
+   an effect is the look's, at the top level. */
+void LooksDrop_Test::theTreeNestsWhatTheEngineGivesAnEffect()
+{
+    auto add = [this](QLCPalette::PaletteType type, const QString &name) {
+        QLCPalette *p = new QLCPalette(type, m_doc);
+        p->setName(name);
+        m_doc->addPalette(p);
+        return p;
+    };
+    QLCPalette *blue = add(QLCPalette::Color, "Blue");
+    QLCPalette *fx = add(QLCPalette::Effect, "Ballyhoo");
+    QLCPalette *red = add(QLCPalette::Color, "Red");
+    QLCPalette *aim = add(QLCPalette::PanTilt, "Spot");
+    QLCPalette *half = add(QLCPalette::Dimmer, "Half");
+    Scene *scene = new Scene(m_doc);
+    for (QLCPalette *p : { blue, fx, red, aim, half })
+        scene->addPalette(p->id());
+    QVERIFY(m_doc->addFunction(scene));
+
+    SceneGroupLooks looks(scene, m_doc);
+    QTreeWidget *tree = looks.m_lookList;
+    QVERIFY(tree != nullptr);
+    QStringList top;
+    for (int i = 0; i < tree->topLevelItemCount(); ++i)
+        top << tree->topLevelItem(i)->data(0, Qt::UserRole).toString();
+    QCOMPARE(top, QStringList({ QString::number(blue->id()), QString::number(fx->id()),
+                                QString::number(aim->id()) }));
+    QTreeWidgetItem *effect = tree->topLevelItem(1);
+    QCOMPARE(effect->childCount(), 2);              // Red and Half are the effect's
+    QCOMPARE(effect->child(0)->data(0, Qt::UserRole).toUInt(), red->id());
+    QCOMPARE(effect->child(1)->data(0, Qt::UserRole).toUInt(), half->id());
+    QVERIFY(QLCPalette::isEffectScoped(m_doc, scene->palettes(), red->id()));
+    QVERIFY(!QLCPalette::isEffectScoped(m_doc, scene->palettes(), aim->id()));
+}
+
+/* The stack checker's findings, on the rows they're about. */
+void LooksDrop_Test::whatWontWorkIsMarkedInTheList()
+{
+    Fixture *fx = new Fixture(m_doc);
+    fx->setChannels(1);
+    QVERIFY(m_doc->addFixture(fx));
+    QLCPalette *full = new QLCPalette(QLCPalette::Dimmer, m_doc);
+    full->setName("Full");
+    full->setValue(255);
+    m_doc->addPalette(full);
+    QLCPalette *half = new QLCPalette(QLCPalette::Dimmer, m_doc);
+    half->setName("Half");
+    half->setValue(128);
+    m_doc->addPalette(half);
+    Scene *scene = new Scene(m_doc);
+    scene->addFixture(fx->id());
+    scene->addPalette(full->id());
+    scene->addPalette(half->id());
+    QVERIFY(m_doc->addFunction(scene));
+
+    SceneGroupLooks looks(scene, m_doc);
+    QTreeWidgetItem *fullRow = looks.m_lookList->topLevelItem(0);
+    QCOMPARE(fullRow->data(0, Qt::UserRole).toUInt(), full->id());
+    QVERIFY2(fullRow->toolTip(0).contains("Never shows"), qPrintable(fullRow->toolTip(0)));
+    QVERIFY(!fullRow->icon(1).isNull());
+    QVERIFY(looks.m_lookList->topLevelItem(1)->icon(1).isNull());
+    QVERIFY(!looks.m_stackNotes->isHidden());
+    QVERIFY(looks.m_stackNotes->text().contains("hover"));
+
+    // Put right (only one dimmer): nothing to say.
+    scene->removePalette(full->id());
+    looks.reload();
+    QVERIFY2(looks.m_stackNotes->isHidden(), qPrintable(looks.m_stackNotes->text()));
+}
+
 QTEST_MAIN(LooksDrop_Test)

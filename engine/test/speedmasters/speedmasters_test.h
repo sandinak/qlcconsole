@@ -45,6 +45,13 @@ private slots:
     void aChaseHandsItsMasterToItsSteps();
     void aCollectionHandsItsMasterToItsMembers();
     void aBeatChaseStepsOnItsMastersBeats();
+    void aGoLandsOnTheNextBeat();
+    void aGoOnTheBarWaitsForTheBar();
+    void goQuantizeIsSavedWithTheChase();
+    void aShowUsesFourToSixteen();
+    void aMasterFollowsTheShowTimeline();
+    void aControlSurfaceDrivesAMaster();
+    void onlyTheMastersSomethingIsOnAreUsed();
 
 private:
     Doc *m_doc = nullptr;

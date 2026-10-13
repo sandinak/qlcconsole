@@ -55,6 +55,7 @@ class Doc;
 class ProgrammingManager final : public QWidget
 {
     Q_OBJECT
+    friend class HelpShots;     // opens scenes for the help's pictures
 
 public:
     ProgrammingManager(QWidget *parent, Doc *doc);
@@ -90,6 +91,7 @@ public:
     quint32 currentSceneId() const;
 
 protected:
+    bool eventFilter(QObject *watched, QEvent *event) override;
     void showEvent(QShowEvent *ev) override;
     void hideEvent(QHideEvent *ev) override;
 
@@ -287,6 +289,14 @@ private:
     QToolButton *m_addFuncBtn; //!< "Add" dropdown consolidating New Scene/Chaser/…/Folder
 
     QVBoxLayout *m_canvasLayout;
+    /** The canvas over the editor of what's selected, a handle between. */
+    class QSplitter *m_canvasSplit = nullptr;
+    class QSplitter *m_mainSplit = nullptr;
+    QVBoxLayout *m_canvasTopLayout = nullptr;   //!< the canvas / function editor
+    QWidget *m_editorPane = nullptr;            //!< look editor / fixture console
+    QVBoxLayout *m_editorLayout = nullptr;
+    /** Show the editor pane only while one of its editors shows. */
+    void syncEditorPane();
     QLabel *m_canvasTitle;
     /** In a fixture group's layout view: back to the scene that was open
      *  before it ("clicked back on an effect .. I can't get back"). */

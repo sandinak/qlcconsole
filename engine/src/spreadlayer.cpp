@@ -40,9 +40,10 @@ QVector<double> SpreadLayer::phases(const QVector<Point> &points, const Settings
     if (!s.isActive() || points.isEmpty())
         return out;
 
-    /* No target: centre stage. (The middle of the heads was the first
+    /* No centre given: the world origin. The instance passes centre stage
+       when the look has no target (the middle of the heads was the first
        idea, but a truss of heads has its middle ON the line -- round it,
-       every head is just left or right of it.) */
+       every head is just left or right of it). */
     const QVector3D c = centre != nullptr ? *centre : QVector3D();
 
     /* Where each head is along the axis. Heads at the same place (one
@@ -61,8 +62,9 @@ QVector<double> SpreadLayer::phases(const QVector<Point> &points, const Settings
                 return std::round(std::hypot(p.pos.x() - c.x(), p.pos.y() - c.y()) * 100.0);
             case AroundTarget:
             {
-                // 0 straight downstage of it (-y), on round towards +x.
-                double deg = std::atan2(p.pos.x() - c.x(), -(p.pos.y() - c.y())) * 180.0 / M_PI;
+                // 0 straight downstage of it, on round towards stage right.
+                // (+Y is downstage, +X stage LEFT: monitorproperties.cpp.)
+                double deg = std::atan2(-(p.pos.x() - c.x()), p.pos.y() - c.y()) * 180.0 / M_PI;
                 if (deg < 0)
                     deg += 360.0;
                 return std::round(deg * 10.0);
