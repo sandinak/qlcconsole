@@ -226,7 +226,14 @@ void ZRaster::scan(const QPointF *pts, const double *zs, int n, const QColor &fi
                 const float fr = float(fill.red()), fg = float(fill.green()),
                             fb = float(fill.blue());
                 const double a0 = alpha / 255.0;
-                float z = float(A * (xa + 0.5) + B * sy + C);
+                /* Depth where the depth buffer has it: the CENTRE SAMPLE of
+                   the supersampled pixel, not the final pixel's middle. On a
+                   deck top seen at an angle the quarter pixel between the two
+                   was more than the lift a pool gets off its surface, and
+                   every pool on a deck failed the test -- drawn only where
+                   it reached the bare floor. */
+                const double at = (double(half) + 0.5) / double(m_ss);
+                float z = float(A * (xa + at) + B * (y + at) + C);
                 double av = (alphaScale != nullptr) ? aA * (xa + 0.5) + aB * sy + aC : 1.0;
                 const double dav = (alphaScale != nullptr) ? aA : 0.0;
                 float *lrow = m_lightPtr + qsizetype(y) * W * 3;

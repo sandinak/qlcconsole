@@ -3175,8 +3175,79 @@ QVector<StructureStudioView::Deck> StructureStudioView::decks() const
     return out;
 }
 
+quint64 StructureStudioView::throwScene() const
+{
+    QVector<float> f;
+    for (const Deck &d : decks())
+    {
+        const StagePlatform *pl = d.platform;
+        f << float(pl->id()) << pl->originX() << pl->originY() << pl->width()
+          << pl->depth() << pl->rotation() << pl->frontCurve() << float(d.baseZ);
+        for (const StagePlatform::Block &b : d.blocks)
+            f << b.x0 << b.y0 << b.x1 << b.y1 << b.height;
+    }
+    MonitorProperties *props = m_doc->monitorProperties();
+    foreach (Scenery *sc, props->sceneries())
+    {
+        if (sc == nullptr || !layerShown(sc->layerId()))
+            continue;
+        f << float(sc->id()) << float(sc->kind()) << sc->originX() << sc->originY()
+          << sc->width() << sc->height() << sc->bottom() << sc->rotation() << sc->bow()
+          << float(sc->outline()) << sc->depth() << sc->thickness() << float(sc->state())
+          << sc->openingWidth() << sc->openingHeight();
+    }
+    return quint64(qHashBits(f.constData(), size_t(f.size()) * sizeof(float), 0x5eed))
+         ^ (quint64(f.size()) << 40);
+}
+
 double StructureStudioView::beamThrow(const QVector3D &apex, const QVector3D &dir,
                                      bool *hit, QVector3D *landNormal, int *surface) const
+{
+    /* While painting, a ray thrown before (the same apex, the same way) at
+       the same scene lands where it did: no need to ask every deck and every
+       piece of scenery again. */
+    ThrowKey key;
+    if (m_decksValid)
+    {
+        key = ThrowKey{ { apex.x(), apex.y(), apex.z(), dir.x(), dir.y(), dir.z() } };
+        auto it = m_throws.find(key);
+        if (it != m_throws.end())
+        {
+            if (it->frame != m_throwFrame)
+            {
+                it->frame = m_throwFrame;
+                ++m_throwsUsed;
+            }
+            if (hit != nullptr)
+                *hit = it->hit;
+            if (landNormal != nullptr)
+                *landNormal = it->normal;
+            if (surface != nullptr)
+                *surface = it->surface;
+            return it->run;
+        }
+    }
+
+    bool h = false;
+    QVector3D n;
+    int sf = 0;
+    const double run = beamThrowUncached(apex, dir, &h, &n, &sf);
+    if (m_decksValid)
+    {
+        m_throws.insert(key, Throw{ run, n, sf, h, m_throwFrame });
+        ++m_throwsUsed;
+    }
+    if (hit != nullptr)
+        *hit = h;
+    if (landNormal != nullptr)
+        *landNormal = n;
+    if (surface != nullptr)
+        *surface = sf;
+    return run;
+}
+
+double StructureStudioView::beamThrowUncached(const QVector3D &apex, const QVector3D &dir,
+                                             bool *hit, QVector3D *landNormal, int *surface) const
 {
     static const double NO_HIT = 8.0;      // metres, for a beam fired into the air
     static const double MAX_THROW = 24.0;
@@ -3935,7 +4006,22 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
            A cell is lit only where its corners all land on the same surface,
            so the pool stops at the cyc's edge or the deck's, and goes on on
            the next thing. A gobo's mask still says how much each point gets. */
-        const int RINGS = gobo ? 16 : 12, SECTORS = gobo ? 48 : 40;
+        /* As fine as it shows: the cells only need to be small ON SCREEN.
+           A pool a few dozen pixels across -- most of them, in a whole-rig
+           view -- was 960 triangles at the finest grid, and a lit rig's
+           frame was mostly these. Sized from the pool's reach on screen, a
+           close-up still gets the full grid (and a gobo always does). */
+        int RINGS = 16, SECTORS = 48;
+        if (!gobo)
+        {
+            const QPointF c = w2s(apex + d * float(len));
+            double reach = 0.0;
+            for (const QVector3D &q : footprint)
+                reach = qMax(reach, QLineF(c, w2s(q)).length());
+            reach *= fieldMult;                       // out to the field edge
+            RINGS = qBound(4, int(reach / 20.0), 8);
+            SECTORS = qBound(16, int(2.0 * M_PI * reach / 20.0), 32);
+        }
         const int N = (RINGS + 1) * SECTORS;
         QVector<QPointF> px(N);
         QVector<double> pz(N), pt(N);
@@ -7698,11 +7784,32 @@ void StructureStudioView::paintEvent(QPaintEvent *)
     m_decksValid = false;
     m_decks = decks();
     m_decksValid = true;
+
+    /* Where rays landed last frame still stands if what they land on hasn't
+       changed. Rays no longer thrown (a mover that has moved on) are let go
+       once they are most of what is kept. */
+    const quint64 scene = throwScene();
+    if (scene != m_throwScene || m_throws.size() > 400000)
+    {
+        m_throws.clear();
+        m_throwScene = scene;
+    }
+    ++m_throwFrame;
+    m_throwsUsed = 0;
     struct DecksDone
     {
-        bool &valid;
-        ~DecksDone() { valid = false; }
-    } decksDone{ m_decksValid };
+        const StructureStudioView *view;
+        ~DecksDone()
+        {
+            view->m_decksValid = false;
+            if (view->m_throws.size() > 2 * view->m_throwsUsed + 4096)
+            {
+                for (auto it = view->m_throws.begin(); it != view->m_throws.end(); )
+                    it = (it->frame == view->m_throwFrame) ? std::next(it)
+                                                           : view->m_throws.erase(it);
+            }
+        }
+    } decksDone{ this };
 
     m_opticsAnimating = false;          // set again by any gobo or prism turning
     QElapsedTimer frameTimer;
