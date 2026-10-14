@@ -99,11 +99,25 @@ FixtureVisualTraits classifyFixture(Fixture *fx)
 
     QSet<int> colours;
     QSet<int> panTiltHeads;
+    bool shapesItsBeam = false;     // gobo, focus or iris: a profile
     for (quint32 c = 0; c < fx->channels(); ++c)
     {
         QLCChannel *ch = mode->channel(c);
         if (ch == nullptr)
             continue;
+        switch (ch->preset())
+        {
+        case QLCChannel::BeamFocusNearFar: case QLCChannel::BeamFocusFarNear:
+        case QLCChannel::BeamFocusFine:
+        case QLCChannel::ShutterIrisMinToMax: case QLCChannel::ShutterIrisMaxToMin:
+        case QLCChannel::ShutterIrisFine:
+            shapesItsBeam = true;
+            break;
+        default:
+            break;
+        }
+        if (ch->group() == QLCChannel::Gobo)
+            shapesItsBeam = true;
         if (ch->group() == QLCChannel::Beam)
         {
             switch (ch->preset())
@@ -138,7 +152,24 @@ FixtureVisualTraits classifyFixture(Fixture *fx)
     }
     t.rgbw = colours.size() >= 3;   // at least Red+Green+Blue
     t.multiHeadPanTilt = panTiltHeads.size() >= 2;
+    t.edgeSoftness = poolEdgeSoftness(shapesItsBeam,
+                                      fx->fixtureDef() != nullptr ? int(fx->fixtureDef()->type()) : -1,
+                                      phys.lensName(), t.beamMaxDeg);
     return t;
+}
+
+float poolEdgeSoftness(bool shapesItsBeam, int fixtureType, const QString &lensName,
+                       double beamMaxDeg)
+{
+    float soft = 1.0f;                                  // a wash
+    if (shapesItsBeam || fixtureType == int(QLCFixtureDef::LEDBarBeams))
+        soft = 0.1f;                                    // a profile, a beam bar
+    else if (lensName.compare(QLatin1String("PC"), Qt::CaseInsensitive) == 0
+             || lensName.compare(QLatin1String("Fresnel"), Qt::CaseInsensitive) == 0)
+        soft = 1.25f;
+    if (beamMaxDeg > 0.0 && beamMaxDeg < 12.0)
+        soft = qMin(soft, 0.4f);                        // a tight beam is fairly crisp
+    return soft;
 }
 
 // One base+yoke-arms+head unit inside $r -- see moverElevationPath() below,

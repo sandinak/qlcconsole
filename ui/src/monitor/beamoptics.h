@@ -41,6 +41,9 @@ namespace BeamOptics
         bool animated = false;
         /** Prism facets in use: 0 = none, 1 = linear (three in a row), else N. */
         int prismFacets = 0;
+        /** How soft its pool's edge is: 0 crisp (a profile, a gobo) ... 1 a
+         *  wash, fading out past its beam angle (FixtureVisualTraits::edgeSoftness). */
+        double softness = 0.0;
     };
 
     /** The optics of @p fx for its channel values @p values at time

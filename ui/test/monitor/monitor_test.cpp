@@ -434,7 +434,9 @@ void Monitor_Test::removeSelectedCancelled()
 
 /* How long the rig view takes to draw a real show: QLC_RIG_BENCH=<show file>
    (skipped without it). Reported, not checked -- the number to watch when
-   making the rig view faster. */
+   making the rig view faster. QLC_RIG_BENCH_LIT=1 sends every channel at
+   full first (every beam lit: the worst case); QLC_RIG_BENCH_SHOT=<file.png>
+   saves the frame, "-q1"/"-q2" before the extension. */
 void Monitor_Test::aShowsRigViewDrawTime()
 {
     const QString path = qEnvironmentVariable("QLC_RIG_BENCH");
@@ -455,6 +457,47 @@ void Monitor_Test::aShowsRigViewDrawTime()
         r.skipCurrentElement();
     }
     QVERIFY(loaded);
+
+    if (qEnvironmentVariableIntValue("QLC_RIG_BENCH_LIT") == 1)
+    {
+        // What the rig view reads: each fixture's own values. A show's
+        // typical state: dimmers and colours full, the shutter open, pan and
+        // tilt centred, gobos and prisms out (everything else at 0).
+        for (Fixture *fx : m_doc->fixtures())
+        {
+            // setChannelValues() takes the universe, from its channel 0.
+            const int at = int(fx->address());
+            QByteArray v(at + int(fx->channels()), char(0));
+            for (quint32 c = 0; c < fx->channels(); ++c)
+            {
+                const QLCChannel *ch = fx->channel(c);
+                if (ch == nullptr)
+                    continue;
+                switch (ch->group())
+                {
+                case QLCChannel::Intensity:
+                    v[at + int(c)] = char(255);
+                    break;
+                case QLCChannel::Pan: case QLCChannel::Tilt:
+                    v[at + int(c)] = char(128);
+                    break;
+                case QLCChannel::Shutter:
+                    v[at + int(c)] = char(255);
+                    for (const QLCCapability *cap : ch->capabilities())
+                        if (cap->preset() == QLCCapability::ShutterOpen)
+                        {
+                            v[at + int(c)] = char(cap->middle());
+                            break;
+                        }
+                    break;
+                default:
+                    break;
+                }
+            }
+            fx->setChannelValues(v);
+        }
+    }
+    const QString shot = qEnvironmentVariable("QLC_RIG_BENCH_SHOT");
 
     const int frames = qMax(1, qEnvironmentVariableIntValue("QLC_RIG_FRAMES"));
     for (int quality = 1; quality <= 2; ++quality)
@@ -477,6 +520,12 @@ void Monitor_Test::aShowsRigViewDrawTime()
         qInfo().noquote() << QString("rig view, %1 fixtures, quality %2: %3 ms a frame")
                              .arg(m_doc->fixtures().size()).arg(quality)
                              .arg(double(clock.nsecsElapsed()) / 1e6 / frames, 0, 'f', 1);
+        if (!shot.isEmpty())
+        {
+            QString name = shot;
+            name.insert(name.lastIndexOf(QLatin1Char('.')), QString("-q%1").arg(quality));
+            view.grab().save(name);
+        }
     }
 }
 
@@ -12319,6 +12368,117 @@ void Monitor_Test::prismAndRotationNamesAreRead()
     QCOMPARE(BeamOptics::indexedAngle(&notIdx, 64), -1.0);
 }
 
+/* "this is the xl-450's lit .. but they're profiling as spots.. not washes":
+   a definition's optics say how its pool lands. One that can sharpen or
+   shape its beam (gobo, focus, iris), or a beam bar, is a profile with a
+   crisp edge; anything else is a wash; a PC or Fresnel softer still; a very
+   tight beam fairly crisp whatever it is. Head count has nothing to do with
+   it. */
+void Monitor_Test::aPoolsEdgeFollowsTheFixturesOptics()
+{
+    QCOMPARE(poolEdgeSoftness(false, int(QLCFixtureDef::LEDBarPixels), "Other", 80.0), 1.0f);
+    QCOMPARE(poolEdgeSoftness(true, int(QLCFixtureDef::MovingHead), "Other", 18.0), 0.1f);
+    QCOMPARE(poolEdgeSoftness(false, int(QLCFixtureDef::LEDBarBeams), "Other", 4.0), 0.1f);
+    QCOMPARE(poolEdgeSoftness(false, int(QLCFixtureDef::ColorChanger), "Fresnel", 40.0), 1.25f);
+    QCOMPARE(poolEdgeSoftness(false, int(QLCFixtureDef::ColorChanger), "pc", 40.0), 1.25f);
+    QCOMPARE(poolEdgeSoftness(false, int(QLCFixtureDef::ColorChanger), "Other", 8.0), 0.4f);
+    QCOMPARE(poolEdgeSoftness(false, int(QLCFixtureDef::ColorChanger), "Other", 0.0), 1.0f);
+
+    // From real channels: a gobo, a focus or an iris make a profile; a zoom
+    // alone doesn't (wash movers zoom).
+    // A show of its own: the fixtures stay out of the other tests' way.
+    Doc local(this);
+    auto traitsOf = [&local](QLCFixtureDef::FixtureType type,
+                           QList<QPair<QLCChannel::Group, QLCChannel::Preset>> chans,
+                           int heads = 1) {
+        QLCFixtureDef *def = new QLCFixtureDef();
+        def->setManufacturer("Test"); def->setModel(QString("Optics %1").arg(local.fixtures().size()));
+        def->setType(type);
+        QLCFixtureMode *mode = new QLCFixtureMode(def);
+        mode->setName("Mode");
+        for (int h = 0; h < heads; ++h)
+            chans << qMakePair(QLCChannel::Intensity, QLCChannel::IntensityDimmer);
+        for (const auto &c : chans)
+        {
+            QLCChannel *ch = new QLCChannel();
+            ch->setName(QString("C%1").arg(def->channels().size()));
+            ch->setGroup(c.first);
+            if (c.second != QLCChannel::Custom)
+                ch->setPreset(c.second);
+            def->addChannel(ch);
+            mode->insertChannel(ch, mode->channels().size());
+        }
+        QLCPhysical ph;
+        ph.setLensDegreesMin(30);
+        ph.setLensDegreesMax(30);
+        mode->setPhysical(ph);
+        def->addMode(mode);
+        Fixture *fxi = new Fixture(&local);
+        fxi->setFixtureDefinition(def, mode);
+        fxi->setAddress(local.fixtures().size() * 32);
+        local.addFixture(fxi);
+        return classifyFixture(fxi);
+    };
+    using C = QLCChannel;
+    QCOMPARE(traitsOf(QLCFixtureDef::LEDBarPixels, {}, 15).edgeSoftness, 1.0f);   // the XL-450
+    QCOMPARE(traitsOf(QLCFixtureDef::MovingHead, { { C::Gobo, C::Custom } }).edgeSoftness, 0.1f);
+    QCOMPARE(traitsOf(QLCFixtureDef::MovingHead, { { C::Beam, C::BeamFocusNearFar } }).edgeSoftness, 0.1f);
+    QCOMPARE(traitsOf(QLCFixtureDef::MovingHead, { { C::Shutter, C::ShutterIrisMinToMax } }).edgeSoftness, 0.1f);
+    QCOMPARE(traitsOf(QLCFixtureDef::MovingHead, { { C::Beam, C::BeamZoomSmallBig } }).edgeSoftness, 1.0f);
+}
+
+/* A wash's pool goes on past its beam angle, fading out to nothing; a
+   profile's stops almost at it. Both are full in the middle. */
+void Monitor_Test::aWashPoolFadesPastItsBeamAngle()
+{
+    Doc *doc = new Doc(this);
+    {
+        StructureStudioView view(doc, StructureStudioView::StageKind, 0);
+        view.resize(800, 600);
+        view.setPlane(StructureStudioView::Angled);
+        view.setAngledView(-30.0, 60.0);
+        QImage canvas(800, 600, QImage::Format_ARGB32);
+        QPainter p(&canvas);
+        const QVector3D apex(4.0f, 4.0f, 5.0f), down(0.0f, 0.0f, -1.0f);
+        const double half = qDegreesToRadians(15.0);
+        const QPointF centre = view.w2s(QVector3D(4.0f, 4.0f, 0.0f));
+
+        // The pool's reach on screen (its rim: corners with no light left),
+        // and whether its middle is full.
+        auto pool = [&](double softness, bool *fullMiddle) {
+            BeamOptics::Optics o;
+            o.softness = softness;
+            view.m_ops.clear();
+            view.m_collecting = true;
+            view.drawBeamCone(p, apex, down, half, QColor(0, 0, 255), 1.0, 1.0, &o);
+            view.m_collecting = false;
+            double reach = 0.0;
+            *fullMiddle = false;
+            for (const auto &op : view.m_ops)
+            {
+                if (!op.light)
+                    continue;
+                if (op.alphas.isEmpty() && op.poly.size() == 16)
+                    *fullMiddle = true;                    // the core: no fade in it
+                for (int i = 0; i < op.alphas.size(); ++i)
+                    if (op.alphas.at(i) <= 0.001)
+                        reach = qMax(reach, QLineF(centre, op.poly.at(i)).length());
+            }
+            return reach;
+        };
+        bool crispFull = false, washFull = false;
+        const double crisp = pool(0.1, &crispFull);
+        const double wash = pool(1.0, &washFull);
+        QVERIFY(crispFull);
+        QVERIFY(washFull);
+        QVERIFY(crisp > 10.0);
+        // tan(21 deg) / tan(15.6 deg): the wash reaches about 1.37 times as far.
+        QVERIFY2(wash / crisp > 1.25 && wash / crisp < 1.5,
+                 qPrintable(QString("%1 / %2").arg(wash).arg(crisp)));
+    }
+    delete doc;
+}
+
 void Monitor_Test::aGoboPoolIsDrawnThroughItsMask()
 {
     Doc *doc = new Doc(this);
@@ -12348,7 +12508,7 @@ void Monitor_Test::aGoboPoolIsDrawnThroughItsMask()
                 }
             return n;
         };
-        const int plain = emitted(nullptr);             // cone triangles + one pool
+        const int plain = emitted(nullptr);             // cone triangles + a plain pool
         QVERIFY(plain > 1);
 
         BeamOptics::Optics clear;
@@ -12367,7 +12527,9 @@ void Monitor_Test::aGoboPoolIsDrawnThroughItsMask()
                 halfOpen.mask.scanLine(y)[x] = 255;
         halfOpen.coverage = 0.5;
 
-        const int cone = plain - 1;
+        // A plain pool: its core, and two rings fading to its rim, each a
+        // triangle pair for each of the sixteen points round it.
+        const int cone = plain - (1 + 2 * 2 * 16);
         // All metal: no pool at all. All clear: the whole mesh.
         QCOMPARE(emitted(&metal), cone);
         const int full = emitted(&clear) - cone;

@@ -76,9 +76,23 @@ struct FixtureVisualTraits
     bool  laser = false;            ///< pencil-thin beams (QLCPhysical::LaserEmission)
     bool  stars = false;            ///< a star field (QLCPhysical::StarEmission)
     bool  flame = false;            ///< a silk flame (QLCPhysical::FlameEmission)
+    /** How its pool lands: 0 a profile's crisp edge ... 1 a wash fading out
+     *  past its beam angle; a PC or Fresnel lens a little softer still
+     *  (poolEdgeSoftness()). */
+    float edgeSoftness = 1.0f;
 };
 
 FixtureVisualTraits classifyFixture(Fixture *fx);
+
+/** How soft the edge of a fixture's pool is, from what its definition says
+ *  about its optics: one that can sharpen or shape its beam -- a gobo wheel,
+ *  a focus, an iris -- is a profile, with a crisp edge (0.1); so is a beam
+ *  bar (LED Bar (Beams)). Anything else is a wash (1.0); a PC or Fresnel
+ *  lens, which exist to soften the edge, a little more (1.25). A very
+ *  narrow beam (under 12 degrees) stays fairly crisp whatever it is.
+ *  Head count says nothing about optics: a pixel bar can be either. */
+float poolEdgeSoftness(bool shapesItsBeam, int fixtureType, const QString &lensName,
+                       double beamMaxDeg);
 
 /**
  * Where a fixture actually IS, in world metres.

@@ -40,6 +40,15 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Lighting Studio
 
+- **Washes look like washes.** A pool now fades out past its beam angle
+  for a wash (pars, pixel bars, wash movers) and stays crisp for a profile
+  (a gobo, focus or iris channel, or a beam bar); PC and Fresnel lenses
+  are softest. See
+  [Washes and profiles](lighting-studio.md#washes-and-profiles-the-edge-of-a-pool).
+- **A lit rig draws several times faster**: where every beam lands on the
+  decks is worked out once a frame, not once per ray (a 208-fixture show
+  fully lit went from about a second a frame to under a fifth of one).
+
 - **The Rig Overview stands on centre stage** — on the floor, in the
   middle of the stage grid — and turns about it, instead of centring
   whatever the rig's bounding box was (which floated the floor half a
