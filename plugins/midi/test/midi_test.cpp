@@ -23,6 +23,7 @@
 #include "midi_test.h"
 #include "midiprotocol.h"
 #include "midimtcdecoder.h"
+#include "midisysexassembler.h"
 
 #undef private
 
@@ -116,6 +117,53 @@ void Midi_Test::mtcPartialIgnored()
         dec.feedQuarterFrame(qf[i]);
     QCOMPARE(dec.feedQuarterFrame(qf[7]), true);
     QCOMPARE(dec.seconds(), 10);
+}
+
+/* MIDI Show Control arrives as SysEx, and a driver can hand one message
+   over in pieces: it's put back together whole, F0 to F7. */
+void Midi_Test::sysExIsPutBackTogether()
+{
+    auto feed = [](MidiSysExAssembler &a, const QByteArray &bytes) {
+        return a.feed(reinterpret_cast<const uchar *>(bytes.constData()), bytes.size());
+    };
+    // MSC GO cue 12.5, lighting, device 1.
+    const QByteArray go("\xF0\x7F\x01\x02\x01\x01" "12.5" "\xF7", 11);
+
+    MidiSysExAssembler a;
+    QList<QByteArray> got = feed(a, go);
+    QCOMPARE(got.count(), 1);
+    QCOMPARE(got.first(), go);
+    QVERIFY(!a.inProgress());
+
+    // In two packets, the second with no status byte of its own.
+    got = feed(a, go.left(5));
+    QVERIFY(got.isEmpty());
+    QVERIFY(a.inProgress());
+    got = feed(a, go.mid(5));
+    QCOMPARE(got.count(), 1);
+    QCOMPARE(got.first(), go);
+
+    // A clock tick in the middle is let through, not kept.
+    QByteArray ticked = go;
+    ticked.insert(7, char(0xF8));
+    got = feed(a, ticked);
+    QCOMPARE(got.count(), 1);
+    QCOMPARE(got.first(), go);
+
+    // Another status byte ends one that never finished; the next is whole.
+    got = feed(a, go.left(6) + QByteArray("\x90\x40\x7F", 3) + go);
+    QCOMPARE(got.count(), 1);
+    QCOMPARE(got.first(), go);
+
+    // Two in one feed; bytes before the first F0 are not part of anything.
+    got = feed(a, QByteArray("\x40\x41", 2) + go + go);
+    QCOMPARE(got.count(), 2);
+
+    // Too long to be show control: dropped.
+    got = feed(a, QByteArray(1, char(0xF0)) + QByteArray(MidiSysExAssembler::MaxLength + 10, 0x01)
+                  + QByteArray(1, char(0xF7)));
+    QVERIFY(got.isEmpty());
+    QVERIFY(!a.inProgress());
 }
 
 QTEST_MAIN(Midi_Test)

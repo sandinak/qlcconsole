@@ -190,6 +190,7 @@ private:
     MonitorProperties *m_monitorProps;
     PowerDistribution *m_powerDist;
     SpeedMasters *m_speedMasters;
+    class ShowControl *m_showControl;
     class PowerLimiter *m_powerLimiter = nullptr;
     NetworkTopology *m_networkTopology;
     TimecodeSource *m_timecodeSource;
@@ -1126,6 +1127,8 @@ public:
 
     /** The show's speed masters (SpeedMasters). Never null. */
     SpeedMasters *speedMasters() const { return m_speedMasters; }
+    /** Cues fired from outside: MSC, OSC (ShowControl). Never null. */
+    class ShowControl *showControl() const { return m_showControl; }
     /** Holds fixtures to their maximum draw (PowerLimiter) */
     class PowerLimiter *powerLimiter() const { return m_powerLimiter; }
 

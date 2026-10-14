@@ -30,6 +30,8 @@
 #include <QPushButton>
 #include <QMessageBox>
 #include <QLineEdit>
+#include <QCheckBox>
+#include <QMenu>
 #include <QApplication>
 #include <QSettings>
 #include <QDebug>
@@ -43,6 +45,7 @@
 #include <QComboBox>
 #include "speedmasters.h"
 #include "chasereditor.h"
+#include "showcontrol.h"
 #include "mastertimer.h"
 #include "chaserstep.h"
 #include "sequence.h"
@@ -63,6 +66,7 @@
 #define COL_DURATION 5
 #define COL_NOTES    6
 #define COL_SPEED    7
+#define COL_CUE      8
 
 ChaserEditor::ChaserEditor(QWidget* parent, Chaser* chaser, Doc* doc, bool liveMode)
     : QWidget(parent)
@@ -114,6 +118,82 @@ ChaserEditor::ChaserEditor(QWidget* parent, Chaser* chaser, Doc* doc, bool liveM
         m_doc->setModified();
     });
     horizontalLayout->addWidget(goLands);
+
+    /* Show control (SHOW_CONTROL_DESIGN.md): each step's cue number, this
+       chase's cue-list number, and whether it's the show's main cue list --
+       what QLab's MSC or OSC GO finds. */
+    m_tree->setColumnCount(COL_CUE + 1);
+    m_tree->headerItem()->setText(COL_CUE, tr("Cue"));
+    m_tree->headerItem()->setToolTip(COL_CUE, tr("The cue number a show controller (QLab: MSC or OSC) "
+                                                 "fires this step by. Grey: none set, so it's the "
+                                                 "step's position."));
+    m_tree->header()->moveSection(m_tree->header()->visualIndex(COL_CUE), 1);
+
+    m_tree->setProperty("helpTopic", QStringLiteral("show-control.md#cues-and-cue-lists"));
+    m_tree->headerItem()->setToolTip(COL_NUM, tr("Untick a step to skip it: GO, Next, Back and "
+                                                 "the steps that run on by themselves pass over "
+                                                 "it. Picked by itself, it still plays."));
+
+    /* Right-click: skip the selected steps, or use them again. */
+    m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(m_tree, &QWidget::customContextMenuRequested, this, [this](const QPoint &pos) {
+        QList<int> rows;
+        for (QTreeWidgetItem *it : m_tree->selectedItems())
+            rows << m_tree->indexOfTopLevelItem(it);
+        if (rows.isEmpty())
+            return;
+        QMenu menu(this);
+        QAction *skip = menu.addAction(rows.count() == 1 ? tr("Skip This Step")
+                                                         : tr("Skip %1 Steps").arg(rows.count()));
+        QAction *use = menu.addAction(rows.count() == 1 ? tr("Use This Step")
+                                                        : tr("Use %1 Steps").arg(rows.count()));
+        QAction *picked = menu.exec(m_tree->viewport()->mapToGlobal(pos));
+        if (picked != skip && picked != use)
+            return;
+        for (int row : rows)
+            m_chaser->setStepSkipped(row, picked == skip);
+        updateTree();
+        m_doc->setModified();
+    });
+    QLineEdit *cueList = new QLineEdit(m_chaser->cueListNumber(), this);
+    cueList->setObjectName(QStringLiteral("chaserCueList"));
+    cueList->setPlaceholderText(tr("none"));
+    cueList->setMaximumWidth(fontMetrics().horizontalAdvance(QStringLiteral("0000.00")) + 16);
+    cueList->setToolTip(tr("The cue-list number a show controller picks this chase by "
+                           "(MSC's cue list, OSC's /list/<n>). Empty: only as the main cue list."));
+    connect(cueList, &QLineEdit::editingFinished, this, [this, cueList]() {
+        if (cueList->text().trimmed() == m_chaser->cueListNumber())
+            return;
+        m_chaser->setCueListNumber(cueList->text());
+        m_doc->setModified();
+    });
+    QCheckBox *mainList = new QCheckBox(tr("Main cue list"), this);
+    mainList->setObjectName(QStringLiteral("chaserMainCueList"));
+    mainList->setChecked(m_doc->showControl()->mainCueList() == m_chaser->id());
+    mainList->setToolTip(tr("A show controller's GO with no cue list comes here. One chase in "
+                            "the show is the main cue list."));
+    connect(mainList, &QCheckBox::toggled, this, [this](bool on) {
+        ShowControl *sc = m_doc->showControl();
+        if (on)
+            sc->setMainCueList(m_chaser->id());
+        else if (sc->mainCueList() == m_chaser->id())
+            sc->setMainCueList(Function::invalidId());
+    });
+    QPushButton *renumber = new QPushButton(tr("Renumber Cues"), this);
+    renumber->setObjectName(QStringLiteral("chaserRenumberCues"));
+    renumber->setToolTip(tr("Number every step's cue 1, 2, 3... in the order they are now."));
+    connect(renumber, &QPushButton::clicked, this, [this]() {
+        m_chaser->renumberCues();
+        updateTree();
+        m_doc->setModified();
+    });
+    for (QWidget *w : { static_cast<QWidget *>(cueList), static_cast<QWidget *>(mainList),
+                        static_cast<QWidget *>(renumber) })
+        w->setProperty("helpTopic", QStringLiteral("show-control.md#cues-and-cue-lists"));
+    horizontalLayout->addWidget(new QLabel(tr("Cue list:"), this));
+    horizontalLayout->addWidget(cueList);
+    horizontalLayout->addWidget(mainList);
+    horizontalLayout->addWidget(renumber);
     if (m_chaser->type() == Function::SequenceType)
         m_tree->header()->setSectionHidden(COL_NAME, true);
 
@@ -655,6 +735,19 @@ void ChaserEditor::slotItemSelectionChanged()
     applyStepValues();
 }
 
+void ChaserEditor::setCueText(QTreeWidgetItem *item, const ChaserStep &step)
+{
+    // A step's own number, or (grey) its position -- what it answers to.
+    const int index = m_tree->indexOfTopLevelItem(item);
+    const bool own = !step.cueNumber.trimmed().isEmpty();
+    const QString text = own ? step.cueNumber.trimmed()
+                             : (index >= 0 ? QString::number(index + 1) : QString());
+    if (item->text(COL_CUE) != text)
+        item->setText(COL_CUE, text);
+    item->setForeground(COL_CUE, own ? m_tree->palette().brush(QPalette::Text)
+                                     : m_tree->palette().brush(QPalette::Disabled, QPalette::Text));
+}
+
 void ChaserEditor::slotItemChanged(QTreeWidgetItem *item, int column)
 {
     QString itemText = item->text(column);
@@ -758,6 +851,18 @@ void ChaserEditor::slotItemChanged(QTreeWidgetItem *item, int column)
     else if (column == COL_NOTES)
     {
         step.note = itemText;
+    }
+    else if (column == COL_NUM)
+    {
+        step.skip = item->checkState(COL_NUM) == Qt::Unchecked;
+    }
+    else if (column == COL_CUE)
+    {
+        // The position shown for a step with no number of its own comes
+        // back here unchanged: it stays without one.
+        const QString cue = itemText.trimmed();
+        if (!(step.cueNumber.isEmpty() && cue == QString::number(idx + 1)))
+            step.cueNumber = cue;
     }
     else if (column == COL_SPEED)
     {
@@ -1313,6 +1418,8 @@ void ChaserEditor::handleDropEvent(QDropEvent *event)
         {
             QTreeWidgetItem *it = m_tree->topLevelItem(i);
             it->setText(COL_NUM, QString::number(i + 1));
+            if (i < m_chaser->stepsCount())
+                setCueText(it, m_chaser->steps().at(i));
         }
         event->setDropAction(Qt::CopyAction);
         event->accept();
@@ -1417,8 +1524,19 @@ void ChaserEditor::updateItem(QTreeWidgetItem* item, ChaserStep& step)
 
     m_tree->blockSignals(true);
 
-    item->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemIsEditable);
+    item->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemIsEditable
+                   | Qt::ItemIsUserCheckable);
     item->setText(COL_NUM, QString("%1").arg(m_tree->indexOfTopLevelItem(item) + 1));
+    // Ticked: played. Unticked: skipped -- GO, Next and Back pass over it.
+    item->setCheckState(COL_NUM, step.skip ? Qt::Unchecked : Qt::Checked);
+    {
+        QFont f = m_tree->font();
+        f.setStrikeOut(step.skip);
+        item->setFont(COL_NAME, f);
+        item->setForeground(COL_NAME, step.skip
+            ? m_tree->palette().brush(QPalette::Disabled, QPalette::Text)
+            : m_tree->palette().brush(QPalette::Text));
+    }
     if (m_chaser->type() == Function::ChaserType)
     {
         QString displayName = function->name();
@@ -1454,6 +1572,7 @@ void ChaserEditor::updateItem(QTreeWidgetItem* item, ChaserStep& step)
 
     if (step.note.isEmpty() == false)
         item->setText(COL_NOTES, step.note);
+    setCueText(item, step);
     {
         const int i = SpeedMastersPanel::choiceValues(m_doc).indexOf(step.speedMaster);
         item->setData(COL_SPEED, Qt::UserRole, qMax(0, i));
@@ -1515,6 +1634,8 @@ void ChaserEditor::updateStepNumbers()
         QTreeWidgetItem* item = m_tree->topLevelItem(i);
         Q_ASSERT(item != NULL);
         item->setText(COL_NUM, QString("%1").arg(i + 1));
+        if (i < m_chaser->stepsCount())
+            setCueText(item, m_chaser->steps().at(i));
     }
 }
 

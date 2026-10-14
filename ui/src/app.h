@@ -214,6 +214,8 @@ public:
     void clearDocument();
 
     Doc *doc();
+    /** Show control's OSC listener and settings (QLab). */
+    class ShowControlListener *showControlListener() const { return m_showControlListener; }
 
 private slots:
     void slotDocModified(bool state);
@@ -234,6 +236,7 @@ private:
     void initDoc();
 
 private:
+    class ShowControlListener *m_showControlListener = nullptr;
     Doc* m_doc;
 
     /** Device-agnostic control-surface engine + the PMJ Black 1 overlay
@@ -395,6 +398,8 @@ private:
     QAction* m_lastLookAction;
     QAction* m_clearLastLookAction;
     QAction* m_controlPanicAction;
+    QAction* m_cueGoAction = nullptr;       ///< the main cue list's GO
+    QAction* m_cueBackAction = nullptr;
     QAction* m_dumpDmxAction;
     QAction* m_liveEditAction;
     QAction* m_liveEditVirtualConsoleAction;
@@ -576,6 +581,9 @@ private slots:
     void slotPadModeChanged(Doc::PadMode mode);
 
     /** Refresh the global timecode chip (position/state colour). */
+    /** The footer's "Next:" -- the main cue list's standby cue. */
+    void slotUpdateStandby();
+    void slotFillStandbyMenu();
     void slotTimecodeStatusChanged();
 
     /** Poll + refresh the global engine-load chip (and timecode chip). */
@@ -611,6 +619,7 @@ private:
      *  by m_showFooterGM, same pattern as Load/Power below. */
     QWidget* m_statusGrandMasterBox = nullptr;
     QLabel* m_statusTimecodeLabel;
+    class QToolButton* m_statusStandby = nullptr;   ///< "Next: 12.5 — ..."
     QLabel* m_statusLoadLabel;
     QLabel* m_statusPowerLabel = nullptr;
     // Whether the engine-load / power-estimate / GM-fader footer chips are

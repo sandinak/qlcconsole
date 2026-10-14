@@ -153,6 +153,7 @@ add_library(${module_name}
     patchinventorydialog.cpp patchinventorydialog.h
     helpbrowser.cpp helpbrowser.h
     helpshots.cpp helpshots.h
+    showcontrollistener.cpp showcontrollistener.h
     universecombo.cpp universecombo.h
     powerdistributiondialog.cpp powerdistributiondialog.h
     powerdistributionwidget.cpp powerdistributionwidget.h

@@ -83,6 +83,8 @@ bool InputPatch::set(QLCIOPlugin* plugin, quint32 input, QLCInputProfile* profil
                    this, SLOT(slotValueChanged(quint32,quint32,quint32,uchar,QString)));
         disconnect(m_plugin, SIGNAL(timeCodeChanged(quint32,quint32,quint32,uchar)),
                    this, SLOT(slotTimeCodeChanged(quint32,quint32,quint32,uchar)));
+        disconnect(m_plugin, SIGNAL(sysExReceived(quint32,quint32,QByteArray)),
+                   this, SLOT(slotSysExReceived(quint32,quint32,QByteArray)));
         m_plugin->closeInput(m_pluginLine, m_universe);
     }
 
@@ -106,6 +108,8 @@ bool InputPatch::set(QLCIOPlugin* plugin, quint32 input, QLCInputProfile* profil
                 this, SLOT(slotValueChanged(quint32,quint32,quint32,uchar,QString)));
         connect(m_plugin, SIGNAL(timeCodeChanged(quint32,quint32,quint32,uchar)),
                 this, SLOT(slotTimeCodeChanged(quint32,quint32,quint32,uchar)));
+        connect(m_plugin, SIGNAL(sysExReceived(quint32,quint32,QByteArray)),
+                this, SLOT(slotSysExReceived(quint32,quint32,QByteArray)));
         result = m_plugin->openInput(m_pluginLine, m_universe);
 
         if (m_profile != NULL)
@@ -257,6 +261,17 @@ void InputPatch::slotTimeCodeChanged(quint32 universe, quint32 input,
         return;
 
     emit inputTimeCodeChanged(m_universe, msPosition, fps);
+}
+
+void InputPatch::slotSysExReceived(quint32 universe, quint32 input, const QByteArray &sysEx)
+{
+    // As timecode: only what arrives on this patch's own line.
+    if (input != m_pluginLine)
+        return;
+    if (universe != UINT_MAX && universe != m_universe)
+        return;
+
+    emit inputSysExReceived(m_universe, sysEx);
 }
 
 void InputPatch::setProfilePageControls()

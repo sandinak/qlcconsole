@@ -31,6 +31,7 @@ private slots:
     void mtcQuarterFrame();
     void mtcFullFrame();
     void mtcPartialIgnored();
+    void sysExIsPutBackTogether();
 };
 
 #endif

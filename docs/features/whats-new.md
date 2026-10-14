@@ -4,6 +4,20 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## October 2026
 
+### Show control
+
+- **QLab can fire the lights' cues.** A chase's steps have **cue numbers**
+  (a Cue column in the chaser editor; a step without one answers to its
+  position), a chase can be the **main cue list** or have a list number,
+  and **MIDI Show Control** (on a patched MIDI input) or **OSC** (on a port
+  of its own, Settings → Show control) can GO, LOAD, STOP, PAUSE, RESUME,
+  RESET or ALL OFF them. See [Show control (QLab)](show-control.md).
+- **Next:** in the footer says what the main cue list's GO plays next; GO
+  (⌘↩) and Back (⌘⇧↩) work from any window, and the Virtual Console cue
+  list shows each cue's number and what's next.
+- **Skip a step** without deleting it: untick it in the chaser editor (or
+  right-click → Skip); GO, Next, Back and auto-follow pass over it.
+
 ### Help
 
 - **In-app help.** **F1** opens the guide for whatever is in front — the

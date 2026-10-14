@@ -316,6 +316,16 @@ ChaserRunnerStep *ChaserRunner::currentRunningStep() const
 
 int ChaserRunner::computeNextStep(int currentStep) const
 {
+    // Past skipped steps (ChaserStep::skip): the one GO will play.
+    int next = computeNextStepIgnoringSkips(currentStep);
+    for (int guard = 0; next >= 0 && m_chaser->isStepSkipped(next)
+                        && guard < m_chaser->stepsCount(); ++guard)
+        next = computeNextStepIgnoringSkips(next);
+    return next >= 0 && m_chaser->isStepSkipped(next) ? -1 : next;
+}
+
+int ChaserRunner::computeNextStepIgnoringSkips(int currentStep) const
+{
     int nextStep = currentStep;
 
     if (m_chaser->runOrder() == Function::Random)
@@ -614,6 +624,22 @@ void ChaserRunner::startNewStep(int index, MasterTimer *timer, qreal mIntensity,
 }
 
 int ChaserRunner::getNextStepIndex()
+{
+    // Next, Back and auto-follow pass over skipped steps (ChaserStep::skip),
+    // stepping on from each in the same way; all skipped: none.
+    const int from = m_lastRunStepIdx;
+    int next = nextStepIndexIgnoringSkips();
+    for (int guard = 0; next >= 0 && m_chaser->isStepSkipped(next)
+                        && guard < 2 * m_chaser->stepsCount(); ++guard)
+    {
+        m_lastRunStepIdx = next;
+        next = nextStepIndexIgnoringSkips();
+    }
+    m_lastRunStepIdx = from;
+    return next >= 0 && m_chaser->isStepSkipped(next) ? -1 : next;
+}
+
+int ChaserRunner::nextStepIndexIgnoringSkips()
 {
     int currentStepIndex = m_lastRunStepIdx;
 

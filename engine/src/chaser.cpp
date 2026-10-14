@@ -110,6 +110,7 @@ bool Chaser::copyFrom(const Function* function)
     // Copy chaser stuff
     m_steps = chaser->m_steps;
     m_goQuantize = chaser->m_goQuantize;
+    m_cueListNumber = chaser->m_cueListNumber;
     m_fadeInMode = chaser->m_fadeInMode;
     m_fadeOutMode = chaser->m_fadeOutMode;
     m_holdMode = chaser->m_holdMode;
@@ -386,6 +387,89 @@ Chaser::GoQuantize Chaser::stringToGoQuantize(const QString &str)
 }
 
 /*****************************************************************************
+ * Cues for show control
+ *****************************************************************************/
+
+void Chaser::setCueListNumber(const QString &number)
+{
+    const QString n = number.trimmed();
+    if (n == m_cueListNumber)
+        return;
+    m_cueListNumber = n;
+    emit changed(this->id());
+}
+
+QString Chaser::stepCue(int index) const
+{
+    QMutexLocker locker(&m_stepListMutex);
+    if (index < 0 || index >= m_steps.count())
+        return QString();
+    const QString n = m_steps.at(index).cueNumber.trimmed();
+    return n.isEmpty() ? QString::number(index + 1) : n;
+}
+
+int Chaser::findCue(const QString &cue) const
+{
+    const int count = stepsCount();
+    for (int i = 0; i < count; ++i)
+        if (cuesMatch(stepCue(i), cue))
+            return i;
+    return -1;
+}
+
+void Chaser::renumberCues()
+{
+    {
+        QMutexLocker locker(&m_stepListMutex);
+        for (int i = 0; i < m_steps.count(); ++i)
+            m_steps[i].cueNumber = QString::number(i + 1);
+    }
+    emit changed(this->id());
+}
+
+bool Chaser::isStepSkipped(int index) const
+{
+    QMutexLocker locker(&m_stepListMutex);
+    return index >= 0 && index < m_steps.count() && m_steps.at(index).skip;
+}
+
+void Chaser::setStepSkipped(int index, bool skip)
+{
+    {
+        QMutexLocker locker(&m_stepListMutex);
+        if (index < 0 || index >= m_steps.count() || m_steps.at(index).skip == skip)
+            return;
+        m_steps[index].skip = skip;
+    }
+    emit changed(this->id());
+}
+
+int Chaser::firstPlayableStep() const
+{
+    const int count = stepsCount();
+    const bool back = direction() == Function::Backward;
+    for (int n = 0; n < count; ++n)
+    {
+        const int i = back ? count - 1 - n : n;
+        if (!isStepSkipped(i))
+            return i;
+    }
+    return -1;
+}
+
+bool Chaser::cuesMatch(const QString &a, const QString &b)
+{
+    const QString x = a.trimmed(), y = b.trimmed();
+    if (x.isEmpty() || y.isEmpty())
+        return false;
+    bool okX = false, okY = false;
+    const double dx = x.toDouble(&okX), dy = y.toDouble(&okY);
+    if (okX && okY)
+        return qAbs(dx - dy) < 1e-9;
+    return x.compare(y, Qt::CaseInsensitive) == 0;
+}
+
+/*****************************************************************************
  * Save & Load
  *****************************************************************************/
 
@@ -400,6 +484,8 @@ bool Chaser::saveXML(QXmlStreamWriter *doc) const
     saveXMLCommon(doc);
     if (m_goQuantize != GoNow)
         doc->writeAttribute(QStringLiteral("GoQuantize"), goQuantizeToString(m_goQuantize));
+    if (m_cueListNumber.isEmpty() == false)
+        doc->writeAttribute(QStringLiteral("CueList"), m_cueListNumber);
 
     /* Save Tempo type */
     saveXMLTempoType(doc);
@@ -464,6 +550,7 @@ bool Chaser::loadXML(QXmlStreamReader &root)
     }
 
     m_goQuantize = stringToGoQuantize(root.attributes().value(QStringLiteral("GoQuantize")).toString());
+    m_cueListNumber = root.attributes().value(QStringLiteral("CueList")).toString().trimmed();
 
     /* Load chaser contents */
     while (root.readNextStartElement())

@@ -174,6 +174,8 @@ private:
     ChaserStep stepAtIndex(int index) const;
 
     /** Update $item contents from $step */
+    /** The Cue column: the step's cue number, or its position (grey). */
+    void setCueText(QTreeWidgetItem *item, const ChaserStep &step);
     void updateItem(QTreeWidgetItem* item, ChaserStep& step);
 
     /** Update the step numbers (col 0) for each list item */

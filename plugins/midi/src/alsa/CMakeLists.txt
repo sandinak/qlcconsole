@@ -35,6 +35,7 @@ target_sources(${module_name} PRIVATE
     ../common/${module_name}.cpp ../common/${module_name}.h
     ../common/midiprotocol.cpp ../common/midiprotocol.h
     ../common/midimtcdecoder.cpp ../common/midimtcdecoder.h
+    ../common/midisysexassembler.cpp ../common/midisysexassembler.h
     ../common/miditemplate.cpp ../common/miditemplate.h
     alsamidienumerator.cpp alsamidienumerator.h
     alsamidiinputdevice.cpp alsamidiinputdevice.h

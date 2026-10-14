@@ -28,6 +28,10 @@
 #include <QPushButton>
 #include <QDialogButtonBox>
 
+#include <QNetworkInterface>
+#include <QGridLayout>
+
+#include "showcontrollistener.h"
 #include "appsettings.h"
 #include "app.h"
 
@@ -112,6 +116,68 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     fxLayout->addStretch();
     mainLayout->addWidget(fxGroup);
 
+    // --- Show control (QLab) ---
+    ShowControlListener *listener = m_app->showControlListener();
+    QGroupBox *scGroup = new QGroupBox(tr("Show control (QLab)"), this);
+    scGroup->setObjectName(QStringLiteral("settingsShowControl"));
+    scGroup->setProperty("helpTopic", QStringLiteral("show-control.md"));
+    QGridLayout *scLayout = new QGridLayout(scGroup);
+
+    m_oscCheck = new QCheckBox(tr("Listen for OSC cue commands on port"), scGroup);
+    m_oscCheck->setChecked(ShowControlListener::oscEnabled());
+    m_oscCheck->setToolTip(tr("QLab's Network cue (or anything that sends OSC) can GO a cue: "
+                              "/go, /cue/12/start, /stop... Anyone on the network can, so it's off "
+                              "until you turn it on."));
+    m_oscPortSpin = new QSpinBox(scGroup);
+    m_oscPortSpin->setRange(1, 65535);
+    m_oscPortSpin->setValue(ShowControlListener::oscPort());
+    m_oscPortSpin->setToolTip(tr("Not 53000 or 53001 if QLab runs on this computer: it uses those."));
+    scLayout->addWidget(m_oscCheck, 0, 0);
+    scLayout->addWidget(m_oscPortSpin, 0, 1);
+
+    QStringList addresses;
+    for (const QHostAddress &a : QNetworkInterface::allAddresses())
+        if (a.protocol() == QAbstractSocket::IPv4Protocol && !a.isLoopback())
+            addresses << a.toString();
+    QLabel *where = new QLabel(addresses.isEmpty()
+        ? tr("Send to this computer as localhost (127.0.0.1).")
+        : tr("Send to this computer at %1 (or 127.0.0.1 on this computer).")
+              .arg(addresses.join(tr(" or "))), scGroup);
+    where->setWordWrap(true);
+    where->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    scLayout->addWidget(where, 1, 0, 1, 3);
+
+    m_mscCheck = new QCheckBox(tr("Answer MIDI Show Control as device"), scGroup);
+    m_mscCheck->setChecked(ShowControlListener::mscEnabled());
+    m_mscCheck->setToolTip(tr("MSC GO, STOP, RESUME, LOAD, ALL_OFF, RESET and GO_OFF arriving on "
+                              "a patched MIDI input (Connections), for lighting, moving lights or "
+                              "all types. The all-call (127) is always answered."));
+    m_mscDeviceSpin = new QSpinBox(scGroup);
+    m_mscDeviceSpin->setRange(0, 0x6F);
+    m_mscDeviceSpin->setValue(ShowControlListener::mscDeviceId());
+    scLayout->addWidget(m_mscCheck, 2, 0);
+    scLayout->addWidget(m_mscDeviceSpin, 2, 1);
+
+    QLabel *status = new QLabel(scGroup);
+    status->setObjectName(QStringLiteral("showControlStatus"));
+    QLabel *last = new QLabel(scGroup);
+    last->setObjectName(QStringLiteral("showControlLast"));
+    last->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    auto showLast = [last](const QString &what) {
+        last->setText(what.isEmpty() ? tr("Nothing received yet.") : tr("Last: %1").arg(what));
+    };
+    if (listener != nullptr)
+    {
+        status->setText(listener->status());
+        showLast(listener->lastCommand());
+        connect(listener, &ShowControlListener::statusChanged, status, &QLabel::setText);
+        connect(listener, &ShowControlListener::lastCommandChanged, last, showLast);
+    }
+    scLayout->addWidget(status, 3, 0, 1, 3);
+    scLayout->addWidget(last, 4, 0, 1, 3);
+    scLayout->setColumnStretch(2, 1);
+    mainLayout->addWidget(scGroup);
+
     // Add stretch to push buttons to bottom
     mainLayout->addStretch();
 
@@ -145,6 +211,11 @@ void AppSettings::accept()
     // Effect script editor preference (read by the Look Editor authoring flow).
     QSettings().setValue(QStringLiteral("effectscript/editor"),
                          m_scriptEditorCombo->currentData().toString());
+
+    ShowControlListener::setSettings(m_oscCheck->isChecked(), m_oscPortSpin->value(),
+                                     m_mscCheck->isChecked(), m_mscDeviceSpin->value());
+    if (ShowControlListener *listener = m_app->showControlListener())
+        listener->apply();
 
     QDialog::accept();
 }
