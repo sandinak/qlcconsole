@@ -226,6 +226,37 @@ public:
 private:
     GoQuantize m_goQuantize = GoNow;
 
+    /*********************************************************************
+     * Cues for show control (SHOW_CONTROL_DESIGN.md)
+     *********************************************************************/
+public:
+    /** The number a show controller picks this cue list by ("2"); empty
+     *  for none. */
+    QString cueListNumber() const { return m_cueListNumber; }
+    void setCueListNumber(const QString &number);
+
+    /** Step @a index's cue: its cue number, or its position counting from
+     *  1 when it has none. Empty for a step that isn't there. */
+    QString stepCue(int index) const;
+    /** The step whose cue is @a cue (cuesMatch()), or -1. */
+    int findCue(const QString &cue) const;
+    /** Numbers every step 1, 2, 3... in order. */
+    void renumberCues();
+    /** Step @a index is skipped (ChaserStep::skip); false for one not there. */
+    bool isStepSkipped(int index) const;
+    /** Skips step @a index, or puts it back. */
+    void setStepSkipped(int index, bool skip);
+    /** The first step GO plays from stopped: the first not skipped (the last,
+     *  running backward); -1 when every step is skipped. */
+    int firstPlayableStep() const;
+    /** Two cue numbers are the same cue: as numbers when both read as
+     *  numbers ("12.50" is "12.5"), else as text, ignoring case and spaces
+     *  round them. */
+    static bool cuesMatch(const QString &a, const QString &b);
+
+private:
+    QString m_cueListNumber;
+
 public:
 
 protected:

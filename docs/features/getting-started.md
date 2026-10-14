@@ -88,9 +88,12 @@ the footer.
 3. **Speed masters** — one button per master the show uses, showing its
    tempo; click one to set it
    ([Speed masters](effects.md#speed-masters)).
-4. **MTC** — the timecode the Shows timeline follows.
-5. **Load** — how much of each DMX tick the show uses.
-6. **DESIGN** / **OPERATE** — click to switch.
+4. **Next:** — what the main cue list's GO (⌘↩) plays next; click for
+   GO, Back and loading another cue
+   ([Show control](show-control.md#whats-next-and-go-from-anywhere)).
+5. **MTC** — the timecode the Shows timeline follows.
+6. **Load** — how much of each DMX tick the show uses.
+7. **DESIGN** / **OPERATE** — click to switch.
 
 **The footer** says whether the show is ready to run: **Ready**, or **Not
 ready (N)** in red — click it for the list (unpatched or clashing
@@ -204,6 +207,9 @@ Steps, towers and booms usually come in sets that should all be the same:
   operator.
 - **Stop ALL functions** (⌘⇧Esc), or its menu's **Fade and stop**, is the
   panic button.
+- **From QLab**: QLab (or anything that speaks MIDI Show Control or OSC)
+  can GO a chase's cues by number. See
+  [Show control (QLab)](show-control.md).
 - The Virtual Console, Simple Desk and Shows timeline work as in stock
   QLC+; the **Programming** tab's toolbar has Highlight / Flash / Park /
   Blind for working on a running show.

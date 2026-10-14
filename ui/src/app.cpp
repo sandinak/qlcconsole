@@ -91,6 +91,9 @@
 #include "videoprovider.h"
 #include "qlcconfig.h"
 #include "helpbrowser.h"
+#include "showcontrollistener.h"
+#include "chaserstep.h"
+#include "showcontrol.h"
 #include "fixturegroup.h"
 #include "qlcfile.h"
 #include "apputil.h"
@@ -881,6 +884,10 @@ void App::initDoc()
        fixture, with Fix on Device. Read again a moment after the show loads
        or a fixture changes (a patch, a mode), and every so often anyway. */
     WledConfigCheck *wledCheck = new WledConfigCheck(m_doc, this);
+
+    /* Cues fired from outside (QLab): OSC on a port of our own, MSC on a
+       patched MIDI input (SHOW_CONTROL_DESIGN.md). */
+    m_showControlListener = new ShowControlListener(m_doc, this);
     QTimer *wledRecheck = new QTimer(this);
     wledRecheck->setSingleShot(true);
     wledRecheck->setInterval(1500);
@@ -1685,6 +1692,21 @@ void App::initActions()
     m_helpContextAction->setToolTip(tr("Help on what you're looking at"));
     connect(m_helpContextAction, &QAction::triggered, this, &App::slotHelpContext);
 
+    /* The main cue list's GO and Back (SHOW_CONTROL_DESIGN.md), from any
+       window: what the footer's "Next:" says GO plays. */
+    m_cueGoAction = new QAction(tr("GO (Main Cue List)"), this);
+    m_cueGoAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Return));
+    m_cueGoAction->setShortcutContext(Qt::ApplicationShortcut);
+    connect(m_cueGoAction, &QAction::triggered, this, [this]() {
+        m_doc->showControl()->execute({ ShowControl::Go, QString(), QString() });
+    });
+    m_cueBackAction = new QAction(tr("Back (Main Cue List)"), this);
+    m_cueBackAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Return));
+    m_cueBackAction->setShortcutContext(Qt::ApplicationShortcut);
+    connect(m_cueBackAction, &QAction::triggered, this, [this]() {
+        m_doc->showControl()->execute({ ShowControl::Back, QString(), QString() });
+    });
+
     m_helpIndexAction = new QAction(tr("QLC+ Reference (online)"), this);
     m_helpIndexAction->setShortcut(QKeySequence("SHIFT+F1"));
     connect(m_helpIndexAction, SIGNAL(triggered(bool)), this, SLOT(slotHelpIndex()));
@@ -1999,6 +2021,9 @@ void App::initMenuBar()
     ctrlMenu->addSeparator();
     ctrlMenu->addAction(m_controlPanicAction);      // fade-and-stop options as submenu
     ctrlMenu->addAction(m_dumpDmxAction);
+    ctrlMenu->addSeparator();
+    ctrlMenu->addAction(m_cueGoAction);
+    ctrlMenu->addAction(m_cueBackAction);
     ctrlMenu->addSeparator();
     QMenu* liveMenu = ctrlMenu->addMenu(tr("&Live Edit"));
     liveMenu->addAction(m_liveEditAction);
@@ -4375,6 +4400,26 @@ void App::initStatusBar()
     chipFont.setStyleHint(QFont::Monospace);
     chipFont.setFamily(QFontDatabase::systemFont(QFontDatabase::FixedFont).family());
 
+    /* What the main cue list's GO plays next (SHOW_CONTROL_DESIGN.md);
+       click for GO, Back, Stop and loading another cue. Hidden when the
+       show has no cue list to follow. */
+    m_statusStandby = new QToolButton(this);
+    m_statusStandby->setObjectName(QStringLiteral("footerStandby"));
+    m_statusStandby->setAutoRaise(true);
+    m_statusStandby->setPopupMode(QToolButton::InstantPopup);
+    m_statusStandby->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    m_statusStandby->setMenu(new QMenu(m_statusStandby));
+    m_statusStandby->setToolTip(tr("The main cue list: what GO (%1) plays next. Click for "
+                                   "GO, Back, Stop, or to load another cue.")
+                                .arg(m_cueGoAction->shortcut().toString(QKeySequence::NativeText)));
+    m_statusStandby->setProperty("helpTopic", QStringLiteral("show-control.md"));
+    m_statusStandby->hide();
+    connect(m_statusStandby->menu(), &QMenu::aboutToShow, this, &App::slotFillStandbyMenu);
+    sb->addWidget(m_statusStandby, 0);
+    QTimer *standby = new QTimer(this);
+    connect(standby, &QTimer::timeout, this, &App::slotUpdateStandby);
+    standby->start(250);
+
     m_statusTimecodeLabel = new QLabel(this);
     m_statusTimecodeLabel->setObjectName("footerTimecode");
     m_statusTimecodeLabel->setFont(chipFont);
@@ -5096,6 +5141,75 @@ void App::captureScenarioIfRequested()
 
         if (qgetenv("QLC_SHOT_STAY") != QByteArray("1"))
             qApp->quit();
+    });
+}
+
+void App::slotUpdateStandby()
+{
+    if (m_statusStandby == NULL || m_doc == NULL)
+        return;
+    ShowControl *sc = m_doc->showControl();
+    Chaser *list = sc->cueList(QString());
+    if (list == NULL)
+    {
+        m_statusStandby->hide();
+        return;
+    }
+    const int next = sc->standbyStep(list);
+    QString text;
+    if (next < 0)
+        text = tr("Next: (end of %1)").arg(list->name());
+    else
+    {
+        const Function *f = m_doc->function(list->steps().at(next).fid);
+        text = tr("Next: %1").arg(list->stepCue(next));
+        if (f != NULL)
+            text += QStringLiteral(" \u2014 ") + f->name();
+    }
+    if (m_statusStandby->text() != text)
+        m_statusStandby->setText(text);
+    m_statusStandby->show();
+}
+
+void App::slotFillStandbyMenu()
+{
+    QMenu *menu = m_statusStandby->menu();
+    menu->clear();
+    ShowControl *sc = m_doc->showControl();
+    Chaser *list = sc->cueList(QString());
+    if (list == NULL)
+        return;
+
+    menu->addAction(m_cueGoAction);
+    menu->addAction(m_cueBackAction);
+    menu->addAction(tr("Stop %1").arg(list->name()), this, [sc]() {
+        sc->execute({ ShowControl::Stop, QString(), QString() });
+    });
+    QMenu *load = menu->addMenu(tr("Load"));
+    const QList<ChaserStep> steps = list->steps();
+    for (int i = 0; i < steps.count(); ++i)
+    {
+        const Function *f = m_doc->function(steps.at(i).fid);
+        QString label = list->stepCue(i);
+        if (f != NULL)
+            label += QStringLiteral(" \u2014 ") + f->name();
+        if (steps.at(i).skip)
+            label += tr(" (skipped)");
+        const QString cue = list->stepCue(i);
+        QAction *a = load->addAction(label, this, [sc, cue]() {
+            sc->execute({ ShowControl::Load, cue, QString() });
+        });
+        a->setCheckable(true);
+        a->setChecked(i == sc->standbyStep(list));
+    }
+    menu->addSeparator();
+    const quint32 id = list->id();
+    menu->addAction(tr("Open the Cue List"), this, [this, id]() {
+        if (ProgrammingManager *pm = findChild<ProgrammingManager *>())
+        {
+            switchToTabContaining(pm);
+            pm->showFunction(id);
+        }
     });
 }
 

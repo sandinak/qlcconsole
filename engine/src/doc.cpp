@@ -61,6 +61,7 @@
 #include "scene.h"
 #include "show.h"
 #include "speedmasters.h"
+#include "showcontrol.h"
 #include "doc.h"
 #include "powerlimiter.h"
 #include "bus.h"
@@ -95,6 +96,7 @@ Doc::Doc(QObject* parent, int universes)
     , m_monitorProps(NULL)
     , m_powerDist(NULL)
     , m_speedMasters(NULL)
+    , m_showControl(NULL)
     , m_networkTopology(NULL)
     , m_timecodeSource(NULL)
     , m_mode(Design)
@@ -130,6 +132,12 @@ Doc::Doc(QObject* parent, int universes)
     m_speedMasters = new SpeedMasters(this, this);
     connect(m_ioMap, &InputOutputMap::inputValueChanged,
             m_speedMasters, &SpeedMasters::slotInputValue);
+
+    // Cues fired from outside (QLab): MSC arrives as SysEx on a patched
+    // MIDI input, as MTC does.
+    m_showControl = new ShowControl(this, this);
+    connect(m_ioMap, &InputOutputMap::inputSysExReceived,
+            m_showControl, &ShowControl::handleSysEx);
     // Which masters are used changes only with an edit: let them know.
     // (modified() can come from the DMX thread; marking is atomic.)
     auto usage = [this]() { m_speedMasters->markUsageDirty(); };
@@ -284,6 +292,7 @@ void Doc::clearContents()
         m_powerDist->reset();
 
     m_speedMasters->reset();
+    m_showControl->reset();
 
     if (m_networkTopology != NULL)
         m_networkTopology->reset();
@@ -2319,6 +2328,10 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
         {
             m_speedMasters->loadXML(doc);
         }
+        else if (doc.name() == KXMLQLCShowControl)
+        {
+            m_showControl->loadXML(doc);
+        }
         else if (doc.name() == KXMLQLCPowerDistribution)
         {
             powerDistribution()->loadXML(doc, this);
@@ -2432,6 +2445,7 @@ bool Doc::saveXML(QXmlStreamWriter *doc)
         m_powerDist->saveXML(doc);
 
     m_speedMasters->saveXML(doc);
+    m_showControl->saveXML(doc);
 
     if (m_networkTopology != NULL)
         m_networkTopology->saveXML(doc);

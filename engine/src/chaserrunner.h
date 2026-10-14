@@ -123,6 +123,8 @@ public:
      * Compute next step for manual fading
      */
     int computeNextStep(int currentStepIndex) const;
+    /** computeNextStep() as if no step were skipped. */
+    int computeNextStepIgnoringSkips(int currentStepIndex) const;
 
     /**
      * Get the running step number.
@@ -224,6 +226,8 @@ private:
      * according to the Chaser running order
      */
     int getNextStepIndex();
+    /** getNextStepIndex() as if no step were skipped. */
+    int nextStepIndexIgnoringSkips();
 
 private:
     FunctionParent functionParent() const;

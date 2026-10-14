@@ -94,6 +94,12 @@ public:
     /** What the step's function runs on (a SpeedMasters::Assignment):
      *  Inherit (-1, the default) takes the chaser's. */
     int speedMaster = -1;
+    /** The step's cue number for show control ("12.5"; SHOW_CONTROL_DESIGN.md).
+     *  Empty: it answers to its position (Chaser::stepCue()). */
+    QString cueNumber;
+    /** Skipped: GO, Next, Back and auto-follow pass over it; a jump straight
+     *  to it still plays it. Kept so it can be put back (rehearsals). */
+    bool skip = false;
 };
 
 /** @} */

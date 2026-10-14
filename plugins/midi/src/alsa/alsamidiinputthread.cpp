@@ -259,6 +259,14 @@ void AlsaMidiInputThread::readEvent()
                     cmd = 0;
                 break;
 
+                case SND_SEQ_EVENT_SYSEX:
+                    // A SysEx message, or a chunk of a long one (MIDI Show
+                    // Control, full-frame MTC); not channel input.
+                    device->feedSysEx(static_cast<const uchar *>(ev->data.ext.ptr),
+                                      int(ev->data.ext.len));
+                    cmd = 0;
+                break;
+
                 default:
                 break;
             }

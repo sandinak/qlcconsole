@@ -47,6 +47,7 @@
 #include "apputil.h"
 #include "chaser.h"
 #include "qmath.h"
+#include "showcontrol.h"
 #include "doc.h"
 
 #define COL_NUM      0
@@ -55,6 +56,7 @@
 #define COL_FADEOUT  3
 #define COL_DURATION 4
 #define COL_NOTES    5
+#define COL_CUE      6
 
 #define PROP_ID  Qt::UserRole
 #define HYSTERESIS 3 // Hysteresis for next/previous external input
@@ -165,12 +167,25 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
     m_tree->setItemDelegateForColumn(COL_FADEIN, new NoEditDelegate(this));
     m_tree->setItemDelegateForColumn(COL_FADEOUT, new NoEditDelegate(this));
     m_tree->setItemDelegateForColumn(COL_DURATION, new NoEditDelegate(this));
+    m_tree->setItemDelegateForColumn(COL_CUE, new NoEditDelegate(this));
 
     connect(m_tree, SIGNAL(itemActivated(QTreeWidgetItem*,int)),
             this, SLOT(slotItemActivated(QTreeWidgetItem*)));
     connect(m_tree, SIGNAL(itemChanged(QTreeWidgetItem*,int)),
             this, SLOT(slotItemChanged(QTreeWidgetItem*,int)));
     vbox->addWidget(m_tree);
+
+    /* What GO plays next (SHOW_CONTROL_DESIGN.md): the standby cue, with
+       its name and note, so the operator never has to work it out. */
+    m_standbyLabel = new QLabel(this);
+    m_standbyLabel->setObjectName(QStringLiteral("cueListStandby"));
+    m_standbyLabel->setTextFormat(Qt::PlainText);
+    m_standbyLabel->setMinimumWidth(0);
+    m_standbyLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    vbox->addWidget(m_standbyLabel);
+    QTimer *standby = new QTimer(this);
+    connect(standby, &QTimer::timeout, this, &VCCueList::updateStandby);
+    standby->start(250);
 
     m_progress = new QProgressBar(this);
     m_progress->setOrientation(Qt::Horizontal);
@@ -420,6 +435,20 @@ void VCCueList::updateStepList()
         item->setText(COL_NAME, displayName);
         if (step.note.isEmpty() == false)
             item->setText(COL_NOTES, step.note);
+        item->setText(COL_CUE, ch->stepCue(index - 1));
+        if (step.skip)
+        {
+            // Skipped: GO passes over it. Shown, not changed, here.
+            QFont f = m_tree->font();
+            f.setStrikeOut(true);
+            const QBrush grey = m_tree->palette().brush(QPalette::Disabled, QPalette::Text);
+            for (int col = 0; col <= COL_CUE; ++col)
+            {
+                item->setFont(col, f);
+                item->setForeground(col, grey);
+            }
+            item->setToolTip(COL_NAME, tr("Skipped: GO passes over it"));
+        }
 
         switch (ch->fadeInMode())
         {
@@ -468,13 +497,63 @@ void VCCueList::updateStepList()
     m_tree->header()->resizeSections(QHeaderView::ResizeToContents);
     m_tree->header()->setSectionHidden(COL_NAME, ch->type() == Function::SequenceType ? true : false);
     m_listIsUpdating = false;
+    updateStandby();
+}
+
+int VCCueList::standbyIndex() const
+{
+    Chaser *ch = chaser();
+    if (ch == NULL || ch->stepsCount() == 0)
+        return -1;
+    // A cue a show controller LOADed; playing, the next not skipped;
+    // stopped, the one Play starts from (the selected step).
+    const int loaded = m_doc->showControl()->loadedStep(ch->id());
+    if (loaded >= 0)
+        return loaded;
+    if (ch->isRunning())
+        return ch->computeNextStep(ch->currentStepIndex());
+    if (m_tree->currentItem() != NULL)
+        return m_tree->indexOfTopLevelItem(m_tree->currentItem());
+    return ch->firstPlayableStep();
+}
+
+void VCCueList::updateStandby()
+{
+    if (m_standbyLabel == NULL)
+        return;
+    Chaser *ch = chaser();
+    const int next = standbyIndex();
+    QString text;
+    if (ch == NULL)
+        text = QString();
+    else if (next < 0 || next >= ch->stepsCount())
+        text = tr("Next: (end of the list)");
+    else
+    {
+        const ChaserStep step = ch->steps().at(next);
+        const Function *f = m_doc->function(step.fid);
+        text = tr("Next: %1").arg(ch->stepCue(next));
+        if (f != NULL)
+            text += QStringLiteral(" \u2014 ") + f->name();
+        if (!step.note.isEmpty())
+            text += QStringLiteral(" \u2014 ") + step.note;
+    }
+    if (m_standbyLabel->text() != text)
+    {
+        m_standbyLabel->setText(text);
+        m_standbyLabel->setToolTip(text);
+    }
 }
 
 int VCCueList::getCurrentIndex() const
 {
     int index = m_tree->indexOfTopLevelItem(m_tree->currentItem());
     if (index == -1)
-        index = 0;
+    {
+        // Nothing picked: the first step not skipped (what "Next:" says).
+        Chaser *ch = chaser();
+        index = ch != NULL ? qMax(0, ch->firstPlayableStep()) : 0;
+    }
     return index;
 }
 
@@ -1525,8 +1604,11 @@ void VCCueList::setCaption(const QString& text)
     VCWidget::setCaption(text);
 
     QStringList list;
-    list << "#" << text << tr("Fade In") << tr("Fade Out") << tr("Duration") << tr("Notes");
+    list << "#" << text << tr("Fade In") << tr("Fade Out") << tr("Duration") << tr("Notes")
+         << tr("Cue");
     m_tree->setHeaderLabels(list);
+    // The cue number beside the step number, where a cue list shows it.
+    m_tree->header()->moveSection(m_tree->header()->visualIndex(COL_CUE), 1);
 }
 
 void VCCueList::setFont(const QFont& font)

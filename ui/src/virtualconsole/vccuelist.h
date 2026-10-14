@@ -267,6 +267,13 @@ private:
     QToolButton *m_previousButton;
     QToolButton *m_nextButton;
     QProgressBar *m_progress;
+    QLabel *m_standbyLabel = nullptr;
+
+    /** The step GO plays next: a LOADed cue, the next not skipped, or (stopped)
+     *  the selected one. -1: none. */
+    int standbyIndex() const;
+    /** The "Next: 12.5 — name — note" line. */
+    void updateStandby();
     bool m_listIsUpdating;
 
     QTimer *m_timer;

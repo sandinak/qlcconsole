@@ -39,6 +39,16 @@ static void MidiInProc(const MIDIPacketList* pktList, void* readProcRefCon,
     const MIDIPacket* packet = &pktList->packet[0];
     for (quint32 p = 0; p < pktList->numPackets && packet != NULL; ++p)
     {
+        // SysEx has a packet to itself, and a long one goes on into the
+        // next packets (data bytes with no status): put it back together
+        // (MIDI Show Control, full-frame MTC).
+        if (packet->length > 0 && (packet->data[0] == MIDI_SYSEX || self->inSysEx()))
+        {
+            self->feedSysEx(packet->data, int(packet->length));
+            packet = MIDIPacketNext(packet);
+            continue;
+        }
+
         // Go thru all simultaneously-occurring messages in the packet
         for (quint32 i = 0; i < packet->length && i < 256; ++i)
         {
@@ -53,7 +63,11 @@ static void MidiInProc(const MIDIPacketList* pktList, void* readProcRefCon,
             if (!MIDI_IS_CMD(cmd))
                 continue; // Not a MIDI command. Skip to the next byte.
             if (cmd == MIDI_SYSEX)
-                break; // Sysex reserves the whole packet. Not interested.
+            {
+                // SysEx after other messages in one packet: from here on.
+                self->feedSysEx(packet->data + i, int(packet->length - i));
+                break;
+            }
 
             // 1 or 2 MIDI Data bytes
             if (packet->length > (i + 1) && !MIDI_IS_CMD(packet->data[i + 1]))

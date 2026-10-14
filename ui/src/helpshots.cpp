@@ -490,8 +490,8 @@ QList<HelpShots::Shot> HelpShots::shots()
         f.pad = QMargins(4, 30, 4, 4);      // the numbers go above the chips
         int n = 0;
         for (const char *name : { "footerReadiness", "footerGrandMaster",
-                                  "speedMastersFooter", "footerTimecode",
-                                  "footerLoad", "footerMode" })
+                                  "speedMastersFooter", "footerStandby",
+                                  "footerTimecode", "footerLoad", "footerMode" })
         {
             Callout c = mark(named(app, name), ++n);
             c.place = Above;

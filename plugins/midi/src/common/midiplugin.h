@@ -133,6 +133,7 @@ private slots:
 
     /** Catch MIDI input device Time Code signals */
     void slotMtcTimeChanged(const QVariant& uid, quint32 msPosition, uchar fps);
+    void slotSysExReceived(const QVariant& uid, const QByteArray &sysEx);
 
     /*************************************************************************
      * Configuration

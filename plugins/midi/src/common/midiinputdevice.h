@@ -22,6 +22,7 @@
 
 #include "mididevice.h"
 #include "midimtcdecoder.h"
+#include "midisysexassembler.h"
 
 class MidiInputDevice : public MidiDevice
 {
@@ -41,6 +42,15 @@ public:
      *  mtcTimeChanged() if it is a valid full-frame message. */
     void feedMTCFullFrame(const QByteArray &sysex);
 
+    /** Feed SysEx bytes as the driver hands them over (a message may come
+     *  in pieces). A full-frame MTC message goes to the MTC decoder; any
+     *  other whole message is emitted as sysExReceived(). */
+    void feedSysEx(const uchar *data, int length);
+
+    /** A SysEx message has started and not finished: the driver's next
+     *  bytes belong to it. */
+    bool inSysEx() const { return m_sysEx.inProgress(); }
+
 signals:
     void valueChanged(const QVariant& uid, ushort channel, uchar value);
 
@@ -48,8 +58,12 @@ signals:
      *  whenever incoming MTC assembles a complete SMPTE time. */
     void mtcTimeChanged(const QVariant& uid, quint32 msPosition, uchar fps);
 
+    /** A whole SysEx message (F0 ... F7) other than MTC -- MIDI Show Control. */
+    void sysExReceived(const QVariant& uid, const QByteArray &sysEx);
+
 private:
     MidiMtcDecoder m_mtcDecoder;
+    MidiSysExAssembler m_sysEx;
 };
 
 #endif

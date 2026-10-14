@@ -72,9 +72,11 @@ void ChaserStep_Test::variant()
 {
     ChaserStep step(1, 2, 3, 4);
     step.speedMaster = 3;
+    step.cueNumber = "12.5";
+    step.skip = true;
     QVariant var = step.toVariant();
     QList <QVariant> list(var.toList());
-    QCOMPARE(list.size(), 7);               // + the speed master
+    QCOMPARE(list.size(), 9);               // + the speed master, cue number, skip
     QCOMPARE(list[0].toUInt(), uint(1));
     QCOMPARE(list[1].toUInt(), uint(2));
     QCOMPARE(list[2].toUInt(), uint(3));
@@ -88,6 +90,18 @@ void ChaserStep_Test::variant()
     QCOMPARE(pets.fadeOut, uint(4));
     QCOMPARE(pets.duration, uint(5));
     QCOMPARE(pets.speedMaster, 3);
+    QCOMPARE(pets.cueNumber, QString("12.5"));
+    QVERIFY(pets.skip);
+
+    // An eight-field variant (from before skipping) still reads, not skipped.
+    list.removeLast();
+    QVERIFY(!ChaserStep::fromVariant(list).skip);
+    QCOMPARE(ChaserStep::fromVariant(list).cueNumber, QString("12.5"));
+
+    // A seven-field variant (from before cue numbers) still reads, with none.
+    list.removeLast();
+    QCOMPARE(ChaserStep::fromVariant(list).cueNumber, QString());
+    QCOMPARE(ChaserStep::fromVariant(list).speedMaster, 3);
 
     // A six-field variant (from before speed masters) still reads, as Inherit.
     list.removeLast();

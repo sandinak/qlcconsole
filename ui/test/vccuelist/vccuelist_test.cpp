@@ -22,6 +22,7 @@
 #include <QXmlStreamWriter>
 #include <QTreeWidgetItem>
 #include <QTreeWidget>
+#include <QHeaderView>
 #include <QtTest>
 
 #define protected public
@@ -983,6 +984,41 @@ void VCCueList_Test::input()
     //QVERIFY(cl.m_runner == NULL);
     timer->timerTick();
     //QVERIFY(cl.m_runner == NULL);
+}
+
+/* Show control (SHOW_CONTROL_DESIGN.md): the cue list shows each step's
+   cue, a skipped step greyed and struck through, and what GO plays next. */
+void VCCueList_Test::cuesSkipsAndNextAreShown()
+{
+    QWidget w;
+    VCCueList cl(&w, m_doc);
+    Chaser *c = createChaser(m_doc);
+    c->setStepSkipped(0, true);
+    ChaserStep step = c->steps().at(1);
+    step.cueNumber = "12.5";
+    step.note = "on the downbeat";
+    c->replaceStep(step, 1);
+    cl.setChaser(c->id());
+    cl.updateStepList();
+
+    const int colCue = 6;
+    QCOMPARE(cl.m_tree->headerItem()->text(colCue), QString("Cue"));
+    QCOMPARE(cl.m_tree->header()->visualIndex(colCue), 1);
+    QCOMPARE(cl.m_tree->topLevelItem(1)->text(colCue), QString("12.5"));
+    QCOMPARE(cl.m_tree->topLevelItem(2)->text(colCue), QString("3"));
+    QVERIFY(cl.m_tree->topLevelItem(0)->font(1).strikeOut());
+    QVERIFY(!cl.m_tree->topLevelItem(1)->font(1).strikeOut());
+
+    // Stopped, nothing picked: the first step not skipped -- and Play starts there.
+    QCOMPARE(cl.standbyIndex(), 1);
+    QCOMPARE(cl.getCurrentIndex(), 1);
+    QCOMPARE(cl.m_standbyLabel->text(),
+             QString("Next: 12.5 \u2014 Second \u2014 on the downbeat"));
+
+    // A step picked: that one.
+    cl.m_tree->setCurrentItem(cl.m_tree->topLevelItem(3));
+    cl.updateStandby();
+    QVERIFY(cl.m_standbyLabel->text().startsWith("Next: 4"));
 }
 
 QTEST_MAIN(VCCueList_Test)

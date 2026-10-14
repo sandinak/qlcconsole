@@ -135,6 +135,8 @@ signals:
     /** Emitted when the patched plugin delivers an absolute timeline
      *  position (e.g. MIDI Time Code) on this patch's line. */
     void inputTimeCodeChanged(quint32 inputUniverse, quint32 msPosition, uchar fps);
+    /** A SysEx message (MSC) arrived on this patch's line. */
+    void inputSysExReceived(quint32 inputUniverse, const QByteArray &sysEx);
 
     void inputNameChanged();
     void pluginNameChanged();
@@ -146,6 +148,7 @@ private slots:
 
     void slotTimeCodeChanged(quint32 universe, quint32 input,
                              quint32 msPosition, uchar fps);
+    void slotSysExReceived(quint32 universe, quint32 input, const QByteArray &sysEx);
 
 private:
     /** The reference of the plugin associated by this Input patch */

@@ -345,6 +345,16 @@ signals:
      */
     void timeCodeChanged(quint32 universe, quint32 input, quint32 msPosition, uchar fps);
 
+    /**
+     * A whole System Exclusive message arrived (F0 ... F7) -- MIDI Show
+     * Control, for one. Only the MIDI plugin sends it.
+     *
+     * @param universe The universe ID detected from the data received
+     * @param input The input line it arrived on
+     * @param sysEx The message, F0 to F7
+     */
+    void sysExReceived(quint32 universe, quint32 input, const QByteArray &sysEx);
+
     /*************************************************************************
      * Configure
      *************************************************************************/

@@ -584,6 +584,8 @@ signals:
     /** Emitted when an input line delivers an absolute timeline position
      *  (e.g. MIDI Time Code). Consumed by the Doc's timecode source. */
     void inputTimeCodeChanged(quint32 universe, quint32 msPosition, uchar fps);
+    /** A SysEx message (MSC) arrived on an input universe. */
+    void inputSysExReceived(quint32 universe, const QByteArray &sysEx);
 
     /*************************************************************************
      * Input profiles

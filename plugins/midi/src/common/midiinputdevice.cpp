@@ -47,3 +47,16 @@ void MidiInputDevice::feedMTCFullFrame(const QByteArray &sysex)
     if (m_mtcDecoder.feedFullFrame(sysex))
         emit mtcTimeChanged(uid(), m_mtcDecoder.milliseconds(), uchar(m_mtcDecoder.fps()));
 }
+
+void MidiInputDevice::feedSysEx(const uchar *data, int length)
+{
+    for (const QByteArray &message : m_sysEx.feed(data, length))
+    {
+        // F0 7F <device> 01 01 ...: a full-frame MTC position.
+        if (message.size() >= 10 && uchar(message.at(1)) == 0x7F
+                && uchar(message.at(3)) == 0x01 && uchar(message.at(4)) == 0x01)
+            feedMTCFullFrame(message);
+        else
+            emit sysExReceived(uid(), message);
+    }
+}
