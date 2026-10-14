@@ -39,6 +39,7 @@
 #include <QElapsedTimer>
 
 #include "beamoptics.h"
+#include "stageplatform.h"
 
 #include "fixture.h"   // Fixture::invalidId() -- the "no fixture" marker
 #include "truss.h"     // FixtureRigProps::Face
@@ -633,6 +634,18 @@ private:
     void drawStarField(QPainter &p, quint32 fid, const Fixture *fx, const QByteArray &vals,
                        const QVector3D &apex, const QVector3D &dir, double halfAngleRad,
                        const QColor &colour, double level) const;
+    /** A shown platform, as beam rays meet it: its blocks and the height it
+     *  stands at (decks()). */
+    struct Deck
+    {
+        StagePlatform *platform = nullptr;
+        double baseZ = 0.0;
+        QList<StagePlatform::Block> blocks;
+    };
+    QVector<Deck> decks() const;
+    mutable QVector<Deck> m_decks;      ///< this frame's, while painting
+    mutable bool m_decksValid = false;
+
     void drawBeamCone(QPainter &p, const QVector3D &apex, const QVector3D &dir,
                       double halfAngleRad, const QColor &colour, double level,
                       double haze = 1.0,

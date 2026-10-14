@@ -3151,6 +3151,30 @@ bool StructureStudioView::beamHitsSomething(const QVector3D &apex,
     return hit;
 }
 
+QVector<StructureStudioView::Deck> StructureStudioView::decks() const
+{
+    /* Each shown platform, its blocks and the height it stands at. Every ray
+       of every beam asks; worked out per ray it was every platform's every
+       block asking where every other platform is (platformBaseZ()), and a
+       rig of step units lit up took a second a frame. So once a frame, while
+       painting (m_decksValid); outside a paint, as the platforms are now. */
+    if (m_decksValid)
+        return m_decks;
+    QVector<Deck> out;
+    MonitorProperties *props = m_doc->monitorProperties();
+    foreach (StagePlatform *pl, props->platforms())
+    {
+        if (pl == nullptr || !layerShown(pl->layerId()))
+            continue;
+        Deck d;
+        d.platform = pl;
+        d.baseZ = double(props->platformBaseZ(pl->id()));
+        d.blocks = pl->blocks();
+        out << d;
+    }
+    return out;
+}
+
 double StructureStudioView::beamThrow(const QVector3D &apex, const QVector3D &dir,
                                      bool *hit, QVector3D *landNormal, int *surface) const
 {
@@ -3173,16 +3197,16 @@ double StructureStudioView::beamThrow(const QVector3D &apex, const QVector3D &di
 
     // Platform tops, but only where the beam actually crosses the footprint.
     MonitorProperties *props = m_doc->monitorProperties();
-    foreach (StagePlatform *pl, props->platforms())
+    const QVector<Deck> shown = decks();   // const: shares, never copies
+    for (const Deck &deck : shown)
     {
-        if (pl == nullptr || !layerShown(pl->layerId()))
-            continue;
+        StagePlatform *pl = deck.platform;
         // Each tread of a flight of steps is a deck of its own height.
         int blockNo = 0;
-        foreach (const StagePlatform::Block &bk, pl->blocks())
+        for (const StagePlatform::Block &bk : deck.blocks)
         {
             ++blockNo;
-            const double topZ = double(props->platformBaseZ(pl->id())) + double(bk.height);
+            const double topZ = deck.baseZ + double(bk.height);
             if (double(apex.z()) <= topZ)      // already at or below it
                 continue;
             const double t = toPlane(topZ);
@@ -3784,6 +3808,21 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
     // Where it ends: the pool's shape, and the far end of the cone's outline.
     const QVector<QVector3D> footprint = beamFootprint(apex, d, halfAngleRad, len, lands, landNormal);
 
+    /* How its pool lands ("the XL-450s .. they're profiling as spots, not
+       washes"). The beam angle is where a real beam is at half its middle's
+       brightness; a wash goes on past it, fading out to its field angle, and
+       a profile stops almost at it. So the pool runs out to the field edge
+       -- the beam angle times fieldMult -- full in its core and fading to
+       nothing at the rim, half way down at the beam angle itself. */
+    const double soft = optics != nullptr ? qBound(0.0, optics->softness, 1.5) : 0.0;
+    const double fieldMult = 1.0 + 0.4 * soft;
+    const double coreR = qMax(0.0, 2.0 / fieldMult - 1.0);  // of the field radius
+    auto poolFade = [coreR](double r) {                      // r: 0 axis .. 1 field edge
+        if (r <= coreR)
+            return 1.0;
+        return qBound(0.0, (1.0 - r) / qMax(1e-6, 1.0 - coreR), 1.0);
+    };
+
     /* ONE polygon, faded along its length by per-vertex alpha.
      *
        This was sixteen constant-alpha slices stacked end to end, and every seam
@@ -3867,7 +3906,7 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
        rays end on different things -- the cyc and the floor beyond, a deck
        and the floor below its edge -- the pool is laid ray by ray instead,
        each part on what it reaches. */
-    const double halfA = qBound(0.005, halfAngleRad, 1.4);
+    const double halfA = qBound(0.005, halfAngleRad * fieldMult, 1.4);
     QVector3D side = QVector3D::crossProduct(QVector3D(0, 0, 1), d);
     if (side.length() < 1e-3f)
         side = QVector3D(1, 0, 0);
@@ -3918,7 +3957,8 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
                 surf[k] = sf;
                 landed[k] = h;
                 const double rs = qMin(r, 0.985);
-                pt[k] = gobo ? BeamOptics::sample(optics->mask, rs * qCos(a), rs * qSin(a)) : 1.0;
+                pt[k] = gobo ? BeamOptics::sample(optics->mask, rs * qCos(a), rs * qSin(a))
+                             : poolFade(r);
             }
         QColor cellCol = colour;
         cellCol.setAlpha(qBound(0, int(poolA), 220));
@@ -4011,19 +4051,61 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
     }
     else if (lands)
     {
-        QPolygonF poolPoly;
-        QVector<double> poolZ;
-        double sum = 0.0;
-        foreach (const QVector3D &q, footprint)
-        {
-            poolPoly << w2s(q);
-            const double z = viewDepth(q) + 1e-4;
-            poolZ << z;
-            sum += z;
-        }
+        /* The core at full, then rings fading out to the field edge: a few
+           triangles a ring with their alpha per corner, which the rasteriser
+           fades smoothly -- far cheaper than the gobo's mesh, which a plain
+           pool doesn't need. */
         QColor poolCol = colour;
         poolCol.setAlpha(qBound(0, int(poolA), 220));
-        emitLight(poolPoly, sum / qMax(1, footprint.size()), poolCol, p, poolZ);
+        const double fieldHalf = halfAngleRad * fieldMult;
+        static const double kRings[] = { 0.0, 0.5, 1.0 };   // of the fade, core to rim
+        QVector<QVector<QPointF>> ringPx;
+        QVector<QVector<double>> ringZ;
+        QVector<double> ringA;
+        for (double f : kRings)
+        {
+            const double r = coreR + (1.0 - coreR) * f;
+            const QVector<QVector3D> ring = (f == 0.0 && coreR >= 0.999)
+                ? footprint : beamFootprint(apex, d, fieldHalf * r, len, lands, landNormal);
+            QVector<QPointF> px;
+            QVector<double> zs;
+            for (const QVector3D &q : ring)
+            {
+                px << w2s(q);
+                zs << viewDepth(q) + 1e-4;
+            }
+            ringPx << px;
+            ringZ << zs;
+            ringA << poolFade(r);
+        }
+        // The core.
+        {
+            double sum = 0.0;
+            for (double z : ringZ.first())
+                sum += z;
+            emitLight(QPolygonF(ringPx.first()), sum / qMax(1, ringZ.first().size()),
+                      poolCol, p, ringZ.first());
+        }
+        // The fade, ring to ring.
+        for (int k = 0; k + 1 < ringPx.size(); ++k)
+        {
+            const QVector<QPointF> &in = ringPx.at(k), &out = ringPx.at(k + 1);
+            const QVector<double> &zi = ringZ.at(k), &zo = ringZ.at(k + 1);
+            const int n = qMin(in.size(), out.size());
+            for (int i = 0; i < n; ++i)
+            {
+                const int j = (i + 1) % n;
+                QPolygonF t1, t2;
+                t1 << in[i] << in[j] << out[i];
+                t2 << in[j] << out[j] << out[i];
+                emitLight(t1, (zi[i] + zi[j] + zo[i]) / 3.0, poolCol, p,
+                          QVector<double>({ zi[i], zi[j], zo[i] }),
+                          QVector<double>({ ringA[k], ringA[k], ringA[k + 1] }));
+                emitLight(t2, (zi[j] + zo[j] + zo[i]) / 3.0, poolCol, p,
+                          QVector<double>({ zi[j], zo[j], zo[i] }),
+                          QVector<double>({ ringA[k], ringA[k + 1], ringA[k + 1] }));
+            }
+        }
     }
 }
 
@@ -5563,6 +5645,8 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                         beamLevel = qMax(beamLevel, looks[u].beamLevel);
                         // The gobo and prism it throws through.
                         looks[u].optics = BeamOptics::opticsFor(fx, vals, opticsTime(), m_doc->monitorProperties());
+                        // A gobo's picture is sharp, whatever the lens.
+                        looks[u].optics.softness = looks[u].optics.mask.isNull() ? traits.edgeSoftness : 0.0;
                         if (looks[u].optics.animated)
                             m_opticsAnimating = true;
                     }
@@ -5732,7 +5816,8 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                                  : (declared > 0.0) ? declared : 40.0;
                 const QVector3D apex = fixtureCentre(fid);
                 const double half = qDegreesToRadians(deg / 2.0);
-                const BeamOptics::Optics optics = BeamOptics::opticsFor(fx, vals, opticsTime(), m_doc->monitorProperties());
+                BeamOptics::Optics optics = BeamOptics::opticsFor(fx, vals, opticsTime(), m_doc->monitorProperties());
+                optics.softness = optics.mask.isNull() ? traits.edgeSoftness : 0.0;
                 if (optics.animated)
                     m_opticsAnimating = true;
                 /* A bar of pixels is not a lamp in its middle ("the source
@@ -7609,6 +7694,16 @@ void StructureStudioView::rebuildOverlapWarnings() const
 
 void StructureStudioView::paintEvent(QPaintEvent *)
 {
+    // The decks every beam ray is thrown against, worked out once this frame.
+    m_decksValid = false;
+    m_decks = decks();
+    m_decksValid = true;
+    struct DecksDone
+    {
+        bool &valid;
+        ~DecksDone() { valid = false; }
+    } decksDone{ m_decksValid };
+
     m_opticsAnimating = false;          // set again by any gobo or prism turning
     QElapsedTimer frameTimer;
     if (m_liveValues)

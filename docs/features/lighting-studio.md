@@ -507,6 +507,28 @@ the Rig Overview show what it's actually doing, not just where it sits:
 Both overlays are visualization aids only — they aren't saved with the
 workspace.
 
+### Washes and profiles: the edge of a pool
+
+A beam's angle (the definition's **Lens** degrees) is where the light is
+half as bright as in the middle. What happens past it depends on the
+fixture:
+
+- A **wash** goes on past its beam angle, fading out to nothing at about
+  1.4 times it — a soft-edged pool. Pars, LED bars of pixels, wash movers
+  and anything else that can't sharpen its beam are washes.
+- A **profile** stops almost at its beam angle, with a crisp edge. A
+  fixture is a profile when its definition has a **gobo wheel**, a
+  **focus** or an **iris** channel — what you'd only have on a light meant
+  to be sharp — or when its type is **LED Bar (Beams)**. A gobo in the
+  beam is always drawn sharp.
+- A **PC** or **Fresnel** lens (the definition's Lens name) is softer
+  still, as those lenses are.
+- A very narrow beam (under 12°) stays fairly crisp, whatever it is.
+
+So the angle in the definition should be the fixture's real beam angle;
+the edge follows from what the fixture is. A fixed lens has the same
+Min and Max degrees — different ones say it zooms.
+
 ### How bright each fixture is
 
 The Lighting Studio and the Rig Overview size each fixture's light from what the device actually puts
