@@ -12479,6 +12479,136 @@ void Monitor_Test::aWashPoolFadesPastItsBeamAngle()
     delete doc;
 }
 
+/* Where a beam's rays land is kept from frame to frame (a static beam
+   throws the same rays every frame) -- until what they land on changes. A
+   par over a deck lands on it; the deck moved away, the next frame's beam
+   goes on to the floor. */
+void Monitor_Test::keptLandingsFollowTheDecks()
+{
+    Doc doc(this);
+    MonitorProperties *props = doc.monitorProperties();
+    StagePlatform *deck = props->addPlatform();
+    deck->setName("Deck"); deck->setOriginX(0.0f); deck->setOriginY(0.0f);
+    deck->setWidth(4.0f); deck->setDepth(3.0f); deck->setHeight(1.0f);
+    Truss *t = props->addTruss();
+    t->setName("T"); t->setType(Truss::Horizontal);
+    t->setOrigin(QVector3D(0.0f, 1.5f, 5.0f)); t->setDirection(QPointF(1.0, 0.0));
+    t->setLength(4.0f); t->setWidth(0.3f);
+
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Kept Par");
+    def->setType(QLCFixtureDef::ColorChanger);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("m");
+    QLCChannel *dim = new QLCChannel();
+    dim->setName("Dimmer"); dim->setGroup(QLCChannel::Intensity);
+    def->addChannel(dim);
+    mode->insertChannel(dim, 0);
+    QLCPhysical ph;
+    ph.setWidth(300); ph.setHeight(300); ph.setDepth(300);
+    ph.setLensDegreesMin(20); ph.setLensDegreesMax(20);
+    mode->setPhysical(ph);
+    def->addMode(mode);
+    Fixture *fx = new Fixture(&doc);
+    fx->setName("Kept Par"); fx->setFixtureDefinition(def, mode);
+    QVERIFY(doc.addFixture(fx));
+    props->setFixturePosition(fx->id(), 0, 0, QVector3D(0, 0, 0));
+    FixtureRigProps rp;
+    rp.trussId = t->id(); rp.trussOffset = 2.0f;
+    props->setFixtureRigProps(fx->id(), rp);
+    fx->setChannelValues(QByteArray(1, char(255)));
+
+    StructureStudioView v(&doc, StructureStudioView::StageKind, 0);
+    v.resize(600, 400);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    v.setLiveValues(true);
+    v.setBeams(true);
+    auto beamLength = [&v]() {
+        v.grab();
+        double len = -1.0;
+        for (const auto &b : v.m_frameBeams)
+            len = qMax(len, b.length);
+        return len;
+    };
+
+    const double onDeck = beamLength();
+    QVERIFY2(onDeck > 0.0, "no beam drawn");
+    QVERIFY(!v.m_throws.isEmpty());                 // its landings are kept
+    QCOMPARE(beamLength(), onDeck);                  // and used: the same again
+
+    deck->setOriginX(8.0f);                          // the deck moves out from under it
+    const double onFloor = beamLength();
+    QVERIFY2(onFloor > onDeck + 0.8,
+             qPrintable(QString("still landing on the deck: %1 then %2").arg(onDeck).arg(onFloor)));
+}
+
+/* A pool lands ON a deck, not only on the bare floor. Light is drawn at
+   the final resolution and depth-tested against the supersampled deck: its
+   depth was taken a quarter pixel from where the deck's was, and on a deck
+   top seen at an angle that was more than the lift a pool gets off its
+   surface -- every pool on a deck was dropped. */
+void Monitor_Test::aPoolOnADeckIsDrawn()
+{
+    Doc doc(this);
+    MonitorProperties *props = doc.monitorProperties();
+    StagePlatform *deck = props->addPlatform();
+    deck->setName("Deck"); deck->setOriginX(0.0f); deck->setOriginY(0.0f);
+    deck->setWidth(6.0f); deck->setDepth(6.0f); deck->setHeight(1.0f);
+    deck->setColor(QColor(60, 60, 60));
+    Truss *t = props->addTruss();
+    t->setName("T"); t->setType(Truss::Horizontal);
+    t->setOrigin(QVector3D(1.0f, 3.0f, 5.0f)); t->setDirection(QPointF(1.0, 0.0));
+    t->setLength(4.0f); t->setWidth(0.3f);
+
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Deck Par");
+    def->setType(QLCFixtureDef::ColorChanger);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("m");
+    QLCChannel *dim = new QLCChannel();
+    dim->setName("Dimmer"); dim->setGroup(QLCChannel::Intensity);
+    def->addChannel(dim);
+    mode->insertChannel(dim, 0);
+    QLCPhysical ph;
+    ph.setWidth(300); ph.setHeight(300); ph.setDepth(300);
+    ph.setLensDegreesMin(30); ph.setLensDegreesMax(30);
+    mode->setPhysical(ph);
+    def->addMode(mode);
+    Fixture *fx = new Fixture(&doc);
+    fx->setName("Deck Par"); fx->setFixtureDefinition(def, mode);
+    QVERIFY(doc.addFixture(fx));
+    props->setFixturePosition(fx->id(), 0, 0, QVector3D(0, 0, 0));
+    FixtureRigProps rp;
+    rp.trussId = t->id(); rp.trussOffset = 2.0f;
+    props->setFixtureRigProps(fx->id(), rp);
+    fx->setChannelValues(QByteArray(1, char(255)));
+
+    StructureStudioView v(&doc, StructureStudioView::StageKind, 0);
+    v.resize(700, 500);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    v.setAngledView(-15.0, 55.0);
+    v.setSupersample(2);
+    v.setLiveValues(true);
+    v.setBeams(true);
+    v.setHaze(0.0);
+    v.setAmbient(0.2);
+
+    const QImage img = v.grab().toImage();
+    const double dpr = img.devicePixelRatio();
+    auto luma = [&](const QVector3D &w) {
+        const QPoint at = (v.w2s(w) * dpr).toPoint();
+        const QColor c = img.pixelColor(at);
+        return c.red() * 0.30 + c.green() * 0.59 + c.blue() * 0.11;
+    };
+    // Straight under it on the deck top, and a corner of the deck it doesn't reach.
+    const double lit = luma(QVector3D(3.0f, 3.0f, 1.0f));
+    const double dark = luma(QVector3D(5.6f, 0.4f, 1.0f));
+    QVERIFY2(lit > dark + 10.0,
+             qPrintable(QString("no pool on the deck: %1 under the beam, %2 away").arg(lit).arg(dark)));
+}
+
 void Monitor_Test::aGoboPoolIsDrawnThroughItsMask()
 {
     Doc *doc = new Doc(this);

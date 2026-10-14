@@ -45,9 +45,13 @@ The latest changes, newest first. Each links to the guide with the detail.
   (a gobo, focus or iris channel, or a beam bar); PC and Fresnel lenses
   are softest. See
   [Washes and profiles](lighting-studio.md#washes-and-profiles-the-edge-of-a-pool).
-- **A lit rig draws several times faster**: where every beam lands on the
-  decks is worked out once a frame, not once per ray (a 208-fixture show
-  fully lit went from about a second a frame to under a fifth of one).
+- **A lit rig draws about fifteen times faster**: the decks are worked
+  out once a frame, where each ray lands is kept while the rig stays put,
+  and a pool split across a deck's edge is drawn only as finely as it
+  shows (a 208-fixture show fully lit: from about a second a frame to 70
+  ms).
+- **Pools show on decks and steps.** A beam landing on a platform was drawn
+  only where it reached the bare floor; the part on the deck was lost.
 
 - **The Rig Overview stands on centre stage** — on the floor, in the
   middle of the stage grid — and turns about it, instead of centring

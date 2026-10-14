@@ -26,6 +26,7 @@
 #define STRUCTURESTUDIOVIEW_H
 
 #include <QWidget>
+#include <cstring>
 #include <QImage>
 #include <functional>
 #include <QVector3D>
@@ -642,9 +643,46 @@ private:
         double baseZ = 0.0;
         QList<StagePlatform::Block> blocks;
     };
+    /** beamThrow() without the kept landings. */
+    double beamThrowUncached(const QVector3D &apex, const QVector3D &dir, bool *hit,
+                             QVector3D *landNormal, int *surface) const;
     QVector<Deck> decks() const;
     mutable QVector<Deck> m_decks;      ///< this frame's, while painting
     mutable bool m_decksValid = false;
+
+    /** Where each ray thrown while painting landed (beamThrow()), kept from
+     *  frame to frame: a par, a bar or a parked mover throws the very same
+     *  rays every frame, and where they land only changes when what they
+     *  can land on does (throwScene()). */
+    struct ThrowKey
+    {
+        float v[6];
+        bool operator==(const ThrowKey &o) const
+        { return std::memcmp(v, o.v, sizeof v) == 0; }
+    };
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    friend size_t qHash(const ThrowKey &k, size_t seed = 0)
+    { return qHashBits(k.v, sizeof k.v, seed); }
+#else
+    friend uint qHash(const ThrowKey &k, uint seed = 0)
+    { return qHashBits(k.v, sizeof k.v, seed); }
+#endif
+    struct Throw
+    {
+        double run = 0.0;
+        QVector3D normal;
+        int surface = 0;
+        bool hit = false;
+        quint32 frame = 0;              ///< the last frame that threw it
+    };
+    mutable QHash<ThrowKey, Throw> m_throws;
+    mutable quint64 m_throwScene = 0;
+    mutable quint32 m_throwFrame = 0;
+    mutable int m_throwsUsed = 0;
+    /** A fingerprint of everything a beam can land on as it is shown now:
+     *  the decks (where, how big, how high, their blocks), the scenery,
+     *  what's hidden. A change, and the kept landings are thrown away. */
+    quint64 throwScene() const;
 
     void drawBeamCone(QPainter &p, const QVector3D &apex, const QVector3D &dir,
                       double halfAngleRad, const QColor &colour, double level,

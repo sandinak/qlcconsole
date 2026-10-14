@@ -414,6 +414,8 @@ private slots:
      *  metal, all of it where it is clear, and the haze dimmed to match. */
     void aPoolsEdgeFollowsTheFixturesOptics();
     void aWashPoolFadesPastItsBeamAngle();
+    void keptLandingsFollowTheDecks();
+    void aPoolOnADeckIsDrawn();
     void aGoboPoolIsDrawnThroughItsMask();
     /** "specialized gobos": a slot of ONE unit fitted with the operator's
      *  own picture (Gobo Wheels…), saved per fixture, drawn on the rig. */
