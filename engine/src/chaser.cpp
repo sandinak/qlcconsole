@@ -466,6 +466,204 @@ bool Chaser::cuesMatch(const QString &a, const QString &b)
 }
 
 /*****************************************************************************
+ * Sub-cues (SUBCUES_DESIGN.md)
+ *****************************************************************************/
+
+Chaser *Chaser::subCueChase(int index) const
+{
+    quint32 fid = Function::invalidId();
+    {
+        QMutexLocker locker(&m_stepListMutex);
+        if (index < 0 || index >= m_steps.count())
+            return NULL;
+        fid = m_steps.at(index).fid;
+    }
+    if (fid == id() || doc() == NULL)
+        return NULL;
+    return qobject_cast<Chaser *>(doc()->function(fid));
+}
+
+ChaserStep::SubCueMode Chaser::stepSubCues(int index) const
+{
+    QMutexLocker locker(&m_stepListMutex);
+    if (index < 0 || index >= m_steps.count())
+        return ChaserStep::Auto;
+    return m_steps.at(index).subCues;
+}
+
+void Chaser::setStepSubCues(int index, ChaserStep::SubCueMode mode)
+{
+    {
+        QMutexLocker locker(&m_stepListMutex);
+        if (index < 0 || index >= m_steps.count() || m_steps.at(index).subCues == mode)
+            return;
+        m_steps[index].subCues = mode;
+    }
+    emit changed(this->id());
+    emit stepChanged(index);
+}
+
+bool Chaser::isSubGoStep(int index) const
+{
+    return stepSubCues(index) == ChaserStep::SubGo && subCueChase(index) != NULL;
+}
+
+bool Chaser::hasSubGoSteps() const
+{
+    const int count = stepsCount();
+    for (int i = 0; i < count; ++i)
+        if (isSubGoStep(i))
+            return true;
+    return false;
+}
+
+int Chaser::subCueCount(int index) const
+{
+    const Chaser *inner = subCueChase(index);
+    return inner == NULL ? 0 : inner->stepsCount();
+}
+
+QString Chaser::subCue(int index, int subIndex) const
+{
+    const Chaser *inner = subCueChase(index);
+    if (inner == NULL)
+        return QString();
+    QString own;
+    {
+        QMutexLocker locker(&inner->m_stepListMutex);
+        if (subIndex < 0 || subIndex >= inner->m_steps.count())
+            return QString();
+        own = inner->m_steps.at(subIndex).cueNumber.trimmed();
+    }
+    if (own.isEmpty() == false)
+        return own;
+    return QString("%1.%2").arg(stepCue(index)).arg(subIndex + 1);
+}
+
+bool Chaser::findSubCue(const QString &cue, int *index, int *subIndex) const
+{
+    const int count = stepsCount();
+    for (int i = 0; i < count; ++i)
+    {
+        const int subs = subCueCount(i);
+        for (int j = 0; j < subs; ++j)
+        {
+            if (cuesMatch(subCue(i, j), cue))
+            {
+                if (index != NULL)
+                    *index = i;
+                if (subIndex != NULL)
+                    *subIndex = j;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool Chaser::findCueOrSubCue(const QString &cue, int *index, int *subIndex) const
+{
+    const int step = findCue(cue);
+    if (step >= 0)
+    {
+        if (index != NULL)
+            *index = step;
+        if (subIndex != NULL)
+            *subIndex = -1;
+        return true;
+    }
+    return findSubCue(cue, index, subIndex);
+}
+
+int Chaser::currentSubCueIndex() const
+{
+    if (isRunning() == false)
+        return -1;
+    const Chaser *inner = subCueChase(currentStepIndex());
+    if (inner == NULL || inner->isRunning() == false)
+        return -1;
+    return inner->currentStepIndex();
+}
+
+int Chaser::nextSubCueIndex() const
+{
+    const int current = currentSubCueIndex();
+    if (current < 0 || isSubGoStep(currentStepIndex()) == false)
+        return -1;
+    const Chaser *inner = subCueChase(currentStepIndex());
+    return inner->nextPlayableStep(current, inner->direction() == Function::Backward ? -1 : 1);
+}
+
+int Chaser::previousSubCueIndex() const
+{
+    const int current = currentSubCueIndex();
+    if (current < 0 || isSubGoStep(currentStepIndex()) == false)
+        return -1;
+    const Chaser *inner = subCueChase(currentStepIndex());
+    return inner->nextPlayableStep(current, inner->direction() == Function::Backward ? 1 : -1);
+}
+
+int Chaser::nextPlayableStep(int from, int delta) const
+{
+    if (delta == 0)
+        return -1;
+    const int count = stepsCount();
+    for (int i = from + delta; i >= 0 && i < count; i += delta)
+    {
+        if (isStepSkipped(i) == false)
+            return i;
+    }
+    return -1;
+}
+
+namespace
+{
+ChaserAction subAction(ChaserActionType type, int index = -1, int subIndex = -1)
+{
+    ChaserAction action;
+    action.m_action = type;
+    action.m_masterIntensity = 1.0;
+    action.m_stepIntensity = 1.0;
+    action.m_fadeMode = Chaser::FromFunction;
+    action.m_stepIndex = index;
+    action.m_subStepIndex = subIndex;
+    return action;
+}
+}
+
+void Chaser::subGo()
+{
+    ChaserAction action = subAction(ChaserSubNextStep);
+    setAction(action);
+}
+
+void Chaser::subBack()
+{
+    ChaserAction action = subAction(ChaserSubPreviousStep);
+    setAction(action);
+}
+
+void Chaser::jumpToSubCue(int index, int subIndex)
+{
+    ChaserAction action = subAction(ChaserSubSetStep, index, subIndex);
+    setAction(action);
+}
+
+void Chaser::setSubCueHeld(bool held)
+{
+    QMutexLocker runnerLocker(&m_runnerMutex);
+    m_subCueHeld = held;
+    if (m_runner != NULL)
+        m_runner->setSubCueHeld(held);
+}
+
+bool Chaser::isSubCueHeld() const
+{
+    QMutexLocker runnerLocker(const_cast<QRecursiveMutex*>(&m_runnerMutex));
+    return m_subCueHeld;
+}
+
+/*****************************************************************************
  * Save & Load
  *****************************************************************************/
 
@@ -648,6 +846,11 @@ void Chaser::setAction(ChaserAction &action)
     {
         m_runner->setAction(action);
     }
+    else if (action.m_action == ChaserSubNextStep || action.m_action == ChaserSubPreviousStep)
+    {
+        // Not playing: no sub-cues to step through.
+        return;
+    }
     else
     {
         m_startupAction.m_action = action.m_action;
@@ -655,6 +858,7 @@ void Chaser::setAction(ChaserAction &action)
         m_startupAction.m_masterIntensity = action.m_masterIntensity;
         m_startupAction.m_stepIntensity = action.m_stepIntensity;
         m_startupAction.m_fadeMode = action.m_fadeMode;
+        m_startupAction.m_subStepIndex = action.m_subStepIndex;
     }
 }
 
@@ -768,6 +972,7 @@ void Chaser::createRunner(quint32 startTime)
     m_runner->moveToThread(QCoreApplication::instance()->thread());
     m_runner->setParent(this);
     m_runner->setExternalClock(m_showClocked);
+    m_runner->setSubCueHeld(m_subCueHeld);
     m_runner->setAction(m_startupAction);
     m_startupAction.m_action = ChaserNoAction;
 }

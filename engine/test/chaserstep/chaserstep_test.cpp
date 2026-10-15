@@ -74,9 +74,10 @@ void ChaserStep_Test::variant()
     step.speedMaster = 3;
     step.cueNumber = "12.5";
     step.skip = true;
+    step.subCues = ChaserStep::SubGo;
     QVariant var = step.toVariant();
     QList <QVariant> list(var.toList());
-    QCOMPARE(list.size(), 9);               // + the speed master, cue number, skip
+    QCOMPARE(list.size(), 10);              // + the speed master, cue number, skip, sub-cues
     QCOMPARE(list[0].toUInt(), uint(1));
     QCOMPARE(list[1].toUInt(), uint(2));
     QCOMPARE(list[2].toUInt(), uint(3));
@@ -92,6 +93,12 @@ void ChaserStep_Test::variant()
     QCOMPARE(pets.speedMaster, 3);
     QCOMPARE(pets.cueNumber, QString("12.5"));
     QVERIFY(pets.skip);
+    QCOMPARE(pets.subCues, ChaserStep::SubGo);
+
+    // A nine-field variant (from before sub-cues) still reads, as Auto.
+    list.removeLast();
+    QCOMPARE(ChaserStep::fromVariant(list).subCues, ChaserStep::Auto);
+    QVERIFY(ChaserStep::fromVariant(list).skip);
 
     // An eight-field variant (from before skipping) still reads, not skipped.
     list.removeLast();
