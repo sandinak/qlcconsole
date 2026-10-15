@@ -116,14 +116,27 @@ PatchLabels::Label PatchLabels::label(const PatchList::Row &row)
     else
         l.address = QStringLiteral("not patched");
 
+    if (row.patched || row.clash)
+        l.universe = row.universeName;
+
     QStringList detail;
     if (!row.mode.isEmpty())
         detail << row.mode;
     detail << QStringLiteral("%1 ch").arg(row.channels);
-    if (row.network)
-        detail << QStringLiteral("%1 %2").arg(row.transport,
-                                             row.ip.isEmpty() ? QStringLiteral("(no IP)") : row.ip);
     l.detail = detail.join(QStringLiteral(" · "));
+
+    if (row.network)
+    {
+        QString where;
+        if (row.ip.isEmpty())
+            where = QStringLiteral("(no IP)");
+        else if (row.host.isEmpty() || row.host == row.ip)
+            where = row.ip;
+        else
+            where = QStringLiteral("%1 (%2)").arg(row.host, row.ip);
+        l.network = row.transport.isEmpty() ? where
+                                            : QStringLiteral("%1 · %2").arg(row.transport, where);
+    }
     l.mount = row.mountedOn;
     return l;
 }
@@ -132,6 +145,26 @@ PatchLabels::Label PatchLabels::label(const PatchList::Row &row)
  * The PDF
  *********************************************************************/
 
+static QFont labelFont(bool bold, qreal px)
+{
+    QFont font(QStringLiteral("Helvetica"));
+    font.setStyleHint(QFont::SansSerif);
+    font.setBold(bold);
+    font.setPixelSize(qMax(1, qRound(px)));
+    return font;
+}
+
+/* The size @p text is set at to fit @p width: @p maxPx, shrunk down to
+   @p minPx at most (it is elided past that). */
+static qreal fitPx(QPainter &p, const QString &text, bool bold, qreal width, qreal maxPx, qreal minPx)
+{
+    qreal px = maxPx;
+    while (px > minPx
+           && QFontMetricsF(labelFont(bold, px), p.device()).horizontalAdvance(text) > width)
+        px = qMax(minPx, px * 0.92);
+    return px;
+}
+
 /* Draw @p text in @p box (device units) on one line, as large as @p maxPx
    allows: shrunk to fit down to @p minPx, then elided. */
 static void drawLine(QPainter &p, const QRectF &box, const QString &text, bool bold,
@@ -139,22 +172,40 @@ static void drawLine(QPainter &p, const QRectF &box, const QString &text, bool b
 {
     if (text.isEmpty() || box.width() <= 0)
         return;
-    QFont font(QStringLiteral("Helvetica"));
-    font.setStyleHint(QFont::SansSerif);
-    font.setBold(bold);
-    qreal px = maxPx;
-    for (;;)
-    {
-        font.setPixelSize(qMax(1, qRound(px)));
-        QFontMetricsF fm(font, p.device());
-        if (fm.horizontalAdvance(text) <= box.width() || px <= minPx)
-            break;
-        px = qMax(minPx, px * 0.92);
-    }
-    QFontMetricsF fm(font, p.device());
+    const QFont font = labelFont(bold, fitPx(p, text, bold, box.width(), maxPx, minPx));
     p.setFont(font);
     p.drawText(box, Qt::AlignLeft | Qt::AlignVCenter,
-               fm.elidedText(text, Qt::ElideRight, box.width()));
+               QFontMetricsF(font, p.device()).elidedText(text, Qt::ElideRight, box.width()));
+}
+
+/* The address, large, and the universe's name beside it, smaller, on the
+   same baseline, in what room is left. */
+static void drawAddress(QPainter &p, const QRectF &box, const QString &address,
+                        const QString &universe, qreal maxPx, qreal minPx)
+{
+    if (universe.isEmpty())
+    {
+        drawLine(p, box, address, true, maxPx, minPx);
+        return;
+    }
+    /* The address keeps at least two thirds of the width for itself. */
+    const QFont big = labelFont(true, fitPx(p, address, true, box.width() * 2 / 3, maxPx, minPx));
+    const QFontMetricsF bfm(big, p.device());
+    const QString addr = bfm.elidedText(address, Qt::ElideRight, box.width() * 2 / 3);
+    const qreal baseline = box.center().y() + (bfm.ascent() - bfm.descent()) / 2;
+    p.setFont(big);
+    p.drawText(QPointF(box.left(), baseline), addr);
+
+    const qreal gap = bfm.height() * 0.3;
+    const qreal x = box.left() + bfm.horizontalAdvance(addr) + gap;
+    const qreal room = box.right() - x;
+    if (room <= 0)
+        return;
+    const qreal smallMax = qMax(minPx * 0.6, big.pixelSize() * 0.55);
+    const QFont small = labelFont(false, fitPx(p, universe, false, room, smallMax, smallMax * 0.7));
+    p.setFont(small);
+    p.drawText(QPointF(x, baseline),
+               QFontMetricsF(small, p.device()).elidedText(universe, Qt::ElideRight, room));
 }
 
 bool PatchLabels::writePdf(const QString &path, const QList<PatchList::Row> &rows,
@@ -216,18 +267,30 @@ bool PatchLabels::writePdf(const QString &path, const QList<PatchList::Row> &row
                            (mm.width() - 2 * pad) * dpm, (mm.height() - 1.5 * pad) * dpm);
         const Label l = label(rows.at(i));
 
-        /* Name and address large, mode and mount small: shares of the height. */
-        const qreal shares[] = { 0.31, 0.29, 0.20, 0.20 };
-        const QString text[] = { l.name, l.address, l.detail, l.mount };
-        const bool bold[] = { true, true, false, false };
+        /* Name and address large, the rest small, in shares of the height:
+           a network fixture's own line takes some from the large two. */
+        const bool net = !l.network.isEmpty();
+        const qreal big = net ? 0.28 : 0.31, addr = net ? 0.27 : 0.29;
+        const qreal small = (1.0 - big - addr) / (net ? 3 : 2);
         qreal y = inner.top();
-        for (int line = 0; line < 4; ++line)
+        auto box = [&](qreal share) {
+            const QRectF r(inner.left(), y, inner.width(), inner.height() * share);
+            y += r.height();
+            return r;
+        };
+        QRectF r = box(big);
+        drawLine(p, r, l.name, true, r.height() * 0.82, r.height() * 0.45);
+        r = box(addr);
+        drawAddress(p, r, l.address, l.universe, r.height() * 0.82, r.height() * 0.45);
+        r = box(small);
+        drawLine(p, r, l.detail, false, r.height() * 0.82, r.height() * 0.5);
+        if (net)
         {
-            const qreal h = inner.height() * shares[line];
-            const QRectF box(inner.left(), y, inner.width(), h);
-            drawLine(p, box, text[line], bold[line], h * 0.82, h * 0.45);
-            y += h;
+            r = box(small);
+            drawLine(p, r, l.network, false, r.height() * 0.82, r.height() * 0.5);
         }
+        r = box(small);
+        drawLine(p, r, l.mount, false, r.height() * 0.82, r.height() * 0.5);
     }
     p.end();
     return true;

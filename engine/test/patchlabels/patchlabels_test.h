@@ -35,6 +35,7 @@ private slots:
     void aPatchedLabel();
     void unpatchedAndClashLabels();
     void aNetworkLabelCarriesItsIp();
+    void theUniverseIsNamed();
     void aLabelFromTheShow();
     void thePdfHasAPagePerSheet();
     void theRollPdfIsALabelAPage();

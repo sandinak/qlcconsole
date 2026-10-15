@@ -242,9 +242,12 @@ its case), saved as a PDF to print from Preview. Each label has:
 - the fixture's **name**, large;
 - its **address**, large: universe and first channel, one-based — "U3 · 101"
   ("not patched" for a fixture in the inventory, "clash · U1 · 12" for one
-  in an address clash);
-- its **mode and channels** — "16-channel · 16 ch" — and, for a network
-  fixture, its transport and IP;
+  in an address clash) — with the universe's name, when it has one, smaller
+  beside it;
+- its **mode and channels** — "16-channel · 16 ch";
+- for a network fixture, a line of its own: its transport and IP, with the
+  name that IP goes by when it has one — "WLED · 172.18.2.50",
+  "WLED · lantern-2 (172.18.2.50)";
 - **where it hangs**, the same words as the Mounted on column.
 
 A name too long for the label is set smaller, then cut short with "…";

@@ -22,6 +22,7 @@
 #include <QtTest>
 
 #include "monitorproperties.h"
+#include "inputoutputmap.h"
 #include "patchlabels.h"
 #include "patchlist.h"
 #include "fixture.h"
@@ -201,12 +202,39 @@ void PatchLabels_Test::aNetworkLabelCarriesItsIp()
 {
     PatchList::Row r = row(QStringLiteral("Strip"), 4, 0, 3);
     r.mode = QStringLiteral("RGB");
+    QVERIFY(PatchLabels::label(r).network.isEmpty());        // DMX: no line for it
+
     r.network = true;
     r.transport = QStringLiteral("WLED");
     r.ip = QStringLiteral("172.18.2.50");
-    QCOMPARE(PatchLabels::label(r).detail, QStringLiteral("RGB · 3 ch · WLED 172.18.2.50"));
+    // A line of its own, not the mode's.
+    QCOMPARE(PatchLabels::label(r).detail, QStringLiteral("RGB · 3 ch"));
+    QCOMPARE(PatchLabels::label(r).network, QStringLiteral("WLED · 172.18.2.50"));
+
+    // The name it goes by, when it has one.
+    r.host = QStringLiteral("lantern-2");
+    QCOMPARE(PatchLabels::label(r).network, QStringLiteral("WLED · lantern-2 (172.18.2.50)"));
+
+    // A host name for its address.
+    r.host.clear();
+    r.ip = QStringLiteral("lantern-2.local");
+    QCOMPARE(PatchLabels::label(r).network, QStringLiteral("WLED · lantern-2.local"));
+
     r.ip.clear();
-    QCOMPARE(PatchLabels::label(r).detail, QStringLiteral("RGB · 3 ch · WLED (no IP)"));
+    QCOMPARE(PatchLabels::label(r).network, QStringLiteral("WLED · (no IP)"));
+}
+
+void PatchLabels_Test::theUniverseIsNamed()
+{
+    PatchList::Row r = row(QStringLiteral("Wash"), 2, 0);
+    QVERIFY(PatchLabels::label(r).universe.isEmpty());       // the default name says nothing
+    r.universeName = QStringLiteral("Stage left");
+    QCOMPARE(PatchLabels::label(r).address, QStringLiteral("U3 · 1"));
+    QCOMPARE(PatchLabels::label(r).universe, QStringLiteral("Stage left"));
+
+    // Not patched: no universe to name.
+    r.patched = false;
+    QVERIFY(PatchLabels::label(r).universe.isEmpty());
 }
 
 void PatchLabels_Test::aLabelFromTheShow()
@@ -219,14 +247,33 @@ void PatchLabels_Test::aLabelFromTheShow()
     f->setAddress(40);
     f->setPatched(true);
     QVERIFY(doc.addFixture(f));
+    Fixture *lantern = new Fixture(&doc);
+    lantern->setName(QStringLiteral("Lantern 2"));
+    lantern->setChannels(3);
+    lantern->setUniverse(2);
+    lantern->setAddress(0);
+    lantern->setPatched(true);
+    lantern->setConnection(Fixture::Network);
+    lantern->setTransport(Fixture::WledTransport);
+    lantern->setIPAddress(QStringLiteral("172.18.2.51"));
+    QVERIFY(doc.addFixture(lantern));
+    doc.inputOutputMap()->setUniverseName(1, QStringLiteral("Stage left"));
+    doc.inputOutputMap()->setTargetAlias(QStringLiteral("172.18.2.51"), QStringLiteral("lantern-2"));
 
     const QList<PatchList::Row> rs = PatchList::build(&doc).rows();
-    QCOMPARE(rs.size(), 1);
-    const PatchLabels::Label l = PatchLabels::label(rs.first());
+    QCOMPARE(rs.size(), 2);
+    PatchLabels::Label l = PatchLabels::label(rs.at(0));
     QCOMPARE(l.name, QStringLiteral("Front 1"));
     QCOMPARE(l.address, QStringLiteral("U2 · 41"));
+    QCOMPARE(l.universe, QStringLiteral("Stage left"));
     QVERIFY2(l.detail.endsWith(QStringLiteral("6 ch")), qPrintable(l.detail));
+    QVERIFY(l.network.isEmpty());
     QCOMPARE(l.mount, doc.monitorProperties()->mountDescription(f->id()));
+
+    l = PatchLabels::label(rs.at(1));
+    QCOMPARE(l.address, QStringLiteral("U3 · 1"));
+    QVERIFY(l.universe.isEmpty());
+    QCOMPARE(l.network, QStringLiteral("WLED · lantern-2 (172.18.2.51)"));
 }
 
 void PatchLabels_Test::thePdfHasAPagePerSheet()
@@ -238,6 +285,12 @@ void PatchLabels_Test::thePdfHasAPagePerSheet()
     QList<PatchList::Row> rs = rows(31);
     // A name far too long for a label still draws (shrunk, then elided).
     rs[0].name = QString(200, QLatin1Char('W'));
+    // And every line there is, the universe's name and a network line too.
+    rs[1].universeName = QString(80, QLatin1Char('S'));
+    rs[1].network = true;
+    rs[1].transport = QStringLiteral("WLED");
+    rs[1].ip = QStringLiteral("172.18.2.50");
+    rs[1].host = QString(80, QLatin1Char('h'));
     const QString path = dir.filePath("labels.pdf");
     QString error;
     QVERIFY2(PatchLabels::writePdf(path, rs, s, QStringLiteral("Labels"), &error), qPrintable(error));
