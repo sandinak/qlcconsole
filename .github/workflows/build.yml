@@ -407,7 +407,13 @@ jobs:
       - name: Test
         continue-on-error: true
         timeout-minutes: 30
-        run: ./unittest.sh ui build
+        run: |
+          # Probe (temporary): which subsystem the tests link as, and the
+          # doc test's own log.
+          objdump -p build/engine/test/doc/doc_test.exe | grep -i subsystem || true
+          DLLDIRS=$(find "$PWD/build" -name '*.dll' -not -path '*/CMakeFiles/*' -exec dirname {} \; | sort -u | tr '\n' ':')
+          ( cd build/engine/test/doc && PATH="${DLLDIRS}${PATH}" QT_QPA_PLATFORM=offscreen ./doc_test.exe -o /tmp/doc.txt,txt; echo "exit: $?"; grep -E -A4 "FAIL|Totals" /tmp/doc.txt | head -80 ) || true
+          ./unittest.sh ui build
 
   build-macos:
     runs-on: macos-15
