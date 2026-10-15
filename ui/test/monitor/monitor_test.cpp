@@ -216,6 +216,15 @@ static QString testLayouts()
     return QFileInfo(QStringLiteral(__FILE__)).absolutePath() + QStringLiteral("/headlayouts");
 }
 
+/* Every case: a connection to a slot or signal that doesn't exist fails it.
+   Qt only warns, and the action it was meant for silently does nothing --
+   Add Target, Add Person, Copy and Paste were dead in the Studio for a week
+   behind such warnings. */
+void Monitor_Test::init()
+{
+    QTest::failOnWarning(QRegularExpression(QStringLiteral("No such (slot|signal)")));
+}
+
 void Monitor_Test::initTestCase()
 {
     m_doc = new Doc(this);
