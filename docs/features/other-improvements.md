@@ -10,7 +10,11 @@ The Connections tab reworks stock QLC+'s I/O patching into one place that
 answers "how is this console actually wired," following the signal outward:
 **protocol → interface → devices heard on it → the universes they carry.**
 Three sub-tabs — **Devices** (shown above), **Overview**, and **Detailed** —
-give the same information at different levels of depth.
+give the same information at different levels of depth. A fourth, **Show
+control &amp; sync**, holds what controls or clocks the show from outside:
+OSC and MIDI Show Control cue commands in, MIDI timecode with its sync
+health, and a place for QLab out — see
+[Show control (QLab)](show-control.md#checking-the-hookup).
 
 Because Devices follows the wiring, a patched universe appears only under
 the output it goes to, and only unpatched ones gather in their own
@@ -45,7 +49,7 @@ to one row over the list — **By universe**, **Show unused…**, a one-line
 "Right-click a row for what it can do" whose tooltip has the whole
 explanation, the search status, **Undo Patch Change** and **Rescan** — so
 the list and the output view get the window's height.) A full patch-change **undo**
-(Ctrl+Z, from any of the three sub-tabs) snapshots and restores the whole
+(Ctrl+Z, from any of the patching sub-tabs) snapshots and restores the whole
 patch state, not just the last single edit.
 
 Compared to stock QLC+, this fork also fixed a number of real patching

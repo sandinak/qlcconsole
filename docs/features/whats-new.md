@@ -10,8 +10,13 @@ The latest changes, newest first. Each links to the guide with the detail.
   (a Cue column in the chaser editor; a step without one answers to its
   position), a chase can be the **main cue list** or have a list number,
   and **MIDI Show Control** (on a patched MIDI input) or **OSC** (on a port
-  of its own, Settings → Show control) can GO, LOAD, STOP, PAUSE, RESUME,
-  RESET or ALL OFF them. See [Show control (QLab)](show-control.md).
+  of its own) can GO, LOAD, STOP, PAUSE, RESUME, RESET or ALL OFF them.
+  See [Show control (QLab)](show-control.md).
+- **Connections → Show control &amp; sync**: OSC in, MIDI Show Control in
+  and MIDI timecode in one place, each live — listening or why not, the
+  last command and when, the timecode's source and sync health. It replaces
+  the Settings dialog's Show control group (which now points there); the
+  settings carry over.
 - **Next:** in the footer says what the main cue list's GO plays next; GO
   (⌘↩) and Back (⌘⇧↩) work from any window, and the Virtual Console cue
   list shows each cue's number and what's next.

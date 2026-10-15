@@ -79,7 +79,8 @@ before building):
   - **Sub-cues** — a step whose function is a chaser shown inline (4.1,
     4.2), a "Sub GO" for the cue playing, the same idea for step-based
     effects.
-  - **Sending to QLab** — OSC / MSC out.
+  - **Sending to QLab** — OSC / MSC out. Its home is ready: the "QLab out"
+    section of Connections → Show control & sync (`ShowControlSyncPage`).
   - **Tower patch rule in one step** — Patch dialog: "each structure: bars
     to its Int universe, the rest to its Ext, by name".
   - **Windows build** — port upstream QLC+'s `build-windows` CI job
