@@ -12,6 +12,18 @@ under `~/.claude/.../memory/`.
 
 (Nothing open right now.)
 
+## Release 0.1.0 (in progress, 2026-10-15)
+
+On `release/0.1.0`. Universal (Apple silicon + Intel), macOS 12+.
+
+- **24-hour soak on kronk** (the Intel show machine, i7-9750H) — running
+  since 2026-10-15 09:56: the real show, the show plus a synthetic block,
+  then rough handling (`stresstest/soak24/`, results in
+  `~/soak24/run-20261015-0956/` on kronk). Review before releasing.
+- **Rig test pass** — `RIG_TEST_PLAN.md`, section K first (the 0.1.0
+  work), on the office rig with kronk.
+- Then: merge `release/0.1.0` to main, `./release.sh`.
+
 ## Needs the real rig / hardware
 
 - **Rig test pass** — run `RIG_TEST_PLAN.md`, fix any ❌ (the gate on the
@@ -56,12 +68,30 @@ before building):
    stands on the plot; fire as one of them.
 3. **Layers, blend modes and masks** — effects stacked in layers, with
    blend modes between them and masks to limit where one applies.
-4. **Beat-quantized GO and Swop** — GO and Swop that land on the next
-   beat rather than the instant they're pressed.
+4. **Beat-quantized Swop** — GO on the beat is done (a chase or cue list
+   holds a GO to the next beat or bar); Swop still lands the instant it's
+   pressed.
 5. **Keyframe shapes and spatial transitions** — the shape of a move
    between keyframes, and transitions that sweep across the rig spatially
    instead of everything changing at once.
 
+- **Agreed next (2026-10-13/15), after 0.1.0:**
+  - **Sub-cues** — a step whose function is a chaser shown inline (4.1,
+    4.2), a "Sub GO" for the cue playing, the same idea for step-based
+    effects.
+  - **Sending to QLab** — OSC / MSC out.
+  - **Tower patch rule in one step** — Patch dialog: "each structure: bars
+    to its Int universe, the rest to its Ext, by name".
+  - **Windows build** — port upstream QLC+'s `build-windows` CI job
+    (MSYS2/MinGW) with qlcconsole names; installer `.exe` as an artifact.
+  - **WLED** — the rest of the 1D effects (Fireworks Starburst, Percent,
+    Noise 1–4, Perlin Move, Meteor Smooth…), from behaviour only (WLED is
+    EUPL).
+  - **Playback timing** (PLAYBACK_TIMING_DESIGN.md): P2 fade shapes, P3
+    per-chase-step transitions, P4 Swop, P5 clickable Load chip.
+  - **Rig Overview frame rate** — maybe automatic (30, lower when the
+    engine is busy): the overview now draws on every core, which competes
+    with the DMX engine on a 6-core machine. Decide from the soak.
 - **Patch-list labels** — the patch list (Fixtures → Patch List…) exports
   CSV and PDF; still to come: printing a label per fixture from it.
 - **Stage and inventory across show files** — keep a stage layout
@@ -262,20 +292,6 @@ rig edits, bulk repatching, cross-show consistency checks.
   duplicates CI exactly and would never find anything. The value of
   192.168.1.245 was proven the day it was built: its older glibc exposed a
   pthread linkage bug (`4a360911c`) that Ubuntu 22.04 structurally cannot see.
-
-- **Decide whether qlcconsole supports Intel Macs (TODO, 2026-08-25)** — a
-  product question, not a coverage gap, and worth settling before building
-  hardware for it. The shipped binary is **arm64 only** (`file` on both the
-  build output and the packaged app); nothing sets `CMAKE_OSX_ARCHITECTURES`,
-  so it targets whatever host builds it. An Intel Mac therefore cannot run the
-  current DMG at all. Note this is NOT a Rosetta problem — Rosetta translates
-  x86 -> arm, not the reverse, so its sunset doesn't threaten an arm64 build.
-  If the answer is "yes, support Intel", the cheap route is probably a
-  universal binary (`CMAKE_OSX_ARCHITECTURES="arm64;x86_64"`; Qt from
-  install-qt-action ships universal for macOS) rather than a second build
-  machine — one CI config change instead of another host to maintain. Branson
-  has an Intel Mac available if a real second machine turns out to be needed.
-
 
 - **MasterTimer misses ticks at full output load (2026-08-25, 2026-09-02) —
   fixed on macOS, ROUGHED IN elsewhere, NOT YET VERIFIED on Linux/Windows.**

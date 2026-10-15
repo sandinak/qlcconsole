@@ -16,7 +16,46 @@ First public release. qlcconsole is a fork of
 [QLC+ 4.14.2](https://github.com/mcallegari/qlcplus), rebuilt around a
 console-first programmer-mode workflow for macOS.
 
+One app for **Apple silicon and Intel Macs** (macOS 12 Monterey or later),
+built on Qt 6.9.
+
 ### Added
+- **QLab and show control.** Chase steps carry cue numbers (a Cue column in
+  the chaser editor, with Renumber); a chase can be the main cue list or
+  have a list number; **MIDI Show Control** on a patched MIDI input and
+  **OSC** on a port of its own (Settings → Show control) can GO, LOAD, STOP,
+  PAUSE, RESUME, RESET and ALL OFF them. The footer's **Next:** shows what
+  the main list's GO plays next; GO (⌘↩) and Back (⌘⇧↩) work from any
+  window; the Virtual Console cue list shows cue numbers and what's next.
+  **Skip** a step without deleting it — GO, Next, Back and auto-follow pass
+  over it.
+- **One beat clock and speed masters.** Every effect and beat chase reads
+  one clock (effects started apart are on the same beat); a Tap on the
+  Programming toolbar. Up to sixteen **speed masters**, each its own BPM and
+  tap, rate and pause, or following the main clock or another master by a
+  ratio; a look, chase, step or collection runs on one, and the footer
+  shows each master's beat. **GO on the beat** holds a GO to the next beat
+  or bar.
+- **Spread** — an effect's phase spread across its heads: by order,
+  columns, rows or across the stage, forward, reversed, from the centre or
+  the ends, mirrored or in blocks, or out from / round the look's aim; a
+  preview in the look editor.
+- **The stack checker** — the Looks list marks a look the one below always
+  covers, an effect another covers, a dimmer only some heads get, and says
+  why.
+- **Patch list** — every fixture's patch, where its universe goes and what
+  it hangs on, as CSV or a printable PDF (Fixtures → Patch List…).
+- **In-app pictures** — the guides show the main window, footer,
+  Programming tab, effect browser, Patch dialog and more with numbered
+  marks; click one for full size.
+- **The Rig Overview on the graphics card** (Metal on a Mac, OpenGL
+  elsewhere) with its fixtures worked out on every core: a fully lit
+  208-fixture show from about a second a frame to 15 ms.
+  A **GPU** box turns it off. Its own **Layers** menu shows and hides
+  layers — the same switch as the Studio's eye.
+- **Washes look like washes** — a pool fades past its beam angle for a wash
+  and stays crisp for a profile; PC and Fresnel lenses are softest. Pools
+  show on decks and steps.
 - **Programming tab** — a dedicated top-level tab for building scenes/"looks":
   searchable/foldered palette and function trees, drag-and-drop palettes onto
   looks, groups onto dynamic targets, fixtures onto fixed targets. Inline look
@@ -186,10 +225,19 @@ console-first programmer-mode workflow for macOS.
 - The Rig Overview follows the Lighting Studio's layers.
 
 ### Changed
-- Versioning scheme: the in-app build string now tracks the QLC+ base version
-  this fork tracks, plus a git-derived build count
-  (`4.14.2+qlcconsole.<N>`); public releases additionally get a SemVer tag
-  (see [RELEASE.md](RELEASE.md)).
+- The version you see is the release: the About box, `--version` and
+  Finder say **0.1.0**, with the build (`4.14.2+qlcconsole.<N>`, what a saved
+  show records) and the commit beside it (see [RELEASE.md](RELEASE.md)).
+- **Qt 6.8 or later only**; Qt 5 is no longer supported (the last tree that
+  built on it is tagged `qt5-last`).
+- Opening the app goes straight into qlcconsole — no window asking whether
+  to open the Fixture Editor (Fixtures → Fixture Editor…; a double-clicked
+  definition still opens in it).
+- Showing and hiding layers, and their labels, work in Operate mode; locking
+  stays a Design-mode change.
+- A look stacks one way: top to bottom, the lower wins; an effect's colour
+  replaces the base; dimmer effects scale and multiply; a Colour or Dimmer
+  under an effect is that effect's only.
 - Main tab order regrouped to follow the build workflow: Hardware →
   Inputs/Outputs → Lighting Studio → Functions → Programming → Shows →
   Virtual Console → Simple Desk.
@@ -249,11 +297,20 @@ console-first programmer-mode workflow for macOS.
 - Creating a palette or function in a new folder renamed the workspace's
   first look to the folder's name.
 - Add Fixture gave every fixture in a network batch the same IP.
-
-[0.1.0]: https://github.com/sandinak/qlcconsole/releases/tag/v0.1.0
 - Lanterns on hangers that kept an earlier mount's face drew on their side;
   a fixture on a hanger now always hangs straight.
 - A light at the foot of a tower, moved under the bar on top of it, was
   hung on the bar.
 - A copy of a fixture's physical data recompiled a regular expression and
   wrote a guessed power figure into the copy.
+- **Don't Save** left the unsaved show's autosave behind, so every start
+  offered the discarded work back.
+- Two static looks on one channel kept the higher value (Blue then Red came
+  out magenta-ish); a second Colour look moved a colour wheel; an Aim or a
+  Dimmer after a movement effect did nothing; Breathe did nothing on movers
+  with only a head dimmer.
+- The speed master's beat blinked in the footer with nothing playing.
+- The Xbox controller profile was installed where the HID plugin never
+  looked.
+
+[0.1.0]: https://github.com/sandinak/qlcconsole/releases/tag/v0.1.0

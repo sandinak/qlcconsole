@@ -58,7 +58,7 @@ fi
 step "1/7 Configure (Release, $FLAVOUR, separate build dir: $(basename "$BUILD"))"
 cmake -S . -B "$BUILD" "${ARCHFLAGS[@]}" \
   -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+  -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0   # what Qt 6.9 itself needs
 
 step "2/7 Build (parallel)"
 cmake --build "$BUILD" -j"$JOBS"

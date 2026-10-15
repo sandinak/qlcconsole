@@ -6,6 +6,62 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-15 — Release prep: 0.1.0 labels, universal build, kronk fixes *(on release/0.1.0)*
+
+- **Version shown is the release** (VERSION): About box (build id + commit
+  under it, selectable), `--version`, Info.plist (CFBundleShortVersionString
+  0.1.0, CFBundleVersion = commit count, LSMinimumSystemVersion 12.0).
+  APPVERSION stays the build id shows record.
+- **Intel Macs: yes, one universal app** (the 2026-08-25 TODO decided).
+  `package-local.sh` builds arm64 + x86_64 by default against aqt's universal
+  Qt 6.9.3 and `platforms/macos/universal-deps.sh` (libusb, libftdi, fftw,
+  libsndfile; libusb without pipe2(), which the macOS 27 SDK has and 26 does
+  not); macdeployqt + bundlefix.py; the bundle is checked for both arches and
+  every @rpath resolving. No OLA in it (Homebrew's is single-arch). macOS 12+
+  (Qt 6.9's own minimum). Verified on kronk (i7-9750H, macOS 26.7.1),
+  installed from the DMG.
+- **Launcher** starts qlcconsole instead of showing the Fixture Editor /
+  qlcconsole chooser; double-clicked files still route.
+- **HID profiles** install to Resources/HIDProfiles (were loose in Contents/:
+  never found, and broke a strict codesign).
+- **Don't Save** removes the autosave (the recovery prompt came back every
+  start).
+- **Rig Overview Layers menu**; the Studio's eye and labels work in Operate
+  mode (Branson hit them disabled in run mode); collapse glyph ▾/▸.
+- **stresstest/soak24/** — 24 h on-screen soak of the real app (see TODO).
+
+### 2026-10-15 — Rig Overview on the GPU, fixtures across the cores *(SHIPPED, merged)*
+
+- RhiRaster (QRhi: Metal / D3D11 / OpenGL incl. Mesa GL 2.1) does what
+  ZRaster does; picking rasterises depth on the CPU on demand. GPU box in the
+  overview (monitor/rig/gpu).
+- Fixtures drawn in parallel (EmitContext per run, merged in order; lanterns
+  and omni lights on the GUI thread; landing/mesh caches read-only meanwhile);
+  light as one mesh op per beam; beamLightAt() sphere reject; flushOps by
+  pointer. Lit 208-fixture show, Release: 72.5 -> 14.3 ms (GPU), 33.8 (CPU);
+  pixel-identical one thread or many. kronk: 50.6 ms GPU, 98.4 CPU.
+- Tested: Mac gate, Linux suite (Mesa offscreen + xcb), TSan (no
+  worker-vs-worker race in the fixture code).
+
+### 2026-10-14/15 — Qt 6 only *(SHIPPED, merged)*
+
+- Qt 6.8+ required; Qt5 branches, the QtScript RGB engine and Qt4/5 audio
+  backends gone; `QT_DISABLE_DEPRECATED_UP_TO=0x060800`; tag `qt5-last` is
+  the last tree that built on Qt5, `qt6-pre-gpu` the Qt6 tree before the GPU
+  work. Two speed-master timing tests made robust (CI flakes).
+
+### 2026-10-13/14 — Show control, help pictures, soft pools *(SHIPPED, merged)*
+
+- **Show control (QLab)**: SHOW_CONTROL_DESIGN.md / docs show-control.md —
+  cue numbers, main / numbered cue lists, MSC (SysEx on CoreMIDI and ALSA)
+  and OSC in, footer Next, GO / Back app-wide, VC cue list cue column, step
+  skip. *Not yet tried against a real QLab / MIDI port.*
+- **Help pictures**: `./help-shots.sh` (offscreen, Blue theme, numbered
+  callouts), eight pictures; help browser fits and zooms them.
+- **Soft pools** (FixtureVisualTraits::edgeSoftness) and the rig beam cache
+  (decks per frame, kept landings, adaptive split grid): lit DanceHysteria
+  1073 -> 157 ms before the GPU work.
+
 ### 2026-10-12 — How a look stacks: one set of rules, tested end to end *(SHIPPED)*
 
 Branson: "make sure that stacked effects and colors and such always applied

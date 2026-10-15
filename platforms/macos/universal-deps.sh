@@ -15,12 +15,12 @@ mkdir -p "$SRC" "$P/lib/pkgconfig"
 cd "$SRC"
 
 ARCHS="-arch arm64 -arch x86_64"
-MIN="-mmacosx-version-min=11.0"
+MIN="-mmacosx-version-min=12.0"      # Qt 6.9's own minimum
 export CFLAGS="$ARCHS $MIN -O2" CXXFLAGS="$ARCHS $MIN -O2" LDFLAGS="$ARCHS $MIN"
 export PKG_CONFIG_PATH="$P/lib/pkgconfig" PKG_CONFIG_LIBDIR="$P/lib/pkgconfig"
 J=$(sysctl -n hw.perflevel0.logicalcpu 2>/dev/null || sysctl -n hw.ncpu)
 AC="--prefix=$P --disable-dependency-tracking --disable-static"
-CM=(-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+CM=(-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0
     -DCMAKE_INSTALL_PREFIX="$P" -DCMAKE_PREFIX_PATH="$P" -DCMAKE_BUILD_TYPE=Release
     -DCMAKE_IGNORE_PREFIX_PATH="/opt/homebrew;/usr/local"
     -DCMAKE_POLICY_VERSION_MINIMUM=3.5)
@@ -35,7 +35,7 @@ step() { echo; echo "== $*"; }
 step "libusb"
 tar xf "$(fetch https://github.com/libusb/libusb/releases/download/v1.0.27/libusb-1.0.27.tar.bz2)"
 # The SDK may declare pipe2() (macOS 27); an older Mac has none, and libusb
-# would fail to load there. The deployment target is 11.
+# would fail to load there. The deployment target is 12.
 (cd libusb-1.0.27 && ac_cv_func_pipe2=no ./configure $AC >/dev/null \
     && make -j"$J" >/dev/null && make install >/dev/null)
 
