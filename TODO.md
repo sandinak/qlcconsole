@@ -32,9 +32,11 @@ On `release/0.1.0`. Universal (Apple silicon + Intel), macOS 12+.
   probably the WLED controller rather than the interface; needs more
   testing. Still to do: the live view included;
   effect / palette names read from the device (`/json/eff`, `/json/pal`);
-  92 WLED effects ported, written from behaviour (WLED is EUPL -- never
-  from FX.cpp); the rest of the 1D list next, 2D / sound-reactive only if
-  wanted; compare the ports side by side with a real device.
+  160 WLED effects ported, written from behaviour (WLED is EUPL -- never
+  from FX.cpp): every 1D effect, the 23 sound-reactive 1D ones on the audio
+  input; not ported: the 2D ones, Copy Segment, Image, Slow Transition.
+  Compare the ports side by side with a real device -- Percent's share
+  (intensity/255, from the docs' "% of fill") especially.
 - **Control surfaces** — PMJ (OpenDeck) mapping as the show's operating
   surface; the control-surface engine (PMJ + APC40 mk2 + Xbox) was last
   "in progress, at the rig".
