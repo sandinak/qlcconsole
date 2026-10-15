@@ -2,8 +2,9 @@
 
 Start with the **footer**: if it says **Not ready (N)**, click it — most
 problems that stop a show (unpatched or clashing fixtures, universes going
-nowhere, missing definitions, WLED devices not answering or not set up)
-are listed there with a fix.
+nowhere, missing definitions, network outputs that can't send or nodes
+that stopped answering, WLED devices not answering or not set up) are
+listed there with a fix.
 
 ## Lights
 
@@ -13,6 +14,17 @@ One reading "not patched" has no output — right-click it and patch it to
 an interface. Select a universe to see the channels it is actually
 sending: if the values are there, the problem is downstream (node, cable,
 the fixture's address); if not, it's the look or the patch.
+
+**An output or node is reported in trouble** ("not reachable", "stopped
+answering", "DMX output short", "not outputting DMX" — in the footer and in
+red on the universe's row in Connections). "Not reachable": check the
+console's own cable and network settings, and that the address is right.
+"Stopped answering": the node is off, unplugged, or its switch port is down.
+"Short" / "not outputting": the DMX run from that node port — cable,
+connectors, terminator, a failed fixture. Each clears by itself once fixed
+(sends after 30 s working, nodes after two answered polls, ports after 10 s
+clean). See
+[When an output is in trouble](other-improvements.md#when-an-output-is-in-trouble).
 
 **A look stays on the fixtures after its function is removed.** Fixed — a
 function deleted while it runs now lets go of its channels. On an older

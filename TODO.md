@@ -413,30 +413,58 @@ rig edits, bulk repatching, cross-show consistency checks.
   Worth considering a `QLC_PLUGIN_PATH` env override so test rigs stop needing
   root to run what they just built.
 
-- **ArtNet failure reporting flapped (BUILT 2026-10-15 — needs the rig)** —
-  `e3905a2a1` replaced 2850 identical `sendDmx failed` lines with one report
-  per universe per state change, an ~87% reduction but not the "one line"
-  first claimed: a unicast target that never answers ARP oscillates fail →
-  succeed → fail (macOS: ~5 s of queued "successes" while ARP is out, then 20 s
-  of "host is down"), so the live soak still produced 200 "is failing" + 150
-  "recovered" lines across 50 universes in 120 s.
-  **Fixed on `feat/artnet-status`:** the decision moved into
-  `plugins/artnet/src/artnetsendhealth.{h,cpp}` with hysteresis — failing once
-  failures persist 1 s (isolated successes don't reset that), at once for a
-  hard error (datagram too large, socket/address unusable), and recovered only
-  after 30 s of uninterrupted successes. `artnet_test` drives it with injected
-  results/times: transient burst silent, sustained failure reported once,
-  alternating results never toggle, the ARP cycle is ONE report over two
-  minutes, recovery clears. Still log-only — nothing in the UI reads it (see
-  the endpoint-reachability item below before wiring it to the footer).
-  **To confirm on the rig:** (1) patch a universe to a unicast address with
-  nothing on it for a few minutes — expect one "is failing" line per universe
-  and no "recovered" lines; (2) power a node up mid-run — one "recovered" line
-  about 30 s after it answers ARP, and its fixtures respond right away (the
-  delay is in the log only, never in the output); (3) pull the console's cable
-  / down the interface — "is failing" within 1-2 s (2 s if the look is static), "recovered" ~30 s after it
-  is back; (4) a healthy rig over a long run logs nothing. E1.31's send path
-  still has the old per-send `qDebug` and is untouched.
+- **Output trouble reporting: send health, node health, UI (BUILT 2026-10-15
+  — needs the rig)** — started as "ArtNet failure reporting still flaps":
+  `e3905a2a1` logged once per state change, and a unicast target that never
+  answers ARP flips that state itself (macOS: ~5 s of queued "successes"
+  while ARP is out, then 20 s of "host is down"), so the soak still produced
+  200 "is failing" + 150 "recovered" lines across 50 universes in 120 s.
+  Built on `feat/artnet-status`:
+  - **Send health** (`plugins/interfaces/sendhealth.{h,cpp}`, shared by
+    Art-Net and E1.31): failing once failures persist 1 s (isolated successes
+    don't reset it), at once for a hard error; recovered only after 30 s of
+    uninterrupted successes. E1.31's per-packet `qDebug` spam is gone too.
+  - **Node health** (`plugins/artnet/src/artnetnodewatch.{h,cpp}`), from the
+    ArtPollReplies the plugin already asks for: a node heard this session
+    that misses 3 polls in a row is "stopped answering" (back after 2
+    answered); the port carrying our universe reporting a DMX short
+    (GoodOutputA bit 2), or no longer outputting after it was, is a port
+    fault (2 replies in a row; clears after 10 s clean). Broadcast universes
+    watch the nodes that output that Port-Address; unicast ones the node at
+    that address.
+  - **Traffic:** unchanged on-subnet (the existing 3 s broadcast ArtPoll per
+    interface with an output). New: one unicast ArtPoll per 3 s to each
+    distinct unicast output target OFF the interface's subnet (coalesced by
+    address, GUI thread, never in a DMX tick), since those never hear the
+    broadcast.
+  - **UI:** new `QLCIOPlugin::outputProblems(output, universe)`; footer entry
+    `outputs.problems` (one line per problem with the universes it hits,
+    **Open Connections**); the universe's Connections row gets the problem in
+    red with a tooltip, in both views, refreshed on `targetProblemsChanged()`.
+    The footer now listens to every plugin's `targetProblemsChanged()`, not
+    only WLED's.
+  - **Bug found on the way:** Connections had GoodOutput's short (0x04) and
+    merging (0x08) bits swapped, so a merging port showed SHORT DETECTED.
+    Fixed per the Art-Net 4 spec / libartnet's `PORT_STATUS_*` — **worth
+    confirming against a node that really is merging**.
+  - Tests: `artnet_test` 7 → 24, new `e131_test` (5), `connectionstree_test`
+    +2 (row + footer), all on injected results/times and fabricated replies;
+    nothing is sent.
+  **To confirm on the rig:** (1) unicast to an address with nothing on it for
+  a few minutes — one "not reachable" line per target in the footer and log,
+  no "recovered"; (2) unplug a node that was answering — "stopped answering"
+  within ~9-12 s, back ~6 s after it is plugged in, fixtures respond at once
+  (reporting never holds output back); (3) short a DMX run on a node port that
+  reports it (or pull the terminator if that trips it) — "DMX output short"
+  on that universe's row, gone 10 s after it's cleared; (4) pull the
+  console's own cable — "not reachable" within 1-2 s, gone ~30 s after it's
+  back; (5) a node on another subnet: confirm it now appears and is watched
+  (unicast polls), and that nothing on the show segment minds a poll every
+  3 s; (6) a healthy rig over a long run shows and logs nothing; (7) check
+  a merging port no longer reads SHORT DETECTED.
+  Not built: E1.31 has no per-receiver reply in the base protocol. E1.31
+  Universe Discovery packets only list the universes a *source* sends, so
+  they say nothing about receivers either -- noted, not worth building.
 
 - **`VCCueList_Test::functionRemoved()` flake — watch, don't assume fixed
   (OPEN, 2026-08-25)** — failed on 2 of ~9 macOS CI runs asserting a tree row
@@ -473,7 +501,13 @@ rig edits, bulk repatching, cross-show consistency checks.
   unexercised.
 
 
-- **Output ENDPOINT reachability check (BACK BURNER, 2026-08-25)** — the
+- **Output ENDPOINT reachability check (MOSTLY BUILT 2026-10-15, see "Output
+  trouble reporting" above)** — node liveness is now watched continuously
+  from the ArtPoll the plugin already ran every 3 s, rather than the
+  config-time probe sketched below; only nodes heard this session are judged,
+  which answers the cry-wolf concern. Still open from this item: a check at
+  load/patch time for a unicast target that has NEVER answered. Original
+  notes: the
   readiness indicator added in `daeeb97d7` catches one failure mode: the
   workspace names a plugin *line* (for the network plugins, an index into the
   local interface list) that doesn't exist on this machine. It does **not**
