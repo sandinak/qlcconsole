@@ -57,8 +57,9 @@ drawn **faded and dashed**. Check its height in Front or Side.
 face of what it hung on before; it is straightened when the show loads
 (and when it's hung) on this build. Re-open the show.
 
-**Something is missing from the Rig Overview.** Its layer is hidden in the
-Lighting Studio's Layers panel — the overview hides what the Studio hides.
+**Something is missing from the Rig Overview.** Its layer is hidden — check
+the overview's **Layers** menu (or the Lighting Studio's Layers panel; it is
+the same switch).
 
 **The Rig Overview is slow.** Make sure its **GPU** box is ticked, then
 **Quality: Fast**, hide layers you don't need, and use a release build.

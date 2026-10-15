@@ -103,6 +103,13 @@ deck no longer stops a beam). Toggling a layer redraws the open overview
 where it is, keeping your angle and zoom. A structure's own editor always
 shows that structure, whatever layer it is on.
 
+**Or hide it from the overview itself.** The overview's **Layers** menu lists
+the show's layers with a tick each: untick one to hide it, **Show all** to
+bring everything back. It is the same switch as the layer's eye in the
+Studio (and saved with the show), so the two always agree. Showing, hiding
+and labels work in Operate mode too; locking a layer stays a Design-mode
+change.
+
 **Keeping it quick.** The Rig Overview draws on
 the graphics card (Metal on a Mac, OpenGL elsewhere) when the machine has
 one; its **GPU** box turns that off, back to drawing on the processor —

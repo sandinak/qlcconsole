@@ -2482,6 +2482,45 @@ void Monitor::showStageOverview()
         view->setSupersample(qualityCombo->currentData().toInt());
     });
 
+    /* Layers, from here: show or hide one without the Studio open. The same
+       switch as the Studio's eye (saved with the show), so the two agree --
+       and in any mode, since it is how you look at the rig, not a change to
+       it. Rebuilt each time it opens, so it is the show's layers as they are. */
+    QToolButton *layersBtn = new QToolButton(&dlg);
+    layersBtn->setObjectName(QStringLiteral("rigLayers"));
+    layersBtn->setText(tr("Layers"));
+    layersBtn->setToolTip(tr("Show or hide a layer (the same as its eye in the Studio)"));
+    layersBtn->setPopupMode(QToolButton::InstantPopup);
+    QMenu *layersMenu = new QMenu(layersBtn);
+    layersBtn->setMenu(layersMenu);
+    connect(layersMenu, &QMenu::aboutToShow, layersMenu, [this, layersMenu]() {
+        layersMenu->clear();
+        MonitorProperties *props = m_doc->monitorProperties();
+        auto setShown = [this, props](quint32 id, bool on) {
+            props->setLayerVisible(id, on);
+            m_doc->setModified();
+            if (m_graphicsView != NULL)
+                m_graphicsView->refreshItemLayerState();   // -> this view, the Studio's list
+        };
+        const QList<MonitorProperties::MonitorLayer> layers = props->layers();
+        for (const MonitorProperties::MonitorLayer &lyr : layers)
+        {
+            QAction *a = layersMenu->addAction(lyr.name);
+            a->setCheckable(true);
+            a->setChecked(lyr.visible);
+            const quint32 id = lyr.id;
+            connect(a, &QAction::toggled, layersMenu, [setShown, id](bool on) { setShown(id, on); });
+        }
+        layersMenu->addSeparator();
+        QAction *all = layersMenu->addAction(tr("Show all"));
+        connect(all, &QAction::triggered, layersMenu, [setShown, layers]() {
+            for (const MonitorProperties::MonitorLayer &lyr : layers)
+                if (!lyr.visible)
+                    setShown(lyr.id, true);
+        });
+    });
+    bar->addWidget(layersBtn);
+
     /* On the graphics card when there is one (RhiRaster): the same picture,
        drawn there instead of on the CPU. Off falls back to the CPU renderer,
        for comparing or for a driver that misbehaves. */

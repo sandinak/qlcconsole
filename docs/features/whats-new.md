@@ -56,6 +56,9 @@ The latest changes, newest first. Each links to the guide with the detail.
   to 15 (from a stutter to smooth). The **GPU** box in its toolbar turns it off
   if a driver draws it wrongly. See
   [Angled — the free 3D view](lighting-studio.md#angled--the-free-3d-view).
+- **Show or hide layers from the Rig Overview** — its **Layers** menu, the
+  same switch as the Studio's eye. The eye and the labels toggle now work in
+  Operate mode as well.
 - **Pools show on decks and steps.** A beam landing on a platform was drawn
   only where it reached the bare floor; the part on the deck was lost.
 

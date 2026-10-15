@@ -565,6 +565,83 @@ void Monitor_Test::theRigOverviewShortcutTogglesIt()
     QTRY_VERIFY(dlg.isNull());
 }
 
+/* A layer is shown or hidden from the Rig Overview's own Layers menu, without
+   the Studio -- and from the Studio's eye -- in Operate mode as well as
+   Design: it is how you look at the rig. The Studio's list follows a change
+   made in the overview; locking stays Design only. */
+void Monitor_Test::layersShowAndHideFromTheRigOverviewInAnyMode()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    const quint32 upper = props->addLayer("Upper");
+    QVERIFY(props->layer(upper).visible);
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        doc->setMode(Doc::Operate);
+
+        // The Studio's list: eye and labels work in Operate, the lock doesn't.
+        QTreeWidget *tree = mon.findChild<MonitorLayersPanel *>()->findChild<QTreeWidget *>();
+        QVERIFY(tree != nullptr);
+        auto layerButtons = [tree, upper]() {
+            for (int i = 0; i < tree->topLevelItemCount(); ++i)
+            {
+                QTreeWidgetItem *node = tree->topLevelItem(i);
+                if (node->data(0, Qt::UserRole).toInt() == int(MonitorLayersPanel::NodeLayer)
+                    && node->data(0, Qt::UserRole + 1).toUInt() == upper)
+                    return tree->itemWidget(node, 1)->findChildren<QToolButton *>();
+            }
+            return QList<QToolButton *>();
+        };
+        QList<QToolButton *> b = layerButtons();
+        QCOMPARE(b.size(), 4);                  // collapse, eye, labels, lock
+        QVERIFY(b.at(1)->isEnabled());
+        QVERIFY(b.at(2)->isEnabled());
+        QVERIFY(!b.at(3)->isEnabled());
+        b.at(1)->click();                       // the eye: hidden
+        QVERIFY(!props->layer(upper).visible);
+        QTRY_VERIFY(!layerButtons().isEmpty() && !layerButtons().at(1)->isChecked());
+        layerButtons().at(1)->click();          // and shown again
+        QVERIFY(props->layer(upper).visible);
+
+        // The overview's own menu.
+        mon.toggleStageOverview();
+        QDialog *dlg = nullptr;
+        foreach (QWidget *w, QApplication::topLevelWidgets())
+            if (QDialog *d = qobject_cast<QDialog *>(w))
+                if (d->windowTitle() == QString("Rig Overview") && d->isVisible())
+                    dlg = d;
+        QVERIFY(dlg != nullptr);
+        QToolButton *layersBtn = dlg->findChild<QToolButton *>("rigLayers");
+        QVERIFY(layersBtn != nullptr && layersBtn->menu() != nullptr);
+        QMenu *menu = layersBtn->menu();
+        emit menu->aboutToShow();
+        QAction *upperAction = nullptr;
+        for (QAction *a : menu->actions())
+            if (a->text() == "Upper")
+                upperAction = a;
+        QVERIFY(upperAction != nullptr);
+        QVERIFY(upperAction->isCheckable() && upperAction->isChecked());
+        upperAction->trigger();                 // hidden, from the overview
+        QVERIFY(!props->layer(upper).visible);
+        QVERIFY(doc->isModified());
+        // ... and the Studio's list says so.
+        QTRY_VERIFY(!layerButtons().isEmpty() && !layerButtons().at(1)->isChecked());
+
+        emit menu->aboutToShow();               // rebuilt: as the show is now
+        QAction *all = nullptr;
+        for (QAction *a : menu->actions())
+            if (a->text() == "Show all")
+                all = a;
+        QVERIFY(all != nullptr);
+        all->trigger();
+        QVERIFY(props->layer(upper).visible);
+        dlg->close();
+        doc->setMode(Doc::Design);
+    }
+    delete doc;
+}
+
 /* Moving a drape, the ruler marks its middle, not where it was grabbed;
    just hovering, the mark is the pointer. */
 void Monitor_Test::theRulerMarksTheMiddleOfADraggedDrape()

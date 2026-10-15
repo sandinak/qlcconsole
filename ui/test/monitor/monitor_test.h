@@ -31,6 +31,7 @@ class Monitor_Test final : public QObject
 private slots:
     void aShowsRigViewDrawTime();
     void theRigOverviewShortcutTogglesIt();
+    void layersShowAndHideFromTheRigOverviewInAnyMode();
     void theRulerMarksTheMiddleOfADraggedDrape();
     void theRigViewHidesWhatTheStudioHides();
     void aLightAtTheFootOfATowerIsNotHungOnItsTopBar();
