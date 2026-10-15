@@ -1015,11 +1015,12 @@ void Inventory_Test::placedFixturesArePlannedBeforeTheRest()
     makeDimmer(g_doc, 500, 0, 0);                        // universe 1: 12 channels left
     g_doc->networkTopology()->nodes() << proxNode("Node", 0, 0, { 0 });
     Fixture *loose = makeStaged(g_doc, 10, "A Loose");   // sorts first, not on the plot
-    Fixture *near = placedStaged(g_doc, 10, "B Near", 1, 0);
-    const QList<PatchPlanner::Assignment> plan = PatchPlanner(g_doc).plan({ loose->id(), near->id() });
+    // "nearFx", not "near": windows.h #defines near (and far) to nothing.
+    Fixture *nearFx = placedStaged(g_doc, 10, "B Near", 1, 0);
+    const QList<PatchPlanner::Assignment> plan = PatchPlanner(g_doc).plan({ loose->id(), nearFx->id() });
     QCOMPARE(plan.at(0).fixtureId, loose->id());         // listed in inventory order still
-    QCOMPARE(forFixture(plan, near->id()).universe, quint32(0));
-    QCOMPARE(forFixture(plan, near->id()).address, quint32(500));
+    QCOMPARE(forFixture(plan, nearFx->id()).universe, quint32(0));
+    QCOMPARE(forFixture(plan, nearFx->id()).address, quint32(500));
     QVERIFY(forFixture(plan, loose->id()).universe != 0);
     QCOMPARE(forFixture(plan, loose->id()).nodeIndex, -1);
 }
@@ -1031,20 +1032,20 @@ void Inventory_Test::unplacedNetworkAndOptedOutFixturesKeepTheOldRules()
     Fixture *fence = placedStaged(g_doc, 3, "Fence", 9, 0);
     fence->setConnection(Fixture::Network);
     fence->setIPAddress("172.18.2.41");
-    Fixture *near = placedStaged(g_doc, 4, "Near SL", 9, 1);
+    Fixture *nearFx = placedStaged(g_doc, 4, "Near SL", 9, 1);
 
     PatchPlanner pp(g_doc);
-    QList<PatchPlanner::Assignment> plan = pp.plan({ loose->id(), fence->id(), near->id() });
+    QList<PatchPlanner::Assignment> plan = pp.plan({ loose->id(), fence->id(), nearFx->id() });
     QCOMPARE(forFixture(plan, loose->id()).universe, quint32(0));            // first-fit
     QCOMPARE(forFixture(plan, loose->id()).nodeIndex, -1);
     // Its own, by IP -- a free one, not loose's nor the SL node's.
     QVERIFY(forFixture(plan, fence->id()).universe > 1);
     QCOMPARE(forFixture(plan, fence->id()).nodeIndex, -1);
-    QCOMPARE(forFixture(plan, near->id()).universe, quint32(1));             // the SL node's
+    QCOMPARE(forFixture(plan, nearFx->id()).universe, quint32(1));             // the SL node's
 
     pp.setUseProximity(false);
     QVERIFY(!pp.useProximity());
-    plan = pp.plan({ near->id() });
+    plan = pp.plan({ nearFx->id() });
     QCOMPARE(plan.first().universe, quint32(0));
     QCOMPARE(plan.first().nodeIndex, -1);
 }

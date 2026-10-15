@@ -66,6 +66,16 @@ else
   fi
 fi
 
+# Windows (MSYS2 bash, as CI runs it): no display needed for offscreen, and
+# no rpath -- test.sh's LD_LIBRARY_PATH means nothing to the Windows loader,
+# which finds DLLs on PATH. Put every build dir holding one there.
+if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+  TESTPREFIX="QT_QPA_PLATFORM=offscreen"
+  RUN_UI_TESTS="1"
+  DLLDIRS=$(find "$PWD" -name '*.dll' -not -path '*/CMakeFiles/*' -exec dirname {} \; | sort -u | tr '\n' ':')
+  export PATH="${DLLDIRS}${PATH}"
+fi
+
 #############################################################################
 # Fixture definitions check with xmllint
 #############################################################################
@@ -174,6 +184,8 @@ popd
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
   echo "Skip Velleman test (not supported on OSX)"
+elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+  echo "Skip Velleman test (plugin not built on Windows)"
 else
   $SLEEPCMD
   pushd plugins/velleman/test

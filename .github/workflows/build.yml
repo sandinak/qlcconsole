@@ -306,6 +306,7 @@ jobs:
             fftw:p
             libusb:p
             python-lxml:p
+            libxml2:p
             nsis:p
 
       - name: Set ENV variables
@@ -400,6 +401,13 @@ jobs:
           name: qlcconsole-${{env.QLCCONSOLE_VERSION}}-${{env.BUILD_DATE}}-${{env.GIT_REV}}-win64-setup.exe
           path: qlcconsole-${{env.QLCCONSOLE_VERSION}}-${{env.BUILD_DATE}}-${{env.GIT_REV}}-win64-setup.exe
           if-no-files-found: error
+
+      # After the artifact on purpose: the suite is new on Windows, and a
+      # failing test there should not withhold the installer.
+      - name: Test
+        continue-on-error: true
+        timeout-minutes: 30
+        run: ./unittest.sh ui build
 
   build-macos:
     runs-on: macos-15
