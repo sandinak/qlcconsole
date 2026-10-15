@@ -55,6 +55,7 @@
 #include "fixturegroup.h"
 #include "function.h"
 #include "zraster.h"
+#include "rhiraster.h"
 #include "aimsolver.h"
 #include <QScopedValueRollback>
 #include <array>
@@ -86,6 +87,7 @@ StructureStudioView::StructureStudioView(Doc *doc, Kind kind, quint32 id, QWidge
         m_supersample = qBound(1, s.value(QStringLiteral("monitor/rig/supersample"), 2).toInt(), 4);
         m_renderThreads = qMax(0, s.value(QStringLiteral("monitor/rig/threads"), 0).toInt());
         m_maxFps = qBound(10, s.value(QStringLiteral("monitor/rig/maxfps"), 30).toInt(), 120);
+        m_gpuWanted = s.value(QStringLiteral("monitor/rig/gpu"), true).toBool();
     }
 
     /* Re-resolve the selected look when it changes underneath us.
@@ -162,6 +164,20 @@ void StructureStudioView::setPipeBarHighlight(quint32 barId)
  * Projection
  *********************************************************************/
 
+const StructureStudioView::Trig &StructureStudioView::angledTrig() const
+{
+    /* The camera's sines and cosines, worked out when it turns -- not for
+       every point projected, which was several hundred thousand times a
+       lit frame. */
+    if (m_trig.az != m_azimuthDeg || m_trig.el != m_elevationDeg)
+    {
+        const double A = qDegreesToRadians(m_azimuthDeg);
+        const double E = qDegreesToRadians(m_elevationDeg);
+        m_trig = Trig{ m_azimuthDeg, m_elevationDeg, qCos(A), qSin(A), qCos(E), qSin(E) };
+    }
+    return m_trig;
+}
+
 QPointF StructureStudioView::project(const QVector3D &w) const
 {
     switch (m_plane)
@@ -184,9 +200,8 @@ QPointF StructureStudioView::project(const QVector3D &w) const
          *     screen right r = (cosA, -sinA, 0)        (horizontal, perp to d)
          *     screen up    u = d x r = (-sinE sinA, -sinE cosA, cosE)
          * and the in-plane coordinates are just the projections onto them. */
-        const double A = qDegreesToRadians(m_azimuthDeg);
-        const double E = qDegreesToRadians(m_elevationDeg);
-        const double cA = qCos(A), sA = qSin(A), cE = qCos(E), sE = qSin(E);
+        const Trig &t = angledTrig();
+        const double cA = t.cA, sA = t.sA, cE = t.cE, sE = t.sE;
         const double a = double(w.x()) * cA - double(w.y()) * sA;
         const double b = -double(w.x()) * sE * sA
                          - double(w.y()) * sE * cA
@@ -1736,13 +1751,6 @@ void StructureStudioView::flushOps(QPainter &p) const
         return;
     }
 
-    if (m_z == nullptr)
-        m_z = new ZRaster();
-
-    /* Transparent, so the floor grid already painted underneath shows through
-       wherever the rig does not cover it. */
-    m_z->begin(size(), m_supersample, Qt::transparent);
-
     /* OPAQUE GEOMETRY NEEDS NO SORT AT ALL. That is the whole reason for the
        depth buffer: which surface wins is decided per pixel, so a polygon whose
        depth varies across it can be partly in front of and partly behind
@@ -1776,6 +1784,38 @@ void StructureStudioView::flushOps(QPainter &p) const
     }
     std::stable_sort(translucent.begin(), translucent.end(),
                      [](const DrawOp &a, const DrawOp &b) { return a.depth < b.depth; });
+
+    /* On the GPU when there is one (RhiRaster): the same triangles, the same
+       passes, multisampled where ZRaster supersamples. What it hands back is
+       what ZRaster would have -- the scene and the light -- so everything
+       painted round it is unchanged. Picking then asks the CPU for depth
+       alone, and only when it is asked (pickDepth()). */
+    bool drawn = false;
+    m_drewOnGpu = false;
+    if (gpuActive())
+    {
+        drawn = gpuRender(p, opaque, translucent, lights);
+        m_drewOnGpu = drawn;
+        if (drawn)
+        {
+            m_pickOpaque = opaque;
+            m_pickSeeThrough.clear();
+            for (const DrawOp &o : translucent)
+                if (o.pickable)
+                    m_pickSeeThrough << o;
+            m_pickDirty = true;
+        }
+    }
+    if (!drawn)
+    {
+    m_pickDirty = false;
+    if (m_z == nullptr)
+        m_z = new ZRaster();
+
+    /* Transparent, so the floor grid already painted underneath shows through
+       wherever the rig does not cover it. */
+    m_z->begin(size(), m_supersample, Qt::transparent);
+
 
     /* One band of the frame: solids, then light -- after every solid is in, so
        it is stopped by what stands in front of it, and before the translucent
@@ -1860,6 +1900,7 @@ void StructureStudioView::flushOps(QPainter &p) const
             p.restore();
         }
     }
+    }   // !drawn: the CPU
 
     // Text last, in screen space: depth-testing a label is not meaningful.
     foreach (const DrawOp &o, labels)
@@ -1881,6 +1922,159 @@ void StructureStudioView::flushOps(QPainter &p) const
     m_ops.clear();
 }
 
+StructureStudioView::~StructureStudioView()
+{
+    delete m_z;
+    delete m_gpu;
+}
+
+bool StructureStudioView::gpuActive() const
+{
+    return m_useZBuffer && m_gpuWanted && RhiRaster::available();
+}
+
+void StructureStudioView::setGpu(bool on)
+{
+    if (on == m_gpuWanted)
+        return;
+    m_gpuWanted = on;
+    QSettings().setValue(QStringLiteral("monitor/rig/gpu"), on);
+    update();
+}
+
+bool StructureStudioView::gpuRender(QPainter &p, const QVector<DrawOp> &opaque,
+                                    const QVector<DrawOp> &translucent,
+                                    const QVector<DrawOp> &lights) const
+{
+    if (m_gpu == nullptr)
+        m_gpu = new RhiRaster();
+
+    using V = RhiRaster::Vertex;
+    /* A convex polygon as a fan of triangles, each corner its depth and its
+       colour premultiplied by its alpha (and, faded, by its own share). */
+    auto polyTo = [](QVector<V> &out, const QPointF *pts, const double *zs, int n,
+                     const QColor &c, const double *alphas) {
+        if (n < 3 || !c.isValid() || c.alpha() == 0)
+            return;
+        auto corner = [&](int k) {
+            const float a = float(c.alphaF() * (alphas != nullptr ? qBound(0.0, alphas[k], 1.0) : 1.0));
+            return V{ float(pts[k].x()), float(pts[k].y()), float(zs[k]),
+                      float(c.redF()) * a, float(c.greenF()) * a, float(c.blueF()) * a, a };
+        };
+        for (int i = 1; i + 1 < n; ++i)
+            out << corner(0) << corner(i) << corner(i + 1);
+    };
+    // A line of finite width: a quad with depth down its length (ZRaster::thickLine).
+    auto lineTo = [&polyTo](QVector<V> &out, const QPointF &a, const QPointF &b,
+                            double za, double zb, double width, const QColor &c) {
+        QPointF d = b - a;
+        const double len = qSqrt(d.x() * d.x() + d.y() * d.y());
+        if (len < 1e-6)
+            return;
+        d /= len;
+        const QPointF nrm(-d.y() * width * 0.5, d.x() * width * 0.5);
+        const QPointF q[4] = { a + nrm, b + nrm, b - nrm, a - nrm };
+        const double qz[4] = { za, zb, zb, za };
+        polyTo(out, q, qz, 4, c, nullptr);
+    };
+    // One op as rasterOp() draws it.
+    auto opTo = [&](QVector<V> &out, const DrawOp &o) {
+        const int n = o.poly.size();
+        if (n == 0)
+            return;
+        QVarLengthArray<double, 32> zs(n);
+        for (int i = 0; i < n; ++i)
+            zs[i] = (o.zs.size() == n) ? o.zs.at(i) : o.depth;
+        switch (o.kind)
+        {
+        case DrawOp::Poly:
+            if (o.fill.isValid())
+                polyTo(out, o.poly.constData(), zs.constData(), n, o.fill,
+                       (o.alphas.size() == n) ? o.alphas.constData() : nullptr);
+            if (o.pen.isValid() && n >= 2)
+                for (int i = 0; i < n; ++i)
+                {
+                    const int k = (i + 1) % n;
+                    lineTo(out, o.poly.at(i), o.poly.at(k), zs[i], zs[k],
+                           qMax(1.0, o.penWidth), o.pen);
+                }
+            break;
+        case DrawOp::Line:
+            if (n >= 2 && o.pen.isValid())
+                lineTo(out, o.poly.at(0), o.poly.at(1), zs[0], zs[1],
+                       qMax(1.0, o.penWidth), o.pen);
+            break;
+        case DrawOp::Dot:
+        {
+            const double r = qMax(0.5, o.radius);
+            for (int i = 0; i < n; ++i)
+            {
+                const QPointF c = o.poly.at(i);
+                const QPointF q[4] = { QPointF(c.x() - r, c.y() - r), QPointF(c.x() + r, c.y() - r),
+                                       QPointF(c.x() + r, c.y() + r), QPointF(c.x() - r, c.y() + r) };
+                const double qz[4] = { zs[i], zs[i], zs[i], zs[i] };
+                polyTo(out, q, qz, 4, o.fill, nullptr);
+            }
+            break;
+        }
+        case DrawOp::Label:
+        case DrawOp::Trace:
+            break;
+        }
+    };
+
+    QVector<V> solids, see, light;
+    for (const DrawOp &o : opaque)
+        opTo(solids, o);
+    for (const DrawOp &o : translucent)
+        opTo(see, o);
+    /* Light adds: each corner carries how much of the colour it adds, on the
+       0..1-per-255 scale the light buffer keeps (ZRaster::light()). */
+    for (const DrawOp &o : lights)
+    {
+        const int n = o.poly.size();
+        if (n < 3 || !o.fill.isValid())
+            continue;
+        QVarLengthArray<double, 8> zs(n);
+        for (int i = 0; i < n; ++i)
+            zs[i] = (o.zs.size() == n) ? o.zs.at(i) : o.depth;
+        polyTo(light, o.poly.constData(), zs.constData(), n, o.fill,
+               (o.alphas.size() == n) ? o.alphas.constData() : nullptr);
+    }
+
+    if (!m_gpu->render(size(), m_supersample, solids, see, light))
+        return false;
+    p.drawImage(0, 0, m_gpu->scene());
+    const QImage lit = m_gpu->lightImage();
+    if (!lit.isNull())
+    {
+        p.save();
+        p.setCompositionMode(QPainter::CompositionMode_Screen);
+        p.drawImage(0, 0, lit);
+        p.restore();
+    }
+    return true;
+}
+
+double StructureStudioView::pickDepth(const QPoint &px) const
+{
+    if (!m_useZBuffer)
+        return -1e30;
+    if (m_pickDirty)
+    {
+        // The GPU drew the frame: depth alone, once, from what it drew.
+        if (m_z == nullptr)
+            m_z = new ZRaster();
+        m_z->begin(size(), 1, Qt::transparent);
+        for (const DrawOp &o : m_pickOpaque)
+            rasterOp(o, true, 0, INT_MAX);
+        for (const DrawOp &o : m_pickSeeThrough)
+            rasterOp(o, false, 0, INT_MAX);
+        m_pickDirty = false;
+    }
+    return (m_z != nullptr && m_z->isValid()) ? m_z->depthAt(px) : -1e30;
+}
+
 double StructureStudioView::viewDepth(const QVector3D &w) const
 {
     /* CONVENTION: a LARGER value is NEARER the eye. Painter's algorithm
@@ -1888,12 +2082,11 @@ double StructureStudioView::viewDepth(const QVector3D &w) const
        sorts here originally ran descending while their comments said "back to
        front", so far objects painted over near ones: a step covered the tower
        standing in front of it. */
-    const double A = qDegreesToRadians(m_azimuthDeg);
-    const double E = qDegreesToRadians(m_elevationDeg);
     // The view direction derived in project(): d = (-sinA cosE, -cosA cosE, -sinE).
-    return -(double(w.x()) * -qSin(A) * qCos(E)
-             + double(w.y()) * -qCos(A) * qCos(E)
-             + double(w.z()) * -qSin(E));
+    const Trig &t = angledTrig();
+    return -(double(w.x()) * -t.sA * t.cE
+             + double(w.y()) * -t.cA * t.cE
+             + double(w.z()) * -t.sE);
 }
 
 /* Paint a solid box from its eight world corners.
@@ -4027,25 +4220,65 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
         QVector<double> pz(N), pt(N);
         QVector<int> surf(N);
         QVector<bool> landed(N);
-        for (int ri = 0; ri <= RINGS; ++ri)
-            for (int si = 0; si < SECTORS; ++si)
+        /* Where the mesh lands is kept from frame to frame, like each ray
+           (m_throws): a beam that hasn't moved lands where it did, and only
+           its projection to the screen is asked again. A gobo's mask can
+           turn, so a gobo's mesh is worked out every frame. */
+        BeamMesh *kept = nullptr;
+        BeamMeshKey key;
+        if (!gobo && m_decksValid)
+        {
+            key = BeamMeshKey{ { apex.x(), apex.y(), apex.z(), d.x(), d.y(), d.z(),
+                                 float(halfA), float(coreR) }, RINGS, SECTORS };
+            auto it = m_beamMeshes.find(key);
+            if (it != m_beamMeshes.end())
+                kept = &it.value();
+        }
+        if (kept != nullptr)
+        {
+            kept->frame = m_throwFrame;
+            for (int k = 0; k < N; ++k)
             {
-                const double r = double(ri) / RINGS;
-                const double a = 2.0 * M_PI * si / SECTORS;
-                const QVector3D ray = (ri == 0) ? d : rayAt(r, a);
-                bool h = false;
-                int sf = 0;
-                const double run = beamThrow(apex, ray, &h, nullptr, &sf);
-                const QVector3D q = apex + ray * float(run);
-                const int k = ri * SECTORS + si;
-                px[k] = w2s(q);
-                pz[k] = viewDepth(q) + 1e-4;
-                surf[k] = sf;
-                landed[k] = h;
-                const double rs = qMin(r, 0.985);
-                pt[k] = gobo ? BeamOptics::sample(optics->mask, rs * qCos(a), rs * qSin(a))
-                             : poolFade(r);
+                px[k] = w2s(kept->q.at(k));
+                pz[k] = viewDepth(kept->q.at(k)) + 1e-4;
             }
+            surf = kept->surf;
+            landed = kept->landed;
+            pt = kept->fade;
+        }
+        else
+        {
+            BeamMesh fresh;
+            fresh.q.resize(N);
+            for (int ri = 0; ri <= RINGS; ++ri)
+                for (int si = 0; si < SECTORS; ++si)
+                {
+                    const double r = double(ri) / RINGS;
+                    const double a = 2.0 * M_PI * si / SECTORS;
+                    const QVector3D ray = (ri == 0) ? d : rayAt(r, a);
+                    bool h = false;
+                    int sf = 0;
+                    const double run = beamThrow(apex, ray, &h, nullptr, &sf);
+                    const QVector3D q = apex + ray * float(run);
+                    const int k = ri * SECTORS + si;
+                    fresh.q[k] = q;
+                    px[k] = w2s(q);
+                    pz[k] = viewDepth(q) + 1e-4;
+                    surf[k] = sf;
+                    landed[k] = h;
+                    const double rs = qMin(r, 0.985);
+                    pt[k] = gobo ? BeamOptics::sample(optics->mask, rs * qCos(a), rs * qSin(a))
+                                 : poolFade(r);
+                }
+            if (!gobo && m_decksValid)
+            {
+                fresh.surf = surf;
+                fresh.landed = landed;
+                fresh.fade = pt;
+                fresh.frame = m_throwFrame;
+                m_beamMeshes.insert(key, fresh);
+            }
+        }
         QColor cellCol = colour;
         cellCol.setAlpha(qBound(0, int(poolA), 220));
         auto tri = [&](int i, int j, int k) {
@@ -7425,8 +7658,7 @@ QVector3D StructureStudioView::worldAt(const QPointF &px, int *known, bool *onSu
 
     *known = 0;
     *onSurface = false;
-    const double depth = (m_useZBuffer && m_z != nullptr && m_z->isValid())
-                             ? m_z->depthAt(px.toPoint()) : -1e30;
+    const double depth = pickDepth(px.toPoint());
     if (depth > -1e29)
     {
         const double r[3] = { px.x() - s0[0], px.y() - s0[1], depth - s0[2] };
@@ -7792,6 +8024,7 @@ void StructureStudioView::paintEvent(QPaintEvent *)
     if (scene != m_throwScene || m_throws.size() > 400000)
     {
         m_throws.clear();
+        m_beamMeshes.clear();
         m_throwScene = scene;
     }
     ++m_throwFrame;
@@ -7808,6 +8041,10 @@ void StructureStudioView::paintEvent(QPaintEvent *)
                     it = (it->frame == view->m_throwFrame) ? std::next(it)
                                                            : view->m_throws.erase(it);
             }
+            // Meshes of beams not drawn this frame (moved, or gone).
+            for (auto it = view->m_beamMeshes.begin(); it != view->m_beamMeshes.end(); )
+                it = (it->frame == view->m_throwFrame) ? std::next(it)
+                                                       : view->m_beamMeshes.erase(it);
         }
     } decksDone{ this };
 

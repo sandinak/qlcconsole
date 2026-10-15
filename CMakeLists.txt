@@ -67,7 +67,12 @@ if(QT_VERSION VERSION_LESS 6.8)
     message(FATAL_ERROR "qlcconsole needs Qt 6.8 or later; found ${QT_VERSION} "
                         "(${QT_DIR}). Point CMAKE_PREFIX_PATH at a newer Qt.")
 endif()
-find_package(Qt6 REQUIRED COMPONENTS Gui Multimedia MultimediaWidgets Network PrintSupport Qml Quick Svg Test Widgets LinguistTools)
+find_package(Qt6 REQUIRED COMPONENTS Gui Multimedia MultimediaWidgets Network PrintSupport Qml Quick Svg Test Widgets LinguistTools ShaderTools)
+# QRhi (the rig view on the GPU) is in Qt's private GUI module: a package
+# of its own from 6.9; with Qt6Gui before that.
+if(QT_VERSION VERSION_GREATER_EQUAL 6.9)
+    find_package(Qt6 REQUIRED COMPONENTS GuiPrivate)
+endif()
 if(qmlui)
     find_package(Qt6 REQUIRED COMPONENTS 3DCore 3DInput 3DLogic 3DQuick 3DQuickExtras 3DRender WebSockets)
     if(ANDROID)

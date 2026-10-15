@@ -75,6 +75,7 @@ public:
     enum Plane { Top = 0, Front = 1, Side = 2, Angled = 3 };
 
     StructureStudioView(Doc *doc, Kind kind, quint32 id, QWidget *parent = nullptr);
+    ~StructureStudioView() override;
 
     void setPlane(Plane p);
     Plane plane() const { return m_plane; }
@@ -137,6 +138,12 @@ public:
      * frame costs more than the rate allows. */
     void setSupersample(int factor);
     int supersample() const { return m_supersample; }
+    /** The rig drawn on the GPU (RhiRaster) when the machine has one; else,
+     *  or switched off, on the CPU (ZRaster). */
+    bool gpuActive() const;
+    void setGpu(bool on);
+    /** Did the last frame come off the GPU (rather than falling back)? */
+    bool drewOnGpu() const { return m_drewOnGpu; }
     void setRenderThreads(int threads);
     int renderThreads() const { return m_renderThreads; }
     void setMaxFrameRate(int fps);
@@ -377,7 +384,24 @@ private:
     };
     /** Set while drawing structures: their see-through faces are pickable. */
     mutable bool m_emitPickable = false;
+    /** The angled camera's sines and cosines, for the angles they were
+     *  worked out at (angledTrig()). */
+    struct Trig { double az, el, cA, sA, cE, sE; };
+    mutable Trig m_trig{ qQNaN(), qQNaN(), 1.0, 0.0, 1.0, 0.0 };
+    const Trig &angledTrig() const;
     mutable class ZRaster *m_z = nullptr;   ///< the depth-buffered target
+    mutable class RhiRaster *m_gpu = nullptr; ///< the same, on the GPU
+    /** Draw the rig on the GPU when there is one ("monitor/rig/gpu"). */
+    bool     m_gpuWanted = true;
+    mutable bool m_drewOnGpu = false;
+    /** What the GPU drew last, for picking: depth is rasterised from these
+     *  on the CPU when a pick asks (pickDepth()). */
+    mutable QVector<DrawOp> m_pickOpaque, m_pickSeeThrough;
+    mutable bool m_pickDirty = false;
+    bool gpuRender(QPainter &p, const QVector<DrawOp> &opaque,
+                   const QVector<DrawOp> &translucent,
+                   const QVector<DrawOp> &lights) const;
+    double pickDepth(const QPoint &px) const;
     int      m_supersample = 2;   ///< a flat rasteriser has no AA of its own
     int      m_renderThreads = 0; ///< 0 = one per core
     int      m_maxFps = 30;       ///< ceiling on the live repaint rate
@@ -674,6 +698,26 @@ private:
     mutable quint64 m_throwScene = 0;
     mutable quint32 m_throwFrame = 0;
     mutable int m_throwsUsed = 0;
+    /** A split pool's mesh, as it landed (drawBeamCone()): kept while the
+     *  beam and the scene stay put, so a frame only projects it. */
+    struct BeamMeshKey
+    {
+        float v[8];             ///< apex, direction, half angle, fade core
+        int rings, sectors;
+        bool operator==(const BeamMeshKey &o) const
+        { return rings == o.rings && sectors == o.sectors && std::memcmp(v, o.v, sizeof v) == 0; }
+    };
+    friend size_t qHash(const BeamMeshKey &k, size_t seed = 0)
+    { return qHashBits(k.v, sizeof k.v, seed) ^ size_t(k.rings * 131 + k.sectors); }
+    struct BeamMesh
+    {
+        QVector<QVector3D> q;   ///< where each ray of the mesh landed
+        QVector<int> surf;
+        QVector<bool> landed;
+        QVector<double> fade;
+        quint32 frame = 0;
+    };
+    mutable QHash<BeamMeshKey, BeamMesh> m_beamMeshes;
     /** A fingerprint of everything a beam can land on as it is shown now:
      *  the decks (where, how big, how high, their blocks), the scenery,
      *  what's hidden. A change, and the kept landings are thrown away. */

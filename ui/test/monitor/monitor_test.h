@@ -416,6 +416,7 @@ private slots:
     void aWashPoolFadesPastItsBeamAngle();
     void keptLandingsFollowTheDecks();
     void aPoolOnADeckIsDrawn();
+    void theGpuDrawsWhatTheCpuDraws();
     void aGoboPoolIsDrawnThroughItsMask();
     /** "specialized gobos": a slot of ONE unit fitted with the operator's
      *  own picture (Gobo Wheels…), saved per fixture, drawn on the rig. */

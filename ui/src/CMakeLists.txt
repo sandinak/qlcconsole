@@ -112,6 +112,7 @@ add_library(${module_name}
     monitor/studioplaneview.cpp monitor/studioplaneview.h
     monitor/structurestudioview.cpp monitor/structurestudioview.h
     monitor/zraster.cpp monitor/zraster.h
+    monitor/rhiraster.cpp monitor/rhiraster.h
     monitor/fixturevisualtraits.cpp monitor/fixturevisualtraits.h
     monitor/lanternpixels.cpp monitor/lanternpixels.h
     monitor/lightcontrols.cpp monitor/lightcontrols.h
@@ -243,6 +244,7 @@ target_include_directories(${module_name} PUBLIC ${FFTW3_INCLUDE_DIRS})
 target_link_libraries(${module_name} PUBLIC
     Qt6::Core
     Qt6::Gui
+    Qt6::GuiPrivate     # QRhi (rhi/qrhi.h): the rig view on the GPU
     Qt6::Multimedia
     Qt6::MultimediaWidgets
     Qt6::Network
@@ -255,6 +257,17 @@ target_link_libraries(${module_name} PUBLIC Qt6::Qml)
 qt_add_resources(qlcplusui_resource_files "qlcui.qrc" "help.qrc")
 
 target_sources(${module_name} PRIVATE ${qlcplusui_resource_files})
+
+# The rig view's GPU shaders (RhiRaster), compiled for every backend QRhi has.
+qt_add_shaders(${module_name} "rigshaders"
+    PREFIX "/rig"
+    BASE "monitor/shaders"
+    FILES
+        monitor/shaders/rig.vert
+        monitor/shaders/rig.frag
+        monitor/shaders/rolloff.vert
+        monitor/shaders/rolloff.frag
+)
 
 if(WIN32)
     target_include_directories(${module_name} PUBLIC ../../hotplugmonitor/src)

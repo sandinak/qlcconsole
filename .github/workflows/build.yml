@@ -114,7 +114,7 @@ jobs:
           version: ${{ env.QT_VERSION }}
           cache: true
           dir: ${{ env.QT_INSTALL_DIR }}
-          modules: 'qt3d qtimageformats qtmultimedia qtserialport qtwebsockets'
+          modules: 'qt3d qtimageformats qtmultimedia qtserialport qtwebsockets qtshadertools'
 
       - name: Install python-lxml for fixtures-tool # with the now-registered aqt python
         run: pip install lxml
@@ -303,7 +303,7 @@ jobs:
           dir: "${{ github.workspace }}/qt/"
           target: 'desktop'
           arch: 'clang_64'
-          modules: 'qt3d qtimageformats qtmultimedia qtserialport qtwebsockets'
+          modules: 'qt3d qtimageformats qtmultimedia qtserialport qtwebsockets qtshadertools'
 
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
