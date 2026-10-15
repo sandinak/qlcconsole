@@ -28,13 +28,21 @@ for entry in * ; do
     esac
     # NSIS expands $ in strings; a literal one is written $$.
     name=$(printf '%s' "$entry" | sed 's/\$/$$/g')
-    if [ -d "$entry" ]; then
-        printf 'File /r "%s"\n' "$name" >> "$INSTALL"
+    if [ -d "$entry" ] && [ -z "$(find "$entry" -type f | head -n 1)" ]; then
+        # windeployqt can leave an empty folder (qml/); NSIS's File /r
+        # treats "no files found" as fatal.
+        continue
+    elif [ -d "$entry" ]; then
+        # Not `File /r "name"`: with one path segment NSIS searches the
+        # whole tree for anything called name, nested ones included.
+        printf 'SetOutPath "$INSTDIR\\%s"\n' "$name" >> "$INSTALL"
+        printf 'File /r "%s\\*"\n' "$name" >> "$INSTALL"
         printf 'RMDir /r "$INSTDIR\\%s"\n' "$name" >> "$UNINSTALL"
     else
+        printf 'SetOutPath "$INSTDIR"\n' >> "$INSTALL"
         printf 'File "%s"\n' "$name" >> "$INSTALL"
         printf 'Delete "$INSTDIR\\%s"\n' "$name" >> "$UNINSTALL"
     fi
 done
 
-echo "nsis-manifest: $(wc -l < "$INSTALL") top-level entries listed in $(pwd)"
+echo "nsis-manifest: $(grep -c "^File" "$INSTALL") top-level entries listed in $(pwd)"
