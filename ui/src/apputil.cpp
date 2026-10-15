@@ -65,6 +65,33 @@
 #include "qlcfixturedefcache.h"
 
 /****************************************************************************
+ * Application identity
+ ****************************************************************************/
+
+QIcon AppUtil::applicationIcon(const QString &name)
+{
+    // The sizes resources/icons/hicolor/render.sh produces (appicons.qrc).
+    static const int sizes[] = { 16, 22, 24, 32, 48, 64, 128, 256 };
+
+    QIcon icon;
+    for (int size : sizes)
+    {
+        const QString path = QString(":/appicon/%1x%1/apps/%2.png").arg(size).arg(name);
+        if (QFile::exists(path))
+            icon.addFile(path, QSize(size, size));
+    }
+    return icon;
+}
+
+void AppUtil::setApplicationIdentity(const QString &name)
+{
+    QGuiApplication::setDesktopFileName(name);
+#if !defined(Q_OS_MACOS)
+    QApplication::setWindowIcon(applicationIcon(name));
+#endif
+}
+
+/****************************************************************************
  * Widget visibility helper
  ****************************************************************************/
 

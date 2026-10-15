@@ -254,7 +254,8 @@ target_link_libraries(${module_name} PUBLIC
 
 # Add resources and RGB Script deps
 target_link_libraries(${module_name} PUBLIC Qt6::Qml)
-qt_add_resources(qlcplusui_resource_files "qlcui.qrc" "help.qrc")
+qt_add_resources(qlcplusui_resource_files "qlcui.qrc" "help.qrc"
+    "../../resources/icons/hicolor/appicons.qrc")
 
 target_sources(${module_name} PRIVATE ${qlcplusui_resource_files})
 

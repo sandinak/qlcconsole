@@ -376,8 +376,6 @@ void App::init()
     if (m_startupWindow != NULL)
         m_startupWindow->beginStep(tr("Restoring window state"));
 
-    setWindowIcon(QIcon(":/qlcconsole.png"));
-
     m_tab = new QTabWidget(this);
     m_tab->setObjectName("MainTabs");
     m_tab->setTabPosition(QTabWidget::South);

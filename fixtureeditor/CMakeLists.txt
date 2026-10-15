@@ -620,6 +620,10 @@ qt_add_resources(${module_name} "qlcui"
         ${qlcui_resource_files}
 )
 
+# The window icon at every size (AppUtil::setApplicationIdentity).
+qt_add_resources(fixtureeditor_appicon_files "../resources/icons/hicolor/appicons.qrc")
+target_sources(${module_name} PRIVATE ${fixtureeditor_appicon_files})
+
 install(TARGETS ${module_name}
     DESTINATION ${INSTALLROOT}/${BINDIR}
 )

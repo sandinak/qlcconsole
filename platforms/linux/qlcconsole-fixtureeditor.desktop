@@ -14,5 +14,6 @@ GenericName[ca]=Editor de Fixtures
 Keywords=qlc;light;controller;fixture;
 Exec=qlcconsole-fixtureeditor --open %f
 Icon=qlcconsole-fixtureeditor
+StartupWMClass=qlcconsole-fixtureeditor
 MimeType=application/x-qlc-fixture;
 Categories=Qt;AudioVideo;
