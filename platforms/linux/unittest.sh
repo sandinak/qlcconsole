@@ -69,8 +69,11 @@ fi
 # Windows (MSYS2 bash, as CI runs it): no display needed for offscreen, and
 # no rpath -- test.sh's LD_LIBRARY_PATH means nothing to the Windows loader,
 # which finds DLLs on PATH. Put every build dir holding one there.
+# QT_FORCE_STDERR_LOGGING: a Windows process without a console (CI's piped
+# output) has QTest send its whole log to OutputDebugString instead of stdout,
+# so every test, failing ones included, ran silently.
 if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
-  TESTPREFIX="QT_QPA_PLATFORM=offscreen"
+  TESTPREFIX="QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1"
   RUN_UI_TESTS="1"
   DLLDIRS=$(find "$PWD" -name '*.dll' -not -path '*/CMakeFiles/*' -exec dirname {} \; | sort -u | tr '\n' ':')
   export PATH="${DLLDIRS}${PATH}"
