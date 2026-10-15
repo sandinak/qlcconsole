@@ -127,7 +127,9 @@ while IFS= read -r f; do
     case "$a" in *x86_64*arm64*|*arm64*x86_64*) ;;
       *) echo "  NOT UNIVERSAL ($a): ${f#$APP/}"; missing=1 ;; esac
   fi
-  for ref in $(otool -L "$f" | awk '/@rpath\//{print $1}'); do
+  # (A dylib lists its own id first, once per arch: not a dependency.)
+  id=$(otool -D "$f" | sed -n 2p)
+  for ref in $(otool -L "$f" | awk '/@rpath\//{print $1}' | sort -u | grep -vxF "${id:-none}"); do
     [ -e "$APP/Contents/Frameworks/${ref#@rpath/}" ] || { echo "  MISSING ${ref} (from ${f#$APP/})"; missing=1; }
   done
 done < <(find "$APP/Contents" -type f \( -perm -u+x -o -name "*.dylib" \))

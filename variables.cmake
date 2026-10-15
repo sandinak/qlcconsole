@@ -204,6 +204,17 @@ elseif (IOS)
     set(INPUTPROFILEDIR "InputProfiles")
 endif ()
 
+# HID controller profiles (.qxhid): where plugins/hid/hidplugin.cpp looks,
+# Resources/HIDProfiles in the bundle. Unset, they landed in the install
+# root -- loose in Contents/, never found, and breaking a strict codesign.
+if (WIN32)
+    set(HIDPROFILEDIR "HIDProfiles")
+elseif (APPLE)
+    set(HIDPROFILEDIR "${DATADIR}/HIDProfiles")
+else ()
+    set(HIDPROFILEDIR "${DATADIR}/hidprofiles")
+endif ()
+
 # User input profiles
 if (WIN32)
     set(USERINPUTPROFILEDIR "${USERDATADIR}/InputProfiles")
