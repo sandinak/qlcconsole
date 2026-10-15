@@ -56,9 +56,7 @@ endif()
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
-# Set up AUTOMOC and some sensible defaults for runtime execution
-# When using Qt 6.3, you can replace the code block below with
-# qt_standard_project_setup()
+# AUTOMOC and some sensible defaults for runtime execution
 set(CMAKE_AUTOMOC ON)
 include(GNUInstallDirs)
 

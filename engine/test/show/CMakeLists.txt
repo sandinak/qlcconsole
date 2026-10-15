@@ -12,7 +12,3 @@ target_link_libraries(show_test PRIVATE
     Qt6::Test
     qlcplusengine
 )
-
-# Consider using qt_generate_deploy_app_script() for app deployment if
-# the project can use Qt 6.3. In that case rerun qmake2cmake with
-# --min-qt-version=6.3.

@@ -26,8 +26,6 @@ endif()
 
 #string(STRIP ${CURRUSR} CURRUSR)
 
-# Consider using qt_generate_deploy_app_script() for app deployment if
-
 target_compile_definitions(${module_name} PRIVATE
     FIXTUREDEFCHECK_DATA="${CMAKE_CURRENT_SOURCE_DIR}/data/"
 )
