@@ -238,7 +238,7 @@ void LookEditor_Test::aSwappedSlotShowsItsOwnGlass()
         QCOMPARE(ed.m_singleCombo->currentIndex(), 1);
         // The big preview shows the fitted glass too.
         QVERIFY(!ed.m_singlePreview->isHidden());
-        QVERIFY(!ed.m_singlePreview->pixmap(Qt::ReturnByValue).isNull());
+        QVERIFY(!ed.m_singlePreview->pixmap().isNull());
 
         // A missing picture falls back to the definition's slot.
         doc.monitorProperties()->setGoboSwap(f->id(), 0, 20, "gone.png");

@@ -4,6 +4,11 @@ set(CMAKE_AUTORCC ON)
 
 add_definitions(-DUNICODE)
 
+# Nothing Qt deprecated by 6.8 (the oldest Qt built against) compiles: the
+# declarations are hidden, so a use of one fails to build rather than
+# lingering until a later Qt removes it.
+add_definitions(-DQT_DISABLE_DEPRECATED_UP_TO=0x060800)
+
 set(APPNAME "qlcconsole")
 set(FXEDNAME "Fixture Definition Editor")
 
