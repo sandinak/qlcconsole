@@ -402,27 +402,35 @@ jobs:
           path: qlcconsole-${{env.QLCCONSOLE_VERSION}}-${{env.BUILD_DATE}}-${{env.GIT_REV}}-win64-setup.exe
           if-no-files-found: error
 
-      # After the artifact on purpose: the suite is new on Windows, and a
-      # failing test there should not withhold the installer.
-      - name: Test
+      # Informational, after the artifact on purpose: the suite does not pass
+      # on Windows yet (TODO.md lists the failures), and a failing test there
+      # should not withhold the installer. Runs every test binary rather than
+      # stopping at the first failure like unittest.sh, and lists them all.
+      # (unittest.sh itself also works under MSYS2: ./unittest.sh ui build.)
+      - name: Test (informational)
         continue-on-error: true
-        timeout-minutes: 30
+        timeout-minutes: 45
         run: |
-          # Probe (temporary): run every test binary, not just up to the
-          # first failure, and list the ones that fail.
-          ./unittest.sh ui build || true
+          ./unittest.sh ui build > /tmp/unittest.log 2>&1 || true   # stages resources for the tests
+          grep -E "^Fixtures|definitions processed|^Fixturesmap" /tmp/unittest.log || true
           DLLDIRS=$(find "$PWD/build" -name '*.dll' -not -path '*/CMakeFiles/*' -exec dirname {} \; | sort -u | tr '\n' ':')
           FAILED=""
+          PASSED=0
           for t in $(find build -name '*_test.exe' -not -path '*/CMakeFiles/*' | sort); do
             rc=0
             ( cd "$(dirname "$t")" && PATH="${DLLDIRS}${PATH}" QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1 \
                 /usr/bin/timeout 300 "./$(basename "$t")" > /tmp/t.log 2>&1 ) || rc=$?
             if [ $rc -ne 0 ]; then
-              FAILED="$FAILED $(basename "$t")($rc)"
-              echo "=== $t exit $rc"; grep -E -A3 "^FAIL!|^QFATAL|Totals" /tmp/t.log | head -40
+              FAILED="$FAILED $(basename "$t" .exe)($rc)"
+              echo "=== $t exit $rc"
+              grep -E -A3 "^FAIL!|^QFATAL" /tmp/t.log | head -40 || true
+              [ $rc -gt 128 ] && tail -n 15 /tmp/t.log || true
+            else
+              PASSED=$((PASSED + 1))
             fi
           done
-          echo "FAILED:$FAILED"
+          echo "Passed: $PASSED test binaries"
+          echo "Failed:$FAILED"
           [ -z "$FAILED" ]
 
   build-macos:
