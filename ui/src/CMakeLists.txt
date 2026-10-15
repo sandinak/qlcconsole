@@ -273,6 +273,13 @@ if(WIN32)
     target_include_directories(${module_name} PUBLIC ../../hotplugmonitor/src)
 endif()
 
+# MinGW exports every symbol of a DLL by itself only while nothing in it is
+# marked dllexport; qlcui_export.h marks a few classes, so ask for the
+# rest explicitly.
+if(MINGW)
+    target_link_options(${module_name} PRIVATE -Wl,--export-all-symbols)
+endif()
+
 install(TARGETS ${module_name}
     LIBRARY DESTINATION ${INSTALLROOT}/${LIBSDIR}
     RUNTIME DESTINATION ${INSTALLROOT}/${LIBSDIR}

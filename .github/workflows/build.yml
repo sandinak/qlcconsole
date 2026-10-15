@@ -407,13 +407,7 @@ jobs:
       - name: Test
         continue-on-error: true
         timeout-minutes: 30
-        run: |
-          # Probe (temporary): the test binaries print nothing to the
-          # console on Windows; write one's log to a file to see it.
-          DLLDIRS=$(find "$PWD/build" -name '*.dll' -not -path '*/CMakeFiles/*' -exec dirname {} \; | sort -u | tr '\n' ':')
-          ( cd build/engine/test/controlsurface && PATH="${DLLDIRS}${PATH}" QT_QPA_PLATFORM=offscreen ./controlsurface_test.exe -o /tmp/cs.txt,txt; echo "exit: $?"; cat /tmp/cs.txt | tail -60 ) || true
-          ( cd build/engine/test/aimsolver && PATH="${DLLDIRS}${PATH}" QT_QPA_PLATFORM=offscreen ./aimsolver_test.exe; echo "exit (stdout direct): $?" ) || true
-          ./unittest.sh ui build
+        run: ./unittest.sh ui build
 
   build-macos:
     runs-on: macos-15

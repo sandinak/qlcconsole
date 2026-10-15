@@ -21,6 +21,7 @@
 #define MONITORPROPERTIES_H
 
 #include <QObject>
+#include "qlcengine_export.h"
 #include <functional>
 #include <QVector3D>
 #include <QPointF>
@@ -73,7 +74,7 @@ struct FixturePreviewItem
     QMap<quint32, PreviewItem> m_subItems;  ///< Map of the heads/linked fixtures
 };
 
-class MonitorProperties final : public QObject
+class QLC_ENGINE_EXPORT MonitorProperties final : public QObject
 {
     Q_OBJECT
 

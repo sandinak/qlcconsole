@@ -22,6 +22,7 @@
 #define CHASER_H
 
 #include <QMutex>
+#include "qlcengine_export.h"
 #include <QColor>
 #include <QList>
 
@@ -50,7 +51,7 @@ class QXmlStreamReader;
  * applied automatically to those chasers that hold the changed function(s) as
  * their members.
  */
-class Chaser : public Function
+class QLC_ENGINE_EXPORT Chaser : public Function
 {
     Q_OBJECT
     Q_DISABLE_COPY(Chaser)

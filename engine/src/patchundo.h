@@ -19,6 +19,7 @@
 #define PATCHUNDO_H
 
 #include <QObject>
+#include "qlcengine_export.h"
 #include <QString>
 #include <QVariant>
 #include <QList>
@@ -65,7 +66,7 @@ class InputOutputMap;
  * the action driving it is named for what it does rather than offered as a
  * reflexive Ctrl+Z.
  */
-class PatchUndo : public QObject
+class QLC_ENGINE_EXPORT PatchUndo : public QObject
 {
     Q_OBJECT
 
