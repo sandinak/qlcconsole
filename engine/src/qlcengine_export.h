@@ -11,6 +11,10 @@
   signal lookup compares addresses, finds no match, and the connection
   silently never happens. dllimport makes the importer take the real address.
 
+  Code linked into the engine DLL from a static library (qlcplusaudio) is
+  built with QLC_ENGINE_BUILD, since CMake only defines qlcplusengine_EXPORTS
+  for the DLL's own sources.
+
   The library is still linked with --export-all-symbols (see its
   CMakeLists.txt), so every other class keeps being exported as before.
 
@@ -33,7 +37,7 @@
 #include <QtGlobal>
 
 #if defined(Q_OS_WIN)
-#  if defined(qlcplusengine_EXPORTS)
+#  if defined(qlcplusengine_EXPORTS) || defined(QLC_ENGINE_BUILD)
 #    define QLC_ENGINE_EXPORT Q_DECL_EXPORT
 #  else
 #    define QLC_ENGINE_EXPORT Q_DECL_IMPORT
