@@ -355,6 +355,34 @@ void SubCues_Test::subGoWaitsForTheBeat()
              qPrintable(QString("landed %1 ms after the Sub GO, the beat was ~850 away").arg(landed)));
     QVERIFY(!list->goHeld());
 
+    // A GO asked while a Sub GO waits waits for the beat too (and takes
+    // the Sub GO's place: it was for the cue being left).
+    timer->alignBeat(1.0);
+    QTest::qWait(150);
+    list->subGo();
+    tick(1);
+    go(list);
+    tick(1);
+    QCOMPARE(list->currentStepIndex(), 1);
+    QCOMPARE(list->currentSubCueIndex(), 1);
+    t.restart();
+    while (t.elapsed() < 2000 && list->currentStepIndex() == 1)
+    {
+        tick(1);
+        QTest::qWait(10);
+    }
+    QVERIFY2(t.elapsed() > 600, qPrintable(QString::number(t.elapsed())));
+    QCOMPARE(list->currentStepIndex(), 0);           // two steps: loops round to 0
+    QCOMPARE(list->currentSubCueIndex(), -1);
+    back(list);
+    list->setGoQuantize(Chaser::GoNow);
+    tick(1);
+    QCOMPARE(list->currentStepIndex(), 1);
+    QCOMPARE(list->currentSubCueIndex(), 0);
+    list->subGo();
+    tick(1);
+    QCOMPARE(list->currentSubCueIndex(), 1);
+
     // At once: at once.
     list->setGoQuantize(Chaser::GoNow);
     list->subGo();

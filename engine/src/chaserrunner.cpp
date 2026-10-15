@@ -926,7 +926,8 @@ bool ChaserRunner::write(MasterTimer *timer, QList<Universe *> universes)
     if (stepChange && m_chaser->goQuantize() != Chaser::GoNow && !m_externalClock && !m_subCueHeld)
     {
         const qint64 unit = qint64(std::floor(goClockUnits()));
-        if (!goHeld())
+        // (Its own hold only: goHeld() counts a held Sub GO too.)
+        if (m_goHeldIn == std::numeric_limits<qint64>::min())
             m_goHeldIn = unit;
         if (unit <= m_goHeldIn)
         {
