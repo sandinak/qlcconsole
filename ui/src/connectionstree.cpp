@@ -299,6 +299,20 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     /* Deliberately NOT started here -- showEvent() owns the timer, so a
        hidden tab costs nothing. */
 
+    /* An output going into or out of trouble shows within a moment rather
+       than at the next five-second tick -- coalesced, since one dead node
+       can take many universes with it at once. Only while on screen. */
+    QTimer *problemRefresh = new QTimer(this);
+    problemRefresh->setSingleShot(true);
+    problemRefresh->setInterval(250);
+    connect(problemRefresh, SIGNAL(timeout()), this, SLOT(refresh()));
+    if (m_doc != NULL && m_doc->ioPluginCache() != NULL)
+        foreach (QLCIOPlugin *plugin, m_doc->ioPluginCache()->plugins())
+            connect(plugin, &QLCIOPlugin::targetProblemsChanged, problemRefresh, [this, problemRefresh]() {
+                if (isVisible())
+                    problemRefresh->start();
+            });
+
     /* Live input. Devices is the tab you are on when asking "is that surface
        actually sending anything", and it was the only one of the three that
        could not answer -- Overview flashes its input combo, Detailed prints a
@@ -1829,6 +1843,7 @@ void ConnectionsTree::refresh()
                 all << it->child(c);
         }
     }
+    markOutputProblems();
     m_rebuilding = false;
     restoreScroll(scroll);
 
@@ -1839,6 +1854,61 @@ void ConnectionsTree::refresh()
        ambiguity it exists to remove, pointing the other way. */
     if (m_status != NULL)
         m_status->setVisible(heardDevices == 0 && m_since->elapsed() < 6000);
+}
+
+void ConnectionsTree::markOutputProblems()
+{
+    InputOutputMap *io = m_doc != NULL ? m_doc->inputOutputMap() : NULL;
+    if (io == NULL)
+        return;
+    const bool byUniverse = m_byUniverse != NULL && m_byUniverse->isChecked();
+
+    QList<QTreeWidgetItem *> stack;
+    for (int i = 0; i < m_tree->topLevelItemCount(); i++)
+        stack << m_tree->topLevelItem(i);
+    while (stack.isEmpty() == false)
+    {
+        QTreeWidgetItem *it = stack.takeFirst();
+        for (int c = 0; c < it->childCount(); c++)
+            stack << it->child(c);
+
+        const QVariant uv = it->data(COL_NAME, ROLE_UNIVERSE);
+        const int kind = it->data(COL_NAME, ROLE_KIND).toInt();
+        if (uv.isValid() == false || it->data(COL_NAME, ROLE_OUTPUT).toBool() == false
+                || (kind != KIND_UNIVERSE && kind != KIND_PORT))
+            continue;
+        Universe *u = io->universe(uv.toUInt());
+        if (u == NULL)
+            continue;
+
+        /* In the wiring tree a row IS one patch (plugin + line); in the
+           universe list it is the universe, every leg of it. */
+        const QString pluginName = it->data(COL_NAME, ROLE_PLUGIN).toString();
+        const QVariant line = it->data(COL_NAME, ROLE_LINE);
+        QStringList problems;
+        for (int i = 0; i < u->outputPatchesCount(); i++)
+        {
+            OutputPatch *op = u->outputPatch(i);
+            if (op == NULL || op->plugin() == NULL)
+                continue;
+            if (byUniverse == false
+                    && (op->plugin()->name() != pluginName
+                        || (line.isValid() && op->output() != line.toUInt())))
+                continue;
+            problems << op->plugin()->outputProblems(op->output(), u->id());
+        }
+        if (problems.isEmpty())
+            continue;
+
+        it->setText(COL_DETAIL, it->text(COL_DETAIL).isEmpty()
+                    ? problems.join(QStringLiteral(" · "))
+                    : QString("%1 · %2").arg(it->text(COL_DETAIL), problems.join(QStringLiteral(" · "))));
+        it->setForeground(COL_DETAIL, QBrush(QColor(220, 90, 90)));
+        QStringList escaped;
+        foreach (const QString &p, problems)
+            escaped << p.toHtmlEscaped();
+        setRowTooltip(it, escaped.join(QStringLiteral("<br>")));
+    }
 }
 
 /** Stable identity for a row: its name plus every ancestor's, so two rows that
@@ -4485,6 +4555,7 @@ void ConnectionsTree::buildUniverseList()
                 m_tree->setCurrentItem(it, 0, QItemSelectionModel::NoUpdate);
         }
     }
+    markOutputProblems();
     m_rebuilding = false;
     m_populatedOnce = true;
     restoreScroll(scroll);

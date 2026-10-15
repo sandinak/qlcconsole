@@ -23,6 +23,11 @@
 #include <QScopedPointer>
 #include <QByteArray>
 #include <QMap>
+#include <QPair>
+#include <QElapsedTimer>
+#include <climits>
+
+#include "sendhealth.h"
 #include <QSharedPointer>
 #include <QNetworkInterface>
 #include <QHostAddress>
@@ -52,6 +57,12 @@ typedef struct _uinfo
     int outputPriority;
 
     int type;
+
+    /** Whether sends for this universe are failing, with hysteresis (see
+     *  SendHealth), and the address that verdict is about: a new target
+     *  starts clean. */
+    SendHealth sendHealth;
+    QHostAddress healthTarget;
 } UniverseInfo;
 
 class E131Controller final : public QObject
@@ -145,6 +156,25 @@ public:
     /** Get the number of packets received by this controller */
     quint64 getPacketReceivedNumber();
 
+    /** Output universes whose sends are failing, as (QLC+ universe, text)
+     *  pairs: "E1.31 to 239.255.0.3: not reachable since 20:14". @a universe
+     *  limits it to one (UINT_MAX: all). Changes: problemsChanged(). */
+    QList<QPair<quint32, QString> > outputProblems(quint32 universe = UINT_MAX);
+
+private:
+    /** Feed one send result to the universe's SendHealth; log only when the
+     *  reported state changes. Returns true when it did. */
+    bool reportSendResult(UniverseInfo &info, quint32 universe,
+                          const QHostAddress &dest, bool ok);
+
+    /** The monotonic time SendHealth is fed */
+    qint64 nowMs() const { return m_testNowMs >= 0 ? m_testNowMs : m_clock.elapsed(); }
+
+    QElapsedTimer m_clock;
+
+    /** When >= 0, the time nowMs() returns instead of the clock. Tests only. */
+    qint64 m_testNowMs;
+
 private:
     QSharedPointer<QUdpSocket> getInputSocket(bool multicast, QHostAddress const& address, quint16 port);
 
@@ -184,6 +214,10 @@ private slots:
 
 signals:
     void valueChanged(quint32 universe, quint32 input, quint32 channel, uchar value);
+
+    /** outputProblems() has changed. May be emitted from the thread that
+     *  sends DMX; never with the data mutex held. */
+    void problemsChanged();
 };
 
 #endif

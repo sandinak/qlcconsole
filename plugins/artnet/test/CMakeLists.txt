@@ -3,7 +3,8 @@ add_executable(artnet_test WIN32 MACOSX_BUNDLE
     ../../interfaces/qlcioplugin.cpp ../../interfaces/qlcioplugin.h
     ../../interfaces/rdmprotocol.cpp ../../interfaces/rdmprotocol.h
     ../src/artnetpacketizer.cpp
-    ../src/artnetsendhealth.cpp
+    ../../interfaces/sendhealth.cpp
+    ../src/artnetnodewatch.cpp
     artnet_test.cpp artnet_test.h
 )
 target_include_directories(artnet_test PRIVATE

@@ -1,6 +1,6 @@
 /*
   Q Light Controller Plus
-  artnetsendhealth.cpp
+  sendhealth.cpp
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -15,9 +15,9 @@
   limitations under the License.
 */
 
-#include "artnetsendhealth.h"
+#include "sendhealth.h"
 
-ArtNetSendHealth::ArtNetSendHealth()
+SendHealth::SendHealth()
     : m_failing(false)
     , m_pendingFailures(0)
     , m_pendingSince(0)
@@ -29,7 +29,7 @@ ArtNetSendHealth::ArtNetSendHealth()
 {
 }
 
-ArtNetSendHealth::Transition ArtNetSendHealth::record(bool ok, qint64 nowMs, bool hardError)
+SendHealth::Transition SendHealth::record(bool ok, qint64 nowMs, bool hardError)
 {
     if (ok == false)
     {
@@ -90,7 +90,7 @@ ArtNetSendHealth::Transition ArtNetSendHealth::record(bool ok, qint64 nowMs, boo
     return NoChange;
 }
 
-bool ArtNetSendHealth::isHardError(QAbstractSocket::SocketError error)
+bool SendHealth::isHardError(QAbstractSocket::SocketError error)
 {
     switch (error)
     {

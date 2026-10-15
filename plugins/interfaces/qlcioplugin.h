@@ -485,6 +485,16 @@ public:
     virtual QStringList targetProblems() const { return QStringList(); }
 
     /**
+     * The same kind of trouble, for one patched output: what is wrong with
+     * where @p universe goes from @p output ("Art-Net to 172.18.2.50: not
+     * reachable since 20:14"), one line each, for the Connections row that
+     * patch is drawn on. Empty when it is fine or the plugin can't tell.
+     * Changes are announced with targetProblemsChanged(), as above.
+     */
+    virtual QStringList outputProblems(quint32 output, quint32 universe) const
+    { Q_UNUSED(output) Q_UNUSED(universe) return QStringList(); }
+
+    /**
      * A device that runs its own looks (a WLED: the console sends "Chase, speed
      * 128", the device works out every LED) can say what it is SHOWING, LED by
      * LED -- for the rig view to draw the real thing.

@@ -18,6 +18,7 @@
 */
 
 #include <QSettings>
+#include <algorithm>
 #include <QNetworkDatagram>
 #include <QDebug>
 
@@ -326,16 +327,18 @@ QList<QLCIOPlugin::Device> ArtNetPlugin::discoveredDevices() const
             {
                 if ((n.portTypes[p] & 0x80) == 0)
                     continue;
-                /* GoodOutput bit 7 is "data is being transmitted", bit 2 is
-                   "output is merging", bit 3 is "DMX output short detected". A
-                   short is the single most useful thing a node ever reports
-                   and it has never been surfaced anywhere. */
+                /* GoodOutput bit 7 is "data is being transmitted", bit 3 is
+                   "output is merging", bit 2 is "DMX output short detected"
+                   (Art-Net 4 GoodOutputA; libartnet's PORT_STATUS_MERGE 0x08
+                   and PORT_STATUS_SHORT 0x04 agree). These two were swapped
+                   here, so a merging port read SHORT DETECTED and a real short
+                   read "merging". */
                 QStringList st;
                 st << QString("%1:%2:%3").arg(n.netSwitch).arg(n.subSwitch)
                       .arg(n.swOut[p]);
                 if (n.goodOutput[p] & 0x80) st << QObject::tr("transmitting");
-                if (n.goodOutput[p] & 0x08) st << QObject::tr("SHORT DETECTED");
-                if (n.goodOutput[p] & 0x04) st << QObject::tr("merging");
+                if (n.goodOutput[p] & 0x04) st << QObject::tr("SHORT DETECTED");
+                if (n.goodOutput[p] & 0x08) st << QObject::tr("merging");
                 dev.properties << Prop(QObject::tr("Port %1").arg(p + 1),
                                        st.join(" · "));
             }
@@ -350,6 +353,58 @@ QList<QLCIOPlugin::Device> ArtNetPlugin::discoveredDevices() const
         }
     }
     return list;
+}
+
+/** Every output problem on every line, a target's universes on one line:
+ *  "Art-Net to 172.18.2.50: not reachable since 20:14 (universes 3, 4)".
+ *  Fifty universes behind thirteen dead nodes are thirteen problems, not
+ *  fifty. */
+QStringList ArtNetPlugin::targetProblems() const
+{
+    QStringList order;
+    QMap<QString, QList<quint32> > universes;
+    typedef QPair<quint32, QString> Problem;
+    for (int line = 0; line < m_IOmapping.count(); line++)
+    {
+        ArtNetController *ctrl = m_IOmapping.at(line).controller;
+        if (ctrl == NULL)
+            continue;
+        foreach (const Problem &p, ctrl->outputProblems())
+        {
+            if (universes.contains(p.second) == false)
+                order << p.second;
+            if (universes[p.second].contains(p.first) == false)
+                universes[p.second] << p.first;
+        }
+    }
+
+    QStringList out;
+    foreach (const QString &text, order)
+    {
+        QList<quint32> unis = universes.value(text);
+        std::sort(unis.begin(), unis.end());
+        QStringList nums;
+        foreach (quint32 u, unis)
+            nums << QString::number(u + 1);
+        out << (nums.count() == 1
+                ? tr("%1 (universe %2)").arg(text, nums.first())
+                : tr("%1 (universes %2)").arg(text, nums.join(", ")));
+    }
+    return out;
+}
+
+QStringList ArtNetPlugin::outputProblems(quint32 output, quint32 universe) const
+{
+    QStringList out;
+    if (output >= quint32(m_IOmapping.count()))
+        return out;
+    ArtNetController *ctrl = m_IOmapping.at(int(output)).controller;
+    if (ctrl == NULL)
+        return out;
+    typedef QPair<quint32, QString> Problem;
+    foreach (const Problem &p, ctrl->outputProblems(universe))
+        out << p.second;
+    return out;
 }
 
 /** Poll every line once, on demand.
@@ -446,6 +501,8 @@ void ArtNetPlugin::rescan()
                     this, SIGNAL(valueChanged(quint32,quint32,quint32,uchar)));
             connect(controller, SIGNAL(rdmValueChanged(quint32, quint32, QVariantMap)),
                     this , SIGNAL(rdmValueChanged(quint32, quint32, QVariantMap)));
+            connect(controller, &ArtNetController::problemsChanged,
+                    this, &QLCIOPlugin::targetProblemsChanged);
             m_IOmapping[line].controller = controller;
         }
         m_IOmapping[line].controller->sendPoll();
@@ -470,6 +527,8 @@ bool ArtNetPlugin::openOutput(quint32 output, quint32 universe)
                 this, SIGNAL(valueChanged(quint32,quint32,quint32,uchar)));
         connect(controller, SIGNAL(rdmValueChanged(quint32, quint32, QVariantMap)),
                 this , SIGNAL(rdmValueChanged(quint32, quint32, QVariantMap)));
+        connect(controller, &ArtNetController::problemsChanged,
+                this, &QLCIOPlugin::targetProblemsChanged);
         m_IOmapping[output].controller = controller;
     }
 
@@ -495,6 +554,8 @@ void ArtNetPlugin::closeOutput(quint32 output, quint32 universe)
             m_IOmapping[output].controller = NULL;
         }
     }
+    // A closed output has nothing left to be wrong with
+    emit targetProblemsChanged();
 }
 
 void ArtNetPlugin::writeUniverse(quint32 universe, quint32 output, const QByteArray &data, bool dataChanged)
@@ -537,6 +598,8 @@ bool ArtNetPlugin::openInput(quint32 input, quint32 universe)
                                                             input, this);
         connect(controller, SIGNAL(valueChanged(quint32,quint32,quint32,uchar)),
                 this, SIGNAL(valueChanged(quint32,quint32,quint32,uchar)));
+        connect(controller, &ArtNetController::problemsChanged,
+                this, &QLCIOPlugin::targetProblemsChanged);
         m_IOmapping[input].controller = controller;
     }
 

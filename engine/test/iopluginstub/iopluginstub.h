@@ -81,7 +81,16 @@ public:
     bool probeTarget(const QString &address) override
     { m_probed << address; return true; }
 
+    /** @reimp m_outputProblems for @p universe, whatever the line */
+    QStringList outputProblems(quint32 output, quint32 universe) const override
+    { Q_UNUSED(output) return m_outputProblems.value(universe); }
+
+    /** Say the problems changed, as a real plugin would */
+    void emitTargetProblemsChanged() { emit targetProblemsChanged(); }
+
 public:
+    /** What outputProblems() reports, by universe */
+    QMap<quint32, QStringList> m_outputProblems;
     QList<Device> m_devices;
     QMap<int, QString> m_lineDescriptions;
     bool m_linesAreHardware;

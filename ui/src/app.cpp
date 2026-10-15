@@ -1062,8 +1062,7 @@ void App::initDoc()
             }).detach();
         });
     ShowStatus::instance()->setAction("definitions.duplicates", tr("Move to Trash…"), trashDefinitions);
-    ShowStatus::instance()->setAction("universes.nooutput", tr("Open Connections"),
-        [this](QWidget *parent, const QVariantList &items) {
+    auto openConnections = [this](QWidget *parent, const QVariantList &items) {
             InputOutputManager *io = InputOutputManager::instance();
             if (io == NULL || items.isEmpty())
                 return;
@@ -1071,7 +1070,9 @@ void App::initDoc()
             io->selectUniverse(items.first().toUInt());
             if (QDialog *dlg = qobject_cast<QDialog *>(parent))
                 dlg->accept();          // out of the way of the tab it opened
-        });
+        };
+    ShowStatus::instance()->setAction("universes.nooutput", tr("Open Connections"), openConnections);
+    ShowStatus::instance()->setAction("outputs.problems", tr("Open Connections"), openConnections);
 #ifdef DEBUG_SPEED
     speedTime.start();
 #endif
@@ -1117,10 +1118,12 @@ void App::initDoc()
             m_startupWindow->logDetail(name);
     });
     m_doc->ioPluginCache()->load(IOPluginCache::systemPluginDirectory());
-    // WLED devices that stop answering, or fade to a weak signal: the footer.
-    if (QLCIOPlugin *wled = m_doc->ioPluginCache()->plugin(QStringLiteral("WLED")))
-        if (QTimer *t = findChild<QTimer *>(QStringLiteral("fixtureReadinessTimer")))
-            connect(wled, &QLCIOPlugin::targetProblemsChanged, t, QOverload<>::of(&QTimer::start));
+    /* Outputs in trouble -- WLED devices that stop answering or fade to a
+       weak signal, Art-Net / E1.31 outputs that can't send, Art-Net nodes
+       that stop answering: the footer, whichever plugin says so. */
+    if (QTimer *t = findChild<QTimer *>(QStringLiteral("fixtureReadinessTimer")))
+        foreach (QLCIOPlugin *plugin, m_doc->ioPluginCache()->plugins())
+            connect(plugin, &QLCIOPlugin::targetProblemsChanged, t, QOverload<>::of(&QTimer::start));
 
     /* Load audio decoder plugins
      * This doesn't use a AudioPluginCache::systemPluginDirectory() cause

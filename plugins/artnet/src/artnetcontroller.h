@@ -30,9 +30,13 @@
 #include <QElapsedTimer>
 #include <QTimer>
 #include <QMap>
+#include <QSet>
+#include <QPair>
+#include <climits>
 
 #include "artnetpacketizer.h"
-#include "artnetsendhealth.h"
+#include "sendhealth.h"
+#include "artnetnodewatch.h"
 
 #define ARTNET_PORT      6454
 
@@ -72,8 +76,8 @@ typedef struct _uinfo
      *  send produced thousands of identical lines a minute. A target that
      *  never answers ARP also fails and "succeeds" in turns, which a report
      *  per state change turned into a fail/recover pair every ~25 s.
-     *  See ArtNetSendHealth for the rules. */
-    ArtNetSendHealth sendHealth;
+     *  See SendHealth for the rules. */
+    SendHealth sendHealth;
 } UniverseInfo;
 
 class ArtNetController final : public QObject
@@ -160,11 +164,39 @@ public:
     /** Send a RDM command */
     bool sendRDMCommand(const quint32 universe, uchar command, QVariantList params);
 
+    /** What is wrong with where each output universe goes, as
+     *  (QLC+ universe, text) pairs -- "Art-Net to 172.18.2.50: not reachable
+     *  since 20:14", "Art-Net node CR041R (172.18.2.10): stopped answering
+     *  since 20:14", ... Only universes opened for output; @a universe limits
+     *  it to one (UINT_MAX: all). Changes are announced by problemsChanged().
+     *  See SendHealth and ArtNetNodeWatch for when each is said. */
+    QList<QPair<quint32, QString> > outputProblems(quint32 universe = UINT_MAX);
+
+    /** Is @a address one that every node on this line hears (the line's
+     *  broadcast address, or the limited broadcast)? */
+    bool isBroadcastTarget(const QHostAddress &address) const;
+
 private:
-    /** Feed one send result to the universe's ArtNetSendHealth and log only
-     *  when its reported state changes. See the implementation. */
-    void reportSendResult(UniverseInfo &info, quint32 universe,
+    /** Feed one send result to the universe's SendHealth and log only
+     *  when its reported state changes. Returns true when it did. See the
+     *  implementation. */
+    bool reportSendResult(UniverseInfo &info, quint32 universe,
                           const QHostAddress &dest, bool ok);
+
+    /** outputProblems(), optionally without the send-health ones (which
+     *  reportSendResult() logs itself) */
+    QList<QPair<quint32, QString> > problems(quint32 universe, bool withSends);
+
+    /** Close one poll interval in the node watch; log and announce what
+     *  changed. Split from the sending so it can be tested without a packet
+     *  leaving the machine. */
+    void nodeIntervalElapsed();
+
+    /** Log node-watch issues that appeared or cleared since the last call */
+    void logNodeIssueChanges();
+
+    /** The monotonic time SendHealth and ArtNetNodeWatch are fed */
+    qint64 nowMs() const { return m_testNowMs >= 0 ? m_testNowMs : m_clock.elapsed(); }
 
     /** The network interface associated to this controller */
     QNetworkInterface m_interface;
@@ -178,8 +210,17 @@ private:
 
     QString m_MACAddress;
 
-    /** Monotonic clock for ArtNetSendHealth */
-    QElapsedTimer m_sendClock;
+    /** Monotonic clock for SendHealth and the node watch */
+    QElapsedTimer m_clock;
+
+    /** When >= 0, the time nowMs() returns instead of the clock. Tests only. */
+    qint64 m_testNowMs;
+
+    /** Nodes heard on this line, and their health. GUI thread only. */
+    ArtNetNodeWatch m_nodeWatch;
+
+    /** The node issues last logged, so the log says each once */
+    QSet<QString> m_loggedNodeIssues;
 
     /** Counter for transmitted packets */
     quint64 m_packetSent;
@@ -245,16 +286,26 @@ public:
      *  broadcast poll, so it can never answer one -- which is exactly the node
      *  somebody had to declare by hand, and exactly the node they most want to
      *  know is alive. Unicast reaches it through the router if anything can. */
-    void sendPollTo(const QHostAddress &address);
+    void sendPollTo(const QHostAddress &address, bool quiet = false);
 
 protected slots:
     void slotSendPoll();
+
+    /** The periodic poll: judge the interval that just ended, then poll --
+     *  broadcast on this line, plus one unicast ArtPoll to each unicast
+     *  output target OFF this line's subnet (a broadcast never reaches those,
+     *  so without it they could never be known, let alone missed). */
+    void slotPollTick();
     void slotSendAllUniverses();
 
 signals:
     void valueChanged(quint32 universe, quint32 input, quint32 channel, uchar value);
 
     void rdmValueChanged(quint32 universe, quint32 line, QVariantMap data);
+
+    /** outputProblems() has changed. May be emitted from the thread that
+     *  sends DMX; never with the data mutex held. */
+    void problemsChanged();
 };
 
 #endif

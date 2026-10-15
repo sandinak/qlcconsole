@@ -21,6 +21,7 @@
 #include "rdmprotocol.h"
 
 #include <QMutexLocker>
+#include <QDateTime>
 #include <QStringList>
 #include <QDebug>
 
@@ -40,6 +41,7 @@ ArtNetController::ArtNetController(QNetworkInterface const& iface, QNetworkAddre
     , m_interface(iface)
     , m_address(address)
     , m_ipAddr(address.ip())
+    , m_testNowMs(-1)
     , m_packetSent(0)
     , m_packetReceived(0)
     , m_line(line)
@@ -58,7 +60,7 @@ ArtNetController::ArtNetController(QNetworkInterface const& iface, QNetworkAddre
         m_MACAddress = iface.hardwareAddress();
     }
 
-    m_sendClock.start();
+    m_clock.start();
 
     qDebug() << "[ArtNetController] IP Address:" << m_ipAddr.toString() << " Broadcast address:" << m_broadcastAddr.toString() << "(MAC:" << m_MACAddress << ")";
 }
@@ -133,10 +135,10 @@ void ArtNetController::addUniverse(quint32 universe, ArtNetController::Type type
         if (m_pollTimer.isActive() == false)
         {
             m_pollTimer.setInterval(POLL_INTERVAL_MS);
-            connect(&m_pollTimer, SIGNAL(timeout()), this, SLOT(slotSendPoll()));
+            connect(&m_pollTimer, SIGNAL(timeout()), this, SLOT(slotPollTick()));
             m_pollTimer.start();
 
-            slotSendPoll();
+            slotPollTick();
         }
         if (m_sendTimer.isActive() == false &&
             m_universeMap[universe].outputTransmissionMode == Standard)
@@ -161,7 +163,7 @@ void ArtNetController::removeUniverse(quint32 universe, ArtNetController::Type t
         {
             m_pollTimer.stop();
             disconnect(&m_pollTimer, SIGNAL(timeout()),
-                       this, SLOT(slotSendPoll()));
+                       this, SLOT(slotPollTick()));
         }
     }
 }
@@ -182,9 +184,15 @@ bool ArtNetController::setOutputIPAddress(quint32 universe, QString address)
     if (!m_universeMap.contains(universe))
         return false;
 
+    /* A new target starts with a clean slate: the old one's failures say
+       nothing about it. */
     if (address.size() == 0)
     {
+        QMutexLocker locker(&m_dataMutex);
         m_universeMap[universe].outputAddress = m_broadcastAddr;
+        m_universeMap[universe].sendHealth = SendHealth();
+        locker.unlock();
+        emit problemsChanged();
         return true;
     }
 
@@ -207,7 +215,11 @@ bool ArtNetController::setOutputIPAddress(quint32 universe, QString address)
 
     qDebug() << "[setOutputIPAddress] transmit to IP: " << hostAddress.toString();
 
+    if (m_universeMap[universe].outputAddress != hostAddress)
+        m_universeMap[universe].sendHealth = SendHealth();
     m_universeMap[universe].outputAddress = hostAddress;
+    locker.unlock();
+    emit problemsChanged();
 
     return hostAddress == m_broadcastAddr;
 }
@@ -278,45 +290,47 @@ UniverseInfo *ArtNetController::getUniverseInfo(quint32 universe)
  * Report a send result for one universe without flooding the log.
  *
  * Logs once when the universe starts failing and once when it has recovered,
- * as decided by ArtNetSendHealth -- not per send (thousands of identical lines
+ * as decided by SendHealth -- not per send (thousands of identical lines
  * a minute) and not per flip of the per-send result (a target that never
  * answers ARP alternates, and was reported failing/recovered every ~25 s
  * while never receiving a thing).
  */
-void ArtNetController::reportSendResult(UniverseInfo &info, quint32 universe,
+bool ArtNetController::reportSendResult(UniverseInfo &info, quint32 universe,
                                         const QHostAddress &dest, bool ok)
 {
     if (ok)
         m_packetSent++;
 
-    const bool hard = ok == false && ArtNetSendHealth::isHardError(m_udpSocket->error());
+    const bool hard = ok == false && SendHealth::isHardError(m_udpSocket->error());
 
-    switch (info.sendHealth.record(ok, m_sendClock.elapsed(), hard))
+    switch (info.sendHealth.record(ok, nowMs(), hard))
     {
-        case ArtNetSendHealth::StartedFailing:
+        case SendHealth::StartedFailing:
             qWarning() << "[ArtNet] universe" << (universe + 1)
                        << "output to" << dest.toString()
                        << "is failing:" << m_udpSocket->errorString()
                        << "- nothing patched to it will transmit."
                        << "Further failures on this universe will be counted, not logged;"
                        << "recovery is reported once sends have succeeded for"
-                       << (ArtNetSendHealth::RecoverAfterMs / 1000) << "s.";
+                       << (SendHealth::RecoverAfterMs / 1000) << "s.";
         break;
-        case ArtNetSendHealth::Recovered:
+        case SendHealth::Recovered:
             qWarning() << "[ArtNet] universe" << (universe + 1)
                        << "output to" << dest.toString()
                        << "recovered: sends have succeeded for"
-                       << (ArtNetSendHealth::RecoverAfterMs / 1000) << "s, after"
+                       << (SendHealth::RecoverAfterMs / 1000) << "s, after"
                        << info.sendHealth.failedSends() << "failed sends over"
                        << (info.sendHealth.failedForMs() / 1000) << "s.";
         break;
-        case ArtNetSendHealth::NoChange:
-        break;
+        case SendHealth::NoChange:
+            return false;
     }
+    return true;
 }
 
 void ArtNetController::slotSendAllUniverses()
 {
+    bool changed = false;
     QMutexLocker locker(&m_dataMutex);
     for (QMap<quint32, UniverseInfo>::iterator it = m_universeMap.begin(); it != m_universeMap.end(); ++it)
     {
@@ -331,9 +345,13 @@ void ArtNetController::slotSendAllUniverses()
             m_packetizer->setupArtNetDmx(dmxPacket, info.outputUniverse, info.outputData);
 
             qint64 sent = m_udpSocket->writeDatagram(dmxPacket, info.outputAddress, ARTNET_PORT);
-            reportSendResult(info, it.key(), info.outputAddress, sent >= 0);
+            if (reportSendResult(info, it.key(), info.outputAddress, sent >= 0))
+                changed = true;
         }
     }
+    locker.unlock();
+    if (changed)
+        emit problemsChanged();
 }
 
 void ArtNetController::sendDmx(const quint32 universe, const QByteArray &data, bool dataChanged)
@@ -374,7 +392,10 @@ void ArtNetController::sendDmx(const quint32 universe, const QByteArray &data, b
     }
 
     qint64 sent = m_udpSocket->writeDatagram(dmxPacket, outAddress, ARTNET_PORT);
-    reportSendResult(*info, universe, outAddress, sent >= 0);
+    const bool changed = reportSendResult(*info, universe, outAddress, sent >= 0);
+    locker.unlock();
+    if (changed)
+        emit problemsChanged();
 }
 
 bool ArtNetController::sendRDMCommand(const quint32 universe, uchar command, QVariantList params)
@@ -446,6 +467,12 @@ bool ArtNetController::handleArtNetPollReply(QByteArray const& datagram, QHostAd
     m_nodesList[senderAddress] = newNode;
 
     ++m_packetReceived;
+
+    if (m_nodeWatch.replyHeard(senderAddress, newNode, nowMs()))
+    {
+        logNodeIssueChanges();
+        emit problemsChanged();
+    }
     return true;
 }
 
@@ -588,7 +615,7 @@ bool ArtNetController::handlePacket(QByteArray const& datagram, QHostAddress con
     return true;
 }
 
-void ArtNetController::sendPollTo(const QHostAddress &address)
+void ArtNetController::sendPollTo(const QHostAddress &address, bool quiet)
 {
     if (address.isNull())
         return;
@@ -599,9 +626,13 @@ void ArtNetController::sendPollTo(const QHostAddress &address)
     const qint64 sent = m_udpSocket->writeDatagram(pollPacket, address, ARTNET_PORT);
     if (sent < 0)
     {
-        qWarning() << "Unable to send Poll packet to" << address.toString()
-                   << ": errno=" << m_udpSocket->error()
-                   << "(" << m_udpSocket->errorString() << ")";
+        /* The periodic one stays quiet: whether this target is reachable is
+           for the send health and the node watch to say, once -- not a
+           warning every 3 s. */
+        if (quiet == false)
+            qWarning() << "Unable to send Poll packet to" << address.toString()
+                       << ": errno=" << m_udpSocket->error()
+                       << "(" << m_udpSocket->errorString() << ")";
     }
     else
     {
@@ -643,4 +674,130 @@ void ArtNetController::slotSendPoll()
     else
         m_packetSent++;
 #endif
+}
+
+/*********************************************************************
+ * Output health
+ *********************************************************************/
+
+bool ArtNetController::isBroadcastTarget(const QHostAddress &address) const
+{
+    return address == m_broadcastAddr
+        || address == QHostAddress(QHostAddress::Broadcast);
+}
+
+void ArtNetController::slotPollTick()
+{
+    nodeIntervalElapsed();
+    slotSendPoll();
+
+    /* A unicast target off this line's subnet never sees the broadcast poll
+       above. One unicast ArtPoll per such address per tick -- the same 3 s
+       cadence, one small datagram each, and only for addresses a patch
+       actually sends to. */
+    QSet<QHostAddress> offSubnet;
+    {
+        QMutexLocker locker(&m_dataMutex);
+        for (auto it = m_universeMap.constBegin(); it != m_universeMap.constEnd(); ++it)
+        {
+            const QHostAddress &addr = it.value().outputAddress;
+            if ((it.value().type & Output) == 0 || addr.isNull()
+                    || addr.isLoopback() || addr.isMulticast()
+                    || isBroadcastTarget(addr))
+                continue;
+            if (m_address.prefixLength() > 0
+                    && addr.isInSubnet(m_ipAddr, m_address.prefixLength()))
+                continue;
+            offSubnet.insert(addr);
+        }
+    }
+    foreach (const QHostAddress &addr, offSubnet)
+        sendPollTo(addr, true);
+}
+
+void ArtNetController::nodeIntervalElapsed()
+{
+    if (m_nodeWatch.pollSent(nowMs()))
+    {
+        logNodeIssueChanges();
+        emit problemsChanged();
+    }
+}
+
+static QString sinceText(qint64 sinceMs, qint64 nowMs)
+{
+    const QDateTime now = QDateTime::currentDateTime();
+    const QDateTime then = now.addMSecs(sinceMs - nowMs);
+    return then.date() == now.date() ? then.toString("HH:mm")
+                                     : then.toString("MMM d HH:mm");
+}
+
+QList<QPair<quint32, QString> > ArtNetController::outputProblems(quint32 universe)
+{
+    return problems(universe, true);
+}
+
+QList<QPair<quint32, QString> > ArtNetController::problems(quint32 universe, bool withSends)
+{
+    QList<QPair<quint32, QString> > out;
+    const qint64 now = nowMs();
+
+    QMutexLocker locker(&m_dataMutex);
+    for (auto it = m_universeMap.constBegin(); it != m_universeMap.constEnd(); ++it)
+    {
+        const UniverseInfo &info = it.value();
+        if ((info.type & Output) == 0)
+            continue;
+        if (universe != UINT_MAX && it.key() != universe)
+            continue;
+
+        if (withSends && info.sendHealth.isFailing())
+            out << qMakePair(it.key(),
+                             tr("Art-Net to %1: not reachable since %2")
+                                 .arg(info.outputAddress.toString(),
+                                      sinceText(info.sendHealth.failingSinceMs(), now)));
+
+        foreach (const ArtNetNodeWatch::Issue &i,
+                 m_nodeWatch.issuesFor(info.outputAddress,
+                                       isBroadcastTarget(info.outputAddress),
+                                       info.outputUniverse))
+        {
+            const QString node = i.name.isEmpty()
+                ? i.ip : QString("%1 (%2)").arg(i.name, i.ip);
+            const QString since = sinceText(i.sinceMs, now);
+            QString text;
+            switch (i.kind)
+            {
+                case ArtNetNodeWatch::Issue::NodeSilent:
+                    text = tr("Art-Net node %1: stopped answering since %2").arg(node, since);
+                break;
+                case ArtNetNodeWatch::Issue::PortShort:
+                    text = tr("Art-Net node %1, port %2 (%3): DMX output short since %4")
+                               .arg(node).arg(i.port).arg(i.portLabel, since);
+                break;
+                case ArtNetNodeWatch::Issue::PortNotOutputting:
+                    text = tr("Art-Net node %1, port %2 (%3): not outputting DMX since %4")
+                               .arg(node).arg(i.port).arg(i.portLabel, since);
+                break;
+            }
+            out << qMakePair(it.key(), text);
+        }
+    }
+    return out;
+}
+
+void ArtNetController::logNodeIssueChanges()
+{
+    QSet<QString> now;
+    typedef QPair<quint32, QString> Problem;
+    foreach (const Problem &p, problems(UINT_MAX, false))
+        now.insert(p.second);
+
+    foreach (const QString &text, now)
+        if (m_loggedNodeIssues.contains(text) == false)
+            qWarning().noquote() << "[ArtNet]" << text;
+    foreach (const QString &text, m_loggedNodeIssues)
+        if (now.contains(text) == false)
+            qWarning().noquote() << "[ArtNet] cleared:" << text;
+    m_loggedNodeIssues = now;
 }

@@ -38,7 +38,7 @@ private slots:
        current line, but whose subnet still does. */
     void lineOnSameSubnetResolvesChangedAddress();
 
-    /* Send failure reporting: ArtNetSendHealth's hysteresis, driven with
+    /* Send failure reporting: SendHealth's hysteresis, driven with
        injected results and times -- no packet leaves the machine. */
     void sendHealthTransientBurstIsNotReported();
     void sendHealthSustainedFailureIsReported();
@@ -48,6 +48,21 @@ private slots:
     void sendHealthArpFlapIsReportedOnce();
     void sendHealthHardErrorClassification();
     void controllerLogsOnlyOnStateChange();
+
+    /* Node health from ArtPollReplies: ArtNetNodeWatch driven with
+       fabricated replies and poll times. */
+    void nodeWatchSilentAfterThreeMissedPolls();
+    void nodeWatchAnsweringAgainNeedsTwoIntervals();
+    void nodeWatchNeverHeardIsNotFlagged();
+    void nodeWatchPortShortIsDebouncedBothWays();
+    void nodeWatchNotOutputtingOnlyOnceSeenOutputting();
+    void nodeWatchBroadcastAndUnicastPickTheRightNodes();
+    void nodeWatchBindIndexNumbersPortsPastFour();
+
+    /* The same through the controller and the plugin: real reply bytes in,
+       problem text out, announced and cleared. Nothing is sent. */
+    void controllerReportsAndClearsProblems();
+    void pluginGroupsAProblemsUniverses();
 };
 
 #endif

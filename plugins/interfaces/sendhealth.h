@@ -1,6 +1,6 @@
 /*
   Q Light Controller Plus
-  artnetsendhealth.h
+  sendhealth.h
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -15,14 +15,17 @@
   limitations under the License.
 */
 
-#ifndef ARTNETSENDHEALTH_H
-#define ARTNETSENDHEALTH_H
+#ifndef SENDHEALTH_H
+#define SENDHEALTH_H
 
 #include <QAbstractSocket>
 #include <QtGlobal>
 
 /**
  * Whether one universe's output is failing, decided with hysteresis.
+ * Shared by the network output plugins (Art-Net, E1.31): each keeps one per
+ * universe it sends, and reports its state in the log and through
+ * QLCIOPlugin::targetProblems() / outputProblems().
  *
  * Fed one result per send (ok or not, plus a monotonic time in ms) and says
  * when the reported state should CHANGE. It owns no socket and reads no clock,
@@ -56,7 +59,7 @@
  * Times are compared as spans between sends, so the decision is the same at
  * 44 Hz (changing data) and at the 2 s idle refresh (Standard mode).
  */
-class ArtNetSendHealth
+class SendHealth
 {
 public:
     enum Transition
@@ -76,7 +79,7 @@ public:
      *  recovered. Comfortably over the ~5 s ARP "success" phase above. */
     static constexpr qint64 RecoverAfterMs = 30000;
 
-    ArtNetSendHealth();
+    SendHealth();
 
     /** Record one send. @a nowMs is a monotonic time in ms. @a hardError says
      *  the failure cannot clear by retrying (ignored when @a ok). Returns the
@@ -89,6 +92,10 @@ public:
     /** Failed sends in the current (or, after Recovered, the last) failing
      *  period, including the ones that led up to declaring it */
     quint64 failedSends() const { return m_failedSends; }
+
+    /** When the current failing period began (its first failure), in the
+     *  caller's monotonic ms. Valid while isFailing(). */
+    qint64 failingSinceMs() const { return m_failingSince; }
 
     /** How long the last failing period lasted: from its first failure to the
      *  start of the run of successes that ended it. Valid after Recovered. */
