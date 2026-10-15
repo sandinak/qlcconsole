@@ -1706,6 +1706,25 @@ void App::initActions()
     connect(m_cueBackAction, &QAction::triggered, this, [this]() {
         m_doc->showControl()->execute({ ShowControl::Back, QString(), QString() });
     });
+    /* ...and its Sub GO / Sub Back (SUBCUES_DESIGN.md): through the sub-cues
+       of the cue playing, 4.1, 4.2..., while GO goes on to 5. ⌥⌘↩ / ⌥⌘⇧↩
+       on macOS (Qt's CTRL is ⌘ there). */
+    m_cueSubGoAction = new QAction(tr("Sub GO (Main Cue List)"), this);
+    m_cueSubGoAction->setShortcut(cueSubGoShortcut());
+    m_cueSubGoAction->setShortcutContext(Qt::ApplicationShortcut);
+    connect(m_cueSubGoAction, &QAction::triggered, this, [this]() {
+        Chaser *list = m_doc->showControl()->cueList(QString());
+        if (list != NULL && list->isRunning())
+            list->subGo();
+    });
+    m_cueSubBackAction = new QAction(tr("Sub Back (Main Cue List)"), this);
+    m_cueSubBackAction->setShortcut(cueSubBackShortcut());
+    m_cueSubBackAction->setShortcutContext(Qt::ApplicationShortcut);
+    connect(m_cueSubBackAction, &QAction::triggered, this, [this]() {
+        Chaser *list = m_doc->showControl()->cueList(QString());
+        if (list != NULL && list->isRunning())
+            list->subBack();
+    });
 
     m_helpIndexAction = new QAction(tr("QLC+ Reference (online)"), this);
     m_helpIndexAction->setShortcut(QKeySequence("SHIFT+F1"));
@@ -2024,6 +2043,8 @@ void App::initMenuBar()
     ctrlMenu->addSeparator();
     ctrlMenu->addAction(m_cueGoAction);
     ctrlMenu->addAction(m_cueBackAction);
+    ctrlMenu->addAction(m_cueSubGoAction);
+    ctrlMenu->addAction(m_cueSubBackAction);
     ctrlMenu->addSeparator();
     QMenu* liveMenu = ctrlMenu->addMenu(tr("&Live Edit"));
     liveMenu->addAction(m_liveEditAction);
@@ -5160,9 +5181,37 @@ void App::slotUpdateStandby()
         if (f != NULL)
             text += QStringLiteral(" \u2014 ") + f->name();
     }
+    // The cue playing has sub-cues on Sub GO: what Sub GO plays first
+    // ("Sub: 4.2 · Next: 5"), or that there are none left in it.
+    const QString sub = standbySubCueText(list);
+    if (!sub.isEmpty())
+        text = sub + QStringLiteral(" \u00b7 ") + text;
     if (m_statusStandby->text() != text)
         m_statusStandby->setText(text);
     m_statusStandby->show();
+}
+
+QKeySequence App::cueSubGoShortcut()
+{
+    return QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_Return);
+}
+
+QKeySequence App::cueSubBackShortcut()
+{
+    return QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_Return);
+}
+
+QString App::standbySubCueText(const Chaser *list)
+{
+    if (list == NULL || !list->isRunning())
+        return QString();
+    const int step = list->currentStepIndex();
+    if (!list->isSubGoStep(step) || list->currentSubCueIndex() < 0)
+        return QString();
+    const int sub = list->nextSubCueIndex();
+    if (sub < 0)
+        return tr("Sub: (end of %1)").arg(list->stepCue(step));
+    return tr("Sub: %1").arg(list->subCue(step, sub));
 }
 
 void App::slotFillStandbyMenu()
@@ -5176,6 +5225,11 @@ void App::slotFillStandbyMenu()
 
     menu->addAction(m_cueGoAction);
     menu->addAction(m_cueBackAction);
+    if (list->hasSubGoSteps())
+    {
+        menu->addAction(m_cueSubGoAction);
+        menu->addAction(m_cueSubBackAction);
+    }
     menu->addAction(tr("Stop %1").arg(list->name()), this, [sc]() {
         sc->execute({ ShowControl::Stop, QString(), QString() });
     });

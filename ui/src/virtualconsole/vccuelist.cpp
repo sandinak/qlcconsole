@@ -247,6 +247,29 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
     connect(m_nextButton, SIGNAL(clicked()), this, SLOT(slotNextCue()));
     hbox->addWidget(m_nextButton);
 
+    /* Sub-cues (SUBCUES_DESIGN.md): shown when a step is a chase held as
+       sub-cues -- Sub GO steps through 4.1, 4.2... while GO goes to 5. */
+    m_subBackButton = new QToolButton(this);
+    m_subBackButton->setObjectName(QStringLiteral("cueListSubBack"));
+    m_subBackButton->setText(tr("Sub Back"));
+    m_subBackButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    m_subBackButton->setFixedHeight(32);
+    m_subBackButton->setToolTip(tr("The previous sub-cue of the cue playing"));
+    m_subBackButton->setVisible(false);
+    connect(m_subBackButton, &QToolButton::clicked, this, &VCCueList::slotSubBack);
+    hbox->addWidget(m_subBackButton);
+
+    m_subGoButton = new QToolButton(this);
+    m_subGoButton->setObjectName(QStringLiteral("cueListSubGo"));
+    m_subGoButton->setText(tr("Sub GO"));
+    m_subGoButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    m_subGoButton->setFixedHeight(32);
+    m_subGoButton->setToolTip(tr("The next sub-cue of the cue playing (4.1, 4.2...); "
+                                 "GO goes on to the next cue"));
+    m_subGoButton->setVisible(false);
+    connect(m_subGoButton, &QToolButton::clicked, this, &VCCueList::slotSubGo);
+    hbox->addWidget(m_subGoButton);
+
     vbox->addItem(hbox);
     grid->addItem(vbox, 0, 1, 6);
 
@@ -288,6 +311,8 @@ void VCCueList::enableWidgetUI(bool enable)
     m_stopButton->setEnabled(enable);
     m_previousButton->setEnabled(enable);
     m_nextButton->setEnabled(enable);
+    m_subBackButton->setEnabled(enable);
+    m_subGoButton->setEnabled(enable);
 
     m_topPercentageLabel->setEnabled(enable);
     m_sideFader->setEnabled(enable);
@@ -402,11 +427,18 @@ void VCCueList::updateStepList()
     m_listIsUpdating = true;
 
     m_tree->clear();
+    m_subHighlightStep = m_subHighlightSub = -1;
 
     Chaser *ch = chaser();
     if (ch == NULL)
+    {
+        m_subGoButton->setVisible(false);
+        m_subBackButton->setVisible(false);
+        m_listIsUpdating = false;
         return;
+    }
 
+    bool anySubCues = false;
     QListIterator <ChaserStep> it(ch->steps());
     while (it.hasNext() == true)
     {
@@ -480,7 +512,46 @@ void VCCueList::updateStepList()
             case Chaser::Default:
                 item->setText(COL_DURATION, QString());
         }
+
+        /* A chase step: its steps under it as sub-cues (4.1, 4.2...),
+           read-only; a Sub GO one open, so they're in sight. */
+        const int stepIndex = index - 1;
+        if (Chaser *inner = ch->subCueChase(stepIndex))
+        {
+            anySubCues = true;
+            const QList<ChaserStep> subs = inner->steps();
+            for (int j = 0; j < subs.count(); ++j)
+            {
+                QTreeWidgetItem *child = new QTreeWidgetItem(item);
+                child->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+                child->setText(COL_CUE, ch->subCue(stepIndex, j));
+                if (Function *f = m_doc->function(subs.at(j).fid))
+                    child->setText(COL_NAME, f->name());
+                child->setText(COL_NOTES, subs.at(j).note);
+                child->setToolTip(COL_NAME, step.subCues == ChaserStep::SubGo
+                                                ? tr("Sub-cue: Sub GO plays it; click to jump to it")
+                                                : tr("Sub-cue on its own timing; click to jump to it"));
+                if (subs.at(j).skip)
+                {
+                    QFont f = m_tree->font();
+                    f.setStrikeOut(true);
+                    child->setFont(COL_NAME, f);
+                }
+                const QBrush grey = m_tree->palette().brush(QPalette::Disabled, QPalette::Text);
+                if (subs.at(j).cueNumber.trimmed().isEmpty())
+                    child->setForeground(COL_CUE, grey);
+                child->setForeground(COL_NAME, subs.at(j).skip ? grey
+                                         : m_tree->palette().brush(QPalette::Text));
+            }
+            item->setExpanded(step.subCues == ChaserStep::SubGo);
+        }
     }
+
+    m_tree->setRootIsDecorated(anySubCues);
+    m_tree->setItemsExpandable(anySubCues);
+    const bool subGo = ch->hasSubGoSteps();
+    m_subGoButton->setVisible(subGo);
+    m_subBackButton->setVisible(subGo);
 
     QTreeWidgetItem *item = m_tree->topLevelItem(0);
     if (item != NULL)
@@ -489,6 +560,7 @@ void VCCueList::updateStepList()
     m_tree->header()->resizeSections(QHeaderView::ResizeToContents);
     m_tree->header()->setSectionHidden(COL_NAME, ch->type() == Function::SequenceType ? true : false);
     m_listIsUpdating = false;
+    updateSubCueHighlight();
     updateStandby();
 }
 
@@ -505,7 +577,7 @@ int VCCueList::standbyIndex() const
     if (ch->isRunning())
         return ch->computeNextStep(ch->currentStepIndex());
     if (m_tree->currentItem() != NULL)
-        return m_tree->indexOfTopLevelItem(m_tree->currentItem());
+        return topLevelIndexOf(m_tree->currentItem());
     return ch->firstPlayableStep();
 }
 
@@ -513,6 +585,7 @@ void VCCueList::updateStandby()
 {
     if (m_standbyLabel == NULL)
         return;
+    updateSubCueHighlight();
     Chaser *ch = chaser();
     const int next = standbyIndex();
     QString text;
@@ -530,6 +603,14 @@ void VCCueList::updateStandby()
         if (!step.note.isEmpty())
             text += QStringLiteral(" \u2014 ") + step.note;
     }
+    // Sub-cues left in the cue playing: what Sub GO plays, first.
+    if (ch != NULL && ch->isRunning())
+    {
+        const int sub = ch->nextSubCueIndex();
+        if (sub >= 0)
+            text = tr("Sub: %1").arg(ch->subCue(ch->currentStepIndex(), sub))
+                   + QStringLiteral(" \u00b7 ") + text;
+    }
     if (m_standbyLabel->text() != text)
     {
         m_standbyLabel->setText(text);
@@ -539,7 +620,7 @@ void VCCueList::updateStandby()
 
 int VCCueList::getCurrentIndex() const
 {
-    int index = m_tree->indexOfTopLevelItem(m_tree->currentItem());
+    int index = topLevelIndexOf(m_tree->currentItem());
     if (index == -1)
     {
         // Nothing picked: the first step not skipped (what "Next:" says).
@@ -656,8 +737,25 @@ void VCCueList::slotFunctionRemoved(quint32 fid)
 
 void VCCueList::slotFunctionChanged(quint32 fid)
 {
-    if (fid == m_chaserID && !m_updateTimer->isActive())
+    if (m_updateTimer->isActive())
+        return;
+    if (fid == m_chaserID)
+    {
         m_updateTimer->start(UPDATE_TIMEOUT);
+        return;
+    }
+    // A chase one of its steps is: its steps are the sub-cues shown.
+    Chaser *ch = chaser();
+    if (ch == NULL || qobject_cast<Chaser *>(m_doc->function(fid)) == NULL)
+        return;
+    for (const ChaserStep &step : ch->steps())
+    {
+        if (step.fid == fid)
+        {
+            m_updateTimer->start(UPDATE_TIMEOUT);
+            return;
+        }
+    }
 }
 
 void VCCueList::slotFunctionNameChanged(quint32 fid)
@@ -712,7 +810,7 @@ void VCCueList::slotPlayback()
             }
 
             // check if the item selection has been changed during pause
-            int currentTreeIndex = m_tree->indexOfTopLevelItem(m_tree->currentItem());
+            int currentTreeIndex = topLevelIndexOf(m_tree->currentItem());
             if (currentTreeIndex != ch->currentStepIndex())
                 playCueAtIndex(currentTreeIndex);
 
@@ -938,12 +1036,115 @@ void VCCueList::slotItemActivated(QTreeWidgetItem *item)
     if (mode() != Doc::Operate)
         return;
 
+    if (item != NULL && item->parent() != NULL)
+    {
+        // A sub-cue: its parent first, if that isn't the one playing.
+        QTreeWidgetItem *parent = item->parent();
+        playSubCue(m_tree->indexOfTopLevelItem(parent), parent->indexOfChild(item));
+        return;
+    }
+
     playCueAtIndex(m_tree->indexOfTopLevelItem(item));
+}
+
+int VCCueList::topLevelIndexOf(QTreeWidgetItem *item) const
+{
+    if (item == NULL)
+        return -1;
+    while (item->parent() != NULL)
+        item = item->parent();
+    return m_tree->indexOfTopLevelItem(item);
+}
+
+void VCCueList::playSubCue(int index, int subIndex)
+{
+    Chaser *ch = chaser();
+    if (ch == NULL || index < 0 || subIndex < 0)
+        return;
+
+    ChaserAction action;
+    action.m_action = ChaserSubSetStep;
+    action.m_stepIndex = index;
+    action.m_subStepIndex = subIndex;
+    action.m_masterIntensity = intensity();
+    action.m_stepIntensity = getPrimaryIntensity();
+    action.m_fadeMode = getFadeMode();
+
+    if (ch->isRunning())
+    {
+        ch->setAction(action);
+        return;
+    }
+    // Stopped: start there, as startChaser() does at a step.
+    adjustFunctionIntensity(ch, intensity());
+    ch->setAction(action);
+    ch->start(m_doc->masterTimer(), functionParent());
+    emit functionStarting(m_chaserID);
+}
+
+void VCCueList::slotSubGo()
+{
+    if (mode() != Doc::Operate)
+        return;
+    Chaser *ch = chaser();
+    if (ch != NULL && ch->isRunning())
+        ch->subGo();
+}
+
+void VCCueList::slotSubBack()
+{
+    if (mode() != Doc::Operate)
+        return;
+    Chaser *ch = chaser();
+    if (ch != NULL && ch->isRunning())
+        ch->subBack();
+}
+
+void VCCueList::updateSubCueHighlight()
+{
+    Chaser *ch = chaser();
+    int step = -1, sub = -1;
+    if (ch != NULL && ch->isRunning())
+    {
+        step = ch->currentStepIndex();
+        sub = ch->currentSubCueIndex();
+        if (sub < 0)
+            step = -1;
+    }
+    if (step == m_subHighlightStep && sub == m_subHighlightSub)
+        return;
+
+    auto paint = [this](int s, int j, bool on) {
+        QTreeWidgetItem *parent = m_tree->topLevelItem(s);
+        QTreeWidgetItem *row = parent != NULL ? parent->child(j) : NULL;
+        if (row == NULL)
+            return;
+        for (int col = 0; col < m_tree->columnCount(); ++col)
+        {
+            row->setBackground(col, on ? m_tree->palette().brush(QPalette::Highlight).color().lighter(130)
+                                       : QBrush());
+            QFont f = row->font(col);
+            f.setBold(on);
+            row->setFont(col, f);
+        }
+        if (on)
+        {
+            parent->setExpanded(true);
+            m_tree->scrollToItem(row);
+        }
+    };
+    const bool updating = m_listIsUpdating;
+    m_listIsUpdating = true;                    // not a notes edit
+    paint(m_subHighlightStep, m_subHighlightSub, false);
+    paint(step, sub, true);
+    m_listIsUpdating = updating;
+    m_subHighlightStep = step;
+    m_subHighlightSub = sub;
 }
 
 void VCCueList::slotItemChanged(QTreeWidgetItem *item, int column)
 {
-    if (m_listIsUpdating || column != COL_NOTES)
+    if (m_listIsUpdating || column != COL_NOTES || item == NULL || item->parent() != NULL)
         return;
 
     Chaser *ch = chaser();
@@ -998,6 +1199,7 @@ void VCCueList::slotFunctionStopped(quint32 fid)
     QTreeWidgetItem *item = m_tree->topLevelItem(m_secondaryIndex);
     if (item != NULL)
         item->setBackground(COL_NUM, m_defCol);
+    updateSubCueHighlight();
 
     emit stepChanged(-1);
 
@@ -1014,6 +1216,7 @@ void VCCueList::slotFunctionStopped(quint32 fid)
 
 void VCCueList::slotProgressTimeout()
 {
+    updateSubCueHighlight();
     Chaser *ch = chaser();
     if (ch == NULL || !ch->isRunning())
         return;
