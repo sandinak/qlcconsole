@@ -51,10 +51,14 @@ public:
     /** Write the CSV to @p path. False (with @p error set) if it cannot. */
     bool saveCsv(const QString &path, QString *error = NULL) const;
 
+    /** The rows picked in the table, in list order. */
+    QList<PatchList::Row> selectedRows() const;
+
 public slots:
     void slotCopy();
     void slotSaveCsv();
     void slotSavePdf();
+    void slotLabels();
 
 private:
     PatchList m_list;
