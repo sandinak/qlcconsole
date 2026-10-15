@@ -3387,6 +3387,9 @@ bool App::confirmSaveWithoutDefinitions()
 void App::recoverUnavailableDefinitions(QWidget *parent)
 {
     QLCFixtureDefCache *defs = m_doc->fixtureDefCache();
+    /* Copied into the user folder since qlcconsole started (a show brought
+       to a new computer, its definitions after it): read the folder again. */
+    defs->load(QLCFixtureDefCache::userDefinitionDirectory());
     QList<Fixture *> waiting;
     QStringList fetch;
     foreach (Fixture *fx, m_doc->fixtures())

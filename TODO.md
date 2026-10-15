@@ -478,6 +478,15 @@ rig edits, bulk repatching, cross-show consistency checks.
      for WLED, and App::nativeEvent fixed for Qt 6's qintptr* (USB hotplug
      never reached HotPlugMonitor). Still to confirm on the VM: the main
      window's outer edges resizing, and whether it still feels slow.
+  7. "Rig Overview wireframed in red, no light" on the VM (GPU and CPU alike):
+     not Direct3D -- the VM had none of DanceHysteria's own definitions, so
+     those fixtures stood in as generic dimmers, 300 mm per channel: a
+     64-channel bar was a 19 m wall of heads in the overlap-warning red. A
+     stand-in now draws as one small box with no overlap warning; the footer's
+     "no definition on this computer" error names the folder to copy the
+     .qxf files into, and Fetch Definitions rereads it. Windows CI now runs
+     the rig view on D3D11 (WARP): GPU-vs-CPU matches as on Metal/GL, and the
+     pictures are kept (rig-shots-windows artifact).
 
 - **Warning backlog outside the `-Werror` set (OPEN, 2026-08-25)** — a
   tree-wide `-Wall -Wextra` sweep reports ~1100
