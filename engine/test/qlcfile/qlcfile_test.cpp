@@ -61,9 +61,6 @@ void QLCFile_Test::getXMLHeader()
     QXmlStreamWriter doc(&buffer);
     doc.setAutoFormatting(true);
     doc.setAutoFormattingIndent(1);
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-    doc.setCodec("UTF-8");
-#endif
 
     QLCFile::writeXMLHeader(&doc, "DocumentTag", "TestUnit");
     doc.writeEndDocument();

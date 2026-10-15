@@ -56,36 +56,37 @@ endif()
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
-# Set up AUTOMOC and some sensible defaults for runtime execution
-# When using Qt 6.3, you can replace the code block below with
-# qt_standard_project_setup()
+# AUTOMOC and some sensible defaults for runtime execution
 set(CMAKE_AUTOMOC ON)
 include(GNUInstallDirs)
 
-find_package(QT NAMES Qt5 Qt6 REQUIRED COMPONENTS Core)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Gui Multimedia MultimediaWidgets Network PrintSupport Qml Quick Svg Test Widgets LinguistTools)
+# Qt 6.8 or later (the long-term release; what CI builds with). Qt5 was
+# dropped after the tag qt5-last -- check that out to build on Qt5.
+find_package(QT NAMES Qt6 REQUIRED COMPONENTS Core)
+if(QT_VERSION VERSION_LESS 6.8)
+    message(FATAL_ERROR "qlcconsole needs Qt 6.8 or later; found ${QT_VERSION} "
+                        "(${QT_DIR}). Point CMAKE_PREFIX_PATH at a newer Qt.")
+endif()
+find_package(Qt6 REQUIRED COMPONENTS Gui Multimedia MultimediaWidgets Network PrintSupport Qml Quick Svg Test Widgets LinguistTools ShaderTools)
+# QRhi (the rig view on the GPU) is in Qt's private GUI module: a package
+# of its own from 6.9; with Qt6Gui before that.
+if(QT_VERSION VERSION_GREATER_EQUAL 6.9)
+    find_package(Qt6 REQUIRED COMPONENTS GuiPrivate)
+endif()
 if(qmlui)
-    find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS 3DCore 3DInput 3DLogic 3DQuick 3DQuickExtras 3DRender WebSockets)
+    find_package(Qt6 REQUIRED COMPONENTS 3DCore 3DInput 3DLogic 3DQuick 3DQuickExtras 3DRender WebSockets)
     if(ANDROID)
-        find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Concurrent OpenGL)
+        find_package(Qt6 REQUIRED COMPONENTS Concurrent OpenGL)
     endif()
 
 endif()
 
-message("Found Qt version ${QT_VERSION_MAJOR}: ${QT_DIR}")
-
-if(QT_VERSION_MAJOR EQUAL 5)
-    find_package(Qt${QT_VERSION_MAJOR} OPTIONAL_COMPONENTS Script)
-endif()
+message("Found Qt ${QT_VERSION}: ${QT_DIR}")
 
 find_package(PkgConfig REQUIRED)
 
 include(./variables.cmake)
 include(./coverage.cmake)
-
-if((((QT_VERSION_MAJOR LESS 5)) AND (APPLE)))
-    pkg_check_modules(PORTAUDIO_2 IMPORTED_TARGET portaudio-2.0)
-endif()
 
 if(WIN32)
     # Prefix all shared libraries with ''.

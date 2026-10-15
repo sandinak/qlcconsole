@@ -113,9 +113,6 @@ bool PatchListDialog::saveCsv(const QString &path, QString *error) const
         return false;
     }
     QTextStream out(&file);
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-    out.setCodec("UTF-8");
-#endif
     out << m_list.toCsv();
     return true;
 }

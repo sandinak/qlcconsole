@@ -130,6 +130,7 @@
 #include "stand.h"
 #include "tower.h"
 #include "structurestudioview.h"
+#include "rhiraster.h"
 #include "powerdistributiondialog.h"
 #include "fixturegroupeditor.h"
 #include "studiogroupeditor.h"
@@ -2481,6 +2482,21 @@ void Monitor::showStageOverview()
         view->setSupersample(qualityCombo->currentData().toInt());
     });
 
+    /* On the graphics card when there is one (RhiRaster): the same picture,
+       drawn there instead of on the CPU. Off falls back to the CPU renderer,
+       for comparing or for a driver that misbehaves. */
+    QCheckBox *gpuCheck = new QCheckBox(tr("GPU"), &dlg);
+    gpuCheck->setObjectName(QStringLiteral("rigGpu"));
+    gpuCheck->setEnabled(RhiRaster::available());
+    gpuCheck->setChecked(view->gpuActive());
+    gpuCheck->setToolTip(RhiRaster::available()
+        ? tr("Draw the rig on the graphics card. Off draws it on the CPU, "
+             "the same picture, more slowly.")
+        : tr("No graphics card this view can draw on: the rig is drawn on "
+             "the CPU."));
+    bar->addWidget(gpuCheck);
+    connect(gpuCheck, &QCheckBox::toggled, &dlg, [view](bool on) { view->setGpu(on); });
+
     QComboBox *rateCombo = new QComboBox(&dlg);
     for (int fps : { 25, 30, 60, 120 })
         rateCombo->addItem(tr("%1 fps").arg(fps), fps);
@@ -3042,11 +3058,7 @@ class FixtureSourceTree : public QTreeWidget
 public:
     explicit FixtureSourceTree(QWidget *parent = nullptr) : QTreeWidget(parent) {}
 protected:
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     QMimeData *mimeData(const QList<QTreeWidgetItem *> &items) const override
-#else
-    QMimeData *mimeData(const QList<QTreeWidgetItem *> items) const override
-#endif
     {
         QMimeData *m = new QMimeData;
         QByteArray b; QDataStream s(&b, QIODevice::WriteOnly);

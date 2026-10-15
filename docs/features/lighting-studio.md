@@ -103,10 +103,15 @@ deck no longer stops a beam). Toggling a layer redraws the open overview
 where it is, keeping your angle and zoom. A structure's own editor always
 shows that structure, whatever layer it is on.
 
-**Keeping it quick.** The toolbar's **Quality** sets how sharply edges are
+**Keeping it quick.** The Rig Overview draws on
+the graphics card (Metal on a Mac, OpenGL elsewhere) when the machine has
+one; its **GPU** box turns that off, back to drawing on the processor —
+the same picture, slower, for a graphics driver that gets it wrong. The
+choice is remembered. The toolbar's **Quality** sets how sharply edges are
 drawn: **Fast** draws at screen resolution, **Sharpest** at four times it
-each way — on a 200-fixture show roughly 8 ms a frame at Fast against 14 ms
-at Smooth. The frame rate is only a ceiling: a frame that takes longer
+each way (on the graphics card, as many samples a pixel as it offers) —
+on a 200-fixture show roughly 8 ms a frame at Fast against 14 ms at
+Smooth. The frame rate is only a ceiling: a frame that takes longer
 slows the view by itself, and the view never asks for frames faster than it
 can draw them. The floor grid is drawn once and reused until the view or
 the rig's extent changes.

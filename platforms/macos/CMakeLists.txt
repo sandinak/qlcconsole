@@ -43,11 +43,7 @@ set(QT_FRAMEWORK_NAMES
     "QtWidgets"
     "QtWebSockets"
 )
-if(QT_MAJOR_VERSION GREATER 5)
-    list(APPEND QT_FRAMEWORK_NAMES "QtQml")
-else()
-    list(APPEND QT_FRAMEWORK_NAMES "QtScript")
-endif()
+list(APPEND QT_FRAMEWORK_NAMES "QtQml")
 
 if(qmlui)
     list(APPEND QT_FRAMEWORK_NAMES
@@ -124,14 +120,8 @@ install(FILES ${QT_PLUGINS_DIR}/imageformats/libqjpeg.dylib DESTINATION ${INSTAL
 install(FILES ${QT_PLUGINS_DIR}/imageformats/libqsvg.dylib DESTINATION ${INSTALLROOT}/${PLUGINDIR}/imageformats OPTIONAL)
 # multimedia (not every Qt build ships every backend — e.g. Homebrew's Qt6
 # only builds the native "darwin" AVFoundation backend, no ffmpeg one)
-if(QT_MAJOR_VERSION GREATER 5)
-    install(FILES ${QT_PLUGINS_DIR}/multimedia/libdarwinmediaplugin.dylib DESTINATION ${INSTALLROOT}/${PLUGINDIR}/multimedia OPTIONAL)
-    install(FILES ${QT_PLUGINS_DIR}/multimedia/libffmpegmediaplugin.dylib DESTINATION ${INSTALLROOT}/${PLUGINDIR}/multimedia OPTIONAL)
-else()
-    install(FILES ${QT_PLUGINS_DIR}/audio/libqtaudio_coreaudio.dylib DESTINATION ${INSTALLROOT}/${PLUGINDIR}/audio OPTIONAL)
-    install(FILES ${QT_PLUGINS_DIR}/mediaservice/libqavfmediaplayer.dylib DESTINATION ${INSTALLROOT}/${PLUGINDIR}/mediaservice OPTIONAL)
-    install(FILES ${QT_PLUGINS_DIR}/mediaservice/libqtmedia_audioengine.dylib DESTINATION ${INSTALLROOT}/${PLUGINDIR}/mediaservice OPTIONAL)
-endif()
+install(FILES ${QT_PLUGINS_DIR}/multimedia/libdarwinmediaplugin.dylib DESTINATION ${INSTALLROOT}/${PLUGINDIR}/multimedia OPTIONAL)
+install(FILES ${QT_PLUGINS_DIR}/multimedia/libffmpegmediaplugin.dylib DESTINATION ${INSTALLROOT}/${PLUGINDIR}/multimedia OPTIONAL)
 # platforms -- NOT optional: the bundle can't start without libqcocoa.
 install(FILES ${QT_PLUGINS_DIR}/platforms/libqcocoa.dylib DESTINATION ${INSTALLROOT}/${PLUGINDIR}/platforms)
 # styles

@@ -129,13 +129,9 @@ private:
      ********************************************************************/
 public:
     enum GridUnits { Meters, Feet };
-#if QT_VERSION >= 0x050500
     Q_ENUM(GridUnits)
-#endif
     enum PointOfView { Undefined, TopView, FrontView, RightSideView, LeftSideView };
-#if QT_VERSION >= 0x050500
     Q_ENUM(PointOfView)
-#endif
     enum StageType { StageSimple, StageBox, StageRock, StageTheatre };
 
     /** Get/Set the size of the grid in 2D display mode */
@@ -211,9 +207,7 @@ public:
         MeshZUpFlag         = (1 << 3),
         VerticalStripFlag   = (1 << 4)   ///< lay multi-head fixtures out as a vertical strip
     };
-#if QT_VERSION >= 0x050500
     Q_ENUM(ItemFlags)
-#endif
 
     /********************************************************************
      * Fixture items

@@ -12,6 +12,7 @@
 #include <QImageReader>
 #include <QRegularExpression>
 #include <QHash>
+#include <QMutex>
 #include <QtMath>
 
 #include "beamoptics.h"
@@ -77,10 +78,15 @@ namespace
 
 QImage BeamOptics::goboMask(const QString &path)
 {
+    // Asked from the rig view's drawing threads at once.
     static QHash<QString, QImage> cache;
-    auto it = cache.constFind(path);
-    if (it != cache.constEnd())
-        return it.value();
+    static QMutex lock;
+    {
+        QMutexLocker locker(&lock);
+        auto it = cache.constFind(path);
+        if (it != cache.constEnd())
+            return it.value();
+    }
 
     QImage out;
     QImageReader reader(path);
@@ -102,6 +108,7 @@ QImage BeamOptics::goboMask(const QString &path)
             }
         }
     }
+    QMutexLocker locker(&lock);
     if (cache.size() > 256)
         cache.clear();
     cache.insert(path, out);

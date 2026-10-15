@@ -4,11 +4,7 @@ set(TS_FILES
     qlci18n_fi_FI.ts
 )
 
-if(QT_VERSION_MAJOR GREATER 5)
-    qt_add_translation(QM_FILES ${TS_FILES})
-else()
-    qt5_add_translation(QM_FILES ${TS_FILES})
-endif()
+qt_add_translation(QM_FILES ${TS_FILES})
 
 add_executable(${module_name} WIN32
     ${module_name}.cpp ${module_name}.h
@@ -21,8 +17,8 @@ target_include_directories(${module_name} PRIVATE
 )
 
 target_link_libraries(${module_name} PRIVATE
-    Qt${QT_MAJOR_VERSION}::Core
-    Qt${QT_MAJOR_VERSION}::Gui
-    Qt${QT_MAJOR_VERSION}::Test
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Test
     qlcplusengine
 )

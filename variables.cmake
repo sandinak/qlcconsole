@@ -1,14 +1,13 @@
-if(QT_VERSION_MAJOR GREATER 5)
-    set(QT_MAJOR_VERSION 6)
-else(QT_VERSION_MAJOR EQUAL 5)
-    set(QT_MAJOR_VERSION 5)
-endif()
-
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
 add_definitions(-DUNICODE)
+
+# Nothing Qt deprecated by 6.8 (the oldest Qt built against) compiles: the
+# declarations are hidden, so a use of one fails to build rather than
+# lingering until a later Qt removes it.
+add_definitions(-DQT_DISABLE_DEPRECATED_UP_TO=0x060800)
 
 set(APPNAME "qlcconsole")
 set(FXEDNAME "Fixture Definition Editor")
@@ -50,7 +49,6 @@ set(APPVERSION "${QLC_BASE_VERSION}+qlcconsole.${QLCCONSOLE_REV}")
 if(UNIX)
     set(OLA_GIT "/usr/src/ola") # OLA directories
 endif()
-
 
 if(APPLE)
     set(CMAKE_MACOSX_RPATH ON)
@@ -340,16 +338,15 @@ elseif (APPLE)
     set(PLUGINDIR "PlugIns")
 elseif (UNIX)
     if (appimage)
-        set(PLUGINDIR "../lib/qt${QT_MAJOR_VERSION}/plugins/qlcconsole")
+        set(PLUGINDIR "../lib/qt6/plugins/qlcconsole")
     else ()
-        set(PLUGINDIR "${LIBSDIR}/qt${QT_MAJOR_VERSION}/plugins/qlcconsole")
+        set(PLUGINDIR "${LIBSDIR}/qt6/plugins/qlcconsole")
     endif ()
 endif ()
 
 if (ANDROID OR IOS)
     set(PLUGINDIR "Plugins")
 endif ()
-
 
 # Audio Plugins
 if (WIN32)
@@ -363,7 +360,6 @@ endif ()
 if (ANDROID OR IOS)
     set(AUDIOPLUGINDIR "${PLUGINDIR}/Audio")
 endif ()
-
 
 # Translations
 if (WIN32)
@@ -473,7 +469,6 @@ if (ANDROID)
 elseif (IOS)
     set(MESHESDIR "Meshes")
 endif ()
-
 
 # Color filters
 if (WIN32)

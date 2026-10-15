@@ -9,6 +9,6 @@ target_include_directories(iopluginstub PRIVATE
 )
 
 target_link_libraries(iopluginstub PRIVATE
-    Qt${QT_MAJOR_VERSION}::Core
-    Qt${QT_MAJOR_VERSION}::Gui
+    Qt6::Core
+    Qt6::Gui
 )

@@ -179,11 +179,7 @@ protected:
     // (steps/stepsCount) can lock — they MUST, or a UI-thread repaint racing the
     // timer thread's step reads crashes (SequenceItem::paint copying m_steps
     // mid-reallocation).
-#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
-    mutable QMutex m_stepListMutex;
-#else
     mutable QRecursiveMutex m_stepListMutex;
-#endif
 
     /*********************************************************************
      * Speed modes
@@ -194,9 +190,7 @@ public:
         Common,  //! Impose a common chaser-specific speed to all steps
         PerStep  //! Impose a step-specific speed to each step
     };
-#if QT_VERSION >= 0x050500
     Q_ENUM(SpeedMode)
-#endif
 
     void setFadeInMode(SpeedMode mode);
     SpeedMode fadeInMode() const;
@@ -370,11 +364,7 @@ signals:
     void currentStepChanged(int stepNumber);
 
 private:
-#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
-    QMutex m_runnerMutex;
-#else
     QRecursiveMutex m_runnerMutex;
-#endif
     ChaserRunner* m_runner;
     bool m_showClocked;     //! Steps driven by a ShowRunner's clock, not the MasterTimer
 

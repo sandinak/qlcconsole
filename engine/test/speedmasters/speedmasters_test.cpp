@@ -140,16 +140,23 @@ void SpeedMasters_Test::tapSetsAnOwnMasterNotAFollower()
 {
     SpeedMasters *sm = m_doc->speedMasters();
     sm->setRate(0, 0.5);
+    QElapsedTimer sinceTap;
     for (int i = 0; i < 5; ++i)
     {
         if (i)
             QTest::qWait(250);                   // 240 BPM heard
         QVERIFY(sm->tap(0));
+        sinceTap.start();
     }
     QVERIFY2(sm->bpm(0) > 200 && sm->bpm(0) < 260, qPrintable(QString::number(sm->bpm(0))));
     QCOMPARE(sm->rate(0), 0.5);                  // the fader stays put
-    const double f = sm->beatPosition(0) - std::floor(sm->beatPosition(0));
-    QVERIFY2(f < 0.05 || f > 0.95, qPrintable(QString::number(f)));
+    /* The last tap is on the beat: the phase is no more than the time since
+       it has moved it on (a fixed 0.05 flaked on a stalled CI runner). */
+    const double pos = sm->beatPosition(0);
+    const double moved = sinceTap.nsecsElapsed() / 1e9 * sm->bpm(0) / 60.0;
+    const double f = pos - std::floor(pos);
+    QVERIFY2(f <= moved + 0.02 || f > 0.98,
+             qPrintable(QString("phase %1 after %2 beats").arg(f).arg(moved)));
 
     QVERIFY(sm->setFollow(1, SpeedMasters::MainClock));
     QVERIFY(!sm->tap(1));

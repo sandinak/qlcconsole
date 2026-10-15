@@ -25,12 +25,8 @@
 #endif
 #include <QDebug>
 #include <QUrl>
-#if QT_VERSION >= QT_VERSION_CHECK(5, 10, 0)
 #include <QRandomGenerator>
-#endif
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QRegularExpression>
-#endif
 
 #include "genericfader.h"
 #include "fadechannel.h"
@@ -149,11 +145,7 @@ bool Script::setData(const QString& str)
     if (m_data.isEmpty() == false)
     {
         int i = 1;
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
         QStringList lines = m_data.split(QRegularExpression("(\\r\\n|\\n\\r|\\r|\\n)"));
-#else
-        QStringList lines = m_data.split(QRegExp("(\r\n|\n\r|\r|\n)"));
-#endif
         foreach (QString line, lines)
         {
             bool ok = false;
@@ -203,11 +195,7 @@ QString Script::data() const
 
 QStringList Script::dataLines() const
 {
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     QStringList result = m_data.split(QRegularExpression("(\\r\\n|\\n\\r|\\r|\\n)"));
-#else
-    QStringList result = m_data.split(QRegExp("(\r\n|\n\r|\r|\n)"));
-#endif
     while (result.count() && result.last().isEmpty())
         result.takeLast();
 
@@ -433,11 +421,7 @@ quint32 Script::getValueFromString(QString str, bool *ok)
     int max = Function::stringToSpeed(valList.at(1));
 
     *ok = true;
-#if QT_VERSION < QT_VERSION_CHECK(5, 10, 0)
-    return qrand() % ((max + 1) - min) + min;
-#else
       return QRandomGenerator::global()->generate() % ((max + 1) - min) + min;
-#endif
 }
 
 bool Script::executeCommand(int index, MasterTimer* timer, QList<Universe *> universes)
@@ -959,11 +943,7 @@ QList <QStringList> Script::tokenizeLine(const QString& str, bool* ok)
             else
             {
                 // No quotes. Find the next whitespace.
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
                 right = line.indexOf(QRegularExpression("\\s"), left);
-#else
-                right = line.indexOf(QRegExp("\\s"), left);
-#endif
                 if (right == -1)
                 {
                     qDebug() << "Syntax error:" << line.mid(left);

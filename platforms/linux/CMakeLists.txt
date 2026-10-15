@@ -53,37 +53,20 @@ if(appimage)
     )
 
     # Qt Libraries
-    if (QT_VERSION_MAJOR GREATER 5)
-        set(qtlibs_FILES
-            ${QT_LIBS_PATH}/libQt6Core.so
-            ${QT_LIBS_PATH}/libQt6Network.so
-            ${QT_LIBS_PATH}/libQt6Gui.so
-            ${QT_LIBS_PATH}/libQt6Qml.so
-            ${QT_LIBS_PATH}/libQt6Svg.so
-            ${QT_LIBS_PATH}/libQt6Widgets.so
-            ${QT_LIBS_PATH}/libQt6OpenGL.so
-            ${QT_LIBS_PATH}/libQt6Multimedia.so
-            ${QT_LIBS_PATH}/libQt6MultimediaWidgets.so
-            ${QT_LIBS_PATH}/libQt6SerialPort.so
-            ${QT_LIBS_PATH}/libQt6XcbQpa.so
-            ${QT_LIBS_PATH}/libQt6DBus.so
-            ${QT_LIBS_PATH}/libQt6WebSockets.so)
-    else()
-        set(qtlibs_FILES
-            ${QT_LIBS_PATH}/libQt5Core.so.5
-            ${QT_LIBS_PATH}/libQt5Script.so.5
-            ${QT_LIBS_PATH}/libQt5Network.so.5
-            ${QT_LIBS_PATH}/libQt5Gui.so.5
-            ${QT_LIBS_PATH}/libQt5Svg.so.5
-            ${QT_LIBS_PATH}/libQt5Widgets.so.5
-            ${QT_LIBS_PATH}/libQt5OpenGL.so.5
-            ${QT_LIBS_PATH}/libQt5Multimedia.so.5
-            ${QT_LIBS_PATH}/libQt5MultimediaWidgets.so.5
-            ${QT_LIBS_PATH}/libQt5SerialPort.so.5
-            ${QT_LIBS_PATH}/libQt5XcbQpa.so.5
-            ${QT_LIBS_PATH}/libQt5DBus.so.5
-            ${QT_LIBS_PATH}/libQt5WebSockets.so.5)
-    endif()
+    set(qtlibs_FILES
+        ${QT_LIBS_PATH}/libQt6Core.so
+        ${QT_LIBS_PATH}/libQt6Network.so
+        ${QT_LIBS_PATH}/libQt6Gui.so
+        ${QT_LIBS_PATH}/libQt6Qml.so
+        ${QT_LIBS_PATH}/libQt6Svg.so
+        ${QT_LIBS_PATH}/libQt6Widgets.so
+        ${QT_LIBS_PATH}/libQt6OpenGL.so
+        ${QT_LIBS_PATH}/libQt6Multimedia.so
+        ${QT_LIBS_PATH}/libQt6MultimediaWidgets.so
+        ${QT_LIBS_PATH}/libQt6SerialPort.so
+        ${QT_LIBS_PATH}/libQt6XcbQpa.so
+        ${QT_LIBS_PATH}/libQt6DBus.so
+        ${QT_LIBS_PATH}/libQt6WebSockets.so)
 
     if(qmlui)
         list(APPEND qtlibs_FILES
@@ -143,11 +126,7 @@ if(appimage)
     install(FILES ${_resolved_qtlibs_FILES} DESTINATION ${INSTALLROOT}/${LIBSDIR})
 
     # Qt plugins
-    if (QT_VERSION_MAJOR GREATER 5)
-        set(PLUGINS_DESTINATION ${INSTALLROOT}/plugins)
-    else()
-        set(PLUGINS_DESTINATION ${INSTALLROOT}/${LIBSDIR}/qt5/plugins)
-    endif()
+    set(PLUGINS_DESTINATION ${INSTALLROOT}/plugins)
 
     install(
         FILES 
@@ -162,34 +141,18 @@ if(appimage)
         DESTINATION ${PLUGINS_DESTINATION}/xcbglintegrations
     )
 
-    if (QT_VERSION_MAJOR GREATER 5)
-        install(
-            FILES ${QT_PLUGINS_PATH}/multimedia/libffmpegmediaplugin.so
-            DESTINATION ${PLUGINS_DESTINATION}/multimedia
-        )
-        get_filename_component(LIBAVFORMAT_REAL "${QT_LIBS_PATH}/libavformat.so" REALPATH)
-        install(
-            FILES
-                ${QT_LIBS_PATH}/libavformat.so
-                ${QT_LIBS_PATH}/libavformat.so.61
-                ${LIBAVFORMAT_REAL}
-            DESTINATION ${INSTALLROOT}/${LIBSDIR}
-        )
-    else()
-        install(
-            FILES
-                ${QT_PLUGINS_PATH}/audio/libqtaudio_alsa.so
-                ${QT_PLUGINS_PATH}/audio/libqtmedia_pulse.so
-            DESTINATION ${PLUGINS_DESTINATION}/audio
-        )
-
-        install(
-            FILES
-                ${QT_PLUGINS_PATH}/mediaservice/libgstaudiodecoder.so
-                ${QT_PLUGINS_PATH}/mediaservice/libgstmediaplayer.so
-            DESTINATION ${PLUGINS_DESTINATION}/mediaservice
-        )
-    endif()
+    install(
+        FILES ${QT_PLUGINS_PATH}/multimedia/libffmpegmediaplugin.so
+        DESTINATION ${PLUGINS_DESTINATION}/multimedia
+    )
+    get_filename_component(LIBAVFORMAT_REAL "${QT_LIBS_PATH}/libavformat.so" REALPATH)
+    install(
+        FILES
+            ${QT_LIBS_PATH}/libavformat.so
+            ${QT_LIBS_PATH}/libavformat.so.61
+            ${LIBAVFORMAT_REAL}
+        DESTINATION ${INSTALLROOT}/${LIBSDIR}
+    )
 
     install(
         FILES

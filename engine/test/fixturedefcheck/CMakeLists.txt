@@ -10,9 +10,9 @@ target_include_directories(${module_name} PRIVATE
 )
 
 target_link_libraries(${module_name} PRIVATE
-    Qt${QT_MAJOR_VERSION}::Core
-    Qt${QT_MAJOR_VERSION}::Gui
-    Qt${QT_MAJOR_VERSION}::Test
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Test
     qlcplusengine
 )
 
@@ -25,8 +25,6 @@ endif()
 #if(WIN32)
 
 #string(STRIP ${CURRUSR} CURRUSR)
-
-# Consider using qt_generate_deploy_app_script() for app deployment if
 
 target_compile_definitions(${module_name} PRIVATE
     FIXTUREDEFCHECK_DATA="${CMAKE_CURRENT_SOURCE_DIR}/data/"

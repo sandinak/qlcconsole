@@ -60,8 +60,12 @@ face of what it hung on before; it is straightened when the show loads
 **Something is missing from the Rig Overview.** Its layer is hidden in the
 Lighting Studio's Layers panel — the overview hides what the Studio hides.
 
-**The Rig Overview is slow.** **Quality: Fast**, hide layers you don't need,
-and use a release build. See [Keeping it quick](getting-started.md#keeping-it-quick).
+**The Rig Overview is slow.** Make sure its **GPU** box is ticked, then
+**Quality: Fast**, hide layers you don't need, and use a release build.
+
+**The Rig Overview draws wrongly** — garbled beams, missing structures,
+black patches. Untick its **GPU** box: it draws on the processor instead,
+and a graphics driver can't get it wrong. See [Keeping it quick](getting-started.md#keeping-it-quick).
 
 **I can't click a truss for the fixtures on it.** Show → untick
 **Fixtures on the rig** to hide mounted fixtures while placing structures;

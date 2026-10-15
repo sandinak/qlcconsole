@@ -11,9 +11,9 @@ target_include_directories(${module_name} PRIVATE
 )
 
 target_link_libraries(${module_name} PRIVATE
-    Qt${QT_MAJOR_VERSION}::Core
-    Qt${QT_MAJOR_VERSION}::Gui
-    Qt${QT_MAJOR_VERSION}::Test
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Test
     qlcplusengine
 )
 
@@ -36,7 +36,3 @@ endif()
 #        SKIP_TEST
 #    )
 #endif()
-
-# Consider using qt_generate_deploy_app_script() for app deployment if
-# the project can use Qt 6.3. In that case rerun qmake2cmake with
-# --min-qt-version=6.3.

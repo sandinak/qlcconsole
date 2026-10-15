@@ -13,11 +13,7 @@ set(TS_FILES
     launcher_ja_JP.ts
 )
 
-if(QT_VERSION_MAJOR GREATER 5)
-    qt_add_translation(QM_FILES ${TS_FILES})
-else()
-    qt5_add_translation(QM_FILES ${TS_FILES})
-endif()
+qt_add_translation(QM_FILES ${TS_FILES})
 
 add_executable(${module_name}
     launcher.cpp launcher.h
@@ -31,9 +27,9 @@ target_include_directories(${module_name} PRIVATE
 )
 
 target_link_libraries(${module_name} PRIVATE
-    Qt${QT_MAJOR_VERSION}::Core
-    Qt${QT_MAJOR_VERSION}::Gui
-    Qt${QT_MAJOR_VERSION}::Widgets
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
 )
 
 # Resources:
@@ -48,20 +44,14 @@ set(launcher_resource_files
     "../resources/icons/png/qlcconsole.png"
 )
 
-if(QT_VERSION_MAJOR GREATER 5)
-    qt_add_resources(${module_name} "launcher"
-    PREFIX
-        "/"
-    BASE
-        "."
-    FILES
-        ${launcher_resource_files}
+qt_add_resources(${module_name} "launcher"
+PREFIX
+    "/"
+BASE
+    "."
+FILES
+    ${launcher_resource_files}
 )
-else()
-    qt5_add_resources($launcher.qrc)
-    target_sources(${module_name} PRIVATE
-        ${launcher_resource_files})
-endif()
 
 install(TARGETS ${module_name}
     DESTINATION ${INSTALLROOT}/${BINDIR}

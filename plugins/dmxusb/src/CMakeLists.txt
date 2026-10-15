@@ -15,11 +15,7 @@ set(TS_FILES
     DMX_USB_ja_JP.ts
 )
 
-if(QT_VERSION_MAJOR GREATER 5)
-    qt_add_translation(QM_FILES ${TS_FILES})
-else()
-    qt5_add_translation(QM_FILES ${TS_FILES})
-endif()
+qt_add_translation(QM_FILES ${TS_FILES})
 
 add_library(${module_name}
     SHARED
@@ -123,9 +119,9 @@ target_include_directories(${module_name} PRIVATE
 )
 
 target_link_libraries(${module_name} PRIVATE
-    Qt${QT_MAJOR_VERSION}::Core
-    Qt${QT_MAJOR_VERSION}::Gui
-    Qt${QT_MAJOR_VERSION}::Widgets
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
 )
 
 if(UNIX)
@@ -146,14 +142,14 @@ target_sources(${module_name} PUBLIC
     qtserial-interface.cpp qtserial-interface.h
 )
 
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS SerialPort)
+find_package(Qt6 REQUIRED COMPONENTS SerialPort)
 
 target_compile_definitions(${module_name} PRIVATE
     QTSERIAL
 )
 
 target_link_libraries(${module_name} PRIVATE
-    Qt${QT_MAJOR_VERSION}::SerialPort
+    Qt6::SerialPort
 )
 
 if(WITH_D2XX)

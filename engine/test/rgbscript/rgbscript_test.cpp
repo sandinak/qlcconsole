@@ -23,11 +23,7 @@
 #include "rgbscript_test.h"
 #include "rgbscriptscache.h"
 
-#ifdef QT_QML_LIB
   #include "rgbscriptv4.h"
-#else
-  #include "rgbscript.h"
-#endif
 #undef private
 
 #include "doc.h"
@@ -47,11 +43,7 @@ void RGBScript_Test::cleanupTestCase()
 void RGBScript_Test::initial()
 {
     RGBScript script(m_doc);
-#ifdef QT_QML_LIB
     QVERIFY(script.s_jsThread == NULL);
-#else
-    QVERIFY(script.s_engine == NULL);
-#endif
     QCOMPARE(script.m_apiVersion, 0);
     QCOMPARE(script.m_fileName, QString());
     QCOMPARE(script.m_contents, QString());
@@ -136,30 +128,18 @@ void RGBScript_Test::script()
     QCOMPARE(s->apiVersion(), 0);
     QCOMPARE(s->author(), QString());
     QCOMPARE(s->name(), QString());
-#ifdef QT_QML_LIB
     QVERIFY(s->m_script.isUndefined() == true);
     QVERIFY(s->m_rgbMap.isUndefined() == true);
     QVERIFY(s->m_rgbMapStepCount.isUndefined() == true);
-#else
-    // QVERIFY(s->m_script.isValid() == false); // TODO: to be fixed !!
-    QVERIFY(s->m_rgbMap.isValid() == false);
-    QVERIFY(s->m_rgbMapStepCount.isValid() == false);
-#endif
     s = m_doc->rgbScriptsCache()->script("Stripes");
     QVERIFY(s->fileName().endsWith("stripes.js"));
     QVERIFY(s->m_contents.isEmpty() == false);
     QVERIFY(s->apiVersion() > 0);
     QCOMPARE(s->author(), QString("Massimo Callegari"));
     QCOMPARE(s->name(), QString("Stripes"));
-#ifdef QT_QML_LIB
     QVERIFY(s->m_script.isUndefined() == false);
     QVERIFY(s->m_rgbMap.isUndefined() == false);
     QVERIFY(s->m_rgbMapStepCount.isUndefined() == false);
-#else
-    QVERIFY(s->m_script.isValid() == true);
-    QVERIFY(s->m_rgbMap.isValid() == true);
-    QVERIFY(s->m_rgbMapStepCount.isValid() == true);
-#endif
     delete s;
 }
 
@@ -300,21 +280,11 @@ void RGBScript_Test::runScripts()
         // Verify that the basename only uses lower case characters
         QString baseName = scriptName;
         baseName.truncate(scriptName.size() - 3);
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-        QVERIFY(QRegExp("[a-z]*").exactMatch(baseName));
-#else
         QVERIFY(QRegularExpression("[a-z]+").match(baseName).hasMatch());
-#endif
 
-#ifdef QT_QML_LIB
         QVERIFY(!s->m_script.isUndefined());
         QVERIFY(!s->m_rgbMap.isUndefined());
         QVERIFY(!s->m_rgbMapStepCount.isUndefined());
-#else
-        // QVERIFY(s->m_script.isValid()); // TODO: to be fixed !!
-        QVERIFY(s->m_rgbMap.isValid());
-        QVERIFY(s->m_rgbMapStepCount.isValid());
-#endif
 
         { // limit the scope of this map to keep it clean for future executions
             RGBMap map;

@@ -5,8 +5,8 @@ add_library(hotplugmonitor
 set_property(TARGET hotplugmonitor PROPERTY POSITION_INDEPENDENT_CODE ON)
 
 target_link_libraries(hotplugmonitor PUBLIC
-    Qt${QT_MAJOR_VERSION}::Core
-    Qt${QT_MAJOR_VERSION}::Gui
+    Qt6::Core
+    Qt6::Gui
 )
 
 if(udev)

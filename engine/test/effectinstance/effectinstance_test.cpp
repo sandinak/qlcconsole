@@ -163,18 +163,28 @@ void EffectInstance_Test::anEffectOnASpeedMasterCountsItsBeats()
     EffectInstance inst(m_doc, scene->id(), m_palette->id());
     QVERIFY(inst.isValid());
     auto time = [&]() { return inst.buildInputsObject().property("_time").toNumber(); };
+    /* The effect's time is the master's beat position. Read the master just
+       before and just after it, so it is bracketed however long the machine
+       stalls in between (CI's runners do: a fixed tolerance of a few
+       milliseconds flaked). */
+    auto onMaster = [&](int master) {
+        const double before = sm->beatPosition(master);
+        const double t = time();
+        const double after = sm->beatPosition(master);
+        return t >= before - 1e-6 && t <= after + 1e-6;
+    };
 
     // Free: seconds since it started, as ever.
     QVERIFY(time() < 1.0);
 
     // On its look's master: that master's beats.
     scene->setSpeedMaster(SpeedMasters::Master1 + 1);
-    QVERIFY(qAbs(time() - sm->beatPosition(1)) < 0.02);
+    QVERIFY(onMaster(1));
     QCOMPARE(inst.buildInputsObject().property("_bpm").toNumber(), 60.0);
 
     // Its own choice wins over the look's.
     m_palette->setEffectParamValue("__speedMaster", SpeedMasters::Master1);
-    QVERIFY(qAbs(time() - sm->beatPosition(0)) < 0.05);
+    QVERIFY(onMaster(0));
     QCOMPARE(inst.buildInputsObject().property("_bpm").toNumber(), 600.0);
 
     // Paused: it stands still.

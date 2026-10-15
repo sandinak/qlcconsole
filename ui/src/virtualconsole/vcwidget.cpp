@@ -792,16 +792,6 @@ QKeySequence VCWidget::stripKeySequence(const QKeySequence& seq)
 {
     /* In QLC 3.2.x it is possible to set shortcuts like CTRL+X, but since
        CTRL is now the tap modifier, it must be stripped away. */
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-    int keys[4] = { 0, 0, 0, 0 };
-    for (int i = 0; i < (int)seq.count() && i < 4; i++)
-    {
-        if ((seq[i] & Qt::ControlModifier) != 0)
-            keys[i] = seq[i] & (~Qt::ControlModifier);
-        else
-            keys[i] = seq[i];
-    }
-#else
     QKeyCombination keys[4] = { Qt::Key_unknown, QKeyCombination::fromCombined(0),
                                QKeyCombination::fromCombined(0), QKeyCombination::fromCombined(0)};
     for (int i = 0; i < (int)seq.count() && i < 4; i++)
@@ -811,7 +801,6 @@ QKeySequence VCWidget::stripKeySequence(const QKeySequence& seq)
         else
             keys[i] = seq[i];
     }
-#endif
     return QKeySequence(keys[0], keys[1], keys[2], keys[3]);
 }
 
@@ -1031,13 +1020,8 @@ QString VCWidget::extraParamToString(QVariant param)
     if (param.isValid() == false)
         return QString();
 
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-    if (param.type() == QVariant::Int && param.toInt() != -1)
-        return QString::number(param.toInt());
-#else
     if (param.metaType().id() == QMetaType::Int && param.toInt() != -1)
         return QString::number(param.toInt());
-#endif
     return QString();
 }
 

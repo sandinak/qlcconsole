@@ -438,11 +438,7 @@ protected:
     QList<QSharedPointer<GenericFader>> m_faders;
 
     /** Mutex used to protect the access to the m_faders array */
-#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
-    QMutex m_fadersMutex;
-#else
     QRecursiveMutex m_fadersMutex;
-#endif
 
     /************************************************************************
      * Values

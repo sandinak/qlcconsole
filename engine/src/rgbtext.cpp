@@ -167,11 +167,7 @@ int RGBText::scrollingTextStepCount() const
     if (animationStyle() == Vertical)
         return m_text.length() * fm.ascent();
     else{
-#if (QT_VERSION < QT_VERSION_CHECK(5, 11, 0))
-        return fm.width(m_text);
-#else
         return fm.horizontalAdvance(m_text);
-#endif
     }
 }
 

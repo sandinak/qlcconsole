@@ -130,9 +130,9 @@ target_include_directories(${module_name} PUBLIC
 )
 
 target_link_libraries(${module_name} PUBLIC
-    Qt${QT_MAJOR_VERSION}::Core
-    Qt${QT_MAJOR_VERSION}::Gui
-    Qt${QT_MAJOR_VERSION}::Multimedia
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Multimedia
 )
 
 target_link_libraries(${module_name} PRIVATE qlcplusaudio)
@@ -156,7 +156,7 @@ if(WIN32)
     target_include_directories(${module_name} PUBLIC /)
 
     target_link_libraries(${module_name} PUBLIC
-        Qt${QT_MAJOR_VERSION}::Widgets
+        Qt6::Widgets
         winmm
         avrt
     )
@@ -180,17 +180,9 @@ if(APPLE)
     )
 endif()
 
-if(qmlui OR (QT_VERSION_MAJOR GREATER 5))
-    target_sources(${module_name} PRIVATE rgbscriptv4.cpp rgbscriptv4.h)
+target_sources(${module_name} PRIVATE rgbscriptv4.cpp rgbscriptv4.h)
 
-    target_link_libraries(${module_name} PUBLIC Qt${QT_MAJOR_VERSION}::Qml)
-else()
-    target_sources(${module_name} PRIVATE rgbscript.cpp rgbscript.h)
-    target_link_libraries(${module_name} PUBLIC Qt${QT_MAJOR_VERSION}::Script)
-    # EffectScript uses QJSEngine; link Qml privately so QT_QML_LIB doesn't
-    # propagate to test binaries that guard on it for rgbscript vs rgbscriptv4.
-    target_link_libraries(${module_name} PRIVATE Qt${QT_MAJOR_VERSION}::Qml)
-endif()
+target_link_libraries(${module_name} PUBLIC Qt6::Qml)
 
 if(qmlui)
     target_sources(${module_name} PRIVATE

@@ -98,9 +98,7 @@ public:
         PageSet,
         NoType
     };
-#if QT_VERSION >= 0x050500
     Q_ENUM(Type)
-#endif
 
     /** Set the type of this channel (see enum Type) */
     void setType(Type type);
@@ -160,9 +158,7 @@ public:
         Absolute = 0,
         Relative = 1
     };
-#if QT_VERSION >= 0x050500
     Q_ENUM(MovementType)
-#endif
 
     MovementType movementType() const;
     void setMovementType(MovementType type);

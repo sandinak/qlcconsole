@@ -85,9 +85,9 @@ and releases currently target macOS only — see [RELEASE.md](RELEASE.md).
 
 ## Building qlcconsole
 
-CMake, built out-of-tree in `build/`. `find_package(QT NAMES Qt5 Qt6 ...)`
-auto-detects whichever Qt is installed (Homebrew `qt` gives Qt6; `qt@5` also
-works) — CI and this fork's own releases build against Qt6:
+CMake, built out-of-tree in `build/`, against **Qt 6.8 or later** (Homebrew
+`qt`; Debian 13 / Ubuntu 25.04 `qt6-base-dev` and friends). Qt5 is no longer
+supported: the tag `qt5-last` is the last version that built on it.
 
 ```sh
 # Reconfigure only when CMakeLists/sources are added or removed:

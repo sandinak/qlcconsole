@@ -35,7 +35,7 @@ cp -r $SOURCE_DIR/resources/schemas $DEST_DIR/resources
 # to destination directory.
 #
 # Prune EVERY build directory, not just $DEST_DIR. The old version pruned only
-# the destination, so a second build dir alongside it (a Qt5/Qt6 pair, a Release
+# the destination, so a second build dir alongside it (a Release tree, a Werror
 # tree, anything) got walked and copied: with a handful of them present this
 # find matched 462292 files instead of 124, and the copy loop below -- one
 # mkdir -p and one cp per file -- ground for over fifteen minutes before anyone

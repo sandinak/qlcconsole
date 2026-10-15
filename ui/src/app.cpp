@@ -3634,9 +3634,6 @@ QFile::FileError App::saveXML(const QString& fileName, bool autosave)
     QXmlStreamWriter doc(&file);
     doc.setAutoFormatting(true);
     doc.setAutoFormattingIndent(1);
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-    doc.setCodec("UTF-8");
-#endif
 
     doc.writeStartDocument();
     doc.writeDTD(QString("<!DOCTYPE %1>").arg(KXMLQLCWorkspace));
@@ -4152,9 +4149,6 @@ void App::slotAutosave()
     QXmlStreamWriter doc(&file);
     doc.setAutoFormatting(true);
     doc.setAutoFormattingIndent(1);
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-    doc.setCodec("UTF-8");
-#endif
     doc.writeStartDocument();
     doc.writeDTD(QString("<!DOCTYPE %1>").arg(KXMLQLCWorkspace));
 
@@ -4253,11 +4247,7 @@ void App::checkAutosaveRecovery()
         }
 
         QFileInfo fi(untitledAutosave);
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
         QString lastModified = QLocale().toString(fi.lastModified(), QLocale::LongFormat);
-#else
-        QString lastModified = fi.lastModified().toString(Qt::DefaultLocaleLongDate);
-#endif
 
         const QString question = tr("An autosave file was found from a previous "
             "session (last modified: %1). Recover the unsaved work?").arg(lastModified);

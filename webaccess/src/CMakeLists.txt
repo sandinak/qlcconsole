@@ -15,11 +15,7 @@ set(TS_FILES
     webaccess_ja_JP.ts
 )
 
-if(QT_VERSION_MAJOR GREATER 5)
-    qt_add_translation(QM_FILES ${TS_FILES})
-else()
-    qt5_add_translation(QM_FILES ${TS_FILES})
-endif()
+qt_add_translation(QM_FILES ${TS_FILES})
 
 set(WEBACCESS_SOURCES
     commonjscss.h
@@ -78,30 +74,22 @@ target_compile_definitions(${module_name} PUBLIC
     USE_WEBSOCKET
 )
 
-find_package(Qt${QT_MAJOR_VERSION} REQUIRED COMPONENTS WebSockets)
+find_package(Qt6 REQUIRED COMPONENTS WebSockets)
 
 target_link_libraries(${module_name} PUBLIC
-    Qt${QT_MAJOR_VERSION}::Core
-    Qt${QT_MAJOR_VERSION}::Gui
-    Qt${QT_MAJOR_VERSION}::Multimedia
-    Qt${QT_MAJOR_VERSION}::Network
-    Qt${QT_MAJOR_VERSION}::Quick
-    Qt${QT_MAJOR_VERSION}::Widgets
-    Qt${QT_MAJOR_VERSION}::WebSockets
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Multimedia
+    Qt6::Network
+    Qt6::Quick
+    Qt6::Widgets
+    Qt6::WebSockets
     qlcplusengine
 )
 
-if(qmlui OR (QT_VERSION_MAJOR GREATER 5))
-    target_link_libraries(${module_name} PUBLIC
-        Qt${QT_MAJOR_VERSION}::Qml
-    )
-endif()
-
-if(NOT (qmlui OR (QT_VERSION_MAJOR GREATER 5)))
-    target_link_libraries(${module_name} PUBLIC
-        Qt${QT_MAJOR_VERSION}::Script
-    )
-endif()
+target_link_libraries(${module_name} PUBLIC
+    Qt6::Qml
+)
 
 if(NOT qmlui)
     target_link_libraries(${module_name} PUBLIC
@@ -119,7 +107,6 @@ if(UNIX AND NOT APPLE)
         webaccessnetwork.cpp webaccessnetwork.h
     )
 endif()
-
 
 install(TARGETS ${module_name}
     ARCHIVE DESTINATION ${INSTALLROOT}/${LIBSDIR}

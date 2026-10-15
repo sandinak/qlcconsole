@@ -50,6 +50,12 @@ The latest changes, newest first. Each links to the guide with the detail.
   and a pool split across a deck's edge is drawn only as finely as it
   shows (a 208-fixture show fully lit: from about a second a frame to 70
   ms).
+- **The Rig Overview draws on the graphics card** (Metal on a Mac,
+  OpenGL elsewhere), and works out its fixtures on every core at once:
+  the same picture, and the lit 208-fixture show from about 70 ms a frame
+  to 15 (from a stutter to smooth). The **GPU** box in its toolbar turns it off
+  if a driver draws it wrongly. See
+  [Angled — the free 3D view](lighting-studio.md#angled--the-free-3d-view).
 - **Pools show on decks and steps.** A beam landing on a platform was drawn
   only where it reached the bare floor; the part on the deck was lost.
 

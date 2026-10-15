@@ -91,9 +91,7 @@ public:
         DMX,
         Enttec,
     };
-#if QT_VERSION >= 0x050500
     Q_ENUM(Type)
-#endif
 
     void setType(Type type);
 

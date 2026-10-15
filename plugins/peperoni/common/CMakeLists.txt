@@ -1,6 +1,6 @@
 project(common)
 
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Gui)
+find_package(Qt6 REQUIRED COMPONENTS Gui)
 
 add_executable(common WIN32 MACOSX_BUNDLE
     inputdevice.cpp inputdevice.h
@@ -11,8 +11,8 @@ add_executable(common WIN32 MACOSX_BUNDLE
 )
 
 target_link_libraries(common PRIVATE
-    Qt${QT_MAJOR_VERSION}::Core
-    Qt${QT_MAJOR_VERSION}::Gui
+    Qt6::Core
+    Qt6::Gui
 )
 
 if(WIN32)
@@ -42,7 +42,3 @@ if(UNIX)
         unixpeperonidevice.cpp unixpeperonidevice.h
     )
 endif()
-
-# Consider using qt_generate_deploy_app_script() for app deployment if
-# the project can use Qt 6.3. In that case rerun qmake2cmake with
-# --min-qt-version=6.3.

@@ -7,9 +7,9 @@ target_include_directories(test PRIVATE
 )
 
 target_link_libraries(test PRIVATE
-    Qt${QT_MAJOR_VERSION}::Core
-    Qt${QT_MAJOR_VERSION}::Gui
-    Qt${QT_MAJOR_VERSION}::Widgets
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
     hotplugmonitor
 )
 
@@ -19,7 +19,3 @@ if(iokit)
         "-framework IOKit"
     )
 endif()
-
-# Consider using qt_generate_deploy_app_script() for app deployment if
-# the project can use Qt 6.3. In that case rerun qmake2cmake with
-# --min-qt-version=6.3.

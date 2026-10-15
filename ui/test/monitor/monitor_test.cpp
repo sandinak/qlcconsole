@@ -55,6 +55,7 @@
 #include "monitorgraphicsview.h"
 #include "monitorfixtureitem.h"
 #include "structurestudioview.h"
+#include "rhiraster.h"
 #include "mastertimer.h"
 #include "lanternpixels.h"
 #include "effectscriptrunner.h"
@@ -436,7 +437,8 @@ void Monitor_Test::removeSelectedCancelled()
    (skipped without it). Reported, not checked -- the number to watch when
    making the rig view faster. QLC_RIG_BENCH_LIT=1 sends every channel at
    full first (every beam lit: the worst case); QLC_RIG_BENCH_SHOT=<file.png>
-   saves the frame, "-q1"/"-q2" before the extension. */
+   saves the frame, "-q1"/"-q2" before the extension; QLC_RIG_BENCH_THREADS=n
+   draws on n threads (1: one at a time, to compare against). */
 void Monitor_Test::aShowsRigViewDrawTime()
 {
     const QString path = qEnvironmentVariable("QLC_RIG_BENCH");
@@ -510,6 +512,8 @@ void Monitor_Test::aShowsRigViewDrawTime()
         view.setBeams(true);
         view.setHaze(1.0);
         view.setSupersample(quality);
+        if (qEnvironmentVariableIsSet("QLC_RIG_BENCH_THREADS"))
+            view.setRenderThreads(qEnvironmentVariableIntValue("QLC_RIG_BENCH_THREADS"));
         view.show();
         QVERIFY(QTest::qWaitForWindowExposed(&view));
         view.repaint();                      // the first frame builds what it keeps
@@ -12609,6 +12613,118 @@ void Monitor_Test::aPoolOnADeckIsDrawn()
              qPrintable(QString("no pool on the deck: %1 under the beam, %2 away").arg(lit).arg(dark)));
 }
 
+/* The rig on the GPU (RhiRaster) draws what ZRaster draws: the same
+   triangles, the same passes. A lit par over a deck, drawn both ways at
+   each quality; the two pictures agree to within edge smoothing. Skipped
+   where there is no GPU to draw on. */
+void Monitor_Test::theGpuDrawsWhatTheCpuDraws()
+{
+    Doc doc(this);
+    MonitorProperties *props = doc.monitorProperties();
+    StagePlatform *deck = props->addPlatform();
+    deck->setName("Deck"); deck->setOriginX(0.0f); deck->setOriginY(0.0f);
+    deck->setWidth(6.0f); deck->setDepth(4.0f); deck->setHeight(1.0f);
+    deck->setColor(QColor(90, 70, 60));
+    Truss *t = props->addTruss();
+    t->setName("T"); t->setType(Truss::Horizontal);
+    t->setOrigin(QVector3D(0.5f, 2.0f, 5.0f)); t->setDirection(QPointF(1.0, 0.0));
+    t->setLength(5.0f); t->setWidth(0.3f);
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("GPU Par");
+    def->setType(QLCFixtureDef::ColorChanger);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("m");
+    const char *nm[] = { "Dimmer", "Red", "Green", "Blue" };
+    for (int c = 0; c < 4; ++c)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(nm[c]); ch->setGroup(QLCChannel::Intensity);
+        if (c == 1) ch->setColour(QLCChannel::Red);
+        if (c == 2) ch->setColour(QLCChannel::Green);
+        if (c == 3) ch->setColour(QLCChannel::Blue);
+        def->addChannel(ch);
+        mode->insertChannel(ch, c);
+    }
+    QLCPhysical ph;
+    ph.setWidth(300); ph.setHeight(300); ph.setDepth(300);
+    ph.setLensDegreesMin(30); ph.setLensDegreesMax(30);
+    mode->setPhysical(ph);
+    def->addMode(mode);
+    Fixture *fx = new Fixture(&doc);
+    fx->setName("GPU Par"); fx->setFixtureDefinition(def, mode);
+    QVERIFY(doc.addFixture(fx));
+    props->setFixturePosition(fx->id(), 0, 0, QVector3D(0, 0, 0));
+    FixtureRigProps rp;
+    rp.trussId = t->id(); rp.trussOffset = 2.5f;
+    props->setFixtureRigProps(fx->id(), rp);
+    QByteArray v(4, char(0));
+    v[0] = char(255); v[1] = char(60); v[3] = char(255);
+    fx->setChannelValues(v);
+
+    StructureStudioView view(&doc, StructureStudioView::StageKind, 0);
+    view.resize(640, 420);
+    view.reload();
+    view.setPlane(StructureStudioView::Angled);
+    view.setAngledView(-20.0, 45.0);
+    view.setLiveValues(true);
+    view.setBeams(true);
+    view.setHaze(0.5);
+    view.setAmbient(0.3);
+
+    const QByteArray was = qgetenv("QLC_RIG_GPU");
+    auto restore = qScopeGuard([&]() {
+        if (was.isNull()) qunsetenv("QLC_RIG_GPU"); else qputenv("QLC_RIG_GPU", was);
+    });
+    qputenv("QLC_RIG_GPU", "1");
+    if (!RhiRaster::available())
+        QSKIP("no GPU to draw on here");
+
+    for (int quality : { 1, 2 })
+    {
+        view.setSupersample(quality);
+        view.setGpu(false);
+        QVERIFY(!view.gpuActive());
+        const QImage cpu = view.grab().toImage().convertToFormat(QImage::Format_ARGB32);
+        view.setGpu(true);
+        QVERIFY(view.gpuActive());
+        const QImage gpu = view.grab().toImage().convertToFormat(QImage::Format_ARGB32);
+        QVERIFY2(view.drewOnGpu(), "the GPU fell back to the CPU");
+        QCOMPARE(gpu.size(), cpu.size());
+        const QString shots = qEnvironmentVariable("QLC_GPU_SHOTS");
+        if (!shots.isEmpty())
+        {
+            cpu.save(QString("%1/cpu-q%2.png").arg(shots).arg(quality));
+            gpu.save(QString("%1/gpu-q%2.png").arg(shots).arg(quality));
+        }
+
+        // Per pixel: how far apart, as the brightest channel's difference.
+        qint64 total = 0;
+        int far = 0, lit = 0;
+        for (int y = 0; y < cpu.height(); ++y)
+        {
+            const QRgb *a = reinterpret_cast<const QRgb *>(cpu.constScanLine(y));
+            const QRgb *b = reinterpret_cast<const QRgb *>(gpu.constScanLine(y));
+            for (int x = 0; x < cpu.width(); ++x)
+            {
+                const int d = qMax(qAbs(qRed(a[x]) - qRed(b[x])),
+                              qMax(qAbs(qGreen(a[x]) - qGreen(b[x])), qAbs(qBlue(a[x]) - qBlue(b[x]))));
+                total += d;
+                if (d > 24)
+                    ++far;
+                if (qBlue(a[x]) > 90)
+                    ++lit;
+            }
+        }
+        const double mean = double(total) / (cpu.width() * cpu.height());
+        const double farShare = double(far) / (cpu.width() * cpu.height());
+        qInfo() << "quality" << quality << "mean difference" << mean
+                << "pixels far apart" << farShare << "lit pixels" << lit;
+        QVERIFY2(lit > 2000, "the scene isn't lit: nothing to compare");
+        QVERIFY2(mean < 3.0, qPrintable(QString("mean difference %1").arg(mean)));
+        QVERIFY2(farShare < 0.02, qPrintable(QString("%1 of the pixels far apart").arg(farShare)));
+    }
+}
+
 void Monitor_Test::aGoboPoolIsDrawnThroughItsMask()
 {
     Doc *doc = new Doc(this);
@@ -12628,12 +12744,13 @@ void Monitor_Test::aGoboPoolIsDrawnThroughItsMask()
             view.m_collecting = true;
             view.drawBeamCone(p, apex, down, half, QColor(0, 0, 255), 1.0, 1.0, o);
             view.m_collecting = false;
+            // Triangles of light: a mesh op carries many, three corners each.
             int n = 0;
             for (const auto &op : view.m_ops)
                 if (op.light)
                 {
-                    ++n;
-                    if (hazeAlpha != nullptr && op.poly.size() == 3 && *hazeAlpha < 0)
+                    n += op.mesh ? int(op.poly.size() / 3) : 1;
+                    if (hazeAlpha != nullptr && (op.mesh || op.poly.size() == 3) && *hazeAlpha < 0)
                         *hazeAlpha = op.fill.alpha();   // the first: a cone triangle
                 }
             return n;

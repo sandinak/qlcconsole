@@ -322,11 +322,7 @@ void FixtureTreeWidget::dragEnterEvent(QDragEnterEvent* event)
 
 void FixtureTreeWidget::dragMoveEvent(QDragMoveEvent* event)
 {
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-    QTreeWidgetItem *target = itemAt(event->pos());
-#else
     QTreeWidgetItem *target = itemAt(event->position().toPoint());
-#endif
 
     // Fixtures (or a group's fixtures) onto a universe: patch them into it.
     if (m_showGroups && dropUniverse(target).isValid()
@@ -373,11 +369,7 @@ void FixtureTreeWidget::dragMoveEvent(QDragMoveEvent* event)
 
 void FixtureTreeWidget::dropEvent(QDropEvent* event)
 {
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-    QTreeWidgetItem *target = itemAt(event->pos());
-#else
     QTreeWidgetItem *target = itemAt(event->position().toPoint());
-#endif
 
     const QVariant dropUni = m_showGroups ? dropUniverse(target) : QVariant();
     if (dropUni.isValid()

@@ -24,7 +24,7 @@ endif()
 # Qml is needed so QT_QML_LIB is defined: rgbmatrix.h then uses the Qt6
 # rgbscriptv4 path instead of the Qt5-only QtScript rgbscript.h.
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core Gui Qml)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Gui Qml)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml)
 
 add_executable(qlcstress qlcstress.cpp showbuilder.cpp showbuilder.h)
 
@@ -40,9 +40,9 @@ find_library(QLCPLUSENGINE_LIB
 
 target_link_libraries(qlcstress PRIVATE
     ${QLCPLUSENGINE_LIB}
-    Qt${QT_VERSION_MAJOR}::Core
-    Qt${QT_VERSION_MAJOR}::Gui
-    Qt${QT_VERSION_MAJOR}::Qml)
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Qml)
 
 # so the dylib resolves at runtime without copying
 set_target_properties(qlcstress PROPERTIES

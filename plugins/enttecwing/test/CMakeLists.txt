@@ -13,11 +13,11 @@ target_include_directories(enttecwing_test PRIVATE
 
 target_link_libraries(enttecwing_test PRIVATE
     # Remove: L../src
-    Qt${QT_MAJOR_VERSION}::Core
-    Qt${QT_MAJOR_VERSION}::Gui
-    Qt${QT_MAJOR_VERSION}::Network
-    Qt${QT_MAJOR_VERSION}::Test
-    Qt${QT_MAJOR_VERSION}::Widgets
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Network
+    Qt6::Test
+    Qt6::Widgets
     enttecwing
 )
 
@@ -26,7 +26,3 @@ if(WIN32)
         QLC_EXPORT
     )
 endif()
-
-# Consider using qt_generate_deploy_app_script() for app deployment if
-# the project can use Qt 6.3. In that case rerun qmake2cmake with
-# --min-qt-version=6.3.

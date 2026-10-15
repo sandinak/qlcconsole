@@ -12,21 +12,13 @@ target_include_directories(${module_name} PRIVATE
 )
 
 target_link_libraries(${module_name} PRIVATE
-    Qt${QT_MAJOR_VERSION}::Core
-    Qt${QT_MAJOR_VERSION}::Gui
-    Qt${QT_MAJOR_VERSION}::Widgets
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
     qlcplusengine
     qlcplusui
     qlcpluswebaccess
 )
-
-
-if(QT_VERSION_MAJOR EQUAL 5)
-    qt5_add_resources(qlcplusui_resource_files ${CMAKE_SOURCE_DIR}/ui/src/qlcui.qrc)
-    target_sources(${module_name} PRIVATE
-        ${qlcplusui_resource_files}
-    )
-endif()
 
 if(WIN32 OR APPLE)
     target_sources(${module_name} PRIVATE
@@ -51,15 +43,9 @@ if(WIN32)
     )
 endif()
 
-if(qmlui OR (QT_VERSION_MAJOR GREATER 5))
-    target_link_libraries(${module_name} PRIVATE
-        Qt${QT_MAJOR_VERSION}::Qml
-    )
-else()
-    target_link_libraries(${module_name} PRIVATE
-        Qt${QT_MAJOR_VERSION}::Script
-    )
-endif()
+target_link_libraries(${module_name} PRIVATE
+    Qt6::Qml
+)
 
 # DEV builds on macOS: main.cpp restricts the Qt plugin search path to
 # <build>/plugins (bundle-style) so a deployed .app only loads its own plugins.
@@ -72,8 +58,8 @@ endif()
 #     audio preview) silently gets NO signal.
 # Mirror all of them into <build>/plugins so the dev run finds them. (A real
 # macdeployqt bundle copies these itself, so this is dev-only.)
-if(APPLE AND TARGET Qt${QT_MAJOR_VERSION}::qmake)
-    get_target_property(_qlc_qmake Qt${QT_MAJOR_VERSION}::qmake IMPORTED_LOCATION)
+if(APPLE AND TARGET Qt6::qmake)
+    get_target_property(_qlc_qmake Qt6::qmake IMPORTED_LOCATION)
     execute_process(COMMAND "${_qlc_qmake}" -query QT_INSTALL_PLUGINS
                     OUTPUT_VARIABLE _qlc_qt_plugins
                     OUTPUT_STRIP_TRAILING_WHITESPACE)
@@ -107,7 +93,3 @@ endif()
 install(TARGETS ${module_name}
     DESTINATION ${INSTALLROOT}/${BINDIR}
 )
-
-# Consider using qt_generate_deploy_app_script() for app deployment if
-# the project can use Qt 6.3. In that case rerun qmake2cmake with
-# --min-qt-version=6.3.

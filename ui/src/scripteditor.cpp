@@ -54,11 +54,7 @@ ScriptEditor::ScriptEditor(QWidget* parent, Script* script, Doc* doc)
 
     /* Document */
     m_document = new QTextDocument(m_script->data(), this);
-#if (QT_VERSION < QT_VERSION_CHECK(5, 10, 0))
-    m_editor->setTabStopWidth(20);
-#else
     m_editor->setTabStopDistance(20);
-#endif
     m_editor->setDocument(m_document);
     connect(m_document, SIGNAL(undoAvailable(bool)), m_undoButton, SLOT(setEnabled(bool)));
     m_document->setUndoRedoEnabled(false);
