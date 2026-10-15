@@ -13,11 +13,7 @@ set(TS_FILES
     ../Peperoni_ja_JP.ts
 )
 
-if(QT_VERSION_MAJOR GREATER 5)
-    qt_add_translation(QM_FILES ${TS_FILES})
-else()
-    qt5_add_translation(QM_FILES ${TS_FILES})
-endif()
+qt_add_translation(QM_FILES ${TS_FILES})
 
 add_library(${module_name}
     SHARED

@@ -20,14 +20,6 @@ target_link_libraries(${module_name} PRIVATE
     qlcpluswebaccess
 )
 
-
-if(QT_VERSION_MAJOR EQUAL 5)
-    qt5_add_resources(qlcplusui_resource_files ${CMAKE_SOURCE_DIR}/ui/src/qlcui.qrc)
-    target_sources(${module_name} PRIVATE
-        ${qlcplusui_resource_files}
-    )
-endif()
-
 if(WIN32 OR APPLE)
     target_sources(${module_name} PRIVATE
         ../ui/src/debugbox.cpp ../ui/src/debugbox.h ../ui/src/debugbox.ui
@@ -51,15 +43,9 @@ if(WIN32)
     )
 endif()
 
-if(qmlui OR (QT_VERSION_MAJOR GREATER 5))
-    target_link_libraries(${module_name} PRIVATE
-        Qt${QT_MAJOR_VERSION}::Qml
-    )
-else()
-    target_link_libraries(${module_name} PRIVATE
-        Qt${QT_MAJOR_VERSION}::Script
-    )
-endif()
+target_link_libraries(${module_name} PRIVATE
+    Qt${QT_MAJOR_VERSION}::Qml
+)
 
 # DEV builds on macOS: main.cpp restricts the Qt plugin search path to
 # <build>/plugins (bundle-style) so a deployed .app only loads its own plugins.

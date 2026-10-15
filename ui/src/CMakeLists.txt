@@ -15,11 +15,7 @@ set(TS_FILES
     qlcconsole_ja_JP.ts
 )
 
-if(QT_VERSION_MAJOR GREATER 5)
-    qt_add_translation(QM_FILES ${TS_FILES})
-else()
-    qt5_add_translation(QM_FILES ${TS_FILES})
-endif()
+qt_add_translation(QM_FILES ${TS_FILES})
 
 add_library(${module_name}
     SHARED
@@ -255,23 +251,14 @@ target_link_libraries(${module_name} PUBLIC
 )
 
 # Add resources and RGB Script deps
-if(QT_VERSION_MAJOR GREATER 5)
-    target_link_libraries(${module_name} PUBLIC Qt${QT_MAJOR_VERSION}::Qml)
-    qt_add_resources(qlcplusui_resource_files "qlcui.qrc" "help.qrc")
-else()
-    target_link_libraries(${module_name} PUBLIC Qt${QT_MAJOR_VERSION}::Script)
-    # EffectScript (via lookeditor) uses QJSEngine; link privately so
-    # QT_QML_LIB doesn't leak to downstream test binaries.
-    target_link_libraries(${module_name} PRIVATE Qt${QT_MAJOR_VERSION}::Qml)
-    qt5_add_resources(qlcplusui_resource_files "qlcui.qrc" "help.qrc")
-endif()
+target_link_libraries(${module_name} PUBLIC Qt${QT_MAJOR_VERSION}::Qml)
+qt_add_resources(qlcplusui_resource_files "qlcui.qrc" "help.qrc")
 
 target_sources(${module_name} PRIVATE ${qlcplusui_resource_files})
 
 if(WIN32)
     target_include_directories(${module_name} PUBLIC ../../hotplugmonitor/src)
 endif()
-
 
 install(TARGETS ${module_name}
     LIBRARY DESTINATION ${INSTALLROOT}/${LIBSDIR}

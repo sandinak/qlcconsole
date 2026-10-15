@@ -68,9 +68,6 @@ RGBMatrix::RGBMatrix(Doc *doc)
     , m_requestEngineCreation(true)
     , m_runAlgorithm(NULL)
     , m_algorithm(NULL)
-#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
-    , m_algorithmMutex(QMutex::Recursive)
-#endif
     , m_stepHandler(new RGBMatrixStep())
     , m_stepsCount(0)
     , m_stepBeatDuration(0)
@@ -277,17 +274,10 @@ RGBAlgorithm *RGBMatrix::algorithm() const
     return m_algorithm;
 }
 
-#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
-QMutex& RGBMatrix::algorithmMutex()
-{
-    return m_algorithmMutex;
-}
-#else
 QRecursiveMutex& RGBMatrix::algorithmMutex()
 {
     return m_algorithmMutex;
 }
-#endif
 
 
 int RGBMatrix::stepsCount() const

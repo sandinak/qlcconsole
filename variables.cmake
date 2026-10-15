@@ -1,8 +1,4 @@
-if(QT_VERSION_MAJOR GREATER 5)
-    set(QT_MAJOR_VERSION 6)
-else(QT_VERSION_MAJOR EQUAL 5)
-    set(QT_MAJOR_VERSION 5)
-endif()
+set(QT_MAJOR_VERSION 6)
 
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
@@ -50,7 +46,6 @@ set(APPVERSION "${QLC_BASE_VERSION}+qlcconsole.${QLCCONSOLE_REV}")
 if(UNIX)
     set(OLA_GIT "/usr/src/ola") # OLA directories
 endif()
-
 
 if(APPLE)
     set(CMAKE_MACOSX_RPATH ON)
@@ -350,7 +345,6 @@ if (ANDROID OR IOS)
     set(PLUGINDIR "Plugins")
 endif ()
 
-
 # Audio Plugins
 if (WIN32)
     set(AUDIOPLUGINDIR "${PLUGINDIR}/Audio")
@@ -363,7 +357,6 @@ endif ()
 if (ANDROID OR IOS)
     set(AUDIOPLUGINDIR "${PLUGINDIR}/Audio")
 endif ()
-
 
 # Translations
 if (WIN32)
@@ -473,7 +466,6 @@ if (ANDROID)
 elseif (IOS)
     set(MESHESDIR "Meshes")
 endif ()
-
 
 # Color filters
 if (WIN32)

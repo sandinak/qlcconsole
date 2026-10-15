@@ -21,11 +21,7 @@
 #define AUDIOPLUGINCACHE_H
 
 #include <QtGlobal>
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
- #include <QAudioDeviceInfo>
-#else
  #include <QAudioDevice>
-#endif
 #include <QObject>
 #include <QDir>
 
@@ -61,11 +57,7 @@ public:
     QList<AudioDeviceInfo> audioDevicesList() const;
 
     /** Return a Qt output device info match based on $devName */
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-    QAudioDeviceInfo getOutputDeviceInfo(QString devName) const;
-#else
     QAudioDevice getOutputDeviceInfo(QString devName) const;
-#endif
 
 private:
     /** a map of the vailable plugins ordered by priority */
@@ -76,11 +68,7 @@ private:
     QList<AudioDeviceInfo> m_audioDevicesList;
 
     /** a list of output audio device for faster lookup */
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-    QList<QAudioDeviceInfo> m_outputDevicesList;
-#else
     QList<QAudioDevice> m_outputDevicesList;
-#endif
 };
 
 /** @} */

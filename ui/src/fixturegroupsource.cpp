@@ -555,11 +555,7 @@ void FixtureGroupSource::dragMoveEvent(QDragMoveEvent *event)
         event->ignore();
         return;
     }
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-    QTreeWidgetItem *target = itemAt(event->pos());
-#else
     QTreeWidgetItem *target = itemAt(event->position().toPoint());
-#endif
     // A folder, a group (join its folder), or the empty root are valid.
     const bool valid = target == NULL
             || target->data(0, PathRole).isValid()
@@ -577,11 +573,7 @@ void FixtureGroupSource::dropEvent(QDropEvent *event)
         event->ignore();
         return;
     }
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-    QTreeWidgetItem *target = itemAt(event->pos());
-#else
     QTreeWidgetItem *target = itemAt(event->position().toPoint());
-#endif
 
     QString destPath;
     if (target == NULL)

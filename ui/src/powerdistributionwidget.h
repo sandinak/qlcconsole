@@ -67,11 +67,7 @@ protected:
     void dropEvent(QDropEvent *event) override;
     /** Encode selected fixture rows so they can be dragged between circuits.
      *  (Qt5 passes the list by value; Qt6 by const-ref.) */
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     QMimeData *mimeData(const QList<QTreeWidgetItem *> &items) const override;
-#else
-    QMimeData *mimeData(const QList<QTreeWidgetItem *> items) const override;
-#endif
 };
 
 /**

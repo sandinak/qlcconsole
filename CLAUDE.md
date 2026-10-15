@@ -14,16 +14,15 @@ don't merge speculative or in-progress work.
 
 ## Build & run
 
-CMake, out-of-tree in `build/` (Unix Makefiles, Debug). `find_package(QT NAMES
-Qt5 Qt6 ...)` auto-detects whichever it finds FIRST, and **both are installed
-here** (`/opt/homebrew/opt/qt6` and `/opt/homebrew/opt/qt@5`) — `check-all.sh`
-builds against both. A bare `cmake -S . -B <dir>` can therefore land on Qt5 and
-produce a wall of errors that look like rotten code; pass
-`-DCMAKE_PREFIX_PATH=/opt/homebrew/opt/qt6/lib/cmake` when you mean Qt6. (The
-tell: Qt3D's `QAttribute` lives in `Qt3DRender` on Qt5 and `Qt3DCore` on Qt6.)
+CMake, out-of-tree in `build/` (Unix Makefiles, Debug). **Qt6 only, 6.8 or
+later** (CMake stops with a clear message on anything older). Qt5 support was
+dropped in 2026-10; the tag **`qt5-last`** is the last `main` that also built on
+Qt5. Homebrew's `qt@5` may still be installed here: pass
+`-DCMAKE_PREFIX_PATH=/opt/homebrew/opt/qt6/lib/cmake` if CMake ever picks the
+wrong one up.
 
 Before a release — and after any non-trivial change — run `./check-all.sh`.
-It builds and runs the full gate against **Qt5, Qt6 and Qt6-Release** in
+It builds and runs the full gate as **Qt6, Qt6-Release and Qt6-Werror** in
 separate build dirs. The Release leg is not redundant: one shipped bug
 (undefined narrowing in `VCXYPadFixture::writeDMX`) only misbehaved under
 `-O2` and was invisible to every default-build check.

@@ -22,17 +22,7 @@ target_link_libraries(${module_name} PRIVATE
     qlcplusui
 )
 
-if(qmlui OR (QT_VERSION_MAJOR GREATER 5))
-    target_link_libraries(${module_name} PRIVATE
-        Qt${QT_MAJOR_VERSION}::Qml
-    )
-endif()
+target_link_libraries(${module_name} PRIVATE
+    Qt${QT_MAJOR_VERSION}::Qml
+)
 
-if(NOT (qmlui OR (QT_VERSION_MAJOR GREATER 5)))
-    target_link_libraries(${module_name} PRIVATE
-        Qt${QT_MAJOR_VERSION}::Script
-        # The effect browser test reaches the effect-script cache (QJSEngine),
-        # as the engine itself does on Qt5.
-        Qt${QT_MAJOR_VERSION}::Qml
-    )
-endif()

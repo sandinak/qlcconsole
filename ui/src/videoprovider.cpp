@@ -18,10 +18,8 @@
 */
 
 #include <QVersionNumber>
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
  #include <QMediaMetaData>
  #include <QAudioOutput>
-#endif
 #include <QApplication>
 #include <QMediaPlayer>
 #include <QVideoWidget>
@@ -81,13 +79,9 @@ VideoWidget::VideoWidget(Video *video, QObject *parent)
 {
     Q_ASSERT(video != NULL);
 
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-    m_videoPlayer = new QMediaPlayer(this, QMediaPlayer::VideoSurface);
-#else
     m_videoPlayer = new QMediaPlayer(this);
     m_audioOutput = new QAudioOutput(this);
     m_videoPlayer->setAudioOutput(m_audioOutput);
-#endif
     m_videoPlayer->moveToThread(QCoreApplication::instance()->thread());
 
     if (QLCFile::getQtRuntimeVersion() >= 50700 && m_videoWidget == NULL)
@@ -99,13 +93,8 @@ VideoWidget::VideoWidget(Video *video, QObject *parent)
 
     connect(m_videoPlayer, SIGNAL(mediaStatusChanged(QMediaPlayer::MediaStatus)),
             this, SLOT(slotStatusChanged(QMediaPlayer::MediaStatus)));
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-    connect(m_videoPlayer, SIGNAL(metaDataChanged(QString,QVariant)),
-            this, SLOT(slotMetaDataChanged(QString,QVariant)));
-#else
     connect(m_videoPlayer, SIGNAL(metaDataChanged()),
             this, SLOT(slotMetaDataChanged()));
-#endif
     connect(m_videoPlayer, SIGNAL(durationChanged(qint64)),
             this, SLOT(slotTotalTimeChanged(qint64)));
 
@@ -121,17 +110,10 @@ VideoWidget::VideoWidget(Video *video, QObject *parent)
             this, SLOT(slotBrightnessVolumeAdjust(qreal)));
 
     QString sourceURL = m_video->sourceUrl();
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-    if (sourceURL.contains("://"))
-        m_videoPlayer->setMedia(QUrl(sourceURL));
-    else
-        m_videoPlayer->setMedia(QUrl::fromLocalFile(sourceURL));
-#else
     if (sourceURL.contains("://"))
         m_videoPlayer->setSource(QUrl(sourceURL));
     else
         m_videoPlayer->setSource(QUrl::fromLocalFile(sourceURL));
-#endif
     qDebug() << "Video source URL:" << sourceURL;
 }
 
@@ -139,17 +121,10 @@ void VideoWidget::slotSourceUrlChanged(QString url)
 {
     qDebug() << "Video source URL changed:" << url;
 
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-    if (url.contains("://"))
-        m_videoPlayer->setMedia(QUrl(url));
-    else
-        m_videoPlayer->setMedia(QUrl::fromLocalFile(url));
-#else
     if (url.contains("://"))
         m_videoPlayer->setSource(QUrl(url));
     else
         m_videoPlayer->setSource(QUrl::fromLocalFile(url));
-#endif
 }
 
 void VideoWidget::slotTotalTimeChanged(qint64 duration)
@@ -199,21 +174,6 @@ void VideoWidget::slotStatusChanged(QMediaPlayer::MediaStatus status)
     }
 }
 
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-void VideoWidget::slotMetaDataChanged(QString key, QVariant data)
-{
-    if (m_video == NULL)
-        return;
-
-    qDebug() << Q_FUNC_INFO << "Got meta data:" << key;
-    if (key == "Resolution")
-        m_video->setResolution(data.toSize());
-    else if (key == "VideoCodec")
-        m_video->setVideoCodec(data.toString());
-    else if (key == "AudioCodec")
-        m_video->setAudioCodec(data.toString());
-}
-#else
 void VideoWidget::slotMetaDataChanged()
 {
     if (m_video == NULL)
@@ -239,7 +199,6 @@ void VideoWidget::slotMetaDataChanged()
         }
     }
 }
-#endif
 
 void VideoWidget::slotPlaybackVideo()
 {
@@ -312,18 +271,9 @@ void VideoWidget::slotStopVideo()
 
 void VideoWidget::slotBrightnessVolumeAdjust(qreal value)
 {
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-    int brightness = -100 + (int)(qreal(100.0) * value);
-    int volume = 100 * (int)QAudio::convertVolume(value, QAudio::LogarithmicVolumeScale, QAudio::LinearVolumeScale);
-    if (m_videoWidget)
-        m_videoWidget->setBrightness(brightness);
-    if (m_videoPlayer)
-        m_videoPlayer->setVolume(volume);
-#else
     qreal linearVolume = QAudio::convertVolume(value, QAudio::LogarithmicVolumeScale, QAudio::LinearVolumeScale);
     if (m_audioOutput)
         m_audioOutput->setVolume(linearVolume);
-#endif
 }
 
 int VideoWidget::getScreenCount()

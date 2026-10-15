@@ -107,11 +107,7 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
 
     m_topPercentageLabel = new QLabel("100%");
     m_topPercentageLabel->setAlignment(Qt::AlignHCenter);
-#if (QT_VERSION < QT_VERSION_CHECK(5, 11, 0))
-    m_topPercentageLabel->setFixedWidth(m_fm.width("100%"));
-#else
     m_topPercentageLabel->setFixedWidth(m_fm.horizontalAdvance("100%"));
-#endif
     grid->addWidget(m_topPercentageLabel, 1, 0, 1, 1);
 
     m_topStepLabel = new QLabel("");
@@ -135,11 +131,7 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
 
     m_bottomPercentageLabel = new QLabel("0%");
     m_bottomPercentageLabel->setAlignment(Qt::AlignHCenter);
-#if (QT_VERSION < QT_VERSION_CHECK(5, 11, 0))
-    m_bottomPercentageLabel->setFixedWidth(m_fm.width("100%"));
-#else
     m_bottomPercentageLabel->setFixedWidth(m_fm.horizontalAdvance("100%"));
-#endif
     grid->addWidget(m_bottomPercentageLabel, 5, 0, 1, 1);
 
     connect(m_sideFader, SIGNAL(valueChanged(int)),
@@ -1616,11 +1608,7 @@ void VCCueList::setFont(const QFont& font)
     VCWidget::setFont(font);
 
     QFontMetrics m_fm = QFontMetrics(font);
-#if (QT_VERSION < QT_VERSION_CHECK(5, 11, 0))
-    int w = m_fm.width("100%");
-#else
     int w = m_fm.horizontalAdvance("100%");
-#endif
     m_topPercentageLabel->setFixedWidth(w);
     m_bottomPercentageLabel->setFixedWidth(w);
 }

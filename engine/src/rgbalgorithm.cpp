@@ -31,11 +31,7 @@
 #include "rgbtext.h"
 #include "doc.h"
 
-#ifdef QT_QML_LIB
   #include "rgbscriptv4.h"
-#else
-  #include "rgbscript.h"
-#endif
 
 RGBAlgorithm::RGBAlgorithm(Doc * doc)
     : m_doc(doc)

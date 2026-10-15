@@ -34,12 +34,8 @@ Prerequisites (one-time, already done on this machine):
 
 Steps:
 
-0. Run `./check-all.sh` — the full test gate against **both** Qt majors.
-   `release.sh`'s own gate builds only whichever Qt cmake picks up, and this
-   fork ships Qt6 DMGs while development happens against whatever is
-   installed. Three defects in one week came from that split (see the header
-   comment in `check-all.sh`). CI's macOS job builds against Qt6 only and has
-   no Qt5 leg, so this script is the only cross-Qt coverage there is.
+0. Run `./check-all.sh` — the full test gate: Qt6 Debug, Release (one
+   shipped bug only showed at -O2) and warnings-as-errors.
 1. Bump `VERSION` to the new release number.
 2. Add a `## [X.Y.Z] - YYYY-MM-DD` section to [CHANGELOG.md](CHANGELOG.md)
    summarizing what shipped since the last release (pull the user-facing

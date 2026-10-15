@@ -410,11 +410,7 @@ void CollectionEditor::handleDropEvent(QDropEvent* event)
 
 void CollectionEditor::reorderFromDrop(QDropEvent* event)
 {
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-    const QPoint dropPos = event->pos();
-#else
     const QPoint dropPos = event->position().toPoint();
-#endif
 
     // The rows being moved, in their current visual order.
     QList<QTreeWidgetItem*> sel = m_tree->selectedItems();

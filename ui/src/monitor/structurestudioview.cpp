@@ -7949,11 +7949,7 @@ bool StructureStudioView::event(QEvent *e)
             // QNativeGestureEvent doesn't fit qlceventpos.h's shared template --
             // Qt5 spells the QPointF accessor localPos(), not posF() like the
             // event types that header already covers.
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
             zoomAt(g->position(), m_scale * (1.0 + g->value()));
-#else
-            zoomAt(g->localPos(), m_scale * (1.0 + g->value()));
-#endif
             return true;
         }
     }
@@ -7976,11 +7972,7 @@ void StructureStudioView::wheelEvent(QWheelEvent *e)
         return;
     }
 
-#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
     const QPointF anchor = e->position();
-#else
-    const QPointF anchor = e->posF();
-#endif
     zoomAt(anchor, m_scale * ((delta > 0) ? 1.12 : 1.0 / 1.12));
     e->accept();
 }

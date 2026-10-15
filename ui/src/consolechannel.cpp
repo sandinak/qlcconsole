@@ -592,11 +592,7 @@ QIcon ConsoleChannel::colorIcon(const QString& name)
     index = colorList.indexOf(colname);
     if (index != -1)
     {
-#if QT_VERSION < QT_VERSION_CHECK(6, 4, 0)
-        color.setNamedColor(colname);
-#else
         color.fromString(colname);
-#endif
     }
     else
     {
@@ -614,11 +610,7 @@ QIcon ConsoleChannel::colorIcon(const QString& name)
         index = colorList.indexOf(regex);
         if (index != -1)
         {
-#if QT_VERSION < QT_VERSION_CHECK(6, 4, 0)
-            color.setNamedColor(colorList.at(index));
-#else
             color.fromString(colorList.at(index));
-#endif
         }
     }
 

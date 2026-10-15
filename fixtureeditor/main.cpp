@@ -60,9 +60,7 @@ bool closeWhenDone = false;
 QString locale;
 }
 
-#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
 #define endl Qt::endl
-#endif
 
 /**
  * Prints the application version

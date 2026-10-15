@@ -26,11 +26,7 @@
 #include "rgbalgorithm_test.h"
 #include "rgbscriptscache.h"
 #include "rgbalgorithm.h"
-#ifdef QT_QML_LIB
   #include "rgbscriptv4.h"
-#else
-  #include "rgbscript.h"
-#endif
 #undef private
 
 #include "doc.h"

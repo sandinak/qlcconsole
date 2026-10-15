@@ -23,14 +23,7 @@ target_link_libraries(${module_name} PRIVATE
     qlcplusui
 )
 
-if(qmlui OR (QT_VERSION_MAJOR GREATER 5))
-    target_link_libraries(${module_name} PRIVATE
-        Qt${QT_MAJOR_VERSION}::Qml
-    )
-endif()
+target_link_libraries(${module_name} PRIVATE
+    Qt${QT_MAJOR_VERSION}::Qml
+)
 
-if(NOT (qmlui OR (QT_VERSION_MAJOR GREATER 5)))
-    target_link_libraries(${module_name} PRIVATE
-        Qt${QT_MAJOR_VERSION}::Script
-    )
-endif()

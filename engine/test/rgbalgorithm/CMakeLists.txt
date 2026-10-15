@@ -15,17 +15,9 @@ target_link_libraries(rgbalgorithm_test PRIVATE
     qlcplusengine
 )
 
-if(qmlui OR (QT_VERSION_MAJOR GREATER 5))
-    target_link_libraries(rgbalgorithm_test PRIVATE
-        Qt${QT_MAJOR_VERSION}::Qml
-    )
-endif()
-
-if(NOT (qmlui OR (QT_VERSION_MAJOR GREATER 5)))
-    target_link_libraries(rgbalgorithm_test PRIVATE
-        Qt${QT_MAJOR_VERSION}::Script
-    )
-endif()
+target_link_libraries(rgbalgorithm_test PRIVATE
+    Qt${QT_MAJOR_VERSION}::Qml
+)
 
 # Consider using qt_generate_deploy_app_script() for app deployment if
 # the project can use Qt 6.3. In that case rerun qmake2cmake with

@@ -15,11 +15,7 @@ set(TS_FILES
     webaccess_ja_JP.ts
 )
 
-if(QT_VERSION_MAJOR GREATER 5)
-    qt_add_translation(QM_FILES ${TS_FILES})
-else()
-    qt5_add_translation(QM_FILES ${TS_FILES})
-endif()
+qt_add_translation(QM_FILES ${TS_FILES})
 
 set(WEBACCESS_SOURCES
     commonjscss.h
@@ -91,17 +87,9 @@ target_link_libraries(${module_name} PUBLIC
     qlcplusengine
 )
 
-if(qmlui OR (QT_VERSION_MAJOR GREATER 5))
-    target_link_libraries(${module_name} PUBLIC
-        Qt${QT_MAJOR_VERSION}::Qml
-    )
-endif()
-
-if(NOT (qmlui OR (QT_VERSION_MAJOR GREATER 5)))
-    target_link_libraries(${module_name} PUBLIC
-        Qt${QT_MAJOR_VERSION}::Script
-    )
-endif()
+target_link_libraries(${module_name} PUBLIC
+    Qt${QT_MAJOR_VERSION}::Qml
+)
 
 if(NOT qmlui)
     target_link_libraries(${module_name} PUBLIC
@@ -119,7 +107,6 @@ if(UNIX AND NOT APPLE)
         webaccessnetwork.cpp webaccessnetwork.h
     )
 endif()
-
 
 install(TARGETS ${module_name}
     ARCHIVE DESTINATION ${INSTALLROOT}/${LIBSDIR}

@@ -180,17 +180,9 @@ if(APPLE)
     )
 endif()
 
-if(qmlui OR (QT_VERSION_MAJOR GREATER 5))
-    target_sources(${module_name} PRIVATE rgbscriptv4.cpp rgbscriptv4.h)
+target_sources(${module_name} PRIVATE rgbscriptv4.cpp rgbscriptv4.h)
 
-    target_link_libraries(${module_name} PUBLIC Qt${QT_MAJOR_VERSION}::Qml)
-else()
-    target_sources(${module_name} PRIVATE rgbscript.cpp rgbscript.h)
-    target_link_libraries(${module_name} PUBLIC Qt${QT_MAJOR_VERSION}::Script)
-    # EffectScript uses QJSEngine; link Qml privately so QT_QML_LIB doesn't
-    # propagate to test binaries that guard on it for rgbscript vs rgbscriptv4.
-    target_link_libraries(${module_name} PRIVATE Qt${QT_MAJOR_VERSION}::Qml)
-endif()
+target_link_libraries(${module_name} PUBLIC Qt${QT_MAJOR_VERSION}::Qml)
 
 if(qmlui)
     target_sources(${module_name} PRIVATE

@@ -120,9 +120,6 @@ QStringList Video::getVideoCapabilities()
 {
     QStringList caps;
     QStringList mimeTypes;
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-    mimeTypes = QMediaPlayer::supportedMimeTypes();
-#endif
 
     if (mimeTypes.isEmpty())
     {

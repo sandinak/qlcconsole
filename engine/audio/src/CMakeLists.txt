@@ -42,54 +42,10 @@ if(WIN32)
     )
 endif()
 
-if(((QT_VERSION_MAJOR LESS 5)) AND (UNIX AND NOT APPLE))
-    target_sources(${module_name} PRIVATE
-        audiocapture_alsa.cpp audiocapture_alsa.h
-        audiorenderer_alsa.cpp audiorenderer_alsa.h
-    )
-endif()
-
-if(((QT_VERSION_MAJOR LESS 5)) AND (WIN32))
-    target_sources(${module_name} PRIVATE
-        audiocapture_wavein.cpp audiocapture_wavein.h
-        audiorenderer_waveout.cpp audiorenderer_waveout.h
-    )
-endif()
-
-if((QT_VERSION_MAJOR LESS 6))
-    target_sources(${module_name} PRIVATE
-        audiocapture_qt5.cpp audiocapture_qt5.h
-        audiorenderer_qt5.cpp audiorenderer_qt5.h
-    )
-endif()
-
-if(NOT ((QT_VERSION_MAJOR LESS 6)))
-    target_sources(${module_name} PRIVATE
-        audiocapture_qt6.cpp audiocapture_qt6.h
-        audiorenderer_qt6.cpp audiorenderer_qt6.h
-    )
-endif()
-
-if((((QT_VERSION_MAJOR LESS 5)) AND (APPLE)))
-    if (${PORTAUDIO_2_FOUND})
-        target_sources(${module_name} PRIVATE
-            audiocapture_portaudio.cpp audiocapture_portaudio.h
-            audiorenderer_portaudio.cpp audiorenderer_portaudio.h
-        )
-
-        target_compile_definitions(${module_name} PUBLIC
-            HAS_PORTAUDIO
-        )
-
-        target_include_directories(${module_name} PUBLIC
-            ${PORTAUDIO_2_INCLUDE_DIRS}
-        )
-
-        target_link_libraries(${module_name} PUBLIC
-            ${PORTAUDIO_2_LIBRARIES}
-        )
-    endif()
-endif()
+target_sources(${module_name} PRIVATE
+    audiocapture_qt6.cpp audiocapture_qt6.h
+    audiorenderer_qt6.cpp audiorenderer_qt6.h
+)
 
 if((NOT ANDROID AND NOT IOS) AND (${FFTW3_FOUND}))
     target_compile_definitions(${module_name} PUBLIC

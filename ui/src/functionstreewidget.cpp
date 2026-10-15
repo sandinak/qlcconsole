@@ -1085,11 +1085,7 @@ void FunctionsTreeWidget::dragMoveEvent(QDragMoveEvent *event)
 {
     if (m_externalDragMode)
     {
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-        QTreeWidgetItem *target = itemAt(event->pos());
-#else
         QTreeWidgetItem *target = itemAt(event->position().toPoint());
-#endif
         if (event->mimeData()->hasFormat(PALETTE_DRAG_MIME_TYPE))
         {
             // A folder, a palette leaf (join its folder), the Palettes category,
@@ -1118,11 +1114,7 @@ void FunctionsTreeWidget::dragMoveEvent(QDragMoveEvent *event)
 
 void FunctionsTreeWidget::dropEvent(QDropEvent *event)
 {
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-    QTreeWidgetItem *dropItem = itemAt(event->pos());
-#else
     QTreeWidgetItem *dropItem = itemAt(event->position().toPoint());
-#endif
 
     // External/Programming mode.
     if (m_externalDragMode)

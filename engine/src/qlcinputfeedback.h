@@ -48,9 +48,7 @@ public:
         UpperValue   =  1,
         MonitorValue =  2
     };
-#if QT_VERSION >= 0x050500
     Q_ENUM(FeedbackType)
-#endif
 
     FeedbackType type() const;
     void setType(FeedbackType type);

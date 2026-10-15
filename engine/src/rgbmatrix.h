@@ -30,11 +30,7 @@
 #include <QMap>
 #include <QMutex>
 
-#ifdef QT_QML_LIB
   #include "rgbscriptv4.h"
-#else
-  #include "rgbscript.h"
-#endif
 #include "function.h"
 
 class FixtureGroup;
@@ -197,11 +193,7 @@ public:
     RGBAlgorithm* algorithm() const;
 
     /** Get the algorithm protection mutex */
-#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
-    QMutex& algorithmMutex();
-#else
     QRecursiveMutex& algorithmMutex();
-#endif
 
     /** Get the number of steps of the current algorithm */
     int stepsCount() const;
@@ -216,11 +208,7 @@ private:
     bool m_requestEngineCreation;
     RGBAlgorithm *m_runAlgorithm;
     RGBAlgorithm *m_algorithm;
-#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
-    QMutex m_algorithmMutex;
-#else
     QRecursiveMutex m_algorithmMutex;
-#endif
 
     /************************************************************************
      * Color

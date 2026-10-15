@@ -313,11 +313,7 @@ bool FixtureGroupEditor::eventFilter(QObject *obj, QEvent *event)
             // where the block would actually fit.
             if (dm->mimeData()->hasFormat(CELLS_DRAG_MIME))
             {
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-                const QLCPoint c = cellAt(dm->pos());
-#else
                 const QLCPoint c = cellAt(dm->position().toPoint());
-#endif
                 const int dx = c.x() - m_dragAnchor.x();
                 const int dy = c.y() - m_dragAnchor.y();
                 showDropPreview(dx, dy);
@@ -342,11 +338,7 @@ bool FixtureGroupEditor::eventFilter(QObject *obj, QEvent *event)
             if (dr->mimeData()->hasFormat(CELLS_DRAG_MIME))
             {
                 hideDropPreview();
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-                const QLCPoint c = cellAt(dr->pos());
-#else
                 const QLCPoint c = cellAt(dr->position().toPoint());
-#endif
                 const int dx = c.x() - m_dragAnchor.x();
                 const int dy = c.y() - m_dragAnchor.y();
                 if (dx != 0 || dy != 0)
@@ -369,11 +361,7 @@ bool FixtureGroupEditor::eventFilter(QObject *obj, QEvent *event)
                 return false;
 
             // Cell under the cursor (fall back to the current cell).
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-            QModelIndex idx = m_table->indexAt(dr->pos());
-#else
             QModelIndex idx = m_table->indexAt(dr->position().toPoint());
-#endif
             int col = idx.isValid() ? idx.column() : m_column;
             int row = idx.isValid() ? idx.row() : m_row;
 
@@ -692,11 +680,7 @@ void FixtureGroupEditor::relayoutCellFonts()
             if (item != NULL)
             {
                 QFont scaledFont = font;
-#if (QT_VERSION < QT_VERSION_CHECK(5, 11, 0))
-                float baseWidth  = (float)fm.width(item->text());
-#else
                 float baseWidth  = (float)fm.horizontalAdvance(item->text());
-#endif
                 float factor = cellWidth / baseWidth;
                 if (factor != 1)
                     scaledFont.setPointSizeF((pSizeF * factor) + 2);

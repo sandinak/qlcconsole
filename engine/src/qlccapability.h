@@ -172,11 +172,7 @@ public:
         Alias,
         LastPreset // dummy for cycles
     };
-#if QT_VERSION >= 0x050500
     Q_ENUM(Preset)
-#else
-    Q_ENUMS(Preset)
-#endif
 
     enum PresetType
     {
@@ -188,11 +184,7 @@ public:
         Picture
     };
 
-#if QT_VERSION >= 0x050500
     Q_ENUM(PresetType)
-#else
-    Q_ENUMS(PresetType)
-#endif
 
     /** String <-> value preset conversion helpers */
     static QString presetToString(Preset preset);
@@ -224,11 +216,7 @@ public:
         Overlapping
     };
 
-#if QT_VERSION >= 0x050500
     Q_ENUM(WarningType)
-#else
-    Q_ENUMS(WarningType)
-#endif
 
     /** Get/Set the capability range minimum value */
     uchar min() const;

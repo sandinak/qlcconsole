@@ -13,11 +13,7 @@ set(TS_FILES
     fixtureeditor_ja_JP.ts
 )
 
-if(QT_VERSION_MAJOR GREATER 5)
-    qt_add_translation(QM_FILES ${TS_FILES})
-else()
-    qt5_add_translation(QM_FILES ${TS_FILES})
-endif()
+qt_add_translation(QM_FILES ${TS_FILES})
 
 add_executable(${module_name} WIN32
     ../ui/src/aboutbox.cpp ../ui/src/aboutbox.h ../ui/src/aboutbox.ui
@@ -52,7 +48,6 @@ target_link_libraries(${module_name} PRIVATE
     Qt${QT_MAJOR_VERSION}::Network
     qlcplusengine
 )
-
 
 # Resources:
 set_source_files_properties("../ui/src/../../resources/icons/png/add_dump.png"
@@ -612,28 +607,18 @@ if(WIN32)
     )
 endif()
 
-if(qmlui OR (QT_VERSION_MAJOR GREATER 5))
-    target_link_libraries(${module_name} PRIVATE
-        Qt${QT_MAJOR_VERSION}::Qml
-    )
+target_link_libraries(${module_name} PRIVATE
+    Qt${QT_MAJOR_VERSION}::Qml
+)
 
-    qt_add_resources(${module_name} "qlcui"
-        PREFIX
-            "/"
-        BASE
-            "../ui/src"
-        FILES
-            ${qlcui_resource_files}
-    )
-else()
-    target_link_libraries(${module_name} PRIVATE
-        Qt${QT_MAJOR_VERSION}::Script
-    )
-    qt5_add_resources(qlcplusui_resource_files ../ui/src/qlcui.qrc)
-    target_sources(${module_name} PRIVATE
-        ${qlcplusui_resource_files}
-    )
-endif()
+qt_add_resources(${module_name} "qlcui"
+    PREFIX
+        "/"
+    BASE
+        "../ui/src"
+    FILES
+        ${qlcui_resource_files}
+)
 
 install(TARGETS ${module_name}
     DESTINATION ${INSTALLROOT}/${BINDIR}

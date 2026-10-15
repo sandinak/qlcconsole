@@ -174,11 +174,7 @@ protected:
     /** Guards m_tracks: the ShowRunner walks tracks() every frame on the timer
      *  thread while the UI adds/removes/moves on the main thread. Recursive so a
      *  locked accessor can call another. */
-#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
-    mutable QMutex m_tracksMutex;
-#else
     mutable QRecursiveMutex m_tracksMutex;
-#endif
 
     /** Latest assigned track ID */
     quint32 m_latestTrackId;

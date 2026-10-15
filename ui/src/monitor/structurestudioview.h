@@ -660,13 +660,8 @@ private:
         bool operator==(const ThrowKey &o) const
         { return std::memcmp(v, o.v, sizeof v) == 0; }
     };
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     friend size_t qHash(const ThrowKey &k, size_t seed = 0)
     { return qHashBits(k.v, sizeof k.v, seed); }
-#else
-    friend uint qHash(const ThrowKey &k, uint seed = 0)
-    { return qHashBits(k.v, sizeof k.v, seed); }
-#endif
     struct Throw
     {
         double run = 0.0;

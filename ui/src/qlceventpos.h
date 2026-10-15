@@ -25,33 +25,21 @@
 template <typename Event>
 inline QPoint qlcEventPos(const Event *e)
 {
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     return e->position().toPoint();
-#else
-    return e->pos();
-#endif
 }
 
 /** Event position in widget coordinates, full precision. */
 template <typename Event>
 inline QPointF qlcEventPosF(const Event *e)
 {
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     return e->position();
-#else
-    return e->posF();
-#endif
 }
 
 /** Event position in screen coordinates, rounded to whole pixels. */
 template <typename Event>
 inline QPoint qlcEventGlobalPos(const Event *e)
 {
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     return e->globalPosition().toPoint();
-#else
-    return e->globalPos();
-#endif
 }
 
 #endif

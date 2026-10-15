@@ -56,13 +56,8 @@ AddRGBPanel::AddRGBPanel(QWidget *parent, const Doc *doc)
             this, SLOT(slotUniverseChanged()));
     connect(m_compCombo, SIGNAL(currentIndexChanged(int)),
             this, SLOT(slotComponentsChanged()));
-#if (QT_VERSION < QT_VERSION_CHECK(6, 7, 0))
-    connect(m_16bitCheck, SIGNAL(stateChanged(int)),
-            this, SLOT(slotComponentsChanged()));
-#else
     connect(m_16bitCheck, SIGNAL(checkStateChanged(Qt::CheckState)),
             this, SLOT(slotComponentsChanged()));
-#endif
     connect(m_addressSpin, SIGNAL(valueChanged(int)),
             this, SLOT(slotAddressChanged()));
     connect(m_columnSpin, SIGNAL(valueChanged(int)),

@@ -84,9 +84,7 @@ public:
         Beam,
         Effect      ///< Computed by a JS effect script (tick-driven)
     };
-#if QT_VERSION >= 0x050500
     Q_ENUM(PaletteType)
-#endif
 
     /************************************************************************
      * Initialization
@@ -237,9 +235,7 @@ public:
         Square,
         Saw
     };
-#if QT_VERSION >= 0x050500
     Q_ENUM(FanningType)
-#endif
 
     enum FanningLayout
     {
@@ -253,9 +249,7 @@ public:
         ZDescending,
         ZCentered
     };
-#if QT_VERSION >= 0x050500
     Q_ENUM(FanningLayout)
-#endif
 
     /** Get/Set the fanning type */
     FanningType fanningType() const;

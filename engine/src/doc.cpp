@@ -31,9 +31,7 @@
 #include <QList>
 #include <QTime>
 #include <QDir>
-#if QT_VERSION >= QT_VERSION_CHECK(5, 10, 0)
 #include <QRandomGenerator>
-#endif
 
 #include "qlcfixturemode.h"
 #include "qlcfixturedef.h"
@@ -74,11 +72,7 @@
 #include "markplanner.h"
 #include "lastlookeffect.h"
 
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
- #include "audiocapture_qt5.h"
-#else
  #include "audiocapture_qt6.h"
-#endif
 
 #define AUTOSAVE_TIMEOUT    30 // seconds
 
@@ -113,9 +107,6 @@ Doc::Doc(QObject* parent, int universes)
 {
     Bus::init(this);
     resetModified();
-#if QT_VERSION < QT_VERSION_CHECK(5, 10, 0)
-    qsrand(QTime::currentTime().msec());
-#endif
     
     m_autosaveTimer.setInterval(AUTOSAVE_TIMEOUT * 1000);
     m_autosaveTimer.setSingleShot(true);
@@ -830,11 +821,7 @@ QSharedPointer<AudioCapture> Doc::audioInputCapture() const
     {
         qDebug() << "Creating new audio capture";
         m_inputCapture = QSharedPointer<AudioCapture>(
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-            new AudioCaptureQt5()
-#else
             new AudioCaptureQt6()
-#endif
             );
     }
     return m_inputCapture;

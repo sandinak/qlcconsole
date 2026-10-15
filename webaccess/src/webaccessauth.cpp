@@ -23,9 +23,7 @@
 #include <QTextStream>
 #include <QStringList>
 #include <QCryptographicHash>
-#if QT_VERSION >= QT_VERSION_CHECK(5, 10, 0)
 #include <QRandomGenerator>
-#endif
 
 #include "webaccessauth.h"
 #include "qlcconfig.h"
@@ -110,11 +108,7 @@ bool WebAccessAuth::savePasswordsFile() const
             << user.passwordHash << ':'
             << (int)user.level << ':'
             << user.hashType << ':'
-#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
             << user.passwordSalt << Qt::endl;
-#else
-            << user.passwordSalt << endl;
-#endif
     }
 
     return true;
@@ -214,11 +208,7 @@ QString WebAccessAuth::generateSalt() const
 
     for (int i = 0; i < SALT_LENGTH; i++)
     {
-#if QT_VERSION < QT_VERSION_CHECK(5, 10, 0)
-        int halfByte = qrand() % 16;
-#else
         int halfByte = QRandomGenerator::global()->generate() % 16;
-#endif
         salt.append(QString::number(halfByte, 16));
     }
 

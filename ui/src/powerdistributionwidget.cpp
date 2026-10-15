@@ -251,11 +251,7 @@ PowerCircuitTree::PowerCircuitTree(QWidget *parent)
     setDefaultDropAction(Qt::CopyAction);
 }
 
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 QMimeData *PowerCircuitTree::mimeData(const QList<QTreeWidgetItem *> &items) const
-#else
-QMimeData *PowerCircuitTree::mimeData(const QList<QTreeWidgetItem *> items) const
-#endif
 {
     QByteArray fxData;
     QDataStream stream(&fxData, QIODevice::WriteOnly);

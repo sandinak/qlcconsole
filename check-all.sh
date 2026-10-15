@@ -1,26 +1,20 @@
 #!/bin/bash
-# Run the full test gate against BOTH Qt majors.
+# Run the full test gate: Qt6 Debug, Release, and Debug with warnings as
+# errors.
 #
-# Why: this fork builds against whichever Qt cmake finds, but ships macOS DMGs
-# built against Qt6 while day-to-day development happens against whatever is
-# installed (qt@5 here). Three separate defects in one week came from that
-# split and none were caught by building one configuration:
-#   - QTreeWidget::mimeData() takes the item list by value in Qt5, by
-#     const-ref in Qt6 -- the widgets UI stopped compiling under Qt5.
-#   - Homebrew's Qt6 keeps plugins under share/qt/, qt@5 directly under the
-#     prefix -- bundles shipped with no platform plugin and could not launch.
-#   - Array.prototype.fill() is ES6; the Qt5 script engine lacks it, so the
-#     Lines RGB script returned an empty map on Qt5 builds.
+# Qt6 only, since the Qt6-only conversion (2026-10;
+# the tag qt5-last is the last main that also built on Qt5). The Qt5 leg had
+# earned its place -- three defects in one week came from the Qt5/Qt6 split
+# (QTreeWidget::mimeData() by value vs const-ref; Homebrew's plugin paths;
+# the Qt5 script engine lacking ES6 Array.prototype.fill()) -- and went with
+# the split itself.
 #
-# Also runs one Release leg: CMAKE_BUILD_TYPE changes optimisation, and at
-# least one shipped bug (undefined narrowing in VCXYPadFixture::writeDMX) only
+# The Release leg: CMAKE_BUILD_TYPE changes optimisation, and at least one
+# shipped bug (undefined narrowing in VCXYPadFixture::writeDMX) only
 # manifested under -O2 -- invisible to every Debug-ish local build.
 #
-# CI does not cover this: .github/workflows/build.yml has a build-macos job,
-# but it installs Qt6 only (no Qt5 leg), and as of this writing the workflow
-# has never actually run on this repo -- `gh run list` is empty and the
-# actions/workflows API reports total_count 0. Until CI is demonstrably
-# running, this script is the only cross-Qt coverage there is.
+# CI (.github/workflows/build.yml) builds and tests macOS and Linux on every
+# push; this is the local gate to run before pushing.
 set -u
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -73,7 +67,6 @@ $(printf '  %-12s configure %4ss   build %5ss   test %5ss   total %5ss' \
 TIMINGS=""
 GATE_START=$(date +%s)
 
-run_gate "Qt5" build-qt5 /opt/homebrew/opt/qt@5 "" || true
 run_gate "Qt6" build-qt6 /opt/homebrew/opt/qt6  "" || true
 
 # Release matters on its own, not as a variant: VCXYPadFixture::writeDMX()

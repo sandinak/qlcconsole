@@ -306,9 +306,7 @@ protected:
      *********************************************************************/
 public:
     enum RunOrder { Loop = 0, SingleShot, PingPong, Random };
-#if QT_VERSION >= 0x050500
     Q_ENUM(RunOrder)
-#endif
 
 public:
     /**
@@ -355,9 +353,7 @@ private:
      *********************************************************************/
 public:
     enum Direction { Forward = 0, Backward };
-#if QT_VERSION >= 0x050500
     Q_ENUM(Direction)
-#endif
 
 public:
     /**
@@ -412,10 +408,8 @@ public:
         ByTwoFractions,
         AllFractions
     };
-#if QT_VERSION >= 0x050500
     Q_ENUM(TempoType)
     Q_ENUM(FractionsType)
-#endif
 
 public:
     /**

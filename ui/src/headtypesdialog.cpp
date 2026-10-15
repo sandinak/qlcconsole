@@ -117,11 +117,7 @@ void LedMapWidget::paintEvent(QPaintEvent *)
 
 void LedMapWidget::mousePressEvent(QMouseEvent *e)
 {
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     const int h = headAt(e->position());
-#else
-    const int h = headAt(e->localPos());
-#endif
     if (h < 0)
         return;
     if (m_picked < 0 || m_picked == h)

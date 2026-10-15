@@ -13,11 +13,7 @@ set(TS_FILES
     GPIO_ja_JP.ts
 )
 
-if(QT_VERSION_MAJOR GREATER 5)
-    qt_add_translation(QM_FILES ${TS_FILES})
-else()
-    qt5_add_translation(QM_FILES ${TS_FILES})
-endif()
+qt_add_translation(QM_FILES ${TS_FILES})
 
 project(${module_name})
 
