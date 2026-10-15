@@ -753,10 +753,18 @@ void EffectInstance_Test::bothFiresAreOfferedAndEachComesBackAsItself()
     QTemporaryDir home;
     const QByteArray realHome = qgetenv("HOME");
     qputenv("HOME", home.path().toUtf8());
+#ifdef Q_OS_WIN
+    // Windows takes the home folder from USERPROFILE, not HOME.
+    const QByteArray realProfile = qgetenv("USERPROFILE");
+    qputenv("USERPROFILE", home.path().toUtf8());
+#endif
     EffectScriptCache cache;
     cache.addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
     cache.addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "rgbscripts"), true);
     qputenv("HOME", realHome);
+#ifdef Q_OS_WIN
+    qputenv("USERPROFILE", realProfile);
+#endif
 
     // Both listed: the flicker by its new name, the rising flame as Fire.
     const QStringList names = cache.scriptNames();

@@ -414,9 +414,9 @@ jobs:
           DLLDIRS=$(find "$PWD/build" -name '*.dll' -not -path '*/CMakeFiles/*' -exec dirname {} \; | sort -u | tr '\n' ':')
           FAILED=""
           for t in $(find build -name '*_test.exe' -not -path '*/CMakeFiles/*' | sort); do
+            rc=0
             ( cd "$(dirname "$t")" && PATH="${DLLDIRS}${PATH}" QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1 \
-                /usr/bin/timeout 300 "./$(basename "$t")" > /tmp/t.log 2>&1 )
-            rc=$?
+                /usr/bin/timeout 300 "./$(basename "$t")" > /tmp/t.log 2>&1 ) || rc=$?
             if [ $rc -ne 0 ]; then
               FAILED="$FAILED $(basename "$t")($rc)"
               echo "=== $t exit $rc"; grep -E -A3 "^FAIL!|^QFATAL|Totals" /tmp/t.log | head -40
