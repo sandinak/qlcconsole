@@ -25,6 +25,8 @@
   #define WINVER 0x05000000
 #endif
 
+// avrt.h uses HANDLE/WINBOOL without including anything that defines them.
+#include <windows.h>
 #include <avrt.h>
 
 #include <QDebug>
