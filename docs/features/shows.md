@@ -60,7 +60,8 @@ lines the show's zero up with wherever the clock is now. The footer's
 **MTC** chip says what's being followed and how healthy it is (rate,
 jitter, latency); **Load** says how much of each DMX tick the show uses.
 **Connections → Show control &amp; sync** shows the same source and health
-with the other outside links, and can pick the source too.
+with the other outside links, and can pick the source too. The source
+picked is saved with the show.
 
 While the show runs, Virtual Console faders and buttons can still take a
 channel over live.

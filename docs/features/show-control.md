@@ -87,9 +87,13 @@ given as an argument can be a number or text.
 2. **Connections → Show control &amp; sync → MIDI Show Control in**: **Answer
    MIDI Show Control** is on; set the **device** number QLab sends to (1 by
    default). A message to the all-call device (127) is always answered.
-   **Listens on** names the MIDI inputs it answers on — every universe with
-   a MIDI input patched — or says there are none, with **Patch a MIDI
-   input…** to go and patch one.
+   **Listen on** is **All MIDI inputs** (the default) or the one port QLab
+   sends on. The choice names the port, not a universe, and belongs to
+   this computer, so it holds for every show. Under it the page says where
+   MSC can come in — the universes with that input patched — or, if the
+   chosen port isn't patched in this show, says so in red: MSC isn't
+   answered then (it doesn't quietly fall back to every input). **Patch a
+   MIDI input…** goes to where inputs are patched.
 3. In QLab, a **MIDI cue** sending MSC with the command format **Lighting**
    (or Moving Lights, or All Types), the command, and the cue number — and
    the cue list, for a list other than the main one.
@@ -112,7 +116,9 @@ cue from QLab and look there first.
 
 The same page's **MIDI timecode** section picks which universe's MIDI input
 timecode is taken from (the same choice as the footer's **MTC** chip) and
-shows the code as it arrives with its **sync health**: healthy, usable or
+saves that choice with the show (it's a universe of the show's patch; a
+show that names a universe it doesn't have follows any), and shows the
+code as it arrives with its **sync health**: healthy, usable or
 unstable, from how fast it runs against real time, its jitter and how
 often it updates.
 

@@ -21,6 +21,12 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
   page) and `sourceUniverseChanged` keeps chip and page in step.
 - Tests: showcontrol_ui_test (page, own QSettings + HOME), showcontrol_test,
   timecodesource_test.
+- **MSC on one port**: Listen on All MIDI inputs (default) or one, saved
+  machine-wide by plugin + input name (`showcontrol/mscInputPlugin`,
+  `showcontrol/mscInput`); `ShowControl::acceptsMscFrom()` filters the
+  SysEx path; a chosen port not patched in the show is shown in red, no
+  fall-back. **Timecode source saved with the show** (`<Timecode Source>`;
+  absent/unknown universe = any; cleared on a new show).
 
 ### 2026-10-15 — Release prep: 0.1.0 labels, universal build, kronk fixes *(on release/0.1.0)*
 

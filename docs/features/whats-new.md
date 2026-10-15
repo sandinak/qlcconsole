@@ -16,7 +16,8 @@ The latest changes, newest first. Each links to the guide with the detail.
   and MIDI timecode in one place, each live — listening or why not, the
   last command and when, the timecode's source and sync health. It replaces
   the Settings dialog's Show control group (which now points there); the
-  settings carry over.
+  settings carry over. MSC can be kept to **one MIDI port** (by name, for
+  every show) and the **timecode source is saved with the show**.
 - **Next:** in the footer says what the main cue list's GO plays next; GO
   (⌘↩) and Back (⌘⇧↩) work from any window, and the Virtual Console cue
   list shows each cue's number and what's next.
