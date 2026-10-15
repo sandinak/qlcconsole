@@ -17,9 +17,9 @@ target_include_directories(${module_name} PUBLIC
 )
 
 target_link_libraries(${module_name} PUBLIC
-    Qt${QT_MAJOR_VERSION}::Core
-    Qt${QT_MAJOR_VERSION}::Gui
-    Qt${QT_MAJOR_VERSION}::Multimedia
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Multimedia
 )
 
 if(APPLE)
@@ -38,7 +38,7 @@ endif()
 
 if(WIN32)
     target_link_libraries(${module_name} PUBLIC
-        Qt${QT_MAJOR_VERSION}::Widgets
+        Qt6::Widgets
     )
 endif()
 

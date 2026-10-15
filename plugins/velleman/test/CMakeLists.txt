@@ -12,8 +12,8 @@ target_include_directories(${module_name} PRIVATE
 
 target_link_libraries(${module_name} PRIVATE
     # Remove: L../src
-    Qt${QT_MAJOR_VERSION}::Core
-    Qt${QT_MAJOR_VERSION}::Test
+    Qt6::Core
+    Qt6::Test
     velleman
 )
 

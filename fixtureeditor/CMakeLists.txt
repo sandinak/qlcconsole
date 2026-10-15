@@ -42,10 +42,10 @@ target_include_directories(${module_name} PRIVATE
 )
 
 target_link_libraries(${module_name} PRIVATE
-    Qt${QT_MAJOR_VERSION}::Core
-    Qt${QT_MAJOR_VERSION}::Gui
-    Qt${QT_MAJOR_VERSION}::Widgets
-    Qt${QT_MAJOR_VERSION}::Network
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
+    Qt6::Network
     qlcplusengine
 )
 
@@ -608,7 +608,7 @@ if(WIN32)
 endif()
 
 target_link_libraries(${module_name} PRIVATE
-    Qt${QT_MAJOR_VERSION}::Qml
+    Qt6::Qml
 )
 
 qt_add_resources(${module_name} "qlcui"

@@ -241,17 +241,17 @@ target_include_directories(${module_name} PUBLIC
 target_include_directories(${module_name} PUBLIC ${FFTW3_INCLUDE_DIRS})
 
 target_link_libraries(${module_name} PUBLIC
-    Qt${QT_MAJOR_VERSION}::Core
-    Qt${QT_MAJOR_VERSION}::Gui
-    Qt${QT_MAJOR_VERSION}::Multimedia
-    Qt${QT_MAJOR_VERSION}::MultimediaWidgets
-    Qt${QT_MAJOR_VERSION}::Network
-    Qt${QT_MAJOR_VERSION}::Widgets
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Multimedia
+    Qt6::MultimediaWidgets
+    Qt6::Network
+    Qt6::Widgets
     qlcplusengine
 )
 
 # Add resources and RGB Script deps
-target_link_libraries(${module_name} PUBLIC Qt${QT_MAJOR_VERSION}::Qml)
+target_link_libraries(${module_name} PUBLIC Qt6::Qml)
 qt_add_resources(qlcplusui_resource_files "qlcui.qrc" "help.qrc")
 
 target_sources(${module_name} PRIVATE ${qlcplusui_resource_files})

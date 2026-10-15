@@ -129,9 +129,9 @@ target_compile_definitions(${module_name} PRIVATE
 set(_qt6_3d_modules 3DCore 3DInput 3DLogic 3DQuick 3DQuickExtras 3DRender 3DExtras)
 set(_qt6_3d_link "")
 foreach(_m IN LISTS _qt6_3d_modules)
-    list(APPEND _qt6_3d_link "Qt${QT_MAJOR_VERSION}::${_m}")
+    list(APPEND _qt6_3d_link "Qt6::${_m}")
 endforeach()
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND QT_MAJOR_VERSION EQUAL 6 AND (NOT DEFINED ENV{QTDIR} OR "$ENV{QTDIR}" STREQUAL ""))
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND (NOT DEFINED ENV{QTDIR} OR "$ENV{QTDIR}" STREQUAL ""))
     set(_qt6_base "")
     get_target_property(_qt6_core_incs Qt6::Core INTERFACE_INCLUDE_DIRECTORIES)
     if(_qt6_core_incs AND NOT _qt6_core_incs MATCHES "-NOTFOUND$")
@@ -194,25 +194,25 @@ endif()
 
 target_link_libraries(${module_name} PRIVATE
     ${_qt6_3d_link}
-    Qt${QT_MAJOR_VERSION}::Core
-    Qt${QT_MAJOR_VERSION}::Gui
-    Qt${QT_MAJOR_VERSION}::Multimedia
-    Qt${QT_MAJOR_VERSION}::MultimediaWidgets
-    Qt${QT_MAJOR_VERSION}::Network
-    Qt${QT_MAJOR_VERSION}::PrintSupport
-    Qt${QT_MAJOR_VERSION}::Qml
-    Qt${QT_MAJOR_VERSION}::Quick
-    Qt${QT_MAJOR_VERSION}::Svg
-    Qt${QT_MAJOR_VERSION}::Widgets
-    Qt${QT_MAJOR_VERSION}::WebSockets
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Multimedia
+    Qt6::MultimediaWidgets
+    Qt6::Network
+    Qt6::PrintSupport
+    Qt6::Qml
+    Qt6::Quick
+    Qt6::Svg
+    Qt6::Widgets
+    Qt6::WebSockets
     qlcplusengine
     qlcpluswebaccess
 )
 
 if(ANDROID)
     target_link_libraries(${module_name} PRIVATE
-        Qt${QT_MAJOR_VERSION}::Concurrent
-        Qt${QT_MAJOR_VERSION}::OpenGL
+        Qt6::Concurrent
+        Qt6::OpenGL
         GLESv2
         log
         z

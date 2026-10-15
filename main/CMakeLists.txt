@@ -12,9 +12,9 @@ target_include_directories(${module_name} PRIVATE
 )
 
 target_link_libraries(${module_name} PRIVATE
-    Qt${QT_MAJOR_VERSION}::Core
-    Qt${QT_MAJOR_VERSION}::Gui
-    Qt${QT_MAJOR_VERSION}::Widgets
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
     qlcplusengine
     qlcplusui
     qlcpluswebaccess
@@ -44,7 +44,7 @@ if(WIN32)
 endif()
 
 target_link_libraries(${module_name} PRIVATE
-    Qt${QT_MAJOR_VERSION}::Qml
+    Qt6::Qml
 )
 
 # DEV builds on macOS: main.cpp restricts the Qt plugin search path to
@@ -58,8 +58,8 @@ target_link_libraries(${module_name} PRIVATE
 #     audio preview) silently gets NO signal.
 # Mirror all of them into <build>/plugins so the dev run finds them. (A real
 # macdeployqt bundle copies these itself, so this is dev-only.)
-if(APPLE AND TARGET Qt${QT_MAJOR_VERSION}::qmake)
-    get_target_property(_qlc_qmake Qt${QT_MAJOR_VERSION}::qmake IMPORTED_LOCATION)
+if(APPLE AND TARGET Qt6::qmake)
+    get_target_property(_qlc_qmake Qt6::qmake IMPORTED_LOCATION)
     execute_process(COMMAND "${_qlc_qmake}" -query QT_INSTALL_PLUGINS
                     OUTPUT_VARIABLE _qlc_qt_plugins
                     OUTPUT_STRIP_TRAILING_WHITESPACE)

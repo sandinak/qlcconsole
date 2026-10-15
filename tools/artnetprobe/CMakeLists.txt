@@ -13,6 +13,6 @@ target_include_directories(artnetprobe PRIVATE
 )
 
 target_link_libraries(artnetprobe PRIVATE
-    Qt${QT_MAJOR_VERSION}::Core
-    Qt${QT_MAJOR_VERSION}::Network
+    Qt6::Core
+    Qt6::Network
 )

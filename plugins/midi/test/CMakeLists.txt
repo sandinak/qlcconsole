@@ -12,8 +12,8 @@ target_include_directories(midi_test PRIVATE
 
 target_link_libraries(midi_test PRIVATE
     # Remove: L../src
-    Qt${QT_MAJOR_VERSION}::Core
-    Qt${QT_MAJOR_VERSION}::Test
+    Qt6::Core
+    Qt6::Test
 )
 
 # Consider using qt_generate_deploy_app_script() for app deployment if

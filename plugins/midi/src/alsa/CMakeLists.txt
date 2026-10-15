@@ -49,9 +49,9 @@ target_include_directories(${module_name} PRIVATE
 pkg_check_modules(ALSA IMPORTED_TARGET alsa)
 
 target_link_libraries(${module_name} PRIVATE
-    Qt${QT_MAJOR_VERSION}::Core
-    Qt${QT_MAJOR_VERSION}::Gui
-    Qt${QT_MAJOR_VERSION}::Widgets
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
 )
 
 if (ALSA_FOUND)

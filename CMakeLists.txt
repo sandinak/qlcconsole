@@ -69,16 +69,16 @@ if(QT_VERSION VERSION_LESS 6.8)
     message(FATAL_ERROR "qlcconsole needs Qt 6.8 or later; found ${QT_VERSION} "
                         "(${QT_DIR}). Point CMAKE_PREFIX_PATH at a newer Qt.")
 endif()
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Gui Multimedia MultimediaWidgets Network PrintSupport Qml Quick Svg Test Widgets LinguistTools)
+find_package(Qt6 REQUIRED COMPONENTS Gui Multimedia MultimediaWidgets Network PrintSupport Qml Quick Svg Test Widgets LinguistTools)
 if(qmlui)
-    find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS 3DCore 3DInput 3DLogic 3DQuick 3DQuickExtras 3DRender WebSockets)
+    find_package(Qt6 REQUIRED COMPONENTS 3DCore 3DInput 3DLogic 3DQuick 3DQuickExtras 3DRender WebSockets)
     if(ANDROID)
-        find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Concurrent OpenGL)
+        find_package(Qt6 REQUIRED COMPONENTS Concurrent OpenGL)
     endif()
 
 endif()
 
-message("Found Qt version ${QT_VERSION_MAJOR}: ${QT_DIR}")
+message("Found Qt ${QT_VERSION}: ${QT_DIR}")
 
 find_package(PkgConfig REQUIRED)
 

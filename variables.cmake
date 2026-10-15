@@ -1,5 +1,3 @@
-set(QT_MAJOR_VERSION 6)
-
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
@@ -335,9 +333,9 @@ elseif (APPLE)
     set(PLUGINDIR "PlugIns")
 elseif (UNIX)
     if (appimage)
-        set(PLUGINDIR "../lib/qt${QT_MAJOR_VERSION}/plugins/qlcconsole")
+        set(PLUGINDIR "../lib/qt6/plugins/qlcconsole")
     else ()
-        set(PLUGINDIR "${LIBSDIR}/qt${QT_MAJOR_VERSION}/plugins/qlcconsole")
+        set(PLUGINDIR "${LIBSDIR}/qt6/plugins/qlcconsole")
     endif ()
 endif ()
 

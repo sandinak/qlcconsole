@@ -130,9 +130,9 @@ target_include_directories(${module_name} PUBLIC
 )
 
 target_link_libraries(${module_name} PUBLIC
-    Qt${QT_MAJOR_VERSION}::Core
-    Qt${QT_MAJOR_VERSION}::Gui
-    Qt${QT_MAJOR_VERSION}::Multimedia
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Multimedia
 )
 
 target_link_libraries(${module_name} PRIVATE qlcplusaudio)
@@ -156,7 +156,7 @@ if(WIN32)
     target_include_directories(${module_name} PUBLIC /)
 
     target_link_libraries(${module_name} PUBLIC
-        Qt${QT_MAJOR_VERSION}::Widgets
+        Qt6::Widgets
         winmm
         avrt
     )
@@ -182,7 +182,7 @@ endif()
 
 target_sources(${module_name} PRIVATE rgbscriptv4.cpp rgbscriptv4.h)
 
-target_link_libraries(${module_name} PUBLIC Qt${QT_MAJOR_VERSION}::Qml)
+target_link_libraries(${module_name} PUBLIC Qt6::Qml)
 
 if(qmlui)
     target_sources(${module_name} PRIVATE

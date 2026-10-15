@@ -7,9 +7,9 @@ target_include_directories(test PRIVATE
 )
 
 target_link_libraries(test PRIVATE
-    Qt${QT_MAJOR_VERSION}::Core
-    Qt${QT_MAJOR_VERSION}::Gui
-    Qt${QT_MAJOR_VERSION}::Widgets
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
     hotplugmonitor
 )
 

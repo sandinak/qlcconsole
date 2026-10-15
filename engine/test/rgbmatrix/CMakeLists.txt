@@ -10,14 +10,14 @@ target_include_directories(rgbmatrix_test PRIVATE
 )
 
 target_link_libraries(rgbmatrix_test PRIVATE
-    Qt${QT_MAJOR_VERSION}::Core
-    Qt${QT_MAJOR_VERSION}::Gui
-    Qt${QT_MAJOR_VERSION}::Test
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Test
     qlcplusengine
 )
 
 target_link_libraries(rgbmatrix_test PRIVATE
-    Qt${QT_MAJOR_VERSION}::Qml
+    Qt6::Qml
 )
 
 # Consider using qt_generate_deploy_app_script() for app deployment if

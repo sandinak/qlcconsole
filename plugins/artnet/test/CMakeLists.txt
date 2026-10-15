@@ -12,9 +12,9 @@ target_include_directories(artnet_test PRIVATE
 
 target_link_libraries(artnet_test PRIVATE
     # Remove: L../src
-    Qt${QT_MAJOR_VERSION}::Core
-    Qt${QT_MAJOR_VERSION}::Network
-    Qt${QT_MAJOR_VERSION}::Test
+    Qt6::Core
+    Qt6::Network
+    Qt6::Test
     artnet
 )
 

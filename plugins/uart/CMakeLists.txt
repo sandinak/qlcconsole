@@ -1,6 +1,6 @@
 project(uart)
 
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Gui SerialPort Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Gui SerialPort Widgets)
 
 set(module_name "uart")
 
@@ -33,10 +33,10 @@ target_include_directories(${module_name} PRIVATE
 )
 
 target_link_libraries(${module_name} PRIVATE
-    Qt${QT_MAJOR_VERSION}::Core
-    Qt${QT_MAJOR_VERSION}::Gui
-    Qt${QT_MAJOR_VERSION}::SerialPort
-    Qt${QT_MAJOR_VERSION}::Widgets
+    Qt6::Core
+    Qt6::Gui
+    Qt6::SerialPort
+    Qt6::Widgets
 )
 
 install(TARGETS ${module_name}

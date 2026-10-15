@@ -8,9 +8,9 @@ target_include_directories(inputpatch_test PRIVATE
 )
 
 target_link_libraries(inputpatch_test PRIVATE
-    Qt${QT_MAJOR_VERSION}::Core
-    Qt${QT_MAJOR_VERSION}::Gui
-    Qt${QT_MAJOR_VERSION}::Test
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Test
     qlcplusengine
 )
 
