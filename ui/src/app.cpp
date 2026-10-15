@@ -2183,6 +2183,10 @@ bool App::saveModifiedDoc(const QString & title, const QString & message)
     }
     else if (result == QMessageBox::No)
     {
+        /* Discarded, on purpose: so is its recovery copy. Left behind (the
+           document is still "modified", so closing doesn't remove it either),
+           it was offered back at every start from then on. */
+        removeAutosaveFile();
         return true;
     }
     else
