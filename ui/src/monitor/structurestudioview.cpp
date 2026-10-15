@@ -8188,8 +8188,8 @@ void StructureStudioView::rebuildOverlapWarnings() const
     QVector<Box> boxes;
     foreach (Fixture *fx, m_doc->fixtures())
     {
-        if (fx == nullptr)
-            continue;
+        if (fx == nullptr || fx->definitionUnavailable())
+            continue;   // a stand-in's size is made up: nothing to warn about
         const FixtureVisualTraits traits = classifyFixture(fx);
         if (traits.physW <= 0.0f && traits.physH <= 0.0f && traits.physD <= 0.0f)
             continue;   // nothing declared to compare against

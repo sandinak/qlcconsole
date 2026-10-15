@@ -433,6 +433,56 @@ jobs:
           echo "Failed:$FAILED"
           [ -z "$FAILED" ]
 
+      # The rig view on Direct3D 11 (the runner has no GPU: WARP), drawn
+      # both ways, the pictures kept to look at: the GPU-vs-CPU test, and a
+      # real show lit. Plus a bundle that runs the same headless on another
+      # Windows machine (monitor_test + the deployed app + offscreen).
+      - name: Rig view renders (informational)
+        continue-on-error: true
+        timeout-minutes: 20
+        run: |
+          SHOTS=${GITHUB_WORKSPACE}/rig-shots
+          mkdir -p $SHOTS
+          DLLDIRS=$(find "$PWD/build" -name '*.dll' -not -path '*/CMakeFiles/*' -exec dirname {} \; | sort -u | tr '\n' ':')
+          T=$(find build -name 'monitor_test.exe' -not -path '*/CMakeFiles/*' | head -n1)
+          cd "$(dirname "$T")"
+          run() { PATH="${DLLDIRS}${PATH}" QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1 \
+                    /usr/bin/timeout 600 ./monitor_test.exe "$@" 2>&1 \
+                  | grep -E "RhiRaster|quality|rig view|^PASS|^FAIL|^SKIP|^QFATAL|Totals|   Loc" || true; }
+          QLC_RIG_GPU=1 QLC_GPU_SHOTS=$SHOTS run theGpuDrawsWhatTheCpuDraws
+          for gpu in 0 1; do
+            QLC_RIG_GPU=$gpu QLC_RIG_BENCH=${GITHUB_WORKSPACE}/test-workspaces/DanceHysteria-0.1.qlcc \
+              QLC_RIG_BENCH_DEFS=${GITHUB_WORKSPACE}/resources/fixtures QLC_RIG_BENCH_LIT=1 \
+              QLC_RIG_BENCH_SHOT=$SHOTS/dancehysteria-gpu$gpu.png run aShowsRigViewDrawTime
+          done
+          ls -l $SHOTS
+          # The bundle: monitor_test beside the deployed app and its DLLs.
+          B=${GITHUB_WORKSPACE}/rig-test-bundle
+          mkdir -p $B
+          cp -r ${DEPLOY_DIR}/. $B/
+          cp -v monitor_test.exe $B/
+          mkdir -p $B/platforms
+          cp -v ${MINGW_PREFIX}/share/qt6/plugins/platforms/qoffscreen.dll $B/platforms/
+          cd $B
+          ldd monitor_test.exe platforms/qoffscreen.dll | awk '{print $3}' | grep -i "^${MINGW_PREFIX}/bin/" | sort -u \
+            | while read dll; do [ -e "$(basename "$dll")" ] || cp -v "$dll" . ; done
+
+      - name: Store rig view renders
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rig-shots-windows
+          path: rig-shots
+          if-no-files-found: warn
+
+      - name: Store rig test bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rig-test-bundle-windows
+          path: rig-test-bundle
+          if-no-files-found: warn
+
   build-macos:
     runs-on: macos-15
     name: QLCplus macOS ${{matrix.task}}

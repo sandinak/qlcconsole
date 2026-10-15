@@ -419,6 +419,9 @@ private slots:
     void keptLandingsFollowTheDecks();
     void aPoolOnADeckIsDrawn();
     void theGpuDrawsWhatTheCpuDraws();
+    /** A fixture standing in for a missing definition: one small body,
+     *  no overlap warning (not a 19 m wall of heads in red). */
+    void aStandInForAMissingDefinitionIsOneSmallBody();
     void aGoboPoolIsDrawnThroughItsMask();
     /** "specialized gobos": a slot of ONE unit fitted with the operator's
      *  own picture (Gobo Wheels…), saved per fixture, drawn on the rig. */
