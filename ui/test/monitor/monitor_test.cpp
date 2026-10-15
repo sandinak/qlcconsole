@@ -437,7 +437,8 @@ void Monitor_Test::removeSelectedCancelled()
    (skipped without it). Reported, not checked -- the number to watch when
    making the rig view faster. QLC_RIG_BENCH_LIT=1 sends every channel at
    full first (every beam lit: the worst case); QLC_RIG_BENCH_SHOT=<file.png>
-   saves the frame, "-q1"/"-q2" before the extension. */
+   saves the frame, "-q1"/"-q2" before the extension; QLC_RIG_BENCH_THREADS=n
+   draws on n threads (1: one at a time, to compare against). */
 void Monitor_Test::aShowsRigViewDrawTime()
 {
     const QString path = qEnvironmentVariable("QLC_RIG_BENCH");
@@ -511,6 +512,8 @@ void Monitor_Test::aShowsRigViewDrawTime()
         view.setBeams(true);
         view.setHaze(1.0);
         view.setSupersample(quality);
+        if (qEnvironmentVariableIsSet("QLC_RIG_BENCH_THREADS"))
+            view.setRenderThreads(qEnvironmentVariableIntValue("QLC_RIG_BENCH_THREADS"));
         view.show();
         QVERIFY(QTest::qWaitForWindowExposed(&view));
         view.repaint();                      // the first frame builds what it keeps
@@ -12741,12 +12744,13 @@ void Monitor_Test::aGoboPoolIsDrawnThroughItsMask()
             view.m_collecting = true;
             view.drawBeamCone(p, apex, down, half, QColor(0, 0, 255), 1.0, 1.0, o);
             view.m_collecting = false;
+            // Triangles of light: a mesh op carries many, three corners each.
             int n = 0;
             for (const auto &op : view.m_ops)
                 if (op.light)
                 {
-                    ++n;
-                    if (hazeAlpha != nullptr && op.poly.size() == 3 && *hazeAlpha < 0)
+                    n += op.mesh ? int(op.poly.size() / 3) : 1;
+                    if (hazeAlpha != nullptr && (op.mesh || op.poly.size() == 3) && *hazeAlpha < 0)
                         *hazeAlpha = op.fill.alpha();   // the first: a cone triangle
                 }
             return n;

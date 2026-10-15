@@ -328,19 +328,11 @@ bool RhiRaster::render(const QSize &size, int quality,
     const float span = qMax(1e-6f, zNear - zFar);
 
     const int n = solids.size() + seeThrough.size() + light.size();
-    QVector<Vertex> all;
-    all.reserve(n + 3);
-    for (const QVector<Vertex> *list : { &solids, &seeThrough, &light })
-        for (Vertex v : *list)
-        {
-            v.z = 0.01f + 0.98f * (zNear - v.z) / span;
-            all << v;
-        }
-    // The roll-off pass's triangle over the whole screen, last.
-    all << Vertex{ 0, 0, 0, 0, 0, 0, 0 } << Vertex{ 2, 0, 0, 0, 0, 0, 0 }
-        << Vertex{ 0, 2, 0, 0, 0, 0, 0 };
+    // The roll-off pass's triangle over the whole screen, after the rest.
+    static const Vertex screen[3] = { { 0, 0, 0, 0, 0, 0, 0 }, { 2, 0, 0, 0, 0, 0, 0 },
+                                      { 0, 2, 0, 0, 0, 0, 0 } };
 
-    const quint32 bytes = quint32(all.size() * kVertexSize);
+    const quint32 bytes = quint32((n + 3) * kVertexSize);
     if (m_vbuf == nullptr || m_vbuf->size() < bytes)
     {
         release(m_vbuf);
@@ -357,17 +349,27 @@ bool RhiRaster::render(const QSize &size, int quality,
     if (m_rhi->beginOffscreenFrame(&cb) != QRhi::FrameOpSuccess)
         return false;
 
-    // Screen pixels, y down, to the backend's clip space (z in 0..1 as given).
+    /* Screen pixels, y down, to the backend's clip space; depth from
+       zNear..zFar to 0.01..0.99 (as 0..1, -1..1 in GL's clip space), so the
+       vertices go up as they came. */
     QMatrix4x4 m;
     m.setRow(0, QVector4D(2.0f / size.width(), 0.0f, 0.0f, -1.0f));
     m.setRow(1, QVector4D(0.0f, -2.0f / size.height(), 0.0f, 1.0f));
-    m.setRow(2, QVector4D(0.0f, 0.0f, 2.0f, -1.0f));
+    m.setRow(2, QVector4D(0.0f, 0.0f, -1.96f / span, 1.96f * zNear / span - 0.98f));
     m.setRow(3, QVector4D(0.0f, 0.0f, 0.0f, 1.0f));
     const QMatrix4x4 mvp = m_rhi->clipSpaceCorrMatrix() * m;
     const float flip[4] = { m_rhi->isYUpInFramebuffer() ? 0.0f : 1.0f, 0, 0, 0 };
 
     QRhiResourceUpdateBatch *u = m_rhi->nextResourceUpdateBatch();
-    u->uploadStaticBuffer(m_vbuf, 0, bytes, all.constData());
+    quint32 at = 0;
+    for (const QVector<Vertex> *list : { &solids, &seeThrough, &light })
+    {
+        if (!list->isEmpty())
+            u->uploadStaticBuffer(m_vbuf, at, quint32(list->size() * kVertexSize),
+                                  list->constData());
+        at += quint32(list->size() * kVertexSize);
+    }
+    u->uploadStaticBuffer(m_vbuf, at, quint32(3 * kVertexSize), screen);
     u->updateDynamicBuffer(m_ubuf, 0, 64, mvp.constData());
     u->updateDynamicBuffer(m_ubuf, 64, 16, flip);
 

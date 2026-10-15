@@ -40,6 +40,7 @@
 #include <QElapsedTimer>
 
 #include "beamoptics.h"
+#include "rhiraster.h"
 #include "stageplatform.h"
 
 #include "fixture.h"   // Fixture::invalidId() -- the "no fixture" marker
@@ -378,6 +379,9 @@ private:
         double    radius = 2.0;  ///< Dot
         QString   text;          ///< Label
         bool      light = false; ///< Poly of LIGHT: added, not layered (see ZRaster::light)
+        /** Light only: poly, zs and alphas hold triangles, three corners
+         *  each, all in fill -- a beam's mesh as one op (emitLightTri()). */
+        bool      mesh = false;
         /** A see-through surface that is still a thing -- a deck top, a sock:
          *  what the pointer reads when it is over it (worldAt()). */
         bool      pickable = false;
@@ -394,13 +398,19 @@ private:
     /** Draw the rig on the GPU when there is one ("monitor/rig/gpu"). */
     bool     m_gpuWanted = true;
     mutable bool m_drewOnGpu = false;
+    /** The triangles gpuRender() hands the GPU, kept for their room. */
+    mutable QVector<RhiRaster::Vertex> m_gpuSolids, m_gpuSee, m_gpuLight;
+    /** A frame's ops by how they are drawn: pointers into m_ops (or, once
+     *  the GPU has drawn them, m_pickOps), so splitting them moves nothing. */
+    typedef QVector<const DrawOp *> OpRefs;
     /** What the GPU drew last, for picking: depth is rasterised from these
-     *  on the CPU when a pick asks (pickDepth()). */
-    mutable QVector<DrawOp> m_pickOpaque, m_pickSeeThrough;
+     *  on the CPU when a pick asks (pickDepth()). The ops themselves are
+     *  m_pickOps, swapped out of m_ops. */
+    mutable QVector<DrawOp> m_pickOps;
+    mutable OpRefs m_pickOpaque, m_pickSeeThrough;
     mutable bool m_pickDirty = false;
-    bool gpuRender(QPainter &p, const QVector<DrawOp> &opaque,
-                   const QVector<DrawOp> &translucent,
-                   const QVector<DrawOp> &lights) const;
+    bool gpuRender(QPainter &p, const OpRefs &opaque, const OpRefs &translucent,
+                   const OpRefs &lights) const;
     double pickDepth(const QPoint &px) const;
     int      m_supersample = 2;   ///< a flat rasteriser has no AA of its own
     int      m_renderThreads = 0; ///< 0 = one per core
@@ -420,6 +430,13 @@ private:
     void emitLight(const QPolygonF &poly, double depth, const QColor &colour, QPainter &p,
                    const QVector<double> &vertexDepths,
                    const QVector<double> &vertexAlphas = QVector<double>()) const;
+    /** One triangle of light, a depth and an alpha at each corner: joins the
+     *  op before it when that is light of the same colour (light adds, so
+     *  its order never matters), so a beam's mesh is one op, not hundreds. */
+    void emitLightTri(const QPointF &a, const QPointF &b, const QPointF &c,
+                      double za, double zb, double zc,
+                      double aa, double ab, double ac,
+                      const QColor &colour, QPainter &p) const;
     /** A line with a depth at EACH end. A truss chord spans the whole rig;
      *  describing it with one averaged depth is the same mistake a face
      *  with one depth was, and leaves webbing punching through a deck. */
@@ -778,6 +795,48 @@ private:
         float     ax0 = 0, ay0 = 0, ax1 = 0, ay1 = 0, az = 0;
     };
     mutable QVector<FrameBeam> m_frameBeams;
+    /** A sphere round each of m_frameBeams (same index), and its colour as
+     *  floats: beamLightAt() passes over a beam that cannot reach a point
+     *  with one distance, not the cone. Filled as it is asked for. */
+    struct BeamBound { QVector3D centre; float reach2; float r, g, b; float factor; };
+    mutable QVector<BeamBound> m_beamBounds;
+
+    /** What one drawing thread gathers while fixtures are drawn across the
+     *  cores (drawFixturesInParallel()): its own ops and beams, in its
+     *  fixtures' order, and what it found or worked out of the kept landings
+     *  and meshes -- which stay read-only until every thread is done. */
+    struct EmitContext
+    {
+        QVector<DrawOp> ops;
+        QVector<FrameBeam> beams;
+        bool pickable = false;
+        bool opticsAnimating = false;
+        QVector<const Throw *> throwHits;
+        QVector<QPair<ThrowKey, Throw>> newThrows;
+        QVector<const BeamMesh *> meshHits;
+        QVector<QPair<BeamMeshKey, BeamMesh>> newMeshes;
+    };
+    /** This thread's, while it draws fixtures for drawFixturesInParallel();
+     *  null on the GUI thread, where everything goes to the members. */
+    static thread_local EmitContext *s_emit;
+    QVector<DrawOp> &opsOut() const { return s_emit != nullptr ? s_emit->ops : m_ops; }
+    QVector<FrameBeam> &beamsOut() const
+    { return s_emit != nullptr ? s_emit->beams : m_frameBeams; }
+    bool &emitPickable() const
+    { return s_emit != nullptr ? s_emit->pickable : m_emitPickable; }
+    void markOpticsAnimating() const
+    {
+        if (s_emit != nullptr)
+            s_emit->opticsAnimating = true;
+        else
+            m_opticsAnimating = true;
+    }
+    /** The fixtures of drawRigDepthSorted(), drawn across the cores and their
+     *  ops and beams put back in this order -- the frame they would have made
+     *  one at a time. Lanterns and omni lights run scripts and ask devices on
+     *  the GUI thread: drawn there, in their place. */
+    void drawFixturesInParallel(QPainter &p, const QVector<quint32> &fids,
+                                bool nameEveryone) const;
     /** How much of beam @p fb reaches @p at: 1 inside its cone, rolling off
      *  over a soft edge; 0 outside, past where it lands, or -- lit from inside
      *  a box -- unless the line from it to @p at goes out through the top. */

@@ -938,14 +938,19 @@ void StructureStudioView::drawRigDepthSorted(QPainter &p) const
 
     m_ops.clear();
     m_frameBeams.clear();
+    m_beamBounds.clear();
     m_collecting = true;
-    foreach (const Item &it, items)
+    /* Structures first, as they come (they paint some of themselves straight
+       away), then the fixtures -- most of a lit frame -- across the cores. */
+    QVector<quint32> fids;
+    for (const Item &it : std::as_const(items))
     {
         if (it.isFixture)
-            drawOneFixture(p, it.id, nameEveryone);
+            fids << it.id;
         else
             drawOneStructure(p, it.kind, it.id);
     }
+    drawFixturesInParallel(p, fids, nameEveryone);
     collectInsideLight(p);
     drawSocks(p);
     drawTowerFaces(p);
@@ -953,6 +958,110 @@ void StructureStudioView::drawRigDepthSorted(QPainter &p) const
         drawStageFigures(p);
     m_collecting = false;
     flushOps(p);
+}
+
+thread_local StructureStudioView::EmitContext *StructureStudioView::s_emit = nullptr;
+
+void StructureStudioView::drawFixturesInParallel(QPainter &p, const QVector<quint32> &fids,
+                                                 bool nameEveryone) const
+{
+    int threads = (m_renderThreads > 0) ? m_renderThreads : QThread::idealThreadCount();
+    threads = qMin(threads, int(fids.size() / 8));      // a few: not worth the hand-off
+    if (threads <= 1)
+    {
+        for (quint32 fid : fids)
+            drawOneFixture(p, fid, nameEveryone);
+        return;
+    }
+
+    /* Runs of fixtures, each gathered into a context of its own, then put back
+       together in this order. A lantern or omni light is a run of one, drawn
+       here on the GUI thread while the others are drawn on the pool. */
+    struct Run { int from, to; bool here; };
+    QVector<Run> runs;
+    const int perRun = qMax(4, int(fids.size() / (threads * 4)));
+    for (int i = 0; i < fids.size(); )
+    {
+        Fixture *fx = m_doc->fixture(fids.at(i));
+        bool here = false;
+        if (fx != nullptr)
+        {
+            const FixtureVisualTraits traits = classifyFixture(fx);
+            here = (traits.kind == FixtureSilhouette::Lantern || traits.omni);
+        }
+        if (here)
+        {
+            runs << Run{ i, i + 1, true };
+            ++i;
+            continue;
+        }
+        if (runs.isEmpty() || runs.last().here || runs.last().to - runs.last().from >= perRun)
+            runs << Run{ i, i + 1, false };
+        else
+            runs.last().to = i + 1;
+        ++i;
+    }
+
+    opticsTime();                       // starts its clock: read-only from here
+    QVector<EmitContext> ctx(runs.size());
+    if (m_renderPool == nullptr)
+        m_renderPool = new QThreadPool(const_cast<StructureStudioView *>(this));
+    if (m_renderPool->maxThreadCount() < threads)
+        m_renderPool->setMaxThreadCount(threads);
+
+    QSemaphore done;
+    int started = 0;
+    for (int r = 0; r < runs.size(); ++r)
+    {
+        if (runs.at(r).here)
+            continue;
+        ++started;
+        m_renderPool->start([&, r]() {
+            s_emit = &ctx[r];
+            for (int i = runs.at(r).from; i < runs.at(r).to; ++i)
+                drawOneFixture(p, fids.at(i), nameEveryone);
+            s_emit = nullptr;
+            done.release();
+        });
+    }
+    for (int r = 0; r < runs.size(); ++r)
+    {
+        if (!runs.at(r).here)
+            continue;
+        s_emit = &ctx[r];
+        drawOneFixture(p, fids.at(runs.at(r).from), nameEveryone);
+        s_emit = nullptr;
+    }
+    done.acquire(started);
+
+    /* Back together. What was used of the kept landings and meshes is marked
+       before anything new goes in: an insert can move what the marks point
+       at. */
+    for (const EmitContext &c : std::as_const(ctx))
+    {
+        for (const Throw *t : c.throwHits)
+            if (t->frame != m_throwFrame)
+            {
+                const_cast<Throw *>(t)->frame = m_throwFrame;
+                ++m_throwsUsed;
+            }
+        for (const BeamMesh *m : c.meshHits)
+            const_cast<BeamMesh *>(m)->frame = m_throwFrame;
+    }
+    for (EmitContext &c : ctx)
+    {
+        m_ops.append(std::move(c.ops));
+        m_frameBeams.append(c.beams);
+        if (c.opticsAnimating)
+            m_opticsAnimating = true;
+        for (const auto &t : std::as_const(c.newThrows))
+        {
+            m_throws.insert(t.first, t.second);
+            ++m_throwsUsed;
+        }
+        for (const auto &m : std::as_const(c.newMeshes))
+            m_beamMeshes.insert(m.first, m.second);
+    }
 }
 
 void StructureStudioView::drawStageFigures(QPainter &p) const
@@ -1537,12 +1646,12 @@ void StructureStudioView::emitPoly(const QPolygonF &poly, double depth, const QC
     {
         DrawOp o; o.kind = DrawOp::Poly; o.depth = depth; o.poly = poly;
         o.fill = fill; o.pen = pen; o.penWidth = penW;
-        o.pickable = m_emitPickable;
+        o.pickable = emitPickable();
         if (vertexDepths.size() == poly.size())
             o.zs = vertexDepths;
         if (vertexAlphas.size() == poly.size())
             o.alphas = vertexAlphas;
-        m_ops << o;
+        opsOut() << std::move(o);
         return;
     }
     p.setBrush(fill.isValid() ? QBrush(fill) : QBrush(Qt::NoBrush));
@@ -1562,11 +1671,38 @@ void StructureStudioView::emitLight(const QPolygonF &poly, double depth, const Q
             o.zs = vertexDepths;
         if (vertexAlphas.size() == poly.size())
             o.alphas = vertexAlphas;
-        m_ops << o;
+        opsOut() << std::move(o);
         return;
     }
     // The painter path has no light buffer: layer it, as it always did.
     emitPoly(poly, depth, colour, QColor(), 0.0, p, vertexDepths, vertexAlphas);
+}
+
+void StructureStudioView::emitLightTri(const QPointF &a, const QPointF &b, const QPointF &c,
+                                       double za, double zb, double zc,
+                                       double aa, double ab, double ac,
+                                       const QColor &colour, QPainter &p) const
+{
+    if (!m_collecting)
+    {
+        QPolygonF t;
+        t << a << b << c;
+        emitLight(t, (za + zb + zc) / 3.0, colour, p,
+                  QVector<double>({ za, zb, zc }), QVector<double>({ aa, ab, ac }));
+        return;
+    }
+    QVector<DrawOp> &ops = opsOut();
+    if (ops.isEmpty() || !ops.last().mesh || ops.last().fill != colour)
+    {
+        DrawOp o; o.kind = DrawOp::Poly; o.light = true; o.mesh = true;
+        o.fill = colour; o.depth = (za + zb + zc) / 3.0;
+        o.poly.reserve(48); o.zs.reserve(48); o.alphas.reserve(48);
+        ops << std::move(o);
+    }
+    DrawOp &o = ops.last();
+    o.poly << a << b << c;
+    o.zs << za << zb << zc;
+    o.alphas << aa << ab << ac;
 }
 
 void StructureStudioView::emitLine(const QPointF &a, const QPointF &b,
@@ -1578,7 +1714,7 @@ void StructureStudioView::emitLine(const QPointF &a, const QPointF &b,
         DrawOp o; o.kind = DrawOp::Line; o.depth = (za + zb) / 2.0;
         o.zs << za << zb;
         o.poly << a << b; o.pen = pen; o.penWidth = penW;
-        m_ops << o;
+        opsOut() << std::move(o);
         return;
     }
     p.setPen(QPen(pen, penW));
@@ -1599,7 +1735,7 @@ void StructureStudioView::emitDots(const QVector<QPointF> &pts, double depth, do
         o.poly = QPolygonF(pts);
         if (pointDepths.size() == pts.size())
             o.zs = pointDepths;
-        m_ops << o;
+        opsOut() << std::move(o);
         return;
     }
     p.setPen(Qt::NoPen);
@@ -1615,7 +1751,7 @@ void StructureStudioView::emitDot(const QPointF &c, double depth, double r,
     {
         DrawOp o; o.kind = DrawOp::Dot; o.depth = depth;
         o.poly << c; o.radius = r; o.fill = fill;
-        m_ops << o;
+        opsOut() << std::move(o);
         return;
     }
     p.setPen(Qt::NoPen);
@@ -1630,7 +1766,7 @@ void StructureStudioView::emitLabel(const QPointF &at, double depth, const QStri
     {
         DrawOp o; o.kind = DrawOp::Label; o.depth = depth;
         o.poly << at; o.text = text; o.pen = pen;
-        m_ops << o;
+        opsOut() << std::move(o);
         return;
     }
     p.setPen(pen);
@@ -1722,7 +1858,11 @@ void StructureStudioView::flushOps(QPainter &p) const
             case DrawOp::Poly:
                 p.setBrush(o.fill.isValid() ? QBrush(o.fill) : QBrush(Qt::NoBrush));
                 p.setPen(o.pen.isValid() ? QPen(o.pen, o.penWidth) : QPen(Qt::NoPen));
-                p.drawPolygon(o.poly);
+                if (o.mesh)
+                    for (int t = 0; t + 2 < o.poly.size(); t += 3)
+                        p.drawPolygon(o.poly.constData() + t, 3);
+                else
+                    p.drawPolygon(o.poly);
                 break;
             case DrawOp::Line:
                 p.setPen(QPen(o.pen, o.penWidth));
@@ -1761,29 +1901,30 @@ void StructureStudioView::flushOps(QPainter &p) const
        order-dependent, so beams and clear tops go last, back to front among
        themselves, depth-TESTED against the solid world but not writing depth.
        That sort is over a handful of primitives instead of all of them. */
-    QVector<DrawOp> opaque, translucent, labels, lights;
+    OpRefs opaque, translucent, labels, lights;
     opaque.reserve(m_ops.size());
-    foreach (const DrawOp &o, m_ops)
+    lights.reserve(m_ops.size());
+    for (const DrawOp &o : std::as_const(m_ops))
     {
         if (o.kind == DrawOp::Label || o.kind == DrawOp::Trace)
         {
-            labels << o;        // annotation: screen space, after the resolve
+            labels << &o;        // annotation: screen space, after the resolve
             continue;
         }
         if (o.light)
         {
-            lights << o;        // added after the solids are in, in any order
+            lights << &o;        // added after the solids are in, in any order
             continue;
         }
         const bool seeThrough = (o.fill.isValid() && o.fill.alpha() < 255)
                                 || (o.pen.isValid() && o.pen.alpha() < 255);
         if (seeThrough)
-            translucent << o;
+            translucent << &o;
         else
-            opaque << o;
+            opaque << &o;
     }
     std::stable_sort(translucent.begin(), translucent.end(),
-                     [](const DrawOp &a, const DrawOp &b) { return a.depth < b.depth; });
+                     [](const DrawOp *a, const DrawOp *b) { return a->depth < b->depth; });
 
     /* On the GPU when there is one (RhiRaster): the same triangles, the same
        passes, multisampled where ZRaster supersamples. What it hands back is
@@ -1798,10 +1939,14 @@ void StructureStudioView::flushOps(QPainter &p) const
         m_drewOnGpu = drawn;
         if (drawn)
         {
+            /* Kept for picking: the ops stay where they are (a swap moves
+               the lists, not what is in them), so the pointers hold. m_ops
+               gets the last frame's, cleared when the next frame starts. */
+            m_pickOps.swap(m_ops);
             m_pickOpaque = opaque;
             m_pickSeeThrough.clear();
-            for (const DrawOp &o : translucent)
-                if (o.pickable)
+            for (const DrawOp *o : std::as_const(translucent))
+                if (o->pickable)
                     m_pickSeeThrough << o;
             m_pickDirty = true;
         }
@@ -1823,15 +1968,23 @@ void StructureStudioView::flushOps(QPainter &p) const
        front. Rows are supersampled; light rows are the final image's. */
     const int ss = m_z->supersample();
     auto fillBand = [&](int rowFrom, int rowTo, QRect *lit) {
-        for (const DrawOp &o : opaque)
-            rasterOp(o, true, rowFrom, rowTo);
+        for (const DrawOp *o : opaque)
+            rasterOp(*o, true, rowFrom, rowTo);
         const int lightFrom = rowFrom / ss;
         const int lightTo = (rowTo == INT_MAX) ? INT_MAX : rowTo / ss;
-        for (const DrawOp &o : lights)
+        for (const DrawOp *op : lights)
         {
+            const DrawOp &o = *op;
             const int n = o.poly.size();
             if (n < 3 || !o.fill.isValid())
                 continue;
+            if (o.mesh)
+            {
+                for (int t = 0; t + 2 < n; t += 3)
+                    m_z->light(o.poly.constData() + t, o.zs.constData() + t, 3, o.fill,
+                               o.alphas.constData() + t, lightFrom, lightTo, lit);
+                continue;
+            }
             QVarLengthArray<double, 8> zs(n);
             for (int i = 0; i < n; ++i)
                 zs[i] = (o.zs.size() == n) ? o.zs.at(i) : o.depth;
@@ -1839,8 +1992,8 @@ void StructureStudioView::flushOps(QPainter &p) const
                        (o.alphas.size() == n) ? o.alphas.constData() : nullptr,
                        lightFrom, lightTo, lit);
         }
-        for (const DrawOp &o : translucent)
-            rasterOp(o, false, rowFrom, rowTo);
+        for (const DrawOp *o : translucent)
+            rasterOp(*o, false, rowFrom, rowTo);
     };
 
     /* ACROSS THE CORES. The fill is most of a frame and it used one core.
@@ -1903,8 +2056,9 @@ void StructureStudioView::flushOps(QPainter &p) const
     }   // !drawn: the CPU
 
     // Text last, in screen space: depth-testing a label is not meaningful.
-    foreach (const DrawOp &o, labels)
+    for (const DrawOp *op : std::as_const(labels))
     {
+        const DrawOp &o = *op;
         if (o.kind == DrawOp::Trace)
         {
             if (o.poly.size() >= 2)
@@ -1919,7 +2073,8 @@ void StructureStudioView::flushOps(QPainter &p) const
             p.drawText(o.poly.at(0), o.text);
     }
 
-    m_ops.clear();
+    if (!drawn)
+        m_ops.clear();
 }
 
 StructureStudioView::~StructureStudioView()
@@ -1942,9 +2097,8 @@ void StructureStudioView::setGpu(bool on)
     update();
 }
 
-bool StructureStudioView::gpuRender(QPainter &p, const QVector<DrawOp> &opaque,
-                                    const QVector<DrawOp> &translucent,
-                                    const QVector<DrawOp> &lights) const
+bool StructureStudioView::gpuRender(QPainter &p, const OpRefs &opaque,
+                                    const OpRefs &translucent, const OpRefs &lights) const
 {
     if (m_gpu == nullptr)
         m_gpu = new RhiRaster();
@@ -1956,13 +2110,25 @@ bool StructureStudioView::gpuRender(QPainter &p, const QVector<DrawOp> &opaque,
                      const QColor &c, const double *alphas) {
         if (n < 3 || !c.isValid() || c.alpha() == 0)
             return;
-        auto corner = [&](int k) {
-            const float a = float(c.alphaF() * (alphas != nullptr ? qBound(0.0, alphas[k], 1.0) : 1.0));
-            return V{ float(pts[k].x()), float(pts[k].y()), float(zs[k]),
-                      float(c.redF()) * a, float(c.greenF()) * a, float(c.blueF()) * a, a };
-        };
+        const QRgba64 c64 = c.rgba64();
+        const float r = c64.red() / 65535.0f, g = c64.green() / 65535.0f,
+                    b = c64.blue() / 65535.0f, ca = c64.alpha() / 65535.0f;
+        QVarLengthArray<V, 32> corner(n);
+        for (int k = 0; k < n; ++k)
+        {
+            const float a = ca * (alphas != nullptr ? float(qBound(0.0, alphas[k], 1.0)) : 1.0f);
+            corner[k] = V{ float(pts[k].x()), float(pts[k].y()), float(zs[k]),
+                           r * a, g * a, b * a, a };
+        }
+        const qsizetype at = out.size();
+        out.resize(at + 3 * (n - 2));
+        V *t = out.data() + at;
         for (int i = 1; i + 1 < n; ++i)
-            out << corner(0) << corner(i) << corner(i + 1);
+        {
+            *t++ = corner[0];
+            *t++ = corner[i];
+            *t++ = corner[i + 1];
+        }
     };
     // A line of finite width: a quad with depth down its length (ZRaster::thickLine).
     auto lineTo = [&polyTo](QVector<V> &out, const QPointF &a, const QPointF &b,
@@ -2023,18 +2189,30 @@ bool StructureStudioView::gpuRender(QPainter &p, const QVector<DrawOp> &opaque,
         }
     };
 
-    QVector<V> solids, see, light;
-    for (const DrawOp &o : opaque)
-        opTo(solids, o);
-    for (const DrawOp &o : translucent)
-        opTo(see, o);
+    // Kept from frame to frame: cleared, they keep what they had room for.
+    QVector<V> &solids = m_gpuSolids, &see = m_gpuSee, &light = m_gpuLight;
+    solids.clear();
+    see.clear();
+    light.clear();
+    for (const DrawOp *o : opaque)
+        opTo(solids, *o);
+    for (const DrawOp *o : translucent)
+        opTo(see, *o);
     /* Light adds: each corner carries how much of the colour it adds, on the
        0..1-per-255 scale the light buffer keeps (ZRaster::light()). */
-    for (const DrawOp &o : lights)
+    for (const DrawOp *op : lights)
     {
+        const DrawOp &o = *op;
         const int n = o.poly.size();
         if (n < 3 || !o.fill.isValid())
             continue;
+        if (o.mesh)
+        {
+            for (int t = 0; t + 2 < n; t += 3)
+                polyTo(light, o.poly.constData() + t, o.zs.constData() + t, 3, o.fill,
+                       o.alphas.constData() + t);
+            continue;
+        }
         QVarLengthArray<double, 8> zs(n);
         for (int i = 0; i < n; ++i)
             zs[i] = (o.zs.size() == n) ? o.zs.at(i) : o.depth;
@@ -2066,10 +2244,10 @@ double StructureStudioView::pickDepth(const QPoint &px) const
         if (m_z == nullptr)
             m_z = new ZRaster();
         m_z->begin(size(), 1, Qt::transparent);
-        for (const DrawOp &o : m_pickOpaque)
-            rasterOp(o, true, 0, INT_MAX);
-        for (const DrawOp &o : m_pickSeeThrough)
-            rasterOp(o, false, 0, INT_MAX);
+        for (const DrawOp *o : std::as_const(m_pickOpaque))
+            rasterOp(*o, true, 0, INT_MAX);
+        for (const DrawOp *o : std::as_const(m_pickSeeThrough))
+            rasterOp(*o, false, 0, INT_MAX);
         m_pickDirty = false;
     }
     return (m_z != nullptr && m_z->isValid()) ? m_z->depthAt(px) : -1e30;
@@ -2202,7 +2380,7 @@ void StructureStudioView::drawSolidBox(QPainter &p, const QVector3D corner[8],
                                        double depthBias) const
 {
     // A deck top or a fabric is see-through and still where the pointer is.
-    QScopedValueRollback<bool> pickable(m_emitPickable, true);
+    QScopedValueRollback<bool> pickable(emitPickable(), true);
     const int (*faces)[4] = BOX_FACES;
     static const int shade[6] = { 118, 62, 92, 78, 100, 85 };   // % brightness
 
@@ -2769,7 +2947,7 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
             {
                 /* A rounded front: the deck's outline stood up into its sides,
                    shaded by which way each faces, with the top over them. */
-                QScopedValueRollback<bool> pickable(m_emitPickable, true);
+                QScopedValueRollback<bool> pickable(emitPickable(), true);
                 const QList<QPointF> fp = pl->footprint(32);
                 const float top = b0 + pl->height();
                 const double af = 0.18 + 0.82 * m_ambient;
@@ -3403,12 +3581,16 @@ double StructureStudioView::beamThrow(const QVector3D &apex, const QVector3D &di
     if (m_decksValid)
     {
         key = ThrowKey{ { apex.x(), apex.y(), apex.z(), dir.x(), dir.y(), dir.z() } };
-        auto it = m_throws.find(key);
-        if (it != m_throws.end())
+        auto it = m_throws.constFind(key);
+        if (it != m_throws.constEnd())
         {
-            if (it->frame != m_throwFrame)
+            /* On a drawing thread the kept landings are only read: what was
+               used is marked once they all are done. */
+            if (s_emit != nullptr)
+                s_emit->throwHits << &it.value();
+            else if (it->frame != m_throwFrame)
             {
-                it->frame = m_throwFrame;
+                const_cast<Throw &>(it.value()).frame = m_throwFrame;
                 ++m_throwsUsed;
             }
             if (hit != nullptr)
@@ -3427,8 +3609,13 @@ double StructureStudioView::beamThrow(const QVector3D &apex, const QVector3D &di
     const double run = beamThrowUncached(apex, dir, &h, &n, &sf);
     if (m_decksValid)
     {
-        m_throws.insert(key, Throw{ run, n, sf, h, m_throwFrame });
-        ++m_throwsUsed;
+        if (s_emit != nullptr)
+            s_emit->newThrows << qMakePair(key, Throw{ run, n, sf, h, m_throwFrame });
+        else
+        {
+            m_throws.insert(key, Throw{ run, n, sf, h, m_throwFrame });
+            ++m_throwsUsed;
+        }
     }
     if (hit != nullptr)
         *hit = h;
@@ -3822,7 +4009,7 @@ void StructureStudioView::drawAimTrace(QPainter &p, const QVector3D &from,
             o.poly << w2s(a) << w2s(b);
             o.pen = c;
             o.penWidth = 1.6;
-            m_ops << o;
+            opsOut() << o;
         }
         else
         {
@@ -3980,7 +4167,7 @@ void StructureStudioView::drawStarField(QPainter &p, quint32 fid, const Fixture 
 
     const double rate = starTurnRate(fx, vals);
     if (rate != 0.0)
-        m_opticsAnimating = true;
+        markOpticsAnimating();
     const double turn = qDegreesToRadians(rate * opticsTime());
     const double k = qBound(0.0, level, 1.0);
     const QColor hsv = colour.toHsv();
@@ -4149,16 +4336,12 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
            losing a tie with the surface it lands on. */
         const double lift = 2e-4;
         const double lensZ = viewDepth(apex) + lift;
-        const double sortZ = viewDepth(apex + d * float(len * 0.5));
         for (int i = 0; i < spans; ++i)
         {
             const HullPt &a = rim.at(i);
             const HullPt &b = rim.at((i + 1) % rim.size());
-            QPolygonF tri;
-            tri << lensPx << a.p << b.p;
-            emitLight(tri, sortZ, c, p,
-                      QVector<double>({ lensZ, a.z + lift, b.z + lift }),
-                      QVector<double>({ 1.0, a.a, b.a }));
+            emitLightTri(lensPx, a.p, b.p, lensZ, a.z + lift, b.z + lift,
+                         1.0, a.a, b.a, c, p);
         }
     }
 
@@ -4224,19 +4407,23 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
            (m_throws): a beam that hasn't moved lands where it did, and only
            its projection to the screen is asked again. A gobo's mask can
            turn, so a gobo's mesh is worked out every frame. */
-        BeamMesh *kept = nullptr;
+        const BeamMesh *kept = nullptr;
         BeamMeshKey key;
         if (!gobo && m_decksValid)
         {
             key = BeamMeshKey{ { apex.x(), apex.y(), apex.z(), d.x(), d.y(), d.z(),
                                  float(halfA), float(coreR) }, RINGS, SECTORS };
-            auto it = m_beamMeshes.find(key);
-            if (it != m_beamMeshes.end())
+            auto it = m_beamMeshes.constFind(key);
+            if (it != m_beamMeshes.constEnd())
                 kept = &it.value();
         }
         if (kept != nullptr)
         {
-            kept->frame = m_throwFrame;
+            // Marked as used now, or -- on a drawing thread -- once all are done.
+            if (s_emit != nullptr)
+                s_emit->meshHits << kept;
+            else
+                const_cast<BeamMesh *>(kept)->frame = m_throwFrame;
             for (int k = 0; k < N; ++k)
             {
                 px[k] = w2s(kept->q.at(k));
@@ -4276,7 +4463,10 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
                 fresh.landed = landed;
                 fresh.fade = pt;
                 fresh.frame = m_throwFrame;
-                m_beamMeshes.insert(key, fresh);
+                if (s_emit != nullptr)
+                    s_emit->newMeshes << qMakePair(key, fresh);
+                else
+                    m_beamMeshes.insert(key, fresh);
             }
         }
         QColor cellCol = colour;
@@ -4288,11 +4478,8 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
                 return;                                   // straddles an edge
             if (pt[i] < 0.04 && pt[j] < 0.04 && pt[k] < 0.04)
                 return;                                   // all metal here
-            QPolygonF t;
-            t << px[i] << px[j] << px[k];
-            emitLight(t, (pz[i] + pz[j] + pz[k]) / 3.0, cellCol, p,
-                      QVector<double>({ pz[i], pz[j], pz[k] }),
-                      QVector<double>({ pt[i], pt[j], pt[k] }));
+            emitLightTri(px[i], px[j], px[k], pz[i], pz[j], pz[k],
+                         pt[i], pt[j], pt[k], cellCol, p);
         };
         for (int ri = 0; ri < RINGS; ++ri)
             for (int si = 0; si < SECTORS; ++si)
@@ -4351,11 +4538,8 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
         auto tri = [&](int i, int j, int k) {
             if (pt[i] < 0.04 && pt[j] < 0.04 && pt[k] < 0.04)
                 return;                                   // all metal here
-            QPolygonF t;
-            t << px[i] << px[j] << px[k];
-            emitLight(t, (pz[i] + pz[j] + pz[k]) / 3.0, cellCol, p,
-                      QVector<double>({ pz[i], pz[j], pz[k] }),
-                      QVector<double>({ pt[i], pt[j], pt[k] }));
+            emitLightTri(px[i], px[j], px[k], pz[i], pz[j], pz[k],
+                         pt[i], pt[j], pt[k], cellCol, p);
         };
         for (int ri = 0; ri < RINGS; ++ri)
             for (int si = 0; si < SECTORS; ++si)
@@ -4414,15 +4598,10 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
             for (int i = 0; i < n; ++i)
             {
                 const int j = (i + 1) % n;
-                QPolygonF t1, t2;
-                t1 << in[i] << in[j] << out[i];
-                t2 << in[j] << out[j] << out[i];
-                emitLight(t1, (zi[i] + zi[j] + zo[i]) / 3.0, poolCol, p,
-                          QVector<double>({ zi[i], zi[j], zo[i] }),
-                          QVector<double>({ ringA[k], ringA[k], ringA[k + 1] }));
-                emitLight(t2, (zi[j] + zo[j] + zo[i]) / 3.0, poolCol, p,
-                          QVector<double>({ zi[j], zo[j], zo[i] }),
-                          QVector<double>({ ringA[k], ringA[k + 1], ringA[k + 1] }));
+                emitLightTri(in[i], in[j], out[i], zi[i], zi[j], zo[i],
+                             ringA[k], ringA[k], ringA[k + 1], poolCol, p);
+                emitLightTri(in[j], out[j], out[i], zi[j], zo[j], zo[i],
+                             ringA[k], ringA[k + 1], ringA[k + 1], poolCol, p);
             }
         }
     }
@@ -4691,7 +4870,7 @@ void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
                     const QVector3D apex = lens + side * float((b - (beams - 1) * 0.5) * pitch);
                     drawBeamCone(p, apex, beam, qDegreesToRadians(deg / 2.0),
                                  lightColour, look.beamLevel * headOutput, haze, &look.optics);
-                    m_frameBeams << FrameBeam{ apex, beam.normalized(),
+                    beamsOut() << FrameBeam{ apex, beam.normalized(),
                                                qDegreesToRadians(deg / 2.0),
                                                beamThrow(apex, beam.normalized()),
                                                lightColour, look.beamLevel * headOutput };
@@ -4802,9 +4981,47 @@ double StructureStudioView::beamCoverage(const FrameBeam &fb, const QVector3D &a
 
 QVector3D StructureStudioView::beamLightAt(const QVector3D &at, const QVector3D &n) const
 {
-    QVector3D sum;
-    for (const FrameBeam &fb : m_frameBeams)
+    /* Beams only ever join m_frameBeams during a frame (it is cleared when
+       one starts), so the bounds of the ones not seen yet are added on. */
+    if (m_beamBounds.size() > m_frameBeams.size())
+        m_beamBounds.clear();
+    for (qsizetype i = m_beamBounds.size(); i < m_frameBeams.size(); ++i)
     {
+        const FrameBeam &fb = m_frameBeams.at(i);
+        BeamBound b;
+        if (fb.omni)
+        {
+            b.centre = fb.apex;
+            b.reach2 = float(fb.length * fb.length);
+        }
+        else if (fb.halfAngle >= 1.5)
+        {
+            b.centre = fb.apex;                  // near flat: no telling
+            b.reach2 = std::numeric_limits<float>::infinity();
+        }
+        else
+        {
+            // The cone as far as beamCoverage() reaches, soft edge included.
+            const double len = fb.length + 0.25;
+            const double rim = len * qTan(fb.halfAngle);
+            const double r = rim + qMax(0.03, rim * 0.25);
+            b.centre = fb.apex + fb.dir * float(len * 0.5);
+            b.reach2 = float(len * len * 0.25 + r * r) * 1.0001f;
+        }
+        b.r = float(fb.colour.red());
+        b.g = float(fb.colour.green());
+        b.b = float(fb.colour.blue());
+        b.factor = float(fb.level * 1.15 * lightFactor(fb));
+        m_beamBounds << b;
+    }
+
+    QVector3D sum;
+    for (qsizetype i = 0; i < m_frameBeams.size(); ++i)
+    {
+        const BeamBound &b = m_beamBounds.at(i);
+        if ((at - b.centre).lengthSquared() > b.reach2)
+            continue;
+        const FrameBeam &fb = m_frameBeams.at(i);
         const double cover = beamCoverage(fb, at);
         if (cover <= 0.0)
             continue;
@@ -4818,8 +5035,8 @@ QVector3D StructureStudioView::beamLightAt(const QVector3D &at, const QVector3D 
             continue;
         toward.normalize();
         const double facing = double(qMax(0.0f, QVector3D::dotProduct(n, toward)));
-        const float k = float(fb.level * cover * facing * 1.15 * lightFactor(fb));
-        sum += QVector3D(fb.colour.red(), fb.colour.green(), fb.colour.blue()) * k;
+        const float k = b.factor * float(cover * facing);
+        sum += QVector3D(b.r, b.g, b.b) * k;
     }
     return sum;
 }
@@ -4896,7 +5113,7 @@ void StructureStudioView::collectInsideLight(QPainter &p) const
             FrameBeam fb{ centre + L * u, N, half, 10.0, c, dim / 255.0 * headOutput };
             fb.apertured = true;
             fb.ax0 = blk.x0; fb.ax1 = blk.x1; fb.ay0 = blk.y0; fb.ay1 = blk.y1; fb.az = topZ;
-            m_frameBeams << fb;
+            beamsOut() << fb;
             /* The colour carries the level; the footprint wants hue x level. */
             const double cmax = qMax(c.redF(), qMax(c.greenF(), c.blueF()));
             if (cmax > 0.0)
@@ -5116,7 +5333,7 @@ void StructureStudioView::emitPatternedFace(QPainter &p, const QVector3D q[4], c
 void StructureStudioView::drawTowerFaces(QPainter &p) const
 {
     // A deck top or a fabric is see-through and still where the pointer is.
-    QScopedValueRollback<bool> pickable(m_emitPickable, true);
+    QScopedValueRollback<bool> pickable(emitPickable(), true);
     if (m_plane != Angled)
         return;
     MonitorProperties *props = m_doc->monitorProperties();
@@ -5241,7 +5458,7 @@ QVector<QVector3D> StructureStudioView::sockGlow(Truss *t, int segments) const
 void StructureStudioView::drawSocks(QPainter &p) const
 {
     // A deck top or a fabric is see-through and still where the pointer is.
-    QScopedValueRollback<bool> pickable(m_emitPickable, true);
+    QScopedValueRollback<bool> pickable(emitPickable(), true);
     if (m_plane != Angled)
         return;
     MonitorProperties *props = m_doc->monitorProperties();
@@ -5967,7 +6184,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                         // A gobo's picture is sharp, whatever the lens.
                         looks[u].optics.softness = looks[u].optics.mask.isNull() ? traits.edgeSoftness : 0.0;
                         if (looks[u].optics.animated)
-                            m_opticsAnimating = true;
+                            markOpticsAnimating();
                     }
                 }
             }
@@ -6072,8 +6289,8 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                 FrameBeam fb{ c + QVector3D(0.0f, 0.0f, float(h)), QVector3D(0, 0, -1), M_PI, 6.0,
                               QColor(255, 130, 35), 0.6 * fixtureOutput(fx) };
                 fb.omni = true;
-                m_frameBeams << fb;
-                m_opticsAnimating = true;          // it moves: keep drawing it
+                beamsOut() << fb;
+                markOpticsAnimating();          // it moves: keep drawing it
             }
         }
         /* All round (a lantern): no cone to draw -- its glow is drawn with its
@@ -6112,7 +6329,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                 FrameBeam fb{ fixtureCentre(fid), QVector3D(0, 0, -1), M_PI, 10.0, live,
                               level * fixtureOutput(fx) };
                 fb.omni = true;
-                m_frameBeams << fb;
+                beamsOut() << fb;
             }
         }
         else if (traits.kind != FixtureSilhouette::Mover && m_beams && showingOutput
@@ -6138,7 +6355,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                 BeamOptics::Optics optics = BeamOptics::opticsFor(fx, vals, opticsTime(), m_doc->monitorProperties());
                 optics.softness = optics.mask.isNull() ? traits.edgeSoftness : 0.0;
                 if (optics.animated)
-                    m_opticsAnimating = true;
+                    markOpticsAnimating();
                 /* A bar of pixels is not a lamp in its middle ("the source
                    appears centred on the matrix, not using the individual
                    LEDs"): its light comes from the lit pixels, section by
@@ -6176,14 +6393,14 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                 {
                     const double level = fixedLevel;
                     drawBeamCone(p, apex, dir, half, live, level, 1.0, &optics);
-                    m_frameBeams << FrameBeam{ apex, dir.normalized(), half,
+                    beamsOut() << FrameBeam{ apex, dir.normalized(), half,
                                                beamThrow(apex, dir.normalized()),
                                                live, level };
                 }
                 for (const BarLight &bl : sources)
                 {
                     drawBeamCone(p, bl.at, dir, half, bl.colour, bl.level, 1.0, &optics);
-                    m_frameBeams << FrameBeam{ bl.at, dir.normalized(), half,
+                    beamsOut() << FrameBeam{ bl.at, dir.normalized(), half,
                                                beamThrow(bl.at, dir.normalized()),
                                                bl.colour, bl.level };
                 }

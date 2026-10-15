@@ -14,6 +14,7 @@
 #include <QJsonArray>
 #include <QFile>
 #include <QHash>
+#include <QMutex>
 
 #include "qlcfixturemode.h"
 #include "qlcfixturehead.h"
@@ -40,6 +41,14 @@ namespace
     {
         static QHash<QString, HeadLayout> c;
         return c;
+    }
+
+    /* The rig view draws fixtures on several threads at once, and each may
+       ask for its layout. */
+    QMutex &cacheLock()
+    {
+        static QMutex m;
+        return m;
     }
 
     /* A file name for a key: the key with anything a file system might
@@ -230,6 +239,7 @@ bool HeadKinds::isMixed(const Fixture *fx)
 
 void HeadLayoutLibrary::setUserDirectoryOverride(const QString &path)
 {
+    QMutexLocker lock(&cacheLock());
     overridePath() = path;
     cache().clear();
 }
@@ -252,6 +262,7 @@ HeadLayout HeadLayoutLibrary::load(const QString &key)
 {
     if (key.isEmpty())
         return HeadLayout();
+    QMutexLocker lock(&cacheLock());
     if (cache().contains(key))
         return cache().value(key);
     cache().insert(key, HeadLayout());
@@ -295,6 +306,7 @@ bool HeadLayoutLibrary::save(const HeadLayout &layout)
     if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
         return false;
     f.write(QJsonDocument(o).toJson(QJsonDocument::Indented));
+    QMutexLocker lock(&cacheLock());
     cache().insert(layout.key, layout);
     return true;
 }
