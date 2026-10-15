@@ -17,6 +17,8 @@
   limitations under the License.
 */
 
+#include <QXmlStreamReader>
+#include <QXmlStreamWriter>
 #include <QTimer>
 #include <cmath>
 
@@ -86,6 +88,27 @@ void TimecodeSource::setSourceUniverse(qint32 universe)
         return;
     m_sourceUniverse = universe;
     emit sourceUniverseChanged(m_sourceUniverse);
+}
+
+bool TimecodeSource::loadXML(QXmlStreamReader &root)
+{
+    if (root.name() != KXMLQLCTimecode)
+        return false;
+    bool ok = false;
+    const int uni = root.attributes().value(QStringLiteral("Source")).toString().toInt(&ok);
+    setSourceUniverse(ok && uni >= 0 ? uni : -1);
+    root.skipCurrentElement();
+    return true;
+}
+
+bool TimecodeSource::saveXML(QXmlStreamWriter *doc) const
+{
+    if (m_sourceUniverse < 0)
+        return true;
+    doc->writeStartElement(KXMLQLCTimecode);
+    doc->writeAttribute(QStringLiteral("Source"), QString::number(m_sourceUniverse));
+    doc->writeEndElement();
+    return true;
 }
 
 qint32 TimecodeSource::lastUniverse() const

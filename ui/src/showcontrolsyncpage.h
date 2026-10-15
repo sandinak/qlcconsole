@@ -71,6 +71,7 @@ private slots:
     void slotLastOscChanged(const QString &what);
     void slotLastMscChanged(const QString &what);
     void slotMtcSourceActivated(int index);
+    void slotMscInputActivated(int index);
     void slotTimeChanged();
     void refreshMidiInputs();
     void refreshTimecode();
@@ -95,6 +96,7 @@ private:
     // MSC in
     QCheckBox *m_mscCheck;
     QSpinBox *m_mscDeviceSpin;
+    QComboBox *m_mscInputCombo;
     QLabel *m_mscInputs;
     QPushButton *m_patchMidiButton;
     QLabel *m_mscLast;

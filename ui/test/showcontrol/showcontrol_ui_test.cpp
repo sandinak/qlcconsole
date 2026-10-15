@@ -400,4 +400,46 @@ void ShowControlUi_Test::theTimecodeSourceAndHealth()
     QCOMPARE(source->currentData().toInt(), -1);
 }
 
+/* "Listen on": all MIDI inputs, or one port by name -- kept machine-wide,
+   and a port not patched in this show is said plainly. */
+void ShowControlUi_Test::mscOnOneChosenInput()
+{
+    ShowControlListener::setSettings(false, freePort(), true, 1);
+    QSettings().remove("showcontrol/mscInputPlugin");
+    QSettings().remove("showcontrol/mscInput");
+    ShowControlListener listener(m_doc);
+    ShowControlSyncPage page(m_doc);
+    page.setListener(&listener);
+    QComboBox *on = page.findChild<QComboBox *>("scMscInput");
+    QLabel *inputs = page.findChild<QLabel *>("scMscInputs");
+    QVERIFY(on && inputs);
+    QCOMPARE(on->currentIndex(), 0);                         // all, by default
+    QCOMPARE(on->currentText(), QString("All MIDI inputs"));
+    QVERIFY(inputs->property("mscInputPatched").toBool());
+
+    // Chosen (here through the listener, as the page's picker does).
+    listener.setMscInput("MIDI", "IAC Driver Bus 1");
+    QCOMPARE(QSettings().value("showcontrol/mscInputPlugin").toString(), QString("MIDI"));
+    QCOMPARE(QSettings().value("showcontrol/mscInput").toString(), QString("IAC Driver Bus 1"));
+    QCOMPARE(m_doc->showControl()->mscInput(), QString("IAC Driver Bus 1"));
+    QCOMPARE(on->currentData().toStringList(), QStringList({ "MIDI", "IAC Driver Bus 1" }));
+    // Not patched in this show: said so, and nothing quietly answers.
+    QVERIFY(!inputs->property("mscInputPatched").toBool());
+    QVERIFY2(inputs->text().contains("isn't patched"), qPrintable(inputs->text()));
+    QVERIFY(m_doc->showControl()->mscUniverses().isEmpty());
+
+    // A new page (the next run) reads it back.
+    ShowControlSyncPage again(m_doc);
+    again.setListener(&listener);
+    QComboBox *on2 = again.findChild<QComboBox *>("scMscInput");
+    QCOMPARE(on2->currentData().toStringList(), QStringList({ "MIDI", "IAC Driver Bus 1" }));
+
+    // Back to all, on the page.
+    emit on->activated(0);
+    QVERIFY(!QSettings().contains("showcontrol/mscInput"));
+    QVERIFY(m_doc->showControl()->mscInput().isEmpty());
+    QVERIFY(inputs->property("mscInputPatched").toBool());
+    QCOMPARE(on2->currentIndex(), 0);
+}
+
 QTEST_MAIN(ShowControlUi_Test)

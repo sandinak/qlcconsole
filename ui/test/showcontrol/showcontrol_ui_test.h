@@ -45,6 +45,7 @@ private slots:
     void aCommandReceivedShowsAsLast();
     void aPortInUseShowsAnError();
     void theTimecodeSourceAndHealth();
+    void mscOnOneChosenInput();
 
 private:
     Chaser *makeList(int steps);

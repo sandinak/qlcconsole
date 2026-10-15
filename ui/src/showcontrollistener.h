@@ -50,6 +50,11 @@ public:
     static bool mscEnabled();
     static int mscDeviceId();
     static void setSettings(bool oscOn, int port, bool mscOn, int deviceId);
+    /** The one input MSC is answered on, by plugin and input name as the
+     *  plugin reports it ("MIDI", "IAC Driver Bus 1"); empty, all of them.
+     *  Machine-wide, like the rest: the port belongs to the computer. */
+    static QString mscInputPlugin();
+    static QString mscInputName();
 
     static const int DefaultOscPort = 53100;
 
@@ -62,6 +67,8 @@ public:
     void setOscPort(int port);
     void setMscEnabled(bool on);
     void setMscDeviceId(int id);
+    /** Empty @a input: every MIDI input. */
+    void setMscInput(const QString &plugin, const QString &input);
 
     enum OscState { OscOff, OscListening, OscError };
     OscState oscState() const { return m_oscState; }

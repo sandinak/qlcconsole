@@ -24,7 +24,9 @@
 
 #include "functionparent.h"
 #include "chaseraction.h"
+#include "inputoutputmap.h"
 #include "showcontrol.h"
+#include "inputpatch.h"
 #include "mastertimer.h"
 #include "function.h"
 #include "chaser.h"
@@ -323,9 +325,40 @@ bool ShowControl::parseMsc(const QByteArray &sysEx, int deviceId, Request *out)
     return true;
 }
 
+void ShowControl::setMscInput(const QString &plugin, const QString &input)
+{
+    m_mscInputPlugin = input.isEmpty() ? QString() : plugin;
+    m_mscInput = plugin.isEmpty() ? QString() : input;
+}
+
+bool ShowControl::acceptsMscFrom(quint32 universe) const
+{
+    if (m_mscInput.isEmpty())
+        return true;
+    if (m_doc == nullptr || m_doc->inputOutputMap() == nullptr)
+        return false;
+    const InputPatch *ip = m_doc->inputOutputMap()->inputPatch(universe);
+    return ip != nullptr && ip->pluginName() == m_mscInputPlugin && ip->inputName() == m_mscInput;
+}
+
+QList<quint32> ShowControl::mscUniverses() const
+{
+    QList<quint32> list;
+    if (m_doc == nullptr || m_doc->inputOutputMap() == nullptr)
+        return list;
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    for (quint32 i = 0; i < iom->universesCount(); i++)
+    {
+        const quint32 uni = iom->getUniverseID(i);
+        if (iom->inputPatch(uni) != nullptr && acceptsMscFrom(uni))
+            list << uni;
+    }
+    return list;
+}
+
 void ShowControl::handleSysEx(quint32 universe, const QByteArray &sysEx)
 {
-    if (!m_mscEnabled)
+    if (!m_mscEnabled || !acceptsMscFrom(universe))
         return;
     Request r;
     if (!parseMsc(sysEx, m_mscDeviceId, &r))

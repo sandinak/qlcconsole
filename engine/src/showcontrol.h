@@ -127,6 +127,21 @@ public:
     bool mscEnabled() const { return m_mscEnabled; }
     void setMscEnabled(bool enable) { m_mscEnabled = enable; }
 
+    /** The one input MSC is answered on, by the plugin's name for it
+     *  ("MIDI", "IAC Driver Bus 1") -- the port belongs to the machine, so
+     *  it's named, not numbered by universe. Empty: every patched input. */
+    void setMscInput(const QString &plugin, const QString &input);
+    QString mscInputPlugin() const { return m_mscInputPlugin; }
+    QString mscInput() const { return m_mscInput; }
+
+    /** The universes whose input patch is the chosen MSC input (none when
+     *  it isn't patched in this show); with no choice, every universe with
+     *  an input patched. */
+    QList<quint32> mscUniverses() const;
+
+    /** Whether MSC arriving on @a universe's input is answered. */
+    bool acceptsMscFrom(quint32 universe) const;
+
     /** Decodes one MSC message (with or without its F0 ... F7) for device
      *  @a deviceId. False when it isn't MSC, isn't for us, or isn't a
      *  command we carry out. */
@@ -168,6 +183,8 @@ private:
     QHash<quint32, int> m_loaded;       ///< chaser id -> step on standby
     int m_mscDeviceId;
     bool m_mscEnabled;
+    QString m_mscInputPlugin;           ///< empty: any input
+    QString m_mscInput;
     Source m_source;                    ///< of the command being carried out
     quint32 m_sourceUniverse;           ///< MSC: the universe it came in on
 };

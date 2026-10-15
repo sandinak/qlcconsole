@@ -4772,7 +4772,11 @@ bool App::eventFilter(QObject *watched, QEvent *event)
         anyA->setActionGroup(grp);
         anyA->setChecked(cur < 0);
         connect(anyA, &QAction::triggered, this, [this, tc]() {
-            if (tc) tc->setSourceUniverse(-1);
+            if (tc && tc->sourceUniverse() != -1)
+            {
+                tc->setSourceUniverse(-1);
+                m_doc->setModified();      // saved with the show
+            }
             slotTimecodeStatusChanged();
         });
 
@@ -4818,7 +4822,11 @@ bool App::eventFilter(QObject *watched, QEvent *event)
             a->setActionGroup(grp);
             a->setChecked(qint32(uniID) == cur);
             connect(a, &QAction::triggered, this, [this, tc, uniID]() {
-                if (tc) tc->setSourceUniverse(qint32(uniID));
+                if (tc && tc->sourceUniverse() != qint32(uniID))
+                {
+                    tc->setSourceUniverse(qint32(uniID));
+                    m_doc->setModified();  // saved with the show
+                }
                 slotTimecodeStatusChanged();   // reflect the selection immediately
             });
         }

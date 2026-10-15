@@ -31,6 +31,8 @@
 #define SETTINGS_OSC_PORT   QStringLiteral("showcontrol/oscPort")
 #define SETTINGS_MSC_ON     QStringLiteral("showcontrol/mscEnabled")
 #define SETTINGS_MSC_DEVICE QStringLiteral("showcontrol/mscDeviceId")
+#define SETTINGS_MSC_INPUT_PLUGIN QStringLiteral("showcontrol/mscInputPlugin")
+#define SETTINGS_MSC_INPUT  QStringLiteral("showcontrol/mscInput")
 
 ShowControlListener::ShowControlListener(Doc *doc, QObject *parent)
     : QObject(parent)
@@ -70,6 +72,16 @@ int ShowControlListener::mscDeviceId()
     return qBound(0, QSettings().value(SETTINGS_MSC_DEVICE, 1).toInt(), 0x6F);
 }
 
+QString ShowControlListener::mscInputPlugin()
+{
+    return QSettings().value(SETTINGS_MSC_INPUT_PLUGIN).toString();
+}
+
+QString ShowControlListener::mscInputName()
+{
+    return QSettings().value(SETTINGS_MSC_INPUT).toString();
+}
+
 void ShowControlListener::setSettings(bool oscOn, int port, bool mscOn, int deviceId)
 {
     QSettings s;
@@ -103,11 +115,28 @@ void ShowControlListener::setMscDeviceId(int id)
     apply();
 }
 
+void ShowControlListener::setMscInput(const QString &plugin, const QString &input)
+{
+    QSettings s;
+    if (input.isEmpty())
+    {
+        s.remove(SETTINGS_MSC_INPUT_PLUGIN);
+        s.remove(SETTINGS_MSC_INPUT);
+    }
+    else
+    {
+        s.setValue(SETTINGS_MSC_INPUT_PLUGIN, plugin);
+        s.setValue(SETTINGS_MSC_INPUT, input);
+    }
+    apply();
+}
+
 void ShowControlListener::apply()
 {
     ShowControl *sc = m_doc->showControl();
     sc->setMscEnabled(mscEnabled());
     sc->setMscDeviceId(mscDeviceId());
+    sc->setMscInput(mscInputPlugin(), mscInputName());
 
     bindOsc();
     emit settingsChanged();

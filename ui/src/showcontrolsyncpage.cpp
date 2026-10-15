@@ -33,6 +33,7 @@
 #include "showcontrollistener.h"
 #include "timecodesource.h"
 #include "inputoutputmap.h"
+#include "showcontrol.h"
 #include "inputpatch.h"
 #include "doc.h"
 
@@ -195,19 +196,29 @@ QGroupBox *ShowControlSyncPage::buildMscGroup()
     row->addStretch();
     form->addRow(row);
 
+    m_mscInputCombo = new QComboBox(box);
+    m_mscInputCombo->setObjectName(QStringLiteral("scMscInput"));
+    m_mscInputCombo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    m_mscInputCombo->setToolTip(tr("Answer MSC from every MIDI input, or only from the port QLab "
+                                   "sends on. The choice is this computer's: it names the port, "
+                                   "not a universe, so it holds for every show."));
+    connect(m_mscInputCombo, &QComboBox::activated,
+            this, &ShowControlSyncPage::slotMscInputActivated);
+    form->addRow(tr("Listen on:"), m_mscInputCombo);
+
     QHBoxLayout *inputs = new QHBoxLayout();
     m_mscInputs = new QLabel(box);
     m_mscInputs->setObjectName(QStringLiteral("scMscInputs"));
     m_mscInputs->setWordWrap(true);
-    m_mscInputs->setToolTip(tr("MSC is answered on every universe with a MIDI input patched "
-                               "(the same inputs MIDI timecode can come in on)."));
+    m_mscInputs->setToolTip(tr("Where MSC can come in: the universes with that MIDI input "
+                               "patched (the same inputs MIDI timecode can come in on)."));
     m_patchMidiButton = new QPushButton(tr("Patch a MIDI input…"), box);
     m_patchMidiButton->setObjectName(QStringLiteral("scPatchMidi"));
     connect(m_patchMidiButton, &QPushButton::clicked,
             this, &ShowControlSyncPage::patchMidiInputRequested);
     inputs->addWidget(m_mscInputs, 1);
     inputs->addWidget(m_patchMidiButton, 0, Qt::AlignTop);
-    form->addRow(tr("Listens on:"), inputs);
+    form->addRow(QString(), inputs);
 
     m_mscLast = new QLabel(box);
     m_mscLast->setObjectName(QStringLiteral("scMscLast"));
@@ -275,7 +286,8 @@ void ShowControlSyncPage::setListener(ShowControlListener *listener)
 
     const bool have = (listener != nullptr);
     for (QWidget *w : { static_cast<QWidget *>(m_oscCheck), static_cast<QWidget *>(m_oscPortSpin),
-                        static_cast<QWidget *>(m_mscCheck), static_cast<QWidget *>(m_mscDeviceSpin) })
+                        static_cast<QWidget *>(m_mscCheck), static_cast<QWidget *>(m_mscDeviceSpin),
+                        static_cast<QWidget *>(m_mscInputCombo) })
         w->setEnabled(have);
 
     if (have)
@@ -305,7 +317,9 @@ void ShowControlSyncPage::slotListenerSettingsChanged()
     m_mscDeviceSpin->setValue(ShowControlListener::mscDeviceId());
     m_updating = false;
     m_mscDeviceSpin->setEnabled(m_listener && m_mscCheck->isChecked());
+    m_mscInputCombo->setEnabled(m_listener && m_mscCheck->isChecked());
     slotOscStatusChanged();
+    refreshMidiInputs();
 }
 
 void ShowControlSyncPage::slotOscStatusChanged()
@@ -343,6 +357,7 @@ void ShowControlSyncPage::refreshMidiInputs()
     const qint32 cur = tc->sourceUniverse();
 
     QStringList midi;
+    QStringList patchedMidiInputs;
     m_mtcSourceCombo->clear();
     m_mtcSourceCombo->addItem(tr("Any universe (auto-detect)"), -1);
 
@@ -361,6 +376,7 @@ void ShowControlSyncPage::refreshMidiInputs()
         {
             name += QStringLiteral("  —  %1").arg(ip->inputName());
             midi << name;
+            patchedMidiInputs << ip->inputName();
         }
         else if (!selected && !sawCode)
         {
@@ -374,14 +390,62 @@ void ShowControlSyncPage::refreshMidiInputs()
     }
     m_mtcSourceCombo->setCurrentIndex(qMax(0, m_mtcSourceCombo->findData(cur)));
 
-    if (midi.isEmpty())
+    /* MSC: every MIDI input, or the one chosen -- by name, from this
+       computer's MIDI ports, the patched ones and the saved choice. */
+    const QString wantPlugin = ShowControlListener::mscInputPlugin();
+    const QString want = ShowControlListener::mscInputName();
+    QStringList names = iom->pluginInputs(QStringLiteral("MIDI"));
+    for (const QString &n : patchedMidiInputs)
+        if (!names.contains(n))
+            names << n;
+    m_mscInputCombo->clear();
+    m_mscInputCombo->addItem(tr("All MIDI inputs"), QStringList());
+    for (const QString &n : names)
+        m_mscInputCombo->addItem(n, QStringList{ QStringLiteral("MIDI"), n });
+    if (!want.isEmpty())
+    {
+        int at = m_mscInputCombo->findData(QStringList{ wantPlugin, want });
+        if (at < 0)
+        {
+            m_mscInputCombo->addItem(tr("%1 (not on this computer now)").arg(want),
+                                     QStringList{ wantPlugin, want });
+            at = m_mscInputCombo->count() - 1;
+        }
+        m_mscInputCombo->setCurrentIndex(at);
+    }
+    else
+    {
+        m_mscInputCombo->setCurrentIndex(0);
+    }
+
+    QStringList where;
+    for (quint32 uni : m_doc->showControl()->mscUniverses())
+        for (quint32 i = 0; i < iom->universesCount(); i++)
+            if (iom->getUniverseID(i) == uni)
+                where << universeName(iom, i);
+
+    m_mscInputs->setProperty("mscInputPatched", want.isEmpty() || !where.isEmpty());
+    if (want.isEmpty() && midi.isEmpty())
     {
         m_mscInputs->setText(tr("No MIDI input is patched, so neither MSC nor timecode can arrive."));
         m_mscInputs->setStyleSheet(kAmber);
     }
-    else
+    else if (want.isEmpty())
     {
         m_mscInputs->setText(tr("Every patched MIDI input: %1").arg(midi.join(QStringLiteral("; "))));
+        m_mscInputs->setStyleSheet(QString());
+    }
+    else if (where.isEmpty())
+    {
+        // Said plainly, and no quiet fall-back to every input.
+        m_mscInputs->setText(tr("%1 isn't patched in this show, so MSC isn't answered. Patch it "
+                                "as the input of a universe, or listen on all MIDI inputs.")
+                             .arg(want));
+        m_mscInputs->setStyleSheet(kRed);
+    }
+    else
+    {
+        m_mscInputs->setText(tr("Only %1, patched to %2.").arg(want, where.join(QStringLiteral(", "))));
         m_mscInputs->setStyleSheet(QString());
     }
     refreshTimecode();
@@ -389,7 +453,23 @@ void ShowControlSyncPage::refreshMidiInputs()
 
 void ShowControlSyncPage::slotMtcSourceActivated(int index)
 {
-    m_doc->timecodeSource()->setSourceUniverse(m_mtcSourceCombo->itemData(index).toInt());
+    TimecodeSource *tc = m_doc->timecodeSource();
+    const qint32 uni = m_mtcSourceCombo->itemData(index).toInt();
+    if (uni == tc->sourceUniverse())
+        return;
+    tc->setSourceUniverse(uni);
+    m_doc->setModified();       // saved with the show
+}
+
+void ShowControlSyncPage::slotMscInputActivated(int index)
+{
+    if (!m_listener)
+        return;
+    const QStringList id = m_mscInputCombo->itemData(index).toStringList();
+    if (id.size() == 2)
+        m_listener->setMscInput(id.at(0), id.at(1));
+    else
+        m_listener->setMscInput(QString(), QString());
 }
 
 void ShowControlSyncPage::slotTimeChanged()

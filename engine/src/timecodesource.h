@@ -45,7 +45,11 @@
 // means the timeline runs away.
 #define SHOW_TC_HOLD_MS 1000
 
+class QXmlStreamReader;
+class QXmlStreamWriter;
 class QTimer;
+
+#define KXMLQLCTimecode QStringLiteral("Timecode")
 
 /** @addtogroup engine Engine
  * @{
@@ -86,6 +90,12 @@ public:
     /** Override: only accept timecode from this universe. -1 = accept any. */
     qint32 sourceUniverse() const;
     void setSourceUniverse(qint32 universe);
+
+    /** The override is the show's: a universe of its patch. Saved with the
+     *  workspace as <Timecode Source="N"/> (nothing when it's "any");
+     *  Doc drops a loaded one that names no universe of the show. */
+    bool loadXML(QXmlStreamReader &root);
+    bool saveXML(QXmlStreamWriter *doc) const;
 
     /** Universe that most recently delivered timecode (-1 if none yet). */
     qint32 lastUniverse() const;
