@@ -465,6 +465,19 @@ rig edits, bulk repatching, cross-show consistency checks.
   4. Not code-signed (SmartScreen will warn). No `-Werror` on MinGW, by design.
   5. `QLCIOPlugin` signals are connected by member pointer from the UI too, but
      its moc lives in each plugin DLL as well as the engine; not annotated.
+  6. First install on a Windows 10 VM (2026-10-15), Branson's report and what
+     was done: unreadable buttons/combos/spin boxes on a dark theme (the
+     native windowsvista style ignores the palette's Button colour) -> Fusion
+     off macOS (main.cpp) plus theme-derived shade roles (App::applyTheme);
+     invisible splitter handles -> same; "Win+Shift+R does nothing" -> it is
+     Ctrl+Shift+R, now also in the Window menu, and the help spells keys as
+     Ctrl/Alt/Shift off a Mac (HelpBrowser::keysForPlatform); sluggishness ->
+     Art-Net/E1.31/OSC walked every network interface (~20 ms each on
+     Windows) on every outputs()/inputs() call, now at most once a second;
+     also fewer repolishes/registry reads on the status-bar timers, NoProxy
+     for WLED, and App::nativeEvent fixed for Qt 6's qintptr* (USB hotplug
+     never reached HotPlugMonitor). Still to confirm on the VM: the main
+     window's outer edges resizing, and whether it still feels slow.
 
 - **Warning backlog outside the `-Werror` set (OPEN, 2026-08-25)** — a
   tree-wide `-Wall -Wextra` sweep reports ~1100
