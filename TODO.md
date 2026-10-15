@@ -433,14 +433,34 @@ rig edits, bulk repatching, cross-show consistency checks.
   insufficient rather than wrong. Five other UI test files still use fixed
   `QTest::qWait` and were left alone — none has failed.
 
-- **Windows CI removed, not repaired (OPEN, 2026-08-25)** — `fb9c5fd74` deleted
-  the `build-windows` job. Both legs failed at "Fix build" seding
-  `platforms/windows/qlcplus4Qt6.nsi`, which the rebrand renamed, and
-  RELEASE.md already lists Windows packaging as out of scope and stale. Removed
-  rather than left permanently red, because a job that cannot pass trains
-  people to ignore CI — which is exactly how this repo ended up with a workflow
-  nobody noticed had never run. Re-add when Windows is a real target and the
-  NSIS scripts have had their rebrand pass.
+- **Windows build back in CI (OPEN, 2026-10-15)** — `fb9c5fd74` had deleted
+  `build-windows` (it died seding the pre-rebrand `qlcplus4Qt6.nsi`).
+  Re-added: MSYS2 UCRT64 + MSYS2's own Qt 6 packages (6.11 at the time; GCC
+  16), NSIS installer `qlcconsole-<VERSION>-<date>-<rev>-win64-setup.exe`
+  uploaded as an artifact, `--version` smoke test run from the deploy dir with
+  MSYS2 off PATH. Fixed on the way: avrt.h include order, `near` (a windows.h
+  macro) as a variable name, PreviewItem typedefs, and -- the important one --
+  signals named by member pointer across the engine/UI DLL boundary silently
+  never connecting under MinGW (`qlcengine_export.h` / `qlcui_export.h`; a new
+  class whose signal another module connects by `&Class::signal` needs
+  `QLC_ENGINE_EXPORT` / `QLC_UI_EXPORT` too). Left open:
+  1. Nobody has installed it on a real Windows machine -- rig view on D3D11,
+     audio, DMX USB/D2XX and the per-user file associations are unverified.
+  2. ~95 MB installer, mostly ffmpeg codec DLLs pulled in by Qt Multimedia's
+     ffmpeg backend; trim if it matters.
+  3. Tests: 126 of 136 binaries pass; the step is informational
+     (`continue-on-error`). Failing: qlcfixturedefcache (definitionSourceFile
+     vs relPath -- path form), rgbscript (`scriptName.toLower()`), addfixture
+     rememberExpanded, functionselection rememberFilter/constFilter,
+     programmingguide (these three look like QSettings persisting in the
+     registry between runs), monitor theInventoryButtonShowsAndHidesThePanel,
+     networkreportdialog saveCsv (a "locked" dir is writable on Windows),
+     showcontrol_ui OSC listener (firewall/port on the runner?), speedmasters
+     panel blink timing, lookeditor segfault (exit 139). mastertimer
+     startStopFunction failed once and passed once -- timing.
+  4. Not code-signed (SmartScreen will warn). No `-Werror` on MinGW, by design.
+  5. `QLCIOPlugin` signals are connected by member pointer from the UI too, but
+     its moc lives in each plugin DLL as well as the engine; not annotated.
 
 - **Warning backlog outside the `-Werror` set (OPEN, 2026-08-25)** — a
   tree-wide `-Wall -Wextra` sweep reports ~1100
