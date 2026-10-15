@@ -294,8 +294,34 @@ int main(int argc, char** argv)
     // default layout and leave the user's own settings alone.
     HelpShots::isolateSettings();
 
+#if !defined(Q_OS_MACOS)
+    /* Asked for a style by name (-style / QT_STYLE_OVERRIDE)? Looked for
+       before QApplication strips the argument out of argv. */
+    bool styleRequested = qEnvironmentVariableIsEmpty("QT_STYLE_OVERRIDE") == false;
+    for (int i = 1; i < argc; i++)
+    {
+        const QByteArray arg(argv[i]);
+        if (arg == "-style" || arg == "--style" || arg.startsWith("-style=") || arg.startsWith("--style="))
+            styleRequested = true;
+    }
+#endif
+
     /* Create the Qt core application object */
     QApplication qapp(argc, argv);
+
+#if !defined(Q_OS_MACOS)
+    /* Fusion everywhere but macOS. The themes (App::applyTheme()) work by
+       swapping the application QPalette, and the native Windows styles
+       (windowsvista, windows11) draw push buttons, tool buttons, combo and
+       spin boxes with the system's own light theme, ignoring the palette's
+       Button colour but not its ButtonText -- so on a dark theme every one of
+       them came out pale grey with pale text on it, unreadable. Fusion draws
+       every control from the palette, so a theme looks the same on Windows
+       and Linux as it does in the offscreen renders. macOS keeps its native
+       style. */
+    if (styleRequested == false)
+        QApplication::setStyle(QStringLiteral("Fusion"));
+#endif
 
     /* At least MIDI plugin requires this so best to declare it here for everyone */
     qRegisterMetaType<QVariant>("QVariant");

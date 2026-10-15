@@ -542,9 +542,11 @@ void App::init()
             m_statusPowerLabel->setText(overload
                 ? tr("%1 A · %2 kW  OVERLOAD").arg(amps, 0, 'f', 1).arg(kw, 0, 'f', 2)
                 : tr("%1 A · %2 kW").arg(amps, 0, 'f', 1).arg(kw, 0, 'f', 2));
-            m_statusPowerLabel->setStyleSheet(overload
+            const QString sheet = overload
                 ? QStringLiteral("QLabel { color: #ff5555; font-weight: bold; }")
-                : QString());
+                : QString();
+            if (m_statusPowerLabel->styleSheet() != sheet)   // every 500 ms: only on a change
+                m_statusPowerLabel->setStyleSheet(sheet);
             m_statusPowerLabel->show();
         });
         w = pm;
@@ -667,11 +669,17 @@ void App::setActiveWindow(const QString& name)
 }
 
 #if defined(WIN32) || defined(Q_OS_WIN)
-bool App::nativeEvent(const QByteArray &eventType, void *message, long *result)
+/* Qt 6 takes the result as qintptr*. Declared with Qt 5's long* this never
+   overrode anything, so WM_DEVICECHANGE never reached HotPlugMonitor and a
+   USB device plugged in after launch went unnoticed on Windows. */
+bool App::nativeEvent(const QByteArray &eventType, void *message, qintptr *result)
 {
     Q_UNUSED(eventType)
-    //qDebug() << Q_FUNC_INFO << eventType;
-    return HotPlugMonitor::parseWinEvent(message, result);
+    long res = 0;
+    const bool handled = HotPlugMonitor::parseWinEvent(message, &res);
+    if (handled && result != NULL)
+        *result = res;
+    return handled;
 }
 
 void App::disableTimerResolutionThrottling()
@@ -2063,6 +2071,10 @@ void App::initMenuBar()
         });
         m_windowJumps << jump;
     }
+    /* The Rig Overview is a window of its own, so it is offered here too, not
+       only under View: the Window menu is where people go looking for one
+       ("there's no option in Windows"). The same action, so one shortcut. */
+    windowMenu->addAction(m_rigOverviewAction);
     windowMenu->addSeparator();
     m_windowDockMenu = windowMenu->addMenu(tr("Put Back in Main Window"));
     m_windowDockAll = windowMenu->addAction(tr("Put All Back in Main Window"));
@@ -4097,6 +4109,32 @@ void App::applyTheme()
         break;
     }
 
+    /* Off macOS the app runs on Fusion (main.cpp; offscreen renders do too),
+       which draws bevels, frames, separators and default.qss's palette(mid)/
+       palette(midlight) borders and hovers from the shade roles. Left at the
+       native palette's values they are a light theme's greys -- bright lines
+       and pale hover blocks across a dark theme. Derive them from the theme's
+       own Button/Window colours, as QPalette(button, window) would, and make
+       the accent the theme's highlight rather than the system accent colour.
+       The native macOS style is left exactly as it was. */
+    if (m_theme != ThemeDefault
+        && QApplication::style()->name().compare(QLatin1String("fusion"), Qt::CaseInsensitive) == 0)
+    {
+        const QPalette derived(pal.color(QPalette::Button), pal.color(QPalette::Window));
+        const QPalette::ColorRole shades[] = { QPalette::Light, QPalette::Midlight,
+                                               QPalette::Mid, QPalette::Dark,
+                                               QPalette::Shadow };
+        const QPalette::ColorGroup groups[] = { QPalette::Active, QPalette::Inactive,
+                                                QPalette::Disabled };
+        for (QPalette::ColorGroup g : groups)
+            for (QPalette::ColorRole r : shades)
+                pal.setColor(g, r, derived.color(g, r));
+        pal.setColor(QPalette::PlaceholderText,
+                     pal.color(QPalette::Disabled, QPalette::Text));
+        pal.setColor(QPalette::Accent, pal.color(QPalette::Highlight));
+        pal.setColor(QPalette::Link, pal.color(QPalette::Highlight).lighter(130));
+    }
+
     qApp->setPalette(pal);
 
     // Qt doesn't always re-evaluate palette(...)-based QSS on a palette
@@ -5371,8 +5409,13 @@ void App::slotUpdateHealthFooter()
         const char *green = "QLabel { color:#ffffff; background:#2e7d32; padding:1px 6px; border-radius:3px; }";
         const char *amber = "QLabel { color:#000000; background:#f5a623; padding:1px 6px; border-radius:3px; }";
         const char *red   = "QLabel { color:#ffffff; background:#c62828; padding:1px 6px; border-radius:3px; }";
-        m_statusLoadLabel->setStyleSheet(pct >= 100 ? red
-                                         : ((pct >= 60 || stalled) ? amber : green));
+        // Only on a change: setStyleSheet() re-polishes the label (and can
+        // re-lay the status bar) even when handed the same sheet, and this
+        // runs twice a second for as long as the app is open.
+        const QString sheet = QString::fromLatin1(pct >= 100 ? red
+                                                  : ((pct >= 60 || stalled) ? amber : green));
+        if (m_statusLoadLabel->styleSheet() != sheet)
+            m_statusLoadLabel->setStyleSheet(sheet);
     }
 
     // Safety refresh for the timecode chip between watchdog transitions.

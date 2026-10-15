@@ -95,7 +95,7 @@ that scene first, with the effect showing.
    are colour 1 and colour 2 instead; see
    [How a look stacks](effects.md#how-a-look-stacks)). Remove a look or
    target with its panel's **Remove** button.
-8. Save the workspace normally (⌘S / Ctrl+S).
+8. Save the workspace normally (⌘S).
 
 If some of a scene's targets are still in the inventory (not patched), an
 amber warning under Targets says so: they send no DMX, and the look shows in

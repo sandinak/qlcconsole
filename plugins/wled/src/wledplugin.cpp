@@ -16,6 +16,7 @@
 */
 
 #include <QNetworkAccessManager>
+#include <QNetworkProxy>
 #include <QNetworkRequest>
 #include <QNetworkReply>
 #include <QJsonDocument>
@@ -35,6 +36,10 @@ WledPlugin::~WledPlugin()
 void WledPlugin::init()
 {
     m_nam = new QNetworkAccessManager(this);
+    /* A WLED is on the show LAN, never behind a proxy -- and asking the
+       system proxy settings (WinHTTP auto-detect on Windows) on every
+       request, up to ten a second, costs the GUI thread. */
+    m_nam->setProxy(QNetworkProxy::NoProxy);
     m_sendTimer = new QTimer(this);
     m_sendTimer->setInterval(m_sendInterval);
     connect(m_sendTimer, &QTimer::timeout, this, &WledPlugin::tick);

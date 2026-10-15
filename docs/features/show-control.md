@@ -31,7 +31,7 @@ A **cue list** is a chase (a chaser). Its steps are the **cues**.
 - The footer's **Next:** says what the main cue list's GO plays next — its
   cue number and name. Click it for **GO**, **Back**, **Stop**, **Load ▸**
   (any cue, onto standby) and **Open the Cue List**.
-- **GO** is ⌘↩ (Ctrl+Enter) and **Back** ⌘⇧↩, in every window, and in
+- **GO** is ⌘↩ and **Back** ⌘⇧↩, in every window, and in
   **Control** → GO / Back (Main Cue List).
 - A **Virtual Console cue list** shows a **Cue** column beside the step
   number and a **Next:** line under its list — the cue, its name and its

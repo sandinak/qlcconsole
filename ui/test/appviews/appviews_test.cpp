@@ -137,6 +137,10 @@ void AppViews_Test::theWindowMenuFindsAndPutsBackBrokenOutViews()
     QTabWidget *tabs = m_app->m_tab;
     const int views = tabs->count();
     QCOMPARE(m_app->m_windowJumps.size(), views + 1);    // and Functions, which has no tab
+    // The Rig Overview is a window too: offered here as well as under View.
+    QVERIFY(windowMenu->actions().contains(m_app->m_rigOverviewAction));
+    QCOMPARE(m_app->m_rigOverviewAction->shortcut(),
+             QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_R));
 
     const QString label = tabs->tabBar()->tabData(2).toString();
     m_app->slotDetachContext(2);

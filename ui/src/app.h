@@ -115,7 +115,7 @@ protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 #if defined(WIN32) || defined(Q_OS_WIN)
-    bool nativeEvent(const QByteArray & eventType, void * message, long * result);
+    bool nativeEvent(const QByteArray &eventType, void *message, qintptr *result) override;
     void disableTimerResolutionThrottling();
 #endif
 
