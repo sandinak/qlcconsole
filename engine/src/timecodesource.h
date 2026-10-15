@@ -98,6 +98,19 @@ public:
     /** Mean interval between position updates, in ms (the effective update rate). */
     double avgIntervalMs() const;
 
+    /** The verdict on the measurements above -- one place for the
+     *  thresholds, shared by the footer chip, the calibration dialog and
+     *  Connections' Show control & sync page. */
+    enum Health
+    {
+        NoSource,   ///< no timecode has arrived yet
+        Held,       ///< it arrived, but nothing fresh within the watchdog window
+        Healthy,    ///< rate within 5% of real time, jitter under 40 ms
+        Usable,     ///< rate within 15%, jitter under 120 ms
+        Unstable    ///< worse than that
+    };
+    Health health() const;
+
 public slots:
     /** Push a new absolute position received on the given universe. */
     void updateTimeCode(quint32 universe, quint32 msPosition, uchar fps);
@@ -108,6 +121,9 @@ signals:
 
     /** Emitted when the running/stopped state flips. */
     void runningChanged(bool running);
+
+    /** Emitted when the override (sourceUniverse()) changes. */
+    void sourceUniverseChanged(qint32 universe);
 
 private slots:
     void slotWatchdogTimeout();

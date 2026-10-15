@@ -22,8 +22,12 @@
 #include <QUdpSocket>
 #include <QTreeWidget>
 #include <QPushButton>
+#include <QComboBox>
 #include <QCheckBox>
 #include <QLineEdit>
+#include <QSpinBox>
+#include <QLabel>
+#include <QRegularExpression>
 #include <QSettings>
 #include <QtTest>
 
@@ -32,6 +36,8 @@
 #include "mastertimer.h"
 #undef private
 #include "showcontrollistener.h"
+#include "showcontrolsyncpage.h"
+#include "timecodesource.h"
 #include "functionparent.h"
 #include "showcontrol.h"
 #include "chaserstep.h"
@@ -45,15 +51,20 @@
 
 namespace
 {
-const char *const kKeys[] = { "showcontrol/oscEnabled", "showcontrol/oscPort",
-                              "showcontrol/mscEnabled", "showcontrol/mscDeviceId" };
-
 QByteArray osc(const QByteArray &address)
 {
     QByteArray b = address;
     do b.append('\0'); while (b.size() % 4);
     b.append(',');
     do b.append('\0'); while (b.size() % 4);
+    return b;
+}
+
+QByteArray msc(int device, int command, const QByteArray &cue)
+{
+    QByteArray b;
+    b.append(char(0xF0)).append(char(0x7F)).append(char(device)).append(char(0x02))
+     .append(char(0x01)).append(char(command)).append(cue).append(char(0xF7));
     return b;
 }
 
@@ -68,22 +79,21 @@ int freePort()
 
 void ShowControlUi_Test::initTestCase()
 {
-    // The test's own settings, put back after.
-    QSettings s;
-    for (const char *k : kKeys)
-        m_saved << s.value(QLatin1String(k));
+    // Settings and a home folder of the test's own: never the user's (Doc
+    // looks for user scripts and fixtures under $HOME).
+    QVERIFY(m_settingsDir.isValid());
+    m_realHome = qgetenv("HOME");
+    qputenv("HOME", m_settingsDir.path().toUtf8());
+    QCoreApplication::setOrganizationName(QStringLiteral("qlcconsole-test"));
+    QCoreApplication::setApplicationName(QStringLiteral("showcontrol_ui_test"));
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, m_settingsDir.path());
+    QVERIFY(QSettings().fileName().startsWith(m_settingsDir.path()));
 }
 
 void ShowControlUi_Test::cleanupTestCase()
 {
-    QSettings s;
-    for (int i = 0; i < m_saved.count(); ++i)
-    {
-        if (m_saved.at(i).isValid())
-            s.setValue(QLatin1String(kKeys[i]), m_saved.at(i));
-        else
-            s.remove(QLatin1String(kKeys[i]));
-    }
+    qputenv("HOME", m_realHome);
 }
 
 void ShowControlUi_Test::init()
@@ -201,6 +211,193 @@ void ShowControlUi_Test::theChaserEditorSetsCuesAndTheList()
     QCOMPARE(c->firstPlayableStep(), 1);
     ed.m_tree->topLevelItem(0)->setCheckState(0, Qt::Checked);
     QVERIFY(!c->isStepSkipped(0));
+}
+
+/* Connections' Show control & sync page shows the settings as saved --
+   the same keys the Settings dialog wrote, so nothing is lost. */
+void ShowControlUi_Test::thePageShowsTheCurrentSettings()
+{
+    const int port = freePort();
+    ShowControlListener::setSettings(false, port, false, 7);
+    ShowControlListener listener(m_doc);
+    ShowControlSyncPage page(m_doc);
+    page.setListener(&listener);
+
+    QCheckBox *oscOn = page.findChild<QCheckBox *>("scOscEnabled");
+    QSpinBox *oscPort = page.findChild<QSpinBox *>("scOscPort");
+    QCheckBox *mscOn = page.findChild<QCheckBox *>("scMscEnabled");
+    QSpinBox *device = page.findChild<QSpinBox *>("scMscDevice");
+    QLabel *status = page.findChild<QLabel *>("scOscStatus");
+    QVERIFY(oscOn && oscPort && mscOn && device && status);
+    QVERIFY(!oscOn->isChecked());
+    QCOMPARE(oscPort->value(), port);
+    QVERIFY(!mscOn->isChecked());
+    QCOMPARE(device->value(), 7);
+    QVERIFY(!device->isEnabled());              // nothing to answer as, MSC off
+    QVERIFY(status->text().contains("off"));
+    QCOMPARE(page.findChild<QLabel *>("scOscLast")->text(), QString("Nothing received yet."));
+    QCOMPARE(page.findChild<QLabel *>("scMscLast")->text(), QString("Nothing received yet."));
+
+    // No MIDI input patched: it says so, and offers to patch one.
+    QVERIFY(page.findChild<QLabel *>("scMscInputs")->text().contains("No MIDI input"));
+    QPushButton *patch = page.findChild<QPushButton *>("scPatchMidi");
+    QVERIFY(patch != nullptr);
+    QSignalSpy wantsPatch(&page, &ShowControlSyncPage::patchMidiInputRequested);
+    patch->click();
+    QCOMPARE(wantsPatch.count(), 1);
+
+    // QLab out: a place for it, nothing to press yet.
+    QWidget *out = page.findChild<QWidget *>("scQLabOutGroup");
+    QVERIFY(out != nullptr);
+    QVERIFY(out->findChildren<QAbstractButton *>().isEmpty());
+    QVERIFY(out->findChildren<QSpinBox *>().isEmpty());
+
+    // With no listener yet (the page is built before it), nothing to edit.
+    ShowControlSyncPage early(m_doc);
+    QVERIFY(!early.findChild<QCheckBox *>("scOscEnabled")->isEnabled());
+    QCOMPARE(early.findChild<QSpinBox *>("scOscPort")->value(), port);
+}
+
+/* Editing on the page saves the setting and puts it into effect at once. */
+void ShowControlUi_Test::editingThePageChangesTheListener()
+{
+    const int port = freePort();
+    ShowControlListener::setSettings(false, port, true, 1);
+    ShowControlListener listener(m_doc);
+    ShowControlSyncPage page(m_doc);
+    page.setListener(&listener);
+    ShowControl *sc = m_doc->showControl();
+
+    QCheckBox *oscOn = page.findChild<QCheckBox *>("scOscEnabled");
+    QLabel *status = page.findChild<QLabel *>("scOscStatus");
+    oscOn->setChecked(true);
+    QVERIFY(ShowControlListener::oscEnabled());
+    QCOMPARE(listener.oscState(), ShowControlListener::OscListening);
+    QVERIFY2(status->text().contains(QString::number(port)), qPrintable(status->text()));
+
+    const int other = freePort();
+    page.findChild<QSpinBox *>("scOscPort")->setValue(other);
+    QCOMPARE(ShowControlListener::oscPort(), other);
+    QVERIFY2(status->text().contains(QString::number(other)), qPrintable(status->text()));
+    // The old port is let go.
+    QUdpSocket again;
+    QVERIFY(again.bind(QHostAddress(QHostAddress::Any), quint16(port)));
+
+    page.findChild<QSpinBox *>("scMscDevice")->setValue(12);
+    QCOMPARE(ShowControlListener::mscDeviceId(), 12);
+    QCOMPARE(sc->mscDeviceId(), 12);
+    page.findChild<QCheckBox *>("scMscEnabled")->setChecked(false);
+    QVERIFY(!ShowControlListener::mscEnabled());
+    QVERIFY(!sc->mscEnabled());
+    QVERIFY(!page.findChild<QSpinBox *>("scMscDevice")->isEnabled());
+
+    // And the other way: a change through the listener shows on the page.
+    listener.setOscEnabled(false);
+    QVERIFY(!oscOn->isChecked());
+    QVERIFY(status->text().contains("off"));
+}
+
+/* What arrived last, and when, by the way it came. */
+void ShowControlUi_Test::aCommandReceivedShowsAsLast()
+{
+    Chaser *c = makeList(3);
+    m_doc->showControl()->setMainCueList(c->id());
+    const int port = freePort();
+    ShowControlListener::setSettings(true, port, true, 1);
+    ShowControlListener listener(m_doc);
+    ShowControlSyncPage page(m_doc);
+    page.setListener(&listener);
+    QLabel *oscLast = page.findChild<QLabel *>("scOscLast");
+    QLabel *mscLast = page.findChild<QLabel *>("scMscLast");
+
+    QUdpSocket qlab;
+    qlab.writeDatagram(osc("/cue/2/start"), QHostAddress::LocalHost, quint16(port));
+    QTRY_VERIFY2(oscLast->text().contains("GO cue 2"), qPrintable(oscLast->text()));
+    QVERIFY(oscLast->text().contains(QRegularExpression("^\\d\\d:\\d\\d:\\d\\d")));
+    QCOMPARE(mscLast->text(), QString("Nothing received yet."));
+
+    // An address that isn't a cue command says what it was.
+    qlab.writeDatagram(osc("/qlab/hello"), QHostAddress::LocalHost, quint16(port));
+    QTRY_VERIFY2(oscLast->text().contains("/qlab/hello"), qPrintable(oscLast->text()));
+    QVERIFY(oscLast->text().contains("not a cue command"));
+
+    // MSC, as it arrives from a patched MIDI input.
+    m_doc->showControl()->handleSysEx(0, msc(1, 0x01, QByteArray("3")));
+    QVERIFY2(mscLast->text().contains("GO cue 3"), qPrintable(mscLast->text()));
+    QVERIFY(mscLast->text().contains("Universe 1"));
+    QVERIFY(oscLast->text().contains("/qlab/hello"));       // untouched
+    // One for another device isn't ours.
+    const QString before = mscLast->text();
+    m_doc->showControl()->handleSysEx(0, msc(5, 0x01, QByteArray("1")));
+    QCOMPARE(mscLast->text(), before);
+
+    // GO pressed here is neither.
+    m_doc->showControl()->execute({ ShowControl::Go, QString(), QString() });
+    QCOMPARE(mscLast->text(), before);
+    QVERIFY(oscLast->text().contains("/qlab/hello"));
+
+    c->stop(FunctionParent::master());
+    for (int i = 0; i < 3; ++i)
+        m_doc->masterTimer()->timerTick();
+}
+
+/* Something else already has the port: the page says it can't listen. */
+void ShowControlUi_Test::aPortInUseShowsAnError()
+{
+    QUdpSocket blocker;
+    QVERIFY(blocker.bind(QHostAddress(QHostAddress::Any), 0, QUdpSocket::DontShareAddress));
+    const int port = blocker.localPort();
+
+    ShowControlListener::setSettings(false, port, true, 1);
+    ShowControlListener listener(m_doc);
+    ShowControlSyncPage page(m_doc);
+    page.setListener(&listener);
+    QLabel *status = page.findChild<QLabel *>("scOscStatus");
+
+    page.findChild<QCheckBox *>("scOscEnabled")->setChecked(true);
+    QCOMPARE(listener.oscState(), ShowControlListener::OscError);
+    QCOMPARE(status->property("oscState").toInt(), int(ShowControlListener::OscError));
+    QVERIFY2(status->text().contains("Can't listen") && status->text().contains(QString::number(port)),
+             qPrintable(status->text()));
+
+    // Freed, and asked again (the port set again): listening.
+    blocker.close();
+    listener.apply();
+    QCOMPARE(listener.oscState(), ShowControlListener::OscListening);
+    QCOMPARE(status->property("oscState").toInt(), int(ShowControlListener::OscListening));
+}
+
+/* MIDI timecode: the source the footer chip picks, and the feed's health. */
+void ShowControlUi_Test::theTimecodeSourceAndHealth()
+{
+    ShowControlSyncPage page(m_doc);
+    TimecodeSource *tc = m_doc->timecodeSource();
+    QComboBox *source = page.findChild<QComboBox *>("scMtcSource");
+    QLabel *health = page.findChild<QLabel *>("scMtcHealth");
+    QLabel *status = page.findChild<QLabel *>("scMtcStatus");
+    QVERIFY(source && health && status);
+    QCOMPARE(source->currentData().toInt(), -1);
+    QCOMPARE(health->property("health").toInt(), int(TimecodeSource::NoSource));
+    QVERIFY(status->text().contains("None received"));
+
+    // Code arrives on universe 2: it joins the list, and is measured.
+    for (int i = 0; i < 6; ++i)
+    {
+        tc->updateTimeCode(1, 3600000 + quint32(i) * 40, 25);
+        QTest::qWait(40);
+        QTest::qWait(170);          // past the readout's throttle
+    }
+    QVERIFY(tc->isRunning());
+    QVERIFY(health->property("health").toInt() != int(TimecodeSource::NoSource));
+    QVERIFY2(status->text().contains("01:00:"), qPrintable(status->text()));
+    const int at = source->findData(1);
+    QVERIFY(at > 0);
+
+    // Picking it here is the same as picking it on the chip.
+    emit source->activated(at);
+    QCOMPARE(tc->sourceUniverse(), 1);
+    tc->setSourceUniverse(-1);
+    QCOMPARE(source->currentData().toInt(), -1);
 }
 
 QTEST_MAIN(ShowControlUi_Test)

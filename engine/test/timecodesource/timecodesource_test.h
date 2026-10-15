@@ -31,6 +31,7 @@ private slots:
     void updateAndRunning();
     void watchdogStops();
     void overrideFilter();
+    void healthAndSourceSignal();
 };
 
 #endif

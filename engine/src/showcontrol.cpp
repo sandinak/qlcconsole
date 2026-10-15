@@ -38,6 +38,8 @@ ShowControl::ShowControl(Doc *doc, QObject *parent)
     , m_mainCueList(UINT_MAX)
     , m_mscDeviceId(1)
     , m_mscEnabled(true)
+    , m_source(Local)
+    , m_sourceUniverse(UINT_MAX)
 {
     if (m_doc != nullptr)
         connect(m_doc, &Doc::functionRemoved, this, &ShowControl::slotFunctionRemoved);
@@ -144,7 +146,9 @@ bool ShowControl::execute(const Request &request)
         what += tr(" cue %1").arg(request.cue);
 
     auto finish = [&](bool done, const QString &how) {
-        emit commandHandled(how.isEmpty() ? what : what + QStringLiteral(" — ") + how, done);
+        const QString line = how.isEmpty() ? what : what + QStringLiteral(" — ") + how;
+        emit commandHandled(line, done);
+        emit commandFrom(m_source, m_sourceUniverse, line, done);
         return done;
     };
 
@@ -321,12 +325,16 @@ bool ShowControl::parseMsc(const QByteArray &sysEx, int deviceId, Request *out)
 
 void ShowControl::handleSysEx(quint32 universe, const QByteArray &sysEx)
 {
-    Q_UNUSED(universe)
     if (!m_mscEnabled)
         return;
     Request r;
-    if (parseMsc(sysEx, m_mscDeviceId, &r))
-        execute(r);
+    if (!parseMsc(sysEx, m_mscDeviceId, &r))
+        return;
+    m_source = Msc;
+    m_sourceUniverse = universe;
+    execute(r);
+    m_source = Local;
+    m_sourceUniverse = UINT_MAX;
 }
 
 /*****************************************************************************
@@ -496,9 +504,11 @@ QList<ShowControl::Request> ShowControl::parseOsc(const QByteArray &datagram)
 int ShowControl::handleOsc(const QByteArray &datagram)
 {
     int done = 0;
+    m_source = Osc;
     for (const Request &r : parseOsc(datagram))
         if (execute(r))
             ++done;
+    m_source = Local;
     return done;
 }
 

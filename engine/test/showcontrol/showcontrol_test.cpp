@@ -413,6 +413,19 @@ void ShowControl_Test::mscFromAPatchedInputFiresTheCue()
         timer->timerTick();
     QCOMPARE(c->currentStepIndex(), 1);
 
+    // Said to be MSC, from the universe it came in on; GO pressed here isn't.
+    sc->setMscEnabled(true);
+    QSignalSpy from(sc, &ShowControl::commandFrom);
+    emit m_doc->inputOutputMap()->inputSysExReceived(0, msc(1, 0x01, 0x01, "3"));
+    sc->execute({ ShowControl::Go, QString(), QString() });
+    QCOMPARE(from.count(), 2);
+    QCOMPARE(from.at(0).at(0).value<ShowControl::Source>(), ShowControl::Msc);
+    QCOMPARE(from.at(0).at(1).toUInt(), 0u);
+    QCOMPARE(from.at(1).at(0).value<ShowControl::Source>(), ShowControl::Local);
+    QCOMPARE(from.at(1).at(1).toUInt(), UINT_MAX);
+    for (int i = 0; i < 3; ++i)
+        timer->timerTick();
+
     c->stop(FunctionParent::master());
     for (int i = 0; i < 3; ++i)
         timer->timerTick();
@@ -473,8 +486,11 @@ void ShowControl_Test::oscFiresTheCue()
     other->setCueListNumber("2");
     m_doc->showControl()->setMainCueList(c->id());
 
+    QSignalSpy from(m_doc->showControl(), &ShowControl::commandFrom);
     QCOMPARE(m_doc->showControl()->handleOsc(osc("/cue/3/start")), 1);
     QCOMPARE(m_doc->showControl()->handleOsc(osc("/list/2/go")), 1);
+    QCOMPARE(from.count(), 2);
+    QCOMPARE(from.at(0).at(0).value<ShowControl::Source>(), ShowControl::Osc);
     for (int i = 0; i < 3; ++i)
         timer->timerTick();
     QCOMPARE(c->currentStepIndex(), 2);

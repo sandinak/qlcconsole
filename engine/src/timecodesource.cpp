@@ -80,7 +80,12 @@ qint32 TimecodeSource::sourceUniverse() const
 
 void TimecodeSource::setSourceUniverse(qint32 universe)
 {
+    if (universe < 0)
+        universe = -1;
+    if (universe == m_sourceUniverse)
+        return;
     m_sourceUniverse = universe;
+    emit sourceUniverseChanged(m_sourceUniverse);
 }
 
 qint32 TimecodeSource::lastUniverse() const
@@ -115,6 +120,21 @@ double TimecodeSource::jitterMs() const
         var += d * d;
     }
     return std::sqrt(var / m_gapCount);
+}
+
+TimecodeSource::Health TimecodeSource::health() const
+{
+    if (m_lastUniverse < 0)
+        return NoSource;
+    if (!m_running)
+        return Held;
+    const double drift = qAbs(rateEstimate() - 1.0);
+    const double jit = jitterMs();
+    if (drift <= 0.05 && jit < 40.0)
+        return Healthy;
+    if (drift <= 0.15 && jit < 120.0)
+        return Usable;
+    return Unstable;
 }
 
 void TimecodeSource::updateTimeCode(quint32 universe, quint32 msPosition, uchar fps)

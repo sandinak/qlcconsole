@@ -52,12 +52,6 @@ private:
     // Tab label mode
     QComboBox *m_tabLabelModeCombo;
     QComboBox *m_scriptEditorCombo;
-
-    // Show control
-    QCheckBox *m_oscCheck;
-    QSpinBox  *m_oscPortSpin;
-    QCheckBox *m_mscCheck;
-    QSpinBox  *m_mscDeviceSpin;
 };
 
 /** @} */

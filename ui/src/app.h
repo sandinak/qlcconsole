@@ -216,6 +216,8 @@ public:
     Doc *doc();
     /** Show control's OSC listener and settings (QLab). */
     class ShowControlListener *showControlListener() const { return m_showControlListener; }
+    /** Open Connections at its Show control & sync page. */
+    void showShowControlSettings();
 
 private slots:
     void slotDocModified(bool state);

@@ -58,6 +58,11 @@ public:
 
     enum Command { Go, Stop, Pause, Resume, Load, AllOff, Reset, Back };
 
+    /** Where a command came from: OSC, MSC, or this console (a key, the
+     *  footer, the Virtual Console). */
+    enum Source { Local, Osc, Msc };
+    Q_ENUM(Source)
+
     /** One command: what, which cue (empty: none) and which list (empty:
      *  the main one). */
     struct Request
@@ -104,6 +109,11 @@ signals:
      *  line saying which and why: "GO cue 12.5 — Main", "GO cue 9: no such
      *  cue in Main". */
     void commandHandled(const QString &what, bool done);
+
+    /** The same, with where the command came from -- and for MSC, the
+     *  universe whose MIDI input it arrived on (UINT_MAX otherwise). */
+    void commandFrom(ShowControl::Source source, quint32 universe,
+                     const QString &what, bool done);
 
     /*********************************************************************
      * MIDI Show Control
@@ -158,6 +168,8 @@ private:
     QHash<quint32, int> m_loaded;       ///< chaser id -> step on standby
     int m_mscDeviceId;
     bool m_mscEnabled;
+    Source m_source;                    ///< of the command being carried out
+    quint32 m_sourceUniverse;           ///< MSC: the universe it came in on
 };
 
 /** @} */

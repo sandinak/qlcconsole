@@ -38,6 +38,7 @@
 #include <QIcon>
 
 #include "inputoutputpatcheditor.h"
+#include "showcontrolsyncpage.h"
 #include "universepatchgrid.h"
 #include "universeitemwidget.h"
 #include "connectionstree.h"
@@ -69,6 +70,7 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
     , m_ioTabs(NULL)
     , m_patchGrid(NULL)
     , m_undoPatchAction(NULL)
+    , m_showControlPage(NULL)
     , m_toolbar(NULL)
     , m_addUniverseAction(NULL)
     , m_deleteUniverseAction(NULL)
@@ -112,6 +114,15 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
     m_splitter = new QSplitter(Qt::Horizontal, detailed);
     detailedLay->addWidget(m_splitter);
     m_ioTabs->addTab(detailed, tr("Detailed"));
+
+    /* Everything outside that controls or clocks the show -- OSC and MSC
+       cue commands, MIDI timecode -- next to the patch they arrive on.
+       Patch a MIDI input takes you to Devices, where inputs are patched. */
+    m_showControlPage = new ShowControlSyncPage(m_doc, this);
+    m_ioTabs->addTab(m_showControlPage, tr("Show control && sync"));
+    connect(m_showControlPage, &ShowControlSyncPage::patchMidiInputRequested, this, [this]() {
+        m_ioTabs->setCurrentWidget(m_devicesTree);
+    });
 
     /* Parented to the Detailed page, not to the manager. Both actions live on
        the Detailed toolbar, but as children of InputOutputManager with the
@@ -308,6 +319,16 @@ InputOutputManager::~InputOutputManager()
 InputOutputManager* InputOutputManager::instance()
 {
     return s_instance;
+}
+
+void InputOutputManager::showShowControlPage()
+{
+    m_ioTabs->setCurrentWidget(m_showControlPage);
+}
+
+void InputOutputManager::setShowControlListener(ShowControlListener *listener)
+{
+    m_showControlPage->setListener(listener);
 }
 
 void InputOutputManager::applyToolbarLabelMode()
