@@ -31,6 +31,19 @@ Prerequisites (one-time, already done on this machine):
   `platforms/macos/sign-notarize.sh` for how it's used;
   `xcrun notarytool store-credentials qlc-notary` to (re)create it).
 - `gh` (GitHub CLI), authenticated (`gh auth status`).
+- For the **universal** build (Apple silicon + Intel, the default):
+  - the official universal Qt, from aqt, at `~/Qt-aqt/6.9.3/macos`
+    (`QTDIR` to put it elsewhere):
+    `python3 -m venv /tmp/aqt && /tmp/aqt/bin/pip install aqtinstall &&
+    /tmp/aqt/bin/aqt install-qt mac desktop 6.9.3 clang_64 -O ~/Qt-aqt -m
+    qt3d qtimageformats qtmultimedia qtserialport qtwebsockets qtshadertools`
+    -- Homebrew's Qt is this Mac's arch only;
+  - the plugins' libraries (libusb, libftdi, fftw, libsndfile) built
+    universal into `~/unideps`: `platforms/macos/universal-deps.sh`.
+
+  `UNIVERSAL=0 platforms/macos/package-local.sh` is the old Homebrew build,
+  for this Mac's arch only. The universal build has no OLA plugin
+  (Homebrew's OLA is single-arch).
 
 Steps:
 
@@ -45,7 +58,8 @@ Steps:
    - runs the test gate (`cmake --build build --target check` — engine +
      UI unit tests, fixture-definition validation) and **stops here** if
      anything fails, before any of the slower/external steps below run,
-   - builds + bundles via `platforms/macos/package-local.sh`,
+   - builds + bundles via `platforms/macos/package-local.sh` -- one
+     universal app; the DMG is `qlcconsole-<VERSION>-universal-<date>-<rev>.dmg`,
    - Developer ID signs, notarizes, and staples via
      `platforms/macos/sign-notarize.sh`,
    - tags `vX.Y.Z` and pushes the tag,
