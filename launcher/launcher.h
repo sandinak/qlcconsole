@@ -25,12 +25,11 @@
 #include <QEvent>
 
 /**
- * Launcher is a very simple dialog for choosing whether to execute the main
- * QLC application or the Fixture Editor application.
- *
- * Once the choice has been made, the launcher window terminates and the chosen
- * application will be started. This kind of launcher is needed only for OSX
- * because application bundles can launch only one binary program.
+ * What the macOS bundle starts (an app bundle starts one program): it hands
+ * a double-clicked show to qlcconsole and a fixture definition to the
+ * Fixture Editor, and on a plain start -- Dock, Finder, Launchpad -- starts
+ * qlcconsole straight away (slotStartDefault()). Its window, a choice between
+ * the two, is no longer shown: the Fixture Editor is opened from qlcconsole.
  */
 class Launcher final : public QWidget
 {
@@ -47,6 +46,11 @@ public:
 
     /** Destructor */
     ~Launcher();
+
+public slots:
+    /** Start qlcconsole, unless a file the system asked to open already
+     *  started something. */
+    void slotStartDefault();
 
 private slots:
     /** Slot for fixture editor button click */
@@ -65,6 +69,9 @@ private:
 protected:
     /** Acts as QApplication's event filter for QFileOpen events */
     bool eventFilter(QObject* object, QEvent* event) override;
+
+private:
+    bool m_launched = false;
 };
 
 #endif

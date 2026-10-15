@@ -65,13 +65,10 @@ int main(int argc, char** argv)
     Launcher launcher;
     app.installEventFilter(&launcher);
 
-    // If launcher is started by the system after user has activated
-    // either a .qxf or .qxw file, we don't need to show the dialog
-    // at all. Since this "mime-open" comes as an event, we won't know
-    // about it until app.exec() has been called. So, give some grace
-    // time before actually showing the launcher dialog, in case the
-    // event arrives and we can destroy the dialog before actually
-    // showing it.
-    QTimer::singleShot(100, &launcher, SLOT(show()));
+    // Started by the system for a double-clicked show or fixture, the file
+    // arrives as an event once app.exec() runs, and the event filter starts
+    // the right program for it. Otherwise -- a plain start -- qlcconsole,
+    // after a grace for that event to arrive.
+    QTimer::singleShot(500, &launcher, SLOT(slotStartDefault()));
     return app.exec();
 }

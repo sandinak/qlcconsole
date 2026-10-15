@@ -46,7 +46,7 @@ Launcher::Launcher(QWidget* parent) : QWidget(parent)
     lay->addWidget(icon, 0, 0, 1, 1);
 
     QString text("<H1>%1 %2</H1>");
-    QLabel* title = new QLabel(text.arg(APPNAME).arg(APPVERSION), this);
+    QLabel* title = new QLabel(text.arg(APPNAME).arg(QLCCONSOLE_VERSION), this);
     lay->addWidget(title, 0, 1, 1, 2);
 
     QPushButton* fxed = new QPushButton(FXEDNAME, this);
@@ -62,6 +62,13 @@ Launcher::Launcher(QWidget* parent) : QWidget(parent)
 
 Launcher::~Launcher()
 {
+}
+
+void Launcher::slotStartDefault()
+{
+    if (m_launched)
+        return;
+    launchQLC(QApplication::arguments().mid(1));    // not this program's path
 }
 
 void Launcher::slotFXEDClicked()
@@ -80,6 +87,7 @@ void Launcher::launchFXED(const QStringList& arguments)
     if (path.endsWith(QString("/")) == false)
         path += QString("/");
     path += QString("qlcconsole-fixtureeditor");
+    m_launched = true;
     QProcess::startDetached(path, arguments);
     QApplication::exit();
 }
@@ -90,6 +98,7 @@ void Launcher::launchQLC(const QStringList& arguments)
     if (path.endsWith(QString("/")) == false)
         path += QString("/");
     path += QString("qlcconsole");
+    m_launched = true;
     QProcess::startDetached(path, arguments);
     QApplication::exit();
 }
@@ -120,12 +129,12 @@ bool Launcher::eventFilter(QObject* object, QEvent* event)
         if (path.endsWith(KExtWorkspaceConsole, Qt::CaseInsensitive) == true ||
             path.endsWith(KExtWorkspace, Qt::CaseInsensitive) == true)
         {
-            launchQLC(QApplication::arguments() << "--open" << path);
+            launchQLC(QApplication::arguments().mid(1) << "--open" << path);
             retval = true;
         }
         else if (path.endsWith(KExtFixture, Qt::CaseInsensitive) == true)
         {
-            launchFXED(QApplication::arguments() << "--open" << path);
+            launchFXED(QApplication::arguments().mid(1) << "--open" << path);
             retval = true;
         }
     }
