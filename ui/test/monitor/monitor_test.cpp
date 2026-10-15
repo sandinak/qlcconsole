@@ -15551,6 +15551,13 @@ void Monitor_Test::aLayersRowStaysSelectedWhenThePlotCannotFollow()
         // but not visible, so the plot cannot select it.
         item->setVisible(false);
 
+        // Let the panel settle first. Under QPA minimal (CI's Linux platform)
+        // a rebuild queued while the plot was set up was still pending here
+        // (offscreen had already run it), and it ran inside the
+        // processEvents() after the click below: it re-selected from the plot,
+        // and deleted the very row this test then read -- a use-after-free
+        // that failed the check or crashed the whole program.
+        QCoreApplication::processEvents();
         MonitorLayersPanel *panel = mon.m_layersPanel;
         panel->reload();
         QTreeWidgetItem *row = nullptr;
