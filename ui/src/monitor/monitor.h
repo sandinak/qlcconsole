@@ -478,7 +478,11 @@ public:
     /** The same hanger as @p hid on every tower (standing truss or Tower)
      *  that lacks one at that height and direction. Returns how many. */
     int copyHangerToEveryTower(quint32 hid);
-protected:
+    /* Back to slots: a bare "protected:" here once ended the slots section,
+       and every string-connected slot below (Add Target, Add Person, Copy,
+       Paste...) silently stopped answering. monitor_test fails on "No such
+       slot" now. */
+protected slots:
 
     /** What a fixture is mounted on, in words -- shared by the Fixture
      *  Properties dialog and the Lighting Studio inspector so they cannot

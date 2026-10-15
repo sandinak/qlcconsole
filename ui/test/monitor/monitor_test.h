@@ -46,6 +46,7 @@ private slots:
     void fixturesSitAlongAHorizontalPipe();
     void theTrussEditorSpansTwoStands();
     void initTestCase();
+    void init();
     void cleanupTestCase();
 
     void addTrussAccepted();

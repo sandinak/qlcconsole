@@ -80,8 +80,12 @@ before building):
     4.2), a "Sub GO" for the cue playing, the same idea for step-based
     effects.
   - **Sending to QLab** — OSC / MSC out.
-  - **Tower patch rule in one step** — Patch dialog: "each structure: bars
-    to its Int universe, the rest to its Ext, by name".
+  - **Duplicate a structure's setup** (Branson, 2026-10-15; replaces the
+    one-off "tower patch rule") — from one structure (T1) and the fixtures
+    on it, set up its likes (T2, T3…): the same fixtures placed and mounted
+    the same way, matched by their labels, and addressed. The addressing
+    half exists (right-click → Patch Others Like This / the Patch dialog's
+    Match); the placement half is the new part. Design first.
   - **Windows build** — port upstream QLC+'s `build-windows` CI job
     (MSYS2/MinGW) with qlcconsole names; installer `.exe` as an artifact.
   - **WLED** — the rest of the 1D effects (Fireworks Starburst, Percent,
