@@ -4,6 +4,16 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## October 2026
 
+### Sub-cues
+
+- **Cues inside a cue.** A chase used as a step of a cue list lists its
+  steps under it as **4.1, 4.2…**. Set the step's **Sub-cues** to **Sub
+  GO** and they wait for **Sub GO** (⌥⌘↩; Sub Back ⌥⌘⇧↩) while GO still
+  goes on to cue 5. The chaser editor and the Virtual Console cue list show
+  them nested, the cue list highlights the one playing and has Sub GO /
+  Sub Back buttons, and the footer says **Sub: 4.2 · Next: 5**. Older
+  shows play as before. See [Sub-cues](show-control.md#sub-cues).
+
 ### Show control
 
 - **QLab can fire the lights' cues.** A chase's steps have **cue numbers**

@@ -76,9 +76,13 @@ before building):
    instead of everything changing at once.
 
 - **Agreed next (2026-10-13/15), after 0.1.0:**
-  - **Sub-cues** — a step whose function is a chaser shown inline (4.1,
-    4.2), a "Sub GO" for the cue playing, the same idea for step-based
-    effects.
+  - **Sub-cues** ([SUBCUES_DESIGN.md](SUBCUES_DESIGN.md)) — P1 (engine)
+    and P2 (editor, VC cue list, footer, ⌥⌘↩) built on `feat/sub-cues`
+    (DONE.md). Still to do: P3 show control (`/cue/4.2/go`, `/subgo`,
+    `/subback`, MSC GO 4.2, LOAD 4.2 — after `feat/connections-showcontrol`
+    merges; the engine API is there: `Chaser::findCueOrSubCue()`,
+    `jumpToSubCue()`, `subGo()`, `subBack()`), P4 step-based effects on Sub
+    GO.
   - **Sending to QLab** — OSC / MSC out.
   - **Tower patch rule in one step** — Patch dialog: "each structure: bars
     to its Int universe, the rest to its Ext, by name".

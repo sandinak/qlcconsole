@@ -37,6 +37,44 @@ A **cue list** is a chase (a chaser). Its steps are the **cues**.
   number and a **Next:** line under its list — the cue, its name and its
   note.
 
+## Sub-cues
+
+A cue can have cues inside it: cue 4 brings up a look, and **4.1, 4.2,
+4.3** step through changes within it on a second button, **Sub GO**, while
+GO still goes on to cue 5.
+
+- **Making one.** Use a chase as a step of the cue list (drag it in like any
+  function). Its steps are that cue's sub-cues. In the chaser editor the
+  step gets a disclosure triangle: open it to see the steps under it,
+  numbered, with their fades and holds. They're read-only there —
+  right-click → **Edit Chase…** (or double-click one) opens that chase to
+  change them. The chase can still be used anywhere else.
+- **Sub-cues column.** On the chase step: **Own timing** (the default, and
+  what every older show has) runs the chase on by itself, as ever.
+  **Sub GO** holds each of its steps until a Sub GO.
+- **Playing.** GO into cue 4 plays its first sub-cue (past skipped ones)
+  and holds there — the chase's own holds aren't counted. **Sub GO** plays
+  the next sub-cue with its own fade; **Sub Back** the one before. At the
+  last (or first) one they do nothing. **GO** goes on to cue 5 whatever
+  sub-cues are left, and **Back** to cue 3; the chase stops either way, as
+  it would. If cue 4 has a hold of its own, it follows on to 5 when that
+  runs out. A chase set to **GO on the beat** holds a Sub GO for the beat
+  too.
+- **Numbering.** A sub-cue is its cue's number, a dot, and its place in the
+  chase — 4.1, 4.2… (grey, in the editor) — unless the step has a cue
+  number of its own in that chase, which it keeps.
+- **Where you see them.** The Virtual Console cue list shows the same
+  nesting, with the sub-cue playing highlighted under its cue; a cue list
+  with a Sub GO step gets **Sub GO** and **Sub Back** buttons, and clicking
+  a sub-cue plays it (its cue first, if that isn't the one playing). The
+  footer reads **Sub: 4.2 · Next: 5** while sub-cues are left, or
+  **Sub: (end of 4)**; its menu has Sub GO and Sub Back.
+- **Keys.** **Sub GO** is ⌥⌘↩ and **Sub Back** ⌥⌘⇧↩ (Ctrl+Alt+Enter and
+  Ctrl+Alt+Shift+Enter), in every window, on the main cue list — beside GO
+  ⌘↩ — and in **Control** → Sub GO / Sub Back (Main Cue List).
+
+One level only: a sub-cue's own chase steps run on their own timing.
+
 ## What a command does
 
 | Command | What happens |

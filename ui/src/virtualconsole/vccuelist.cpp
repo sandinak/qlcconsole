@@ -269,6 +269,8 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
     m_subGoButton->setVisible(false);
     connect(m_subGoButton, &QToolButton::clicked, this, &VCCueList::slotSubGo);
     hbox->addWidget(m_subGoButton);
+    for (QToolButton *b : { m_subBackButton, m_subGoButton })
+        b->setProperty("helpTopic", QStringLiteral("show-control.md#sub-cues"));
 
     vbox->addItem(hbox);
     grid->addItem(vbox, 0, 1, 6);
