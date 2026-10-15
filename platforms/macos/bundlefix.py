@@ -42,7 +42,9 @@ def deps(p):
     res = []
     for ln in out:
         ln = ln.strip()
-        if not ln:
+        # A universal file prints a header per arch ("<path> (architecture
+        # arm64):"), not just the first: one is not a dependency.
+        if not ln or ln.endswith(":"):
             continue
         res.append(ln.split(" (")[0])
     return res

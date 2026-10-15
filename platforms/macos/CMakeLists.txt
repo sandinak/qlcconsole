@@ -14,7 +14,9 @@ if(qmlui)
 else()
     install(FILES Info.plist DESTINATION ${INSTALLROOT})
 endif()
-install(CODE "execute_process(COMMAND sed -i -e \"s/__QLC_VERSION__/${APPVERSION}/g\" ${INSTALLROOT}/Info.plist)")
+# The release for Finder's "Version", the commit count as the build number.
+# BSD sed: -i takes a (here empty) suffix, or it leaves an Info.plist-e behind.
+install(CODE "execute_process(COMMAND sed -i \"\" -e \"s/__QLC_VERSION__/${QLCCONSOLE_VERSION}/g\" -e \"s/__QLC_BUILD__/${QLCCONSOLE_REV}/g\" ${INSTALLROOT}/Info.plist)")
 
 set(APPLE_CODESIGN_ENTITLEMENTS "qlcconsole.entitlements")
 

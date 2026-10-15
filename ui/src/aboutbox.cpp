@@ -28,6 +28,13 @@
 #include "qlcconfig.h"
 #include "aboutbox.h"
 
+QString AboutBox::versionText()
+{
+    return QString("%1<br><span style=\"font-size:small; font-weight:normal;\">"
+                   "build %2 (%3)</span>")
+        .arg(QLCCONSOLE_VERSION, APPVERSION, QLCCONSOLE_GITREV);
+}
+
 AboutBox::AboutBox(QWidget* parent) : QDialog (parent)
 {
     setupUi(this);
@@ -38,7 +45,11 @@ AboutBox::AboutBox(QWidget* parent) : QDialog (parent)
     addAction(action);
 
     m_titleLabel->setText(APPNAME);
-    m_versionLabel->setText(APPVERSION);
+    /* The release, and under it what exactly this build is: the build id
+       saved shows record, and the commit. Selectable, to paste into a
+       report. */
+    m_versionLabel->setText(versionText());
+    m_versionLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
     m_copyrightLabel->setText(tr("by <B>Branson Matheson</B><br>%1")
                               .arg(tr("Fork of QLC+ 4.14.2, based on the work of Heikki Junnila, "
                                       "Massimo Callegari, and the QLC+ project — not affiliated with QLC+:")));

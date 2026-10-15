@@ -5,28 +5,63 @@
 # Branson's custom user content (RGB scripts / fixtures / templates / bundle)
 # so the effects work on a fresh machine.
 #
-# Result: ~/qlcconsole.app  and  <repo>/dist/qlcconsole-<ver>-<date>-<rev>.dmg
+# Result: ~/qlcconsole.app  and
+#         <repo>/dist/qlcconsole-<release>-<universal|arm64>-<date>-<rev>.dmg
+#
+# UNIVERSAL=1 (the default) builds one app for Apple silicon AND Intel Macs:
+# against the official, universal Qt (aqt; QTDIR, default ~/Qt-aqt/6.9.3/macos)
+# and the plugins' libraries built universal by universal-deps.sh
+# (UNIDEPS, default ~/unideps). UNIVERSAL=0 is the old Homebrew build: this
+# Mac's arch only.
 set -euo pipefail
 
 REPO="/Users/branson/git/qlcconsole"
 SCRIPTDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BUILD="$REPO/build-package"
 USERDATA="$HOME/Library/Application Support/QLC+"
 APP="$HOME/qlcconsole.app"
-export QTDIR="/opt/homebrew/opt/qt6"
+UNIVERSAL="${UNIVERSAL:-1}"
+UNIDEPS="${UNIDEPS:-$HOME/unideps}"
+JOBS="$(sysctl -n hw.perflevel0.logicalcpu 2>/dev/null || sysctl -n hw.ncpu)"
 
 cd "$REPO"
 
 step() { echo; echo "============================================================"; echo ">>> $*"; echo "============================================================"; }
 
-step "1/7 Configure (Release, separate build dir: build-package)"
-cmake -S . -B "$BUILD" \
-  -DCMAKE_PREFIX_PATH="$QTDIR/lib/cmake" \
+if [ "$UNIVERSAL" = 1 ]; then
+  export QTDIR="${QTDIR:-$HOME/Qt-aqt/6.9.3/macos}"
+  BUILD="$REPO/build-universal"
+  FLAVOUR=universal
+  case "$(lipo -archs "$QTDIR/lib/QtCore.framework/QtCore" 2>/dev/null)" in
+    *x86_64*arm64*|*arm64*x86_64*) ;;
+    *) echo "ERROR: $QTDIR is not a universal Qt. Install one:"
+       echo "  python3 -m venv /tmp/aqt && /tmp/aqt/bin/pip install aqtinstall"
+       echo "  /tmp/aqt/bin/aqt install-qt mac desktop 6.9.3 clang_64 -O ~/Qt-aqt \\"
+       echo "      -m qt3d qtimageformats qtmultimedia qtserialport qtwebsockets qtshadertools"
+       exit 1 ;;
+  esac
+  [ -f "$UNIDEPS/lib/pkgconfig/libftdi1.pc" ] || \
+    { echo "ERROR: no universal libraries in $UNIDEPS -- run platforms/macos/universal-deps.sh"; exit 1; }
+  # Homebrew's libraries are this Mac's arch only: kept out of sight, so a
+  # plugin either finds the universal one or goes without (OLA does).
+  export PKG_CONFIG_PATH="$UNIDEPS/lib/pkgconfig" PKG_CONFIG_LIBDIR="$UNIDEPS/lib/pkgconfig"
+  ARCHFLAGS=(-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+             -DCMAKE_PREFIX_PATH="$QTDIR/lib/cmake;$UNIDEPS"
+             -DCMAKE_IGNORE_PREFIX_PATH="/opt/homebrew;/usr/local"
+             -DCMAKE_IGNORE_PATH="/opt/homebrew/lib;/opt/homebrew/include;/usr/local/lib;/usr/local/include;/opt/local/lib;/opt/local/include")
+else
+  export QTDIR="/opt/homebrew/opt/qt6"
+  BUILD="$REPO/build-package"
+  FLAVOUR="$(uname -m)"
+  ARCHFLAGS=(-DCMAKE_PREFIX_PATH="$QTDIR/lib/cmake")
+fi
+
+step "1/7 Configure (Release, $FLAVOUR, separate build dir: $(basename "$BUILD"))"
+cmake -S . -B "$BUILD" "${ARCHFLAGS[@]}" \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
 
 step "2/7 Build (parallel)"
-cmake --build "$BUILD" -j"$(sysctl -n hw.ncpu)"
+cmake --build "$BUILD" -j"$JOBS"
 
 step "3/7 Install into ~/qlcconsole.app (fresh)"
 rm -rf "$APP"
@@ -71,7 +106,33 @@ if [ -d "$QTPLUGINS/iconengines" ]; then
   mkdir -p "$APP/Contents/PlugIns/iconengines"
   cp -f "$QTPLUGINS/iconengines/"*.dylib "$APP/Contents/PlugIns/iconengines/" 2>/dev/null || true
 fi
+if [ "$UNIVERSAL" = 1 ]; then
+  # Official Qt names its frameworks @rpath/..., which bundlefix.py (made for
+  # Homebrew's absolute names) never follows: macdeployqt brings in what the
+  # app, its helpers and the plugins pull in (QtQml for multimedia, ffmpeg).
+  "$QTDIR/bin/macdeployqt" "$APP" \
+    -executable="$APP/Contents/MacOS/qlcconsole" \
+    -executable="$APP/Contents/MacOS/qlcconsole-fixtureeditor" \
+    -executable="$APP/Contents/MacOS/qlcconsole-launcher" 2>&1 | grep -v "^Log:\|File exists" || true
+  chmod -R u+w "$APP"
+fi
 python3 "$SCRIPTDIR/bundlefix.py" "$APP"
+
+# Every @rpath reference has to be found in the bundle, on both arches.
+missing=0
+while IFS= read -r f; do
+  file "$f" | grep -q 'Mach-O' || continue
+  if [ "$UNIVERSAL" = 1 ]; then
+    a=$(lipo -archs "$f" 2>/dev/null)
+    case "$a" in *x86_64*arm64*|*arm64*x86_64*) ;;
+      *) echo "  NOT UNIVERSAL ($a): ${f#$APP/}"; missing=1 ;; esac
+  fi
+  for ref in $(otool -L "$f" | awk '/@rpath\//{print $1}'); do
+    [ -e "$APP/Contents/Frameworks/${ref#@rpath/}" ] || { echo "  MISSING ${ref} (from ${f#$APP/})"; missing=1; }
+  done
+done < <(find "$APP/Contents" -type f \( -perm -u+x -o -name "*.dylib" \))
+[ "$missing" = 0 ] || { echo "ERROR: the bundle is incomplete"; exit 1; }
+echo "  every reference resolves in the bundle ($FLAVOUR)"
 
 # A bundle with no platform plugin builds and signs fine but cannot launch.
 # Check it here rather than discovering it on a fresh machine.
@@ -94,14 +155,14 @@ set -e
 [ "$csok" = 1 ] && echo "  codesign verify OK (ad-hoc)" || { echo "ERROR: codesign verify failed"; exit 1; }
 
 step "7/7 Create DMG"
-APPVERSION=$(awk -F\" '/^#define APPVERSION/ {gsub(/ /,"-",$2); print $2}' "$REPO/engine/src/qlcconfig.h")
+RELEASE=$(cat "$REPO/VERSION")
 BUILD_DATE=$(date -u '+%Y%m%d')
 GIT_REV=$(git -C "$REPO" rev-parse --short HEAD)
 DIST="$REPO/dist"; mkdir -p "$DIST"
-DMG="$DIST/qlcconsole-${APPVERSION}-${BUILD_DATE}-${GIT_REV}.dmg"
+DMG="$DIST/qlcconsole-${RELEASE}-${FLAVOUR}-${BUILD_DATE}-${GIT_REV}.dmg"
 rm -f "$DMG"
 cd "$REPO/platforms/macos/dmg"
-./create-dmg --volname "qlcconsole ${APPVERSION}" \
+./create-dmg --volname "qlcconsole ${RELEASE}" \
   --volicon "$REPO/resources/icons/qlcconsole.icns" \
   --background background.png \
   --window-size 400 300 \

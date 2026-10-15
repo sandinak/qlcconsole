@@ -63,13 +63,18 @@ xcrun stapler staple "$APP"
 xcrun stapler validate "$APP"
 
 step "6 Rebuild the DMG from the stapled app"
-APPVERSION=$(awk -F\" '/^#define APPVERSION/ {gsub(/ /,"-",$2); print $2}' "$REPO/engine/src/qlcconfig.h")
+# Named as package-local.sh names it: the release, then what it runs on.
+RELEASE=$(cat "$REPO/VERSION")
+case "$(lipo -archs "$APP/Contents/MacOS/qlcconsole")" in
+  *x86_64*arm64*|*arm64*x86_64*) FLAVOUR=universal ;;
+  *) FLAVOUR=$(lipo -archs "$APP/Contents/MacOS/qlcconsole") ;;
+esac
 BUILD_DATE=$(date -u '+%Y%m%d'); GIT_REV=$(git -C "$REPO" rev-parse --short HEAD)
 DIST="$REPO/dist"; mkdir -p "$DIST"
-DMG="$DIST/qlcconsole-${APPVERSION}-${BUILD_DATE}-${GIT_REV}.dmg"
+DMG="$DIST/qlcconsole-${RELEASE}-${FLAVOUR}-${BUILD_DATE}-${GIT_REV}.dmg"
 rm -f "$DMG"
 ( cd "$REPO/platforms/macos/dmg"
-  ./create-dmg --volname "qlcconsole ${APPVERSION}" \
+  ./create-dmg --volname "qlcconsole ${RELEASE}" \
     --volicon "$REPO/resources/icons/qlcconsole.icns" \
     --background background.png --window-size 400 300 --window-pos 200 100 \
     --icon-size 64 --icon "qlcconsole" 0 150 --app-drop-link 200 150 \

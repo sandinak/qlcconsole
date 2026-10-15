@@ -37,7 +37,11 @@ void AboutBox_Test::initial()
     QCOMPARE(ab.m_titleLabel->text(), QString(APPNAME));
 
     QVERIFY(ab.m_versionLabel != NULL);
-    QCOMPARE(ab.m_versionLabel->text(), QString(APPVERSION));
+    QCOMPARE(ab.m_versionLabel->text(), AboutBox::versionText());
+    // The release first, then the build id and the commit it was built from.
+    QVERIFY(ab.m_versionLabel->text().startsWith(QLCCONSOLE_VERSION));
+    QVERIFY(ab.m_versionLabel->text().contains(APPVERSION));
+    QVERIFY(ab.m_versionLabel->text().contains(QLCCONSOLE_GITREV));
 
     QVERIFY(ab.m_copyrightLabel != NULL);
     QVERIFY(ab.m_copyrightLabel->text().contains("by <B>Branson Matheson</B>"));

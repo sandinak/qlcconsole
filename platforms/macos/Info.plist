@@ -12,7 +12,7 @@
 	<string>__QLC_VERSION__</string>
 
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>__QLC_BUILD__</string>
 
 	<key>CFBundleSignature</key>
 	<string>????</string>

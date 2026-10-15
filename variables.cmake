@@ -46,6 +46,29 @@ if(GIT_EXECUTABLE)
 endif()
 set(APPVERSION "${QLC_BASE_VERSION}+qlcconsole.${QLCCONSOLE_REV}")
 
+# The qlcconsole RELEASE -- VERSION at the repo root, bumped once a release
+# (RELEASE.md) -- and the commit it was built from: what the About box,
+# --version and the bundle's Info.plist show. APPVERSION above stays the
+# build id: it is what a saved show records as its creator's version.
+file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/VERSION" QLCCONSOLE_VERSION LIMIT_COUNT 1)
+if(NOT QLCCONSOLE_VERSION)
+    set(QLCCONSOLE_VERSION "0.0.0")
+endif()
+set(QLCCONSOLE_GITREV "unknown")
+if(GIT_EXECUTABLE)
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE _qlcconsole_gitrev
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+        RESULT_VARIABLE _qlcconsole_gitrev_result
+    )
+    if(_qlcconsole_gitrev_result EQUAL 0 AND NOT _qlcconsole_gitrev STREQUAL "")
+        set(QLCCONSOLE_GITREV "${_qlcconsole_gitrev}")
+    endif()
+endif()
+
 if(UNIX)
     set(OLA_GIT "/usr/src/ola") # OLA directories
 endif()

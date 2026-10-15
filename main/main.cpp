@@ -134,7 +134,8 @@ void printVersion()
     QTextStream cout(stdout, QIODevice::WriteOnly);
 
     cout << endl;
-    cout << APPNAME << " " << "version " << APPVERSION << endl;
+    cout << APPNAME << " " << QLCCONSOLE_VERSION << " (build " << APPVERSION
+         << ", " << QLCCONSOLE_GITREV << ")" << endl;
     cout << "This program is licensed under the terms of the ";
     cout << "Apache 2.0 license." << endl;
     cout << "By Branson Matheson" << endl;
