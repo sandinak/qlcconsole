@@ -58,6 +58,8 @@ ArtNetController::ArtNetController(QNetworkInterface const& iface, QNetworkAddre
         m_MACAddress = iface.hardwareAddress();
     }
 
+    m_sendClock.start();
+
     qDebug() << "[ArtNetController] IP Address:" << m_ipAddr.toString() << " Broadcast address:" << m_broadcastAddr.toString() << "(MAC:" << m_MACAddress << ")";
 }
 
@@ -122,7 +124,6 @@ void ArtNetController::addUniverse(quint32 universe, ArtNetController::Type type
         info.outputUniverse = universe;
         info.outputTransmissionMode = Standard;
         info.type = type;
-        info.sendFailures = 0;
         m_universeMap[universe] = info;
     }
 
@@ -276,37 +277,42 @@ UniverseInfo *ArtNetController::getUniverseInfo(quint32 universe)
 /**
  * Report a send result for one universe without flooding the log.
  *
- * A failing output usually fails on every frame -- the interface named by the
- * workspace isn't on this machine, the route is gone -- so warning per send
- * produced thousands of identical lines a minute and hid the one fact that
- * matters: which universe is dark, and why. Warn on the first failure, count
- * the rest, and say so once when it starts working again.
+ * Logs once when the universe starts failing and once when it has recovered,
+ * as decided by ArtNetSendHealth -- not per send (thousands of identical lines
+ * a minute) and not per flip of the per-send result (a target that never
+ * answers ARP alternates, and was reported failing/recovered every ~25 s
+ * while never receiving a thing).
  */
 void ArtNetController::reportSendResult(UniverseInfo &info, quint32 universe,
                                         const QHostAddress &dest, bool ok)
 {
-    if (ok == false)
+    if (ok)
+        m_packetSent++;
+
+    const bool hard = ok == false && ArtNetSendHealth::isHardError(m_udpSocket->error());
+
+    switch (info.sendHealth.record(ok, m_sendClock.elapsed(), hard))
     {
-        info.sendFailures++;
-        if (info.sendFailures == 1)
-        {
+        case ArtNetSendHealth::StartedFailing:
             qWarning() << "[ArtNet] universe" << (universe + 1)
                        << "output to" << dest.toString()
                        << "is failing:" << m_udpSocket->errorString()
                        << "- nothing patched to it will transmit."
-                       << "Further failures on this universe will be counted, not logged.";
-        }
-        return;
+                       << "Further failures on this universe will be counted, not logged;"
+                       << "recovery is reported once sends have succeeded for"
+                       << (ArtNetSendHealth::RecoverAfterMs / 1000) << "s.";
+        break;
+        case ArtNetSendHealth::Recovered:
+            qWarning() << "[ArtNet] universe" << (universe + 1)
+                       << "output to" << dest.toString()
+                       << "recovered: sends have succeeded for"
+                       << (ArtNetSendHealth::RecoverAfterMs / 1000) << "s, after"
+                       << info.sendHealth.failedSends() << "failed sends over"
+                       << (info.sendHealth.failedForMs() / 1000) << "s.";
+        break;
+        case ArtNetSendHealth::NoChange:
+        break;
     }
-
-    if (info.sendFailures > 0)
-    {
-        qWarning() << "[ArtNet] universe" << (universe + 1)
-                   << "output to" << dest.toString() << "recovered after"
-                   << info.sendFailures << "failed sends.";
-        info.sendFailures = 0;
-    }
-    m_packetSent++;
 }
 
 void ArtNetController::slotSendAllUniverses()

@@ -27,10 +27,12 @@
 #include <QUdpSocket>
 #include <QVariant>
 #include <QMutex>
+#include <QElapsedTimer>
 #include <QTimer>
 #include <QMap>
 
 #include "artnetpacketizer.h"
+#include "artnetsendhealth.h"
 
 #define ARTNET_PORT      6454
 
@@ -64,12 +66,14 @@ typedef struct _uinfo
     /** Universe data to be sent depending on the transmission mode */
     QByteArray outputData;
 
-    /** Consecutive failed sends for this universe. A send can fail forever --
-     *  most commonly when the workspace names a bind interface this machine
-     *  doesn't have -- and at DMX rates that produced thousands of identical
-     *  warnings a minute, burying the one line that says which universe is
-     *  dark. Report the first failure and the recovery; count the rest. */
-    quint64 sendFailures;
+    /** Whether sends for this universe are failing, with hysteresis. A send
+     *  can fail forever -- most commonly when the workspace names a bind
+     *  interface this machine doesn't have -- and at DMX rates a warning per
+     *  send produced thousands of identical lines a minute. A target that
+     *  never answers ARP also fails and "succeeds" in turns, which a report
+     *  per state change turned into a fail/recover pair every ~25 s.
+     *  See ArtNetSendHealth for the rules. */
+    ArtNetSendHealth sendHealth;
 } UniverseInfo;
 
 class ArtNetController final : public QObject
@@ -157,8 +161,8 @@ public:
     bool sendRDMCommand(const quint32 universe, uchar command, QVariantList params);
 
 private:
-    /** Log a send failure/recovery for one universe at most once per state
-     *  change, rather than once per frame. See the implementation. */
+    /** Feed one send result to the universe's ArtNetSendHealth and log only
+     *  when its reported state changes. See the implementation. */
     void reportSendResult(UniverseInfo &info, quint32 universe,
                           const QHostAddress &dest, bool ok);
 
@@ -173,6 +177,9 @@ private:
     QHostAddress m_broadcastAddr;
 
     QString m_MACAddress;
+
+    /** Monotonic clock for ArtNetSendHealth */
+    QElapsedTimer m_sendClock;
 
     /** Counter for transmitted packets */
     quint64 m_packetSent;

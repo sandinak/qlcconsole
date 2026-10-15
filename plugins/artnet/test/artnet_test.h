@@ -37,6 +37,17 @@ private slots:
     /* Resolving a saved patch whose exact address no longer matches any
        current line, but whose subnet still does. */
     void lineOnSameSubnetResolvesChangedAddress();
+
+    /* Send failure reporting: ArtNetSendHealth's hysteresis, driven with
+       injected results and times -- no packet leaves the machine. */
+    void sendHealthTransientBurstIsNotReported();
+    void sendHealthSustainedFailureIsReported();
+    void sendHealthHardErrorIsReportedAtOnce();
+    void sendHealthRecoveryClears();
+    void sendHealthAlternatingResultsDoNotToggle();
+    void sendHealthArpFlapIsReportedOnce();
+    void sendHealthHardErrorClassification();
+    void controllerLogsOnlyOnStateChange();
 };
 
 #endif

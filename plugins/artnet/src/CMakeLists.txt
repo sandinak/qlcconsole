@@ -26,6 +26,7 @@ target_sources(${module_name} PRIVATE
     artnetcontroller.cpp artnetcontroller.h
     artnetpacketizer.cpp artnetpacketizer.h
     artnetplugin.cpp artnetplugin.h
+    artnetsendhealth.cpp artnetsendhealth.h
     configureartnet.cpp configureartnet.h configureartnet.ui
 )
 target_include_directories(${module_name} PRIVATE
