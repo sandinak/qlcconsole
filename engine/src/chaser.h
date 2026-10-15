@@ -307,8 +307,16 @@ public:
     void setSubCueHeld(bool held);
     bool isSubCueHeld() const;
 
+    /** About to be started again in this tick, having just been stopped (a
+     *  step's chase whose next step is the same chase): until the new run
+     *  starts, actions are kept for it, and the run being torn down neither
+     *  takes them nor plays. Only when stopped (and not paused), so the
+     *  start is sure to follow; false otherwise. */
+    bool beginRestart();
+
 private:
     bool m_subCueHeld = false;
+    bool m_restarting = false;
 
 public:
 

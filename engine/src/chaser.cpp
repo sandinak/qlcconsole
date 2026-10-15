@@ -657,6 +657,18 @@ void Chaser::setSubCueHeld(bool held)
         m_runner->setSubCueHeld(held);
 }
 
+bool Chaser::beginRestart()
+{
+    QMutexLocker runnerLocker(&m_runnerMutex);
+    // Stopped and not paused: Function::start() will queue the new run
+    // (a paused one would only be resumed), so this can't be left set.
+    if (m_runner == NULL || stopped() == false || isPaused())
+        return false;
+    m_restarting = true;
+    m_startupAction.m_action = ChaserNoAction;
+    return true;
+}
+
 bool Chaser::isSubCueHeld() const
 {
     QMutexLocker runnerLocker(const_cast<QRecursiveMutex*>(&m_runnerMutex));
@@ -842,7 +854,7 @@ void Chaser::tap()
 void Chaser::setAction(ChaserAction &action)
 {
     QMutexLocker runnerLocker(&m_runnerMutex);
-    if (m_runner != NULL)
+    if (m_runner != NULL && !m_restarting)
     {
         m_runner->setAction(action);
     }
@@ -1016,6 +1028,11 @@ void Chaser::write(MasterTimer* timer, QList<Universe *> universes)
     // below must hold it too — not just the m_runner->write() call.
     QMutexLocker runnerLocker(&m_runnerMutex);
 
+    // Being started again this tick: the run being torn down plays no more
+    // (it would take the actions meant for the new one).
+    if (m_restarting)
+        return;
+
     if (isPaused() && m_startupAction.m_action != ChaserPauseRequest)
         return;
 
@@ -1050,6 +1067,8 @@ void Chaser::postRun(MasterTimer* timer, QList<Universe *> universes)
 
         delete m_runner;
         m_runner = NULL;
+        // The new run (if one is starting) takes m_startupAction.
+        m_restarting = false;
     }
 
     Function::postRun(timer, universes);

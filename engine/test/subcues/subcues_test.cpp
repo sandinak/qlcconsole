@@ -333,12 +333,15 @@ void SubCues_Test::subGoWaitsForTheBeat()
     // Just after a beat: the Sub GO waits about a second.
     timer->alignBeat(1.0);
     QTest::qWait(150);
+    // When the next beat is, as asked (a busy machine can sleep long).
+    const double pos = timer->beatPosition();
+    const qint64 toBeat = qint64((std::floor(pos) + 1.0 - pos) * 1000.0);
+    QElapsedTimer t;
+    t.start();
     list->subGo();
     tick(1);
     QCOMPARE(list->currentSubCueIndex(), 0);
-    QVERIFY(list->goHeld());
-    QElapsedTimer t;
-    t.start();
+    QVERIFY(toBeat < 100 || list->goHeld());
     qint64 landed = 0;
     while (t.elapsed() < 2000)
     {
@@ -351,8 +354,9 @@ void SubCues_Test::subGoWaitsForTheBeat()
         QTest::qWait(10);
     }
     QCOMPARE(list->currentSubCueIndex(), 1);
-    QVERIFY2(landed > 600 && landed < 1150,
-             qPrintable(QString("landed %1 ms after the Sub GO, the beat was ~850 away").arg(landed)));
+    QVERIFY2(landed > toBeat - 100 && landed < toBeat + 300,
+             qPrintable(QString("landed %1 ms after the Sub GO, the beat was %2 away")
+                        .arg(landed).arg(toBeat)));
     QVERIFY(!list->goHeld());
 
     // A GO asked while a Sub GO waits waits for the beat too (and takes
@@ -528,6 +532,64 @@ void SubCues_Test::subCuesAreSavedOnlyWhenSubGo()
 
     QCOMPARE(ChaserStep::stringToSubCueMode("SubGo"), ChaserStep::SubGo);
     QCOMPARE(ChaserStep::stringToSubCueMode("anything"), ChaserStep::Auto);
+}
+
+/* Two cues in a row whose steps are the same chase: GO from one to the
+   next stops and restarts that chase in one tick. The start on the first
+   sub-cue (and a jump's sub-cue) must reach the runner that plays, not
+   the one being torn down. Random run order: its natural first step is
+   anywhere, so only the hand-over lands on the first sub-cue. */
+void SubCues_Test::consecutiveCuesOnOneChaseStartWhereAsked()
+{
+    Chaser *inner = makeInner(10);
+    inner->setRunOrder(Function::Random);
+    Chaser *list = new Chaser(m_doc);
+    list->setDurationMode(Chaser::Common);
+    list->setDuration(Function::infiniteSpeed());
+    m_doc->addFunction(list);
+    for (int i = 0; i < 6; ++i)
+    {
+        ChaserStep step(inner->id());
+        step.subCues = ChaserStep::SubGo;
+        list->addStep(step);
+    }
+
+    go(list);
+    tick();
+    QCOMPARE(list->currentStepIndex(), 0);
+    QCOMPARE(list->currentSubCueIndex(), 0);
+    for (int cue = 1; cue < 6; ++cue)
+    {
+        list->subGo();
+        tick(1);
+        list->subGo();
+        tick(1);
+        QCOMPARE(list->currentSubCueIndex(), 2);
+
+        // GO: the next cue, the same chase, from its first sub-cue.
+        go(list);
+        tick(1);
+        QCOMPARE(list->currentStepIndex(), cue);
+        QVERIFY(inner->isSubCueHeld());
+        QCOMPARE(list->currentSubCueIndex(), 0);
+        tick(10);
+        QCOMPARE(list->currentSubCueIndex(), 0);         // and held there
+    }
+
+    // A jump from one cue's sub-cue into the next cue's 2nd sub-cue.
+    list->jumpToSubCue(0, 3);
+    tick(1);
+    QCOMPARE(list->currentStepIndex(), 0);
+    QCOMPARE(list->currentSubCueIndex(), 3);
+    for (int cue = 1; cue < 6; ++cue)
+    {
+        list->jumpToSubCue(cue, 1);
+        tick(1);
+        QCOMPARE(list->currentStepIndex(), cue);
+        QCOMPARE(list->currentSubCueIndex(), 1);
+        tick(10);
+        QCOMPARE(list->currentSubCueIndex(), 1);
+    }
 }
 
 QTEST_MAIN(SubCues_Test)

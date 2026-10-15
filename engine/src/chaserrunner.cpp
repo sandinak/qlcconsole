@@ -715,6 +715,9 @@ void ChaserRunner::startNewStep(int index, MasterTimer *timer, qreal mIntensity,
     if (inner != NULL)
     {
         newStep->m_subCues = true;
+        // Just stopped by the step before (the same chase): its next run
+        // gets what's asked here, not the run being torn down.
+        inner->beginRestart();
         inner->setSubCueHeld(true);
         ChaserAction first;
         first.m_action = ChaserSetStepIndex;
