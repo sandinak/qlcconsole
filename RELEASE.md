@@ -25,8 +25,10 @@ A release's notes should mention both.
 
 ## Cutting a release
 
-Prerequisites (one-time, per machine that releases -- **not yet done on
-`ender`**, as of 2026-10-15: it has only an Apple Development certificate):
+Prerequisites (one-time, per machine that releases; done on `ender`
+2026-10-15 -- a Developer ID certificate made in Xcode → Settings → Accounts →
+Manage Certificates, and `xcrun notarytool store-credentials qlc-notary
+--apple-id <Apple ID> --team-id B4N7HJ7VZ6` with an app-specific password):
 - A **Developer ID Application** certificate in your login keychain.
 - A `notarytool` keychain profile named `qlc-notary` (see
   `platforms/macos/sign-notarize.sh` for how it's used;
