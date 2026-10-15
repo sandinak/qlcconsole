@@ -6,6 +6,24 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-15 — Linux: a test gate that can't skip quietly, and the app icon *(feat/linux-gate-icon)*
+
+- **Test gate counts what it ran** (`platforms/linux/unittest.sh`). The
+  headless-Linux skip (`pidof X` gate; 0 of 52 UI programs run, "Unit tests
+  passed") was closed 2026-08-26; now the runner also prints "Test programs
+  run: 82 engine, 52 of 52 UI (platform: …)" and fails if a group ran none.
+  A caller's `QT_QPA_PLATFORM` wins (cocoa really shows the tests on macOS);
+  CI stays on minimal + xvfb-run, which now exits 1 if xvfb-run is missing.
+- **monitor_test under QPA minimal**: one test read a tree row a queued
+  rebuild had deleted (failed, or SIGSEGV); it settles the panel first.
+- **App icon on Linux**: `desktopFileName` set ("qlcconsole",
+  "qlcconsole-fixtureeditor") so Wayland's app_id matches the .desktop file
+  (it was "org.qlcplus.qlcconsole"); hicolor 16..256 PNGs + scalable SVG
+  installed (`resources/icons/hicolor/render.sh`), cache refreshed on a
+  direct install; the window icon is app-wide at every size (not on macOS:
+  it would replace the .icns in the Dock). `StartupWMClass` in both
+  .desktop files.
+
 ### 2026-10-15 — Release prep: 0.1.0 labels, universal build, kronk fixes *(on release/0.1.0)*
 
 - **Version shown is the release** (VERSION): About box (build id + commit
