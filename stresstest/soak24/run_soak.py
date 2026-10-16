@@ -68,6 +68,37 @@ stresstest/soak24 next to stresstest/driver):
 
     The tasks stay registered (schtasks /Delete /TN qlcsoak-app /F, and
     qlcsoak-runner, removes them).
+
+Linux
+-----
+For a headless box or a container (Python 3.9 or later, same layout):
+
+  * The app is a build tree's binary (--linux-exe, default
+    /build/linux/main/qlcconsole), started by the runner with LD_LIBRARY_PATH
+    pointing at the build's engine/ui/webaccess libraries, QLC_TICKLOG,
+    QLC_NO_RECOVERY_PROMPT and QT_FORCE_STDERR_LOGGING set, -d 1 -w -wp PORT,
+    its stdout/stderr to the phase's app-N.log, in a session of its own, with
+    the phase folder as its working directory (a core file lands there).
+  * It draws on a virtual display: one Xvfb (:99 or the next free number,
+    1920x1080x24) is started for the whole run, QT_QPA_PLATFORM=xcb, and
+    stopped at the end.
+  * Samples: CPU % from /proc/PID/stat over the interval (100 = one core; ps
+    would give the average since the start), rss from ps, threads from
+    /proc/PID/status, and after the columns macOS has: private_mb
+    (Private_Clean + Private_Dirty of /proc/PID/smaps_rollup: the leak signal)
+    and fds (open file descriptors).
+  * Stop: SIGTERM, SIGKILL after 10 s. A crash: the exit status or signal,
+    and a core file in the phase folder or the coredumpctl entry, when the
+    system keeps them (nothing is changed to make it). A hang: gdb's
+    "thread apply all bt" if gdb is installed, else only noted.
+  * The untitled autosave is ~/.qlcconsole/untitled.qxw.autosave.
+  * The shows are stripped of their <Output> patches by default, as on
+    Windows: a soak box must never send DMX.
+  * --detach starts the runner again under setsid nohup, its output to
+    DIR/runner.log, and returns; --stop (or DIR/STOP) ends it:
+
+      python3 run_soak.py --show S.qlcc --scaled-show S-STRESS.qlcc --out DIR --detach
+      python3 run_soak.py --out DIR --stop
 """
 import argparse
 import csv
@@ -88,6 +119,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 from wsclient import WSClient, WSError  # noqa: E402
 
 WIN = sys.platform == "win32"
+LINUX = sys.platform.startswith("linux")
+MAC = not WIN and not LINUX
 # --heap-track (macOS): the app runs with MallocStackLogging=lite, and the
 # phase folder gets a heap summary and a vmmap summary 10 minutes in and then
 # every hour -- diff two of them to see what grew.
@@ -96,6 +129,9 @@ if WIN:
     EXE = r"C:\qlcconsole\qlcconsole.exe"        # --win-exe
     UNTITLED_AUTOSAVE = os.path.join(os.environ.get("USERPROFILE", os.path.expanduser("~")),
                                      "qlcconsole", "untitled.qxw.autosave")
+elif LINUX:
+    EXE = "/build/linux/main/qlcconsole"          # --linux-exe
+    UNTITLED_AUTOSAVE = os.path.expanduser("~/.qlcconsole/untitled.qxw.autosave")
 else:
     APP = "/Applications/qlcconsole.app"
     EXE = APP + "/Contents/MacOS/qlcconsole"
@@ -133,7 +169,8 @@ class Run:
             self.csv.writerow(["time", "phase", "elapsed_s", "pid", "cpu_pct", "rss_mb",
                                "threads", "answers", "ticks_over", "tick_mean_ms",
                                "tick_max_ms", "overrun_pct", "running_note"]
-                              + (["private_mb", "handles"] if WIN else []))
+                              + (["private_mb", "handles"] if WIN else [])
+                              + (["private_mb", "fds"] if LINUX else []))
 
     def event(self, phase, msg):
         line = "%s [%s] %s" % (now(), phase, msg)
@@ -405,6 +442,187 @@ if WIN:
         return "dump: %s" % dst
 
 
+# ---- the app on Linux ----------------------------------------------------------
+
+_lx_children = {}       # pid -> Popen: the app is the runner's child (exit status)
+_lx_cpu_prev = {}       # pid -> (wall time, CPU seconds) at the last sample
+_xvfb = {"proc": None, "display": None}
+
+
+def _lx_start_xvfb(run):
+    """One virtual display for the whole run: Xvfb on :99 or the next free."""
+    n = 99
+    while os.path.exists("/tmp/.X%d-lock" % n) or os.path.exists("/tmp/.X11-unix/X%d" % n):
+        n += 1
+    log = open(os.path.join(run.out, "xvfb.log"), "ab")
+    p = subprocess.Popen(["Xvfb", ":%d" % n, "-screen", "0", "1920x1080x24", "-nolisten", "tcp"],
+                         stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
+                         start_new_session=True)
+    for _ in range(100):
+        if os.path.exists("/tmp/.X11-unix/X%d" % n) or p.poll() is not None:
+            break
+        time.sleep(0.1)
+    if p.poll() is not None:
+        sys.exit("Xvfb :%d did not start (exit %s): see %s" % (n, p.returncode, log.name))
+    _xvfb.update(proc=p, display=":%d" % n)
+    run.event("soak", "Xvfb :%d up (pid %d)" % (n, p.pid))
+
+
+def _lx_stop_xvfb(run):
+    p = _xvfb["proc"]
+    if p is None:
+        return
+    p.terminate()
+    try:
+        p.wait(10)
+    except subprocess.TimeoutExpired:
+        p.kill()
+        p.wait()
+    run.event("soak", "Xvfb %s stopped" % _xvfb["display"])
+    _xvfb["proc"] = None
+
+
+def _lx_lib_path():
+    """The build tree's own libraries (what ui/test/*/test.sh points at)."""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(EXE)))
+    dirs = [os.path.join(root, d) for d in ("engine/src", "ui/src", "webaccess/src",
+                                            "engine/audio/src", "hotplugmonitor/src")]
+    return ":".join([d for d in dirs if os.path.isdir(d)]
+                    + [p for p in os.environ.get("LD_LIBRARY_PATH", "").split(":") if p])
+
+
+def _lx_start_app(port, log_path, ticklog):
+    env = dict(os.environ, QLC_TICKLOG=str(ticklog), QLC_NO_RECOVERY_PROMPT="1",
+               QT_FORCE_STDERR_LOGGING="1", QT_QPA_PLATFORM="xcb",
+               DISPLAY=_xvfb["display"] or os.environ.get("DISPLAY", ""),
+               LD_LIBRARY_PATH=_lx_lib_path())
+    with open(log_path, "wb") as logf:
+        try:
+            p = subprocess.Popen([EXE, "-d", "1", "-w", "-wp", str(port)],
+                                 cwd=os.path.dirname(os.path.abspath(log_path)), env=env,
+                                 stdin=subprocess.DEVNULL, stdout=logf,
+                                 stderr=subprocess.STDOUT, start_new_session=True)
+        except OSError as e:
+            START_ERROR[0] = str(e)
+            return None
+    _lx_children[p.pid] = p
+    return p.pid
+
+
+def _lx_exit(pid):
+    """How the app ended: 'exit status N', 'signal SIGSEGV', or None (running)."""
+    p = _lx_children.get(pid)
+    if p is None:
+        return None
+    try:
+        rc = p.wait(5)
+    except subprocess.TimeoutExpired:
+        return None
+    _lx_children.pop(pid, None)
+    _lx_cpu_prev.pop(pid, None)
+    if rc < 0:
+        try:
+            return "signal %s" % signal.Signals(-rc).name
+        except ValueError:
+            return "signal %d" % -rc
+    return "exit status %d" % rc
+
+
+def _lx_stop_app(pid):
+    """SIGTERM, SIGKILL after 10 s."""
+    if pid not in _lx_children and pid not in app_pids():
+        return "already gone"
+    how = "terminated"
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        how = "already gone"
+    for _ in range(40):
+        time.sleep(0.25)
+        if pid not in app_pids():
+            break
+    else:
+        how = "killed (SIGKILL)"
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    return "%s, %s" % (how, _lx_exit(pid))
+
+
+def _lx_ps(pid):
+    """CPU %, rss MB, threads, private MB, fds."""
+    proc = "/proc/%d" % pid
+    try:
+        with open(proc + "/stat") as f:
+            st = f.read().rsplit(")", 1)[1].split()
+        tck = os.sysconf("SC_CLK_TCK")
+        busy = (int(st[11]) + int(st[12])) / tck        # utime + stime
+        wall = time.time()
+        prev = _lx_cpu_prev.get(pid)
+        if prev is None:                                # the first: since the start
+            with open("/proc/stat") as f:
+                btime = int(re.search(r"^btime (\d+)", f.read(), re.M).group(1))
+            prev = (btime + int(st[19]) / tck, 0.0)
+        cpu = round(100.0 * (busy - prev[1]) / (wall - prev[0]), 1) if wall > prev[0] else None
+        _lx_cpu_prev[pid] = (wall, busy)
+        out = subprocess.check_output(["ps", "-o", "rss=", "-p", str(pid)],
+                                      stderr=subprocess.DEVNULL, text=True).split()
+        rss = float(out[0]) / 1024.0
+        with open(proc + "/status") as f:
+            th = int(re.search(r"^Threads:\s*(\d+)", f.read(), re.M).group(1))
+        priv = 0
+        with open(proc + "/smaps_rollup") as f:
+            for ln in f:
+                if ln.startswith(("Private_Clean:", "Private_Dirty:")):
+                    priv += int(ln.split()[1])
+        fds = len(os.listdir(proc + "/fd"))
+        return cpu, rss, th, priv / 1024.0, fds
+    except (OSError, subprocess.CalledProcessError, IndexError, ValueError, AttributeError):
+        return None, None, None, None, None
+
+
+def _lx_crash_reports(pid, since, phase_dir):
+    """A core file in the phase folder (the app's working directory), or what
+    coredumpctl kept, when the system keeps cores at all."""
+    time.sleep(3)
+    saved = [p for p in glob.glob(os.path.join(phase_dir, "core*"))
+             if os.path.getmtime(p) >= since]
+    try:
+        with open("/proc/sys/kernel/core_pattern") as f:
+            pattern = f.read().strip()
+    except OSError:
+        pattern = "?"
+    if pattern.startswith("|") and shutil.which("coredumpctl"):
+        r = subprocess.run(["coredumpctl", "info", str(pid)], capture_output=True, text=True)
+        if r.returncode == 0 and r.stdout.strip():
+            dst = os.path.join(phase_dir, "coredump-%d.txt" % pid)
+            with open(dst, "w") as f:
+                f.write(r.stdout)
+            saved.append(dst)
+    if not saved:
+        import resource
+        soft = resource.getrlimit(resource.RLIMIT_CORE)[0]
+        saved.append("no core (core_pattern %r, ulimit -c %s)"
+                     % (pattern, "unlimited" if soft == resource.RLIM_INFINITY else soft))
+    return saved
+
+
+def _lx_hang_stack(pid, phase_dir):
+    gdb = shutil.which("gdb")
+    if not gdb:
+        return "no gdb installed: no stack"
+    dst = os.path.join(phase_dir, "hang-%d.txt" % int(time.time()))
+    try:
+        r = subprocess.run([gdb, "-p", str(pid), "-batch", "-ex", "thread apply all bt"],
+                           capture_output=True, text=True, timeout=300)
+        with open(dst, "w") as f:
+            f.write(r.stdout + r.stderr)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return "gdb failed: %s" % e
+    return "stack: %s" % dst
+
+
 def strip_outputs(src, dst):
     """A copy of the show without its <Output> patches: it drives no lights."""
     with open(src, encoding="utf-8", newline="") as f:
@@ -429,6 +647,8 @@ def app_pids():
 def start_app(port, log_path, ticklog):
     if WIN:
         return _win_start_app(port, log_path, ticklog)
+    if LINUX:
+        return _lx_start_app(port, log_path, ticklog)
     # -d 1: warnings and up reach the log (the tick log is warnings; the app
     # shows only criticals otherwise). No recovery prompt on screen between
     # launches: the run's own autosave is not the user's work.
@@ -451,6 +671,8 @@ def stop_app(pid):
         return
     if WIN:
         return _win_stop_app(pid)
+    if LINUX:
+        return _lx_stop_app(pid)
     try:
         os.kill(pid, signal.SIGTERM)
     except ProcessLookupError:
@@ -528,6 +750,8 @@ def functions(ws):
 def ps(pid):
     if WIN:
         return _win_ps(pid)[:3]
+    if LINUX:
+        return _lx_ps(pid)[:3]
     try:
         out = subprocess.check_output(["ps", "-o", "pcpu=,rss=", "-p", str(pid)],
                                       stderr=subprocess.DEVNULL, text=True).split()
@@ -651,6 +875,10 @@ def run_phase(run, name, show, hours, port, ticklog, sample_s, rng):
         stats.update({"private_first": None, "private_peak": 0.0, "private_last": None,
                       "handles_first": None, "handles_peak": 0, "handles_last": None,
                       "exit_codes": []})
+    if LINUX:   # private (USS) is the leak signal; fds as Windows' handles
+        stats.update({"private_first": None, "private_peak": 0.0, "private_last": None,
+                      "fds_first": None, "fds_peak": 0, "fds_last": None,
+                      "exit_codes": []})
     launch = 0
     while not stopping() and time.time() < end:
         launch += 1
@@ -690,6 +918,11 @@ def run_phase(run, name, show, hours, port, ticklog, sample_s, rng):
                     stats["exit_codes"].append(code)
                     run.event(name, "CRASH: pid %d gone, exit code %s; reports: %s"
                               % (pid, code, _win_crash_reports(pid, t0, phase_dir)))
+                elif LINUX:
+                    code = _lx_exit(pid)
+                    stats["exit_codes"].append(code)
+                    run.event(name, "CRASH: pid %d gone, %s; reports: %s"
+                              % (pid, code, _lx_crash_reports(pid, t0, phase_dir)))
                 else:
                     run.event(name, "CRASH: pid %d gone; reports: %s" % (pid, newest_crash(t0)))
                 break
@@ -710,7 +943,7 @@ def run_phase(run, name, show, hours, port, ticklog, sample_s, rng):
                 ws = connect_ws(port, tries=20)
                 if ws:
                     drv.ws = ws
-            if HEAP_TRACK and not WIN and time.time() >= next_heap:
+            if HEAP_TRACK and MAC and time.time() >= next_heap:
                 next_heap = time.time() + 3600
                 stamp = "%s-%05d" % (launch, int(time.time() - started))
                 for tool, args in (("heap", ["heap", "-s", str(pid)]),
@@ -726,6 +959,8 @@ def run_phase(run, name, show, hours, port, ticklog, sample_s, rng):
                 next_sample += sample_s
                 if WIN:
                     cpu, rss, th, priv, handles = _win_ps(pid)
+                elif LINUX:
+                    cpu, rss, th, priv, handles = _lx_ps(pid)
                 else:
                     cpu, rss, th = ps(pid)
                 try:
@@ -756,15 +991,16 @@ def run_phase(run, name, show, hours, port, ticklog, sample_s, rng):
                        None if rss is None else round(rss, 1), th, int(answers), over,
                        summ[0] if summ else "", summ[1] if summ else "",
                        summ[2] if summ else "", len(drv.on)]
-                if WIN:
+                if WIN or LINUX:
+                    hk = "handles" if WIN else "fds"
                     if priv is not None:
                         stats["private_first"] = stats["private_first"] or round(priv, 1)
                         stats["private_peak"] = max(stats["private_peak"], round(priv, 1))
                         stats["private_last"] = round(priv, 1)
                     if handles is not None:
-                        stats["handles_first"] = stats["handles_first"] or handles
-                        stats["handles_peak"] = max(stats["handles_peak"], handles)
-                        stats["handles_last"] = handles
+                        stats[hk + "_first"] = stats[hk + "_first"] or handles
+                        stats[hk + "_peak"] = max(stats[hk + "_peak"], handles)
+                        stats[hk + "_last"] = handles
                     row += [None if priv is None else round(priv, 1), handles]
                 run.csv.writerow(row)
                 if misses >= 3:
@@ -772,6 +1008,10 @@ def run_phase(run, name, show, hours, port, ticklog, sample_s, rng):
                     if WIN:
                         run.event(name, "HANG: no answer for 3 samples; %s"
                                   % _win_hang_dump(pid, phase_dir))
+                        run.event(name, "stopped: %s" % stop_app(pid))
+                    elif LINUX:
+                        run.event(name, "HANG: no answer for 3 samples; %s"
+                                  % _lx_hang_stack(pid, phase_dir))
                         run.event(name, "stopped: %s" % stop_app(pid))
                     else:
                         run.event(name, "HANG: no answer for 3 samples; sampling the stack")
@@ -782,7 +1022,7 @@ def run_phase(run, name, show, hours, port, ticklog, sample_s, rng):
                     break
             time.sleep(3)
         how = stop_app(pid)
-        if WIN and how:
+        if (WIN or LINUX) and how:
             run.event(name, "stopped: %s" % how)
         if os.path.exists(UNTITLED_AUTOSAVE):
             os.remove(UNTITLED_AUTOSAVE)        # this run's, never the user's (set aside)
@@ -833,6 +1073,26 @@ def detach(a):
     print("  stop:     %s %s --out \"%s\" --stop" % (sys.executable, script, out))
 
 
+def detach_linux(a):
+    """Linux: the same run again under setsid nohup, past the end of the
+    shell (or the podman exec) that started it; its output to DIR/runner.log."""
+    out = os.path.abspath(a.out)
+    os.makedirs(out, exist_ok=True)
+    script = os.path.abspath(__file__)
+    args = [sys.executable, script, "--show", os.path.abspath(a.show),
+            "--scaled-show", os.path.abspath(a.scaled_show), "--out", out,
+            "--hours", repr(a.hours), "--phases", a.phases, "--port", str(a.port),
+            "--ticklog", str(a.ticklog), "--sample", str(a.sample), "--seed", str(a.seed),
+            "--linux-exe", os.path.abspath(a.linux_exe)] \
+        + ([] if a.strip_outputs else ["--keep-outputs"])
+    log = open(os.path.join(out, "runner.log"), "ab")
+    p = subprocess.Popen(["setsid", "nohup"] + args, cwd=os.path.dirname(script),
+                         stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
+    print("soak started under setsid nohup (pid %d)" % p.pid)
+    print("  progress: %s" % os.path.join(out, "events.log"))
+    print("  stop:     %s %s --out %s --stop" % (sys.executable, script, out))
+
+
 def ask_stop(out):
     """Ask a running soak to stop (DIR/STOP) and wait for it to finish."""
     with open(os.path.join(out, "STOP"), "w") as f:
@@ -849,8 +1109,8 @@ def ask_stop(out):
             print(last[0])
             return
         time.sleep(1)
-    sys.exit("no 'finished' in %s after 2 min: is the runner alive? (if not: "
-             "taskkill /IM qlcconsole.exe)" % events)
+    sys.exit("no 'finished' in %s after 2 min: is the runner alive? (if not: %s)"
+             % (events, "taskkill /IM qlcconsole.exe" if WIN else "pkill -f " + EXE))
 
 
 def main():
@@ -865,8 +1125,9 @@ def main():
     ap.add_argument("--ticklog", type=int, default=500)
     ap.add_argument("--sample", type=int, default=30)
     ap.add_argument("--seed", type=int, default=24)
-    ap.add_argument("--strip-outputs", action="store_true", default=WIN,
-                    help="run copies of the shows without <Output> patches (default on Windows)")
+    ap.add_argument("--strip-outputs", action="store_true", default=WIN or LINUX,
+                    help="run copies of the shows without <Output> patches "
+                         "(default on Windows and Linux)")
     ap.add_argument("--keep-outputs", dest="strip_outputs", action="store_false",
                     help="run the shows as they are, outputs and all")
     ap.add_argument("--stop", action="store_true", help="ask the soak in --out to stop")
@@ -879,6 +1140,10 @@ def main():
                              "direct: started by the runner, in its own session")
         ap.add_argument("--detach", action="store_true",
                         help="run through a scheduled task, past the end of the SSH session")
+    if LINUX:
+        ap.add_argument("--linux-exe", default=EXE, help="the app binary (a build tree's)")
+        ap.add_argument("--detach", action="store_true",
+                        help="run under setsid nohup, past the end of the shell")
     a = ap.parse_args()
     global HEAP_TRACK
     HEAP_TRACK = a.heap_track
@@ -890,12 +1155,17 @@ def main():
         ap.error("--show and --scaled-show are needed")
     if WIN:
         EXE, WIN_LAUNCH = a.win_exe, a.win_launch
+    if LINUX:
+        EXE = os.path.abspath(a.linux_exe)
     STOP_FILE = os.path.join(a.out, "STOP")
 
     if app_pids():
         sys.exit("qlcconsole is already running: quit it first (this run starts its own)")
     if WIN and a.detach:
         detach(a)
+        return
+    if LINUX and a.detach:
+        detach_linux(a)
         return
     if os.path.exists(STOP_FILE):
         os.remove(STOP_FILE)                     # from a run before
@@ -925,11 +1195,18 @@ def main():
             run.event("soak", "%s: %d output patches removed -> %s" % (src, n, dst))
             shows = {k: (dst if v == src else v) for k, v in shows.items()}
     run.event("soak", "start: phases %s, %.1f h each" % (a.phases, a.hours))
+    if LINUX:
+        _lx_start_xvfb(run)
     results = []
-    for name in a.phases.split(","):
-        if stopping():
-            break
-        results.append(run_phase(run, name, shows[name], a.hours, a.port, a.ticklog, a.sample, rng))
+    try:
+        for name in a.phases.split(","):
+            if stopping():
+                break
+            results.append(run_phase(run, name, shows[name], a.hours, a.port, a.ticklog,
+                                     a.sample, rng))
+    finally:
+        if LINUX:
+            _lx_stop_xvfb(run)
     json.dump(results, open(os.path.join(a.out, "summary.json"), "w"), indent=2)
     if os.path.exists(kept):
         shutil.move(kept, UNTITLED_AUTOSAVE)
