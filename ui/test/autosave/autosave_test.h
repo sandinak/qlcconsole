@@ -21,6 +21,7 @@
 #define AUTOSAVE_TEST_H
 
 #include <QObject>
+#include <QTemporaryDir>
 
 class App;
 
@@ -42,6 +43,10 @@ private slots:
 
 private:
     App *m_app;
+    /** A home and a settings file of the test's own: App reads and writes
+     *  both, and the real ones are the user's. */
+    QTemporaryDir m_home;
+    QByteArray m_realHome;
 };
 
 #endif
