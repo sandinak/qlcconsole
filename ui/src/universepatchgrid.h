@@ -53,7 +53,10 @@ class UniversePatchGrid : public QWidget
 public:
     UniversePatchGrid(Doc *doc, QWidget *parent = nullptr);
 
-    /** Rebuild every row from the current InputOutputMap state. */
+public slots:
+    /** Rebuild every row from the current InputOutputMap state. A slot: a
+     *  universe added or removed reloads it (SIGNAL/SLOT by name — a plain
+     *  method there only logged "No such slot" and the grid went stale). */
     void reload();
 
 private slots:

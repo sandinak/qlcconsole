@@ -75,6 +75,25 @@ if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
 fi
 
 # How many test programs actually ran, per group -- checked at the end.
+# Run one test's test.sh. A connection to a slot or signal that doesn't
+# exist only logs "No such slot"/"No such signal" and the feature it was for
+# silently does nothing (the Studio's Add Target/Copy/Paste, the patch grid,
+# the Function Manager's actions all did, for weeks): such a log fails the test.
+run_test()
+{
+    local out rc
+    out=$(mktemp)
+    eval $TESTPREFIX ./test.sh 2>&1 | tee "$out"
+    rc=${PIPESTATUS[0]}
+    if grep -qE "No such (slot|signal)" "$out"; then
+        echo "*** A broken signal/slot connection was logged:"
+        grep -E "No such (slot|signal)" "$out" | sort | uniq -c
+        [ "$rc" -eq 0 ] && rc=1
+    fi
+    rm -f "$out"
+    return $rc
+}
+
 ENGINE_RAN=0
 UI_RAN=0
 UI_EXPECTED=0
@@ -117,7 +136,7 @@ do
     # Execute the test
     pushd ${TESTDIR}/${test}
     echo "$TESTPREFIX ./test.sh"
-    eval $TESTPREFIX ./test.sh
+    run_test
     RESULT=${?}
     popd
     if [ ${RESULT} != 0 ]; then
@@ -163,7 +182,7 @@ do
     # <name>_test.app/Contents/MacOS/<name>_test bundle path vs. a plain
     # executable — the old bare "./${test}_test" here didn't).
     pushd ${TESTDIR}/${test}
-    eval $TESTPREFIX ./test.sh
+    run_test
     RESULT=${?}
     popd
     if [ ${RESULT} != 0 ]; then
@@ -181,7 +200,7 @@ fi
 
 $SLEEPCMD
 pushd plugins/enttecwing/test
-eval $TESTPREFIX ./test.sh
+run_test
 RESULT=$?
 if [ $RESULT != 0 ]; then
 	echo "${RESULT} Enttec wing unit tests failed. Please fix before commit."
@@ -200,7 +219,7 @@ elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
 else
   $SLEEPCMD
   pushd plugins/velleman/test
-  eval $TESTPREFIX ./test.sh
+  run_test
   RESULT=$?
   if [ $RESULT != 0 ]; then
     echo "Velleman unit test failed ($RESULT). Please fix before commit."
@@ -215,7 +234,7 @@ fi
 
 $SLEEPCMD
 pushd plugins/midi/test
-eval $TESTPREFIX ./test.sh
+run_test
 RESULT=$?
 if [ $RESULT != 0 ]; then
 	echo "${RESULT} MIDI unit tests failed. Please fix before commit."
@@ -229,7 +248,7 @@ popd
 
 $SLEEPCMD
 pushd plugins/artnet/test
-eval $TESTPREFIX ./test.sh
+run_test
 RESULT=$?
 if [ $RESULT != 0 ]; then
 	echo "${RESULT} ArtNet unit tests failed. Please fix before commit."
@@ -243,7 +262,7 @@ popd
 
 $SLEEPCMD
 pushd plugins/E1.31/test
-eval $TESTPREFIX ./test.sh
+run_test
 RESULT=$?
 if [ $RESULT != 0 ]; then
 	echo "${RESULT} E1.31 unit tests failed. Please fix before commit."
@@ -257,7 +276,7 @@ popd
 
 $SLEEPCMD
 pushd plugins/wled/test
-eval $TESTPREFIX ./test.sh
+run_test
 RESULT=$?
 if [ $RESULT != 0 ]; then
 	echo "${RESULT} WLED unit tests failed. Please fix before commit."
