@@ -27,6 +27,7 @@
 #include <QDir>
 
 #include <memory>
+#include "qlcengine_export.h"
 
 class QXmlStreamReader;
 class QXmlStreamWriter;
@@ -58,7 +59,7 @@ class Doc;
  * computer's; closing the show (Doc::clearContents()) puts this computer's
  * back. Saving embeds the version in use -- never quietly this computer's.
  */
-class ShowEmbedding final : public QObject
+class QLC_ENGINE_EXPORT ShowEmbedding final : public QObject
 {
     Q_OBJECT
 
