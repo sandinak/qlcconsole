@@ -38,6 +38,7 @@ private slots:
     void replaceAllSwapsTheWholeSet();
     void aFaderRebuiltEveryTickIsNeverSeenEmpty();
     void aChannelBeingSetUpStaysPutWhileTheUniverseWrites();
+    void aFaderLeavesNothingBehind();
     void writeLoop();
     void adjustIntensity();
 

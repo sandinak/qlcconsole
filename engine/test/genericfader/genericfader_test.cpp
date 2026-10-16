@@ -20,6 +20,9 @@
 #include <QtTest>
 #include <QThread>
 #include <atomic>
+#if defined(Q_OS_WIN)
+#include <windows.h>
+#endif
 
 #include "genericfader_test.h"
 #include "qlcfixturemode.h"
@@ -354,6 +357,43 @@ void GenericFader_Test::aChannelBeingSetUpStaysPutWhileTheUniverseWrites()
     delete universe;
 
     QCOMPARE(moved, 0);
+}
+
+/* Faders are made and dropped all the time -- a scene asks for one per
+   universe each time it starts. With the channel lock a std::recursive_mutex
+   under MinGW, each one left a kernel Event (and a heap block) behind:
+   libstdc++ never destroys that mutex, and winpthreads makes both on its
+   first lock. A stress show leaked ~5000 handles a second. The handle count
+   is Windows' to give; elsewhere this just churns faders. */
+void GenericFader_Test::aFaderLeavesNothingBehind()
+{
+    QList<Universe*> ua = m_doc->inputOutputMap()->universes();
+    QVERIFY(ua.count() > 0);
+    Universe *uni = ua.at(0);
+
+    auto churn = [&](int n) {
+        for (int i = 0; i < n; ++i)
+        {
+            QSharedPointer<GenericFader> fader(new GenericFader());
+            {
+                GenericFader::ChannelRef fc = fader->getChannelFader(m_doc, uni, Fixture::invalidId(), 100);
+                fc->setTarget(uchar(i));
+            }
+            fader->write(uni);   // the universe thread's lock, too
+        }
+    };
+
+    churn(100);   // whatever is made once, on first use
+#if defined(Q_OS_WIN)
+    DWORD before = 0, after = 0;
+    QVERIFY(GetProcessHandleCount(GetCurrentProcess(), &before));
+#endif
+    churn(5000);
+#if defined(Q_OS_WIN)
+    QVERIFY(GetProcessHandleCount(GetCurrentProcess(), &after));
+    QVERIFY2(after < before + 100,
+             qPrintable(QString("handles %1 -> %2 over 5000 faders").arg(before).arg(after)));
+#endif
 }
 
 QTEST_APPLESS_MAIN(GenericFader_Test)
