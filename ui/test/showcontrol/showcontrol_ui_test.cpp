@@ -83,7 +83,9 @@ void ShowControlUi_Test::initTestCase()
     // looks for user scripts and fixtures under $HOME).
     QVERIFY(m_settingsDir.isValid());
     m_realHome = qgetenv("HOME");
+    m_realProfile = qgetenv("USERPROFILE");
     qputenv("HOME", m_settingsDir.path().toUtf8());
+    qputenv("USERPROFILE", m_settingsDir.path().toUtf8());   // Windows' user folder
     QCoreApplication::setOrganizationName(QStringLiteral("qlcconsole-test"));
     QCoreApplication::setApplicationName(QStringLiteral("showcontrol_ui_test"));
     QSettings::setDefaultFormat(QSettings::IniFormat);
@@ -94,6 +96,10 @@ void ShowControlUi_Test::initTestCase()
 void ShowControlUi_Test::cleanupTestCase()
 {
     qputenv("HOME", m_realHome);
+    if (m_realProfile.isEmpty())
+        qunsetenv("USERPROFILE");
+    else
+        qputenv("USERPROFILE", m_realProfile);
 }
 
 void ShowControlUi_Test::init()
