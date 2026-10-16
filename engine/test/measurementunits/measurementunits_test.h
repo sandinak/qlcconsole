@@ -51,6 +51,8 @@ private slots:
 
     void storedMm();
     void preference();
+    /** The first show ever opened, if in feet, seeds an unset preference */
+    void seedFromFirstShow();
 
 private:
     QTemporaryDir m_settings;

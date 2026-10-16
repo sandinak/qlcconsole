@@ -52,6 +52,14 @@ public:
      *  qlcconsole's own settings so the fixture editor follows it too. */
     static LengthUnit preferredLength();
     static void setPreferredLength(LengthUnit unit);
+    /** True once a unit has been chosen (or seeded) */
+    static bool isPreferenceSet();
+    /** The first show opened decides the unit, once: when no unit has been
+     *  chosen yet and that show's grid was in feet (how the unit was picked
+     *  before Settings -> Units), the preference becomes feet. Any later
+     *  show changes nothing. True when it set the preference. */
+    static bool seedFromFirstShow(bool showInFeet);
+
     /** Kilograms for the metric lengths, pounds for inches and feet */
     static WeightUnit weightUnitFor(LengthUnit unit);
 

@@ -35,9 +35,20 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
   (offscreen: `7.5"` with inches → 7.5 in / 191 mm, with mm → 190.5 mm,
   invalid, uncommitted text, follows the preference), appviews
   `settingsChoosesTheUnits`.
-- **Not done, waiting on Branson:** the Studio/Rig Overview grid's
-  Meters/Feet is saved **per show** (`MonitorProperties` `Units` in the
-  .qxw), so it was left alone (see TODO).
+- **The grid follows it too** (Branson, 2026-10-16). Metres for mm/cm/m,
+  feet for in/ft (`MonitorProperties::gridUnitsFor`); the Grid menu's
+  Meters/Feet combo is now a label pointing at Settings. `App::
+  applyUnitPreference()` after every load, on New and when Settings
+  changes it: the show's saved `Units` only says what its grid size is in;
+  `convertGridUnits()` re-expresses the stage exactly (positions are mm).
+  Seed: the first show ever opened, with no unit chosen, sets ft if it was
+  in feet (`units/seededFromShow`, once). Saved: `Units` from the
+  preference; Width/Height/Depth whole (older readers use toInt -- a
+  "32.8084" was read as 0, a bug this fork already had after a units
+  toggle), `ExactWidth/Height/Depth` beside them when not whole.
+  Tests: monitorproperties (`gridUnitsConvertExactly`,
+  `gridSizeSavedWholeAndExact`), measurementunits (`seedFromFirstShow`),
+  appviews (`theGridFollowsTheUnitPreference`).
 
 ### 2026-10-15 — Linux: a test gate that can't skip quietly, and the app icon *(feat/linux-gate-icon)*
 

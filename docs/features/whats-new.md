@@ -12,6 +12,11 @@ The latest changes, newest first. Each links to the guide with the detail.
   takes any unit typed with the number — `7.5"`, `6' 3"`, `19.05 cm`,
   `26.5 lbs`. Files still keep millimetres and kilograms. See
   [The fixture editor](fixture-manager.md#the-fixture-editor).
+- **The Studio's grid follows it too** — rulers, readouts, labels and
+  length fields in metres (mm/cm/m) or feet (in/ft); the grid's own
+  Meters/Feet choice is gone. Shows open in your units and are saved in
+  them; if you'd never chosen, the first show you open in feet makes it
+  feet. See [Selecting and undo on the plot](lighting-studio.md#selecting-and-undo-on-the-plot).
 
 ### Sub-cues
 

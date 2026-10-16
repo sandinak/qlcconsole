@@ -69,6 +69,7 @@
 #include "vcframe.h"
 #include "speedmastersfooter.h"
 #include "app.h"
+#include "measurementunits.h"
 #include "effectscriptrunner.h"
 #include <QPointer>
 #include <thread>
@@ -841,6 +842,7 @@ void App::clearDocument()
     VirtualConsole::instance()->resetContents();
     ShowManager::instance()->clearContents();
     m_doc->clearContents();
+    applyUnitPreference(false);
     if (Monitor::instance() != NULL)
         Monitor::instance()->updateView();
     SimpleDesk::instance()->clearContents();
@@ -849,6 +851,16 @@ void App::clearDocument()
     m_doc->resetModified();
     m_doc->inputOutputMap()->startUniverses();
     m_doc->masterTimer()->start();
+}
+
+void App::applyUnitPreference(bool fromShow)
+{
+    MonitorProperties *mp = m_doc->monitorProperties();
+    if (fromShow)
+        MeasurementUnits::seedFromFirstShow(mp->gridUnits() == MonitorProperties::Feet);
+    /* The show's own Units only said what its grid size was in; from here
+       on it's the person's, and is saved that way. */
+    mp->convertGridUnits(MonitorProperties::gridUnitsFor(MeasurementUnits::preferredLength()));
 }
 
 Doc *App::doc()
@@ -3756,6 +3768,8 @@ bool App::loadXML(QXmlStreamReader& doc, bool goToConsole, bool fromMemory)
     else
         // Set the active window to what was saved in the workspace file
         setActiveWindow(activeWindowName);
+
+    applyUnitPreference(true);
 
     // Perform post-load operations
     VirtualConsole::instance()->postLoad();

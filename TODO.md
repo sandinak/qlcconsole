@@ -10,13 +10,12 @@ under `~/.claude/.../memory/`.
 
 ## Small fixes and leftovers
 
-- **Grid units vs Settings → Units (2026-10-16, needs Branson)** — the new
-  app-wide Settings → Units drives fixture sizes/weights; the Studio /
-  Rig Overview grid still has its own Meters/Feet, saved **per show**
-  (`MonitorProperties::gridUnits`, the `Units` attribute in the .qxw).
-  Asked: make the grid follow the preference (keep reading the show's value
-  for old files? seed the preference from it on first run?) or keep it per
-  show. Nothing changed there yet.
+- **MasterTimer stop/start race (2026-10-16)** — `MasterTimerPrivate::run()`
+  sets `m_run = true` inside the thread, so a `stop()` that comes right after
+  `start()` (before the thread runs) is undone and `wait()` never returns:
+  two `App::clearDocument()` in a row hung appviews_test. `m_run` is a plain
+  bool too. Fix: set it in `start()` before `QThread::start()`, make it
+  atomic. Found on feat/unit-aware-dimensions; worked round in the test.
 
 - **Layers panel: a row the plot can't select loses its selection on any
   rebuild (2026-10-15)** — clicking a fixture the plot can't select (stacked

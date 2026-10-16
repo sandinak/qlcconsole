@@ -220,6 +220,25 @@ void MeasurementUnits::setPreferredLength(LengthUnit unit)
     s.setValue(settingsKey(), key(unit));
 }
 
+bool MeasurementUnits::isPreferenceSet()
+{
+    APP_SETTINGS(s);
+    return s.contains(settingsKey());
+}
+
+bool MeasurementUnits::seedFromFirstShow(bool showInFeet)
+{
+    APP_SETTINGS(s);
+    const QString seededKey = QStringLiteral("units/seededFromShow");
+    if (s.value(seededKey, false).toBool())
+        return false;
+    s.setValue(seededKey, true);
+    if (s.contains(settingsKey()) || !showInFeet)
+        return false;
+    s.setValue(settingsKey(), key(Feet));
+    return true;
+}
+
 MeasurementUnits::WeightUnit MeasurementUnits::weightUnitFor(LengthUnit unit)
 {
     return (unit == Inches || unit == Feet) ? Pounds : Kilograms;

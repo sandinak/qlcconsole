@@ -30,6 +30,7 @@
 
 #include "appsettings.h"
 #include "measurementunits.h"
+#include "monitor.h"
 #include "app.h"
 
 AppSettings::AppSettings(App *app, QWidget *parent)
@@ -94,10 +95,11 @@ AppSettings::AppSettings(App *app, QWidget *parent)
 
     // --- Units ---
     // One choice for the person, whatever show is open: fixture dimensions
-    // and weights (here and in the fixture definition editor) show in it.
+    // and weights (here and in the fixture definition editor) and the
+    // Lighting Studio's grid (App::applyUnitPreference) show in it.
     QGroupBox *unitsGroup = new QGroupBox(tr("Units"), this);
     unitsGroup->setObjectName(QStringLiteral("settingsUnits"));
-    unitsGroup->setProperty("helpTopic", QStringLiteral("fixture-manager.md"));
+    unitsGroup->setProperty("helpTopic", QStringLiteral("lighting-studio.md"));
     QHBoxLayout *unitsLayout = new QHBoxLayout(unitsGroup);
     unitsLayout->addWidget(new QLabel(tr("Lengths and weights in:"), unitsGroup));
     m_unitsCombo = new QComboBox(unitsGroup);
@@ -109,10 +111,11 @@ AppSettings::AppSettings(App *app, QWidget *parent)
                                             MeasurementUnits::Feet })
         m_unitsCombo->addItem(MeasurementUnits::name(u), int(u));
     m_unitsCombo->setCurrentIndex(qMax(0, m_unitsCombo->findData(int(MeasurementUnits::preferredLength()))));
-    m_unitsCombo->setToolTip(tr("How fixture dimensions and weights are shown, here and in "
-                                "the fixture definition editor. Any unit can still be typed "
-                                "(7.5\", 19 cm, 26 lb); fixture files keep millimetres and "
-                                "kilograms either way."));
+    m_unitsCombo->setToolTip(tr("How lengths and weights are shown: fixture sizes here and in "
+                                "the fixture definition editor (any unit can still be typed: "
+                                "7.5\", 19 cm, 26 lb), and the Lighting Studio's grid, rulers "
+                                "and fields -- metres for mm, cm and m, feet for inches and "
+                                "feet. Files keep millimetres and kilograms either way."));
     unitsLayout->addWidget(m_unitsCombo);
     unitsLayout->addStretch();
     mainLayout->addWidget(unitsGroup);
@@ -190,8 +193,15 @@ void AppSettings::accept()
     const int mode = m_tabLabelModeCombo->currentData().toInt();
     m_app->setTabLabelMode(mode);
 
-    MeasurementUnits::setPreferredLength(
-        MeasurementUnits::LengthUnit(m_unitsCombo->currentData().toInt()));
+    const MeasurementUnits::LengthUnit unit =
+            MeasurementUnits::LengthUnit(m_unitsCombo->currentData().toInt());
+    if (unit != MeasurementUnits::preferredLength())
+    {
+        MeasurementUnits::setPreferredLength(unit);
+        m_app->applyUnitPreference(false);
+        if (Monitor::instance() != nullptr)
+            Monitor::instance()->unitsChanged();
+    }
 
     // Effect script editor preference (read by the Look Editor authoring flow).
     QSettings().setValue(QStringLiteral("effectscript/editor"),

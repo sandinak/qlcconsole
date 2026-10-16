@@ -464,7 +464,8 @@ editor on its definition. On top of stock QLC+'s editor:
   **191 mm**) and kilograms. The field's tooltip says what will be saved.
   A saved size shows with the fewest decimals that mean the same
   millimetre, so 191 mm reads 7.5 in again, not 7.52. The Fixture
-  Manager's information panel shows sizes and weight in the same unit.
+  Manager's information panel shows sizes and weight in the same unit, and
+  the Lighting Studio's grid follows it (metres or feet).
 - **Physical tab → "Look in the Lighting Studio"** — how the Lighting Studio and
   the Rig Overview draw it:
   - **Body**: Box, or Lantern (a cage glowing all round).

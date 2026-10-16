@@ -281,4 +281,42 @@ void MeasurementUnits_Test::preference()
     QCOMPARE(MU::preferredLength(), MU::Millimetres);
 }
 
+void MeasurementUnits_Test::seedFromFirstShow()
+{
+    QSettings s(QSettings::defaultFormat(), QSettings::UserScope,
+                QStringLiteral("qlcplus"), QStringLiteral("qlcconsole"));
+    s.clear();
+    s.sync();
+
+    // Never set, first show in feet: feet, once.
+    QVERIFY(!MU::isPreferenceSet());
+    QVERIFY(MU::seedFromFirstShow(true));
+    QCOMPARE(MU::preferredLength(), MU::Feet);
+    QVERIFY(MU::isPreferenceSet());
+
+    // Changed afterwards, later shows in feet leave it alone.
+    MU::setPreferredLength(MU::Millimetres);
+    QVERIFY(!MU::seedFromFirstShow(true));
+    QCOMPARE(MU::preferredLength(), MU::Millimetres);
+
+    // Even with the unit unset again, the seed was spent.
+    s.remove(MU::settingsKey());
+    QVERIFY(!MU::seedFromFirstShow(true));
+    QVERIFY(!MU::isPreferenceSet());
+
+    // A first show in metres seeds nothing -- and spends the seed.
+    s.clear();
+    QVERIFY(!MU::seedFromFirstShow(false));
+    QVERIFY(!MU::isPreferenceSet());
+    QVERIFY(!MU::seedFromFirstShow(true));
+    QCOMPARE(MU::preferredLength(), MU::Millimetres);
+
+    // A unit already chosen is never overridden.
+    s.clear();
+    MU::setPreferredLength(MU::Centimetres);
+    QVERIFY(!MU::seedFromFirstShow(true));
+    QCOMPARE(MU::preferredLength(), MU::Centimetres);
+    s.clear();
+}
+
 QTEST_MAIN(MeasurementUnits_Test)
