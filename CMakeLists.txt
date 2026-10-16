@@ -177,6 +177,17 @@ if(QLC_GATE_TARGETS)
     add_dependencies(unittests ${QLC_GATE_TARGETS})
 endif()
 
+# Windows: the tests are declared WIN32 (GUI subsystem) executables, and a GUI
+# executable's QTest log never reaches the console -- every test ran silently,
+# failures included. Build them as console programs there.
+if(WIN32)
+    foreach(target IN LISTS QLC_GATE_TARGETS)
+        if(target MATCHES "_test$")
+            set_target_properties(${target} PROPERTIES WIN32_EXECUTABLE FALSE)
+        endif()
+    endforeach()
+endif()
+
 add_custom_target(check
     DEPENDS unittests
 )

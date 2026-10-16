@@ -21,6 +21,7 @@
 #define MONITORPROPERTIES_H
 
 #include <QObject>
+#include "qlcengine_export.h"
 #include <functional>
 #include <QVector3D>
 #include <QPointF>
@@ -50,7 +51,10 @@ class Doc;
 
 #define KXMLQLCMonitorProperties QStringLiteral("Monitor")
 
-typedef struct
+// Named structs, not typedef'd anonymous ones: the default member
+// initialisers below make them non-C types, which GCC rejects as typedef
+// names for linkage purposes (-Wnon-c-typedef-for-linkage).
+struct PreviewItem
 {
     QVector3D m_position;       ///< 3D item position
     QVector3D m_rotation;       ///< 3D item rotation
@@ -62,15 +66,15 @@ typedef struct
     quint32 m_flags;            ///< Item flags as specified in the ItemsFlags enum
     quint32 m_layerId = 0;      ///< 2D-map organizational layer (0 = Default)
     quint32 m_groupId = 0;      ///< 2D-map group (0 = ungrouped)
-} PreviewItem;
+};
 
-typedef struct
+struct FixturePreviewItem
 {
     PreviewItem m_baseItem;                 ///< Base fixture item properties
     QMap<quint32, PreviewItem> m_subItems;  ///< Map of the heads/linked fixtures
-} FixturePreviewItem;
+};
 
-class MonitorProperties final : public QObject
+class QLC_ENGINE_EXPORT MonitorProperties final : public QObject
 {
     Q_OBJECT
 

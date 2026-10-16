@@ -12,6 +12,41 @@ if(NOT qmlui)
 endif()
 install(FILES ${icons_SRCS} DESTINATION ${INSTALLROOT}/share/pixmaps/)
 
+# The freedesktop icon theme, which is where desktops look up Icon= first:
+# every rendered size (resources/icons/hicolor/render.sh) plus the SVG, so any
+# other size is drawn sharp rather than scaled up from the 96px pixmap above.
+set(icon_NAMES qlcconsole)
+if(NOT qmlui)
+    list(APPEND icon_NAMES qlcconsole-fixtureeditor)
+endif()
+foreach(icon_SIZE 16 22 24 32 48 64 128 256)
+    foreach(icon_NAME ${icon_NAMES})
+        install(FILES ../../resources/icons/hicolor/${icon_SIZE}x${icon_SIZE}/apps/${icon_NAME}.png
+                DESTINATION ${INSTALLROOT}/share/icons/hicolor/${icon_SIZE}x${icon_SIZE}/apps)
+    endforeach()
+endforeach()
+install(FILES ../../resources/icons/svg/qlcconsole.svg
+        DESTINATION ${INSTALLROOT}/share/icons/hicolor/scalable/apps)
+if(NOT qmlui)
+    install(FILES ../../resources/icons/svg/fixture-editor.svg
+            DESTINATION ${INSTALLROOT}/share/icons/hicolor/scalable/apps
+            RENAME qlcconsole-fixtureeditor.svg)
+endif()
+
+# Refresh the theme cache on a direct install, so the new icons show without a
+# relogin. Packaging (DESTDIR set, or an AppImage staging tree) is left alone:
+# the package manager's own triggers do it on the target system.
+if(NOT appimage)
+    install(CODE "
+        if(\"\$ENV{DESTDIR}\" STREQUAL \"\")
+            find_program(GTK_UPDATE_ICON_CACHE NAMES gtk-update-icon-cache gtk4-update-icon-cache)
+            if(GTK_UPDATE_ICON_CACHE AND EXISTS \"${INSTALLROOT}/share/icons/hicolor/index.theme\")
+                execute_process(COMMAND \${GTK_UPDATE_ICON_CACHE} -q -t -f \"${INSTALLROOT}/share/icons/hicolor\")
+            endif()
+        endif()
+    ")
+endif()
+
 install(FILES qlcconsole.xml DESTINATION ${INSTALLROOT}/share/mime/packages)
 
 set(appdata_FILES org.qlcconsole.QLCConsole.appdata.xml)

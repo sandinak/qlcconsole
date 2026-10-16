@@ -24,7 +24,9 @@
 
 #include "functionparent.h"
 #include "chaseraction.h"
+#include "inputoutputmap.h"
 #include "showcontrol.h"
+#include "inputpatch.h"
 #include "mastertimer.h"
 #include "function.h"
 #include "chaser.h"
@@ -38,6 +40,8 @@ ShowControl::ShowControl(Doc *doc, QObject *parent)
     , m_mainCueList(UINT_MAX)
     , m_mscDeviceId(1)
     , m_mscEnabled(true)
+    , m_source(Local)
+    , m_sourceUniverse(UINT_MAX)
 {
     if (m_doc != nullptr)
         connect(m_doc, &Doc::functionRemoved, this, &ShowControl::slotFunctionRemoved);
@@ -144,7 +148,9 @@ bool ShowControl::execute(const Request &request)
         what += tr(" cue %1").arg(request.cue);
 
     auto finish = [&](bool done, const QString &how) {
-        emit commandHandled(how.isEmpty() ? what : what + QStringLiteral(" — ") + how, done);
+        const QString line = how.isEmpty() ? what : what + QStringLiteral(" — ") + how;
+        emit commandHandled(line, done);
+        emit commandFrom(m_source, m_sourceUniverse, line, done);
         return done;
     };
 
@@ -319,14 +325,49 @@ bool ShowControl::parseMsc(const QByteArray &sysEx, int deviceId, Request *out)
     return true;
 }
 
+void ShowControl::setMscInput(const QString &plugin, const QString &input)
+{
+    m_mscInputPlugin = input.isEmpty() ? QString() : plugin;
+    m_mscInput = plugin.isEmpty() ? QString() : input;
+}
+
+bool ShowControl::acceptsMscFrom(quint32 universe) const
+{
+    if (m_mscInput.isEmpty())
+        return true;
+    if (m_doc == nullptr || m_doc->inputOutputMap() == nullptr)
+        return false;
+    const InputPatch *ip = m_doc->inputOutputMap()->inputPatch(universe);
+    return ip != nullptr && ip->pluginName() == m_mscInputPlugin && ip->inputName() == m_mscInput;
+}
+
+QList<quint32> ShowControl::mscUniverses() const
+{
+    QList<quint32> list;
+    if (m_doc == nullptr || m_doc->inputOutputMap() == nullptr)
+        return list;
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    for (quint32 i = 0; i < iom->universesCount(); i++)
+    {
+        const quint32 uni = iom->getUniverseID(i);
+        if (iom->inputPatch(uni) != nullptr && acceptsMscFrom(uni))
+            list << uni;
+    }
+    return list;
+}
+
 void ShowControl::handleSysEx(quint32 universe, const QByteArray &sysEx)
 {
-    Q_UNUSED(universe)
-    if (!m_mscEnabled)
+    if (!m_mscEnabled || !acceptsMscFrom(universe))
         return;
     Request r;
-    if (parseMsc(sysEx, m_mscDeviceId, &r))
-        execute(r);
+    if (!parseMsc(sysEx, m_mscDeviceId, &r))
+        return;
+    m_source = Msc;
+    m_sourceUniverse = universe;
+    execute(r);
+    m_source = Local;
+    m_sourceUniverse = UINT_MAX;
 }
 
 /*****************************************************************************
@@ -496,9 +537,11 @@ QList<ShowControl::Request> ShowControl::parseOsc(const QByteArray &datagram)
 int ShowControl::handleOsc(const QByteArray &datagram)
 {
     int done = 0;
+    m_source = Osc;
     for (const Request &r : parseOsc(datagram))
         if (execute(r))
             ++done;
+    m_source = Local;
     return done;
 }
 

@@ -31,6 +31,9 @@
 #include <QLabel>
 #include <QFile>
 
+#include <algorithm>
+
+#include "patchlabelsdialog.h"
 #include "patchlistdialog.h"
 #include "app.h"
 #include "doc.h"
@@ -74,13 +77,22 @@ PatchListDialog::PatchListDialog(Doc *doc, QWidget *parent)
     foreach (const PatchList::Row &r, m_list.rows())
     {
         const QString make = r.makeModel();
+        /* A network fixture by the name its IP goes by, as its label has
+           it; the IP itself on mouseover. */
+        const QString ip = r.ip.isEmpty() ? tr("(no IP)") : r.ip;
         const QString conn = r.network
-            ? tr("%1 %2").arg(r.transport, r.ip.isEmpty() ? tr("(no IP)") : r.ip)
+            ? tr("%1 %2").arg(r.transport, r.host.isEmpty() ? ip : r.host)
             : tr("DMX");
         const QStringList cells = { r.patchText(), r.name, make, r.mode, QString::number(r.channels),
                                     conn, r.output, r.mountedOn };
         for (int c = 0; c < cells.size(); ++c)
             m_table->setItem(row, c, new QTableWidgetItem(cells.at(c)));
+        if (r.network)
+            m_table->item(row, ConnectionColumn)->setToolTip(
+                r.host.isEmpty() ? tr("%1 to %2").arg(r.transport, ip)
+                                 : tr("%1 to %2 (%3)").arg(r.transport, r.host, ip));
+        if (!r.output.isEmpty())
+            m_table->item(row, GoesToColumn)->setToolTip(r.output);
         row++;
     }
     m_table->resizeColumnsToContents();
@@ -95,12 +107,16 @@ PatchListDialog::PatchListDialog(Doc *doc, QWidget *parent)
     QPushButton *pdfBtn = btns->addButton(tr("Save PDF..."), QDialogButtonBox::ActionRole);
     pdfBtn->setObjectName(QStringLiteral("patchListPdf"));
     pdfBtn->setToolTip(tr("Save a printable list, a table per universe"));
+    QPushButton *labelsBtn = btns->addButton(tr("Labels..."), QDialogButtonBox::ActionRole);
+    labelsBtn->setObjectName(QStringLiteral("patchListLabels"));
+    labelsBtn->setToolTip(tr("Save a label per fixture (all, or the selected rows) as a PDF to print"));
     root->addWidget(btns);
 
     connect(btns, &QDialogButtonBox::rejected, this, &QDialog::reject);
     connect(copyBtn, &QPushButton::clicked, this, &PatchListDialog::slotCopy);
     connect(csvBtn, &QPushButton::clicked, this, &PatchListDialog::slotSaveCsv);
     connect(pdfBtn, &QPushButton::clicked, this, &PatchListDialog::slotSavePdf);
+    connect(labelsBtn, &QPushButton::clicked, this, &PatchListDialog::slotLabels);
 }
 
 bool PatchListDialog::saveCsv(const QString &path, QString *error) const
@@ -155,4 +171,29 @@ void PatchListDialog::slotSavePdf()
     if (!m_list.writePdf(path, m_title, &error))
         QMessageBox::warning(this, tr("Save Patch List"),
                              tr("Could not save %1:\n%2").arg(path, error));
+}
+
+QList<PatchList::Row> PatchListDialog::selectedRows() const
+{
+    QList<int> picked;
+    foreach (const QModelIndex &idx, m_table->selectionModel()->selectedRows())
+        picked << idx.row();
+    std::sort(picked.begin(), picked.end());
+    const QList<PatchList::Row> all = m_list.rows();
+    QList<PatchList::Row> out;
+    foreach (int r, picked)
+        if (r >= 0 && r < all.size())
+            out << all.at(r);
+    return out;
+}
+
+void PatchListDialog::slotLabels()
+{
+    const QString show = showFileName();
+    const QString title = show.isEmpty() ? tr("Fixture labels") : tr("Fixture labels — %1").arg(show);
+    PatchLabelsDialog dlg(m_list.rows(), selectedRows(), title,
+                          suggestedName(QStringLiteral("pdf")).replace(QStringLiteral("patch-list"),
+                                                                       QStringLiteral("labels")),
+                          this);
+    dlg.exec();
 }

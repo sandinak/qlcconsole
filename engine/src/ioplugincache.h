@@ -21,6 +21,7 @@
 #define IOPLUGINCACHE_H
 
 #include <QObject>
+#include "qlcengine_export.h"
 #include <QDir>
 
 class QLCIOPlugin;
@@ -31,7 +32,7 @@ class QLCIOPlugin;
  * @{
  */
 
-class IOPluginCache final : public QObject
+class QLC_ENGINE_EXPORT IOPluginCache final : public QObject
 {
     Q_OBJECT
 

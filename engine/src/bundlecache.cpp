@@ -6,13 +6,14 @@
 */
 
 #include "bundlecache.h"
+#include "qlcconfig.h"
 #include "qlcfile.h"
 
 #include <QDebug>
 #include <algorithm>
 
-#define BUNDLEDIR     "Resources/Bundles"
-#define USERBUNDLEDIR "Library/Application Support/qlcconsole/Bundles"
+// Per-platform user folder (USERQLCPLUSDIR); system folder from qlcconfig.h.
+#define USERBUNDLEDIR USERQLCPLUSDIR "/Bundles"
 
 BundleCache::BundleCache(QObject *parent)
     : QObject(parent)

@@ -22,6 +22,7 @@
 #define MASTERTIMER_H
 
 #include <QAtomicInteger>
+#include "qlcengine_export.h"
 #include <QElapsedTimer>
 #include <QHash>
 #include <QObject>
@@ -41,7 +42,7 @@ class Doc;
  * @{
  */
 
-class MasterTimer : public QObject
+class QLC_ENGINE_EXPORT MasterTimer : public QObject
 {
     Q_OBJECT
     Q_DISABLE_COPY(MasterTimer)

@@ -44,6 +44,8 @@ private slots:
     void mscIsDecoded();
     void mscIsOnlyForUs();
     void mscFromAPatchedInputFiresTheCue();
+    void mscOnlyOnTheChosenInput();
+    void theTimecodeSourceIsSavedWithTheShow();
     void oscIsDecoded();
     void oscFiresTheCue();
     void removingTheMainListForgetsIt();

@@ -4,14 +4,64 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## October 2026
 
+### Sub-cues
+
+- **Cues inside a cue.** A chase used as a step of a cue list lists its
+  steps under it as **4.1, 4.2…**. Set the step's **Sub-cues** to **Sub
+  GO** and they wait for **Sub GO** (⌥⌘↩; Sub Back ⌥⌘⇧↩) while GO still
+  goes on to cue 5. The chaser editor and the Virtual Console cue list show
+  them nested, the cue list highlights the one playing and has Sub GO /
+  Sub Back buttons, and the footer says **Sub: 4.2 · Next: 5**. Older
+  shows play as before. See [Sub-cues](show-control.md#sub-cues).
+
+### Outputs
+
+- **Art-Net and E1.31 say when an output is in trouble** — in the footer
+  and in red on the universe's row in Connections: an address that can't
+  be reached, an Art-Net node that stopped answering, a node port reporting
+  a DMX short or no longer outputting. Judged with a delay each way, so they
+  don't flicker, and they clear by themselves. See
+  [When an output is in trouble](other-improvements.md#when-an-output-is-in-trouble).
+- **The log no longer flaps** "is failing" / "recovered" for a node that
+  isn't there: one line when it starts, one when it has really recovered.
+- **A node port's DMX short shows as a short.** Connections had the
+  "short" and "merging" flags of a node's ports the wrong way round.
+
+### Shows that travel
+
+- **A .qlcc carries its own definitions and scripts.** Saving embeds every
+  fixture definition, effect script and RGB script the show uses that isn't
+  part of the app, so it opens complete on another computer — no more red
+  stand-ins for your own fixtures. A .qxw is saved as before.
+- **Differences warn; the show keeps its own.** Where this computer's copy
+  differs, the show's is used and the footer says so; **Review…** shows
+  which looks newer and whether switching is safe for the modes and
+  settings the show uses, with **Use This Computer's**, **Keep the Show's**
+  and **Install the Show's**. Ones only the show has are a footer note with
+  **Install on This Computer**. Save never swaps versions behind your back.
+- **File → Collect for Transfer…** writes the show and those files into one
+  folder; a show's folder's Fixtures/, EffectScripts/ and RGBScripts/ are
+  searched when it opens.
+- On **Windows and Linux**, your own effect scripts, LED maps, presets,
+  bundles, gobos and network gear are now found: they live in the same user
+  folder as your fixture definitions (they were looked for at the Mac's
+  path).
+- See [Opening a show on another computer](fixture-manager.md#opening-a-show-on-another-computer).
+
 ### Show control
 
 - **QLab can fire the lights' cues.** A chase's steps have **cue numbers**
   (a Cue column in the chaser editor; a step without one answers to its
   position), a chase can be the **main cue list** or have a list number,
   and **MIDI Show Control** (on a patched MIDI input) or **OSC** (on a port
-  of its own, Settings → Show control) can GO, LOAD, STOP, PAUSE, RESUME,
-  RESET or ALL OFF them. See [Show control (QLab)](show-control.md).
+  of its own) can GO, LOAD, STOP, PAUSE, RESUME, RESET or ALL OFF them.
+  See [Show control (QLab)](show-control.md).
+- **Connections → Show control &amp; sync**: OSC in, MIDI Show Control in
+  and MIDI timecode in one place, each live — listening or why not, the
+  last command and when, the timecode's source and sync health. It replaces
+  the Settings dialog's Show control group (which now points there); the
+  settings carry over. MSC can be kept to **one MIDI port** (by name, for
+  every show) and the **timecode source is saved with the show**.
 - **Next:** in the footer says what the main cue list's GO plays next; GO
   (⌘↩) and Back (⌘⇧↩) work from any window, and the Virtual Console cue
   list shows each cue's number and what's next.
@@ -130,6 +180,11 @@ The latest changes, newest first. Each links to the guide with the detail.
   it hangs on, to save as **CSV** or a printable **PDF** for the crew.
   **Fixtures → Patch List…**, or the Studio's **More** menu.
   ([The patch list](fixture-manager.md#the-patch-list))
+- **A label per fixture** from the patch list: **Labels…** saves a PDF —
+  the name and the address (U3 · 101) large, the universe's name, the mode
+  and channels, a network fixture's name and where it hangs small — on Avery 5160 sheets (30 to a Letter page) or a 62 mm
+  roll, for all the fixtures or the selected rows.
+  ([Labels](fixture-manager.md#labels))
 - **Patch Others Like This.** Right-click a structure: the other
   structures of its kind with the same fixtures are patched as it is — each
   fixture at the address of its counterpart, in its own structure's
@@ -139,7 +194,7 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Programming
 
-- **92 WLED effects run on any fixture** — Android, Aurora, Blink, Blink Rainbow, Bouncing Balls, Bpm, Breathe, Candle, Candle Multi, Chase, Chase Flash, Chase Rainbow, Chunchun, Colorful, Colorloop, Colortwinkles, Colorwaves, Dancing Shadows, Dissolve, Drip, Dynamic, Dynamic Smooth, Fade, Fairy, Fill Noise, Fire 2012, Fire Flicker, Fireworks 1D, Flow, Glitter, Gradient, Halloween Eyes, Heartbeat, Hyper Sparkle, Juggle, Lake, Lightning, Loading, Meteor, Multi Comet, Noise Pal, Oscillate, Pacifica, Palette, Phased, Plasma, Police, Popcorn, Pride 2015, Railway, Rain, Rainbow, Rainbow Runner, Random Colors, Ripple, Ripple Rainbow, Rolling Balls, Running, Running Dual, Saw, Scan, Scanner, Sine, Sinelon, Sinelon Dual, Sinelon Rainbow, Solid, Solid Glitter, Sparkle, Sparkle Dark, Spots, Spots Fade, Stream, Strobe, Strobe Rainbow, Sunrise, Sweep, Tetrix, Theater, Theater Rainbow, Traffic Light, Tri Fade, Tri Wipe, TV Simulator, Twinkle, Twinklecat, Twinklefox, Two Areas, Two Dots, Washing Machine, Wavesins, Wipe — so a look with one runs it on its WLED
+- **160 WLED effects run on any fixture** — every 1D effect of WLED's: Android, Aurora, Blends, Blink, Blink Rainbow, Bouncing Balls, Bpm, Breathe, Candle, Candle Multi, Chase, Chase 2, Chase 3, Chase Flash, Chase Flash Rnd, Chase Rainbow, Chase Random, Chunchun, Color Clouds, Colorful, Colorloop, Colortwinkles, Colorwaves, Dancing Shadows, Dissolve, Dissolve Rnd, Drip, Dynamic, Dynamic Smooth, Fade, Fairy, Fairytwinkle, Fill Noise, Fire 2012, Fire Flicker, Fireworks, Fireworks 1D, Fireworks Starburst, Flow, Flow Stripe, Glitter, Gradient, Halloween Eyes, Heartbeat, Hyper Sparkle, ICU, Juggle, Lake, Lighthouse, Lightning, Loading, Meteor, Meteor Smooth, Multi Comet, Noise 1, Noise 2, Noise 3, Noise 4, Noise Pal, Oscillate, Pacifica, PacMan, Palette, Percent, Perlin Move, Phased, Phased Noise, Plasma, Police, Popcorn, Pride 2015, PS 1D Balance, PS Chase, PS Dancing Shadows, PS DripDrop, PS Fire 1D, PS Fireworks 1D, PS Hourglass, PS Pinball, PS Sparkler, PS Spray 1D, PS Springy, PS Starburst, Railway, Rain, Rainbow, Rainbow Runner, Random Colors, Ripple, Ripple Rainbow, Rolling Balls, Running, Running Dual, Saw, Scan, Scan Dual, Scanner, Scanner Dual, Shimmer, Sine, Sinelon, Sinelon Dual, Sinelon Rainbow, Solid, Solid Glitter, Solid Pattern, Solid Pattern Tri, Sparkle, Sparkle Dark, Sparkle+, Spots, Spots Fade, Stream, Stream 2, Strobe, Strobe Mega, Strobe Rainbow, Sunrise, Sweep, Sweep Random, Tetrix, Theater, Theater Rainbow, Traffic Light, Tri Fade, Tri Wipe, TV Simulator, Twinkle, Twinklecat, Twinklefox, Twinkleup, Two Areas, Two Dots, Washing Machine, Wavesins, Wipe, Wipe Random — and the sound-reactive DJ Light, Freqmap, Freqpixels, Freqwave, Gravcenter, Gravcentric, Gravfreq, Gravimeter, Juggles, Matripix, Midnoise, Noisefire, Noisemeter, Noisemove, Plasmoid, PS GEQ 1D, PS Sonic Boom, PS Sonic Stream, Puddlepeak, Puddles, Ripple Peak, Rocktaves, Waterfall, which follow the audio input (Inputs/Outputs) as the device follows its microphone — so a look with one runs it on its WLED
   devices and its other fixtures alike.
 - **Effect previews show what the effect does.** A position effect draws
   the shape its heads trace, with the heads along it, instead of a strip

@@ -61,6 +61,8 @@ public slots:
     void refresh();
 
 private slots:
+    /** An output's trouble changed: rebuild soon, if on screen. */
+    void slotTargetProblemsChanged();
     /** Flash the universe row that just received input. */
     void slotInputActivity(quint32 universe, quint32 channel, uchar value);
     void slotActivityTimeout();
@@ -251,6 +253,10 @@ private:
     QCheckBox *m_byUniverse = nullptr;
     /** Build the "By universe" list (refresh() does, when it is on). */
     void buildUniverseList();
+    /** Mark every output row whose plugin reports trouble with where it goes
+     *  (QLCIOPlugin::outputProblems()): the problem appended to Detail, in
+     *  red, every problem in the tooltip. Both views end with it. */
+    void markOutputProblems();
     class QPushButton *m_rescan;
     class QPushButton *m_undo;
     class QLabel *m_status;
@@ -289,6 +295,7 @@ private:
     /* Nodes announce themselves about once a second, so a periodic rebuild
        keeps the view honest without a manual rescan. */
     QTimer *m_refreshTimer;
+    QTimer *m_problemRefresh = nullptr;   ///< coalesces output-trouble rebuilds
     /* Rows tinted by live input, and the timer that fades them. Keyed by
        universe id: the row a universe occupies is rebuilt every few seconds,
        so a pointer would dangle. */

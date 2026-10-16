@@ -25,7 +25,10 @@
 #include "fixture.h"
 #include "qlcfile.h"
 
-#define USERHEADLAYOUTDIR "Library/Application Support/qlcconsole/HeadLayouts"
+#include "qlcconfig.h"
+
+// The per-platform user folder, as fixture definitions (it was the Mac's on all).
+#define USERHEADLAYOUTDIR USERQLCPLUSDIR "/HeadLayouts"
 
 namespace
 {
@@ -53,7 +56,7 @@ namespace
 
     /* A file name for a key: the key with anything a file system might
        object to replaced. */
-    QString fileNameFor(const QString &key)
+    QString safeFileNameFor(const QString &key)
     {
         QString n = key;
         for (QChar &c : n)
@@ -266,7 +269,7 @@ HeadLayout HeadLayoutLibrary::load(const QString &key)
     if (cache().contains(key))
         return cache().value(key);
     cache().insert(key, HeadLayout());
-    QFile f(userDirectory().absoluteFilePath(fileNameFor(key)));
+    QFile f(userDirectory().absoluteFilePath(safeFileNameFor(key)));
     if (!f.open(QIODevice::ReadOnly))
         return HeadLayout();
     const QJsonObject o = QJsonDocument::fromJson(f.readAll()).object();
@@ -287,10 +290,13 @@ HeadLayout HeadLayoutLibrary::load(const QString &key)
     return l;
 }
 
-bool HeadLayoutLibrary::save(const HeadLayout &layout)
+QString HeadLayoutLibrary::fileNameFor(const QString &key)
 {
-    if (!layout.isValid())
-        return false;
+    return safeFileNameFor(key);
+}
+
+QByteArray HeadLayoutLibrary::toJson(const HeadLayout &layout)
+{
     QJsonArray cells;
     foreach (const QPoint &p, layout.cells)
         cells.append(QJsonArray({ p.x(), p.y() }));
@@ -299,13 +305,20 @@ bool HeadLayoutLibrary::save(const HeadLayout &layout)
     o.insert(QStringLiteral("cols"), layout.size.width());
     o.insert(QStringLiteral("rows"), layout.size.height());
     o.insert(QStringLiteral("cells"), cells);
+    return QJsonDocument(o).toJson(QJsonDocument::Indented);
+}
+
+bool HeadLayoutLibrary::save(const HeadLayout &layout)
+{
+    if (!layout.isValid())
+        return false;
     QDir dir = userDirectory();
     if (!dir.exists())
         dir.mkpath(".");
-    QFile f(dir.absoluteFilePath(fileNameFor(layout.key)));
+    QFile f(dir.absoluteFilePath(safeFileNameFor(layout.key)));
     if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
         return false;
-    f.write(QJsonDocument(o).toJson(QJsonDocument::Indented));
+    f.write(toJson(layout));
     QMutexLocker lock(&cacheLock());
     cache().insert(layout.key, layout);
     return true;

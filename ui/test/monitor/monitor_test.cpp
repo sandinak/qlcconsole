@@ -453,6 +453,16 @@ void Monitor_Test::aShowsRigViewDrawTime()
     const QString path = qEnvironmentVariable("QLC_RIG_BENCH");
     if (path.isEmpty())
         QSKIP("set QLC_RIG_BENCH to a show file");
+    /* The show's fixtures need their definitions, or every one loads as a
+       generic dimmer: QLC_RIG_BENCH_DEFS=<dir>[;<dir>...] loads them first
+       (a fixtures map where the dir has one, else every .qxf in it). */
+    for (const QString &dir : qEnvironmentVariable("QLC_RIG_BENCH_DEFS")
+                                  .split(QLatin1Char(';'), Qt::SkipEmptyParts))
+    {
+        QDir d(dir, QStringLiteral("*.qxf"));
+        if (!m_doc->fixtureDefCache()->loadMap(d))
+            m_doc->fixtureDefCache()->load(d);
+    }
     QFile file(path);
     QVERIFY(file.open(QIODevice::ReadOnly));
     QXmlStreamReader r(&file);
@@ -6883,6 +6893,43 @@ void Monitor_Test::overlappingFixturesAreFlagged()
              "fixture B, rigged into the same space as A, was not flagged");
     QVERIFY2(v.m_overlappingFixtures.contains(c->id()) == false,
              "fixture C, rigged well clear of the others, was flagged anyway");
+
+    delete doc;
+}
+
+/* A show opened on a computer without some of its definitions (the Windows
+   VM's first DanceHysteria): each such fixture stands in as a generic dimmer
+   of its channel count, whose physical is a made-up 300 mm per channel. The
+   rig view drew a 64-channel bar as a 19 m wall of 64 heads, every one
+   overlapping its neighbours in the warning red -- the whole rig looked
+   wireframed in red. A stand-in is one small body, never an overlap. */
+void Monitor_Test::aStandInForAMissingDefinitionIsOneSmallBody()
+{
+    Doc *doc = new Doc(this);
+    for (int i = 0; i < 2; ++i)
+    {
+        QXmlStreamReader in(QString(
+            "<Fixture><Manufacturer>Nowhere</Manufacturer><Model>Bar 64</Model>"
+            "<Mode>64ch</Mode><ID>%1</ID><Name>Bar %1</Name><Universe>0</Universe>"
+            "<Address>%2</Address><Channels>64</Channels></Fixture>").arg(i).arg(i * 64));
+        in.readNextStartElement();
+        QVERIFY(Fixture::loader(in, doc));
+        // Half a metre apart: clear of each other as the bars really are.
+        doc->monitorProperties()->setFixturePosition(quint32(i), 0, 0,
+                                                     QVector3D(2.0f + 0.5f * i, 2.0f, 3.0f));
+    }
+    Fixture *fx = doc->fixture(0);
+    QVERIFY(fx != nullptr && fx->definitionUnavailable());
+
+    const FixtureVisualTraits t = classifyFixture(fx);
+    QCOMPARE(t.headCount, 1);
+    QVERIFY2(t.physW < 0.5f, qPrintable(QString("a stand-in %1 m wide").arg(t.physW)));
+
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.resize(600, 480);
+    v.reload();
+    v.rebuildOverlapWarnings();
+    QVERIFY2(v.m_overlappingFixtures.isEmpty(), "stand-ins flagged as overlapping");
 
     delete doc;
 }
@@ -16992,10 +17039,10 @@ void Monitor_Test::aWledLanternShowsItsEffectLedByLed()
     f = lp.frame(lantern, values(28), 16, Qt::red, 0.5, true);
     QCOMPARE(f.leds.count(QColor(128, 0, 0)), 13);
 
-    // Fireworks has none (yet): colour 1, and it says what it is not showing.
-    f = lp.frame(lantern, values(42), 16, Qt::red, 1.0, true);
+    // Game Of Life (2D) has none: colour 1, and it says what it is not showing.
+    f = lp.frame(lantern, values(172), 16, Qt::red, 1.0, true);
     QCOMPARE(f.source, LanternPixels::Flat);
-    QCOMPARE(f.tag, QString("WLED: Fireworks"));
+    QCOMPARE(f.tag, QString("WLED: Game Of Life"));
     QCOMPARE(f.leds.count(QColor(255, 0, 0)), 16);
     // Solid is exactly that.
     f = lp.frame(lantern, values(0), 16, Qt::red, 1.0, true);

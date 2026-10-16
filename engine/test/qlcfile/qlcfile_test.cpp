@@ -31,6 +31,12 @@
 #include "qlcfile_test.h"
 #include "qlcfile.h"
 #include "qlcconfig.h"
+#include "effectscriptcache.h"
+#include "effectpresetcache.h"
+#include "bundlecache.h"
+#include "headlayout.h"
+#include "gobolibrary.h"
+#include "networkgearcatalog.h"
 
 void QLCFile_Test::XMLReader()
 {
@@ -196,6 +202,28 @@ void QLCFile_Test::onlineOnlyFilesAreNotedNotWaitedOn()
 /* The old QLC+ folder's files are linked into qlcconsole's at every start
    -- but one removed here stays removed (four malformed definitions came
    back after being deleted). New files there still come across. */
+void QLCFile_Test::userFoldersAreThePlatformsUserFolder()
+{
+#if defined(WIN32) || defined(Q_OS_WIN)
+    QSKIP("the user folder comes from %USERPROFILE% there, not HOME");
+#else
+    QTemporaryDir home;
+    const QByteArray realHome = qgetenv("HOME");
+    qputenv("HOME", home.path().toUtf8());
+    const QString root = QDir(home.path()).absoluteFilePath(QString(USERQLCPLUSDIR));
+    auto under = [&](const QDir &dir, const QString &sub) {
+        return QDir::cleanPath(dir.absolutePath()) == QDir::cleanPath(root + "/" + sub);
+    };
+    QVERIFY(under(EffectScriptCache::userScriptsDirectory(), "EffectScripts"));
+    QVERIFY(under(EffectPresetCache::userPresetsDirectory(), "EffectPresets"));
+    QVERIFY(under(BundleCache::userBundlesDirectory(), "Bundles"));
+    QVERIFY(under(HeadLayoutLibrary::userDirectory(), "HeadLayouts"));
+    QVERIFY(under(GoboLibrary::userDirectory(), "Gobos"));
+    QVERIFY(under(NetworkGearCatalog::userDirectory(), "NetworkGear"));
+    qputenv("HOME", realHome);
+#endif
+}
+
 void QLCFile_Test::aRemovedLegacyLinkStaysRemoved()
 {
 #if defined(__APPLE__) || defined(Q_OS_MAC)

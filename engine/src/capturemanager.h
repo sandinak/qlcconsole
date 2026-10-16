@@ -21,6 +21,7 @@
 #define CAPTUREMANAGER_H
 
 #include <QObject>
+#include "qlcengine_export.h"
 #include <QHash>
 #include <QList>
 #include <QMutex>
@@ -46,7 +47,7 @@ class Scene;
  *   - applyInPlace() mutates the targeted Scenes; saveAsNew() clones them
  *     under user-supplied names and rewires the running Collection.
  */
-class CaptureManager : public QObject
+class QLC_ENGINE_EXPORT CaptureManager : public QObject
 {
     Q_OBJECT
 

@@ -6,6 +6,106 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-15 — Linux: a test gate that can't skip quietly, and the app icon *(feat/linux-gate-icon)*
+
+- **Test gate counts what it ran** (`platforms/linux/unittest.sh`). The
+  headless-Linux skip (`pidof X` gate; 0 of 52 UI programs run, "Unit tests
+  passed") was closed 2026-08-26; now the runner also prints "Test programs
+  run: 82 engine, 52 of 52 UI (platform: …)" and fails if a group ran none.
+  A caller's `QT_QPA_PLATFORM` wins (cocoa really shows the tests on macOS);
+  CI stays on minimal + xvfb-run, which now exits 1 if xvfb-run is missing.
+- **monitor_test under QPA minimal**: one test read a tree row a queued
+  rebuild had deleted (failed, or SIGSEGV); it settles the panel first.
+- **App icon on Linux**: `desktopFileName` set ("qlcconsole",
+  "qlcconsole-fixtureeditor") so Wayland's app_id matches the .desktop file
+  (it was "org.qlcplus.qlcconsole"); hicolor 16..256 PNGs + scalable SVG
+  installed (`resources/icons/hicolor/render.sh`), cache refreshed on a
+  direct install; the window icon is app-wide at every size (not on macOS:
+  it would replace the .icns in the Dock). `StartupWMClass` in both
+  .desktop files.
+
+### 2026-10-15 — Connections → Show control & sync *(feat/connections-showcontrol)*
+
+- **One page for outside control and sync** (`ui/src/showcontrolsyncpage.*`,
+  a fourth Connections sub-tab): OSC in (on, port, listening / can't, last
+  command + time), MSC in (on, device, the MIDI inputs it answers on with
+  Patch a MIDI input…, last command + time + universe), MIDI timecode
+  (source — the footer chip's pick — code, sync health), QLab out kept as a
+  note. Edits save to the same `showcontrol/...` keys and apply at once.
+- **Settings → Show control** is a pointer with **Open** (keeps the
+  dialog's changes, opens Connections at the page).
+- Engine: `ShowControl::commandFrom` (OSC / MSC+universe / local);
+  `TimecodeSource::health()` is the one verdict (chip, calibration dialog,
+  page) and `sourceUniverseChanged` keeps chip and page in step.
+- Tests: showcontrol_ui_test (page, own QSettings + HOME), showcontrol_test,
+  timecodesource_test.
+- **MSC on one port**: Listen on All MIDI inputs (default) or one, saved
+  machine-wide by plugin + input name (`showcontrol/mscInputPlugin`,
+  `showcontrol/mscInput`); `ShowControl::acceptsMscFrom()` filters the
+  SysEx path; a chosen port not patched in the show is shown in red, no
+  fall-back. **Timecode source saved with the show** (`<Timecode Source>`;
+  absent/unknown universe = any; cleared on a new show).
+
+### 2026-10-15 — Sub-cues P1 + P2 *(on feat/sub-cues)*
+
+[SUBCUES_DESIGN.md](SUBCUES_DESIGN.md). A chase used as a cue-list step
+lists its steps under it as 4.1, 4.2…; set to **Sub GO** they wait for Sub
+GO while GO goes on to the next cue.
+
+- **Engine** — `ChaserStep::subCues` (Auto / SubGo, `SubCues="SubGo"` only
+  when set); a SubGo step starts its chase held on its first playable step
+  (`ChaserRunner::setSubCueHeld`: holds not counted, own fades, list
+  order); `ChaserSubNextStep` / `ChaserSubPreviousStep` / `ChaserSubSetStep`
+  on the outer chase, quantized like GO; numbering and lookup
+  (`subCue`, `findSubCue`, `findCueOrSubCue`), `currentSubCueIndex`,
+  `nextSubCueIndex`, `jumpToSubCue`. Tests: `engine/test/subcues`.
+- **UI** — chaser editor disclosure + Sub-cues column + Edit Chase…; VC cue
+  list nesting, highlight, Sub GO / Sub Back buttons, click to jump; footer
+  "Sub: 4.2 · Next: 5"; ⌥⌘↩ / ⌥⌘⇧↩. Tests: `ui/test/subcues`.
+- Not yet: P3 show control, P4 step-based effects (TODO.md). Not tried on
+  the rig.
+
+### 2026-10-16 — Shows that carry their own definitions and scripts *(on feat/show-embedding, not merged)*
+
+SHOW_EMBEDDING_DESIGN.md, P0–P3.
+
+- **P0:** effect scripts, effect presets, bundles, head layouts, gobos and
+  network gear use the per-platform user folder (USERQLCPLUSDIR), not the
+  Mac's path everywhere; the shipped effect scripts/presets/bundles come
+  from EFFECTSCRIPTDIR/EFFECTPRESETDIR/BUNDLEDIR in qlcconfig.h. Files a
+  Windows/Linux user saved at the old (wrong) path are not moved.
+- **P1/P2:** `engine/src/showembedding.{h,cpp}` (Doc::showEmbedding()). A
+  .qlcc saves an `Embedded` section (exact bytes, CDATA or base64,
+  SHA-256, From/FromModified/Embedded, KeptAgainst); opening compares with
+  this computer's: show-only → used from a temp working folder (footer
+  note, Install on This Computer); identical → nothing; different → the
+  show's wins (substituted in QLCFixtureDefCache / scanned first in
+  EffectScriptCache / RGBScriptsCache show overrides), footer warning,
+  Review… (ShowDifferencesDialog). Closing restores this computer's.
+  ShowStatus Ok entries are now footer *notes* ("Ready · 1 note").
+- **P3:** File → Collect for Transfer…; the show's folder's Fixtures/,
+  EffectScripts/, RGBScripts/ searched last.
+- Tests: showembedding_test, showdifferences_test, qlcfile_test.
+- **Not yet tried by hand:** opening a .qlcc on a machine without the
+  definitions (the Windows VM), and Review… on a real difference.
+
+### 2026-10-15 — Patch-list labels *(on feat/patch-labels)*
+
+- **Labels…** in the patch list (`engine/src/patchlabels.{h,cpp}`,
+  `ui/src/patchlabelsdialog.{h,cpp}`): a label per fixture — all, or the
+  selected rows (the default when there are some) — saved as a PDF
+  (QPdfWriter) to print from Preview. Name and `U3 · 101` large, the
+  universe's name smaller beside the address; mode · channels, a network
+  fixture's own line (`WLED · lantern-2` — the IP's target alias,
+  `PatchList::Row::host`; the IP when it has none, and on mouseover in the
+  patch list's Connection column) and the mount description small; each
+  line shrinks to fit, then elides. Stocks are data
+  (`PatchLabels::sheets()`): **Avery 5160** (Letter, 3 × 10, 2⅝ × 1 in, the
+  default) and a **62 mm roll** (62 × 29 mm, one a page, landscape); the
+  choice is remembered (`patchlist/labelsheet`). No QR code. Docs:
+  fixture-manager.md "Labels", whats-new. Tests: `patchlabels_test` (14),
+  `patchlistdialog_test` (+5, settings in a scratch INI).
+
 ### 2026-10-15 — Release prep: 0.1.0 labels, universal build, kronk fixes *(on release/0.1.0)*
 
 - **Version shown is the release** (VERSION): About box (build id + commit

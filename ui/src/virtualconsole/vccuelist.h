@@ -276,6 +276,30 @@ private:
     void updateStandby();
     bool m_listIsUpdating;
 
+    /*************************************************************************
+     * Sub-cues (SUBCUES_DESIGN.md)
+     *************************************************************************/
+public slots:
+    /** Sub GO: the next sub-cue of the cue playing. */
+    void slotSubGo();
+    /** Sub Back: the previous one. */
+    void slotSubBack();
+
+private:
+    /** The step a row is, or is under (a sub-cue row); -1 for none. */
+    int topLevelIndexOf(QTreeWidgetItem *item) const;
+    /** Play sub-cue @a subIndex of step @a index: that step first if it
+     *  isn't the one playing; a stopped list starts there. */
+    void playSubCue(int index, int subIndex);
+    /** Highlight the sub-cue playing inside its parent. */
+    void updateSubCueHighlight();
+
+    QToolButton *m_subBackButton = nullptr;
+    QToolButton *m_subGoButton = nullptr;
+    /** The sub-cue row highlighted: its step and sub-cue (-1: none). */
+    int m_subHighlightStep = -1;
+    int m_subHighlightSub = -1;
+
     QTimer *m_timer;
 
     /*************************************************************************

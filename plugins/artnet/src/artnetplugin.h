@@ -22,6 +22,7 @@
 
 #include <QNetworkAddressEntry>
 #include <QNetworkInterface>
+#include <QElapsedTimer>
 #include <QHostAddress>
 #include <QString>
 #include <QHash>
@@ -97,6 +98,13 @@ public:
     /** @reimp Patches carry outputIP + outputUni to aim at a node's port. */
     bool supportsOutputTargets() const override { return true; }
 
+    /** @reimp Outputs that can't send, nodes that stopped answering, and
+        ports that report a fault -- see SendHealth and ArtNetNodeWatch. */
+    QStringList targetProblems() const override;
+
+    /** @reimp The same, for one patched universe. */
+    QStringList outputProblems(quint32 output, quint32 universe) const override;
+
     /** @reimp Unicast an ArtPoll at one address. */
     bool probeTarget(const QString &address) override;
 
@@ -148,6 +156,9 @@ private:
 
     /** Time to wait (in seconds) for interfaces to be ready */
     int m_ifaceWaitTime;
+
+    /** When init() last walked the network interfaces (see init()) */
+    QElapsedTimer m_ifaceScan;
 
     /********************************************************************
      * RDM

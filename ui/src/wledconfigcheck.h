@@ -13,6 +13,7 @@
 #define WLEDCONFIGCHECK_H
 
 #include <QJsonObject>
+#include "qlcui_export.h"
 #include <QStringList>
 #include <QObject>
 #include <QHash>
@@ -40,7 +41,7 @@ class Doc;
  * fixture -- with the settings that would fix it, which fix() writes to the
  * device (after confirmFix() has shown exactly what changes).
  */
-class WledConfigCheck final : public QObject
+class QLC_UI_EXPORT WledConfigCheck final : public QObject
 {
     Q_OBJECT
 

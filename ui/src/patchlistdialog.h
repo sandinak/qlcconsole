@@ -41,6 +41,9 @@ class PatchListDialog : public QDialog
     Q_OBJECT
 
 public:
+    /** The table's columns that say where a fixture's data goes. */
+    enum { ConnectionColumn = 5, GoesToColumn = 6 };
+
     PatchListDialog(Doc *doc, QWidget *parent = NULL);
 
     const PatchList &list() const { return m_list; }
@@ -51,10 +54,14 @@ public:
     /** Write the CSV to @p path. False (with @p error set) if it cannot. */
     bool saveCsv(const QString &path, QString *error = NULL) const;
 
+    /** The rows picked in the table, in list order. */
+    QList<PatchList::Row> selectedRows() const;
+
 public slots:
     void slotCopy();
     void slotSaveCsv();
     void slotSavePdf();
+    void slotLabels();
 
 private:
     PatchList m_list;

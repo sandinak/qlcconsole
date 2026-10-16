@@ -10,7 +10,11 @@ The Connections tab reworks stock QLC+'s I/O patching into one place that
 answers "how is this console actually wired," following the signal outward:
 **protocol → interface → devices heard on it → the universes they carry.**
 Three sub-tabs — **Devices** (shown above), **Overview**, and **Detailed** —
-give the same information at different levels of depth.
+give the same information at different levels of depth. A fourth, **Show
+control &amp; sync**, holds what controls or clocks the show from outside:
+OSC and MIDI Show Control cue commands in, MIDI timecode with its sync
+health, and a place for QLab out — see
+[Show control (QLab)](show-control.md#checking-the-hookup).
 
 Because Devices follows the wiring, a patched universe appears only under
 the output it goes to, and only unpatched ones gather in their own
@@ -45,7 +49,7 @@ to one row over the list — **By universe**, **Show unused…**, a one-line
 "Right-click a row for what it can do" whose tooltip has the whole
 explanation, the search status, **Undo Patch Change** and **Rescan** — so
 the list and the output view get the window's height.) A full patch-change **undo**
-(Ctrl+Z, from any of the three sub-tabs) snapshots and restores the whole
+(Ctrl+Z, from any of the patching sub-tabs) snapshots and restores the whole
 patch state, not just the last single edit.
 
 Compared to stock QLC+, this fork also fixed a number of real patching
@@ -54,6 +58,47 @@ defaulting unplaceable ones to loopback, universe renumbering under live
 controllers, rescan working on every plugin type, hardware lines no longer
 silently filtered from the "heard on" liveness view, and manual
 targets/ports/aliases that persist with the workspace.
+
+### When an output is in trouble
+
+The Art-Net and E1.31 outputs say when where a universe goes stops working,
+in three places: the **readiness footer** (one line per problem, with the
+universes it hits: "Art-Net to 172.18.2.50: not reachable since 20:14
+(universes 3, 4)"), the universe's **row in Connections** (the problem
+appended to Detail in red, all of them in the tooltip; both the wiring tree
+and By universe), and the log. Each clears by itself once it is fixed.
+
+| Message | What it means |
+|---|---|
+| **Art-Net to 172.18.2.50: not reachable since 20:14** (or **E1.31 to …**) | This computer can't send to that address: the interface is down or gone, there's no route, or the address doesn't answer on the network (nothing there). |
+| **Art-Net node CR041R (172.18.2.10): stopped answering since 20:14** | A node this session has heard from has missed three polls in a row (about 9 s). Unplugged, powered off, or its cable/switch is down. |
+| **Art-Net node CR041R (172.18.2.10), port 2 (0:0:1): DMX output short since 20:14** | The node reports a short on the DMX line of the port carrying this universe — a bad cable, connector or fixture on that run. |
+| **Art-Net node …, port 2 (0:0:1): not outputting DMX since 20:14** | That port was outputting earlier and has stopped, though the console is still sending to it. |
+
+They are judged, not echoed, so they don't flicker:
+
+- **Can't send** shows once sends have failed for a second or more (a brief
+  hiccup is ignored; a hard error such as a packet too big, at once) and
+  clears only after sends have worked for **30 seconds** without a break —
+  a node that isn't there can make sends "succeed" for a few seconds at a
+  time, which is not the same as being back.
+- **Stopped answering** needs three missed polls in a row and clears after
+  replies to two in a row. Only nodes heard from at least once this session
+  are watched: one powered down before the show started isn't flagged.
+- **Port faults** need the same fault in two replies in a row and clear
+  after 10 seconds of clean replies. "Not outputting" is only said of a
+  port seen outputting earlier, so a node that never reports it isn't
+  flagged.
+
+On a **broadcast** universe, the nodes watched are those that output its
+Art-Net universe; on a **unicast** one, the node at that address.
+
+What the console sends for this: nothing new on a node's own subnet — the
+Art-Net plugin already polls each interface it outputs on every 3 seconds
+(ArtPoll, broadcast), and the answers are what's watched. A unicast target
+on **another** subnet never hears that broadcast, so it gets one unicast
+ArtPoll every 3 seconds as well. E1.31 has no reply from a receiver, so
+for E1.31 only "can't send" is shown.
 
 ### WLED output
 
@@ -139,6 +184,9 @@ problem can be fixed on the spot. It checks for:
   where only the newest is used;
 - **universes with fixtures but no output**, so what they send goes
   nowhere;
+- **network outputs in trouble** (see
+  [When an output is in trouble](#when-an-output-is-in-trouble)), one line
+  per problem with the universes it hits, and **Open Connections**;
 - **WLED devices not answering**, or on weak Wi-Fi;
 - **WLEDs not set up as the show drives them** (see WLED output), with
   **Fix on Device…**;

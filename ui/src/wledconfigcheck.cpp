@@ -10,6 +10,7 @@
 */
 
 #include <QNetworkAccessManager>
+#include <QNetworkProxy>
 #include <QNetworkRequest>
 #include <QNetworkReply>
 #include <QJsonDocument>
@@ -69,6 +70,7 @@ WledConfigCheck::WledConfigCheck(Doc *doc, QObject *parent)
 {
     if (s_instance == nullptr)
         s_instance = this;
+    m_nam->setProxy(QNetworkProxy::NoProxy);    // WLEDs are on the show LAN
     m_timer->setInterval(30000);
     connect(m_timer, &QTimer::timeout, this, &WledConfigCheck::checkNow);
     m_timer->start();

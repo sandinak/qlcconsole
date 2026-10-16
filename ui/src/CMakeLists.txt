@@ -142,6 +142,7 @@ add_library(${module_name}
     effectscripteditor.cpp effectscripteditor.h
     pathdrawwidget.cpp pathdrawwidget.h
     networkreportdialog.cpp networkreportdialog.h
+    patchlabelsdialog.cpp patchlabelsdialog.h
     patchlistdialog.cpp patchlistdialog.h
     speedmastersfooter.cpp speedmastersfooter.h
     speedmasterspanel.cpp speedmasterspanel.h
@@ -151,6 +152,7 @@ add_library(${module_name}
     helpbrowser.cpp helpbrowser.h
     helpshots.cpp helpshots.h
     showcontrollistener.cpp showcontrollistener.h
+    showcontrolsyncpage.cpp showcontrolsyncpage.h
     universecombo.cpp universecombo.h
     powerdistributiondialog.cpp powerdistributiondialog.h
     powerdistributionwidget.cpp powerdistributionwidget.h
@@ -177,6 +179,7 @@ add_library(${module_name}
     showmanager/videoitem.cpp showmanager/videoitem.h
     showstatus.cpp showstatus.h
     showstatusdialog.cpp showstatusdialog.h
+    showdifferencesdialog.cpp showdifferencesdialog.h
     simpledesk.cpp simpledesk.h
     simpledeskengine.cpp simpledeskengine.h
     speeddial.cpp speeddial.h
@@ -254,7 +257,8 @@ target_link_libraries(${module_name} PUBLIC
 
 # Add resources and RGB Script deps
 target_link_libraries(${module_name} PUBLIC Qt6::Qml)
-qt_add_resources(qlcplusui_resource_files "qlcui.qrc" "help.qrc")
+qt_add_resources(qlcplusui_resource_files "qlcui.qrc" "help.qrc"
+    "../../resources/icons/hicolor/appicons.qrc")
 
 target_sources(${module_name} PRIVATE ${qlcplusui_resource_files})
 
@@ -271,6 +275,13 @@ qt_add_shaders(${module_name} "rigshaders"
 
 if(WIN32)
     target_include_directories(${module_name} PUBLIC ../../hotplugmonitor/src)
+endif()
+
+# MinGW exports every symbol of a DLL by itself only while nothing in it is
+# marked dllexport; qlcui_export.h marks a few classes, so ask for the
+# rest explicitly.
+if(MINGW)
+    target_link_options(${module_name} PRIVATE -Wl,--export-all-symbols)
 endif()
 
 install(TARGETS ${module_name}

@@ -40,6 +40,7 @@ void IOPluginStub::init()
     m_rescanCalled = 0;
     m_probed.clear();
     m_lineCount = 4;
+    m_outputProblems.clear();
 }
 
 QString IOPluginStub::name() const

@@ -82,13 +82,15 @@ plain CI (build + test on push/PR) and is unrelated to publishing releases.
 
 ## Out of scope for now
 
-- **Linux / Windows packaging** (`platforms/linux/qlcconsole.spec`,
-  `debian/changelog`, the NSIS scripts under `platforms/windows/`) — these
-  are inherited from upstream QLC+ and are stale (e.g. the `.spec` file
-  still reads a `QLCPLUS_VERSION` env var from the old build). qlcconsole's
-  releases are macOS-only until one of those platforms becomes an actual
-  target; at that point these files need their own version/branding pass
-  before they're usable.
+- **Linux packaging** (`platforms/linux/qlcconsole.spec`,
+  `debian/changelog`) — inherited from upstream QLC+ and stale (e.g. the
+  `.spec` file still reads a `QLCPLUS_VERSION` env var from the old build).
+  qlcconsole's releases are macOS-only until Linux becomes an actual target;
+  at that point these files need their own version/branding pass.
+- **Windows** — CI's `build-windows` job builds an NSIS installer
+  (`platforms/windows/qlcconsole.nsi.in`, version from `VERSION`) on every
+  push and uploads it as an artifact. It is not part of a release: unsigned,
+  and not yet tried on a real Windows machine (see TODO.md).
 - **CI-based release builds** — could move build+sign+notarize into GitHub
   Actions later by exporting the cert as a secret, but that trades local key
   custody for CI convenience; not worth it while releases are infrequent and

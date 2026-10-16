@@ -13,5 +13,6 @@ GenericName[ca]=Controlador d'iluminació
 Keywords=qlc;light;controller;dmx;analog;midi;artnet;e131;osc;
 Exec=qlcconsole --open %f
 Icon=qlcconsole
+StartupWMClass=qlcconsole
 MimeType=application/x-qlcconsole-workspace;application/x-qlc-workspace;
 Categories=Qt;AudioVideo;

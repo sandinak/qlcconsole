@@ -21,6 +21,7 @@
 #define INPUTOUTPUTMAP_H
 
 #include <QSharedPointer>
+#include "qlcengine_export.h"
 #include <QObject>
 #include <QMutex>
 #include <QDir>
@@ -48,7 +49,7 @@ class Doc;
 #define KXMLIOBeatType          QStringLiteral("BeatType")
 #define KXMLIOBeatsPerMinute    QStringLiteral("BPM")
 
-class InputOutputMap final : public QObject
+class QLC_ENGINE_EXPORT InputOutputMap final : public QObject
 {
     Q_OBJECT
     Q_DISABLE_COPY(InputOutputMap)

@@ -475,7 +475,7 @@ void EffectInstance_Test::wledPortsRunAsWledDoes()
     cache.addDirectory(QDir(dir));
     QVERIFY(cache.scriptPathForWled("chase").endsWith("wled-chase.js"));
     QVERIFY(cache.scriptPathForWled("Breathe").endsWith("wled-breathe.js"));
-    QVERIFY(cache.scriptPathForWled("Fireworks").isEmpty());
+    QVERIFY(cache.scriptPathForWled("Game Of Life").isEmpty());   // 2D: not ported
 
     auto run = [](EffectScript &es, int n, double t, int speed, int intensity, int option,
                   const QList<QColor> &cols) {
@@ -567,23 +567,68 @@ void EffectInstance_Test::wledPortsRunAsWledDoes()
         QVERIFY2(c.red() < 20, qPrintable(c.name()));
     px = run(breathe, 4, period / 2, 128, 128, 0, { red, QColor(Qt::black), QColor(Qt::black) });
     QVERIFY2(px.first().red() > 240, qPrintable(px.first().name()));
+
+    /* Percent lights a share of the strip from its start -- intensity is the
+       share -- in colour 1, the rest colour 2. */
+    EffectScript percent;
+    QVERIFY(percent.load(dir + "wled-percent.js"));
+    QCOMPARE(percent.wled(), QString("Percent"));
+    QCOMPARE(count(run(percent, 20, 1.0, 128, 0, 0, { red, bg, blue }), red), 0);
+    px = run(percent, 20, 1.0, 128, 128, 0, { red, bg, blue });
+    QCOMPARE(count(px, red), 10);
+    for (int i = 0; i < 10; ++i)
+        QCOMPARE(px.at(i), red);                       // from the start
+    QCOMPARE(count(px, bg), 10);
+    QCOMPARE(count(run(percent, 20, 1.0, 128, 64, 0, { red, bg, blue }), red), 5);
+    QCOMPARE(count(run(percent, 20, 1.0, 128, 255, 0, { red, bg, blue }), red), 20);
+    // Reversed, it fills from the other end.
+    px = run(percent, 20, 1.0, 128, 64, 128, { red, bg, blue });
+    for (int i = 15; i < 20; ++i)
+        QCOMPARE(px.at(i), red);
+
+    /* Solid Pattern: speed is how many lit, intensity how many not, over and
+       over -- speed 8 is two, intensity 24 three. */
+    EffectScript pattern;
+    QVERIFY(pattern.load(dir + "wled-solid-pattern.js"));
+    px = run(pattern, 20, 1.0, 8, 24, 0, { red, bg, blue });
+    for (int i = 0; i < 20; ++i)
+        QCOMPARE(px.at(i), (i % 5) < 2 ? red : bg);
+    // Solid Pattern Tri: the three colours in runs of the intensity's size.
+    EffectScript tri;
+    QVERIFY(tri.load(dir + "wled-solid-pattern-tri.js"));
+    px = run(tri, 12, 1.0, 128, 32, 0, { red, bg, blue });
+    const QList<QColor> threes = { red, red, red, bg, bg, bg, blue, blue, blue, red, red, red };
+    QCOMPARE(px, threes);
+
+    /* Found by the names a WLED device lists them under -- "Sparkle+" is what
+       WLED now calls its hyper sparkle. */
+    EffectScriptCache all;
+    all.addDirectory(QDir(dir));
+    QVERIFY(all.scriptPathForWled("Sparkle+").endsWith("wled-sparkle-plus.js"));
+    QVERIFY(all.scriptPathForWled("Fireworks Starburst").endsWith("wled-fireworks-starburst.js"));
+    QVERIFY(all.scriptPathForWled("PS Fire 1D").endsWith("wled-ps-fire-1d.js"));
+    QVERIFY(all.scriptPathForWled("Gravimeter").endsWith("wled-gravimeter.js"));
 }
 
 /* Every WLED effect written for qlcconsole loads, paints every pixel with a
-   real colour, gives the same frame for the same moment, and (all but Solid)
-   moves. The look's colours, thirty pixels, a few moments. */
+   real colour, gives the same frame for the same moment, and (all but the
+   still ones) moves. The look's colours, thirty pixels, a few moments. The
+   sound-reactive ones hear a made-up song -- and rest, dark, with none. */
 void EffectInstance_Test::everyWledPortRuns()
 {
     const QString dir = QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/";
-    int ports = 0;
+    // Still patterns: the same frame at every moment, as on a device.
+    const QStringList still = { "Solid", "Solid Pattern", "Solid Pattern Tri", "Percent" };
+    int ports = 0, heard = 0;
     foreach (const QString &file, QDir(dir).entryList({ "wled-*.js" }, QDir::Files))
     {
         EffectScript es;
         QVERIFY2(es.load(dir + file), qPrintable(file));
         if (es.wled().isEmpty())
             continue;                               // the device itself, not a port
+        const bool listens = es.dataChannelKeys().contains(QStringLiteral("audio"));
         QJSEngine *eng = es.engine();
-        auto frame = [&](double t) {
+        auto frame = [&](double t, bool song = true) {
             QJSValue fixtures = eng->newArray(30);
             for (int i = 0; i < 30; ++i)
             {
@@ -606,7 +651,26 @@ void EffectInstance_Test::everyWledPortRuns()
             QJSValue palettes = eng->newObject();
             palettes.setProperty("look", look);
             QJSValue state = es.newState();
-            const QJSValue r = es.callTick(fixtures, inputs, palettes, eng->newObject(), state, eng->newObject());
+            QJSValue data = eng->newObject();
+            if (listens && song)
+            {
+                // A song: sixteen bands rising and falling out of step.
+                QJSValue bands = eng->newArray(16);
+                double peak = 0;
+                for (int k = 0; k < 16; ++k)
+                {
+                    const double v = qBound(0.0, 0.45 + 0.45 * std::sin(t * 3.0 + k * 0.9), 1.0);
+                    bands.setProperty(uint(k), v);
+                    peak = qMax(peak, v);
+                }
+                QJSValue audio = eng->newObject();
+                audio.setProperty("bands", bands);
+                audio.setProperty("level", 0.3 + 0.3 * std::sin(t * 2.1));
+                audio.setProperty("peak", peak);
+                audio.setProperty("maxHz", 5000);
+                data.setProperty("audio", audio);
+            }
+            const QJSValue r = es.callTick(fixtures, inputs, palettes, eng->newObject(), state, data);
             QStringList px;
             for (int i = 0; i < 30; ++i)
             {
@@ -626,11 +690,23 @@ void EffectInstance_Test::everyWledPortRuns()
             seen.insert(f.join(QLatin1Char(' ')));
         }
         QCOMPARE(frame(1.17), frame(1.17));          // the same moment, the same frame
-        if (es.wled() != QLatin1String("Solid"))
+        if (!still.contains(es.wled()))
             QVERIFY2(seen.size() > 1, qPrintable(file + ": never moves"));
+        else
+            QVERIFY2(seen.size() == 1, qPrintable(file + ": should hold still"));
+        if (listens)
+        {
+            // No audio input: it rests, dark, rather than making something up.
+            const QStringList quiet = frame(1.17, false);
+            QVERIFY2(quiet.size() == 30, qPrintable(file));
+            for (const QString &p : quiet)
+                QVERIFY2(p == QLatin1String("0,0,0"), qPrintable(file + ": lit with no audio"));
+            heard++;
+        }
         ports++;
     }
-    QVERIFY2(ports >= 90, qPrintable(QString("only %1 WLED ports").arg(ports)));
+    QVERIFY2(ports >= 160, qPrintable(QString("only %1 WLED ports").arg(ports)));
+    QVERIFY2(heard >= 23, qPrintable(QString("only %1 sound-reactive WLED ports").arg(heard)));
 }
 
 /* "for WLED based fixtures we should be selecting WLED effects": a look set
@@ -753,10 +829,18 @@ void EffectInstance_Test::bothFiresAreOfferedAndEachComesBackAsItself()
     QTemporaryDir home;
     const QByteArray realHome = qgetenv("HOME");
     qputenv("HOME", home.path().toUtf8());
+#ifdef Q_OS_WIN
+    // Windows takes the home folder from USERPROFILE, not HOME.
+    const QByteArray realProfile = qgetenv("USERPROFILE");
+    qputenv("USERPROFILE", home.path().toUtf8());
+#endif
     EffectScriptCache cache;
     cache.addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
     cache.addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "rgbscripts"), true);
     qputenv("HOME", realHome);
+#ifdef Q_OS_WIN
+    qputenv("USERPROFILE", realProfile);
+#endif
 
     // Both listed: the flicker by its new name, the rising flame as Fire.
     const QStringList names = cache.scriptNames();

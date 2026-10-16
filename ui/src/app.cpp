@@ -102,6 +102,8 @@
 #include "pmjoverlay.h"
 #include "showstatus.h"
 #include "showstatusdialog.h"
+#include "showembedding.h"
+#include "showdifferencesdialog.h"
 #include "qlcioplugin.h"
 #include "startupwindow.h"
 
@@ -376,8 +378,6 @@ void App::init()
     if (m_startupWindow != NULL)
         m_startupWindow->beginStep(tr("Restoring window state"));
 
-    setWindowIcon(QIcon(":/qlcconsole.png"));
-
     m_tab = new QTabWidget(this);
     m_tab->setObjectName("MainTabs");
     m_tab->setTabPosition(QTabWidget::South);
@@ -542,9 +542,11 @@ void App::init()
             m_statusPowerLabel->setText(overload
                 ? tr("%1 A · %2 kW  OVERLOAD").arg(amps, 0, 'f', 1).arg(kw, 0, 'f', 2)
                 : tr("%1 A · %2 kW").arg(amps, 0, 'f', 1).arg(kw, 0, 'f', 2));
-            m_statusPowerLabel->setStyleSheet(overload
+            const QString sheet = overload
                 ? QStringLiteral("QLabel { color: #ff5555; font-weight: bold; }")
-                : QString());
+                : QString();
+            if (m_statusPowerLabel->styleSheet() != sheet)   // every 500 ms: only on a change
+                m_statusPowerLabel->setStyleSheet(sheet);
             m_statusPowerLabel->show();
         });
         w = pm;
@@ -667,11 +669,17 @@ void App::setActiveWindow(const QString& name)
 }
 
 #if defined(WIN32) || defined(Q_OS_WIN)
-bool App::nativeEvent(const QByteArray &eventType, void *message, long *result)
+/* Qt 6 takes the result as qintptr*. Declared with Qt 5's long* this never
+   overrode anything, so WM_DEVICECHANGE never reached HotPlugMonitor and a
+   USB device plugged in after launch went unnoticed on Windows. */
+bool App::nativeEvent(const QByteArray &eventType, void *message, qintptr *result)
 {
     Q_UNUSED(eventType)
-    //qDebug() << Q_FUNC_INFO << eventType;
-    return HotPlugMonitor::parseWinEvent(message, result);
+    long res = 0;
+    const bool handled = HotPlugMonitor::parseWinEvent(message, &res);
+    if (handled && result != NULL)
+        *result = res;
+    return handled;
 }
 
 void App::disableTimerResolutionThrottling()
@@ -854,6 +862,8 @@ void App::initDoc()
     m_doc = new Doc(this);
 
     connect(m_doc, SIGNAL(modified(bool)), this, SLOT(slotDocModified(bool)));
+    connect(m_doc->showEmbedding(), &ShowEmbedding::changed, this,
+            [this]() { AppUtil::updateShowEmbeddingStatus(m_doc); });
     connect(m_doc, SIGNAL(needAutosave()), this, SLOT(slotDocAutosave()));
     connect(m_doc, SIGNAL(modeChanged(Doc::Mode)), this, SLOT(slotModeChanged(Doc::Mode)));
     connect(m_doc, SIGNAL(loadProgress(QString,int)), this, SLOT(slotLoadProgress(QString,int)));
@@ -888,6 +898,8 @@ void App::initDoc()
     /* Cues fired from outside (QLab): OSC on a port of our own, MSC on a
        patched MIDI input (SHOW_CONTROL_DESIGN.md). */
     m_showControlListener = new ShowControlListener(m_doc, this);
+    if (InputOutputManager::instance() != NULL)
+        InputOutputManager::instance()->setShowControlListener(m_showControlListener);
     QTimer *wledRecheck = new QTimer(this);
     wledRecheck->setSingleShot(true);
     wledRecheck->setInterval(1500);
@@ -1008,6 +1020,25 @@ void App::initDoc()
        of their own reads each one (which makes the cloud send it), however
        long that takes. Fixtures and effects then load at once; anything else
        loads next time qlcconsole starts. */
+    /* What the show carries: keep the ones only it has; review the ones that
+       differ from this computer's (SHOW_EMBEDDING_DESIGN.md). */
+    ShowStatus::instance()->setAction("embedded.showonly", tr("Install on This Computer"),
+        [this](QWidget *parent, const QVariantList &items) {
+            QStringList failed;
+            foreach (const QVariant &v, items)
+            {
+                QString error;
+                if (!m_doc->showEmbedding()->installShows(v.toString(), &error))
+                    failed << error;
+            }
+            if (!failed.isEmpty())
+                QMessageBox::warning(parent, tr("Install on This Computer"), failed.join("\n"));
+        });
+    ShowStatus::instance()->setAction("embedded.differ", tr("Review…"),
+        [this](QWidget *parent, const QVariantList &) {
+            ShowDifferencesDialog dlg(m_doc, parent);
+            dlg.exec();
+        });
     ShowStatus::instance()->setAction("fixtures.nodefinition", tr("Fetch Definitions"),
         [this](QWidget *parent, const QVariantList &) { recoverUnavailableDefinitions(parent); });
     ShowStatus::instance()->setAction("storage.onlineonly", tr("Download Now"),
@@ -1062,8 +1093,7 @@ void App::initDoc()
             }).detach();
         });
     ShowStatus::instance()->setAction("definitions.duplicates", tr("Move to Trash…"), trashDefinitions);
-    ShowStatus::instance()->setAction("universes.nooutput", tr("Open Connections"),
-        [this](QWidget *parent, const QVariantList &items) {
+    auto openConnections = [this](QWidget *parent, const QVariantList &items) {
             InputOutputManager *io = InputOutputManager::instance();
             if (io == NULL || items.isEmpty())
                 return;
@@ -1071,7 +1101,9 @@ void App::initDoc()
             io->selectUniverse(items.first().toUInt());
             if (QDialog *dlg = qobject_cast<QDialog *>(parent))
                 dlg->accept();          // out of the way of the tab it opened
-        });
+        };
+    ShowStatus::instance()->setAction("universes.nooutput", tr("Open Connections"), openConnections);
+    ShowStatus::instance()->setAction("outputs.problems", tr("Open Connections"), openConnections);
 #ifdef DEBUG_SPEED
     speedTime.start();
 #endif
@@ -1117,10 +1149,17 @@ void App::initDoc()
             m_startupWindow->logDetail(name);
     });
     m_doc->ioPluginCache()->load(IOPluginCache::systemPluginDirectory());
-    // WLED devices that stop answering, or fade to a weak signal: the footer.
-    if (QLCIOPlugin *wled = m_doc->ioPluginCache()->plugin(QStringLiteral("WLED")))
-        if (QTimer *t = findChild<QTimer *>(QStringLiteral("fixtureReadinessTimer")))
-            connect(wled, &QLCIOPlugin::targetProblemsChanged, t, QOverload<>::of(&QTimer::start));
+    /* Outputs in trouble -- WLED devices that stop answering or fade to a
+       weak signal, Art-Net / E1.31 outputs that can't send, Art-Net nodes
+       that stop answering: the footer, whichever plugin says so. */
+    /* By name, not by member pointer: QLCIOPlugin is compiled into the engine
+       and into every plugin, so on Windows its signal has no single exporting
+       DLL, and a pointer-to-member connection there silently never fires. */
+    if (QTimer *t = findChild<QTimer *>(QStringLiteral("fixtureReadinessTimer")))
+    {
+        foreach (QLCIOPlugin *plugin, m_doc->ioPluginCache()->plugins())
+            connect(plugin, SIGNAL(targetProblemsChanged()), t, SLOT(start()));
+    }
 
     /* Load audio decoder plugins
      * This doesn't use a AudioPluginCache::systemPluginDirectory() cause
@@ -1706,6 +1745,25 @@ void App::initActions()
     connect(m_cueBackAction, &QAction::triggered, this, [this]() {
         m_doc->showControl()->execute({ ShowControl::Back, QString(), QString() });
     });
+    /* ...and its Sub GO / Sub Back (SUBCUES_DESIGN.md): through the sub-cues
+       of the cue playing, 4.1, 4.2..., while GO goes on to 5. ⌥⌘↩ / ⌥⌘⇧↩
+       on macOS (Qt's CTRL is ⌘ there). */
+    m_cueSubGoAction = new QAction(tr("Sub GO (Main Cue List)"), this);
+    m_cueSubGoAction->setShortcut(cueSubGoShortcut());
+    m_cueSubGoAction->setShortcutContext(Qt::ApplicationShortcut);
+    connect(m_cueSubGoAction, &QAction::triggered, this, [this]() {
+        Chaser *list = m_doc->showControl()->cueList(QString());
+        if (list != NULL && list->isRunning())
+            list->subGo();
+    });
+    m_cueSubBackAction = new QAction(tr("Sub Back (Main Cue List)"), this);
+    m_cueSubBackAction->setShortcut(cueSubBackShortcut());
+    m_cueSubBackAction->setShortcutContext(Qt::ApplicationShortcut);
+    connect(m_cueSubBackAction, &QAction::triggered, this, [this]() {
+        Chaser *list = m_doc->showControl()->cueList(QString());
+        if (list != NULL && list->isRunning())
+            list->subBack();
+    });
 
     m_helpIndexAction = new QAction(tr("QLC+ Reference (online)"), this);
     m_helpIndexAction->setShortcut(QKeySequence("SHIFT+F1"));
@@ -1805,6 +1863,15 @@ void App::initMenuBar()
     fileMenu->addSeparator();
     fileMenu->addAction(m_fileSaveAction);
     fileMenu->addAction(m_fileSaveAsAction);
+    {
+        QAction *collect = new QAction(tr("Collect for &Transfer…"), this);
+        collect->setObjectName(QStringLiteral("fileCollectForTransfer"));
+        collect->setToolTip(tr("Write the show and every definition and script it uses "
+                               "that is not part of the app into one folder, to take to "
+                               "another computer"));
+        connect(collect, &QAction::triggered, this, &App::slotFileCollectForTransfer);
+        fileMenu->addAction(collect);
+    }
     fileMenu->addSeparator();
     fileMenu->addAction(m_appSettingsAction);      // → app menu (Preferences) on macOS
     // Quit: m_quitAction only exists when there's no window manager (kiosk/RPi).
@@ -2024,6 +2091,8 @@ void App::initMenuBar()
     ctrlMenu->addSeparator();
     ctrlMenu->addAction(m_cueGoAction);
     ctrlMenu->addAction(m_cueBackAction);
+    ctrlMenu->addAction(m_cueSubGoAction);
+    ctrlMenu->addAction(m_cueSubBackAction);
     ctrlMenu->addSeparator();
     QMenu* liveMenu = ctrlMenu->addMenu(tr("&Live Edit"));
     liveMenu->addAction(m_liveEditAction);
@@ -2063,6 +2132,10 @@ void App::initMenuBar()
         });
         m_windowJumps << jump;
     }
+    /* The Rig Overview is a window of its own, so it is offered here too, not
+       only under View: the Window menu is where people go looking for one
+       ("there's no option in Windows"). The same action, so one shortcut. */
+    windowMenu->addAction(m_rigOverviewAction);
     windowMenu->addSeparator();
     m_windowDockMenu = windowMenu->addMenu(tr("Put Back in Main Window"));
     m_windowDockAll = windowMenu->addAction(tr("Put All Back in Main Window"));
@@ -2568,6 +2641,54 @@ QFile::FileError App::slotFileSaveAs()
 
     updateFileOpenMenu(fn);
     return error;
+}
+
+void App::slotFileCollectForTransfer()
+{
+    if (!confirmSaveWithoutDefinitions())
+        return;
+
+    const QString base = m_fileName.isEmpty() ? tr("Show") : QFileInfo(m_fileName).completeBaseName();
+    const QString start = m_fileName.isEmpty() ? QDir::homePath() : QFileInfo(m_fileName).absolutePath();
+    const QString parent = QFileDialog::getExistingDirectory(this,
+        tr("Collect for Transfer: where to make the “%1” folder").arg(base), start);
+    if (parent.isEmpty())
+        return;
+
+    const QDir dir(QDir(parent).absoluteFilePath(base));
+    if (dir.exists() && !dir.entryList(QDir::AllEntries | QDir::NoDotAndDotDot).isEmpty()
+        && QMessageBox::question(this, tr("Collect for Transfer"),
+               tr("There is already a folder called “%1” there. Files in it with the same "
+                  "names will be replaced.\n\nCollect into it anyway?").arg(base),
+               QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel) != QMessageBox::Yes)
+        return;
+    if (!QDir().mkpath(dir.absolutePath()))
+    {
+        QMessageBox::warning(this, tr("Collect for Transfer"),
+                             tr("Could not make the folder %1.").arg(dir.absolutePath()));
+        return;
+    }
+
+    /* The show as a .qlcc (it carries the same files), saved as a copy: this
+       window goes on with the show it has open. */
+    const QString show = dir.absoluteFilePath(base + KExtWorkspaceConsole);
+    const QFile::FileError error = saveXML(show, true);
+    if (error != QFile::NoError)
+    {
+        handleFileError(error);
+        return;
+    }
+    QStringList written;
+    const bool ok = m_doc->showEmbedding()->writeTransferFolder(dir.absolutePath(), &written);
+    if (!ok)
+        QMessageBox::warning(this, tr("Collect for Transfer"),
+            tr("The show is in %1, but some of the files it uses could not be written there.")
+                .arg(dir.absolutePath()));
+    else
+        QMessageBox::information(this, tr("Collect for Transfer"),
+            tr("Collected in %1: the show, and %n file(s) it uses that are not part of the "
+               "app (fixture definitions, scripts, LED maps).", "", written.size())
+                .arg(QDir::toNativeSeparators(dir.absolutePath())));
 }
 
 /*****************************************************************************
@@ -3141,6 +3262,15 @@ void App::slotHelpAbout()
     ab.exec();
 }
 
+void App::showShowControlSettings()
+{
+    if (InputOutputManager::instance() == NULL || m_tab == NULL)
+        return;
+    // By label, so a Connections detached into its own window comes forward too.
+    showContext(tr("Connections"));
+    InputOutputManager::instance()->showShowControlPage();
+}
+
 void App::slotAppSettings()
 {
     AppSettings settings(this, this);
@@ -3375,6 +3505,9 @@ bool App::confirmSaveWithoutDefinitions()
 void App::recoverUnavailableDefinitions(QWidget *parent)
 {
     QLCFixtureDefCache *defs = m_doc->fixtureDefCache();
+    /* Copied into the user folder since qlcconsole started (a show brought
+       to a new computer, its definitions after it): read the folder again. */
+    defs->load(QLCFixtureDefCache::userDefinitionDirectory());
     QList<Fixture *> waiting;
     QStringList fetch;
     foreach (Fixture *fx, m_doc->fixtures())
@@ -3424,6 +3557,13 @@ QFile::FileError App::loadXML(const QString& fileName)
 
     if (fileName.isEmpty() == true)
         return QFile::OpenError;
+
+    /* The definitions and scripts the show carries, put in use before any of
+       it loads: where this computer has none, or a different one, the show's
+       own (SHOW_EMBEDDING_DESIGN.md). Its folder's Fixtures/, EffectScripts/
+       and RGBScripts/ too, for what neither has. */
+    if (m_doc->showEmbedding()->readWorkspace(fileName))
+        m_doc->showEmbedding()->apply(QFileInfo(fileName).absolutePath());
 
     // Every definition it needs on this computer before it loads.
     prepareShowDefinitions(fileName);
@@ -3541,6 +3681,11 @@ bool App::loadXML(QXmlStreamReader& doc, bool goToConsole, bool fromMemory)
             /* Ignore creator information */
             doc.skipCurrentElement();
         }
+        else if (doc.name() == KXMLShowEmbedded)
+        {
+            /* Read before anything else (App::loadXML(fileName)). */
+            doc.skipCurrentElement();
+        }
         else if (doc.name() == QLatin1String("AppState"))
         {
             // Defer restoring windows until after the full workspace is loaded
@@ -3654,6 +3799,15 @@ QFile::FileError App::saveXML(const QString& fileName, bool autosave)
     doc.writeTextElement(KXMLQLCCreatorVersion, APPVERSION);
     doc.writeTextElement(KXMLQLCCreatorAuthor, QLCFile::currentUserName());
     doc.writeEndElement(); // close KXMLQLCCreator
+
+    /* What the show uses that is not part of the app, carried in it: the
+       version in use, never quietly this computer's. A .qlcc only -- a .qxw
+       stays as QLC+ can read it. Before <Engine>, so it is read first. */
+    if (ShowEmbedding::embedsIn(fileName))
+    {
+        m_doc->showEmbedding()->collect();
+        m_doc->showEmbedding()->saveXML(&doc);
+    }
 
     /* Write engine components to the XML document */
     m_doc->saveXML(&doc);
@@ -4097,6 +4251,32 @@ void App::applyTheme()
         break;
     }
 
+    /* Off macOS the app runs on Fusion (main.cpp; offscreen renders do too),
+       which draws bevels, frames, separators and default.qss's palette(mid)/
+       palette(midlight) borders and hovers from the shade roles. Left at the
+       native palette's values they are a light theme's greys -- bright lines
+       and pale hover blocks across a dark theme. Derive them from the theme's
+       own Button/Window colours, as QPalette(button, window) would, and make
+       the accent the theme's highlight rather than the system accent colour.
+       The native macOS style is left exactly as it was. */
+    if (m_theme != ThemeDefault
+        && QApplication::style()->name().compare(QLatin1String("fusion"), Qt::CaseInsensitive) == 0)
+    {
+        const QPalette derived(pal.color(QPalette::Button), pal.color(QPalette::Window));
+        const QPalette::ColorRole shades[] = { QPalette::Light, QPalette::Midlight,
+                                               QPalette::Mid, QPalette::Dark,
+                                               QPalette::Shadow };
+        const QPalette::ColorGroup groups[] = { QPalette::Active, QPalette::Inactive,
+                                                QPalette::Disabled };
+        for (QPalette::ColorGroup g : groups)
+            for (QPalette::ColorRole r : shades)
+                pal.setColor(g, r, derived.color(g, r));
+        pal.setColor(QPalette::PlaceholderText,
+                     pal.color(QPalette::Disabled, QPalette::Text));
+        pal.setColor(QPalette::Accent, pal.color(QPalette::Highlight));
+        pal.setColor(QPalette::Link, pal.color(QPalette::Highlight).lighter(130));
+    }
+
     qApp->setPalette(pal);
 
     // Qt doesn't always re-evaluate palette(...)-based QSS on a palette
@@ -4164,6 +4344,13 @@ void App::slotAutosave()
     doc.writeTextElement(KXMLQLCCreatorVersion, APPVERSION);
     doc.writeTextElement(KXMLQLCCreatorAuthor, QLCFile::currentUserName());
     doc.writeEndElement();
+
+    // A .qlcc's recovery copy carries what the show does.
+    if (ShowEmbedding::embedsIn(m_fileName))
+    {
+        m_doc->showEmbedding()->collect();
+        m_doc->showEmbedding()->saveXML(&doc);
+    }
 
     m_doc->saveXML(&doc);
     VirtualConsole::instance()->saveXML(&doc);
@@ -4495,6 +4682,9 @@ void App::initStatusBar()
             slotTimecodeStatusChanged();
         });
         connect(tc, SIGNAL(runningChanged(bool)), this, SLOT(slotTimecodeStatusChanged()));
+        // The source is picked here or in Connections' Show control & sync page.
+        connect(tc, &TimecodeSource::sourceUniverseChanged,
+                this, &App::slotTimecodeStatusChanged);
     }
     slotTimecodeStatusChanged();
 
@@ -4706,14 +4896,13 @@ bool App::eventFilter(QObject *watched, QEvent *event)
             const double jit  = tc->jitterMs();
             const double ivl  = tc->avgIntervalMs();
             QString verdict;
-            if (!tc->isRunning())
-                verdict = tr("held (no fresh code)");
-            else if (qAbs(rate - 1.0) <= 0.05 && jit < 40.0)
-                verdict = tr("✓ healthy");
-            else if (qAbs(rate - 1.0) <= 0.15 && jit < 120.0)
-                verdict = tr("~ usable");
-            else
-                verdict = tr("⚠ unstable");
+            switch (tc->health())
+            {
+                case TimecodeSource::Healthy:  verdict = tr("✓ healthy"); break;
+                case TimecodeSource::Usable:   verdict = tr("~ usable"); break;
+                case TimecodeSource::Unstable: verdict = tr("⚠ unstable"); break;
+                default:                       verdict = tr("held (no fresh code)"); break;
+            }
 
             QAction *sh = menu.addAction(tr("Sync: %1").arg(verdict));
             sh->setEnabled(false);
@@ -4759,7 +4948,11 @@ bool App::eventFilter(QObject *watched, QEvent *event)
         anyA->setActionGroup(grp);
         anyA->setChecked(cur < 0);
         connect(anyA, &QAction::triggered, this, [this, tc]() {
-            if (tc) tc->setSourceUniverse(-1);
+            if (tc && tc->sourceUniverse() != -1)
+            {
+                tc->setSourceUniverse(-1);
+                m_doc->setModified();      // saved with the show
+            }
             slotTimecodeStatusChanged();
         });
 
@@ -4805,7 +4998,11 @@ bool App::eventFilter(QObject *watched, QEvent *event)
             a->setActionGroup(grp);
             a->setChecked(qint32(uniID) == cur);
             connect(a, &QAction::triggered, this, [this, tc, uniID]() {
-                if (tc) tc->setSourceUniverse(qint32(uniID));
+                if (tc && tc->sourceUniverse() != qint32(uniID))
+                {
+                    tc->setSourceUniverse(qint32(uniID));
+                    m_doc->setModified();  // saved with the show
+                }
                 slotTimecodeStatusChanged();   // reflect the selection immediately
             });
         }
@@ -5160,9 +5357,37 @@ void App::slotUpdateStandby()
         if (f != NULL)
             text += QStringLiteral(" \u2014 ") + f->name();
     }
+    // The cue playing has sub-cues on Sub GO: what Sub GO plays first
+    // ("Sub: 4.2 · Next: 5"), or that there are none left in it.
+    const QString sub = standbySubCueText(list);
+    if (!sub.isEmpty())
+        text = sub + QStringLiteral(" \u00b7 ") + text;
     if (m_statusStandby->text() != text)
         m_statusStandby->setText(text);
     m_statusStandby->show();
+}
+
+QKeySequence App::cueSubGoShortcut()
+{
+    return QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_Return);
+}
+
+QKeySequence App::cueSubBackShortcut()
+{
+    return QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_Return);
+}
+
+QString App::standbySubCueText(const Chaser *list)
+{
+    if (list == NULL || !list->isRunning())
+        return QString();
+    const int step = list->currentStepIndex();
+    if (!list->isSubGoStep(step) || list->currentSubCueIndex() < 0)
+        return QString();
+    const int sub = list->nextSubCueIndex();
+    if (sub < 0)
+        return tr("Sub: (end of %1)").arg(list->stepCue(step));
+    return tr("Sub: %1").arg(list->subCue(step, sub));
 }
 
 void App::slotFillStandbyMenu()
@@ -5176,6 +5401,11 @@ void App::slotFillStandbyMenu()
 
     menu->addAction(m_cueGoAction);
     menu->addAction(m_cueBackAction);
+    if (list->hasSubGoSteps())
+    {
+        menu->addAction(m_cueSubGoAction);
+        menu->addAction(m_cueSubBackAction);
+    }
     menu->addAction(tr("Stop %1").arg(list->name()), this, [sc]() {
         sc->execute({ ShowControl::Stop, QString(), QString() });
     });
@@ -5371,8 +5601,13 @@ void App::slotUpdateHealthFooter()
         const char *green = "QLabel { color:#ffffff; background:#2e7d32; padding:1px 6px; border-radius:3px; }";
         const char *amber = "QLabel { color:#000000; background:#f5a623; padding:1px 6px; border-radius:3px; }";
         const char *red   = "QLabel { color:#ffffff; background:#c62828; padding:1px 6px; border-radius:3px; }";
-        m_statusLoadLabel->setStyleSheet(pct >= 100 ? red
-                                         : ((pct >= 60 || stalled) ? amber : green));
+        // Only on a change: setStyleSheet() re-polishes the label (and can
+        // re-lay the status bar) even when handed the same sheet, and this
+        // runs twice a second for as long as the app is open.
+        const QString sheet = QString::fromLatin1(pct >= 100 ? red
+                                                  : ((pct >= 60 || stalled) ? amber : green));
+        if (m_statusLoadLabel->styleSheet() != sheet)
+            m_statusLoadLabel->setStyleSheet(sheet);
     }
 
     // Safety refresh for the timecode chip between watchdog transitions.
@@ -5618,8 +5853,26 @@ void App::updateStatusBar()
         // come and go), the tooltip lists each source's own short reason
         // (one line per ShowStatus entry, not its full explanation), and a
         // click opens every entry's complete detail text in one place.
-        const QList<ShowStatus::Entry> entries = ShowStatus::instance()->allEntries();
-        if (entries.isEmpty() == false)
+        const QList<ShowStatus::Entry> all = ShowStatus::instance()->allEntries();
+        /* An Ok entry is information (definitions that came with the show),
+           not a reason the show is not ready: "Ready", with a note to click. */
+        QList<ShowStatus::Entry> entries, notes;
+        foreach (const ShowStatus::Entry &e, all)
+            (e.severity == ShowStatus::Ok ? notes : entries) << e;
+        if (entries.isEmpty() && !notes.isEmpty())
+        {
+            m_statusModeLabel->setText(m_statusMessage.isEmpty()
+                ? tr("Ready · %n note(s)", "", notes.count())
+                : m_statusMessage + QStringLiteral(" · ") + tr("%n note(s)", "", notes.count()));
+            m_statusModeLabel->setStyleSheet(QString());
+            m_statusModeLabel->setCursor(Qt::PointingHandCursor);
+            QStringList lines;
+            foreach (const ShowStatus::Entry &e, notes)
+                lines << (e.summary.isEmpty() ? e.key : e.summary);
+            lines << QString() << tr("Click for details");
+            m_statusModeLabel->setToolTip(lines.join("\n"));
+        }
+        else if (entries.isEmpty() == false)
         {
             m_statusModeLabel->setText(entries.count() == 1
                 ? tr("Not ready")
@@ -5628,7 +5881,7 @@ void App::updateStatusBar()
             m_statusModeLabel->setCursor(Qt::PointingHandCursor);
 
             QStringList lines;
-            foreach (const ShowStatus::Entry &e, entries)
+            foreach (const ShowStatus::Entry &e, all)
                 lines << (e.summary.isEmpty() ? e.key : e.summary);
             lines << QString() << tr("Click for details");
             m_statusModeLabel->setToolTip(lines.join("\n"));

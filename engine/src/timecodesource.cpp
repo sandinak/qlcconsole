@@ -17,6 +17,8 @@
   limitations under the License.
 */
 
+#include <QXmlStreamReader>
+#include <QXmlStreamWriter>
 #include <QTimer>
 #include <cmath>
 
@@ -80,7 +82,33 @@ qint32 TimecodeSource::sourceUniverse() const
 
 void TimecodeSource::setSourceUniverse(qint32 universe)
 {
+    if (universe < 0)
+        universe = -1;
+    if (universe == m_sourceUniverse)
+        return;
     m_sourceUniverse = universe;
+    emit sourceUniverseChanged(m_sourceUniverse);
+}
+
+bool TimecodeSource::loadXML(QXmlStreamReader &root)
+{
+    if (root.name() != KXMLQLCTimecode)
+        return false;
+    bool ok = false;
+    const int uni = root.attributes().value(QStringLiteral("Source")).toString().toInt(&ok);
+    setSourceUniverse(ok && uni >= 0 ? uni : -1);
+    root.skipCurrentElement();
+    return true;
+}
+
+bool TimecodeSource::saveXML(QXmlStreamWriter *doc) const
+{
+    if (m_sourceUniverse < 0)
+        return true;
+    doc->writeStartElement(KXMLQLCTimecode);
+    doc->writeAttribute(QStringLiteral("Source"), QString::number(m_sourceUniverse));
+    doc->writeEndElement();
+    return true;
 }
 
 qint32 TimecodeSource::lastUniverse() const
@@ -115,6 +143,21 @@ double TimecodeSource::jitterMs() const
         var += d * d;
     }
     return std::sqrt(var / m_gapCount);
+}
+
+TimecodeSource::Health TimecodeSource::health() const
+{
+    if (m_lastUniverse < 0)
+        return NoSource;
+    if (!m_running)
+        return Held;
+    const double drift = qAbs(rateEstimate() - 1.0);
+    const double jit = jitterMs();
+    if (drift <= 0.05 && jit < 40.0)
+        return Healthy;
+    if (drift <= 0.15 && jit < 120.0)
+        return Usable;
+    return Unstable;
 }
 
 void TimecodeSource::updateTimeCode(quint32 universe, quint32 msPosition, uchar fps)

@@ -25,7 +25,11 @@
 #include <cstring>
 
 #define private public
+#include "timecodesource.h"
+#include "ioplugincache.h"
+#include "qlcioplugin.h"
 #include "mastertimer.h"
+#include "qlcfile.h"
 #undef private
 #include "inputoutputmap.h"
 #include "functionparent.h"
@@ -413,9 +417,126 @@ void ShowControl_Test::mscFromAPatchedInputFiresTheCue()
         timer->timerTick();
     QCOMPARE(c->currentStepIndex(), 1);
 
+    // Said to be MSC, from the universe it came in on; GO pressed here isn't.
+    sc->setMscEnabled(true);
+    QSignalSpy from(sc, &ShowControl::commandFrom);
+    emit m_doc->inputOutputMap()->inputSysExReceived(0, msc(1, 0x01, 0x01, "3"));
+    sc->execute({ ShowControl::Go, QString(), QString() });
+    QCOMPARE(from.count(), 2);
+    QCOMPARE(from.at(0).at(0).value<ShowControl::Source>(), ShowControl::Msc);
+    QCOMPARE(from.at(0).at(1).toUInt(), 0u);
+    QCOMPARE(from.at(1).at(0).value<ShowControl::Source>(), ShowControl::Local);
+    QCOMPARE(from.at(1).at(1).toUInt(), UINT_MAX);
+    for (int i = 0; i < 3; ++i)
+        timer->timerTick();
+
     c->stop(FunctionParent::master());
     for (int i = 0; i < 3; ++i)
         timer->timerTick();
+}
+
+/* MSC from one chosen input only -- the port, by name -- or from all. */
+void ShowControl_Test::mscOnlyOnTheChosenInput()
+{
+    QDir dir(QStringLiteral("../iopluginstub"));
+    dir.setFilter(QDir::Files);
+    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    m_doc->ioPluginCache()->load(dir);
+    QVERIFY(!m_doc->ioPluginCache()->plugins().isEmpty());
+    QLCIOPlugin *stub = m_doc->ioPluginCache()->plugins().at(0);
+    const QStringList inputs = stub->inputs();
+    QVERIFY(inputs.size() >= 3);
+
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(0, stub->name(), inputs.at(0), 0));
+    QVERIFY(iom->setInputPatch(1, stub->name(), inputs.at(1), 1));
+    Chaser *c = makeList(3, "Main");
+    ShowControl *sc = m_doc->showControl();
+    QSignalSpy from(sc, &ShowControl::commandFrom);
+
+    // All inputs: either one.
+    QCOMPARE(sc->mscUniverses(), QList<quint32>({ 0, 1 }));
+    emit iom->inputSysExReceived(0, msc(1, 0x01, 0x01, "1"));
+    emit iom->inputSysExReceived(1, msc(1, 0x01, 0x01, "2"));
+    QCOMPARE(from.count(), 2);
+
+    // The second port only: the first is ignored.
+    sc->setMscInput(stub->name(), inputs.at(1));
+    QVERIFY(!sc->acceptsMscFrom(0));
+    QVERIFY(sc->acceptsMscFrom(1));
+    QCOMPARE(sc->mscUniverses(), QList<quint32>({ 1 }));
+    emit iom->inputSysExReceived(0, msc(1, 0x01, 0x01, "3"));
+    QCOMPARE(from.count(), 2);
+    emit iom->inputSysExReceived(1, msc(1, 0x01, 0x01, "3"));
+    QCOMPARE(from.count(), 3);
+    QCOMPARE(from.last().at(1).toUInt(), 1u);
+
+    // A port not patched in this show: nothing answered, no fall-back to all.
+    sc->setMscInput(stub->name(), inputs.at(2));
+    QVERIFY(sc->mscUniverses().isEmpty());
+    emit iom->inputSysExReceived(0, msc(1, 0x01, 0x01, "1"));
+    emit iom->inputSysExReceived(1, msc(1, 0x01, 0x01, "1"));
+    QCOMPARE(from.count(), 3);
+
+    // Moved to another universe, the port is still the port.
+    QVERIFY(iom->setInputPatch(3, stub->name(), inputs.at(2), 2));
+    QCOMPARE(sc->mscUniverses(), QList<quint32>({ 3 }));
+    emit iom->inputSysExReceived(3, msc(1, 0x01, 0x01, "1"));
+    QCOMPARE(from.count(), 4);
+
+    sc->setMscInput(QString(), QString());
+    QCOMPARE(sc->mscUniverses(), QList<quint32>({ 0, 1, 3 }));
+
+    c->stop(FunctionParent::master());
+    for (int i = 0; i < 3; ++i)
+        m_doc->masterTimer()->timerTick();
+}
+
+/* The timecode source is a universe of the show's patch: saved with it,
+   back on load, and one naming no universe of the show is "any". */
+void ShowControl_Test::theTimecodeSourceIsSavedWithTheShow()
+{
+    auto save = [](Doc *doc) {
+        QByteArray xml;
+        QXmlStreamWriter w(&xml);
+        w.writeStartDocument();
+        doc->saveXML(&w);
+        w.writeEndDocument();
+        return xml;
+    };
+    auto load = [](Doc *doc, const QByteArray &xml) {
+        QXmlStreamReader r(xml);
+        r.readNextStartElement();
+        return doc->loadXML(r, true);
+    };
+
+    // "Any" isn't written at all.
+    QVERIFY(!save(m_doc).contains("<Timecode"));
+
+    m_doc->timecodeSource()->setSourceUniverse(2);
+    const QByteArray xml = save(m_doc);
+    QVERIFY2(xml.contains("<Timecode Source=\"2\"/>"), xml.constData());
+
+    Doc other(this);
+    QSignalSpy changed(other.timecodeSource(), &TimecodeSource::sourceUniverseChanged);
+    QVERIFY(load(&other, xml));
+    QCOMPARE(other.timecodeSource()->sourceUniverse(), qint32(2));
+    QCOMPARE(changed.count(), 1);           // the chip and Connections follow
+
+    // A new show starts on "any".
+    other.clearContents();
+    QCOMPARE(other.timecodeSource()->sourceUniverse(), qint32(-1));
+
+    // A universe this show doesn't have: ignored.
+    QByteArray bad = xml;
+    bad.replace("<Timecode Source=\"2\"/>", "<Timecode Source=\"99\"/>");
+    Doc third(this);
+    QVERIFY(load(&third, bad));
+    QCOMPARE(third.timecodeSource()->sourceUniverse(), qint32(-1));
+    bad.replace("<Timecode Source=\"99\"/>", "<Timecode Source=\"x\"/>");
+    Doc fourth(this);
+    QVERIFY(load(&fourth, bad));
+    QCOMPARE(fourth.timecodeSource()->sourceUniverse(), qint32(-1));
 }
 
 void ShowControl_Test::oscIsDecoded()
@@ -473,8 +594,11 @@ void ShowControl_Test::oscFiresTheCue()
     other->setCueListNumber("2");
     m_doc->showControl()->setMainCueList(c->id());
 
+    QSignalSpy from(m_doc->showControl(), &ShowControl::commandFrom);
     QCOMPARE(m_doc->showControl()->handleOsc(osc("/cue/3/start")), 1);
     QCOMPARE(m_doc->showControl()->handleOsc(osc("/list/2/go")), 1);
+    QCOMPARE(from.count(), 2);
+    QCOMPARE(from.at(0).at(0).value<ShowControl::Source>(), ShowControl::Osc);
     for (int i = 0; i < 3; ++i)
         timer->timerTick();
     QCOMPARE(c->currentStepIndex(), 2);

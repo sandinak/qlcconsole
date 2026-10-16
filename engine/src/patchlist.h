@@ -58,6 +58,8 @@ public:
 
         bool    network = false;         //!< its own endpoint (Fixture::Network)
         QString ip;                      //!< network fixtures
+        QString host;                    //!< network fixtures: the name its IP goes by
+                                         //!< (InputOutputMap::targetAlias()), if any
         QString transport;               //!< network fixtures: "Art-Net", "WLED"
         QString output;                  //!< where its universe goes, in words
 

@@ -17,6 +17,7 @@
 #define EFFECTSCRIPTRUNNER_H
 
 #include <QObject>
+#include "qlcengine_export.h"
 #include <QHash>
 #include <QList>
 #include <QMutex>
@@ -33,7 +34,7 @@
 
 class Doc;
 
-class EffectScriptRunner final : public QObject, public DMXSource
+class QLC_ENGINE_EXPORT EffectScriptRunner final : public QObject, public DMXSource
 {
     Q_OBJECT
 

@@ -22,6 +22,7 @@
 #include <QMutexLocker>
 #include <QVariant>
 #include <QDebug>
+#include <QDateTime>
 
 #define TRANSMIT_FULL    "Full"
 #define TRANSMIT_PARTIAL "Partial"
@@ -29,6 +30,7 @@
 E131Controller::E131Controller(QNetworkInterface const& iface, QNetworkAddressEntry const& address,
                                quint32 line, QObject *parent)
     : QObject(parent)
+    , m_testNowMs(-1)
     , m_interface(iface)
     , m_ipAddr(address.ip())
     , m_packetSent(0)
@@ -38,6 +40,7 @@ E131Controller::E131Controller(QNetworkInterface const& iface, QNetworkAddressEn
     , m_packetizer(new E131Packetizer(iface.hardwareAddress()))
 {
     qDebug() << Q_FUNC_INFO;
+    m_clock.start();
     m_UdpSocket->bind(m_ipAddr, 0);
     // Output multicast on the correct interface
     m_UdpSocket->setMulticastInterface(m_interface);
@@ -378,14 +381,86 @@ void E131Controller::sendDmx(const quint32 universe, const QByteArray &data)
 
     qint64 sent = m_UdpSocket->writeDatagram(dmxPacket.data(), dmxPacket.size(),
                                              outAddress, outPort);
-    if (sent < 0)
-    {
-        qDebug() << "sendDmx failed";
-        qDebug() << "Errno: " << m_UdpSocket->error();
-        qDebug() << "Errmsg: " << m_UdpSocket->errorString();
-    }
-    else
+    bool changed = false;
+    if (m_universeMap.contains(universe))
+        changed = reportSendResult(m_universeMap[universe], universe, outAddress, sent >= 0);
+    else if (sent >= 0)
         m_packetSent++;
+
+    locker.unlock();
+    if (changed)
+        emit problemsChanged();
+}
+
+/**
+ * Report a send result for one universe without flooding the log: once when
+ * it starts failing, once when it has recovered, as SendHealth decides. This
+ * used to print three debug lines per failed packet -- at 44 Hz, per
+ * universe -- and nothing anywhere an operator would look.
+ */
+bool E131Controller::reportSendResult(UniverseInfo &info, quint32 universe,
+                                      const QHostAddress &dest, bool ok)
+{
+    if (ok)
+        m_packetSent++;
+
+    bool changed = false;
+    if (info.healthTarget != dest)
+    {
+        // Retargeted: the old address's failures say nothing about this one
+        changed = info.sendHealth.isFailing();
+        info.sendHealth = SendHealth();
+        info.healthTarget = dest;
+    }
+
+    const bool hard = ok == false && SendHealth::isHardError(m_UdpSocket->error());
+
+    switch (info.sendHealth.record(ok, nowMs(), hard))
+    {
+        case SendHealth::StartedFailing:
+            qWarning() << "[E1.31] universe" << (universe + 1)
+                       << "output to" << dest.toString()
+                       << "is failing:" << m_UdpSocket->errorString()
+                       << "- nothing patched to it will transmit."
+                       << "Further failures on this universe will be counted, not logged;"
+                       << "recovery is reported once sends have succeeded for"
+                       << (SendHealth::RecoverAfterMs / 1000) << "s.";
+        return true;
+        case SendHealth::Recovered:
+            qWarning() << "[E1.31] universe" << (universe + 1)
+                       << "output to" << dest.toString()
+                       << "recovered: sends have succeeded for"
+                       << (SendHealth::RecoverAfterMs / 1000) << "s, after"
+                       << info.sendHealth.failedSends() << "failed sends over"
+                       << (info.sendHealth.failedForMs() / 1000) << "s.";
+        return true;
+        case SendHealth::NoChange:
+        break;
+    }
+    return changed;
+}
+
+QList<QPair<quint32, QString> > E131Controller::outputProblems(quint32 universe)
+{
+    QList<QPair<quint32, QString> > out;
+    const qint64 now = nowMs();
+    const QDateTime wallNow = QDateTime::currentDateTime();
+
+    QMutexLocker locker(&m_dataMutex);
+    for (auto it = m_universeMap.constBegin(); it != m_universeMap.constEnd(); ++it)
+    {
+        const UniverseInfo &info = it.value();
+        if ((info.type & Output) == 0 || info.sendHealth.isFailing() == false)
+            continue;
+        if (universe != UINT_MAX && it.key() != universe)
+            continue;
+        const QDateTime then = wallNow.addMSecs(info.sendHealth.failingSinceMs() - now);
+        const QString since = then.date() == wallNow.date()
+            ? then.toString("HH:mm") : then.toString("MMM d HH:mm");
+        out << qMakePair(it.key(), tr("E1.31 to %1: not reachable since %2")
+                                       .arg(info.healthTarget.toString(), since));
+    }
+    return out;
 }
 
 void E131Controller::processPendingPackets()

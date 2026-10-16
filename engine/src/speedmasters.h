@@ -21,6 +21,7 @@
 #define SPEEDMASTERS_H
 
 #include <QElapsedTimer>
+#include "qlcengine_export.h"
 #include <QObject>
 #include <QString>
 #include <QMutex>
@@ -51,7 +52,7 @@ class Doc;
  * What runs on a master reads its beatPosition() the way effects read the
  * main clock's. Readable from any thread.
  */
-class SpeedMasters final : public QObject
+class QLC_ENGINE_EXPORT SpeedMasters final : public QObject
 {
     Q_OBJECT
 

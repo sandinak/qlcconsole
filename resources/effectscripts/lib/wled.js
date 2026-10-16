@@ -24,6 +24,12 @@
   as the WLED definitions' Effect Option channel) are applied by out(), the
   way WLED applies them to a segment, so an effect never sees them.
 
+  A sound-reactive port also says effect.dataChannels = ["audio"], takes
+  tick()'s data argument, and reads it through WLED.audio(data) (null with
+  no audio input: it rests, dark). Those that fade, shift or remember their
+  pixels the way WLED's do keep them in state: WLED.recall() at the start,
+  WLED.keep() at the end.
+
   Palettes 0 and 2-5 are built from the three colours as WLED builds them;
   6 (Party) and 11 (Rainbow) are FastLED's. Any other is drawn as 4
   (Color Gradient) until its table is imported -- WLED.paletteKnown() says
@@ -167,6 +173,12 @@ var WLED = (function() {
             if (!wrap) idx = W.scale8(idx, 240);
             return W.colorFromPalette16(pal, idx);
         };
+        /** A "random" colour for @p u (0..1, from W.hash): off the palette, or
+         *  round the colour wheel with none -- as WLED's random colours are. */
+        seg.randomColor = function(u) {
+            var k = Math.min(255, Math.max(0, Math.floor(u * 256)));
+            return seg.palette ? seg.colorFromPalette(k, false, true, 0) : W.colorWheel(k);
+        };
         /** One {r, g, b} per fixture: mirror and reverse as WLED does them. */
         seg.out = function() {
             var out = [];
@@ -209,6 +221,123 @@ var WLED = (function() {
         var a = W.hash(i, seed || 0), b = W.hash(i + 1, seed || 0);
         var u = f * f * (3 - 2 * f);
         return a + (b - a) * u;
+    };
+
+    /** @p c over @p bg at level @p lvl 0..1 (clamped): a pixel fading in or out. */
+    W.mix = function(bg, c, lvl) {
+        return W.colorBlend(bg, c, Math.round(Math.max(0, Math.min(1, lvl)) * 255));
+    };
+    /** @p c at @p lvl 0..1 of its brightness. */
+    W.dim = function(c, lvl) {
+        return W.colorFade(c, Math.round(Math.max(0, Math.min(1, lvl)) * 255));
+    };
+    /** @p a and @p b added, each channel capped at 255 (light on light). */
+    W.add = function(a, b) {
+        return W.rgb(W.qadd8(W.r(a), W.r(b)), W.qadd8(W.g(a), W.g(b)), W.qadd8(W.b(a), W.b(b)));
+    };
+    /** Where a ball thrown up from the floor at time 0 at @p v (pixels/s) is
+     *  @p t s later under gravity @p g (pixels/s^2), each bounce keeping
+     *  @p keep of its speed: { pos, vel }. Worked out, not stepped -- no state. */
+    W.bounce = function(t, v, g, keep) {
+        var guard = 0;
+        while (v > 0.5 && guard++ < 64) {
+            var flight = 2 * v / g;
+            if (t < flight) return { pos: v * t - g * t * t / 2, vel: v - g * t };
+            t -= flight;
+            v *= keep;
+        }
+        return { pos: 0, vel: 0 };
+    };
+    /** Fire's colour at heat @p x 0..1: black, red, yellow, white. */
+    W.heatColor = function(x) {
+        var ch = function(v) { return Math.max(0, Math.min(255, Math.round(v * 3 * 255))); };
+        return W.rgb(ch(x), ch(x - 1 / 3), ch(x - 2 / 3));
+    };
+
+    /* ---- Sound-reactive ports (effect.dataChannels = ["audio"]) ---- */
+
+    /** What the host's audio channel says this tick, in the terms WLED's
+     *  sound-reactive effects use: { vol, peak, bands[16] (0..1, low to high),
+     *  major (the loudest band), majorHz, mag (its level), pitch (majorHz on
+     *  a log scale, 0..1) } -- or null when no audio input is delivering, so
+     *  an effect can rest. */
+    W.audio = function(data) {
+        var a = data && data.audio;
+        if (!a) return null;
+        var src = a.bands || [], b = [];
+        for (var k = 0; k < 16; k++) {
+            var v = src.length ? src[Math.min(src.length - 1, Math.floor(k * src.length / 16))] : 0;
+            b.push(Math.max(0, Math.min(1, v || 0)));
+        }
+        var major = 0;
+        for (var j = 1; j < 16; j++) if (b[j] > b[major]) major = j;
+        var maxHz = a.maxHz || 5000, hz = (major + 0.5) / 16 * maxHz;
+        return {
+            vol: Math.max(0, Math.min(1, a.level || 0)),
+            peak: Math.max(0, Math.min(1, a.peak || 0)),
+            bands: b,
+            major: major,
+            majorHz: hz,
+            mag: b[major],
+            pitch: Math.max(0, Math.min(1, Math.log(Math.max(1, hz / 60)) / Math.log(maxHz / 60)))
+        };
+    };
+    /** A beat: the volume jumping well above its recent average (kept in
+     *  @p state), no more often than every 120 ms. Call it once a tick. */
+    W.beat = function(state, au, now) {
+        if (!au) return false;
+        var first = state.beatAvg === undefined;
+        var avg = first ? 0 : state.beatAvg;               // the first loud moment is a beat
+        state.beatAvg = first ? au.vol : avg * 0.9 + au.vol * 0.1;
+        var last = state.beatAt === undefined ? -1e9 : state.beatAt;
+        if (au.vol > 0.08 && au.vol > avg * 1.35 && now - last > 120 && now >= last) {
+            state.beatAt = now;
+            return true;
+        }
+        return false;
+    };
+    /** The segment's pixels as they were left last tick (@p state), so a
+     *  sound-reactive effect can fade, shift and add to them as WLED's do;
+     *  sets seg's pixels from them and returns the ms since then. */
+    W.recall = function(seg, state) {
+        if (!state.px || state.px.length !== seg.len) {
+            state.px = [];
+            for (var i = 0; i < seg.len; i++) state.px.push(0);
+        }
+        var dt = state.t === undefined ? 0 : Math.max(0, Math.min(500, seg.now - state.t));
+        state.t = seg.now;
+        for (var j = 0; j < seg.len; j++) seg.px[j] = state.px[j];
+        return dt;
+    };
+    /** Keep the segment's pixels for the next tick (see recall()). */
+    W.keep = function(seg, state) {
+        state.px = seg.px.slice();
+    };
+    /** How many whole @p stepMs steps have passed in @p dt ms, carrying the
+     *  rest over in @p state: for effects that shift their pixels along. */
+    W.steps = function(state, dt, stepMs) {
+        state.stepAcc = (state.stepAcc || 0) + dt;
+        var n = Math.floor(state.stepAcc / stepMs);
+        state.stepAcc -= n * stepMs;
+        return n;
+    };
+    /** Move every pixel one place toward the start (@p dir < 0), the end
+     *  (@p dir > 0) or out from the middle (@p dir 0). */
+    W.shift = function(seg, dir) {
+        var len = seg.len, px = seg.px, i;
+        if (dir < 0) for (i = 0; i < len - 1; i++) px[i] = px[i + 1];
+        else if (dir > 0) for (i = len - 1; i > 0; i--) px[i] = px[i - 1];
+        else {
+            var mid = Math.floor((len - 1) / 2);
+            for (i = 0; i < mid; i++) px[i] = px[i + 1];
+            for (i = len - 1; i > mid + 1; i--) px[i] = px[i - 1];
+        }
+    };
+    /** Fade every pixel toward black: @p perSecond 0..1 of the light gone a
+     *  second, over @p dt ms. */
+    W.fadeOut = function(seg, perSecond, dt) {
+        var k = Math.pow(Math.max(0, 1 - Math.min(0.999, perSecond)), dt / 1000);
+        for (var i = 0; i < seg.len; i++) seg.px[i] = W.dim(seg.px[i], k);
     };
 
     /** The parameters every port takes: WLED's own, 0..255 as the definitions

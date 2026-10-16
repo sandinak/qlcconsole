@@ -38,9 +38,15 @@ not opened — and saving then can write an empty workspace over it.
   often). If the app stops without saving,
   the next launch offers to **recover the unsaved work**. A clean quit
   removes the recovery copy.
-- A show keeps a copy of every **fixture definition** it uses that isn't
-  shipped with the app — the **show cache** — so it opens the same on
-  another computer. See
+- A .qlcc **carries its own copies** of every fixture definition, effect
+  script and RGB script it uses that isn't part of the app, so it opens
+  complete on another computer; where that computer's copy differs, the
+  show keeps its own until you choose. See
+  [Opening a show on another computer](fixture-manager.md#opening-a-show-on-another-computer).
+  **File → Collect for Transfer…** writes the show and those files into one
+  folder.
+- This computer also keeps a copy of every non-shipped definition a show
+  uses — the **show cache** — for shows saved as .qxw. See
   [Missing definitions and the show cache](fixture-manager.md#missing-definitions-and-the-show-cache).
 - A show kept in a **cloud folder** (iCloud, Dropbox, Synology…) is saved
   safely; see [Cloud storage](other-improvements.md#cloud-storage).
@@ -165,9 +171,11 @@ hired rig with a patch sheet):
 
 ## Workflow 3 — bringing a show to a venue
 
-1. **Open the show** (⌘O, or `-o`). If the footer says definitions are
-   missing, click it: they come from the show cache, your library, or can
-   be repaired in the Fixture Editor.
+1. **Open the show** (⌘O, or `-o`). A .qlcc brings its own definitions
+   and scripts; if the footer says some **differ from this computer's**,
+   **Review…** them. If it says definitions are missing, click it: they
+   come from the show cache, your library, or can be repaired in the
+   Fixture Editor.
 2. **Connections**: are the nodes there? **Rescan**; check each universe
    goes where it should (**By universe** lists them in order with where
    each goes). Select a universe to watch what it sends.

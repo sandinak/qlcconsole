@@ -10,7 +10,23 @@ under `~/.claude/.../memory/`.
 
 ## Small fixes and leftovers
 
-(Nothing open right now.)
+- **Layers panel: a row the plot can't select loses its selection on any
+  rebuild (2026-10-15)** — clicking a fixture the plot can't select (stacked
+  inside a tower in plan view) now keeps its row selected, but the next
+  `MonitorLayersPanel::reload()` re-selects from the plot's (empty)
+  selection and clears it. Rebuilds are frequent (a rename, any
+  `fixtureChanged`), so renaming T1-W from the list may still drop the row
+  afterwards. Found when monitor_test's
+  `aLayersRowStaysSelectedWhenThePlotCannotFollow` failed under QPA minimal:
+  a queued rebuild landed after the click (the test now settles first).
+  Fix: carry the list's own selection across a rebuild for items the plot
+  can't hold.
+
+- **macOS dev builds show no app icon (2026-10-15)** — `build/main/qlcconsole`
+  is a bare binary, so the bundle's `.icns` never applies, and
+  `AppUtil::setApplicationIdentity` deliberately skips the app-wide icon on
+  macOS (it would override the `.icns` in a packaged Dock). Could set it only
+  when not running from a bundle, if it matters.
 
 ## Release 0.1.0 (in progress, 2026-10-15)
 
@@ -32,9 +48,11 @@ On `release/0.1.0`. Universal (Apple silicon + Intel), macOS 12+.
   probably the WLED controller rather than the interface; needs more
   testing. Still to do: the live view included;
   effect / palette names read from the device (`/json/eff`, `/json/pal`);
-  92 WLED effects ported, written from behaviour (WLED is EUPL -- never
-  from FX.cpp); the rest of the 1D list next, 2D / sound-reactive only if
-  wanted; compare the ports side by side with a real device.
+  160 WLED effects ported, written from behaviour (WLED is EUPL -- never
+  from FX.cpp): every 1D effect, the 23 sound-reactive 1D ones on the audio
+  input; not ported: the 2D ones, Copy Segment, Image, Slow Transition.
+  Compare the ports side by side with a real device -- Percent's share
+  (intensity/255, from the docs' "% of fill") especially.
 - **Control surfaces** — PMJ (OpenDeck) mapping as the show's operating
   surface; the control-surface engine (PMJ + APC40 mk2 + Xbox) was last
   "in progress, at the rig".
@@ -76,10 +94,15 @@ before building):
    instead of everything changing at once.
 
 - **Agreed next (2026-10-13/15), after 0.1.0:**
-  - **Sub-cues** — a step whose function is a chaser shown inline (4.1,
-    4.2), a "Sub GO" for the cue playing, the same idea for step-based
-    effects.
-  - **Sending to QLab** — OSC / MSC out.
+  - **Sub-cues** ([SUBCUES_DESIGN.md](SUBCUES_DESIGN.md)) — P1 (engine)
+    and P2 (editor, VC cue list, footer, ⌥⌘↩) built on `feat/sub-cues`
+    (DONE.md). Still to do: P3 show control (`/cue/4.2/go`, `/subgo`,
+    `/subback`, MSC GO 4.2, LOAD 4.2 — after `feat/connections-showcontrol`
+    merges; the engine API is there: `Chaser::findCueOrSubCue()`,
+    `jumpToSubCue()`, `subGo()`, `subBack()`), P4 step-based effects on Sub
+    GO.
+  - **Sending to QLab** — OSC / MSC out. Its home is ready: the "QLab out"
+    section of Connections → Show control & sync (`ShowControlSyncPage`).
   - **Duplicate a structure's setup** (Branson, 2026-10-15; replaces the
     one-off "tower patch rule") — from one structure (T1) and the fixtures
     on it, set up its likes (T2, T3…): the same fixtures placed and mounted
@@ -96,8 +119,6 @@ before building):
   - **Rig Overview frame rate** — maybe automatic (30, lower when the
     engine is busy): the overview now draws on every core, which competes
     with the DMX engine on a 6-core machine. Decide from the soak.
-- **Patch-list labels** — the patch list (Fixtures → Patch List…) exports
-  CSV and PDF; still to come: printing a label per fixture from it.
 - **Stage and inventory across show files** — keep a stage layout
   (structures, platforms, scenery) and the hardware inventory (fixtures,
   network gear, their patch) outside any one show, and bring them into a
@@ -349,19 +370,6 @@ rig edits, bulk repatching, cross-show consistency checks.
   box to even confirm the roughed-in `SCHED_FIFO` call links/behaves as
   written before this is worth deciding.
 
-- **Gate hole: on headless Linux `make check` silently skips ALL UI tests and
-  still prints "Unit tests passed" (OPEN, 2026-08-26)** —
-  `platforms/linux/unittest.sh:44` decides whether to run `ui/test` from
-  `pidof X` / `pidof Xorg`, unless `whoami` is `runner`/`buildbot`/`abuild`.
-  On a headless box under a normal login both checks fail, so `RUN_UI_TESTS=0`
-  and **32 UI test binaries never run** — a third of the suite — while the gate
-  still reports success. The same branch also leaves `TESTPREFIX` empty, so the
-  engine tests run with no platform plugin and `genericdmxsource_test` aborts
-  with "could not connect to display". Note `xvfb-run` does NOT rescue it: the
-  process is named `Xvfb`, which `pidof X` does not match. Fix is to key off
-  "can Qt start a platform plugin" (or just always set
-  `QT_QPA_PLATFORM=offscreen`) rather than probing for an X server.
-
 - **The ARM char-signedness tripwire is commented out (OPEN, 2026-08-26)** —
   the assertion cited as the reason to want an ARM build host,
   `QCOMPARE(ua.preGMValues()[0], char(255))` at
@@ -417,15 +425,58 @@ rig edits, bulk repatching, cross-show consistency checks.
   Worth considering a `QLC_PLUGIN_PATH` env override so test rigs stop needing
   root to run what they just built.
 
-- **ArtNet failure reporting still flaps (OPEN, 2026-08-25)** — `e3905a2a1`
-  replaced 2850 identical `sendDmx failed` lines with one report per universe
-  per state change, which is an ~87% reduction but not the "one line" first
-  claimed. A universe whose target never answers ARP oscillates fail →
-  succeed → fail (ARP cache expiry), so the live soak still produced 200
-  "is failing" + 150 "recovered" lines across 50 universes in 120 s. Wants
-  hysteresis: don't report recovery until it has held for N sends. Deliberately
-  NOT built on speculation, because the flapping was caused by absent hardware
-  (rig in storage) rather than a real-world configuration.
+- **Output trouble reporting: send health, node health, UI (BUILT 2026-10-15
+  — needs the rig)** — started as "ArtNet failure reporting still flaps":
+  `e3905a2a1` logged once per state change, and a unicast target that never
+  answers ARP flips that state itself (macOS: ~5 s of queued "successes"
+  while ARP is out, then 20 s of "host is down"), so the soak still produced
+  200 "is failing" + 150 "recovered" lines across 50 universes in 120 s.
+  Built on `feat/artnet-status`:
+  - **Send health** (`plugins/interfaces/sendhealth.{h,cpp}`, shared by
+    Art-Net and E1.31): failing once failures persist 1 s (isolated successes
+    don't reset it), at once for a hard error; recovered only after 30 s of
+    uninterrupted successes. E1.31's per-packet `qDebug` spam is gone too.
+  - **Node health** (`plugins/artnet/src/artnetnodewatch.{h,cpp}`), from the
+    ArtPollReplies the plugin already asks for: a node heard this session
+    that misses 3 polls in a row is "stopped answering" (back after 2
+    answered); the port carrying our universe reporting a DMX short
+    (GoodOutputA bit 2), or no longer outputting after it was, is a port
+    fault (2 replies in a row; clears after 10 s clean). Broadcast universes
+    watch the nodes that output that Port-Address; unicast ones the node at
+    that address.
+  - **Traffic:** unchanged on-subnet (the existing 3 s broadcast ArtPoll per
+    interface with an output). New: one unicast ArtPoll per 3 s to each
+    distinct unicast output target OFF the interface's subnet (coalesced by
+    address, GUI thread, never in a DMX tick), since those never hear the
+    broadcast.
+  - **UI:** new `QLCIOPlugin::outputProblems(output, universe)`; footer entry
+    `outputs.problems` (one line per problem with the universes it hits,
+    **Open Connections**); the universe's Connections row gets the problem in
+    red with a tooltip, in both views, refreshed on `targetProblemsChanged()`.
+    The footer now listens to every plugin's `targetProblemsChanged()`, not
+    only WLED's.
+  - **Bug found on the way:** Connections had GoodOutput's short (0x04) and
+    merging (0x08) bits swapped, so a merging port showed SHORT DETECTED.
+    Fixed per the Art-Net 4 spec / libartnet's `PORT_STATUS_*` — **worth
+    confirming against a node that really is merging**.
+  - Tests: `artnet_test` 7 → 24, new `e131_test` (5), `connectionstree_test`
+    +2 (row + footer), all on injected results/times and fabricated replies;
+    nothing is sent.
+  **To confirm on the rig:** (1) unicast to an address with nothing on it for
+  a few minutes — one "not reachable" line per target in the footer and log,
+  no "recovered"; (2) unplug a node that was answering — "stopped answering"
+  within ~9-12 s, back ~6 s after it is plugged in, fixtures respond at once
+  (reporting never holds output back); (3) short a DMX run on a node port that
+  reports it (or pull the terminator if that trips it) — "DMX output short"
+  on that universe's row, gone 10 s after it's cleared; (4) pull the
+  console's own cable — "not reachable" within 1-2 s, gone ~30 s after it's
+  back; (5) a node on another subnet: confirm it now appears and is watched
+  (unicast polls), and that nothing on the show segment minds a poll every
+  3 s; (6) a healthy rig over a long run shows and logs nothing; (7) check
+  a merging port no longer reads SHORT DETECTED.
+  Not built: E1.31 has no per-receiver reply in the base protocol. E1.31
+  Universe Discovery packets only list the universes a *source* sends, so
+  they say nothing about receivers either -- noted, not worth building.
 
 - **`VCCueList_Test::functionRemoved()` flake — watch, don't assume fixed
   (OPEN, 2026-08-25)** — failed on 2 of ~9 macOS CI runs asserting a tree row
@@ -437,14 +488,56 @@ rig edits, bulk repatching, cross-show consistency checks.
   insufficient rather than wrong. Five other UI test files still use fixed
   `QTest::qWait` and were left alone — none has failed.
 
-- **Windows CI removed, not repaired (OPEN, 2026-08-25)** — `fb9c5fd74` deleted
-  the `build-windows` job. Both legs failed at "Fix build" seding
-  `platforms/windows/qlcplus4Qt6.nsi`, which the rebrand renamed, and
-  RELEASE.md already lists Windows packaging as out of scope and stale. Removed
-  rather than left permanently red, because a job that cannot pass trains
-  people to ignore CI — which is exactly how this repo ended up with a workflow
-  nobody noticed had never run. Re-add when Windows is a real target and the
-  NSIS scripts have had their rebrand pass.
+- **Windows build back in CI (OPEN, 2026-10-15)** — `fb9c5fd74` had deleted
+  `build-windows` (it died seding the pre-rebrand `qlcplus4Qt6.nsi`).
+  Re-added: MSYS2 UCRT64 + MSYS2's own Qt 6 packages (6.11 at the time; GCC
+  16), NSIS installer `qlcconsole-<VERSION>-<date>-<rev>-win64-setup.exe`
+  uploaded as an artifact, `--version` smoke test run from the deploy dir with
+  MSYS2 off PATH. Fixed on the way: avrt.h include order, `near` (a windows.h
+  macro) as a variable name, PreviewItem typedefs, and -- the important one --
+  signals named by member pointer across the engine/UI DLL boundary silently
+  never connecting under MinGW (`qlcengine_export.h` / `qlcui_export.h`; a new
+  class whose signal another module connects by `&Class::signal` needs
+  `QLC_ENGINE_EXPORT` / `QLC_UI_EXPORT` too). Left open:
+  1. Nobody has installed it on a real Windows machine -- rig view on D3D11,
+     audio, DMX USB/D2XX and the per-user file associations are unverified.
+  2. ~95 MB installer, mostly ffmpeg codec DLLs pulled in by Qt Multimedia's
+     ffmpeg backend; trim if it matters.
+  3. Tests: 126 of 136 binaries pass; the step is informational
+     (`continue-on-error`). Failing: qlcfixturedefcache (definitionSourceFile
+     vs relPath -- path form), rgbscript (`scriptName.toLower()`), addfixture
+     rememberExpanded, functionselection rememberFilter/constFilter,
+     programmingguide (these three look like QSettings persisting in the
+     registry between runs), monitor theInventoryButtonShowsAndHidesThePanel,
+     networkreportdialog saveCsv (a "locked" dir is writable on Windows),
+     showcontrol_ui OSC listener (firewall/port on the runner?), speedmasters
+     panel blink timing, lookeditor segfault (exit 139). mastertimer
+     startStopFunction failed once and passed once -- timing.
+  4. Not code-signed (SmartScreen will warn). No `-Werror` on MinGW, by design.
+  5. `QLCIOPlugin` signals are connected by member pointer from the UI too, but
+     its moc lives in each plugin DLL as well as the engine; not annotated.
+  6. First install on a Windows 10 VM (2026-10-15), Branson's report and what
+     was done: unreadable buttons/combos/spin boxes on a dark theme (the
+     native windowsvista style ignores the palette's Button colour) -> Fusion
+     off macOS (main.cpp) plus theme-derived shade roles (App::applyTheme);
+     invisible splitter handles -> same; "Win+Shift+R does nothing" -> it is
+     Ctrl+Shift+R, now also in the Window menu, and the help spells keys as
+     Ctrl/Alt/Shift off a Mac (HelpBrowser::keysForPlatform); sluggishness ->
+     Art-Net/E1.31/OSC walked every network interface (~20 ms each on
+     Windows) on every outputs()/inputs() call, now at most once a second;
+     also fewer repolishes/registry reads on the status-bar timers, NoProxy
+     for WLED, and App::nativeEvent fixed for Qt 6's qintptr* (USB hotplug
+     never reached HotPlugMonitor). Still to confirm on the VM: the main
+     window's outer edges resizing, and whether it still feels slow.
+  7. "Rig Overview wireframed in red, no light" on the VM (GPU and CPU alike):
+     not Direct3D -- the VM had none of DanceHysteria's own definitions, so
+     those fixtures stood in as generic dimmers, 300 mm per channel: a
+     64-channel bar was a 19 m wall of heads in the overlap-warning red. A
+     stand-in now draws as one small box with no overlap warning; the footer's
+     "no definition on this computer" error names the folder to copy the
+     .qxf files into, and Fetch Definitions rereads it. Windows CI now runs
+     the rig view on D3D11 (WARP): GPU-vs-CPU matches as on Metal/GL, and the
+     pictures are kept (rig-shots-windows artifact).
 
 - **Warning backlog outside the `-Werror` set (OPEN, 2026-08-25)** — a
   tree-wide `-Wall -Wextra` sweep reports ~1100
@@ -462,7 +555,13 @@ rig edits, bulk repatching, cross-show consistency checks.
   unexercised.
 
 
-- **Output ENDPOINT reachability check (BACK BURNER, 2026-08-25)** — the
+- **Output ENDPOINT reachability check (MOSTLY BUILT 2026-10-15, see "Output
+  trouble reporting" above)** — node liveness is now watched continuously
+  from the ArtPoll the plugin already ran every 3 s, rather than the
+  config-time probe sketched below; only nodes heard this session are judged,
+  which answers the cry-wolf concern. Still open from this item: a check at
+  load/patch time for a unicast target that has NEVER answered. Original
+  notes: the
   readiness indicator added in `daeeb97d7` catches one failure mode: the
   workspace names a plugin *line* (for the network plugins, an index into the
   local interface list) that doesn't exist on this machine. It does **not**
@@ -531,32 +630,6 @@ rig edits, bulk repatching, cross-show consistency checks.
   the existing readiness indicator (`daeeb97d7`), or a footer chip. Probably
   the first — it is a per-patch-row fact.
 
-
-- **App icon does not reach the runtime on Linux (OPEN, 2026-08-27)** — the
-  asset is fine; the delivery is not. `resources/icons/png/qlcconsole.png` is a
-  purpose-made fork icon (not the old QLC+ logo), `app.cpp:314` does
-  `setWindowIcon(QIcon(":/qlcconsole.png"))`, and `ui/src/qlcui.qrc` aliases it
-  correctly. What is wrong:
-  1. **One size only.** A single **96×96** PNG is shipped, and it is installed
-     to the legacy `share/pixmaps/` rather than the freedesktop icon theme
-     (`share/icons/hicolor/<size>/apps/qlcconsole.png`) --
-     `platforms/linux/CMakeLists.txt:9-13`. Modern shells prefer hicolor, and
-     scaling one 96px source to 128/256 looks soft. `.desktop` says
-     `Icon=qlcconsole`, which resolves through the theme first.
-  2. **The SVG is never installed.** `resources/icons/svg/qlcconsole.svg`
-     exists and would give every size for free via
-     `share/icons/hicolor/scalable/apps/`.
-  3. **Nothing is installed at all when running from `build/`**, which is how
-     every test run works, so the desktop falls back to a generic icon. Only
-     `_NET_WM_ICON` from `setWindowIcon` applies, and shells vary in whether
-     they use it for the task list.
-  4. **macOS dev builds are a bare binary**, not a `.app`, so
-     `CFBundleIconFile=qlcconsole.icns` only takes effect in a packaged DMG --
-     the icon is never seen during development.
-  Fix: install the SVG to `hicolor/scalable/apps/` plus rendered PNGs at
-  16/22/24/32/48/64/128/256 to `hicolor/<size>/apps/`, keep `share/pixmaps` for
-  compatibility, and run `gtk-update-icon-cache` on install. The `.icns`
-  (1024×1024) and `.ico` are already right for macOS/Windows packaging.
 
 - **Art-Net node configuration (ArtAddress) — send path built and proven, but
   no node here applies it (2026-08-26)** — `artnet-config.py` at the repo root

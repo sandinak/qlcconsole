@@ -22,6 +22,7 @@
 #define UNIVERSE_H
 
 #include <QScopedPointer>
+#include "qlcengine_export.h"
 #include <QSemaphore>
 #include <QByteArray>
 #include <QThread>
@@ -69,7 +70,7 @@ class Doc;
 
 /** Universe class contains input/output data for one DMX universe
  */
-class Universe : public QThread
+class QLC_ENGINE_EXPORT Universe : public QThread
 {
     Q_OBJECT
     Q_DISABLE_COPY(Universe)

@@ -22,6 +22,7 @@
 #define SIMPLEDESKENGINE_H
 
 #include <QObject>
+#include "qlcui_export.h"
 #include <QMutex>
 #include <QHash>
 #include <QList>
@@ -44,7 +45,7 @@ class Doc;
 
 #define KXMLQLCSimpleDeskEngine QStringLiteral("Engine")
 
-class SimpleDeskEngine final : public QObject, public DMXSource
+class QLC_UI_EXPORT SimpleDeskEngine final : public QObject, public DMXSource
 {
     Q_OBJECT
 

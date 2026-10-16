@@ -52,6 +52,7 @@ ChaserRunner::ChaserRunner(const Doc *doc, const Chaser *chaser, quint32 startTi
     m_pendingAction.m_stepIntensity = 1.0;
     m_pendingAction.m_fadeMode = Chaser::FromFunction;
     m_pendingAction.m_stepIndex = -1;
+    m_pendingSubAction = m_pendingAction;
 
     if (startTime > 0)
     {
@@ -114,7 +115,7 @@ void ChaserRunner::slotChaserChanged()
     }
     foreach (ChaserRunnerStep *step, delList)
     {
-        step->m_function->stop(functionParent());
+        stopStepFunction(step);
         m_runnerSteps.removeAll(step);
         delete step;
     }
@@ -262,7 +263,7 @@ void ChaserRunner::setAction(ChaserAction &action)
                 {
                     qDebug() << "[ChaserRunner] Stopping step idx:" << action.m_stepIndex << "(running:" << m_runnerSteps.count() << ")";
                     m_lastFunctionID = step->m_function->type() == Function::SceneType ? step->m_function->id() : Function::invalidId();
-                    step->m_function->stop(functionParent());
+                    stopStepFunction(step);
                     m_runnerSteps.removeOne(step);
                     delete step;
                     stopped = true;
@@ -276,6 +277,28 @@ void ChaserRunner::setAction(ChaserAction &action)
                 emit currentStepChanged(m_lastRunStepIdx);
             }
         }
+        break;
+
+        // Sub-cues: kept apart from the step action, so a Sub GO doesn't
+        // take the place of a GO waiting for the beat (or the other way).
+        case ChaserSubNextStep:
+        case ChaserSubPreviousStep:
+            m_pendingSubAction = action;
+        break;
+
+        case ChaserSubSetStep:
+            if (action.m_stepIndex < 0)
+                break;
+            // Its parent step first, if that isn't the one playing.
+            if (currentIndexStep() == NULL || m_lastRunStepIdx != action.m_stepIndex)
+            {
+                m_pendingAction.m_stepIndex = action.m_stepIndex;
+                m_pendingAction.m_masterIntensity = action.m_masterIntensity;
+                m_pendingAction.m_stepIntensity = action.m_stepIntensity;
+                m_pendingAction.m_fadeMode = action.m_fadeMode;
+                m_pendingAction.m_action = ChaserSetStepIndex;
+            }
+            m_pendingSubAction = action;
         break;
 
         // copy to pending action. Will be processed at the next write call
@@ -303,6 +326,16 @@ int ChaserRunner::currentStepIndex() const
 int ChaserRunner::runningStepsNumber() const
 {
     return m_runnerSteps.count();
+}
+
+ChaserRunnerStep *ChaserRunner::currentIndexStep() const
+{
+    foreach (ChaserRunnerStep *step, m_runnerSteps)
+    {
+        if (step->m_index == m_lastRunStepIdx)
+            return step;
+    }
+    return NULL;
 }
 
 ChaserRunnerStep *ChaserRunner::currentRunningStep() const
@@ -490,12 +523,75 @@ void ChaserRunner::clearRunningList()
         {
             // restore the original Function fade out time
             step->m_function->setOverrideFadeOutSpeed(stepFadeOut(step->m_index));
-            step->m_function->stop(functionParent(), m_chaser->type() == Function::SequenceType);
+            stopStepFunction(step, m_chaser->type() == Function::SequenceType);
             m_lastFunctionID = step->m_function->type() == Function::SceneType ? step->m_function->id() : Function::invalidId();
         }
         delete step;
     }
     m_runnerSteps.clear();
+}
+
+void ChaserRunner::stopStepFunction(ChaserRunnerStep *step, bool preserveAttributes)
+{
+    if (step == NULL || step->m_function == NULL)
+        return;
+    // Stopped first, then let go of: stopped, it is never written again, so
+    // it can't run on by its own timing for a tick in between.
+    step->m_function->stop(functionParent(), preserveAttributes);
+    if (step->m_subCues)
+    {
+        Chaser *inner = qobject_cast<Chaser *>(step->m_function);
+        if (inner != NULL)
+            inner->setSubCueHeld(false);
+    }
+}
+
+void ChaserRunner::applySubAction(const ChaserAction &action)
+{
+    ChaserRunnerStep *current = currentIndexStep();
+    if (current == NULL || current->m_function == NULL)
+        return;
+    Chaser *inner = qobject_cast<Chaser *>(current->m_function);
+    if (inner == NULL)
+        return;
+
+    int target = -1;
+    switch (action.m_action)
+    {
+        case ChaserSubSetStep:
+            // A jump: to any chase step's sub-cue (one on its own timing
+            // carries on from there).
+            if (action.m_stepIndex != current->m_index)
+                return;
+            target = action.m_subStepIndex;
+        break;
+        case ChaserSubNextStep:
+        case ChaserSubPreviousStep:
+        {
+            // Sub GO / Sub Back: only for a step held as sub-cues; at the
+            // ends, nothing.
+            if (current->m_subCues == false)
+                return;
+            int delta = inner->direction() == Function::Backward ? -1 : 1;
+            if (action.m_action == ChaserSubPreviousStep)
+                delta = -delta;
+            target = inner->nextPlayableStep(inner->currentStepIndex(), delta);
+        }
+        break;
+        default:
+            return;
+    }
+
+    if (target < 0 || target >= inner->stepsCount())
+        return;
+
+    ChaserAction a;
+    a.m_action = ChaserSetStepIndex;
+    a.m_stepIndex = target;
+    a.m_masterIntensity = inner->getAttributeValue(Function::Intensity);
+    a.m_stepIntensity = 1.0;
+    a.m_fadeMode = Chaser::FromFunction;
+    inner->setAction(a);
 }
 
 void ChaserRunner::startNewStep(int index, MasterTimer *timer, qreal mIntensity, qreal sIntensity,
@@ -520,6 +616,7 @@ void ChaserRunner::startNewStep(int index, MasterTimer *timer, qreal mIntensity,
 
     ChaserRunnerStep *newStep = new ChaserRunnerStep();
     newStep->m_index = index;
+    newStep->m_subCues = false;
 
     // check if blending between Scenes is needed
     if (m_lastFunctionID != Function::invalidId() &&
@@ -610,8 +707,32 @@ void ChaserRunner::startNewStep(int index, MasterTimer *timer, qreal mIntensity,
     func->setInheritedSpeedMaster(step.speedMaster != SpeedMasters::Inherit
                                   ? step.speedMaster : m_chaser->effectiveSpeedMaster());
 
+    /* A chase step held as sub-cues (SUBCUES_DESIGN.md): the inner chase
+       starts on its first playable step and holds there until a Sub GO.
+       Its fades are its own steps', not this step's. */
+    uint fadeIn = newStep->m_fadeIn, fadeOut = newStep->m_fadeOut;
+    Chaser *inner = step.subCues == ChaserStep::SubGo ? qobject_cast<Chaser *>(func) : NULL;
+    if (inner != NULL)
+    {
+        newStep->m_subCues = true;
+        // Just stopped by the step before (the same chase): its next run
+        // gets what's asked here, not the run being torn down.
+        inner->beginRestart();
+        inner->setSubCueHeld(true);
+        ChaserAction first;
+        first.m_action = ChaserSetStepIndex;
+        first.m_stepIndex = inner->firstPlayableStep();
+        first.m_masterIntensity = inner->getAttributeValue(Function::Intensity);
+        first.m_stepIntensity = 1.0;
+        first.m_fadeMode = Chaser::FromFunction;
+        if (first.m_stepIndex >= 0)
+            inner->setAction(first);
+        fadeIn = Function::defaultSpeed();
+        fadeOut = Function::defaultSpeed();
+    }
+
     // Start the fire up!
-    func->start(timer, functionParent(), 0, newStep->m_fadeIn, newStep->m_fadeOut,
+    func->start(timer, functionParent(), 0, fadeIn, fadeOut,
                 func->defaultSpeed(), m_chaser->tempoType());
     m_runnerSteps.append(newStep);
     m_roundTime->restart();
@@ -805,10 +926,11 @@ bool ChaserRunner::write(MasterTimer *timer, QList<Universe *> universes)
                             || m_pendingAction.m_action == ChaserPreviousStep
                             || (m_pendingAction.m_action == ChaserSetStepIndex
                                 && m_pendingAction.m_stepIndex != -1);
-    if (stepChange && m_chaser->goQuantize() != Chaser::GoNow && !m_externalClock)
+    if (stepChange && m_chaser->goQuantize() != Chaser::GoNow && !m_externalClock && !m_subCueHeld)
     {
         const qint64 unit = qint64(std::floor(goClockUnits()));
-        if (!goHeld())
+        // (Its own hold only: goHeld() counts a held Sub GO too.)
+        if (m_goHeldIn == std::numeric_limits<qint64>::min())
             m_goHeldIn = unit;
         if (unit <= m_goHeldIn)
         {
@@ -836,7 +958,7 @@ bool ChaserRunner::write(MasterTimer *timer, QList<Universe *> universes)
             if (m_pendingAction.m_stepIndex != -1)
             {
                 clearRunningList();
-                if (m_chaser->runOrder() == Function::Random)
+                if (m_chaser->runOrder() == Function::Random && !m_subCueHeld)
                     m_lastRunStepIdx = randomStepIndex(m_pendingAction.m_stepIndex);
                 else
                     m_lastRunStepIdx = m_pendingAction.m_stepIndex;
@@ -893,7 +1015,8 @@ bool ChaserRunner::write(MasterTimer *timer, QList<Universe *> universes)
         // elapsed time: the ShowRunner steps them from the show/timecode clock,
         // and infinite-hold cues stay manual-GO barriers. Only explicit actions
         // (SetStepIndex / Next / Previous, handled above) change the step.
-        if (m_externalClock == false &&
+        // Held as sub-cues, likewise: a step changes on a Sub GO.
+        if (m_externalClock == false && m_subCueHeld == false &&
             step->m_duration != Function::infiniteSpeed() &&
             ((m_chaser->tempoType() == Function::Time && step->m_elapsed >= step->m_duration) ||
              (m_chaser->tempoType() == Function::Beats && step->m_elapsedBeats >= step->m_duration)))
@@ -902,7 +1025,7 @@ bool ChaserRunner::write(MasterTimer *timer, QList<Universe *> universes)
                 prevStepRoundElapsed = step->m_elapsed % step->m_duration;
 
             m_lastFunctionID = step->m_function->type() == Function::SceneType ? step->m_function->id() : Function::invalidId();
-            step->m_function->stop(functionParent(), m_chaser->type() == Function::SequenceType);
+            stopStepFunction(step, m_chaser->type() == Function::SequenceType);
             m_runnerSteps.removeOne(step);
             delete step;
         }
@@ -917,7 +1040,7 @@ bool ChaserRunner::write(MasterTimer *timer, QList<Universe *> universes)
             if (m_updateOverrideSpeeds == true)
             {
                 m_updateOverrideSpeeds = false;
-                if (step->m_function != NULL)
+                if (step->m_function != NULL && step->m_subCues == false)
                 {
                     step->m_function->setOverrideFadeInSpeed(step->m_fadeIn);
                     step->m_function->setOverrideFadeOutSpeed(step->m_fadeOut);
@@ -949,6 +1072,41 @@ bool ChaserRunner::write(MasterTimer *timer, QList<Universe *> universes)
         {
             m_pendingAction.m_action = ChaserNoAction;
             return false;
+        }
+    }
+
+    /* Sub GO / Sub Back / a jump to a sub-cue: after the step change, so a
+       jump's parent step has started. A step change that landed drops a Sub
+       GO or Back asked before it (they were for the cue it left). GO on the
+       beat applies as to GO, from this chase's setting. */
+    if (m_pendingSubAction.m_action != ChaserNoAction)
+    {
+        const bool stepLanded = stepChange && held.m_action == ChaserNoAction;
+        const bool aJump = m_pendingSubAction.m_action == ChaserSubSetStep;
+        bool apply = true;
+        if (held.m_action != ChaserNoAction)
+        {
+            apply = false;                          // waits with the step change
+        }
+        else if (stepLanded && !aJump)
+        {
+            m_pendingSubAction.m_action = ChaserNoAction;
+            m_subGoHeldIn = std::numeric_limits<qint64>::min();
+            apply = false;
+        }
+        else if (!stepLanded && m_chaser->goQuantize() != Chaser::GoNow
+                 && !m_externalClock && !m_subCueHeld)
+        {
+            const qint64 unit = qint64(std::floor(goClockUnits()));
+            if (m_subGoHeldIn == std::numeric_limits<qint64>::min())
+                m_subGoHeldIn = unit;
+            apply = unit > m_subGoHeldIn;
+        }
+        if (apply)
+        {
+            m_subGoHeldIn = std::numeric_limits<qint64>::min();
+            applySubAction(m_pendingSubAction);
+            m_pendingSubAction.m_action = ChaserNoAction;
         }
     }
 

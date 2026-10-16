@@ -22,6 +22,7 @@
 #define APP_H
 
 #include <QMainWindow>
+#include <QKeySequence>
 #include <QApplication>
 #include <QString>
 #include <QList>
@@ -51,6 +52,7 @@ class QLabel;
 class QSlider;
 class App;
 class StartupWindow;
+class Chaser;
 
 /** @addtogroup ui UI
  * @{
@@ -115,7 +117,7 @@ protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 #if defined(WIN32) || defined(Q_OS_WIN)
-    bool nativeEvent(const QByteArray & eventType, void * message, long * result);
+    bool nativeEvent(const QByteArray &eventType, void *message, qintptr *result) override;
     void disableTimerResolutionThrottling();
 #endif
 
@@ -216,6 +218,8 @@ public:
     Doc *doc();
     /** Show control's OSC listener and settings (QLab). */
     class ShowControlListener *showControlListener() const { return m_showControlListener; }
+    /** Open Connections at its Show control & sync page. */
+    void showShowControlSettings();
 
 private slots:
     void slotDocModified(bool state);
@@ -285,6 +289,10 @@ public slots:
     void slotFileImport();
     QFile::FileError slotFileSave();
     QFile::FileError slotFileSaveAs();
+    /** File → Collect for Transfer…: the show as a .qlcc in a folder of its
+     *  own, with Fixtures/, EffectScripts/, RGBScripts/ and HeadLayouts/
+     *  beside it (SHOW_EMBEDDING_DESIGN.md §6). */
+    void slotFileCollectForTransfer();
 
     void slotControlMonitor();
     /** Open the rig overview (View menu). Delegates to the Monitor, which owns
@@ -400,6 +408,8 @@ private:
     QAction* m_controlPanicAction;
     QAction* m_cueGoAction = nullptr;       ///< the main cue list's GO
     QAction* m_cueBackAction = nullptr;
+    QAction* m_cueSubGoAction = nullptr;    ///< its Sub GO (SUBCUES_DESIGN.md)
+    QAction* m_cueSubBackAction = nullptr;
     QAction* m_dumpDmxAction;
     QAction* m_liveEditAction;
     QAction* m_liveEditVirtualConsoleAction;
@@ -588,6 +598,16 @@ private slots:
 
     /** Poll + refresh the global engine-load chip (and timecode chip). */
     void slotUpdateHealthFooter();
+
+public:
+    /** The footer's sub-cue part for @a list (SUBCUES_DESIGN.md): "Sub: 4.2"
+     *  (what Sub GO plays), "Sub: (end of 4)", or empty when the cue playing
+     *  has no sub-cues on Sub GO. */
+    static QString standbySubCueText(const Chaser *list);
+    /** Sub GO and Sub Back on the main cue list: ⌥⌘↩ and ⌥⌘⇧↩ on macOS
+     *  (beside GO ⌘↩ and Back ⌘⇧↩). */
+    static QKeySequence cueSubGoShortcut();
+    static QKeySequence cueSubBackShortcut();
 
 private:
     QLabel* m_statusModeLabel;

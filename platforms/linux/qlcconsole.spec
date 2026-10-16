@@ -107,6 +107,7 @@ desktop-file-validate %{buildroot}/%{_datadir}/applications/*.desktop
 %{_datadir}/metainfo/*
 %{_datadir}/mime/packages/qlcconsole.xml
 %{_datadir}/pixmaps/*
+%{_datadir}/icons/hicolor/*/apps/qlcconsole*
 %{_datadir}/qlcconsole/Sample.qxw
 %{_datadir}/qlcconsole/fixtures
 %{_datadir}/qlcconsole/gobos

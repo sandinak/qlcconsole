@@ -13,6 +13,8 @@
 | ⌘L | Show-mode lock |
 | ⌘⇧Esc | **Stop ALL functions** (its arrow: fade 1/5/10/30 s and stop) |
 | ⌘D | Dump the current DMX values into a function |
+| ⌘↩ / ⌘⇧↩ | **GO** / **Back** on the main cue list ([Show control](show-control.md#whats-next-and-go-from-anywhere)) |
+| ⌥⌘↩ / ⌥⌘⇧↩ | **Sub GO** / **Sub Back**: the next / previous [sub-cue](show-control.md#sub-cues) of the cue playing |
 | ⇧⌘1 … ⇧⌘8 | Bring forward Connections, Fixtures, Lighting Studio, **Functions** (opens in its own window), Programming, Shows, Virtual Console, Simple Desk |
 | ⇧⌘M | Lighting Studio |
 | ⇧⌘R | **Rig Overview** — and again to close it when it's in front |

@@ -42,6 +42,7 @@ add_library(${module_name} SHARED
     mastertimer.cpp mastertimer.h
     monitorproperties.cpp monitorproperties.h
     networkreport.cpp networkreport.h
+    patchlabels.cpp patchlabels.h
     patchlist.cpp patchlist.h
     speedmasters.cpp speedmasters.h
     showcontrol.cpp showcontrol.h
@@ -111,6 +112,7 @@ add_library(${module_name} SHARED
     bundlecache.cpp bundlecache.h
     effectinstance.cpp effectinstance.h
     effectscriptrunner.cpp effectscriptrunner.h
+    showembedding.cpp showembedding.h
     programmercontroller.cpp programmercontroller.h
     scene.cpp scene.h
     scenevalue.cpp scenevalue.h
@@ -210,6 +212,13 @@ elseif(UNIX OR ANDROID OR IOS)
 endif()
 
 set_property(DIRECTORY APPEND PROPERTY ADDITIONAL_MAKE_CLEAN_FILES ${CONFIGFILE})
+
+# MinGW exports every symbol of a DLL by itself only while nothing in it is
+# marked dllexport; qlcengine_export.h marks a few classes, so ask for the
+# rest explicitly.
+if(MINGW)
+    target_link_options(${module_name} PRIVATE -Wl,--export-all-symbols)
+endif()
 
 install(TARGETS ${module_name}
     LIBRARY DESTINATION ${INSTALLROOT}/${LIBSDIR}

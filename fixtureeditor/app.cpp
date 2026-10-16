@@ -69,7 +69,6 @@ App::App(QWidget *parent) : QMainWindow(parent)
     m_copyChannel = NULL;
 
     setWindowTitle(App::longName());
-    setWindowIcon(QIcon(":/qlcconsole-fixtureeditor.png"));
     QMdiArea *mdiArea = new QMdiArea(this);
     mdiArea->setBackground(QBrush(QColor(0x60, 0x60, 0x60)));
     setCentralWidget(mdiArea);

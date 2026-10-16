@@ -16,13 +16,14 @@
 #define CONTROLSURFACEENGINE_H
 
 #include <QObject>
+#include "qlcengine_export.h"
 #include <QHash>
 #include <QList>
 #include <functional>
 
 #include "controlsurface.h"
 
-class ControlSurfaceEngine : public QObject
+class QLC_ENGINE_EXPORT ControlSurfaceEngine : public QObject
 {
     Q_OBJECT
 

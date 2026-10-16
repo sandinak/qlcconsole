@@ -137,6 +137,10 @@ void AppViews_Test::theWindowMenuFindsAndPutsBackBrokenOutViews()
     QTabWidget *tabs = m_app->m_tab;
     const int views = tabs->count();
     QCOMPARE(m_app->m_windowJumps.size(), views + 1);    // and Functions, which has no tab
+    // The Rig Overview is a window too: offered here as well as under View.
+    QVERIFY(windowMenu->actions().contains(m_app->m_rigOverviewAction));
+    QCOMPARE(m_app->m_rigOverviewAction->shortcut(),
+             QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_R));
 
     const QString label = tabs->tabBar()->tabData(2).toString();
     m_app->slotDetachContext(2);
@@ -393,6 +397,11 @@ void AppViews_Test::aShowsDefinitionsComeFromTheShowCache()
     QTemporaryDir home;
     const QByteArray realHome = qgetenv("HOME");
     qputenv("HOME", home.path().toUtf8());
+#ifdef Q_OS_WIN
+    // Windows takes the home folder from USERPROFILE, not HOME.
+    const QByteArray realProfile = qgetenv("USERPROFILE");
+    qputenv("USERPROFILE", home.path().toUtf8());
+#endif
 
     // A definition that is only in the show cache.
     QLCFixtureDefCache *defs = m_app->m_doc->fixtureDefCache();
@@ -423,6 +432,10 @@ void AppViews_Test::aShowsDefinitionsComeFromTheShowCache()
              "the show's definition did not come from the show cache");
 
     qputenv("HOME", realHome);
+#ifdef Q_OS_WIN
+
+    qputenv("USERPROFILE", realProfile);
+#endif
 }
 
 QTEST_MAIN(AppViews_Test)

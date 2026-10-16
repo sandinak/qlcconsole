@@ -18,6 +18,7 @@
 #define MARKPLANNER_H
 
 #include <QObject>
+#include "qlcengine_export.h"
 #include <QTimer>
 #include <QSet>
 #include <QString>
@@ -27,7 +28,7 @@ class MarkEffect;
 
 #define KXMLQLCMoveInBlack QStringLiteral("MoveInBlack")
 
-class MarkPlanner : public QObject
+class QLC_ENGINE_EXPORT MarkPlanner : public QObject
 {
     Q_OBJECT
 

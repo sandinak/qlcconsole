@@ -222,16 +222,48 @@ fixtures still in the inventory last:
 | **Fixture** | Its name. |
 | **Make / model**, **Mode** | From its definition. |
 | **Ch** | How many channels it takes. |
-| **Connection** | DMX, or a network fixture's transport and IP ("WLED 172.18.2.50"). |
-| **Goes to** | Where its universe goes: the output and device ("Art-Net → CS1 (172.18.2.211) port 1"), or nothing. |
+| **Connection** | DMX, or a network fixture's transport and the name its IP goes by ("WLED lantern-2"), or the IP when it has none ("WLED 172.18.2.50"). Point at it for the IP. |
+| **Goes to** | Where its universe goes: the output and device ("Art-Net → CS1 (172.18.2.211) port 1"), or nothing; point at it for all of it when the column is narrow. |
 | **Mounted on** | The same words as Fixture Properties: "Truss FOH · 2.5 m along", "Tower T2 · shelf 3", "free / on the floor". |
 
 - **Save CSV…** — every column plus the fixture ID, the first and last
   channel, X/Y/Z on the plot (in the plot's units) and a note, for a
-  spreadsheet or a label printer.
+  spreadsheet or another label program.
 - **Save PDF…** — a landscape Letter page, a table per universe headed
   with where that universe goes, the header row repeated on each page.
 - **Copy** — the CSV on the clipboard, to paste straight into a sheet.
+- **Labels…** — a label per fixture, as a PDF (below).
+
+#### Labels
+
+**Labels…** in the patch list makes a label to stick on each fixture (or
+its case), saved as a PDF to print from Preview. Each label has:
+
+- the fixture's **name**, large;
+- its **address**, large: universe and first channel, one-based — "U3 · 101"
+  ("not patched" for a fixture in the inventory, "clash · U1 · 12" for one
+  in an address clash) — with the universe's name, when it has one, smaller
+  beside it;
+- its **mode and channels** — "16-channel · 16 ch";
+- for a network fixture, a line of its own: its transport and the name its
+  IP goes by — "WLED · lantern-2" — or the IP when it has no name
+  ("WLED · 172.18.2.50");
+- **where it hangs**, the same words as the Mounted on column.
+
+A name too long for the label is set smaller, then cut short with "…";
+nothing runs off the edge.
+
+Pick the **stock** — the choice is remembered for next time:
+
+| Stock | What it is |
+|---|---|
+| **Avery 5160** (the default) | US Letter sheets, 30 labels (3 across, 10 down), each 2⅝ × 1 in. Avery's 5260, 5960, 8160 and other "30 per sheet" labels are the same layout. |
+| **62 mm roll** | A continuous 62 mm roll (Brother DK-22205 and the like), one 62 × 29 mm label a page; the printer cuts between them. |
+
+and **which fixtures**: all of them, or the rows selected in the list (the
+default when some are). The dialog says how many labels that is and, on
+sheets, how many sheets. Print the PDF at **100% / actual size** — "fit to
+page" shrinks it and the labels no longer line up with the sheet.
 
 ## The head-layout grid editor
 
@@ -454,6 +486,65 @@ show opens, each definition comes from your library, else the show cache,
 else — if it's an online-only file in cloud storage — it's fetched (with a
 "Waiting for the cloud…" window you can Skip) and then cached.
 
+### Opening a show on another computer
+
+A **.qlcc carries its own copies** of every fixture definition, effect
+script and RGB Matrix script it uses that isn't part of the app — your own
+definitions, ones linked in from the old QLC+ folder, ones from the show
+cache. Saving writes each one into the show file exactly as it is on disk
+(a few KB each); the ones that ship with the app stay out. A **.qxw** is
+saved as before, without them, so stock QLC+ can still open it.
+
+When the show opens, each copy is compared with this computer's:
+
+| This computer… | What happens |
+|---|---|
+| has none | The show's copy is used while the show is open. The footer notes **"N definitions came with this show"** (a note — the show is still Ready); **Install on This Computer** puts them in your user folder. |
+| has the same, byte for byte | Nothing to say. |
+| has a **different** one | The **show's** copy is used — nothing changes under a patched rig by itself — and the footer warns **"N items in this show differ from this computer's"**. |
+
+**Review…** on that warning lists each difference with:
+
+- **Which looks newer** — "Updated on this computer since the show was
+  saved", "This computer has an older copy", or "Can't tell which is
+  newer" (from the file's time when it was saved into the show, and the
+  file's time here).
+- **Safe to switch?** — *Compatible* when every mode the show's fixtures
+  use is in this computer's copy with the same channels in the same order,
+  and every setting the show's looks and RGB matrices set is still there,
+  of the same kind. Otherwise *Not compatible*, naming the fixtures or
+  looks and what changed ("Mode “4ch” is 5 channels here, 4 in the show:
+  2 fixtures would need re-patching").
+- **Use This Computer's** — the show switches now (asking first when it's
+  not compatible) and carries this computer's copy from the next save.
+  A switch that would need re-patching — a mode that's gone, or fixtures
+  that would grow into the next one — is refused, naming them.
+  **Use This Computer's for All Compatible** does every safe one at once.
+- **Keep the Show's** — stop warning about it. Remembered in the show,
+  until this computer's copy changes again.
+- **Install the Show's** — writes the show's copy over this computer's
+  (asking first; the old file goes to the Trash), so every show opened here
+  uses it.
+
+**Save never swaps versions:** it writes the copy the show is using. A
+newer definition on this computer reaches the show only through **Use This
+Computer's**. Opening another show starts from this computer's copies
+again.
+
+#### Collect for Transfer
+
+**File → Collect for Transfer…** makes a folder named after the show
+holding the show as a .qlcc and, beside it, **Fixtures/**, **EffectScripts/**,
+**RGBScripts/** and **HeadLayouts/** (the show's LED maps) — everything it
+uses that isn't part of the app, as plain files. The show you have open
+stays as it is.
+
+Opening a show also looks in its own folder's **Fixtures/**,
+**EffectScripts/** and **RGBScripts/** for anything neither the show nor
+this computer has, so a collected folder opens complete even as a .qxw,
+and definitions kept beside a show are found. (A copy in the show file
+comes first, then this computer's, then the show's folder.)
+
 ## Terminology
 
 | Term | Meaning |
@@ -467,3 +558,4 @@ else — if it's an online-only file in cloud storage — it's fetched (with a
 | **Address clash** | A fixture the show file puts on channels another already uses; loaded unpatched and kept until re-patched. |
 | **Included / Local definition** | Shipped with the app, or your own file (which replaces an included one of the same make and model). |
 | **Show cache** | This computer's copy of every non-shipped definition a show uses, so the show opens without the original files. |
+| **The show's own copy** | A definition or script saved inside a .qlcc. Used when this computer has none or a different one, until you choose otherwise in **Review…**. |

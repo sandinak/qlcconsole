@@ -39,6 +39,7 @@
 #include "qlcchannel.h"
 #include "programmerflasher.h"
 #include "effectscriptrunner.h"
+#include "showembedding.h"
 
 #include "monitorproperties.h"
 #include "powerdistribution.h"
@@ -175,6 +176,7 @@ Doc::Doc(QObject* parent, int universes)
     // because the runner only needs to know about starts/stops to create
     // or destroy instances; the actual DMX work is driven by its QTimer.
     m_effectScriptRunner = new EffectScriptRunner(this);
+    m_showEmbedding = new ShowEmbedding(this);
     connect(m_masterTimer, SIGNAL(functionStarted(quint32)),
             m_effectScriptRunner, SLOT(slotFunctionStarted(quint32)));
     connect(m_masterTimer, SIGNAL(functionStopped(quint32)),
@@ -284,6 +286,9 @@ void Doc::clearContents()
 
     m_speedMasters->reset();
     m_showControl->reset();
+    // The timecode source is the show's (a universe of its patch).
+    if (m_timecodeSource != NULL)
+        m_timecodeSource->setSourceUniverse(-1);
 
     if (m_networkTopology != NULL)
         m_networkTopology->reset();
@@ -361,6 +366,10 @@ void Doc::clearContents()
     m_loadStatus = Cleared;
 
     m_programmer->clearProgrammerSelection();
+
+    /* The show is gone: this computer's definitions and scripts again. */
+    if (m_showEmbedding != nullptr)
+        m_showEmbedding->restoreComputer();
 
     emit cleared();
 }
@@ -2319,6 +2328,10 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
         {
             m_showControl->loadXML(doc);
         }
+        else if (doc.name() == KXMLQLCTimecode)
+        {
+            timecodeSource()->loadXML(doc);
+        }
         else if (doc.name() == KXMLQLCPowerDistribution)
         {
             powerDistribution()->loadXML(doc, this);
@@ -2363,6 +2376,17 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
     {
         m_monitorProps->foldItemLocksIntoLayers(powerDistribution(), networkTopology());
         m_monitorProps->syncItemLocksToLayers(powerDistribution(), networkTopology());
+    }
+
+    /* A timecode source naming no universe of this show is as good as none:
+       "any", as before it was saved. */
+    if (m_timecodeSource != NULL && m_timecodeSource->sourceUniverse() >= 0)
+    {
+        bool found = false;
+        for (quint32 i = 0; i < m_ioMap->universesCount() && !found; i++)
+            found = (qint32(m_ioMap->getUniverseID(i)) == m_timecodeSource->sourceUniverse());
+        if (!found)
+            m_timecodeSource->setSourceUniverse(-1);
     }
 
     m_loadStatus = Loaded;
@@ -2433,6 +2457,8 @@ bool Doc::saveXML(QXmlStreamWriter *doc)
 
     m_speedMasters->saveXML(doc);
     m_showControl->saveXML(doc);
+    if (m_timecodeSource != NULL)
+        m_timecodeSource->saveXML(doc);
 
     if (m_networkTopology != NULL)
         m_networkTopology->saveXML(doc);
