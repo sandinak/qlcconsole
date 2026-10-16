@@ -271,7 +271,7 @@ private:
 
     static QString itemPath(class QTreeWidgetItem *item);
     /** Put the list back at @p value after a rebuild. */
-    void restoreScroll(int value);
+    void restoreScroll(const QPoint &value);
 
     /** Ordered name/value pairs as a tooltip table, or empty if there are none. */
     static QString propertyTooltip(const QString &title,

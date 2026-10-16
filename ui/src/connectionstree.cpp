@@ -112,6 +112,28 @@ static QString displayPluginName(const QString &pluginName)
     return pluginName;
 }
 
+/* A list whose rows are what gets picked: bringing an item into view moves
+   it up or down, never sideways. QTreeView::scrollTo() also scrolls to show
+   the item's CELL -- and the rebuild re-sets the current row on column 0, so
+   with the list scrolled right to read Detail, every rebuild (the one held
+   off until a right-click menu closes, and every five-second one) jumped it
+   back to the left ("every time I open the right click menu in connections
+   the connections list scrolls right"). Left/Right on a row-selecting tree
+   scroll the bar themselves, so nothing here needs scrollTo to go sideways. */
+namespace {
+class RowTree : public QTreeWidget
+{
+public:
+    using QTreeWidget::QTreeWidget;
+    void scrollTo(const QModelIndex &index, ScrollHint hint = EnsureVisible) override
+    {
+        const int side = horizontalScrollBar()->value();
+        QTreeWidget::scrollTo(index, hint);
+        horizontalScrollBar()->setValue(side);
+    }
+};
+}
+
 ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     : QWidget(parent)
     , m_doc(doc)
@@ -228,7 +250,7 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     m_status->setStyleSheet("QLabel { color: #a06000; }");
     bar->insertWidget(bar->indexOf(hint) + 1, m_status);   // on the same row
 
-    m_tree = new QTreeWidget(this);
+    m_tree = new RowTree(this);
     m_tree->setObjectName("connectionsTree");
     m_tree->setColumnCount(3);
     m_tree->setHeaderLabels(QStringList()
@@ -696,7 +718,8 @@ void ConnectionsTree::refresh()
        seconds used to drop the selection and scroll back to the top, so a
        universe clicked a moment ago was gone, and the list jumped under the
        pointer. Kept by full path, like the open branches. */
-    const int scroll = m_tree->verticalScrollBar()->value();
+    const QPoint scroll(m_tree->horizontalScrollBar()->value(),
+                        m_tree->verticalScrollBar()->value());
     QSet<QString> selectedPaths;
     foreach (QTreeWidgetItem *it, m_tree->selectedItems())
         selectedPaths.insert(itemPath(it));
@@ -1931,15 +1954,23 @@ void ConnectionsTree::markOutputProblems()
 
 /** Stable identity for a row: its name plus every ancestor's, so two rows that
  *  share a display name under different parents are not confused. */
-/* Back to where the list was. The scroll range is only known once the new
-   rows are laid out, which can be after this returns -- so again then. */
-void ConnectionsTree::restoreScroll(int value)
+/* Back to where the list was, both ways (x sideways, y down). The scroll
+   range is only known once the new rows are laid out, which can be after
+   this returns -- so again then. Sideways matters as much as down: the
+   columns size to their contents, so emptying the list for the rebuild
+   narrows the range and clamps a list scrolled right to read Detail. */
+void ConnectionsTree::restoreScroll(const QPoint &value)
 {
-    m_tree->verticalScrollBar()->setValue(value);
+    m_tree->horizontalScrollBar()->setValue(value.x());
+    m_tree->verticalScrollBar()->setValue(value.y());
     QPointer<QTreeWidget> tree(m_tree);
     QTimer::singleShot(0, this, [tree, value]() {
-        if (tree != nullptr && tree->verticalScrollBar()->value() != value)
-            tree->verticalScrollBar()->setValue(value);
+        if (tree == nullptr)
+            return;
+        if (tree->horizontalScrollBar()->value() != value.x())
+            tree->horizontalScrollBar()->setValue(value.x());
+        if (tree->verticalScrollBar()->value() != value.y())
+            tree->verticalScrollBar()->setValue(value.y());
     });
 }
 
@@ -5061,7 +5092,8 @@ void ConnectionsTree::buildUniverseList()
         return;
 
     // Kept across the rebuild every few seconds: where you were, what you had.
-    const int scroll = m_tree->verticalScrollBar()->value();
+    const QPoint scroll(m_tree->horizontalScrollBar()->value(),
+                        m_tree->verticalScrollBar()->value());
     QSet<quint32> selected;
     foreach (QTreeWidgetItem *it, m_tree->selectedItems())
         selected.insert(it->data(COL_NAME, ROLE_UNIVERSE).toUInt());

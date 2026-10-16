@@ -119,6 +119,9 @@ private slots:
     void outputProblemsShowOnTheRowAndClear();
     void outputProblemsReachTheFooterOncePerProblem();
 
+    /* A click or the periodic rebuild never scrolls the list sideways. */
+    void clickingARowDoesNotScrollSideways();
+
 private:
     Doc *m_doc;
 };

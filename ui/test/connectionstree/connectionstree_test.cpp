@@ -24,6 +24,8 @@
 #include <QScrollBar>
 #include <QMenu>
 #include <QSettings>
+#include <QSplitter>
+#include <QContextMenuEvent>
 
 #define protected public
 #define private public
@@ -1558,4 +1560,84 @@ void ConnectionsTree_Test::outputProblemsReachTheFooterOncePerProblem()
     AppUtil::updateFixtureReadiness(m_doc);
     foreach (const ShowStatus::Entry &x, ShowStatus::instance()->allEntries())
         QVERIFY(x.key != "outputs.problems");
+}
+
+/** Right-click @p at in the tree's viewport the way a hand does: press,
+    the context menu (closed again unpicked), release. */
+static void rightClickAt(ConnectionsTree &tree, const QPoint &at)
+{
+    QWidget *vp = tree.m_tree->viewport();
+    QTest::mousePress(vp, Qt::RightButton, Qt::NoModifier, at);
+    QTimer::singleShot(0, []() {
+        if (QWidget *m = QApplication::activePopupWidget())
+            m->close();
+    });
+    QContextMenuEvent ev(QContextMenuEvent::Mouse, at, vp->mapToGlobal(at));
+    QApplication::sendEvent(vp, &ev);
+    QTest::mouseRelease(vp, Qt::RightButton, Qt::NoModifier, at);
+    /* The menu closing hands focus back to the list -- what the offscreen
+       platform, with no active window, does not do by itself. */
+    QFocusEvent back(QEvent::FocusIn, Qt::PopupFocusReason);
+    QApplication::sendEvent(tree.m_tree, &back);
+    QApplication::processEvents();
+}
+
+/* "every time I open the right click menu in connections the connections
+   list scrolls right": the menu holds the rebuild off, and the rebuild that
+   follows (and every five-second one) put the current row back with
+   setCurrentItem(row, 0) -- which Qt answers by scrolling sideways to show
+   that cell, back to the left edge of the list. Rows are what is picked
+   here, so neither a click (either button), the menu nor a rebuild moves the
+   list sideways; going up and down still follows the current row. */
+void ConnectionsTree_Test::clickingARowDoesNotScrollSideways()
+{
+    fourPortNode(m_doc);
+    ConnectionsTree tree(m_doc);
+    showUniverseList(tree);
+    QSplitter *split = qobject_cast<QSplitter *>(tree.m_tree->parentWidget());
+    QVERIFY(split != nullptr);
+    split->setSizes(QList<int>() << 160 << 840);   // narrower than its columns
+    QApplication::processEvents();
+    QScrollBar *h = tree.m_tree->horizontalScrollBar();
+    QVERIFY(h->maximum() > 0);
+
+    const int y = tree.m_tree->visualItemRect(universeRow(tree.m_tree, 2)).center().y();
+    const int right = tree.m_tree->viewport()->width() - 4;
+
+    foreach (const int start, QList<int>() << 0 << h->maximum() / 2 << h->maximum())
+    {
+        h->setValue(start);
+        rightClickAt(tree, QPoint(right, y));
+        QCOMPARE(h->value(), start);
+        rightClickAt(tree, QPoint(4, y));
+        QCOMPARE(h->value(), start);
+        QTest::mouseClick(tree.m_tree->viewport(), Qt::LeftButton, Qt::NoModifier,
+                          QPoint(right, y));
+        QApplication::processEvents();
+        QCOMPARE(h->value(), start);
+        QTest::mouseClick(tree.m_tree->viewport(), Qt::LeftButton, Qt::NoModifier,
+                          QPoint(4, y));
+        QApplication::processEvents();
+        QCOMPARE(h->value(), start);
+        QCOMPARE(tree.m_tree->currentItem(), universeRow(tree.m_tree, 2));
+
+        tree.refresh();                             // the periodic rebuild
+        QApplication::processEvents();
+        QCOMPARE(h->value(), start);
+    }
+
+    // Arrow keys still bring the current row into view, up and down.
+    split->setSizes(QList<int>() << 160 << 840);
+    tree.resize(1000, 150);                        // short: the list scrolls
+    QApplication::processEvents();
+    QScrollBar *v = tree.m_tree->verticalScrollBar();
+    QVERIFY(v->maximum() > 0);
+    v->setValue(0);
+    h->setValue(h->maximum() / 2);
+    const int side = h->value();
+    tree.m_tree->setFocus();
+    QTest::keyClick(tree.m_tree, Qt::Key_End);
+    QApplication::processEvents();
+    QCOMPARE(v->value(), v->maximum());
+    QCOMPARE(h->value(), side);
 }
