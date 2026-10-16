@@ -192,6 +192,28 @@ QLC_TICKLOG=100 DYLD_FALLBACK_LIBRARY_PATH=build-arm64/engine/src \
 
 ---
 
+## 3. 24-hour soak of the real app — `soak24/run_soak.py`
+
+Three phases (real show / scaled show / rough handling), each a fresh start of
+the installed app with web access on, the show posted to `/loadProject`, looks
+cycled over the WebSocket API; CPU, memory, threads, liveness and the engine
+tick log sampled every 30 s; crashes and hangs recorded and the app restarted.
+`soak24/merge_block.py` builds the scaled show (a `qlcstress emit` block merged
+into the real one). The script header has the details.
+
+- **macOS**: `python3 soak24/run_soak.py --show S.qlcc --scaled-show S-STRESS.qlcc --out DIR`
+  (starts `/Applications/qlcconsole.app` through `open`).
+- **Windows**: the same script. The app (`C:\qlcconsole\qlcconsole.exe`) is
+  started on the logged-on user's desktop through an interactive scheduled
+  task; samples add private bytes (the leak signal) and the handle count.
+  **The shows are run as copies with every `<Output>` patch removed**, so a
+  test PC never drives the real lights (`--keep-outputs` to send DMX after
+  all). Start with `--detach` (the runner then lives in a scheduled task of
+  its own, past the SSH session), stop with `--out DIR --stop` (or create
+  `DIR\STOP`). `--win-launch direct` starts the app from the runner instead,
+  in the runner's own session: a headless soak, e.g. when the Task Scheduler
+  refuses interactive tasks.
+
 ## Sanitizers: known host limitation (macOS 26.2)
 
 On this host (macOS 26.2 beta, arm64) the Apple-clang **ASan runtime
