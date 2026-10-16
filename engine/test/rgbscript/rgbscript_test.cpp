@@ -271,7 +271,8 @@ void RGBScript_Test::runScripts()
         qDebug() << "Evaluating script" << name;
         QScopedPointer<RGBScript> s(m_doc->rgbScriptsCache()->script(name));
         QString fileName = s->fileName();
-        QString scriptName = fileName.split(QDir::separator()).last();
+        // Qt paths use '/' on every platform, Windows included.
+        QString scriptName = QFileInfo(fileName).fileName();
 
         // Check naming conventions
         QVERIFY(fileName.endsWith(".js"));

@@ -300,8 +300,11 @@ int QLCFixtureDefCache::loadMapManufacturer(QXmlStreamReader *doc, QString manuf
 
             if (doc->attributes().hasAttribute("n"))
             {
-                defFile = QString("%1%2%3%4")
-                            .arg(manufacturer).arg(QDir::separator())
+                // '/', not QDir::separator(): on Windows that is '\' and
+                // the path came out mixed (C:/.../Fixtures\Make\Make-Model.qxf),
+                // so it never equalled the same file named the Qt way.
+                defFile = QString("%1/%2%3")
+                            .arg(manufacturer)
                             .arg(doc->attributes().value("n").toString()).arg(KExtFixture);
                 //qDebug() << "Manufacturer" << spacedManufacturer << "file" << defFile;
             }
