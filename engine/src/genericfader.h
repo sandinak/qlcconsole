@@ -25,6 +25,9 @@
 #include <QList>
 #include <QHash>
 #include <mutex>
+#if defined(Q_OS_WIN)
+#include <QRecursiveMutex>
+#endif
 
 #include "universe.h"
 #include "scenevalue.h"
@@ -113,6 +116,25 @@ public:
     bool deleteRequested();
     void requestDelete();
 
+    /** The lock guarding a fader's channels.
+     *
+     *  std::recursive_mutex where TSan can see it (it can't see into a
+     *  QRecursiveMutex, which locks out of line). Not on Windows: MinGW's
+     *  libstdc++ gives std::recursive_mutex no destructor (it has a static
+     *  initializer, so it assumes the pthread mutex owns nothing), while
+     *  winpthreads allocates the mutex and a kernel Event on its first lock.
+     *  Every fader leaked both, and faders come and go all the time (a
+     *  scene asks for one per universe each time it starts): the Windows
+     *  stress run leaked ~5000 Events a second -- 3 million handles and
+     *  300 MB in 10 minutes -- with a CreateEvent call on the timer thread
+     *  for each. QRecursiveMutex is a word and a futex: nothing to create,
+     *  nothing to leak. */
+#if defined(Q_OS_WIN)
+    typedef QRecursiveMutex ChannelsLock;
+#else
+    typedef std::recursive_mutex ChannelsLock;
+#endif
+
     /** A FadeChannel of this fader, with the fader's channels locked for as
      *  long as it is held. The universe this fader belongs to writes it on
      *  its own thread -- stepping its channels, and dropping the ones that are
@@ -124,7 +146,7 @@ public:
     class ChannelRef
     {
     public:
-        ChannelRef(std::unique_lock<std::recursive_mutex> &&lock, FadeChannel *fc)
+        ChannelRef(std::unique_lock<ChannelsLock> &&lock, FadeChannel *fc)
             : m_lock(std::move(lock)), m_fc(fc) {}
         ChannelRef() = default;
         ChannelRef(ChannelRef &&) = default;
@@ -138,10 +160,10 @@ public:
         explicit operator bool() const { return m_fc != nullptr; }
 
         /** Let go of the channel (and the lock) before the end of the scope */
-        void release() { m_fc = nullptr; m_lock = std::unique_lock<std::recursive_mutex>(); }
+        void release() { m_fc = nullptr; m_lock = std::unique_lock<ChannelsLock>(); }
 
     private:
-        std::unique_lock<std::recursive_mutex> m_lock;
+        std::unique_lock<ChannelsLock> m_lock;
         FadeChannel *m_fc = nullptr;
     };
 
@@ -235,7 +257,7 @@ private:
     QHash <quint32,FadeChannel> m_channels;
     /** Guards m_channels and the FadeChannels in it. Recursive: a caller
      *  holding a ChannelRef may ask for another channel of the same fader. */
-    mutable std::recursive_mutex m_channelsLock;
+    mutable ChannelsLock m_channelsLock;
     qreal m_intensity;
     qreal m_parentIntensity;
     bool m_paused;
