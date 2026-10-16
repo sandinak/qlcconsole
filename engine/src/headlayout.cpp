@@ -25,7 +25,10 @@
 #include "fixture.h"
 #include "qlcfile.h"
 
-#define USERHEADLAYOUTDIR "Library/Application Support/qlcconsole/HeadLayouts"
+#include "qlcconfig.h"
+
+// The per-platform user folder, as fixture definitions (it was the Mac's on all).
+#define USERHEADLAYOUTDIR USERQLCPLUSDIR "/HeadLayouts"
 
 namespace
 {

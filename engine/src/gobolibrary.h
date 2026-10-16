@@ -27,7 +27,9 @@
 namespace GoboLibrary
 {
     /** The operator's gobo folder (created if missing):
-     *  ~/Library/Application Support/qlcconsole/Gobos on macOS. */
+     *  Gobos in the per-platform user folder (~/Library/Application Support/
+     *  qlcconsole on macOS, %USERPROFILE%\qlcconsole on Windows, ~/.qlcconsole
+     *  on Linux). */
     QDir userDirectory();
 
     /** Point userDirectory() somewhere else (tests); empty restores it. */

@@ -95,7 +95,9 @@ namespace HeadKinds
 namespace HeadLayoutLibrary
 {
     /** The operator's own maps, one JSON file per model and mode:
-     *  ~/Library/Application Support/qlcconsole/HeadLayouts on macOS. */
+     *  HeadLayouts in the per-platform user folder (~/Library/Application
+     *  Support/qlcconsole on macOS, %USERPROFILE%\qlcconsole on Windows,
+     *  ~/.qlcconsole on Linux). */
     QDir userDirectory();
     /** Point userDirectory() somewhere else (tests); empty restores it. */
     void setUserDirectoryOverride(const QString &path);

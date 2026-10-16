@@ -31,6 +31,10 @@ private slots:
      *  skipped by the loaders rather than waited on, and remembered. */
     void onlineOnlyFilesAreNotedNotWaitedOn();
     void aRemovedLegacyLinkStaysRemoved();
+    /** Effect scripts, presets, bundles, head layouts, gobos and network
+     *  gear live in the per-platform user folder, like fixture definitions
+     *  (they were the Mac's path everywhere). */
+    void userFoldersAreThePlatformsUserFolder();
     void XMLReader();
     void getXMLHeader();
     void errorString();

@@ -15,9 +15,11 @@
 #include <QFile>
 #include <QDebug>
 
-// macOS bundle layout mirrors RGBScripts
-#define EFFECTSCRIPTDIR     "Resources/EffectScripts"
-#define USEREFFECTSCRIPTDIR "Library/Application Support/qlcconsole/EffectScripts"
+/* The user's own scripts: in the same per-platform user folder as fixture
+   definitions (it was the Mac's path on every platform, so on Windows and
+   Linux a script of your own was never found). The system folder comes from
+   the build (EFFECTSCRIPTDIR, qlcconfig.h). */
+#define USEREFFECTSCRIPTDIR USERQLCPLUSDIR "/EffectScripts"
 
 EffectScriptCache::EffectScriptCache(QObject *parent)
     : QObject(parent)
