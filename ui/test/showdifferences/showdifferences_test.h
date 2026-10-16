@@ -35,6 +35,7 @@ private slots:
 
 private:
     QByteArray m_realHome;
+    QByteArray m_realProfile;
 };
 
 #endif
