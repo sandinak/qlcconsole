@@ -63,6 +63,25 @@ private slots:
        problem text out, announced and cleared. Nothing is sent. */
     void controllerReportsAndClearsProblems();
     void pluginGroupsAProblemsUniverses();
+
+    /* Nodes without an address on our network, and setting a node's IP
+       (ArtIpProg). Every send goes to a test sink; nothing leaves. */
+    void ipProgQueryChangesNothing();
+    void ipProgPacketLayout();
+    void ipProgReplyParse();
+    void pollReplyDhcpBits();
+    void offSubnetReplyIsListedAsNeedingItsIp();
+    void sameSubnetNodeIsNotFlagged();
+    void ipProgIsNeverSentToAnUnreachableNode();
+    void ipProgIsUnicastToAReachableNode();
+    void ipProgReplyReachesThePlugin();
+    void discoveryPollIsLimitedBroadcastOnTheLine();
+    void rescanSendsOneDiscoveryPollPerInterface();
+    void periodicPollIsUnchanged();
+    void nodeSetupHelpers();
+    void nodeSetupOffersTheAliasForAnUnreachableNode();
+    void nodeSetupValidatesAndConfirmsBeforeSending();
+    void nodeSetupShowsTheNodesAnswer();
 };
 
 #endif

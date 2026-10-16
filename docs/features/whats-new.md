@@ -23,6 +23,16 @@ The latest changes, newest first. Each links to the guide with the detail.
   removes them all in one go — each one undo step. See
   [Connections &amp; patch](other-improvements.md#connections--patch).
 
+- **New Art-Net nodes can be found and given an address.** A node still on
+  its factory address (2.x.x.x and the like) shows in Connections in amber
+  with "set its IP"; **Rescan** now also polls each interface's limited
+  broadcast so such a node can hear it; and right-click → **Set node IP
+  address…** sets its IP, mask, gateway or DHCP (ArtIpProg), after a
+  confirmation. A node no network here can reach gets the command for a
+  temporary address instead. See
+  [Setting up a new Art-Net node](other-improvements.md#setting-up-a-new-art-net-node).
+- **A node's DHCP state reads right.** Connections had "DHCP capable" from
+  the bit that says the node is *using* DHCP.
 - **Art-Net and E1.31 say when an output is in trouble** — in the footer
   and in red on the universe's row in Connections: an address that can't
   be reached, an Art-Net node that stopped answering, a node port reporting

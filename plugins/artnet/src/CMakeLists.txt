@@ -28,6 +28,7 @@ target_sources(${module_name} PRIVATE
     artnetplugin.cpp artnetplugin.h
     ../../interfaces/sendhealth.cpp ../../interfaces/sendhealth.h
     artnetnodewatch.cpp artnetnodewatch.h
+    artnetnodesetup.cpp artnetnodesetup.h
     configureartnet.cpp configureartnet.h configureartnet.ui
 )
 target_include_directories(${module_name} PRIVATE

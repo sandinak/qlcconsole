@@ -41,6 +41,7 @@ ArtNetController::ArtNetController(QNetworkInterface const& iface, QNetworkAddre
     , m_interface(iface)
     , m_address(address)
     , m_ipAddr(address.ip())
+    , m_testSink(NULL)
     , m_testNowMs(-1)
     , m_packetSent(0)
     , m_packetReceived(0)
@@ -580,6 +581,23 @@ bool ArtNetController::handleArtNetRDM(const QByteArray &datagram, const QHostAd
     return false;
 }
 
+bool ArtNetController::handleArtNetIpProgReply(const QByteArray &datagram,
+                                               const QHostAddress &senderAddress)
+{
+    ArtNetIpProgReply reply;
+    if (m_packetizer->fillArtIpProgReply(datagram, reply) == false)
+    {
+        qWarning() << "[ArtNet] Bad ArtIpProgReply received from" << senderAddress.toString();
+        return false;
+    }
+    ++m_packetReceived;
+    qDebug() << "[ArtNet] ArtIpProgReply from" << senderAddress.toString()
+             << "ip" << reply.ip.toString() << "mask" << reply.mask.toString()
+             << "dhcp" << reply.dhcpEnabled;
+    emit ipProgReplied(QHostAddress(senderAddress.toIPv4Address()).toString(), reply);
+    return true;
+}
+
 bool ArtNetController::handlePacket(QByteArray const& datagram, QHostAddress const& senderAddress)
 {
     //if (senderAddress.toIPv4Address() == m_ipAddr.toIPv4Address())
@@ -604,6 +622,8 @@ bool ArtNetController::handlePacket(QByteArray const& datagram, QHostAddress con
                 return handleArtNetTodData(datagram, senderAddress);
             case ARTNET_RDM:
                 return handleArtNetRDM(datagram, senderAddress);
+            case ARTNET_IPREPLY:
+                return handleArtNetIpProgReply(datagram, senderAddress);
             default:
                 qDebug().nospace().noquote() << "[ArtNet] opCode not supported yet (0x" << QString::number(opCode, 16) << ")";
                 break;
@@ -668,7 +688,7 @@ void ArtNetController::slotSendPoll()
     QByteArray pollPacket;
     m_packetizer->setupArtNetPoll(pollPacket);
 
-    qint64 sent = m_udpSocket->writeDatagram(pollPacket, m_broadcastAddr, ARTNET_PORT);
+    qint64 sent = writeDatagram(QNetworkDatagram(pollPacket, m_broadcastAddr, ARTNET_PORT));
     if (sent < 0)
         qWarning() << "Unable to send Poll packet: errno=" << m_udpSocket->error() << "(" << m_udpSocket->errorString() << ")";
     else
@@ -684,6 +704,71 @@ bool ArtNetController::isBroadcastTarget(const QHostAddress &address) const
 {
     return address == m_broadcastAddr
         || address == QHostAddress(QHostAddress::Broadcast);
+}
+
+bool ArtNetController::isOnSubnet(const QHostAddress &address) const
+{
+    if (m_ipAddr.isLoopback())
+        return address.isLoopback();
+    return m_address.prefixLength() > 0
+        && address.isInSubnet(m_ipAddr, m_address.prefixLength());
+}
+
+qint64 ArtNetController::writeDatagram(const QNetworkDatagram &dg)
+{
+    if (m_testSink != NULL)
+    {
+        m_testSink->append(dg);
+        return dg.data().size();
+    }
+    return m_udpSocket->writeDatagram(dg);
+}
+
+bool ArtNetController::sendDiscoveryPoll()
+{
+    const QNetworkInterface::InterfaceFlags need =
+            QNetworkInterface::IsUp | QNetworkInterface::CanBroadcast;
+    if (m_ipAddr.isLoopback() || m_interface.index() <= 0
+            || (m_interface.flags() & need) != need)
+        return false;
+
+    QByteArray pollPacket;
+    m_packetizer->setupArtNetPoll(pollPacket);
+
+    /* 255.255.255.255 is routed like any other destination -- out of the
+       default route's interface -- unless the datagram names the interface.
+       Naming it (IP_PKTINFO) puts it on THIS line's cable, and the source
+       address keeps the node's answer coming back to this line. */
+    QNetworkDatagram dg(pollPacket, QHostAddress(QHostAddress::Broadcast), ARTNET_PORT);
+    dg.setInterfaceIndex(uint(m_interface.index()));
+    dg.setSender(m_ipAddr);
+
+    if (writeDatagram(dg) < 0)
+    {
+        qWarning() << "[ArtNet] Unable to send a discovery poll on"
+                   << m_interface.humanReadableName() << ":" << m_udpSocket->errorString();
+        return false;
+    }
+    m_packetSent++;
+    return true;
+}
+
+bool ArtNetController::sendIpProg(const QHostAddress &node, const ArtNetIpProgRequest &request)
+{
+    QByteArray packet;
+    m_packetizer->setupArtNetIpProg(packet, request);
+
+    QNetworkDatagram dg(packet, node, ARTNET_PORT);
+    qWarning() << "[ArtNet]" << (request.programs() ? "ArtIpProg (programming)" : "ArtIpProg (query)")
+               << "to" << node.toString() << "via" << m_ipAddr.toString();
+    if (writeDatagram(dg) < 0)
+    {
+        qWarning() << "[ArtNet] ArtIpProg to" << node.toString() << "failed:"
+                   << m_udpSocket->errorString();
+        return false;
+    }
+    m_packetSent++;
+    return true;
 }
 
 void ArtNetController::slotPollTick()

@@ -90,7 +90,8 @@ typedef struct
     uchar status1;
     uchar status2;
     bool rdmCapable;        //!< Status1 bit 1 -- NOT GoodOutput bit 3
-    bool dhcpCapable;       //!< Status2 bit 1
+    bool dhcpConfigured;    //!< Status2 bit 1: its IP came from DHCP
+    bool dhcpCapable;       //!< Status2 bit 2: it can use DHCP at all
     uchar bindIndex;
     QString bindIpAddress;
     /* Per physical port, up to 4 per ArtPollReply (a node with more ports
@@ -101,6 +102,46 @@ typedef struct
     uchar swIn[4];
     uchar swOut[4];
 } ArtNetNodeInfo;
+
+/** What to ask of a node in an ArtIpProg (OpCode 0xf800) -- Art-Net 4's way
+ *  of setting a node's IP address, subnet mask, gateway or DHCP, the packet
+ *  DMX-Workshop sends when you change a node's address.
+ *
+ *  Each field is acted on only when its flag says so, so the default -- no
+ *  flags -- asks for nothing and is a pure query: the node answers with an
+ *  ArtIpProgReply carrying its current settings. */
+struct ArtNetIpProgRequest
+{
+    ArtNetIpProgRequest()
+        : setIp(false), setMask(false), setGateway(false)
+        , enableDhcp(false), resetToDefaults(false)
+    {}
+
+    bool setIp;
+    bool setMask;
+    bool setGateway;
+    bool enableDhcp;        //!< the node ignores the three above when set
+    bool resetToDefaults;   //!< back to the node's factory IP / mask / gateway
+    QHostAddress ip;
+    QHostAddress mask;
+    QHostAddress gateway;
+
+    /** Does this change anything on the node (rather than only ask)? */
+    bool programs() const
+    { return setIp || setMask || setGateway || enableDhcp || resetToDefaults; }
+};
+
+/** A node's answer to ArtIpProg: its network settings as they now stand. */
+struct ArtNetIpProgReply
+{
+    ArtNetIpProgReply() : dhcpEnabled(false), hasGateway(false) {}
+
+    QHostAddress ip;
+    QHostAddress mask;
+    QHostAddress gateway;   //!< only when hasGateway (Art-Net 4 nodes)
+    bool dhcpEnabled;
+    bool hasGateway;
+};
 
 class ArtNetPacketizer final
 {
@@ -131,6 +172,10 @@ public:
     /** Prepare an ArtRdm packet */
     void setupArtNetRdm(QByteArray& data, const int &universe, uchar command, QVariantList params);
 
+    /** Prepare an ArtIpProg packet (Art-Net 4, 34 bytes). With a default
+     *  request this is a query that changes nothing. */
+    void setupArtNetIpProg(QByteArray& data, const ArtNetIpProgRequest &request);
+
     /*********************************************************************
      * Receiver functions
      *********************************************************************/
@@ -148,6 +193,9 @@ public:
 
     /** Process a ArtRdm packet and extract the relevant information */
     bool processRDMdata(const QByteArray &data, quint32 &universe, QVariantMap &values);
+
+    /** Parse an ArtIpProgReply. Art-Net 3 nodes stop before the gateway. */
+    bool fillArtIpProgReply(QByteArray const& data, ArtNetIpProgReply &reply);
 
 private:
     QByteArray m_commonHeader;
