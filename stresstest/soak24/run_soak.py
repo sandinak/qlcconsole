@@ -709,13 +709,20 @@ def load_project(port, path):
     head = ("--%s\r\nContent-Disposition: form-data; name=\"qlc\"; "
             "filename=\"project.qxw\"\r\n\r\n" % boundary).encode()
     body = head + xml + ("\n\r\n--%s--\r\n" % boundary).encode()
-    c = http.client.HTTPConnection("127.0.0.1", port, timeout=120)
-    c.request("POST", "/loadProject", body=body,
-              headers={"Content-Type": "multipart/form-data; boundary=" + boundary,
-                       "Content-Length": str(len(body))})
-    r = c.getresponse()
-    r.read()
-    c.close()
+    # 600 s: with --heap-track (MallocStackLogging) the STRESS show takes ~4
+    # min to load on kronk's i7. A failed or timed-out POST is a failed load
+    # for the caller to log, not an exception that ends the runner.
+    c = http.client.HTTPConnection("127.0.0.1", port, timeout=600)
+    try:
+        c.request("POST", "/loadProject", body=body,
+                  headers={"Content-Type": "multipart/form-data; boundary=" + boundary,
+                           "Content-Length": str(len(body))})
+        r = c.getresponse()
+        r.read()
+    except (OSError, http.client.HTTPException):
+        return False
+    finally:
+        c.close()
     return r.status in (200, 302)
 
 
