@@ -710,8 +710,20 @@ def run_phase(run, name, show, hours, port, ticklog, sample_s, rng):
                     cpu, rss, th, priv, handles = _win_ps(pid)
                 else:
                     cpu, rss, th = ps(pid)
-                answers = bool(ws and ws.request("QLC+API|getFunctionsNumber",
-                                                 expect_prefix="QLC+API|getFunctionsNumber", wait=5.0))
+                try:
+                    answers = bool(ws and ws.request("QLC+API|getFunctionsNumber",
+                                                     expect_prefix="QLC+API|getFunctionsNumber",
+                                                     wait=5.0))
+                except (OSError, WSError) as e:
+                    # A timeout half way through a frame (a busy app, a big
+                    # function list) leaves the stream out of step: start over.
+                    answers = False
+                    run.event(name, "websocket (sample): %s; reconnecting" % e)
+                    if ws:
+                        ws.close()
+                    ws = connect_ws(port, tries=10)
+                    if ws:
+                        drv.ws = ws
                 misses = 0 if answers else misses + 1
                 over, worst, summ = tl.read()
                 stats["samples"] += 1
