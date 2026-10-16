@@ -44,6 +44,10 @@
 #define KXMLQLCPaletteType      QStringLiteral("Type")
 #define KXMLQLCPaletteName      QStringLiteral("Name")
 #define KXMLQLCPalettePath      QStringLiteral("Path")
+/* Present (="1") on palettes whose Path is type-independent ("Palettes/01-Song/").
+   Absent: an older show, whose paths start with the palette type -- migrated
+   on load. Older versions ignore it and show the folders at the top level. */
+#define KXMLQLCPaletteFolders   QStringLiteral("Folders")
 #define KXMLQLCPalettePersistent QStringLiteral("Persistent")
 #define KXMLQLCPaletteValue     QStringLiteral("Value")
 #define KXMLQLCPaletteFanning     QStringLiteral("Fan")
@@ -219,6 +223,42 @@ QString QLCPalette::path() const
 void QLCPalette::setPath(const QString &path)
 {
     m_path = path;
+}
+
+QString QLCPalette::migrateLegacyPath(const QString &path, PaletteType type)
+{
+    QString norm = path;
+    while (norm.endsWith('/'))
+        norm.chop(1);
+    if (norm.isEmpty() || norm == QLatin1String("Palettes"))
+        return QString();
+
+    QStringList segs = norm.split('/');
+    if (segs.first() != QLatin1String("Palettes") || segs.size() < 2)
+        return path;
+
+    // Is the first folder a palette type's name (the old type folders)?
+    static const PaletteType kTypes[] = { Dimmer, Color, Pan, Tilt, PanTilt, Aim,
+                                          Shutter, Strobe, Gobo, Zoom, Beam, Effect };
+    bool typeFolder = false;
+    for (PaletteType t : kTypes)
+        if (segs.at(1) == typeToString(t)) { typeFolder = true; break; }
+    if (typeFolder == false)
+        return path;
+
+    // An effect auto-filed under Palettes/Effect/<Category>/<Engine>: that
+    // was bookkeeping, not the user's folder.
+    static const char *kEffectCategories[] = { "Color", "Dimmer", "Position", "Beam",
+                                               "Other", "WLED" };
+    if (type == Effect && segs.at(1) == QLatin1String("Effect") && segs.size() == 4)
+    {
+        for (const char *c : kEffectCategories)
+            if (segs.at(2) == QLatin1String(c))
+                return QString();
+    }
+
+    segs.removeAt(1);
+    return segs.size() < 2 ? QString() : segs.join('/') + '/';
 }
 
 QVariant QLCPalette::value() const
@@ -1410,7 +1450,13 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
         setName(attrs.value(KXMLQLCPaletteName).toString());
 
     if (attrs.hasAttribute(KXMLQLCPalettePath))
-        setPath(attrs.value(KXMLQLCPalettePath).toString());
+    {
+        const QString path = attrs.value(KXMLQLCPalettePath).toString();
+        if (attrs.value(KXMLQLCPaletteFolders) == QLatin1String("1"))
+            setPath(path);
+        else
+            setPath(migrateLegacyPath(path, m_type));
+    }
 
     // Effect looks only: keep the script engine alive across stop/start.
     if (attrs.hasAttribute(KXMLQLCPalettePersistent))
@@ -1600,7 +1646,10 @@ bool QLCPalette::saveXML(QXmlStreamWriter *doc)
     if (m_type == Effect && m_persistent)
         doc->writeAttribute(KXMLQLCPalettePersistent, QStringLiteral("1"));
     if (m_path.isEmpty() == false)
+    {
         doc->writeAttribute(KXMLQLCPalettePath, m_path);
+        doc->writeAttribute(KXMLQLCPaletteFolders, QStringLiteral("1"));
+    }
 
     /* write value */
     switch (m_type)

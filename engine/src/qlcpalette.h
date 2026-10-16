@@ -126,6 +126,14 @@ public:
     QString path() const;
     void setPath(const QString& path);
 
+    /** A palette folder path as older shows stored it — the palette TYPE as
+     *  the first folder ("Palettes/Color/01-Song/", an effect auto-filed as
+     *  "Palettes/Effect/<Category>/<Engine>/") — made type-independent
+     *  ("Palettes/01-Song/"; an auto-filed effect is unfiled, ""). Folders
+     *  are now shared by every palette type; the tree can still group by
+     *  type on top. Paths not under "Palettes/" are returned unchanged. */
+    static QString migrateLegacyPath(const QString &path, PaletteType type);
+
     /** Get/Set the value(s) for this Palette.
      *  Some types like Position will store 2 values */
     QVariant value() const;

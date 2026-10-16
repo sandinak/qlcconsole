@@ -133,6 +133,11 @@ private slots:
      *  palette names every scene look and effect-look slot using it, and
      *  takes it out of them; Delete/Backspace on the palette tree deletes. */
     void deletingAPaletteSaysWhereItIsUsed();
+    /** "be able to make top level things here and put any other type under
+     *  em": palette folders hold any type; folders first by default, or
+     *  grouped by type with the same folders under each type; renaming,
+     *  moving into and deleting a folder act on it for every type. */
+    void paletteFoldersHoldAnyTypeInBothViews();
 
 private:
     Doc* m_doc;

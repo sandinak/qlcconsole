@@ -703,7 +703,10 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     // Multi-select so several palettes can be dragged onto a look together, or
     // saved as a Bundle in one action from the context menu.
     m_paletteTree->setSelectionMode(QAbstractItemView::ExtendedSelection);
-    organizeEffectPalettes();
+    // Folders first (any palette type inside) unless the user chose to group
+    // by type — persisted, toggled in the right-click menu.
+    m_paletteTree->setPaletteTypesFirst(
+        QSettings().value(QStringLiteral("programming/palettetree/groupByType"), false).toBool());
     m_paletteTree->updateTree();
     palCol->addWidget(m_paletteTree, 1);
     palCol->addWidget(new QLabel(tr("Right-click to add a palette."), palTab));
@@ -833,10 +836,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
 
     connect(m_doc, &Doc::paletteAdded, m_paletteTree, &FunctionsTreeWidget::addPalette);
     connect(m_doc, &Doc::paletteRemoved, this, [this](quint32) { m_paletteTree->updateTree(); });
-    connect(m_doc, &Doc::loaded, this, [this]() {
-        organizeEffectPalettes();
-        m_paletteTree->updateTree();
-    });
+    connect(m_doc, &Doc::loaded, m_paletteTree, &FunctionsTreeWidget::updateTree);
     connect(m_doc, &Doc::cleared, m_paletteTree, &FunctionsTreeWidget::updateTree);
 
     connect(m_doc, SIGNAL(modeChanged(Doc::Mode)), this, SLOT(slotModeChanged()));
@@ -1294,47 +1294,6 @@ void ProgrammingManager::updateTrialPalette(quint32 paletteId)
         refreshPreview();
 }
 
-bool ProgrammingManager::organizeEffectPalettes()
-{
-    if (m_doc->effectScriptRunner() == NULL)
-        return false;
-    EffectScriptCache *scache = m_doc->effectScriptRunner()->cache();
-
-    bool changed = false;
-    foreach (QLCPalette *p, m_doc->palettes())
-    {
-        if (p == NULL || p->type() != QLCPalette::Effect || p->scriptPath().isEmpty())
-            continue;
-
-        // Only auto-organize palettes still on the BARE default folder; never
-        // touch a folder the user (or a prior pick) already set.
-        QString norm = p->path();
-        if (norm.endsWith('/')) norm.chop(1);
-        if (!(norm.isEmpty() || norm == QLatin1String("Palettes/Effect")))
-            continue;
-
-        const QString base = EffectScriptCache::portableName(p->scriptPath());
-        const EffectScriptCache::ScriptMeta meta = scache->scriptMeta(base);
-        // A WLED look files under WLED, by WLED's name for it -- as the
-        // effect browser lists it -- not under its port's (or stand-in's).
-        const bool wled = !p->wledEffect().isEmpty();
-        const QString engine = wled ? p->wledEffect()
-                                    : meta.displayName.isEmpty() ? base : meta.displayName;
-        const QString cat    = wled ? QStringLiteral("WLED")
-                                    : EffectScriptCache::categoryForTypes(meta.fixtureTypes);
-        if (engine.isEmpty() || cat.isEmpty())
-            continue;
-
-        const QString folder = QString("Palettes/Effect/%1/%2/").arg(cat, engine);
-        if (p->path() != folder)
-        {
-            p->setPath(folder);
-            changed = true;
-        }
-    }
-    return changed;   // cosmetic: persists when the user next saves
-}
-
 void ProgrammingManager::createPalette(int paletteType)
 {
     const QLCPalette::PaletteType type =
@@ -1354,20 +1313,22 @@ void ProgrammingManager::createPalette(int paletteType)
     default:                  p->setValue(0); break; // Gobo / Shutter / …
     }
 
-    // Default to a type-named folder; override with selected folder if one is active.
-    p->setPath(QString("Palettes/%1/").arg(QLCPalette::typeToString(type)));
+    // Unfiled, unless a folder (or a palette in one) is selected: then there.
+    // Folders hold any palette type; the type is the palette's own.
     const QList<QTreeWidgetItem*> sel = m_paletteTree->selectedItems();
     if (sel.isEmpty() == false)
     {
-        QString cp = sel.first()->text(1); // folder COL_PATH ("Palettes/…")
+        const QString cp = sel.first()->text(1); // folder COL_PATH ("Palettes/…")
         if (cp.isEmpty())
         {
             QLCPalette *sp = m_doc->palette(m_paletteTree->itemPaletteId(sel.first()));
             if (sp != NULL)
-                cp = sp->path();
+                p->setPath(sp->path());
         }
-        if (cp.isEmpty() == false)
-            p->setPath(cp);
+        else
+        {
+            m_paletteTree->filePalette(p, cp);
+        }
     }
 
     if (m_doc->addPalette(p) == false)
@@ -2823,6 +2784,11 @@ void ProgrammingManager::slotPaletteTreeMenu(const QPoint &pos)
 
     menu.addSeparator();
     QAction *aNewFolder = menu.addAction(tr("New folder…"));
+    // Folders first (default: a song's folder holds its colours, aims and
+    // effects together) or grouped by type first. Persisted.
+    QAction *aByType = menu.addAction(tr("Group by type"));
+    aByType->setCheckable(true);
+    aByType->setChecked(m_paletteTree->paletteTypesFirst());
 
     QTreeWidgetItem *clickedPalItem = m_paletteTree->itemAt(pos);
     QAction *aRenameFolder = NULL;
@@ -2871,6 +2837,13 @@ void ProgrammingManager::slotPaletteTreeMenu(const QPoint &pos)
         saveBundleFromPalettes(targetPalettes);
         return;
     }
+    if (chosen == aByType)
+    {
+        m_paletteTree->setPaletteTypesFirst(aByType->isChecked());
+        QSettings().setValue(QStringLiteral("programming/palettetree/groupByType"),
+                             aByType->isChecked());
+        return;
+    }
     if (chosen == aRenameFolder)
     {
         m_paletteTree->editItem(clickedPalItem, 0);
@@ -2916,11 +2889,7 @@ void ProgrammingManager::slotPaletteTreeMenu(const QPoint &pos)
         if (pids.isEmpty() == false)
         {
             foreach (quint32 id, pids)
-            {
-                QLCPalette *p = m_doc->palette(id);
-                if (p != NULL)
-                    p->setPath(full);
-            }
+                m_paletteTree->filePalette(m_doc->palette(id), full);
             m_doc->setModified();
             m_paletteTree->updateTree();
         }
@@ -3697,13 +3666,13 @@ void ProgrammingManager::slotStampBundle(const QString &bundleName)
             {
                 np = new QLCPalette(QLCPalette::Color);
                 np->setValue(entry.color);
-                np->setPath("Palettes/Color/");
+                np->setPath(QString()); // unfiled: folders are the user's
             }
             else if (entry.type == "Dimmer")
             {
                 np = new QLCPalette(QLCPalette::Dimmer);
                 np->setValue(entry.dimmerValue);
-                np->setPath("Palettes/Dimmer/");
+                np->setPath(QString()); // unfiled: folders are the user's
             }
             else if (entry.type == "Effect")
             {
@@ -3716,13 +3685,13 @@ void ProgrammingManager::slotStampBundle(const QString &bundleName)
                 np->setScriptPath(fullPath);
                 np->setEffectPreset(entry.effectPreset);
                 np->setEffectParamValues(entry.params);
-                np->setPath(QString("Palettes/Effect/"));
+                np->setPath(QString()); // unfiled: folders are the user's
             }
             else if (entry.type == "PanTilt")
             {
                 np = new QLCPalette(QLCPalette::PanTilt);
                 np->setValue(entry.pan, entry.tilt);
-                np->setPath("Palettes/PanTilt/");
+                np->setPath(QString()); // unfiled: folders are the user's
             }
             else if (entry.type == "Beam")
             {
@@ -3732,7 +3701,7 @@ void ProgrammingManager::slotStampBundle(const QString &bundleName)
                 // the palette would end up as [iris] — which valuesFromFixtures()
                 // reads as focus, driving the wrong channel.
                 np->setValues(QVariantList() << entry.focus << entry.frost << entry.iris);
-                np->setPath("Palettes/Beam/");
+                np->setPath(QString()); // unfiled: folders are the user's
             }
 
             if (!np) continue;

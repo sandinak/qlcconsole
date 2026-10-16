@@ -6,6 +6,44 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-16 — Palette folders hold any type; folders-first / group-by-type *(feat/palette-folders)*
+
+Branson: "be able to make top level things here and put any other type under
+em in the folder structure" — "01-EverybodyScream" existed twice, under Aim
+and under Color.
+
+- **Model**: a palette's `Path` was "Palettes/<Type>/<folders>/" by
+  convention only (createPalette defaulted to the type folder; the type
+  folder was just the first path level, so an Effect could sit in
+  Color/01-Song). Paths are now type-independent ("Palettes/01-Song/", ""
+  = unfiled). `QLCPalette::migrateLegacyPath()` runs on load for palettes
+  without the new `Folders="1"` attribute (written with every saved path):
+  it drops a first level named like any palette type; an effect auto-filed as
+  Effect/<Category>/<Engine> becomes unfiled. A user folder named e.g.
+  "Color" made after this is safe (marked shows never migrate). Older
+  qlcconsole ignores the attribute and shows the folders at the top level.
+- **Tree**: `FunctionsTreeWidget::setPaletteTypesFirst()`. Off (default):
+  folders at top, any type inside, unfiled palettes at root. On: synthetic
+  type headings (not user folders) with the same folders under each — the
+  tree maps display paths ("Palettes/Color/01-Song") to stored ones
+  (`paletteStorePath`, `filePalette`), and folder rename/move/delete re-root
+  the stored path for every type. Toggle "Group by type" in the palette
+  menu, QSettings `programming/palettetree/groupByType`. Renaming a top-level
+  palette folder now works (it had no parent item, so the rename was
+  dropped).
+- **Dropped**: effect auto-filing into Effect/<Category>/<Engine>
+  (`organizeEffectPalettes`, `LookEditor::maybeAutoPath`/`isAutoEffectPath`)
+  — with type-independent folders it would invent top-level "Color"/"WLED"
+  folders. Effect category detection already falls back to the script.
+  Possible follow-up: virtual category/engine grouping under Effect in the
+  by-type view. New palettes and generated ones start unfiled (or in the
+  selected folder).
+- Tests: qlcpalette_test `olderShowsTypeFoldersBecomeSharedFolders` (rule,
+  load with/without marker, save round trip); programmingmanager_test
+  `paletteFoldersHoldAnyTypeInBothViews`.
+
+---
+
 ### 2026-10-16 — Programming tab: drag scenes/palettes/folders into folders; folder menu *(fix/programming-drag-to-folder)*
 
 Branson: "I can't seem to drag a scene to a folder in the programming view";
