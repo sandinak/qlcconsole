@@ -311,6 +311,10 @@ won't do what it seems to, with a line under the list saying how many:
 - **Black** — a Colour look that is all zero (a "White" saved as
   #000000): the heads it colours give no light, and an effect that takes the
   look's colours (Confetti, a chase) gets black from it too.
+- **Can't move** — on an Aim, Pan/Tilt or movement look: a fixture whose
+  definition marks every Pan (or Tilt) channel Fine has no coarse channel to
+  turn the head, so it stays at 0 whatever the look says. Make the main
+  channel Coarse in the fixture definition.
 - **No targets** — the look lights nothing until fixtures or groups are
   added.
 

@@ -672,6 +672,33 @@ void LookStack_Test::theCheckerSaysWhatWontWork()
     m_doc->addPalette(white);
     got = issuesFor({ white, dimmer(62) });
     QVERIFY2(!about(got, white, "Black"), qPrintable(dump(got)));
+    // A definition whose only Pan channels are both Fine (a "Pan" saved with
+    // Byte="1", as the 36LED mover's was): an Aim can't turn it.
+    {
+        QLCFixtureDef *fd = new QLCFixtureDef();
+        QLCChannel *pan = new QLCChannel();
+        pan->setName("Pan");
+        pan->setGroup(QLCChannel::Pan);
+        pan->setControlByte(QLCChannel::LSB);
+        fd->addChannel(pan);
+        Fixture *fineOnly = make(m_doc, "FineOnly", QLCFixtureDef::MovingHead,
+                                 { pan, chan(fd, "Pan fine", QLCChannel::PositionPanFine),
+                                   chan(fd, "Tilt", QLCChannel::PositionTilt),
+                                   chan(fd, "Dimmer", QLCChannel::IntensityMasterDimmer) }, fd, 3, 60);
+        QCOMPARE(fineOnly->channelNumber(QLCChannel::Pan, QLCChannel::MSB), QLCChannel::invalid());
+        QLCPalette *aim = panTilt(90, 45);
+        Scene *scene = new Scene(m_doc);
+        m_doc->addFunction(scene);
+        scene->addFixture(fineOnly->id());
+        scene->addFixture(m_mover->id());
+        scene->addPalette(dimmer(255)->id());
+        scene->addPalette(aim->id());
+        got = LookStackCheck::check(m_doc, scene);
+        QVERIFY2(about(got, aim, "Can't move 1 fixture") && about(got, aim, "FineOnly's Pan"),
+                 qPrintable(dump(got)));
+        QVERIFY2(!about(got, aim, "Tilt") && !about(got, aim, "Mover"), qPrintable(dump(got)));
+    }
+
     // The clean look above stays clean: a real colour is not black.
     got = issuesFor({ colour(kBlue), dimmer(255) });
     QVERIFY2(!about(got, nullptr, "Black"), qPrintable(dump(got)));
