@@ -1855,6 +1855,7 @@ void ProgrammingManager_Test::scenesDragIntoAFolderAndBackOut()
 
     // Empty space is the top level too.
     mime.reset(treeMimeData(tree, { funcRow(tree, m_doc, b) }));
+    QVERIFY(mime != nullptr);
     QVERIFY(tree->canDropMimeOn(mime.data(), nullptr));
     QVERIFY(tree->dropMimeOn(mime.data(), nullptr));
     QCoreApplication::processEvents(); // the tree rebuilds on the next turn
@@ -1871,6 +1872,7 @@ void ProgrammingManager_Test::scenesDragIntoAFolderAndBackOut()
     // A scene can't go into another type's folder (the Collection category).
     QTRY_VERIFY(tree->m_foldersMap.value("Collection/") != nullptr);
     mime.reset(treeMimeData(tree, { funcRow(tree, m_doc, a) }));
+    QVERIFY(mime != nullptr);
     QVERIFY(tree->canDropMimeOn(mime.data(), tree->m_foldersMap.value("Collection/")) == false);
 
     // A collection row still takes the scene as a member.
@@ -1905,6 +1907,7 @@ void ProgrammingManager_Test::aFolderDragsIntoAnotherFolder()
 
     QTreeWidgetItem *act2 = tree->m_foldersMap.value("Scene/Act 2");
     QScopedPointer<QMimeData> mime(treeMimeData(tree, { act2 }));
+    QVERIFY(mime != nullptr);
     QVERIFY(mime->hasFormat(FunctionsTreeWidget::folderDragMimeType()));
 
     // Not into itself or below itself.
@@ -1921,6 +1924,7 @@ void ProgrammingManager_Test::aFolderDragsIntoAnotherFolder()
 
     // And back out to the top level.
     mime.reset(treeMimeData(tree, { tree->m_foldersMap.value("Scene/Act 1/Act 2") }));
+    QVERIFY(mime != nullptr);
     QVERIFY(tree->dropMimeOn(mime.data(), nullptr));
     QCoreApplication::processEvents(); // the tree rebuilds on the next turn
     QCOMPARE(m_doc->function(b)->path(true), QString("Act 2"));
@@ -1950,6 +1954,7 @@ void ProgrammingManager_Test::palettesAndTheirFoldersDragIntoFolders()
     QVERIFY(fresh != nullptr);
     QScopedPointer<QMimeData> mime(treeMimeData(tree,
         { tree->paletteItem(m_doc->palette(full)), tree->paletteItem(m_doc->palette(half)) }));
+    QVERIFY(mime != nullptr);
     QVERIFY(mime->hasFormat(FunctionsTreeWidget::paletteDragMimeType()));
     QVERIFY(tree->canDropMimeOn(mime.data(), fresh));
     QVERIFY(tree->dropMimeOn(mime.data(), fresh));
@@ -1961,6 +1966,7 @@ void ProgrammingManager_Test::palettesAndTheirFoldersDragIntoFolders()
     QTRY_VERIFY(tree->m_foldersMap.value("Palettes/Fresh") != nullptr
                 && tree->m_foldersMap.value("Palettes/Fresh")->childCount() == 2);
     mime.reset(treeMimeData(tree, { tree->m_foldersMap.value("Palettes/Fresh") }));
+    QVERIFY(mime != nullptr);
     QVERIFY(tree->dropMimeOn(mime.data(), tree->m_foldersMap.value("Palettes/Warm")));
     QCoreApplication::processEvents(); // the tree rebuilds on the next turn
     QCOMPARE(m_doc->palette(full)->path(), QString("Palettes/Warm/Fresh/"));
@@ -1973,6 +1979,7 @@ void ProgrammingManager_Test::palettesAndTheirFoldersDragIntoFolders()
     // Empty space = the palette list's top level.
     QTRY_VERIFY(tree->paletteItem(m_doc->palette(half)) != nullptr);
     mime.reset(treeMimeData(tree, { tree->paletteItem(m_doc->palette(half)) }));
+    QVERIFY(mime != nullptr);
     QVERIFY(tree->dropMimeOn(mime.data(), nullptr));
     QCoreApplication::processEvents(); // the tree rebuilds on the next turn
     QCOMPARE(m_doc->palette(half)->path(), QString());

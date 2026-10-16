@@ -920,6 +920,8 @@ QMimeData* FunctionsTreeWidget::buildMimeData(const QList<QTreeWidgetItem*> &ite
 
         foreach (QTreeWidgetItem *item, items)
         {
+            if (item == NULL)
+                continue;
             if (isUserFolder(item))
             {
                 folderStream << int(itemNodeKind(item)) << strippedPath(item->text(COL_PATH));
