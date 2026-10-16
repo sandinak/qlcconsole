@@ -19,6 +19,7 @@
 #include <QHash>
 
 class QNetworkAccessManager;
+class QNetworkReply;
 class Fixture;
 class QWidget;
 class QTimer;
@@ -101,6 +102,8 @@ signals:
     void changed();
 
 private:
+    /** A /json/cfg reply has finished: read it if it succeeded. */
+    void replied(const QString &ip, QNetworkReply *reply);
     void receive(const QString &ip, const QByteArray &body, bool ok);
     /** The footer's "wled.config" entry, from the findings. */
     void publish();
