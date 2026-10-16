@@ -110,18 +110,20 @@ void qlcMessageHandler(QtMsgType type, const QMessageLogContext &context, const 
 {
     Q_UNUSED(context)
 
+    // Level first: a message below it is dropped, and converting it anyway
+    // was an allocation per message -- many per tick, on the DMX threads.
+    if (type < QLCArgs::debugLevel)
+        return;
+
     QByteArray localMsg = msg.toLocal8Bit();
-    if (type >= QLCArgs::debugLevel)
+    if (QLCArgs::logToFile == true && QLCArgs::logFile.isOpen())
     {
-        if (QLCArgs::logToFile == true && QLCArgs::logFile.isOpen())
-        {
-            QLCArgs::logFile.write(localMsg);
-            QLCArgs::logFile.write((char *)"\n");
-            QLCArgs::logFile.flush();
-        }
-        fprintf(stderr, "%s\n", localMsg.constData());
-        fflush(stderr);
+        QLCArgs::logFile.write(localMsg);
+        QLCArgs::logFile.write((char *)"\n");
+        QLCArgs::logFile.flush();
     }
+    fprintf(stderr, "%s\n", localMsg.constData());
+    fflush(stderr);
 }
 
 #define endl Qt::endl

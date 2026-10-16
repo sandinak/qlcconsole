@@ -1024,22 +1024,38 @@ void Universe::updateIntensityChannelsRanges()
  * Writing
  ****************************************************************************/
 
+/* What of a write of $channelCount channels from $address fits in a universe:
+   a 16-bit pair, or a fixture, at its end ran past the buffers (and the
+   modifiers) -- unchecked in a release build. Keeps the most significant
+   bytes of $value, the ones that land on the channels that exist. */
+static bool clipToUniverse(int address, quint32 &value, int &channelCount)
+{
+    if (address < 0 || address >= UNIVERSE_SIZE || channelCount <= 0)
+        return false;
+    const int room = UNIVERSE_SIZE - address;
+    if (channelCount > room)
+    {
+        value >>= 8 * (channelCount - room);
+        channelCount = room;
+    }
+    return true;
+}
+
 bool Universe::write(int address, uchar value, bool forceLTP)
 {
-    Q_ASSERT(address < UNIVERSE_SIZE);
+    if (address < 0 || address >= UNIVERSE_SIZE)
+        return false;
 
     //qDebug() << "[Universe]" << id() << ": write channel" << address << ", value:" << value;
 
     if (address >= m_usedChannels)
         m_usedChannels = address + 1;
 
+    // A lower value on an HTP channel loses: routine, every tick -- not logged
     if (m_channelsMask->at(address) & HTP)
     {
         if (forceLTP == false && value < (uchar)m_preGMValues->at(address))
-        {
-            qDebug() << "[Universe] HTP check not passed" << address << value;
             return false;
-        }
     }
     else
     {
@@ -1056,6 +1072,9 @@ bool Universe::write(int address, uchar value, bool forceLTP)
 
 bool Universe::writeMultiple(int address, quint32 value, int channelCount)
 {
+    if (!clipToUniverse(address, value, channelCount))
+        return false;
+
     for (int i = 0; i < channelCount; i++)
     {
         //qDebug() << "[Universe]" << id() << ": write channel" << (address + i) << ", value:" << QString::number(((uchar *)&value)[channelCount - 1 - i]);
@@ -1074,7 +1093,8 @@ bool Universe::writeMultiple(int address, quint32 value, int channelCount)
 
 bool Universe::writeRelative(int address, quint32 value, int channelCount)
 {
-    Q_ASSERT(address < UNIVERSE_SIZE);
+    if (!clipToUniverse(address, value, channelCount))
+        return false;
 
     //qDebug() << "Write relative channel" << address << "value" << value;
 
@@ -1110,6 +1130,9 @@ bool Universe::writeRelative(int address, quint32 value, int channelCount)
 
 bool Universe::writeBlended(int address, quint32 value, int channelCount, Universe::BlendMode blend)
 {
+    if (!clipToUniverse(address, value, channelCount))
+        return false;
+
     if (address + channelCount >= m_usedChannels)
         m_usedChannels = address + channelCount;
 
@@ -1121,18 +1144,15 @@ bool Universe::writeBlended(int address, quint32 value, int channelCount, Univer
     {
         case NormalBlend:
         {
+            // routine, every tick -- not logged
             if ((m_channelsMask->at(address) & HTP) && value < currentValue)
-            {
-                qDebug() << "[Universe] HTP check not passed" << address << value;
                 return false;
-            }
         }
         break;
         case MaskBlend:
         {
             if (value)
             {
-                qDebug() << "Current value" << currentValue << "value" << value;
                 if (currentValue)
                     value = float(currentValue) * (float(value) / pow(255.0, channelCount));
                 else

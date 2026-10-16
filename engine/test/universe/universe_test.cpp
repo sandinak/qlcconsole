@@ -430,6 +430,31 @@ void Universe_Test::writeRelative()
 
 }
 
+/* A 16-bit pair -- or any multi-channel write -- starting on the last
+   channel ran past the universe's buffers and its modifier table: unchecked
+   in a release build. What fits is written, most significant byte first;
+   nothing beyond. */
+void Universe_Test::aWritePastTheEndKeepsToTheUniverse()
+{
+    QVERIFY(m_uni->writeBlended(511, 0xAB12, 2, Universe::NormalBlend) == true);
+    QCOMPARE(quint8(m_uni->preGMValues().at(511)), quint8(0xAB));
+    QCOMPARE(quint8(m_uni->postGMValues()->at(511)), quint8(0xAB));
+    QCOMPARE(m_uni->preGMValues().size(), 512);
+
+    QVERIFY(m_uni->writeMultiple(510, 0x01020304, 4) == true);
+    QCOMPARE(quint8(m_uni->preGMValues().at(510)), quint8(0x01));
+    QCOMPARE(quint8(m_uni->preGMValues().at(511)), quint8(0x02));
+
+    QVERIFY(m_uni->writeRelative(511, 0x7F00, 2) == true);
+    QCOMPARE(quint8(m_uni->preGMValues().at(511)), quint8(0x02));
+
+    // starting past the end: nothing to write
+    QVERIFY(m_uni->write(512, 200) == false);
+    QVERIFY(m_uni->writeMultiple(512, 0xFFFF, 2) == false);
+    QVERIFY(m_uni->writeBlended(600, 0xFF, 1, Universe::AdditiveBlend) == false);
+    QVERIFY(m_uni->writeRelative(-1, 0x7F, 1) == false);
+}
+
 void Universe_Test::reset()
 {
     int i;
