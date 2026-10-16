@@ -100,6 +100,7 @@ private slots:
     /** A fixed target renamed anywhere shows its new name in the look's
      *  Targets list. */
     void aRenamedFixedTargetShowsItsNewName();
+    void thePowerChipSaysWhatItsFigureIsMadeOf();
 
 private:
     Doc* m_doc;

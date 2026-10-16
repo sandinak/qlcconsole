@@ -1739,4 +1739,56 @@ void ProgrammingManager_Test::duplicateDefinitionsAreListedWithWhatIsUsed()
     ShowStatus::instance()->clearStatus("definitions.failed");
 }
 
+/* "173 amps at 19% .. that doesn't seem right": the chip's tooltip names the
+   biggest draws, where each figure comes from, and what the estimate assumes,
+   so a definition with no power (guessed) or a reading far over its rating
+   is plain to see. */
+void ProgrammingManager_Test::thePowerChipSaysWhatItsFigureIsMadeOf()
+{
+    QList<PowerEstimator::TypeLoad> rows;
+    PowerEstimator::TypeLoad bar;
+    bar.name = "V-Show PL- 4003 1 Bar";
+    bar.count = 32;
+    bar.basis = PowerEstimator::Guessed;
+    bar.fullWatts = PowerEstimator::FallbackFixtureWatts;
+    bar.watts = 160.0;
+    bar.amps = 160.0 / 120.0;
+    PowerEstimator::TypeLoad washer;
+    washer.name = "Oppsk Wall Washer Light Bar";
+    washer.count = 24;
+    washer.basis = PowerEstimator::Measured;
+    washer.ratedWatts = 100;
+    washer.fullWatts = 12.3 * 120.0;
+    washer.watts = 24 * 48.0;
+    washer.amps = 9.6;
+    PowerEstimator::TypeLoad spot;
+    spot.name = "American DJ Focus Spot Three Z";
+    spot.count = 2;
+    spot.basis = PowerEstimator::Rated;
+    spot.ratedWatts = 230;
+    spot.fullWatts = 230;
+    spot.watts = 142;
+    spot.amps = 142.0 / 120.0;
+    rows << washer << spot << bar;
+
+    const QString text = ProgrammingManager::powerDetailText(rows, 12.1, 1.45, 120.0);
+    QVERIFY2(text.contains("12.1 A"), qPrintable(text));
+    QVERIFY(text.contains("120 V"));
+    QVERIFY(text.contains("Grand Master"));
+    QVERIFY(text.contains("24 x Oppsk Wall Washer Light Bar: 9.6 A (1.15 kW)"));
+    QVERIFY(text.contains("measured, 1.48 kW each at full -- the definition says 100 W; check the readings"));
+    QVERIFY(text.contains("2 x American DJ Focus Spot Three Z: 1.2 A (142 W), rated 230 W each"));
+    QVERIFY(text.contains("32 x V-Show PL- 4003 1 Bar: 1.3 A (160 W), no power in its definition: guessed at 50 W each"));
+    QVERIFY(text.contains("No power given for: V-Show PL- 4003 1 Bar."));
+    QVERIFY(text.contains("circuits editor"));
+
+    // Its numbers are the ones recomputePower() sends with the chip.
+    m_doc->setMode(Doc::Design);
+    ProgrammingManager pm(nullptr, m_doc);
+    QSignalSpy spy(&pm, &ProgrammingManager::powerEstimateChanged);
+    pm.recomputePower();
+    QVERIFY(spy.count() >= 1);
+    QVERIFY(spy.last().at(3).toString().startsWith("Estimated load: "));
+}
+
 QTEST_MAIN(ProgrammingManager_Test)

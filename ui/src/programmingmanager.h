@@ -24,6 +24,7 @@
 #include <QSet>
 #include <QElapsedTimer>
 #include "function.h"
+#include "powerdistribution.h"
 
 class QTreeWidgetItem;
 class Scene;
@@ -396,6 +397,12 @@ private:
     // the show goes live, so Run mode pays nothing.
     QTimer      *m_powerTimer = nullptr;
 
+public:
+    /** The chip's tooltip: the biggest draws by fixture type, where each
+     *  figure comes from, and what the estimate assumes. */
+    static QString powerDetailText(const QList<PowerEstimator::TypeLoad> &rows,
+                                   double amps, double kw, double defaultVoltage);
+private:
     /** Start the periodic re-estimate timer. */
     void initPowerTimer();
     /** Start/stop the periodic re-estimate per mode; clears the status-bar
@@ -410,8 +417,9 @@ signals:
      *  what's "in use right now" (e.g. LED highlighting) without polling. */
     void currentPaletteIdChanged(quint32 paletteId);
     /** Live power estimate for the app status-bar chip (Design mode). Amps, kW,
-     *  and whether any circuit/source is overloaded. */
-    void powerEstimateChanged(double amps, double kw, bool overload);
+     *  whether any circuit/source is overloaded, and what it is made of (the
+     *  biggest draws and what the figure assumes -- the chip's tooltip). */
+    void powerEstimateChanged(double amps, double kw, bool overload, const QString &detail);
 };
 
 /** @} */
