@@ -6932,7 +6932,8 @@ void Monitor_Test::editingALookUpdatesTheRigView()
        the scene announce it. */
     col->setValue(QColor(0, 0, 255));
     QMetaObject::invokeMethod(doc, "functionChanged", Q_ARG(quint32, scene->id()));
-    QTest::qWait(30);                  // the refresh is coalesced to the event loop
+    // The refresh is coalesced to the event loop: wait for it, not a fixed time.
+    QTRY_VERIFY_WITH_TIMEOUT(resolved().blue() > 200 && resolved().red() < 80, 5000);
 
     const QColor after = resolved();
     QVERIFY2(after.blue() > 200 && after.red() < 80,
@@ -6942,7 +6943,7 @@ void Monitor_Test::editingALookUpdatesTheRigView()
     // And back again -- blue to white, which is the other half of the report.
     col->setValue(QColor(255, 255, 255));
     QMetaObject::invokeMethod(doc, "functionChanged", Q_ARG(quint32, scene->id()));
-    QTest::qWait(30);
+    QTRY_VERIFY_WITH_TIMEOUT(resolved().red() > 200 && resolved().green() > 200, 5000);
     const QColor back = resolved();
     QVERIFY2(back.red() > 200 && back.green() > 200,
              qPrintable(QString("editing back to white did not take: %1")
@@ -15091,13 +15092,19 @@ void Monitor_Test::aCableRunFollowsAMovedFixture()
     MonitorFixtureItem *item = rig.gv->m_fixtures.value(a->id());
     item->setPos(item->pos() + QPointF(60.0, 40.0));
     rig.gv->slotFixtureMoved(item);
-    QTest::qWait(120);
 
+    /* Wait for the debounce to FIRE, not for a fixed time: a 40 ms timer
+       given 120 ms still missed it twice on a busy CI runner. The run items
+       are rebuilt when it does, so read them afresh on every try. */
+    auto endMoved = [&]() {
+        if (rig.gv->m_networkRunItems.size() != 1)
+            return false;
+        const QPainterPath after = rig.gv->m_networkRunItems.first()->path();
+        return (QPointF(after.elementAt(1).x, after.elementAt(1).y)
+                - QPointF(before.elementAt(1).x, before.elementAt(1).y)).manhattanLength() > 20.0;
+    };
+    QTRY_VERIFY2_WITH_TIMEOUT(endMoved(), "the run's end did not follow the fixture", 5000);
     QCOMPARE(rig.gv->m_networkRunItems.size(), 1);
-    const QPainterPath after = rig.gv->m_networkRunItems.first()->path();
-    QVERIFY2((QPointF(after.elementAt(1).x, after.elementAt(1).y)
-              - QPointF(before.elementAt(1).x, before.elementAt(1).y)).manhattanLength() > 20.0,
-             "the run's end did not follow the fixture");
     rig.mon->applyMapView(Monitor::ViewNormal);
 }
 
