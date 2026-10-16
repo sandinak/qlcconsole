@@ -818,9 +818,14 @@ void AppUtil::updateFixtureReadiness(Doc *doc)
             status->setStatus("fixtures.nodefinition", ShowStatus::Error,
                 QCoreApplication::translate("AppUtil", "%n fixture(s) have no definition on this computer",
                                             "", items.count()),
-                QCoreApplication::translate("AppUtil", "Standing in as dimmers. Saved as what they "
+                QCoreApplication::translate("AppUtil", "Standing in as dimmers (the Lighting Studio "
+                                            "and the Rig Overview draw each as a small "
+                                            "box). Saved as what they "
                                             "really are, but not programmable as that until "
-                                            "their definitions are back."),
+                                            "their definitions are back: copy the .qxf files "
+                                            "into %1 and Fetch Definitions.")
+                    .arg(QDir::toNativeSeparators(
+                        QLCFixtureDefCache::userDefinitionDirectory().absolutePath())),
                 items, ids, groups);
     }
 

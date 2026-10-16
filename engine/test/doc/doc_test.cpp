@@ -92,7 +92,9 @@ void Doc_Test::normalizeComponentPath()
      QCOMPARE(m_doc->normalizeComponentPath("qlcconsole.png"), QFileInfo("qlcconsole.png").absoluteFilePath());
      QCOMPARE(m_doc->normalizeComponentPath("../../../resources/icons/png/qlcconsole.png"), QString("qlcconsole.png"));
      QCOMPARE(m_doc->normalizeComponentPath("../../../resources/icons/png/sub/qlcconsole.png"), QString("sub/qlcconsole.png"));
-     QCOMPARE(m_doc->normalizeComponentPath("/home/user/test.png"), QString("/home/user/test.png"));
+     // An absolute path outside the workspace comes back unchanged. Spelled
+     // through QFileInfo: on Windows "/home/..." is only drive-relative.
+     QCOMPARE(m_doc->normalizeComponentPath("/home/user/test.png"), QFileInfo("/home/user/test.png").absoluteFilePath());
 }
 
 void Doc_Test::denormalizeComponentPath()
@@ -102,7 +104,9 @@ void Doc_Test::denormalizeComponentPath()
      QCOMPARE(m_doc->denormalizeComponentPath(QString()), QString());
      QCOMPARE(m_doc->denormalizeComponentPath("qlcconsole.png"), QFileInfo("../../../resources/icons/png/qlcconsole.png").absoluteFilePath());
      QCOMPARE(m_doc->denormalizeComponentPath("sub/qlcconsole.png"), QFileInfo("../../../resources/icons/png/sub/qlcconsole.png").absoluteFilePath());
-     QCOMPARE(m_doc->denormalizeComponentPath("/home/user/test.png"), QString("/home/user/test.png"));
+     // An absolute path outside the workspace comes back unchanged. Spelled
+     // through QFileInfo: on Windows "/home/..." is only drive-relative.
+     QCOMPARE(m_doc->denormalizeComponentPath("/home/user/test.png"), QFileInfo("/home/user/test.png").absoluteFilePath());
 }
 
 void Doc_Test::defaults()

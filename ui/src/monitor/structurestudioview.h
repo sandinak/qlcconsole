@@ -26,6 +26,7 @@
 #define STRUCTURESTUDIOVIEW_H
 
 #include <QWidget>
+#include "../qlcui_export.h"
 #include <cstring>
 #include <QImage>
 #include <functional>
@@ -52,7 +53,7 @@ class Doc;
  * @{
  */
 
-class StructureStudioView : public QWidget
+class QLC_UI_EXPORT StructureStudioView : public QWidget
 {
     Q_OBJECT
 

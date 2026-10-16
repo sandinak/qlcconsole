@@ -21,6 +21,7 @@
 #define TIMECODESOURCE_H
 
 #include <QObject>
+#include "qlcengine_export.h"
 #include <QElapsedTimer>
 
 /** Milliseconds of no fresh timecode before a followed show is treated as
@@ -69,7 +70,7 @@ class QTimer;
  * universe's timecode is accepted; set a specific universe to lock onto one
  * source and ignore the rest.
  */
-class TimecodeSource : public QObject
+class QLC_ENGINE_EXPORT TimecodeSource : public QObject
 {
     Q_OBJECT
 

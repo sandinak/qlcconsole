@@ -22,6 +22,7 @@
 #define PROGRAMMERCONTROLLER_H
 
 #include <QObject>
+#include "qlcengine_export.h"
 #include <QList>
 #include <QSet>
 #include <QHash>
@@ -56,7 +57,7 @@ class QXmlStreamWriter;
  * The controller is a QObject child of Doc (auto-deleted) and reaches
  * Doc only through Doc's public methods via the m_doc back-pointer.
  */
-class ProgrammerController final : public QObject
+class QLC_ENGINE_EXPORT ProgrammerController final : public QObject
 {
     Q_OBJECT
 

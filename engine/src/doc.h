@@ -22,6 +22,7 @@
 #define DOC_H
 
 #include <QObject>
+#include "qlcengine_export.h"
 #include <QTimer>
 #include <QList>
 #include <QFile>
@@ -65,7 +66,7 @@ class EffectScriptRunner;
 #define KXMLQLCEngine QStringLiteral("Engine")
 #define KXMLQLCStartupFunction QStringLiteral("Autostart")
 
-class Doc final : public QObject
+class QLC_ENGINE_EXPORT Doc final : public QObject
 {
     Q_OBJECT
     Q_DISABLE_COPY(Doc)

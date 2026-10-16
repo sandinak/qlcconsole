@@ -3300,10 +3300,15 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         QSettings().setValue(SETTINGS_STUDIOROTATION, next);
     });
     cv->addWidget(view, 1);
-    QLabel *hint = new QLabel(tr("click a fixture to select · ⌘- or ⇧-click to add more · "
+#if defined(Q_OS_MACOS)
+    const QString addClick = tr("⌘- or ⇧-click to add more");
+#else
+    const QString addClick = tr("Ctrl- or Shift-click to add more");
+#endif
+    QLabel *hint = new QLabel(tr("click a fixture to select · %1 · "
                                  "double-click to edit · drag to reposition (all "
                                  "selected move together) · drag the background "
-                                 "to pan · wheel to zoom"), center);
+                                 "to pan · wheel to zoom").arg(addClick), center);
     hint->setWordWrap(true);
     hint->setStyleSheet("color:#8a8e99;");
     cv->addWidget(hint);

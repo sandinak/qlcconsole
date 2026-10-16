@@ -57,6 +57,23 @@ else
   TESTPREFIX="QT_QPA_PLATFORM=offscreen"
 fi
 
+# Windows (MSYS2 bash, as CI runs it): no display needed for offscreen, and
+# no rpath -- test.sh's LD_LIBRARY_PATH means nothing to the Windows loader,
+# which finds DLLs on PATH. Put every build dir holding one there.
+# QT_FORCE_STDERR_LOGGING: a Windows process without a console (CI's piped
+# output) has QTest send its whole log to OutputDebugString instead of stdout,
+# so every test, failing ones included, ran silently. A caller's
+# QT_QPA_PLATFORM still wins, as above.
+if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+  if [ -n "${QT_QPA_PLATFORM:-}" ]; then
+    TESTPREFIX="QT_FORCE_STDERR_LOGGING=1"
+  else
+    TESTPREFIX="QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1"
+  fi
+  DLLDIRS=$(find "$PWD" -name '*.dll' -not -path '*/CMakeFiles/*' -exec dirname {} \; | sort -u | tr '\n' ':')
+  export PATH="${DLLDIRS}${PATH}"
+fi
+
 # How many test programs actually ran, per group -- checked at the end.
 ENGINE_RAN=0
 UI_RAN=0
@@ -178,6 +195,8 @@ popd
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
   echo "Skip Velleman test (not supported on OSX)"
+elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+  echo "Skip Velleman test (plugin not built on Windows)"
 else
   $SLEEPCMD
   pushd plugins/velleman/test

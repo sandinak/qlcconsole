@@ -44,13 +44,19 @@ if [ "$1" == "qmlui" ]; then
   $QTDIR/bin/windeployqt --qmldir $ROOT_DIR/qmlui/qml qlcplusengine.dll Plugins/dmxusb.dll qlcconsole-qml.exe
   rm sceneparsers/gltfsceneexport.dll
 else
-  $QTDIR/bin/windeployqt qlcplusengine.dll qlcplusui.dll qlcpluswebaccess.dll Plugins/dmxusb.dll qlcconsole.exe
+  $QTDIR/bin/windeployqt qlcplusengine.dll qlcplusui.dll qlcpluswebaccess.dll Plugins/dmxusb.dll qlcconsole.exe qlcconsole-fixtureeditor.exe
 fi
 
 # remove uneeded stuff
 rm -rf generic networkinformation qmltooling renderplugins tls translations
 
 
-# Create Installer
-makensis -X'SetCompressor /FINAL lzma' qlcconsole*.nsi
+# Create Installer (CI: .github/workflows/build.yml, build-windows, which also
+# sweeps in the non-Qt DLLs an MSYS2-packaged Qt needs)
+sh $ROOT_DIR/platforms/windows/nsis-manifest.sh
+if [ "$1" == "qmlui" ]; then
+  makensis -X'SetCompressor /FINAL lzma' qlcconsole5Qt6.nsi
+else
+  makensis -X'SetCompressor /FINAL lzma' qlcconsole.nsi
+fi
  

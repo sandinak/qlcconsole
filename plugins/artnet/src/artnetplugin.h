@@ -22,6 +22,7 @@
 
 #include <QNetworkAddressEntry>
 #include <QNetworkInterface>
+#include <QElapsedTimer>
 #include <QHostAddress>
 #include <QString>
 #include <QHash>
@@ -155,6 +156,9 @@ private:
 
     /** Time to wait (in seconds) for interfaces to be ready */
     int m_ifaceWaitTime;
+
+    /** When init() last walked the network interfaces (see init()) */
+    QElapsedTimer m_ifaceScan;
 
     /********************************************************************
      * RDM

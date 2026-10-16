@@ -35,6 +35,18 @@ E131Plugin::~E131Plugin()
 
 void E131Plugin::init()
 {
+    /* outputs() and inputs() both re-enter init(), and the UI asks for them
+       in bursts -- OutputPatch::outputName() alone calls outputs() twice, and
+       a tree or status refresh does that once per universe. On Windows
+       QNetworkInterface::allInterfaces() is a GetAdaptersAddresses() walk of
+       some 20 ms (measured on a VM), so every burst froze the GUI for whole
+       fractions of a second. Interfaces do not come and go that fast: walk
+       them at most once a second. requestLine()'s wait loop invalidates this,
+       so its retries always look again. */
+    if (m_ifaceScan.isValid() && m_ifaceScan.elapsed() < 1000)
+        return;
+    m_ifaceScan.start();
+
     QSettings settings;
     QVariant value = settings.value(SETTINGS_IFACE_WAIT_TIME);
     if (value.isValid() == true)
@@ -111,6 +123,7 @@ bool E131Plugin::requestLine(quint32 line)
         if (m_ifaceWaitTime)
         {
             Sleep(1000);
+            m_ifaceScan.invalidate();
             init();
         }
         if (retryCount++ >= m_ifaceWaitTime)

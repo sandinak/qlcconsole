@@ -21,6 +21,7 @@
 #define MONITORGRAPHICSVIEW_H
 
 #include <QElapsedTimer>
+#include "../qlcui_export.h"
 #include <QGraphicsView>
 #include <QDragEnterEvent>
 #include <QDragMoveEvent>
@@ -55,7 +56,7 @@ class Doc;
  * @{
  */
 
-class MonitorGraphicsView final : public QGraphicsView
+class QLC_UI_EXPORT MonitorGraphicsView final : public QGraphicsView
 {
     Q_OBJECT
 

@@ -22,6 +22,7 @@
 #define FUNCTION_H
 
 #include <QWaitCondition>
+#include "qlcengine_export.h"
 #include <QObject>
 #include <QString>
 #include <QMutex>
@@ -36,7 +37,7 @@ class QXmlStreamReader;
 
 class GenericFader;
 class MasterTimer;
-class Function;
+class QLC_ENGINE_EXPORT Function;
 class Doc;
 
 class FunctionUiState;

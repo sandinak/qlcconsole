@@ -43,6 +43,21 @@ FixtureVisualTraits classifyFixture(Fixture *fx)
         return t;
     t.headCount = qMax(1, fx->heads());
 
+    /* Standing in for a definition this computer does not have (the show
+       came from another machine): a generic dimmer of the same channel
+       count, whose made-up physical is 300 mm per channel. A 64-channel bar
+       then drew as a 19 m wall of 64 heads, every one overlapping its
+       neighbours and outlined in the overlap warning's red -- the whole rig
+       looked broken rather than "these definitions are missing". Drawn as
+       one small box instead: nothing is known about it but where it hangs. */
+    if (fx->definitionUnavailable())
+    {
+        t.kind = FixtureSilhouette::Generic;
+        t.headCount = 1;
+        t.physW = t.physH = t.physD = 0.25f;
+        return t;
+    }
+
     if (fx->fixtureDef() != nullptr)
     {
         switch (fx->fixtureDef()->type())

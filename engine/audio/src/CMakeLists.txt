@@ -11,6 +11,10 @@ add_library(${module_name}
     beattracker.cpp beattracker.h
 )
 set_property(TARGET ${module_name} PROPERTY POSITION_INDEPENDENT_CODE ON)
+# Linked into the engine DLL: its uses of engine classes are internal, not
+# imports (see engine/src/qlcengine_export.h).
+target_compile_definitions(${module_name} PRIVATE QLC_ENGINE_BUILD)
+
 target_include_directories(${module_name} PUBLIC
     ../../../plugins/interfaces
     ../../src

@@ -21,6 +21,7 @@
 #define SHOWCONTROL_H
 
 #include <QByteArray>
+#include "qlcengine_export.h"
 #include <QObject>
 #include <QString>
 #include <QList>
@@ -49,7 +50,7 @@ class Doc;
  * arrives (Doc wires it), the UI hands over OSC datagrams from its own
  * listener (the engine doesn't link Qt Network).
  */
-class ShowControl final : public QObject
+class QLC_ENGINE_EXPORT ShowControl final : public QObject
 {
     Q_OBJECT
 

@@ -211,6 +211,13 @@ endif()
 
 set_property(DIRECTORY APPEND PROPERTY ADDITIONAL_MAKE_CLEAN_FILES ${CONFIGFILE})
 
+# MinGW exports every symbol of a DLL by itself only while nothing in it is
+# marked dllexport; qlcengine_export.h marks a few classes, so ask for the
+# rest explicitly.
+if(MINGW)
+    target_link_options(${module_name} PRIVATE -Wl,--export-all-symbols)
+endif()
+
 install(TARGETS ${module_name}
     LIBRARY DESTINATION ${INSTALLROOT}/${LIBSDIR}
     RUNTIME DESTINATION ${INSTALLROOT}/${LIBSDIR}

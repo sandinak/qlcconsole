@@ -174,8 +174,9 @@ void SpeedMastersFooter::tick()
     if (++m_ticks % 16 == 0)
     {
         applyCount();
-        m_style = beatStyle();
-        m_when = beatWhen();
+        /* The beat options are not re-read here: they are two registry reads
+           on Windows, twice a second for good, and the only thing that
+           changes them (the View menu) calls reloadBeatOptions(). */
     }
     SpeedMasters *sm = m_doc->speedMasters();
     for (int i = 0; i < sm->count() && i < m_buttons.size(); ++i)

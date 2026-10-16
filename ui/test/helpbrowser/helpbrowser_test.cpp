@@ -161,6 +161,32 @@ void HelpBrowser_Test::searchFindsTheGuidesThatSayIt()
     QCOMPARE(help.m_topics->count(), all);
 }
 
+/* "windows shift r doesn't work": the guides said ⇧⌘R, and on Windows the
+   only key with a symbol like that is the Windows key. Off a Mac they say
+   Ctrl+Shift+R. */
+void HelpBrowser_Test::keysAreSpelledForTheComputerYouAreOn()
+{
+    const QString mac = QString::fromUtf8(
+        "**View \u2192 Rig Overview** (\u21E7\u2318R) opens it; \u2318Z, \u2318F12, \u2318, | "
+        "\u2318\u21E7\u21A9 \u00B7 \u2325\u2190 \u00B7 \u2318- or \u21E7-click \u00B7 "
+        "Ctrl/\u2318+Shift+R \u00B7 \u21E7 snaps \u00B7 (\u2318O, or");
+    QCOMPARE(HelpBrowser::keysForPlatform(mac, true), mac);
+    QCOMPARE(HelpBrowser::keysForPlatform(mac, false), QString::fromUtf8(
+        "**View \u2192 Rig Overview** (Ctrl+Shift+R) opens it; Ctrl+Z, Ctrl+F12, Ctrl+, | "
+        "Ctrl+Shift+Enter \u00B7 Alt+\u2190 \u00B7 Ctrl- or Shift-click \u00B7 "
+        "Ctrl+Shift+R \u00B7 Shift snaps \u00B7 (Ctrl+O, or"));
+
+    // Every guide, read the way Windows reads it, has no Mac symbol left.
+    for (const auto &t : HelpBrowser::topics())
+    {
+        QFile f(HelpBrowser::resourcePath(t.first));
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        const QString text = HelpBrowser::keysForPlatform(QString::fromUtf8(f.readAll()), false);
+        QVERIFY2(text.contains(QChar(0x2318)) == false || t.first == QLatin1String("shortcuts.md"),
+                 qPrintable(t.first));
+    }
+}
+
 void HelpBrowser_Test::headingsAreSluggedTheWayGitHubDoes()
 {
     QCOMPARE(HelpBrowser::headingSlug("Connections & patch"), QString("connections--patch"));
