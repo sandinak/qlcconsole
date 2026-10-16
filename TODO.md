@@ -10,7 +10,23 @@ under `~/.claude/.../memory/`.
 
 ## Small fixes and leftovers
 
-(Nothing open right now.)
+- **Layers panel: a row the plot can't select loses its selection on any
+  rebuild (2026-10-15)** — clicking a fixture the plot can't select (stacked
+  inside a tower in plan view) now keeps its row selected, but the next
+  `MonitorLayersPanel::reload()` re-selects from the plot's (empty)
+  selection and clears it. Rebuilds are frequent (a rename, any
+  `fixtureChanged`), so renaming T1-W from the list may still drop the row
+  afterwards. Found when monitor_test's
+  `aLayersRowStaysSelectedWhenThePlotCannotFollow` failed under QPA minimal:
+  a queued rebuild landed after the click (the test now settles first).
+  Fix: carry the list's own selection across a rebuild for items the plot
+  can't hold.
+
+- **macOS dev builds show no app icon (2026-10-15)** — `build/main/qlcconsole`
+  is a bare binary, so the bundle's `.icns` never applies, and
+  `AppUtil::setApplicationIdentity` deliberately skips the app-wide icon on
+  macOS (it would override the `.icns` in a packaged Dock). Could set it only
+  when not running from a bundle, if it matters.
 
 ## Release 0.1.0 (in progress, 2026-10-15)
 
@@ -351,19 +367,6 @@ rig edits, bulk repatching, cross-show consistency checks.
   box to even confirm the roughed-in `SCHED_FIFO` call links/behaves as
   written before this is worth deciding.
 
-- **Gate hole: on headless Linux `make check` silently skips ALL UI tests and
-  still prints "Unit tests passed" (OPEN, 2026-08-26)** —
-  `platforms/linux/unittest.sh:44` decides whether to run `ui/test` from
-  `pidof X` / `pidof Xorg`, unless `whoami` is `runner`/`buildbot`/`abuild`.
-  On a headless box under a normal login both checks fail, so `RUN_UI_TESTS=0`
-  and **32 UI test binaries never run** — a third of the suite — while the gate
-  still reports success. The same branch also leaves `TESTPREFIX` empty, so the
-  engine tests run with no platform plugin and `genericdmxsource_test` aborts
-  with "could not connect to display". Note `xvfb-run` does NOT rescue it: the
-  process is named `Xvfb`, which `pidof X` does not match. Fix is to key off
-  "can Qt start a platform plugin" (or just always set
-  `QT_QPA_PLATFORM=offscreen`) rather than probing for an X server.
-
 - **The ARM char-signedness tripwire is commented out (OPEN, 2026-08-26)** —
   the assertion cited as the reason to want an ARM build host,
   `QCOMPARE(ua.preGMValues()[0], char(255))` at
@@ -533,32 +536,6 @@ rig edits, bulk repatching, cross-show consistency checks.
   the existing readiness indicator (`daeeb97d7`), or a footer chip. Probably
   the first — it is a per-patch-row fact.
 
-
-- **App icon does not reach the runtime on Linux (OPEN, 2026-08-27)** — the
-  asset is fine; the delivery is not. `resources/icons/png/qlcconsole.png` is a
-  purpose-made fork icon (not the old QLC+ logo), `app.cpp:314` does
-  `setWindowIcon(QIcon(":/qlcconsole.png"))`, and `ui/src/qlcui.qrc` aliases it
-  correctly. What is wrong:
-  1. **One size only.** A single **96×96** PNG is shipped, and it is installed
-     to the legacy `share/pixmaps/` rather than the freedesktop icon theme
-     (`share/icons/hicolor/<size>/apps/qlcconsole.png`) --
-     `platforms/linux/CMakeLists.txt:9-13`. Modern shells prefer hicolor, and
-     scaling one 96px source to 128/256 looks soft. `.desktop` says
-     `Icon=qlcconsole`, which resolves through the theme first.
-  2. **The SVG is never installed.** `resources/icons/svg/qlcconsole.svg`
-     exists and would give every size for free via
-     `share/icons/hicolor/scalable/apps/`.
-  3. **Nothing is installed at all when running from `build/`**, which is how
-     every test run works, so the desktop falls back to a generic icon. Only
-     `_NET_WM_ICON` from `setWindowIcon` applies, and shells vary in whether
-     they use it for the task list.
-  4. **macOS dev builds are a bare binary**, not a `.app`, so
-     `CFBundleIconFile=qlcconsole.icns` only takes effect in a packaged DMG --
-     the icon is never seen during development.
-  Fix: install the SVG to `hicolor/scalable/apps/` plus rendered PNGs at
-  16/22/24/32/48/64/128/256 to `hicolor/<size>/apps/`, keep `share/pixmaps` for
-  compatibility, and run `gtk-update-icon-cache` on install. The `.icns`
-  (1024×1024) and `.ico` are already right for macOS/Windows packaging.
 
 - **Art-Net node configuration (ArtAddress) — send path built and proven, but
   no node here applies it (2026-08-26)** — `artnet-config.py` at the repo root

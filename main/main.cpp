@@ -44,6 +44,7 @@
 #include "webaccess.h"
 #include "webaccessauth.h"
 #include "helpshots.h"
+#include "apputil.h"
 #include "app.h"
 #include "doc.h"
 
@@ -296,6 +297,9 @@ int main(int argc, char** argv)
 
     /* Create the Qt core application object */
     QApplication qapp(argc, argv);
+
+    /* Which .desktop entry this is, and the window icon at every size */
+    AppUtil::setApplicationIdentity("qlcconsole");
 
     /* At least MIDI plugin requires this so best to declare it here for everyone */
     qRegisterMetaType<QVariant>("QVariant");

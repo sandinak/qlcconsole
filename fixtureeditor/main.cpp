@@ -29,6 +29,7 @@
 
 #include "qlcconfig.h"
 #include "qlcfile.h"
+#include "apputil.h"
 #include "app.h"
 
 // Single-instance handoff: qlcconsole's "Edit Fixture Definition..." launches
@@ -174,6 +175,9 @@ int main(int argc, char** argv)
 {
     /* Create the Qt core application object */
     QApplication qapp(argc, argv);
+
+    /* Which .desktop entry this is, and the window icon at every size */
+    AppUtil::setApplicationIdentity("qlcconsole-fixtureeditor");
 
 #if defined(__APPLE__) || defined(Q_OS_MAC)
     /* Load plugins from within the bundle ONLY */
