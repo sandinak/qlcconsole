@@ -18,6 +18,8 @@
 */
 
 #include <QtTest>
+#include <QBuffer>
+#include <QXmlStreamWriter>
 #include <QScrollArea>
 #include <QToolButton>
 #include <QTextBrowser>
@@ -474,6 +476,102 @@ void LookEditor_Test::anEffectIsPutOnASpeedMaster()
     QCOMPARE(speed->currentData().toInt(), int(SpeedMasters::Master1 + 1));
     speed->setCurrentIndex(speed->findData(SpeedMasters::Free));
     QTRY_VERIFY(!perBeatLabel());
+}
+
+/* "when I set something on the speed masters .. and then double click on
+   the icon it resets those": the look's Speed and Spread are the look's,
+   not the effect's -- double-clicking the effect's icon in the picker, or
+   the look itself, or trying another effect, must keep them. */
+void LookEditor_Test::aLooksSpeedMasterAndSpreadSurviveADoubleClick()
+{
+    Doc doc(this);
+    doc.effectScriptRunner()->cache()->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    QLCPalette *look = new QLCPalette(QLCPalette::Effect, &doc);
+    look->setName("Phase");
+    QVERIFY(doc.addPalette(look));
+    LookEditor ed(&doc);
+    ed.resize(1000, 640);
+    ed.show();
+    ed.setPalette(look->id());
+    EffectBrowser *browser = ed.m_effectBrowser;
+    auto itemNamed = [browser](const QString &name) -> QListWidgetItem * {
+        browser->search()->setText(name);
+        QApplication::processEvents();
+        for (int i = 0; i < browser->list()->count(); ++i)
+            if (browser->list()->item(i)->text() == name)
+                return browser->list()->item(i);
+        return nullptr;
+    };
+    QListWidgetItem *item = itemNamed("Dimmer Phaser");
+    QVERIFY(item != nullptr);
+    browser->pick(item);
+    QApplication::processEvents();
+
+    QComboBox *speed = ed.m_effectDynWidget->findChild<QComboBox *>("effectSpeedMaster");
+    QVERIFY(speed != nullptr);
+    speed->setCurrentIndex(speed->findData(SpeedMasters::Master1 + 1));
+    QApplication::processEvents();
+    look->setEffectParamValue(QStringLiteral("__spreadAmount"), 50);
+    look->setEffectParamValue(QStringLiteral("__spreadWings"), 2);
+    auto kept = [look]() {
+        return int(look->effectParamValues().value("__speedMaster")) == int(SpeedMasters::Master1 + 1)
+            && look->effectParamValues().value("__spreadAmount") == 50.0
+            && look->effectParamValues().value("__spreadWings") == 2.0;
+    };
+    QVERIFY(kept());
+
+    // The look double-clicked (it opens in the editor again).
+    ed.setPalette(look->id());
+    QApplication::processEvents();
+    QVERIFY(kept());
+
+    // Its effect's icon double-clicked in the picker.
+    ed.openEffectPicker();
+    item = itemNamed("Dimmer Phaser");
+    QVERIFY(item != nullptr);
+    const QRect r = browser->list()->visualItemRect(item);
+    QTest::mouseClick(browser->list()->viewport(), Qt::LeftButton, Qt::NoModifier, r.center());
+    QTest::mouseDClick(browser->list()->viewport(), Qt::LeftButton, Qt::NoModifier, r.center());
+    QTest::mouseRelease(browser->list()->viewport(), Qt::LeftButton, Qt::NoModifier, r.center());
+    QApplication::processEvents();
+    QVERIFY(kept());
+
+    // Another effect tried, then back to it: the look's Speed and Spread
+    // go with it (until now they were wiped as the effect's own settings).
+    browser->search()->setText("Dimmer");
+    QApplication::processEvents();
+    QListWidgetItem *other = nullptr;
+    for (int i = 0; i < browser->list()->count() && other == nullptr; ++i)
+        if (browser->list()->item(i)->text() != QLatin1String("Dimmer Phaser"))
+            other = browser->list()->item(i);
+    QVERIFY(other != nullptr);
+    browser->pick(other);
+    QApplication::processEvents();
+    QVERIFY(kept());
+    item = itemNamed("Dimmer Phaser");
+    browser->pick(item);
+    QApplication::processEvents();
+    QVERIFY(kept());
+    ed.m_effectPicker->findChild<QPushButton *>("effectPickerDone")->click();
+    QVERIFY(kept());
+    speed = ed.m_effectDynWidget->findChild<QComboBox *>("effectSpeedMaster");
+    QCOMPARE(speed->currentData().toInt(), int(SpeedMasters::Master1 + 1));
+
+    // And they are saved with the look.
+    QBuffer buf;
+    buf.open(QIODevice::WriteOnly);
+    {
+        QXmlStreamWriter w(&buf);
+        QVERIFY(look->saveXML(&w));
+    }
+    buf.close();
+    buf.open(QIODevice::ReadOnly);
+    QXmlStreamReader xml(&buf);
+    xml.readNextStartElement();
+    QLCPalette back(QLCPalette::Effect);
+    QVERIFY(back.loadXML(xml));
+    QCOMPARE(int(back.effectParamValues().value("__speedMaster")), int(SpeedMasters::Master1 + 1));
+    QCOMPARE(back.effectParamValues().value("__spreadAmount"), 50.0);
 }
 
 /* An effect that takes the host spread gets a Spread row; turned on, it hides
