@@ -55,6 +55,19 @@ public:
      */
     bool load(const QDir& dir);
 
+    /** The file the script called @p name is loaded from: the open show's
+     *  own copy when it has one, else this computer's. Empty if unknown. */
+    QString scriptFile(const QString &name) const;
+
+    /** The open show's own copy of script @p name, at @p path: used in place
+     *  of this computer's for as long as it is set (SHOW_EMBEDDING_DESIGN.md).
+     *  An empty @p path removes it. */
+    void setShowScript(const QString &name, const QString &path);
+    /** Drop every show copy: this computer's scripts again. */
+    void clearShowScripts() { m_showScripts.clear(); }
+    /** The script name a .js file declares (algo.name), or empty. */
+    static QString scriptNameIn(const QString &path);
+
     /**
      * Get the default system RGB scripts directory that contains
      * installed RGB scripts. The location varies greatly between
@@ -76,6 +89,7 @@ public:
 private:
     Doc *m_doc;
     QMap<QString, QString> m_scriptsMap; //! Map of name/filename of the available RGB scripts
+    QMap<QString, QString> m_showScripts; //! the open show's own copies: name/filename
 };
 
 /** @} */

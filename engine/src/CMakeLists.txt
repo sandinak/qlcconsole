@@ -111,6 +111,7 @@ add_library(${module_name} SHARED
     bundlecache.cpp bundlecache.h
     effectinstance.cpp effectinstance.h
     effectscriptrunner.cpp effectscriptrunner.h
+    showembedding.cpp showembedding.h
     programmercontroller.cpp programmercontroller.h
     scene.cpp scene.h
     scenevalue.cpp scenevalue.h

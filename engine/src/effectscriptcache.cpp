@@ -21,6 +21,17 @@
    the build (EFFECTSCRIPTDIR, qlcconfig.h). */
 #define USEREFFECTSCRIPTDIR USERQLCPLUSDIR "/EffectScripts"
 
+namespace
+{
+    QString s_systemOverride, s_systemRgbOverride;
+}
+
+void EffectScriptCache::setSystemDirectoriesOverride(const QString &effects, const QString &rgb)
+{
+    s_systemOverride = effects;
+    s_systemRgbOverride = rgb;
+}
+
 EffectScriptCache::EffectScriptCache(QObject *parent)
     : QObject(parent)
 {
@@ -30,6 +41,10 @@ void EffectScriptCache::rescan()
 {
     m_scripts.clear();
     m_displayNames.clear();
+    // The open show's own copies before anything: its version is the one
+    // used until the operator chooses otherwise.
+    if (!m_showDir.isEmpty())
+        scanDir(QDir(m_showDir));
     // User dir FIRST: scanDir() is first-found-wins (keyed on display name), so
     // scanning the system dir first meant a user's edited copy of a shipped
     // script was silently discarded and the shipped one kept loading. This
@@ -38,13 +53,32 @@ void EffectScriptCache::rescan()
     scanDir(systemScriptsDirectory());
     // RGBScript library (QLC+ RGB Matrix scripts) — run through the EffectScript
     // compat host. Scanned AFTER effect scripts so a purpose-built effect of the
-    // same name wins (first-found-wins keyed on display name).
+    // same name wins (first-found-wins keyed on display name). The show's own
+    // copies first among them.
+    if (!m_showRgbDir.isEmpty())
+        scanDir(QDir(m_showRgbDir), true);
     scanRgbDir(userRgbScriptsDirectory());
     scanRgbDir(systemRgbScriptsDirectory());
     for (const QDir &d : m_extraDirs)
         scanDir(d);
     for (const QDir &d : m_extraRgbDirs)
         scanRgbDir(d);
+    // The show's folder: only what nothing above had.
+    if (!m_fallbackDir.isEmpty())
+        scanDir(QDir(m_fallbackDir));
+    if (!m_fallbackRgbDir.isEmpty())
+        scanDir(QDir(m_fallbackRgbDir), true);
+}
+
+void EffectScriptCache::setShowDirectories(const QString &effects, const QString &rgb,
+                                           const QString &fallbackEffects,
+                                           const QString &fallbackRgb)
+{
+    m_showDir = effects;
+    m_showRgbDir = rgb;
+    m_fallbackDir = fallbackEffects;
+    m_fallbackRgbDir = fallbackRgb;
+    rescan();
 }
 
 void EffectScriptCache::addDirectory(const QDir &dir, bool rgb)
@@ -92,6 +126,8 @@ QString EffectScriptCache::categoryForTypes(const QStringList &ft)
 
 QDir EffectScriptCache::systemScriptsDirectory()
 {
+    if (!s_systemOverride.isEmpty())
+        return QDir(s_systemOverride, QStringLiteral("*.js"));
     return QLCFile::systemDirectory(QString(EFFECTSCRIPTDIR), QString(".js"));
 }
 
@@ -104,6 +140,8 @@ QDir EffectScriptCache::userScriptsDirectory()
 
 QDir EffectScriptCache::systemRgbScriptsDirectory()
 {
+    if (!s_systemRgbOverride.isEmpty())
+        return QDir(s_systemRgbOverride, QStringLiteral("*.js"));
     return QLCFile::systemDirectory(QString(RGBSCRIPTDIR), QString(".js"));
 }
 

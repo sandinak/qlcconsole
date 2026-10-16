@@ -57,6 +57,7 @@ class ProgrammerFlasher;
 class ProgrammerController;
 class LastLookEffect;
 class EffectScriptRunner;
+class ShowEmbedding;
 
 /** @addtogroup engine Engine
  * @{
@@ -633,6 +634,11 @@ public:
     /** Drives all active EffectScript instances (tick, DMX, input routing).
         QObject child of Doc (auto-deleted). */
     EffectScriptRunner *effectScriptRunner() const { return m_effectScriptRunner; }
+
+    /** The definitions and scripts the show carries (SHOW_EMBEDDING_DESIGN.md):
+     *  its own copies in use while it is open; this computer's back when it
+     *  is cleared. QObject child of Doc (auto-deleted). */
+    ShowEmbedding *showEmbedding() const { return m_showEmbedding; }
     /** Effect looks that would not start, and why (palette id -> reason);
      *  the runner's failures(), for code that does not include it. */
     QHash<quint32, QString> effectFailures() const;
@@ -675,6 +681,7 @@ public:
 private:
     ProgrammerController *m_programmer = nullptr;
     EffectScriptRunner   *m_effectScriptRunner = nullptr;
+    ShowEmbedding        *m_showEmbedding = nullptr;
     LastLookEffect       *m_lastLook = nullptr;
     bool                  m_lastLookEnabled = true;
 

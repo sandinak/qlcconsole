@@ -58,6 +58,7 @@
 #include "qlcfixturemode.h"
 #include "qlcphysical.h"
 #include "showstatus.h"
+#include "showembedding.h"
 #include "qlcioplugin.h"
 #include "ioplugincache.h"
 #include "fixturedefcheck.h"
@@ -833,6 +834,84 @@ QString AppUtil::nthAddress(const QString &ip, int n)
     if (n < 0 || low > 255 * 256 + 254)
         return QString();
     return QString("%1.%2.%3.%4").arg(o[0]).arg(o[1]).arg(low / 256).arg(low % 256);
+}
+
+void AppUtil::updateShowEmbeddingStatus(Doc *doc)
+{
+    ShowStatus *status = ShowStatus::instance();
+    ShowEmbedding *e = doc != nullptr ? doc->showEmbedding() : nullptr;
+    if (e == nullptr)
+    {
+        status->clearStatus("embedded.showonly");
+        status->clearStatus("embedded.differ");
+        status->clearStatus("embedded.problems");
+        return;
+    }
+
+    /* Only the show has them: used from it, nothing wrong -- information,
+       with a way to keep them on this computer. */
+    {
+        QStringList items, groups;
+        QVariantList keys;
+        bool allDefinitions = true;
+        foreach (const ShowEmbedding::Item &it, e->showOnly())
+        {
+            items << it.displayName();
+            keys << it.key();
+            groups << (it.fromShowFolder
+                       ? QCoreApplication::translate("AppUtil", "In the show's folder")
+                       : QCoreApplication::translate("AppUtil", "In the show file"));
+            if (it.kind != ShowEmbedding::FixtureDefinition)
+                allDefinitions = false;
+        }
+        if (items.isEmpty())
+            status->clearStatus("embedded.showonly");
+        else
+            status->setStatus("embedded.showonly", ShowStatus::Ok,
+                allDefinitions
+                    ? QCoreApplication::translate("AppUtil", "%n definition(s) came with this show",
+                                                  "", items.count())
+                    : QCoreApplication::translate("AppUtil", "%n definition(s) and script(s) came with this show",
+                                                  "", items.count()),
+                QCoreApplication::translate("AppUtil", "This computer does not have them, so the "
+                                            "show's own copies are used while it is open. Install "
+                                            "on this computer to keep them in your library."),
+                items, keys, groups);
+    }
+
+    /* Different from this computer's: the show's is in use until you choose. */
+    {
+        QStringList items;
+        QVariantList keys;
+        foreach (const ShowEmbedding::Item &it, e->differences())
+        {
+            items << QStringLiteral("%1 — %2").arg(it.displayName(),
+                                                   ShowEmbedding::newerText(e->newer(it)));
+            keys << it.key();
+        }
+        if (items.isEmpty())
+            status->clearStatus("embedded.differ");
+        else
+            status->setStatus("embedded.differ", ShowStatus::Warning,
+                QCoreApplication::translate("AppUtil", "%n item(s) in this show differ from this computer's",
+                                            "", items.count()),
+                QCoreApplication::translate("AppUtil", "The show's own copies are in use, so nothing "
+                                            "changes under the rig by itself. Review… says which "
+                                            "looks newer and whether this computer's would work "
+                                            "in their place."),
+                items, keys);
+    }
+
+    {
+        const QStringList problems = e->problems();
+        if (problems.isEmpty())
+            status->clearStatus("embedded.problems");
+        else
+            status->setStatus("embedded.problems", ShowStatus::Warning,
+                QCoreApplication::translate("AppUtil", "%n of the show's own copies cannot be used",
+                                            "", problems.count()),
+                QString(), problems);
+    }
 }
 
 void AppUtil::updateLoadProblems(const QString &errorLog)

@@ -19,6 +19,7 @@
 
 #include <QDebug>
 #include <QDir>
+#include <QTextStream>
 
 #include "rgbscriptscache.h"
   #include "rgbscriptv4.h"
@@ -32,13 +33,50 @@ RGBScriptsCache::RGBScriptsCache(Doc* doc)
 
 QStringList RGBScriptsCache::names() const
 {
-    return m_scriptsMap.keys();
+    QStringList list = m_scriptsMap.keys();
+    for (auto it = m_showScripts.constBegin(); it != m_showScripts.constEnd(); ++it)
+        if (!list.contains(it.key()))
+            list << it.key();
+    return list;
+}
+
+QString RGBScriptsCache::scriptFile(const QString &name) const
+{
+    const QString show = m_showScripts.value(name);
+    return show.isEmpty() ? m_scriptsMap.value(name) : show;
+}
+
+void RGBScriptsCache::setShowScript(const QString &name, const QString &path)
+{
+    if (path.isEmpty())
+        m_showScripts.remove(name);
+    else
+        m_showScripts.insert(name, path);
+}
+
+QString RGBScriptsCache::scriptNameIn(const QString &path)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+        return QString();
+    QTextStream in(&file);
+    for (QString line = in.readLine(); !line.isNull(); line = in.readLine())
+    {
+        const QStringList tokens = line.split("=");
+        if (tokens.length() == 2 && tokens[0].simplified() == "algo.name")
+        {
+            QString algoName = tokens[1].simplified().remove('"');
+            algoName.remove(';');
+            return algoName;
+        }
+    }
+    return QString();
 }
 
 RGBScript* RGBScriptsCache::script(QString name) const
 {
     RGBScript *mScript = new RGBScript(m_doc);
-    QString filename = m_scriptsMap.value(name);
+    QString filename = scriptFile(name);
     if (filename.isEmpty())
     {
         return mScript;

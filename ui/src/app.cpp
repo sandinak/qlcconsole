@@ -102,6 +102,8 @@
 #include "pmjoverlay.h"
 #include "showstatus.h"
 #include "showstatusdialog.h"
+#include "showembedding.h"
+#include "showdifferencesdialog.h"
 #include "qlcioplugin.h"
 #include "startupwindow.h"
 
@@ -854,6 +856,8 @@ void App::initDoc()
     m_doc = new Doc(this);
 
     connect(m_doc, SIGNAL(modified(bool)), this, SLOT(slotDocModified(bool)));
+    connect(m_doc->showEmbedding(), &ShowEmbedding::changed, this,
+            [this]() { AppUtil::updateShowEmbeddingStatus(m_doc); });
     connect(m_doc, SIGNAL(needAutosave()), this, SLOT(slotDocAutosave()));
     connect(m_doc, SIGNAL(modeChanged(Doc::Mode)), this, SLOT(slotModeChanged(Doc::Mode)));
     connect(m_doc, SIGNAL(loadProgress(QString,int)), this, SLOT(slotLoadProgress(QString,int)));
@@ -1008,6 +1012,25 @@ void App::initDoc()
        of their own reads each one (which makes the cloud send it), however
        long that takes. Fixtures and effects then load at once; anything else
        loads next time qlcconsole starts. */
+    /* What the show carries: keep the ones only it has; review the ones that
+       differ from this computer's (SHOW_EMBEDDING_DESIGN.md). */
+    ShowStatus::instance()->setAction("embedded.showonly", tr("Install on This Computer"),
+        [this](QWidget *parent, const QVariantList &items) {
+            QStringList failed;
+            foreach (const QVariant &v, items)
+            {
+                QString error;
+                if (!m_doc->showEmbedding()->installShows(v.toString(), &error))
+                    failed << error;
+            }
+            if (!failed.isEmpty())
+                QMessageBox::warning(parent, tr("Install on This Computer"), failed.join("\n"));
+        });
+    ShowStatus::instance()->setAction("embedded.differ", tr("Review…"),
+        [this](QWidget *parent, const QVariantList &) {
+            ShowDifferencesDialog dlg(m_doc, parent);
+            dlg.exec();
+        });
     ShowStatus::instance()->setAction("fixtures.nodefinition", tr("Fetch Definitions"),
         [this](QWidget *parent, const QVariantList &) { recoverUnavailableDefinitions(parent); });
     ShowStatus::instance()->setAction("storage.onlineonly", tr("Download Now"),
@@ -3425,6 +3448,13 @@ QFile::FileError App::loadXML(const QString& fileName)
     if (fileName.isEmpty() == true)
         return QFile::OpenError;
 
+    /* The definitions and scripts the show carries, put in use before any of
+       it loads: where this computer has none, or a different one, the show's
+       own (SHOW_EMBEDDING_DESIGN.md). Its folder's Fixtures/, EffectScripts/
+       and RGBScripts/ too, for what neither has. */
+    m_doc->showEmbedding()->readWorkspace(fileName);
+    m_doc->showEmbedding()->apply(QFileInfo(fileName).absolutePath());
+
     // Every definition it needs on this computer before it loads.
     prepareShowDefinitions(fileName);
 
@@ -3541,6 +3571,11 @@ bool App::loadXML(QXmlStreamReader& doc, bool goToConsole, bool fromMemory)
             /* Ignore creator information */
             doc.skipCurrentElement();
         }
+        else if (doc.name() == KXMLShowEmbedded)
+        {
+            /* Read before anything else (App::loadXML(fileName)). */
+            doc.skipCurrentElement();
+        }
         else if (doc.name() == QLatin1String("AppState"))
         {
             // Defer restoring windows until after the full workspace is loaded
@@ -3654,6 +3689,15 @@ QFile::FileError App::saveXML(const QString& fileName, bool autosave)
     doc.writeTextElement(KXMLQLCCreatorVersion, APPVERSION);
     doc.writeTextElement(KXMLQLCCreatorAuthor, QLCFile::currentUserName());
     doc.writeEndElement(); // close KXMLQLCCreator
+
+    /* What the show uses that is not part of the app, carried in it: the
+       version in use, never quietly this computer's. A .qlcc only -- a .qxw
+       stays as QLC+ can read it. Before <Engine>, so it is read first. */
+    if (ShowEmbedding::embedsIn(fileName))
+    {
+        m_doc->showEmbedding()->collect();
+        m_doc->showEmbedding()->saveXML(&doc);
+    }
 
     /* Write engine components to the XML document */
     m_doc->saveXML(&doc);
@@ -4164,6 +4208,13 @@ void App::slotAutosave()
     doc.writeTextElement(KXMLQLCCreatorVersion, APPVERSION);
     doc.writeTextElement(KXMLQLCCreatorAuthor, QLCFile::currentUserName());
     doc.writeEndElement();
+
+    // A .qlcc's recovery copy carries what the show does.
+    if (ShowEmbedding::embedsIn(m_fileName))
+    {
+        m_doc->showEmbedding()->collect();
+        m_doc->showEmbedding()->saveXML(&doc);
+    }
 
     m_doc->saveXML(&doc);
     VirtualConsole::instance()->saveXML(&doc);
@@ -5618,8 +5669,26 @@ void App::updateStatusBar()
         // come and go), the tooltip lists each source's own short reason
         // (one line per ShowStatus entry, not its full explanation), and a
         // click opens every entry's complete detail text in one place.
-        const QList<ShowStatus::Entry> entries = ShowStatus::instance()->allEntries();
-        if (entries.isEmpty() == false)
+        const QList<ShowStatus::Entry> all = ShowStatus::instance()->allEntries();
+        /* An Ok entry is information (definitions that came with the show),
+           not a reason the show is not ready: "Ready", with a note to click. */
+        QList<ShowStatus::Entry> entries, notes;
+        foreach (const ShowStatus::Entry &e, all)
+            (e.severity == ShowStatus::Ok ? notes : entries) << e;
+        if (entries.isEmpty() && !notes.isEmpty())
+        {
+            m_statusModeLabel->setText(m_statusMessage.isEmpty()
+                ? tr("Ready · %n note(s)", "", notes.count())
+                : m_statusMessage + QStringLiteral(" · ") + tr("%n note(s)", "", notes.count()));
+            m_statusModeLabel->setStyleSheet(QString());
+            m_statusModeLabel->setCursor(Qt::PointingHandCursor);
+            QStringList lines;
+            foreach (const ShowStatus::Entry &e, notes)
+                lines << (e.summary.isEmpty() ? e.key : e.summary);
+            lines << QString() << tr("Click for details");
+            m_statusModeLabel->setToolTip(lines.join("\n"));
+        }
+        else if (entries.isEmpty() == false)
         {
             m_statusModeLabel->setText(entries.count() == 1
                 ? tr("Not ready")
@@ -5628,7 +5697,7 @@ void App::updateStatusBar()
             m_statusModeLabel->setCursor(Qt::PointingHandCursor);
 
             QStringList lines;
-            foreach (const ShowStatus::Entry &e, entries)
+            foreach (const ShowStatus::Entry &e, all)
                 lines << (e.summary.isEmpty() ? e.key : e.summary);
             lines << QString() << tr("Click for details");
             m_statusModeLabel->setToolTip(lines.join("\n"));
