@@ -13,6 +13,11 @@ The latest changes, newest first. Each links to the guide with the detail.
   them nested, the cue list highlights the one playing and has Sub GO /
   Sub Back buttons, and the footer says **Sub: 4.2 · Next: 5**. Older
   shows play as before. See [Sub-cues](show-control.md#sub-cues).
+- **Sub-cues from QLab.** `/cue/4.2/go`, `/go 4.2` and MSC GO 4.2 play a
+  sub-cue (its cue first); OSC `/subgo` and `/subback` step the cue
+  playing; LOAD 4.2 puts one on standby and **Next:** shows it. A GO by
+  number on a paused list now plays that cue (it used to resume where it
+  was). See [Sub-cues from QLab](show-control.md#sub-cues-from-qlab).
 
 ### Outputs
 
