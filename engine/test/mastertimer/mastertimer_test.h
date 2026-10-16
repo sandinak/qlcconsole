@@ -45,6 +45,7 @@ private slots:
     void restart();
     void anOverrunningTickRunsAlone();
     void stopWaitsForATickInProgress();
+    void stopRightAfterStartReturns();
 
     void theBeatClockRunsAtTheTempo();
     void aTempoChangeKeepsTheBeatsPlace();

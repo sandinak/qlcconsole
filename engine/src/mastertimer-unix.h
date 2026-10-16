@@ -21,6 +21,7 @@
 #ifndef MASTERTIMER_PRIVATE_H
 #define MASTERTIMER_PRIVATE_H
 
+#include <QAtomicInt>
 #include <QThread>
 
 #if defined(Q_OS_MACOS) || defined(Q_OS_IOS)
@@ -40,6 +41,8 @@ public:
     MasterTimerPrivate(MasterTimer* masterTimer);
     ~MasterTimerPrivate();
 
+    /** Hides QThread::start(): sets the run flag before the thread starts */
+    void start();
     void stop();
 
 private:
@@ -51,7 +54,7 @@ private:
 #endif
 
 private:
-    bool m_run;
+    QAtomicInt m_run;
 #if defined(Q_OS_MACOS) || defined(Q_OS_IOS)
     clock_serv_t cclock;
 #endif
