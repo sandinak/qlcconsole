@@ -31,6 +31,8 @@ private slots:
     void anArtNetLanternMustListenWhereItIsPatched();
     /** Read from the device, in the footer, fixed on the device, read back. */
     void aMismatchIsFoundShownAndFixed();
+    /** A device that does not answer: said once, never read; and back. */
+    void anUnreachableDeviceIsSaidOnceAndNeverRead();
 
 private:
     Doc *m_doc = nullptr;

@@ -47,6 +47,7 @@ private:
      *  both, and the real ones are the user's. */
     QTemporaryDir m_home;
     QByteArray m_realHome;
+    QByteArray m_realProfile;
 };
 
 #endif

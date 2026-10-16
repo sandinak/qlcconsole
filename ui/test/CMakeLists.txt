@@ -60,3 +60,16 @@ add_subdirectory(vcxypad)
 add_subdirectory(vcxypadarea)
 add_subdirectory(vcxypadfixture)
 add_subdirectory(vcxypadfixtureeditor)
+
+# Every UI test program gets settings of its own, never the user's, and no
+# first-run modal (common/testsettings.cpp says why).
+get_property(_ui_test_dirs DIRECTORY PROPERTY SUBDIRECTORIES)
+foreach(_dir ${_ui_test_dirs})
+    get_property(_targets DIRECTORY ${_dir} PROPERTY BUILDSYSTEM_TARGETS)
+    foreach(_target ${_targets})
+        get_target_property(_type ${_target} TYPE)
+        if(_type STREQUAL "EXECUTABLE")
+            target_sources(${_target} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/common/testsettings.cpp)
+        endif()
+    endforeach()
+endforeach()

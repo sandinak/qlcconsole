@@ -42,7 +42,9 @@ void Autosave_Test::initTestCase()
        before App exists. */
     QVERIFY(m_home.isValid());
     m_realHome = qgetenv("HOME");
+    m_realProfile = qgetenv("USERPROFILE");
     qputenv("HOME", m_home.path().toUtf8());
+    qputenv("USERPROFILE", m_home.path().toUtf8());   // Windows' user folder
     QSettings::setDefaultFormat(QSettings::IniFormat);
     QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, m_home.filePath("settings"));
 
@@ -58,6 +60,10 @@ void Autosave_Test::cleanupTestCase()
     delete m_app;
     m_app = nullptr;
     qputenv("HOME", m_realHome);
+    if (m_realProfile.isEmpty())
+        qunsetenv("USERPROFILE");
+    else
+        qputenv("USERPROFILE", m_realProfile);
 }
 
 void Autosave_Test::defaultSettings()

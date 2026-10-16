@@ -30,8 +30,9 @@
 
 void ProgrammingGuide_Test::initTestCase()
 {
-    /* This reads and writes the REAL settings, which is where the flag has to
-       live for "once, ever" to mean anything. Borrow it and put it back. */
+    /* The flag lives in the settings, which is where it has to live for
+       "once, ever" to mean anything. A test's settings are its own
+       (ui/test/common/testsettings.cpp); borrow it and put it back anyway. */
     m_saved = QSettings().value(GUIDE_KEY);
 }
 

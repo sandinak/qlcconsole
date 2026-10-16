@@ -66,6 +66,7 @@ private:
     void open(Doc *doc, const QString &path);
 
     QByteArray m_realHome;
+    QByteArray m_realProfile;
     std::unique_ptr<QTemporaryDir> m_root;   ///< every computer and show of a test
     QString m_shipped;                       ///< the app's own scripts (override)
     int m_computers = 0;

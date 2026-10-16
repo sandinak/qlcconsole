@@ -503,16 +503,19 @@ rig edits, bulk repatching, cross-show consistency checks.
      audio, DMX USB/D2XX and the per-user file associations are unverified.
   2. ~95 MB installer, mostly ffmpeg codec DLLs pulled in by Qt Multimedia's
      ffmpeg backend; trim if it matters.
-  3. Tests: 126 of 136 binaries pass; the step is informational
-     (`continue-on-error`). Failing: qlcfixturedefcache (definitionSourceFile
-     vs relPath -- path form), rgbscript (`scriptName.toLower()`), addfixture
-     rememberExpanded, functionselection rememberFilter/constFilter,
-     programmingguide (these three look like QSettings persisting in the
-     registry between runs), monitor theInventoryButtonShowsAndHidesThePanel,
-     networkreportdialog saveCsv (a "locked" dir is writable on Windows),
-     showcontrol_ui OSC listener (firewall/port on the runner?), speedmasters
-     panel blink timing, lookeditor segfault (exit 139). mastertimer
-     startStopFunction failed once and passed once -- timing.
+  3. Tests: all 142 binaries pass on Windows CI since fix/win-tests-and-nits
+     (run 38938082831); the step is still informational
+     (`continue-on-error`) -- make it fail the job once a few more runs stay
+     green. What the failures were: UI tests' QSettings() had no
+     organization name, and Qt's registry backend keeps nothing without one
+     (addfixture, functionselection, monitor, programmingguide,
+     speedmasterspanel) -- every UI test now gets an INI file of its own
+     (ui/test/common/testsettings.cpp); USERPROFILE not set alongside HOME
+     (showembedding, showdifferences); mixed '\' separators in system
+     fixture paths (qlcfixturedefcache) and a test splitting on them
+     (rgbscript); a read-only folder Windows ignores (networkreportdialog).
+     lookeditor's segfault (exit 139) went away with the settings change;
+     its exact cause was not pinned down.
   4. Not code-signed (SmartScreen will warn). No `-Werror` on MinGW, by design.
   5. `QLCIOPlugin` signals are connected by member pointer from the UI too, but
      its moc lives in each plugin DLL as well as the engine; not annotated.
