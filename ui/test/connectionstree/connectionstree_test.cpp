@@ -1122,6 +1122,30 @@ void ConnectionsTree_Test::deviceRowCarriesItsPropertiesAsATooltip()
     }
 }
 
+/* A node heard on the cable but on no network this computer has an address
+   on -- new, still on its factory 2.x.x.x -- is listed, amber, with what to
+   do about it first in its detail, not presented as a usable green node. */
+void ConnectionsTree_Test::deviceNeedingAttentionSaysSoOnItsRow()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    QLCIOPlugin::Device fresh = makeDevice(0, "New node", "2.0.0.5");
+    fresh.attention = "on its factory Art-Net address, not this network: set its IP";
+    stub->m_devices << fresh << makeDevice(0, "CR041R", "172.18.2.10");
+
+    ConnectionsTree tree(m_doc);
+    tree.refresh();
+
+    QTreeWidgetItem *dev = itemWithAddress(tree.m_tree, "2.0.0.5");
+    QVERIFY(dev != NULL);
+    QVERIFY(dev->text(COL_DETAIL).startsWith(fresh.attention));
+    QCOMPARE(dev->background(COL_NAME).color(), QColor(245, 166, 35, 40));
+
+    QTreeWidgetItem *ok = itemWithAddress(tree.m_tree, "172.18.2.10");
+    QVERIFY(ok != NULL);
+    QVERIFY(ok->text(COL_DETAIL).contains("set its IP") == false);
+    QCOMPARE(ok->background(COL_NAME).color(), QColor(46, 125, 50, 40));
+}
+
 /* "wasting a lot of space in the connections view with the top panel": the
    explanation is one line beside the controls (the rest on hover), and the
    list and output take the height. */

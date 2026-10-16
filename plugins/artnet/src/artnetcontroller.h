@@ -25,6 +25,7 @@
 #include <QNetworkInterface>
 #include <QHostAddress>
 #include <QUdpSocket>
+#include <QNetworkDatagram>
 #include <QVariant>
 #include <QMutex>
 #include <QElapsedTimer>
@@ -176,6 +177,30 @@ public:
      *  broadcast address, or the limited broadcast)? */
     bool isBroadcastTarget(const QHostAddress &address) const;
 
+    /** Is @a address on this line's own subnet, i.e. can a unicast to it
+     *  leave by this line's interface without a router? */
+    bool isOnSubnet(const QHostAddress &address) const;
+
+    /** Send ONE ArtPoll to the limited broadcast (255.255.255.255), out of
+     *  this line's interface.
+     *
+     *  The periodic poll goes to the line's subnet broadcast (172.18.2.255),
+     *  and a node that has not been given an address yet -- still on its
+     *  factory 2.x.x.x or 10.x.x.x, or self-assigned 169.254.x.x after DHCP
+     *  found no server -- is not on that subnet and is entitled to ignore it.
+     *  Every IP stack accepts the limited broadcast, so this reaches every
+     *  node on the cable whatever its address. Only on an explicit Rescan:
+     *  it is the same one datagram per interface the subnet poll is, but it
+     *  is not needed every 3 s. Returns false when the line cannot carry it
+     *  (loopback). */
+    bool sendDiscoveryPoll();
+
+    /** Send an ArtIpProg to the node at @a node -- unicast, as Art-Net 4
+     *  says. Only ever on an explicit operator action; ArtNetPlugin checks
+     *  the node is on this line's subnet first. Returns false if the send
+     *  failed. */
+    bool sendIpProg(const QHostAddress &node, const ArtNetIpProgRequest &request);
+
 private:
     /** Feed one send result to the universe's SendHealth and log only
      *  when its reported state changes. Returns true when it did. See the
@@ -195,6 +220,9 @@ private:
     /** Log node-watch issues that appeared or cleared since the last call */
     void logNodeIssueChanges();
 
+    /** Write one datagram -- or, under test, record it and send nothing */
+    qint64 writeDatagram(const QNetworkDatagram &dg);
+
     /** The monotonic time SendHealth and ArtNetNodeWatch are fed */
     qint64 nowMs() const { return m_testNowMs >= 0 ? m_testNowMs : m_clock.elapsed(); }
 
@@ -212,6 +240,10 @@ private:
 
     /** Monotonic clock for SendHealth and the node watch */
     QElapsedTimer m_clock;
+
+    /** When set, writeDatagram() appends here instead of sending. Tests only:
+     *  nothing a test does should reach a real network. */
+    QList<QNetworkDatagram> *m_testSink;
 
     /** When >= 0, the time nowMs() returns instead of the clock. Tests only. */
     qint64 m_testNowMs;
@@ -262,6 +294,7 @@ private:
     bool handleArtNetDmx(QByteArray const& datagram, QHostAddress const& senderAddress);
     bool handleArtNetTodData(QByteArray const& datagram, QHostAddress const& senderAddress);
     bool handleArtNetRDM(QByteArray const& datagram, QHostAddress const& senderAddress);
+    bool handleArtNetIpProgReply(QByteArray const& datagram, QHostAddress const& senderAddress);
 
 public:
     // Handle a packet received to the ArtNet port.
@@ -306,6 +339,9 @@ signals:
     /** outputProblems() has changed. May be emitted from the thread that
      *  sends DMX; never with the data mutex held. */
     void problemsChanged();
+
+    /** A node answered an ArtIpProg with its current network settings */
+    void ipProgReplied(const QString &sender, const ArtNetIpProgReply &reply);
 };
 
 #endif

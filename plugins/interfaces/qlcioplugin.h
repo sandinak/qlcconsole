@@ -206,6 +206,9 @@ public:
         QString hardwareId;     //!< MAC, serial, or empty
         QString detail;         //!< one line of extra description
         QString status;         //!< last reported status, or empty
+        /** Something the operator has to act on before this device is usable,
+         *  e.g. "not on this network: set its IP". Empty when all is well. */
+        QString attention;
         QStringList portLabels; //!< one label per physical port
         QList<quint32> portUniverses; //!< protocol universe per port, parallel to portLabels
         bool rdmCapable;
@@ -467,6 +470,21 @@ public:
      */
     virtual int lineOnSameSubnet(const QString &identity) const
     { Q_UNUSED(identity) return -1; }
+
+    /**
+     * Can configureDevice() change the device at @p address (one of
+     * discoveredDevices()) -- its network address, for an Art-Net node?
+     */
+    virtual bool canConfigureDevice(const QString &address) const
+    { Q_UNUSED(address) return false; }
+
+    /**
+     * Open this plugin's own dialog for the device at @p address. Called
+     * only from an explicit operator action; the dialog asks for
+     * confirmation before anything is written to the device.
+     */
+    virtual void configureDevice(const QString &address)
+    { Q_UNUSED(address) }
 
     /**
      * Re-enumerate hardware devices and update internal state.

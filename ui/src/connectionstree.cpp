@@ -1019,6 +1019,10 @@ void ConnectionsTree::refresh()
                 ditem->setData(COL_NAME, ROLE_KIND, KIND_DEVICE);
 
                 QStringList detail;
+                /* What has to be done first goes first: a node heard but not
+                   on any network this computer is on (a new one, still on its
+                   factory address) cannot be patched to until its IP is set. */
+                if (dev.attention.isEmpty() == false) detail << dev.attention;
                 if (dev.address.isEmpty() == false) detail << dev.address;
                 if (dev.hardwareId.isEmpty() == false) detail << dev.hardwareId;
                 if (dev.detail.isEmpty() == false) detail << dev.detail;
@@ -1028,8 +1032,13 @@ void ConnectionsTree::refresh()
                    path is real, amber means it is only configured. Applied to
                    the node as well as its universes so availability reads at
                    the level someone actually asks about it -- "is that node
-                   there", not "is that universe reachable". */
-                ditem->setBackground(COL_NAME, QBrush(QColor(46, 125, 50, 40)));
+                   there", not "is that universe reachable". A node needing
+                   attention is there but not usable yet: amber. */
+                ditem->setBackground(COL_NAME, dev.attention.isEmpty()
+                                     ? QBrush(QColor(46, 125, 50, 40))
+                                     : QBrush(QColor(245, 166, 35, 40)));
+                if (dev.attention.isEmpty() == false)
+                    ditem->setForeground(COL_DETAIL, QBrush(QColor("#a06000")));
                 setRowTooltip(ditem, propertyTooltip(
                     shown == dev.address ? dev.address
                                          : tr("%1 (%2)").arg(shown).arg(dev.address),
@@ -2183,6 +2192,14 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         const bool manual = (iom != NULL && iom->isManualTarget(addr));
 
         QAction *ren = menu.addAction(tr("Name this target…"));
+        /* Network settings of a discovered device (an Art-Net node's IP) --
+           the plugin owns the dialog and its confirmation. */
+        QTreeWidgetItem *lineItem = item->parent();
+        QLCIOPlugin *devPlugin = (lineItem != NULL && m_doc->ioPluginCache() != NULL)
+            ? m_doc->ioPluginCache()->plugin(lineItem->data(COL_NAME, ROLE_PLUGIN).toString())
+            : NULL;
+        QAction *setIp = (devPlugin != NULL && devPlugin->canConfigureDevice(addr))
+            ? menu.addAction(tr("Set node IP address…")) : NULL;
         /* Ports can only be added to a target we invented. A discovered node
            reports its own ports in every ArtPollReply, so a hand-added port
            there would be overwritten within seconds -- offering it would be
@@ -2202,6 +2219,11 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
             return;
         if (pick1 == ren)
             renameTarget(addr);
+        else if (setIp != NULL && pick1 == setIp)
+        {
+            devPlugin->configureDevice(addr);
+            refresh();
+        }
         else if (addPort != NULL && pick1 == addPort)
             addManualPort(addr);
         else if (forget != NULL && pick1 == forget)
