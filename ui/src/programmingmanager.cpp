@@ -588,10 +588,14 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
        than during construction. Never on a headless platform ("offscreen", or
        "minimal", which the Linux test runner uses under xvfb): nobody can read
        or dismiss a dialog there, and it hung a test on a fresh CI runner for
-       five minutes waiting for a click. The flag isn't consumed there, so the
-       first real run still shows it. */
+       five minutes waiting for a click. QLC_NO_RECOVERY_PROMPT, which scripted
+       runs on a real display already set to skip the autosave prompt, skips it
+       too: on a fresh Linux soak box under Xvfb it held up the web API that
+       drives the run. The flag isn't consumed there, so the first real run
+       still shows it. */
     const QString platform = QGuiApplication::platformName();
     if (platform != QLatin1String("offscreen") && platform != QLatin1String("minimal")
+        && !qEnvironmentVariableIsSet("QLC_NO_RECOVERY_PROMPT")
         && takeFirstRunGuideFlag())
         QMetaObject::invokeMethod(this, [this]() { showProgrammingGuide(); },
                                   Qt::QueuedConnection);
