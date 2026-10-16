@@ -1893,7 +1893,7 @@ void ConnectionsTree_Test::portAndUniverseReadTheSameEverywhere()
     QTreeWidgetItem *u2 = universeRow(tree.m_tree, 1);
     QTreeWidgetItem *u3 = universeRow(tree.m_tree, 2);
     QVERIFY(u2 != NULL && u3 != NULL);
-    QVERIFY2(u2->text(COL_DETAIL).contains("172.18.2.70 · port 4 · universe 0:0:6"),
+    QVERIFY2(u2->text(COL_DETAIL).contains("Duo (172.18.2.70) · port 4 · universe 0:0:6"),
              qPrintable(u2->text(COL_DETAIL)));
     QVERIFY2(u3->text(COL_DETAIL).contains("172.18.2.80 · universe 0:0:1"),
              qPrintable(u3->text(COL_DETAIL)));
@@ -1951,4 +1951,78 @@ void ConnectionsTree_Test::repatchAsksTheInterfaceAgain()
     showUniverseList(tree);
     const QStringList offered = contextMenuOn(tree, 6, QString());
     QVERIFY2(offered.contains("Change interface / target…"), qPrintable(offered.join(" | ")));
+}
+
+/* "By-universe and By-device views must agree": a node patched from the
+   universe list must be findable, with every universe on it, in the device
+   view -- heard from or not, and on every interface it is fed from -- and
+   called the same thing in both. */
+void ConnectionsTree_Test::bothViewsListTheSameTargets()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    stub->m_supportsTargets = true;
+    // One node that answers, by name; the rest never heard from.
+    QLCIOPlugin::Device t1 = makeDevice(1, "T1 node", "172.18.2.60");
+    t1.portLabels << "0:0:0" << "0:0:2";
+    t1.portUniverses << 0 << 2;
+    stub->m_devices << t1;
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    while (iom->universesCount() < 10)
+        iom->addUniverse();
+    ConnectionsTree tree(m_doc);
+    struct P { quint32 u; quint32 line; const char *addr; quint32 port; };
+    const P ps[] = { {4, 1, "172.18.2.60", 0}, {5, 1, "172.16.2.60", 1},
+                     {6, 1, "172.18.2.60", 2}, {7, 0, "172.18.2.60", 3},
+                     {8, 1, "172.18.2.61", 0}, {9, 1, "172.18.2.61", 1},
+                     {3, 1, "172.18.2.61", 2} };
+    for (const P &p : ps)
+    {
+        QVERIFY(iom->setOutputPatch(p.u, stub->name(), "", p.line, false, 0));
+        QVERIFY(tree.applyTarget(p.u, stub->name(), p.line, p.addr, p.port));
+    }
+    tree.resize(1000, 600);
+    tree.show();
+    tree.refresh();
+
+    // Device view: universe -> "device label · via interface" it is filed under.
+    QMap<quint32, QString> byDevice;
+    foreach (QTreeWidgetItem *it, allItems(tree.m_tree))
+    {
+        const int k = it->data(COL_NAME, ROLE_KIND).toInt();
+        const QVariant uv = it->data(COL_NAME, ROLE_UNIVERSE);
+        if (uv.isValid() == false || (k != KIND_UNIVERSE && k != KIND_PORT))
+            continue;
+        QTreeWidgetItem *dev = it;
+        while (dev != NULL && dev->data(COL_NAME, ROLE_KIND).toInt() != KIND_DEVICE)
+            dev = dev->parent();
+        QVERIFY2(dev != NULL, qPrintable(it->text(COL_NAME)));
+        QTreeWidgetItem *line = dev->parent();
+        QVERIFY(line != NULL);
+        byDevice.insert(uv.toUInt(), QString("%1 · via %2").arg(dev->text(COL_NAME))
+                                     .arg(line->data(COL_NAME, ROLE_LINENAME).toString()));
+    }
+
+    tree.m_byUniverse->setChecked(true);
+    tree.refresh();
+    QMap<quint32, QString> byUniverse;
+    for (const P &p : ps)
+    {
+        QTreeWidgetItem *row = universeRow(tree.m_tree, p.u);
+        QVERIFY(row != NULL);
+        byUniverse.insert(p.u, row->text(COL_DETAIL));
+    }
+
+    QCOMPARE(byDevice.keys(), byUniverse.keys());   // the same set, both ways
+    for (const P &p : ps)
+    {
+        const QString dev = byDevice.value(p.u);
+        const QString name = dev.section(" · via ", 0, 0);
+        const QString via = dev.section(" · via ", 1);
+        QVERIFY2(byUniverse.value(p.u).contains(name + " · ")
+                 && byUniverse.value(p.u).contains(" · via " + via),
+                 qPrintable(QString("%1: device view %2, universe list %3")
+                            .arg(p.u + 1).arg(dev).arg(byUniverse.value(p.u))));
+    }
+    QCOMPARE(byDevice.value(4).section(" · via ", 0, 0), QString("T1 node (172.18.2.60)"));
+    QCOMPARE(byDevice.value(7).section(" · via ", 0, 0), QString("172.18.2.60"));  // line 0: unheard
 }

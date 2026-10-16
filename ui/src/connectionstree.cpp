@@ -5403,19 +5403,36 @@ void ConnectionsTree::buildUniverseList()
         QString where;
         if (!ip.isEmpty())
         {
+            /* The device by the same name its row has in the device view --
+               a node that answered goes by the name it gave, not by its bare
+               address, which made a listed node look missing from one view
+               or the other. */
+            const QString key = QString("%1|%2").arg(plugin).arg(op->output());
+            if (op->plugin() != NULL && targetsByLine.contains(key) == false)
+                targetsByLine.insert(key, visibleTargets(plugin, op->output()));
             const QString alias = iomap->targetAlias(ip);
             where = alias.isEmpty() ? ip : QStringLiteral("%1 (%2)").arg(alias, ip);
-            if (pp.contains(QStringLiteral("outputUni")))
+            int number = 0;
+            const quint32 pa = pp.value(QStringLiteral("outputUni")).toUInt();
+            foreach (const TargetChoice &t, targetsByLine.value(key))
             {
-                const quint32 pa = pp.value(QStringLiteral("outputUni")).toUInt();
-                int number = 0;
-                const QString key = QString("%1|%2").arg(plugin).arg(op->output());
-                if (op->plugin() != NULL && targetsByLine.contains(key) == false)
-                    targetsByLine.insert(key, visibleTargets(plugin, op->output()));
-                foreach (const TargetChoice &t, targetsByLine.value(key))
-                    if (t.address == ip && t.ports.contains(pa))
-                        number = t.numbers.value(t.ports.indexOf(pa));
+                if (t.address != ip)
+                    continue;
+                where = t.label;
+                if (t.ports.contains(pa))
+                    number = t.numbers.value(t.ports.indexOf(pa));
+            }
+            if (pp.contains(QStringLiteral("outputUni")))
                 where += QStringLiteral(" · ") + portWhereText(number, pa);
+
+            /* And which interface it leaves by, when there is a choice: the
+               device view files it under that interface, so a node fed from
+               two NICs is listed under each. */
+            if (op->plugin() != NULL && op->plugin()->outputs().count() > 1)
+            {
+                const QString lname = op->plugin()->outputs().value(int(op->output()));
+                const QString lalias = iomap->lineAlias(plugin, lname);
+                where += tr(" · via %1").arg(lalias.isEmpty() ? lname : lalias);
             }
         }
         else

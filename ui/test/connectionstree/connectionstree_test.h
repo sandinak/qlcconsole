@@ -135,6 +135,9 @@ private slots:
     /* Re-patching asks the interface again, the current one preselected. */
     void repatchAsksTheInterfaceAgain();
 
+    /* The device view and the universe list show the same patches. */
+    void bothViewsListTheSameTargets();
+
 private:
     Doc *m_doc;
 };
