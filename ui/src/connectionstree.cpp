@@ -41,6 +41,7 @@
 #include <QStyledItemDelegate>
 #include <QScrollArea>
 #include <QSplitter>
+#include <QTreeWidgetItemIterator>
 
 #include "connectionstree.h"
 #include "universeoutputview.h"
@@ -111,6 +112,34 @@ static QString displayPluginName(const QString &pluginName)
     return pluginName;
 }
 
+/** A port address the way the port rows and a node's own panel print it. */
+static QString portAddressText(quint32 pa)
+{
+    return QString("%1:%2:%3").arg((pa >> 8) & 0x7F).arg((pa >> 4) & 0x0F).arg(pa & 0x0F);
+}
+
+/* A list whose rows are what gets picked: bringing an item into view moves
+   it up or down, never sideways. QTreeView::scrollTo() also scrolls to show
+   the item's CELL -- and the rebuild re-sets the current row on column 0, so
+   with the list scrolled right to read Detail, every rebuild (the one held
+   off until a right-click menu closes, and every five-second one) jumped it
+   back to the left ("every time I open the right click menu in connections
+   the connections list scrolls right"). Left/Right on a row-selecting tree
+   scroll the bar themselves, so nothing here needs scrollTo to go sideways. */
+namespace {
+class RowTree : public QTreeWidget
+{
+public:
+    using QTreeWidget::QTreeWidget;
+    void scrollTo(const QModelIndex &index, ScrollHint hint = EnsureVisible) override
+    {
+        const int side = horizontalScrollBar()->value();
+        QTreeWidget::scrollTo(index, hint);
+        horizontalScrollBar()->setValue(side);
+    }
+};
+}
+
 ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     : QWidget(parent)
     , m_doc(doc)
@@ -143,7 +172,9 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
            "interface → devices heard on it → the universes they carry. "
            "Right-click an interface to patch a universe to it or configure "
            "the protocol; right-click a universe to rename it, set its "
-           "feedback line or input profile, unpatch it, or delete it."));
+           "feedback line or input profile, unpatch it, or delete it. "
+           "Select several universes to patch them onto a device's ports in "
+           "the order you clicked them, or unpatch them all at once."));
 
     /* Default to only what is live: configured or discovered. A stock build
        exposes 14 plugins and dozens of lines, nearly all of them irrelevant --
@@ -225,7 +256,7 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     m_status->setStyleSheet("QLabel { color: #a06000; }");
     bar->insertWidget(bar->indexOf(hint) + 1, m_status);   // on the same row
 
-    m_tree = new QTreeWidget(this);
+    m_tree = new RowTree(this);
     m_tree->setObjectName("connectionsTree");
     m_tree->setColumnCount(3);
     m_tree->setHeaderLabels(QStringList()
@@ -235,8 +266,9 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
        on consecutive ports. Every single-row action keeps working on the row
        under the pointer, NOT on the selection: right-clicking one row while
        twelve are selected must not quietly act on twelve. Only the explicitly
-       plural action reads the selection, and it says the count in its own
-       name before it does anything. */
+       plural actions (patch, unpatch, retarget N selected universes) read the
+       selection, and each says the count in its own name before it does
+       anything. */
     m_tree->setSelectionMode(QAbstractItemView::ExtendedSelection);
     m_tree->setAlternatingRowColors(true);
     m_tree->setRootIsDecorated(true);
@@ -278,6 +310,12 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     split->setStretchFactor(0, 3);
     split->setStretchFactor(1, 2);
     lay->addWidget(split, 1);           // every spare pixel goes to the list
+    /* Recorded as it happens: see m_selectionOrder. A rebuild clears and
+       restores the same selection, which must not reshuffle it. */
+    connect(m_tree, &QTreeWidget::itemSelectionChanged, this, [this]() {
+        if (!m_rebuilding)
+            syncSelectionOrder();
+    });
     connect(m_tree, &QTreeWidget::itemSelectionChanged, this, [this]() {
         if (m_rebuilding)
             return;                 // a rebuild reselects; keep what is shown
@@ -686,7 +724,8 @@ void ConnectionsTree::refresh()
        seconds used to drop the selection and scroll back to the top, so a
        universe clicked a moment ago was gone, and the list jumped under the
        pointer. Kept by full path, like the open branches. */
-    const int scroll = m_tree->verticalScrollBar()->value();
+    const QPoint scroll(m_tree->horizontalScrollBar()->value(),
+                        m_tree->verticalScrollBar()->value());
     QSet<QString> selectedPaths;
     foreach (QTreeWidgetItem *it, m_tree->selectedItems())
         selectedPaths.insert(itemPath(it));
@@ -1053,11 +1092,16 @@ void ConnectionsTree::refresh()
                     seenPortAddr.insert(pa);
 
                     QTreeWidgetItem *pt = new QTreeWidgetItem(ditem);
-                    pt->setText(COL_NAME, tr("port %1").arg(p + 1));
+                    pt->setText(COL_NAME, tr("port %1").arg(dev.portNumbers.value(p, p + 1)));
+                    /* "port" is the socket on the box, numbered as the node
+                       numbers it; "universe" is the Art-Net port-address it
+                       listens to (the plugin's "ArtNet Universe"), as
+                       net:subnet:universe. Two numbers, two names. */
+                    const QString uniText = p < dev.portUniverses.count()
+                        ? tr("universe %1").arg(portAddressText(pa)) : dev.portLabels.at(p);
                     pt->setText(COL_DETAIL, shared
-                        ? tr("%1  (same address as an earlier port)")
-                              .arg(dev.portLabels.at(p))
-                        : dev.portLabels.at(p));
+                        ? tr("%1  (same address as an earlier port)").arg(uniText)
+                        : uniText);
                     pt->setData(COL_NAME, ROLE_KIND, KIND_PORT);
                     pt->setData(COL_NAME, ROLE_PLUGIN, plugin->name());
                     pt->setData(COL_NAME, ROLE_LINE, quint32(line));
@@ -1118,9 +1162,7 @@ void ConnectionsTree::refresh()
                         const quint32 pa = mt.ports.at(p);
                         QTreeWidgetItem *pt = new QTreeWidgetItem(ditem);
                         pt->setText(COL_NAME, tr("port %1").arg(p + 1));
-                        pt->setText(COL_DETAIL, QString("%1:%2:%3")
-                                    .arg((pa >> 8) & 0x7F).arg((pa >> 4) & 0x0F)
-                                    .arg(pa & 0x0F));
+                        pt->setText(COL_DETAIL, tr("universe %1").arg(portAddressText(pa)));
                         pt->setData(COL_NAME, ROLE_KIND, KIND_PORT);
                         pt->setData(COL_NAME, ROLE_PLUGIN, plugin->name());
                         pt->setData(COL_NAME, ROLE_LINE, quint32(line));
@@ -1239,13 +1281,13 @@ void ConnectionsTree::refresh()
                                 if (gport == NULL)
                                 {
                                     gport = new QTreeWidgetItem(ghost);
+                                    /* Which socket on the box is not known --
+                                       nothing has answered to say -- so no
+                                       "port N" is invented from the address
+                                       (that read "port 2" for universe 0:0:1
+                                       while the patch said "port 1"). */
                                     gport->setText(COL_NAME,
-                                        tr("port %1").arg((portAddr & 0x0F) + 1));
-                                    gport->setText(COL_DETAIL,
-                                        QString("%1:%2:%3")
-                                            .arg((portAddr >> 8) & 0x7F)
-                                            .arg((portAddr >> 4) & 0x0F)
-                                            .arg(portAddr & 0x0F));
+                                        tr("universe %1").arg(portAddressText(portAddr)));
                                     gport->setData(COL_NAME, ROLE_KIND, KIND_PORT);
                                     gport->setData(COL_NAME, ROLE_PLUGIN, plugin->name());
                                     gport->setData(COL_NAME, ROLE_LINE, quint32(line));
@@ -1394,7 +1436,7 @@ void ConnectionsTree::refresh()
                         if (pp.contains("outputIP"))
                             where += tr(" → %1").arg(pp.value("outputIP").toString());
                         if (pp.contains("outputUni"))
-                            where += tr(" port %1").arg(pp.value("outputUni").toInt() & 0x0F);
+                            where += tr(" universe %1").arg(portAddressText(pp.value("outputUni").toUInt()));
                         uprops << Prop(uni->outputPatchesCount() > 1
                                        ? tr("Output %1").arg(oi + 1) : tr("Output"),
                                        where);
@@ -1492,10 +1534,7 @@ void ConnectionsTree::refresh()
 
                         const quint32 portAddr = params.value("outputUni", u->id()).toUInt();
                         QTreeWidgetItem *pt = new QTreeWidgetItem(ditem);
-                        pt->setText(COL_NAME, tr("port · %1:%2:%3")
-                                        .arg((portAddr >> 8) & 0x7F)
-                                        .arg((portAddr >> 4) & 0x0F)
-                                        .arg(portAddr & 0x0F));
+                        pt->setText(COL_NAME, tr("universe %1").arg(portAddressText(portAddr)));
                         pt->setForeground(COL_NAME, errBrush);
                         parentForUniverse = pt;
                     }
@@ -1921,15 +1960,23 @@ void ConnectionsTree::markOutputProblems()
 
 /** Stable identity for a row: its name plus every ancestor's, so two rows that
  *  share a display name under different parents are not confused. */
-/* Back to where the list was. The scroll range is only known once the new
-   rows are laid out, which can be after this returns -- so again then. */
-void ConnectionsTree::restoreScroll(int value)
+/* Back to where the list was, both ways (x sideways, y down). The scroll
+   range is only known once the new rows are laid out, which can be after
+   this returns -- so again then. Sideways matters as much as down: the
+   columns size to their contents, so emptying the list for the rebuild
+   narrows the range and clamps a list scrolled right to read Detail. */
+void ConnectionsTree::restoreScroll(const QPoint &value)
 {
-    m_tree->verticalScrollBar()->setValue(value);
+    m_tree->horizontalScrollBar()->setValue(value.x());
+    m_tree->verticalScrollBar()->setValue(value.y());
     QPointer<QTreeWidget> tree(m_tree);
     QTimer::singleShot(0, this, [tree, value]() {
-        if (tree != nullptr && tree->verticalScrollBar()->value() != value)
-            tree->verticalScrollBar()->setValue(value);
+        if (tree == nullptr)
+            return;
+        if (tree->horizontalScrollBar()->value() != value.x())
+            tree->horizontalScrollBar()->setValue(value.x());
+        if (tree->verticalScrollBar()->value() != value.y())
+            tree->verticalScrollBar()->setValue(value.y());
     });
 }
 
@@ -2010,22 +2057,46 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
 
     QMenu menu(this);
 
-    /* The one plural action, offered above everything else and named with its
-       own count so it can never be mistaken for the single-row entries below
-       it. Everything else in this menu acts on the row under the pointer,
-       whatever else happens to be selected. */
-    QAction *bulk = NULL;
+    /* The plural actions, offered above everything else and named with their
+       own count so they can never be mistaken for the single-row entries
+       below them. Everything else in this menu acts on the row under the
+       pointer, whatever else happens to be selected. Handled centrally in
+       handleUniversalMenuAction(), so every per-kind branch below honours
+       them without having to remember to. */
+    m_pluralRetarget = NULL;
+    m_pluralPatch = NULL;
+    m_pluralUnpatch = NULL;
+    m_pluralUniverses = orderedSelectedUniverses();
+    m_pluralLegs.clear();
+    if (m_pluralUniverses.count() > 1)
+    {
+        /* "select 4 U and set patch to an artnet device that has 4 ports ..
+           it should put them in selected order on those ports" -- and
+           "select 4 U and unpatch .. it should remove all of them at the
+           same time". Both used to act on the one row under the pointer. */
+        m_pluralPatch = menu.addAction(tr("Patch %1 selected universes to…")
+                                           .arg(m_pluralUniverses.count()));
+        m_pluralLegs = selectedUnpatchLegs();
+        QSet<quint32> withPatch;
+        foreach (const UnpatchLeg &l, m_pluralLegs)
+            withPatch.insert(l.universe);
+        if (withPatch.isEmpty() == false)
+            m_pluralUnpatch = menu.addAction(withPatch.count() == 1
+                ? tr("Unpatch the 1 patched universe of the selection")
+                : tr("Unpatch %1 selected universes").arg(withPatch.count()));
+    }
     {
         QString selPlug;
         QList<quint32> selLines;
         const QList<quint32> selUnis = selectedUniverses(selPlug, selLines);
         if (selUnis.count() > 1 && pluginSupportsTargetsIn(m_doc, selPlug))
-        {
-            bulk = menu.addAction(tr("Retarget %1 selected universes…")
-                                      .arg(selUnis.count()));
-            menu.addSeparator();
-        }
+            m_pluralRetarget = menu.addAction(tr("Retarget %1 selected universes…")
+                                                  .arg(selUnis.count()));
     }
+    const bool plural = (m_pluralPatch != NULL || m_pluralUnpatch != NULL
+                         || m_pluralRetarget != NULL);
+    if (plural)
+        menu.addSeparator();
 
     /* Collapse/Expand and Add/Delete Universe are the same regardless of
        what got right-clicked, so they read as generic, root-level actions
@@ -2040,15 +2111,14 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
     QAction *delUniv = NULL;
 
     /* Resolved before the per-kind menus below, each of which exec()s its own
-       menu and returns. */
-    if (bulk != NULL && kind != KIND_UNIVERSE && kind != KIND_PORT)
+       menu and returns. Universe rows of every kind keep their own single-row
+       actions under the plural ones. */
+    if (plural && kind != KIND_UNIVERSE && kind != KIND_PORT
+            && kind != KIND_UNPATCHED_UNIVERSE && kind != KIND_PENDING_UNIVERSE)
     {
         appendUniversalMenuActions(menu, item, collapseAll, expandAll, addUniv, delUniv);
         QAction *pick = menu.exec(m_tree->viewport()->mapToGlobal(pos));
-        if (handleUniversalMenuAction(pick, item, collapseAll, expandAll, addUniv, delUniv))
-            return;
-        if (pick == bulk)
-            retargetSelection(QString());
+        handleUniversalMenuAction(pick, item, collapseAll, expandAll, addUniv, delUniv);
         return;
     }
 
@@ -2224,7 +2294,7 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
             QAction *ren = menu.addAction(tr("Rename universe…"));
             QAction *retgt = (item->data(COL_NAME, ROLE_OUTPUT).toBool()
                               && pluginSupportsTargetsIn(m_doc, plugin))
-                ? menu.addAction(tr("Change target address / port…")) : NULL;
+                ? menu.addAction(tr("Change interface / target…")) : NULL;
             QAction *unp = menu.addAction(tr("Unpatch from this interface"));
             menu.addSeparator();
             QAction *del = menu.addAction(tr("Delete universe entirely…"));
@@ -2232,8 +2302,6 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
             QAction *c = menu.exec(m_tree->viewport()->mapToGlobal(pos));
             if (handleUniversalMenuAction(c, item, collapseAll, expandAll, addUniv, delUniv))
                 return;
-            if (bulk != NULL && c == bulk)
-            { retargetSelection(QString()); return; }
             if (retgt != NULL && c == retgt)
                 retargetPatch(uni, plugin, line);
             else if (c == ren)
@@ -2260,8 +2328,6 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         QAction *pick2 = menu.exec(m_tree->viewport()->mapToGlobal(pos));
         if (handleUniversalMenuAction(pick2, item, collapseAll, expandAll, addUniv, delUniv))
             return;
-        if (bulk != NULL && pick2 == bulk)
-        { retargetSelection(QString()); return; }
         if (pick2 == p)
             patchUniverseToPort(plugin, line, addr, portAddr);
         else if (rmPort != NULL && pick2 == rmPort)
@@ -2449,7 +2515,7 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
            over -- which is what a node swapped for a spare, or renumbered on
            its front panel, used to cost. */
         QAction *retgt = (output && pluginSupportsTargetsIn(m_doc, plugin))
-            ? menu.addAction(tr("Change target address / port…")) : NULL;
+            ? menu.addAction(tr("Change interface / target…")) : NULL;
 
         /* DMX-USB and MIDI widgets have no per-patch parameters at all --
            their real settings (DMX output speed/mode, MIDI init template,
@@ -2696,11 +2762,6 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
             return;
         }
 
-        if (bulk != NULL && chosen == bulk)
-        {
-            retargetSelection(QString());
-            return;
-        }
         if (midiModeMenu != NULL && chosen != NULL
                 && midiModeMenu->actions().contains(chosen))
         {
@@ -2808,7 +2869,8 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
     handleUniversalMenuAction(chosen, item, collapseAll, expandAll, addUniv, delUniv);
 }
 
-bool ConnectionsTree::pickPluginLine(QLCIOPlugin *p, bool output, quint32 &lineOut)
+bool ConnectionsTree::pickPluginLine(QLCIOPlugin *p, bool output, quint32 &lineOut,
+                                     int current)
 {
     if (p == NULL)
         return false;
@@ -2840,7 +2902,8 @@ bool ConnectionsTree::pickPluginLine(QLCIOPlugin *p, bool output, quint32 &lineO
     bool ok = false;
     const QString picked = QInputDialog::getItem(
         this, tr("Choose an interface"),
-        tr("Which interface should this go out on?"), labels, 0, false, &ok);
+        tr("Which interface should this go out on?"), labels,
+        current >= 0 && current < labels.count() ? current : 0, false, &ok);
     if (ok == false)
         return false;
 
@@ -2948,6 +3011,18 @@ void ConnectionsTree::patchUniverseTo(const QString &pluginName, quint32 line,
     }
 
     bool done = false;
+    QString targetAddr;
+    quint32 targetPort = 0;
+    if (output && pluginSupportsTargetsIn(m_doc, pluginName))
+    {
+        /* Where on this interface it goes, asked before anything changes. */
+        if (askTargetPort(tr("Patch universe"), pluginName, line, uniId, true,
+                          targetAddr, targetPort) == false)
+        {
+            refresh();
+            return;
+        }
+    }
     if (output)
     {
         /* Replace, not append.
@@ -2960,6 +3035,8 @@ void ConnectionsTree::patchUniverseTo(const QString &pluginName, quint32 line,
            to one line, which is also what the engine enforces, so appending
            would simply be refused. */
         done = iomap->setOutputPatch(uniId, pluginName, QString(), line, false, 0);
+        if (done && targetAddr.isEmpty() == false)
+            applyTarget(uniId, pluginName, line, targetAddr, targetPort);
     }
     else
     {
@@ -3103,6 +3180,21 @@ bool ConnectionsTree::handleUniversalMenuAction(QAction *chosen, QTreeWidgetItem
 {
     if (chosen == NULL)
         return false;
+    if (m_pluralRetarget != NULL && chosen == m_pluralRetarget)
+    {
+        retargetSelection(QString());
+        return true;
+    }
+    if (m_pluralPatch != NULL && chosen == m_pluralPatch)
+    {
+        patchSelectionTo(m_pluralUniverses);
+        return true;
+    }
+    if (m_pluralUnpatch != NULL && chosen == m_pluralUnpatch)
+    {
+        unpatchLegs(m_pluralLegs);
+        return true;
+    }
     if (chosen == collapseAll || chosen == expandAll)
     {
         setExpandedDeep(item, chosen == expandAll);
@@ -3182,7 +3274,7 @@ void ConnectionsTree::rerouteLine(const QString &pluginName, quint32 oldLine,
         return;
 
     quint32 newLine = 0;
-    if (pickPluginLine(p, true, newLine) == false)
+    if (pickPluginLine(p, true, newLine, int(oldLine)) == false)
         return;
     if (newLine == oldLine)
         return;
@@ -3429,6 +3521,17 @@ void ConnectionsTree::patchUnpatchedUniverseTo(quint32 universe)
     if (pickPluginLine(p, true, line) == false)
         return;
 
+    /* Same "which node, which port" question a port row already answers --
+       asked here instead since there is no port row yet to have clicked, and
+       asked BEFORE anything is patched: a cancel, or a port another universe
+       holds, leaves the universe as it was rather than half-patched. */
+    QString addr;
+    quint32 portAddr = 0;
+    if (p->supportsOutputTargets()
+            && askTargetPort(tr("Patch universe"), pluginName, line, universe,
+                             true, addr, portAddr) == false)
+        return;
+
     const int index = iomap->outputPatchesCount(universe);
     if (iomap->setOutputPatch(universe, pluginName, QString(), line, false, index) == false)
     {
@@ -3436,28 +3539,8 @@ void ConnectionsTree::patchUnpatchedUniverseTo(quint32 universe)
                              tr("Could not patch that universe to %1.").arg(pluginName));
         return;
     }
-
-    /* Same "which node, which port" question a port row already answers --
-       asked here instead since there is no port row yet to have clicked.
-       Left blank, this is a deliberate broadcast patch, not an abandoned
-       dialog: nothing further to configure. */
-    if (p->supportsOutputTargets())
-    {
-        bool ok = false;
-        const QString addr = QInputDialog::getText(
-            this, tr("Patch universe"),
-            tr("Target address (a node IP, or a broadcast address). "
-               "Leave empty to broadcast:"),
-            QLineEdit::Normal, QString(), &ok).trimmed();
-        if (ok && addr.isEmpty() == false)
-        {
-            const int portAddr = QInputDialog::getInt(
-                this, tr("Patch universe"),
-                tr("Port address on that target:"), 0, 0, 32767, 1, &ok);
-            if (ok)
-                applyTarget(universe, pluginName, line, addr, quint32(portAddr));
-        }
-    }
+    if (addr.isEmpty() == false)
+        applyTarget(universe, pluginName, line, addr, portAddr);
 
     m_doc->setModified();
     refresh();
@@ -3484,8 +3567,8 @@ void ConnectionsTree::patchUniverseToPort(const QString &pluginName, quint32 lin
     bool ok = false;
     const QString pick = QInputDialog::getItem(
         this, tr("Patch to port"),
-        tr("Patch which universe to %1 port %2?")
-            .arg(deviceAddress).arg(portAddress & 0x0F),
+        tr("Patch which universe to %1 universe %2?")
+            .arg(deviceAddress).arg(portAddressText(portAddress)),
         names, 0, false, &ok);
     if (ok == false || pick.isEmpty())
         return;
@@ -3799,13 +3882,49 @@ void ConnectionsTree::retargetPatch(quint32 universe, const QString &pluginName,
         undoMap->patchUndo()->capture(QList<quint32>() << universe,
                                       tr("retarget universe %1").arg(universe + 1));
 
-    bool ok = false;
-    const QString addr = QInputDialog::getText(
-        this, tr("Retarget patch"),
-        tr("Send this universe to which address? Leave empty to broadcast:"),
-        QLineEdit::Normal, targeted ? curAddr : QString(), &ok).trimmed();
-    if (ok == false)
+    /* "Re-patching a universe that's already patched must ask for the
+       network interface again": it kept the old one, so a universe on the
+       wrong NIC could only be moved by unpatching it and starting over.
+       Asked first, the current one preselected -- and only when there is
+       more than one to choose. */
+    quint32 newLine = line;
+    QLCIOPlugin *p = m_doc->ioPluginCache() != NULL
+        ? m_doc->ioPluginCache()->plugin(pluginName) : NULL;
+    if (p != NULL && pickPluginLine(p, true, newLine, int(line)) == false)
         return;
+
+    QString addr = (targeted && newLine == line) ? curAddr : QString();
+    quint32 wanted = curPort;
+    if (askTargetPort(tr("Retarget patch"), pluginName, newLine, universe, true,
+                      addr, wanted) == false)
+        return;
+
+    /* Both answered: now move it, keeping the patch's own settings. */
+    if (newLine != line)
+    {
+        InputOutputMap *iomap = m_doc->inputOutputMap();
+        Universe *uni = iomap ? iomap->universe(universe) : NULL;
+        bool moved = false;
+        for (int i = 0; uni != NULL && i < uni->outputPatchesCount(); i++)
+        {
+            OutputPatch *op = uni->outputPatch(i);
+            if (op != NULL && op->plugin() != NULL
+                    && op->plugin()->name() == pluginName && op->output() == line)
+            {
+                moved = iomap->setOutputPatch(universe, pluginName, QString(),
+                                              newLine, false, i);
+                break;
+            }
+        }
+        if (moved == false)
+        {
+            QMessageBox::warning(this, tr("Retarget patch"),
+                                 tr("That universe is no longer patched to %1.")
+                                     .arg(pluginName));
+            return;
+        }
+        line = newLine;
+    }
 
     /* An empty address means broadcast, which is a real and deliberate choice
        -- it is how you drive every node on a segment at once -- so clear the
@@ -3833,52 +3952,13 @@ void ConnectionsTree::retargetPatch(quint32 universe, const QString &pluginName,
         return;
     }
 
-    /* Asked as net:subnet:universe, the same terms the port rows show and the
-       node's own panel prints, rather than the packed 15-bit number the
-       protocol stores. */
-    const QString cur = QString("%1:%2:%3").arg((curPort >> 8) & 0x7F)
-                        .arg((curPort >> 4) & 0x0F).arg(curPort & 0x0F);
-    const QString txt = QInputDialog::getText(
-        this, tr("Retarget patch"),
-        tr("Port address on %1, as net:subnet:universe:").arg(addr),
-        QLineEdit::Normal, targeted ? cur : QString("0:0:0"), &ok).trimmed();
-    if (ok == false)
-        return;
-
-    const QStringList parts = txt.split(':');
-    bool okNet = false, okSub = false, okUni = false;
-    const uint net = parts.value(0).toUInt(&okNet);
-    const uint sub = parts.value(1).toUInt(&okSub);
-    const uint uni = parts.value(2).toUInt(&okUni);
-    if (parts.count() != 3 || !okNet || !okSub || !okUni
-            || net > 127 || sub > 15 || uni > 15)
-    {
-        QMessageBox::warning(this, tr("Retarget patch"),
-            tr("\"%1\" is not a port address. Expected net:subnet:universe, "
-               "with net 0-127 and subnet and universe 0-15.").arg(txt));
-        return;
-    }
-
-    const quint32 wanted = quint32((net << 8) | (sub << 4) | uni);
+    /* askTargetPort() has already refused a port another universe holds, so
+       failing here means the patch this was invoked on has gone. */
     if (applyTarget(universe, pluginName, line, addr, wanted) == false)
     {
-        /* Two reasons it can fail, and they need opposite fixes: the port is
-           spoken for, or the patch this was invoked on has gone. Reporting the
-           second for both sent people looking for a patch that was fine. */
-        const quint32 owner = universeOnTarget(pluginName, line, addr, wanted, universe);
-        if (owner != InputOutputMap::invalidUniverse())
-            QMessageBox::warning(this, tr("Retarget patch"),
-                tr("Universe %1 already sends to %2 port %3:%4:%5.\n\nOne port "
-                   "carries one universe: pointing this one there too would "
-                   "leave both writing to it, and the fixtures showing "
-                   "whichever arrived last. Move universe %1 first, or pick "
-                   "another port.")
-                    .arg(owner + 1).arg(addr)
-                    .arg(net).arg(sub).arg(uni));
-        else
-            QMessageBox::warning(this, tr("Retarget patch"),
-                                 tr("That universe is no longer patched to %1.")
-                                     .arg(pluginName));
+        QMessageBox::warning(this, tr("Retarget patch"),
+                             tr("That universe is no longer patched to %1.")
+                                 .arg(pluginName));
         return;
     }
     m_doc->setModified();
@@ -3933,7 +4013,7 @@ QList<quint32> ConnectionsTree::selectedUniverses(QString &pluginName,
  *  This is the whole reason for multi-select. Sixteen universes leaving by one
  *  node on consecutive ports is an ordinary rig and sixteen separate dialogs
  *  is not an ordinary way to describe it. The port address increments per
- *  universe in selection order, which is the order they are shown in.
+ *  universe in the order they were selected (see m_selectionOrder).
  *
  *  Undo is captured for the entire set as one step, so a wrong node address
  *  costs one button press rather than sixteen corrections -- which is the
@@ -3945,23 +4025,84 @@ void ConnectionsTree::retargetSelection(const QString &pluginName)
 
     QString plug;
     QList<quint32> lines;
-    const QList<quint32> unis = selectedUniverses(plug, lines);
+    QList<quint32> unis = selectedUniverses(plug, lines);
     if (unis.count() < 2 || plug.isEmpty())
         return;
 
+    /* Numbered in the order they were picked, same as "Patch N selected
+       universes to…" -- not the order the tree happens to list them in. */
+    {
+        const QList<quint32> picked = orderedSelectedUniverses();
+        QList<quint32> u2, l2;
+        foreach (quint32 u, picked)
+        {
+            const int i = unis.indexOf(u);
+            if (i >= 0)
+            {
+                u2 << u;
+                l2 << lines.at(i);
+            }
+        }
+        if (u2.count() == unis.count())
+        {
+            unis = u2;
+            lines = l2;
+        }
+    }
+
     bool ok = false;
-    const QString addr = QInputDialog::getText(
-        this, tr("Retarget %1 universes").arg(unis.count()),
-        tr("Send all %1 selected universes to which address?").arg(unis.count()),
-        QLineEdit::Normal, QString(), &ok).trimmed();
-    if (ok == false || addr.isEmpty())
-        return;
+    /* The devices this interface lists come first, as in every other patch
+       question here; the first port to number up from then starts at that
+       device's first free one. */
+    QString addr;
+    QString firstText("0:0:0");
+    const QList<TargetChoice> known = visibleTargets(plug, lines.first());
+    if (known.isEmpty() == false)
+    {
+        QStringList labels;
+        foreach (const TargetChoice &t, known)
+            labels << (t.ports.isEmpty() ? t.label
+                       : tr("%1 — %2 port(s)").arg(t.label).arg(t.ports.count()));
+        const QString other = tr("Another address…");
+        labels << other;
+        const QString pick = QInputDialog::getItem(this,
+            tr("Retarget %1 universes").arg(unis.count()),
+            tr("Send all %1 selected universes to which device?").arg(unis.count()),
+            labels, 0, false, &ok);
+        if (ok == false)
+            return;
+        const int idx = labels.indexOf(pick);
+        if (idx >= 0 && idx < known.count())
+        {
+            const TargetChoice &t = known.at(idx);
+            addr = t.address;
+            foreach (quint32 pa, t.ports)
+            {
+                const quint32 owner = universeOnTarget(plug, lines.first(), addr, pa,
+                                                       InputOutputMap::invalidUniverse());
+                if (owner == InputOutputMap::invalidUniverse() || unis.contains(owner))
+                {
+                    firstText = portAddressText(pa);
+                    break;
+                }
+            }
+        }
+    }
+    if (addr.isEmpty())
+    {
+        addr = QInputDialog::getText(
+            this, tr("Retarget %1 universes").arg(unis.count()),
+            tr("Send all %1 selected universes to which address?").arg(unis.count()),
+            QLineEdit::Normal, QString(), &ok).trimmed();
+        if (ok == false || addr.isEmpty())
+            return;
+    }
 
     const QString txt = QInputDialog::getText(
         this, tr("Retarget %1 universes").arg(unis.count()),
         tr("Port address for the FIRST of them, as net:subnet:universe.\n"
            "The rest follow on consecutive ports."),
-        QLineEdit::Normal, QString("0:0:0"), &ok).trimmed();
+        QLineEdit::Normal, firstText, &ok).trimmed();
     if (ok == false)
         return;
 
@@ -4039,6 +4180,794 @@ void ConnectionsTree::retargetSelection(const QString &pluginName)
                 tr("%1 of %2 were repointed; the rest are no longer patched to %3.")
                     .arg(applied).arg(unis.count()).arg(plug));
     }
+}
+
+/*********************************************************************
+ * Multi-universe patch / unpatch
+ *********************************************************************/
+
+
+/** net:subnet:universe back to a port address; false if it is not one. */
+static bool parsePortAddress(const QString &txt, quint32 &pa)
+{
+    const QStringList parts = txt.trimmed().split(':');
+    bool okNet = false, okSub = false, okUni = false;
+    const uint net = parts.value(0).toUInt(&okNet);
+    const uint sub = parts.value(1).toUInt(&okSub);
+    const uint uni = parts.value(2).toUInt(&okUni);
+    if (parts.count() != 3 || !okNet || !okSub || !okUni
+            || net > 127 || sub > 15 || uni > 15)
+        return false;
+    pa = quint32((net << 8) | (sub << 4) | uni);
+    return true;
+}
+
+QList<ConnectionsTree::TargetChoice>
+ConnectionsTree::visibleTargets(const QString &pluginName, quint32 line) const
+{
+    QList<TargetChoice> choices;
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    QLCIOPlugin *p = m_doc->ioPluginCache() != NULL
+        ? m_doc->ioPluginCache()->plugin(pluginName) : NULL;
+    if (iomap == NULL || p == NULL)
+        return choices;
+
+    /* Built the way refresh() builds the device rows -- heard from first,
+       then declared by hand, then only named by a patch -- so a choice reads
+       like the tree it was picked from. */
+    QSet<QString> seen;
+    const QString self = p->outputs().value(int(line));
+    foreach (const QLCIOPlugin::Device &dev, p->discoveredDevices())
+    {
+        if (dev.line != line || dev.address == self || seen.contains(dev.address))
+            continue;
+        seen.insert(dev.address);
+        TargetChoice c;
+        c.address = dev.address;
+        c.heard = true;
+        const QString alias = iomap->targetAlias(dev.address);
+        const QString shown = alias.isEmpty()
+            ? (dev.name.isEmpty() ? dev.address : dev.name) : alias;
+        c.label = shown == dev.address ? shown : tr("%1 (%2)").arg(shown).arg(dev.address);
+        /* Ports sharing a port address are one destination on the wire
+           (see refresh()), so they count once. */
+        for (int i = 0; i < dev.portUniverses.count(); i++)
+        {
+            const quint32 pa = dev.portUniverses.at(i);
+            if (c.ports.contains(pa))
+                continue;
+            c.ports << pa;
+            c.numbers << dev.portNumbers.value(i, i + 1);
+        }
+        choices << c;
+    }
+    const int lineCount = p->outputs().count();
+    foreach (const InputOutputMap::ManualTarget &mt, iomap->manualTargets())
+    {
+        const quint32 mline = mt.line < quint32(lineCount) ? mt.line : 0;
+        if (mt.plugin != pluginName || mline != line || seen.contains(mt.address))
+            continue;
+        seen.insert(mt.address);
+        TargetChoice c;
+        c.address = mt.address;
+        const QString alias = iomap->targetAlias(mt.address);
+        c.label = alias.isEmpty() ? mt.address : tr("%1 (%2)").arg(alias).arg(mt.address);
+        for (int i = 0; i < mt.ports.count(); i++)
+        {
+            if (c.ports.contains(mt.ports.at(i)))
+                continue;
+            c.ports << mt.ports.at(i);
+            c.numbers << i + 1;
+        }
+        choices << c;
+    }
+    /* A node nothing has answered from, but that a patch on this interface
+       already sends to: the tree lists it, so the picker does too, with the
+       port addresses those patches use (its physical ports are unknown). */
+    for (quint32 u = 0; u < iomap->universesCount(); u++)
+    {
+        QString a;
+        quint32 pa = 0;
+        if (patchTarget(u, pluginName, line, a, pa) == false || a.isEmpty())
+            continue;
+        int at = -1;
+        for (int i = 0; i < choices.count(); i++)
+            if (choices.at(i).address == a)
+                at = i;
+        if (at < 0)
+        {
+            if (seen.contains(a))
+                continue;
+            seen.insert(a);
+            TargetChoice c;
+            c.address = a;
+            const QString alias = iomap->targetAlias(a);
+            c.label = alias.isEmpty() ? a : tr("%1 (%2)").arg(alias).arg(a);
+            choices << c;
+            at = choices.count() - 1;
+        }
+        TargetChoice &c = choices[at];
+        if (c.heard == false && c.ports.contains(pa) == false)
+        {
+            c.ports << pa;
+            c.numbers << 0;
+        }
+    }
+    return choices;
+}
+
+/** How a port reads everywhere in this view: its physical number when the
+    device has told us (or was declared with) one, then its Art-Net
+    port-address as net:subnet:universe. */
+static QString portWhereText(int number, quint32 pa)
+{
+    return number > 0
+        ? QObject::tr("port %1 · universe %2").arg(number).arg(portAddressText(pa))
+        : QObject::tr("universe %1").arg(portAddressText(pa));
+}
+
+QList<ConnectionsTree::TargetPortChoice>
+ConnectionsTree::targetPortChoices(const QString &pluginName, quint32 line,
+                                   quint32 universe) const
+{
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    QList<TargetPortChoice> freePorts, usedPorts;
+    foreach (const TargetChoice &t, visibleTargets(pluginName, line))
+    {
+        for (int i = 0; i < t.ports.count(); i++)
+        {
+            TargetPortChoice c;
+            c.address = t.address;
+            c.port = t.ports.at(i);
+            c.owner = universeOnTarget(pluginName, line, t.address, c.port, universe);
+            const QString where = QString("%1 — %2").arg(t.label)
+                                      .arg(portWhereText(t.numbers.value(i), c.port));
+            if (c.owner == InputOutputMap::invalidUniverse())
+            {
+                c.text = tr("%1 — free").arg(where);
+                freePorts << c;
+            }
+            else
+            {
+                Universe *o = iomap != NULL ? iomap->universe(c.owner) : NULL;
+                c.text = tr("%1 — used by %2").arg(where)
+                    .arg(o != NULL ? tr("%1: %2").arg(o->id() + 1).arg(o->name())
+                                   : tr("universe %1").arg(c.owner + 1));
+                usedPorts << c;
+            }
+        }
+    }
+    return freePorts + usedPorts;
+}
+
+bool ConnectionsTree::askTargetPort(const QString &title, const QString &pluginName,
+                                    quint32 line, quint32 universe, bool allowBroadcast,
+                                    QString &address, quint32 &port)
+{
+    const QString curAddr = address;
+    const quint32 curPort = port;
+    bool ok = false;
+
+    /* "should be able to select an unused Artnet->DMX or other interface if
+       they're visible": every port of every device this interface lists,
+       the free ones first. Ports another universe holds stay in the list,
+       below, saying who -- picking one is refused, never half-done. */
+    const QList<TargetPortChoice> ports = targetPortChoices(pluginName, line, universe);
+    const QString other = tr("Another address…");
+    const QString bcast = tr("Broadcast (no target)");
+    bool typeIt = ports.isEmpty();
+    if (typeIt == false)
+    {
+        QStringList labels;
+        int current = 0;
+        for (int i = 0; i < ports.count(); i++)
+        {
+            const TargetPortChoice &c = ports.at(i);
+            const bool isCurrent = (c.address == curAddr && c.port == curPort);
+            if (isCurrent)
+                current = i;
+            labels << (isCurrent ? tr("%1  (current)").arg(c.text) : c.text);
+        }
+        labels << other;
+        if (allowBroadcast)
+            labels << bcast;
+        const QString pick = QInputDialog::getItem(this, title,
+            tr("Send it to which port?"), labels, current, false, &ok);
+        if (ok == false)
+            return false;
+        const int idx = labels.indexOf(pick);
+        if (pick == bcast)
+        {
+            address.clear();
+            return true;
+        }
+        if (idx >= 0 && idx < ports.count())
+        {
+            const TargetPortChoice &c = ports.at(idx);
+            if (c.owner != InputOutputMap::invalidUniverse())
+            {
+                QMessageBox::warning(this, title,
+                    tr("Universe %1 already sends to %2 %3.\n\nOne port carries "
+                       "one universe. Move universe %1 first, or pick another port.")
+                        .arg(c.owner + 1).arg(c.address).arg(portAddressText(c.port)));
+                return false;
+            }
+            address = c.address;
+            port = c.port;
+            return true;
+        }
+        typeIt = true;
+    }
+
+    /* Typed by hand: a node not heard from yet, on the bench or off this
+       subnet. Deliberately no reachability check. */
+    const QString addr = QInputDialog::getText(this, title,
+        allowBroadcast ? tr("Target address (a node IP, or a broadcast address). "
+                            "Leave empty to broadcast:")
+                       : tr("Target address (a node IP, or a broadcast address):"),
+        QLineEdit::Normal, curAddr, &ok).trimmed();
+    if (ok == false)
+        return false;
+    if (addr.isEmpty())
+    {
+        if (allowBroadcast == false)
+            return false;
+        address.clear();
+        return true;
+    }
+    const QString txt = QInputDialog::getText(this, title,
+        tr("Universe on %1, as net:subnet:universe:").arg(addr), QLineEdit::Normal,
+        curAddr.isEmpty() ? QString("0:0:0") : portAddressText(curPort), &ok).trimmed();
+    if (ok == false)
+        return false;
+    quint32 pa = 0;
+    if (parsePortAddress(txt, pa) == false)
+    {
+        QMessageBox::warning(this, title,
+            tr("\"%1\" is not a port address. Expected net:subnet:universe, "
+               "with net 0-127 and subnet and universe 0-15.").arg(txt));
+        return false;
+    }
+    const quint32 owner = universeOnTarget(pluginName, line, addr, pa, universe);
+    if (owner != InputOutputMap::invalidUniverse())
+    {
+        QMessageBox::warning(this, title,
+            tr("Universe %1 already sends to %2 %3.\n\nOne port carries "
+               "one universe. Move universe %1 first, or pick another port.")
+                .arg(owner + 1).arg(addr).arg(portAddressText(pa)));
+        return false;
+    }
+    address = addr;
+    port = pa;
+    return true;
+}
+
+void ConnectionsTree::syncSelectionOrder()
+{
+    /* Everything selected now, in list order. QTreeWidgetItemIterator walks
+       in display order, and a fanned-out universe on several rows is still
+       one universe. */
+    QList<quint32> now;
+    for (QTreeWidgetItemIterator it(m_tree, QTreeWidgetItemIterator::Selected); *it; ++it)
+    {
+        const QVariant uv = (*it)->data(COL_NAME, ROLE_UNIVERSE);
+        if (uv.isValid() == false || uv.toUInt() == Universe::invalid())
+            continue;
+        if (now.contains(uv.toUInt()) == false)
+            now << uv.toUInt();
+    }
+
+    /* Keep the picking order of what is still selected, then append what is
+       new. One ctrl-click adds one; a shift-click range adds several at once,
+       which only the list can order. A plain click replaces the selection,
+       so the order starts again from it. */
+    QList<quint32> order;
+    foreach (quint32 u, m_selectionOrder)
+        if (now.contains(u))
+            order << u;
+    foreach (quint32 u, now)
+        if (order.contains(u) == false)
+            order << u;
+    m_selectionOrder = order;
+}
+
+QList<quint32> ConnectionsTree::orderedSelectedUniverses()
+{
+    syncSelectionOrder();
+    return m_selectionOrder;
+}
+
+ConnectionsTree::OrderedPatch ConnectionsTree::planOrderedPatch(
+        const QList<quint32> &universes, const QString &pluginName, quint32 line,
+        const QString &address, const QList<quint32> &ports,
+        const QStringList &portNames, bool linesAsPorts) const
+{
+    OrderedPatch plan;
+    plan.pluginName = pluginName;
+    plan.address = linesAsPorts ? QString() : address;
+
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    QLCIOPlugin *p = m_doc->ioPluginCache() != NULL
+                     ? m_doc->ioPluginCache()->plugin(pluginName) : NULL;
+    if (iomap == NULL || p == NULL)
+    {
+        plan.overflow = universes;
+        return plan;
+    }
+
+    const bool targeted = (linesAsPorts == false && address.isEmpty() == false);
+    int capacity = universes.count();               // broadcast: no ports to run out of
+    if (linesAsPorts)
+        capacity = qMax(0, int(p->outputs().count()) - int(line));
+    else if (targeted)
+        capacity = ports.count();
+
+    /* Port k gets universe k. What does not fit is left exactly as it was
+       -- not wrapped round onto port 1 again, which would put two universes
+       on one port, and not dropped without a word. */
+    for (int k = 0; k < universes.count(); k++)
+    {
+        if (k >= capacity)
+        {
+            plan.overflow << universes.at(k);
+            continue;
+        }
+        OrderedPatchEntry e;
+        e.universe = universes.at(k);
+        e.line = linesAsPorts ? line + quint32(k) : line;
+        e.targeted = targeted;
+        e.port = targeted ? ports.at(k) : 0;
+        if (k < portNames.count())
+            e.portName = portNames.at(k);
+        else if (targeted)
+            e.portName = tr("universe %1").arg(portAddressText(e.port));
+        else
+        {
+            const QString ln = p->lineDescription(e.line, true);
+            e.portName = ln.isEmpty() ? p->outputs().value(int(e.line)) : ln;
+        }
+        plan.entries << e;
+    }
+
+    /* One node port, one universe -- the rule applyTarget() enforces for a
+       single patch. A port held by a universe that is ITSELF in this run is
+       not a conflict: it is moving off (re-ordering four universes across
+       the same four ports is an ordinary thing to want). A port held by
+       anything else is, and that universe is skipped rather than patched
+       half-way. Repeated until stable, since skipping one can leave it
+       holding a port the next one wanted. */
+    if (targeted)
+    {
+        bool changed = true;
+        while (changed)
+        {
+            changed = false;
+            QSet<quint32> moving;
+            foreach (const OrderedPatchEntry &e, plan.entries)
+                moving.insert(e.universe);
+            for (int i = 0; i < plan.entries.count() && changed == false; i++)
+            {
+                OrderedPatchEntry e = plan.entries.at(i);
+                for (quint32 u = 0; u < iomap->universesCount(); u++)
+                {
+                    if (u == e.universe || moving.contains(u))
+                        continue;
+                    QString a;
+                    quint32 pa = 0;
+                    if (patchTarget(u, pluginName, e.line, a, pa) == false)
+                        continue;
+                    if (a == address && pa == e.port)
+                    {
+                        e.owner = u;
+                        plan.conflicts << e;
+                        plan.entries.removeAt(i);
+                        changed = true;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    return plan;
+}
+
+int ConnectionsTree::applyOrderedPatch(const OrderedPatch &plan)
+{
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    if (iomap == NULL || plan.entries.isEmpty())
+        return 0;
+
+    QList<quint32> unis;
+    foreach (const OrderedPatchEntry &e, plan.entries)
+        unis << e.universe;
+
+    /* One step for the whole set, like the bulk retarget: a wrong device
+       costs one press of Undo Patch Change, not N corrections. */
+    if (iomap->patchUndo() != NULL)
+        iomap->patchUndo()->capture(unis,
+            tr("patch %1 universes to %2").arg(unis.count())
+                .arg(plan.address.isEmpty() ? plan.pluginName : plan.address));
+
+    /* Two passes. First every universe goes onto its line with whatever
+       target it had dropped, so one moving off a port frees it before the
+       next one in the run is aimed there; then the targets. Replacing patch
+       0 rather than appending, for the reason patchUniverseTo() gives. */
+    QList<OrderedPatchEntry> placed;
+    foreach (const OrderedPatchEntry &e, plan.entries)
+    {
+        if (iomap->setOutputPatch(e.universe, plan.pluginName, QString(), e.line,
+                                  false, 0) == false)
+            continue;
+        Universe *u = iomap->universe(e.universe);
+        OutputPatch *op = (u != NULL && u->outputPatchesCount() > 0) ? u->outputPatch(0) : NULL;
+        if (op != NULL)
+        {
+            op->unSetPluginParameter("outputIP");
+            op->unSetPluginParameter("outputUni");
+        }
+        placed << e;
+    }
+
+    int applied = 0;
+    foreach (const OrderedPatchEntry &e, placed)
+    {
+        if (e.targeted == false
+                || applyTarget(e.universe, plan.pluginName, e.line, plan.address, e.port))
+            applied++;
+    }
+
+    m_doc->setModified();
+    refresh();
+    return applied;
+}
+
+void ConnectionsTree::patchSelectionTo(const QList<quint32> &universes)
+{
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    if (iomap == NULL || m_doc->ioPluginCache() == NULL || universes.count() < 2)
+        return;
+
+    const QString title = tr("Patch %1 universes").arg(universes.count());
+    auto uniName = [iomap](quint32 id) {
+        Universe *u = iomap->universe(id);
+        return u != NULL ? tr("%1: %2").arg(id + 1).arg(u->name())
+                         : tr("universe %1").arg(id + 1);
+    };
+
+    /* Protocol, then interface: the same two questions "Patch to…" asks of a
+       single unpatched universe. */
+    QStringList pluginNames;
+    foreach (QLCIOPlugin *cand, m_doc->ioPluginCache()->plugins())
+        if (cand != NULL && (cand->capabilities() & QLCIOPlugin::Output)
+                && cand->outputs().isEmpty() == false)
+            pluginNames << cand->name();
+    if (pluginNames.isEmpty())
+        return;
+
+    bool ok = false;
+    QString pluginName = pluginNames.first();
+    if (pluginNames.count() > 1)
+    {
+        pluginName = QInputDialog::getItem(this, title, tr("Which protocol?"),
+                                           pluginNames, 0, false, &ok);
+        if (ok == false)
+            return;
+    }
+    QLCIOPlugin *p = m_doc->ioPluginCache()->plugin(pluginName);
+    if (p == NULL)
+        return;
+
+    /* Asked every time, the interface the selection is on now preselected:
+       re-patching must be able to move them to another one. */
+    int current = -1;
+    foreach (quint32 u, universes)
+    {
+        Universe *uni = iomap->universe(u);
+        for (int i = 0; current < 0 && uni != NULL && i < uni->outputPatchesCount(); i++)
+        {
+            OutputPatch *op = uni->outputPatch(i);
+            if (op != NULL && op->plugin() == p)
+                current = int(op->output());
+        }
+    }
+    quint32 line = 0;
+    if (pickPluginLine(p, true, line, current) == false)
+        return;
+
+    QString address;
+    QString targetName;
+    QList<quint32> ports;
+    QStringList portNames;
+    const bool linesAsPorts = (p->supportsOutputTargets() == false);
+
+    if (linesAsPorts)
+    {
+        /* No node to name: each line IS a port (a multi-universe USB
+           widget), so they follow on consecutive lines. */
+        targetName = pluginName;
+    }
+    else
+    {
+        /* The devices known on this interface -- heard from, declared by
+           hand, or only aimed at by a patch -- each with the ports it has,
+           which is what "patch these to that 4-port node" needs to know. */
+        struct Choice { QString address; QString label; QList<quint32> ports; QStringList names; };
+        QList<Choice> choices;
+        foreach (const TargetChoice &t, visibleTargets(pluginName, line))
+        {
+            Choice c;
+            c.address = t.address;
+            c.label = t.label;
+            /* A node only a patch names has told us none of its ports: the
+               ones in use are not the list to fill, so number up from a
+               port address instead, as for an address typed in. */
+            if (t.numbers.contains(0) == false)
+            {
+                c.ports = t.ports;
+                for (int i = 0; i < t.ports.count(); i++)
+                    c.names << portWhereText(t.numbers.value(i), t.ports.at(i));
+            }
+            choices << c;
+        }
+
+        QStringList labels;
+        foreach (const Choice &c, choices)
+            labels << (c.ports.isEmpty() ? c.label
+                       : tr("%1 — %2 port(s)").arg(c.label).arg(c.ports.count()));
+        const QString other = tr("Another address…");
+        const QString bcast = tr("Broadcast (no target)");
+        labels << other << bcast;
+
+        const QString pick = QInputDialog::getItem(this, title,
+            tr("Send them to which device? They go onto its ports in the order "
+               "you selected them."), labels, 0, false, &ok);
+        if (ok == false)
+            return;
+        const int idx = labels.indexOf(pick);
+
+        if (pick == bcast)
+        {
+            targetName = tr("%1, broadcast").arg(pluginName);
+        }
+        else
+        {
+            bool askFirstPort = true;
+            if (idx >= 0 && idx < choices.count())
+            {
+                const Choice &c = choices.at(idx);
+                address = c.address;
+                targetName = c.label;
+                if (c.ports.isEmpty() == false)
+                {
+                    askFirstPort = false;
+                    int from = 0;
+                    if (c.ports.count() > 1)
+                    {
+                        const QString first = QInputDialog::getItem(this, title,
+                            tr("Starting from which port of %1?").arg(c.label),
+                            c.names, 0, false, &ok);
+                        if (ok == false)
+                            return;
+                        from = qMax(0, c.names.indexOf(first));
+                    }
+                    ports = c.ports.mid(from);
+                    portNames = c.names.mid(from);
+                }
+            }
+            else
+            {
+                address = QInputDialog::getText(this, title,
+                    tr("Send them to which address?"), QLineEdit::Normal,
+                    QString(), &ok).trimmed();
+                if (ok == false || address.isEmpty())
+                    return;
+                targetName = address;
+            }
+
+            /* A device that has told us no ports -- typed in, or declared
+               without any -- numbers up from a port address, as the bulk
+               retarget does. */
+            if (askFirstPort)
+            {
+                const QString txt = QInputDialog::getText(this, title,
+                    tr("Port address for the FIRST of them on %1, as "
+                       "net:subnet:universe.\nThe rest follow on consecutive ports.")
+                        .arg(targetName),
+                    QLineEdit::Normal, QString("0:0:0"), &ok).trimmed();
+                if (ok == false)
+                    return;
+                const QStringList parts = txt.split(':');
+                bool okNet = false, okSub = false, okUni = false;
+                const uint net = parts.value(0).toUInt(&okNet);
+                const uint sub = parts.value(1).toUInt(&okSub);
+                const uint uni = parts.value(2).toUInt(&okUni);
+                if (parts.count() != 3 || !okNet || !okSub || !okUni
+                        || net > 127 || sub > 15 || uni > 15)
+                {
+                    QMessageBox::warning(this, title,
+                        tr("\"%1\" is not a port address. Expected net:subnet:universe, "
+                           "with net 0-127 and subnet and universe 0-15.").arg(txt));
+                    return;
+                }
+                const quint32 first = quint32((net << 8) | (sub << 4) | uni);
+                for (int k = 0; k < universes.count() && first + quint32(k) <= 0x7FFF; k++)
+                    ports << first + quint32(k);
+            }
+        }
+    }
+
+    const OrderedPatch plan = planOrderedPatch(universes, pluginName, line, address,
+                                               ports, portNames, linesAsPorts);
+
+    /* The order is the whole point and it is invisible in the selection, so
+       show it -- and what will NOT happen -- before doing anything. */
+    QStringList lines;
+    foreach (const OrderedPatchEntry &e, plan.entries)
+    {
+        Universe *u = iomap->universe(e.universe);
+        const bool replaces = (u != NULL && u->outputPatchesCount() > 0);
+        lines << tr("  %1  →  %2%3").arg(uniName(e.universe)).arg(e.portName)
+                     .arg(replaces ? tr("  (replaces its current patch)") : QString());
+    }
+    QString text = plan.entries.isEmpty()
+        ? tr("Nothing can be patched to %1.").arg(targetName)
+        : tr("Patch to %1, in the order you selected them:\n\n%2")
+              .arg(targetName).arg(lines.join("\n"));
+    if (plan.overflow.isEmpty() == false)
+    {
+        QStringList names;
+        foreach (quint32 u, plan.overflow)
+            names << uniName(u);
+        text += tr("\n\nNot enough ports for %1 of them -- left as they are:\n  %2")
+                    .arg(plan.overflow.count()).arg(names.join(", "));
+    }
+    if (plan.conflicts.isEmpty() == false)
+    {
+        QStringList names;
+        foreach (const OrderedPatchEntry &e, plan.conflicts)
+            names << tr("%1 (%2 is already used by %3)").arg(uniName(e.universe))
+                         .arg(e.portName).arg(uniName(e.owner));
+        text += tr("\n\nSkipped, one port carries one universe -- left as they are:\n  %1")
+                    .arg(names.join("\n  "));
+    }
+
+    if (plan.entries.isEmpty())
+    {
+        QMessageBox::warning(this, title, text);
+        return;
+    }
+    if (QMessageBox::question(this, title, text, QMessageBox::Yes | QMessageBox::No,
+                              QMessageBox::Yes) != QMessageBox::Yes)
+        return;
+
+    const int applied = applyOrderedPatch(plan);
+    if (applied != plan.entries.count())
+        QMessageBox::warning(this, title,
+            tr("%1 of %2 were patched; the rest could not be patched to %3.")
+                .arg(applied).arg(plan.entries.count()).arg(pluginName));
+}
+
+QList<ConnectionsTree::UnpatchLeg> ConnectionsTree::selectedUnpatchLegs() const
+{
+    QList<UnpatchLeg> legs;
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    if (iomap == NULL)
+        return legs;
+
+    for (QTreeWidgetItemIterator it(m_tree, QTreeWidgetItemIterator::Selected); *it; ++it)
+    {
+        QTreeWidgetItem *item = *it;
+        const QVariant uv = item->data(COL_NAME, ROLE_UNIVERSE);
+        if (uv.isValid() == false || uv.toUInt() == Universe::invalid())
+            continue;
+        Universe *u = iomap->universe(uv.toUInt());
+        if (u == NULL)
+            continue;
+
+        UnpatchLeg leg;
+        leg.universe = uv.toUInt();
+        const int kind = item->data(COL_NAME, ROLE_KIND).toInt();
+        if (kind == KIND_PENDING_UNIVERSE)
+        {
+            leg.pending = true;
+        }
+        else if (kind == KIND_UNIVERSE || kind == KIND_PORT)
+        {
+            /* A feedback row is the universe's route BACK to a controller,
+               not its output; "unpatch these universes" is not a request to
+               cut that. */
+            if (item->text(COL_DETAIL) == tr("feedback"))
+                continue;
+            leg.pluginName = item->data(COL_NAME, ROLE_PLUGIN).toString();
+            leg.line = item->data(COL_NAME, ROLE_LINE).toUInt();
+            leg.output = item->data(COL_NAME, ROLE_OUTPUT).toBool();
+            bool exists = false;
+            if (leg.output)
+            {
+                for (int i = 0; i < u->outputPatchesCount() && !exists; i++)
+                {
+                    OutputPatch *op = u->outputPatch(i);
+                    exists = (op != NULL && op->plugin() != NULL
+                              && op->plugin()->name() == leg.pluginName
+                              && op->output() == leg.line);
+                }
+            }
+            else
+            {
+                exists = (u->inputPatch() != NULL);
+            }
+            if (exists == false)
+                continue;
+        }
+        else
+        {
+            continue;       // not patched: nothing to remove
+        }
+
+        bool dup = false;
+        foreach (const UnpatchLeg &l, legs)
+            dup = dup || (l.universe == leg.universe && l.pending == leg.pending
+                          && l.pluginName == leg.pluginName && l.line == leg.line
+                          && l.output == leg.output);
+        if (dup == false)
+            legs << leg;
+    }
+    return legs;
+}
+
+void ConnectionsTree::unpatchLegs(const QList<UnpatchLeg> &legs)
+{
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    if (iomap == NULL || legs.isEmpty())
+        return;
+
+    QList<quint32> unis;
+    foreach (const UnpatchLeg &l, legs)
+        if (unis.contains(l.universe) == false)
+            unis << l.universe;
+
+    /* All of them at once: one undo step, one rebuild -- not N of each. */
+    if (iomap->patchUndo() != NULL)
+        iomap->patchUndo()->capture(unis, tr("unpatch %1 universes").arg(unis.count()));
+
+    foreach (const UnpatchLeg &l, legs)
+    {
+        Universe *u = iomap->universe(l.universe);
+        if (u == NULL)
+            continue;
+        if (l.pending)
+        {
+            // From the end, so a removal does not shift what is still to visit.
+            for (int i = u->outputPatchesCount() - 1; i >= 0; i--)
+            {
+                OutputPatch *op = u->outputPatch(i);
+                if (op != NULL && op->isPending())
+                    iomap->setOutputPatch(l.universe, QString(), QString(), 0, false, i);
+            }
+        }
+        else if (l.output)
+        {
+            /* Looked up afresh: removing one leg of a fanned-out universe
+               shifts the index of the next. */
+            for (int i = 0; i < u->outputPatchesCount(); i++)
+            {
+                OutputPatch *op = u->outputPatch(i);
+                if (op != NULL && op->plugin() != NULL
+                        && op->plugin()->name() == l.pluginName && op->output() == l.line)
+                {
+                    iomap->setOutputPatch(l.universe, QString(), QString(), 0, false, i);
+                    break;
+                }
+            }
+        }
+        else
+        {
+            iomap->setInputPatch(l.universe, QString(), QString(), 0);
+        }
+    }
+
+    m_doc->setModified();
+    refresh();
 }
 
 /** Declare a target discovery cannot find.
@@ -4446,7 +5375,8 @@ void ConnectionsTree::buildUniverseList()
         return;
 
     // Kept across the rebuild every few seconds: where you were, what you had.
-    const int scroll = m_tree->verticalScrollBar()->value();
+    const QPoint scroll(m_tree->horizontalScrollBar()->value(),
+                        m_tree->verticalScrollBar()->value());
     QSet<quint32> selected;
     foreach (QTreeWidgetItem *it, m_tree->selectedItems())
         selected.insert(it->data(COL_NAME, ROLE_UNIVERSE).toUInt());
@@ -4458,18 +5388,52 @@ void ConnectionsTree::buildUniverseList()
     m_tree->setRootIsDecorated(false);
 
     /* Where an output leg goes, in words: the protocol, and the device by its
-       name where it has one ("Art-Net → CS1 (172.18.2.211) port 1"). */
-    auto legText = [iomap](OutputPatch *op) {
+       name where it has one ("Art-Net → CS1 (172.18.2.211) · port 1 ·
+       universe 0:0:0"). "port" is the socket on the node, named only when
+       the node has said (or was declared with) which one carries that
+       universe; "universe" is the Art-Net port-address, as the device rows
+       and the plugin's own "ArtNet Universe" have it. This said "port 1" for
+       outputUni 0 while the device row said "0:0:0" -- two numbers, one
+       name. */
+    QHash<QString, QList<TargetChoice> > targetsByLine;   // asked once per rebuild
+    auto legText = [this, iomap, &targetsByLine](OutputPatch *op) {
         const QString plugin = op->plugin() != NULL ? op->plugin()->name() : op->pluginName();
         const QMap<QString, QVariant> pp = op->getPluginParameters();
         const QString ip = pp.value(QStringLiteral("outputIP")).toString();
         QString where;
         if (!ip.isEmpty())
         {
+            /* The device by the same name its row has in the device view --
+               a node that answered goes by the name it gave, not by its bare
+               address, which made a listed node look missing from one view
+               or the other. */
+            const QString key = QString("%1|%2").arg(plugin).arg(op->output());
+            if (op->plugin() != NULL && targetsByLine.contains(key) == false)
+                targetsByLine.insert(key, visibleTargets(plugin, op->output()));
             const QString alias = iomap->targetAlias(ip);
             where = alias.isEmpty() ? ip : QStringLiteral("%1 (%2)").arg(alias, ip);
+            int number = 0;
+            const quint32 pa = pp.value(QStringLiteral("outputUni")).toUInt();
+            foreach (const TargetChoice &t, targetsByLine.value(key))
+            {
+                if (t.address != ip)
+                    continue;
+                where = t.label;
+                if (t.ports.contains(pa))
+                    number = t.numbers.value(t.ports.indexOf(pa));
+            }
             if (pp.contains(QStringLiteral("outputUni")))
-                where += QObject::tr(" port %1").arg(pp.value(QStringLiteral("outputUni")).toInt() + 1);
+                where += QStringLiteral(" · ") + portWhereText(number, pa);
+
+            /* And which interface it leaves by, when there is a choice: the
+               device view files it under that interface, so a node fed from
+               two NICs is listed under each. */
+            if (op->plugin() != NULL && op->plugin()->outputs().count() > 1)
+            {
+                const QString lname = op->plugin()->outputs().value(int(op->output()));
+                const QString lalias = iomap->lineAlias(plugin, lname);
+                where += tr(" · via %1").arg(lalias.isEmpty() ? lname : lalias);
+            }
         }
         else
         {

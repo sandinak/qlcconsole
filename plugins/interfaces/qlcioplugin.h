@@ -208,6 +208,11 @@ public:
         QString status;         //!< last reported status, or empty
         QStringList portLabels; //!< one label per physical port
         QList<quint32> portUniverses; //!< protocol universe per port, parallel to portLabels
+        /** The node's own number for each of those ports (1-based), parallel
+            to portLabels: only some of a node's ports may be listed (Art-Net
+            lists output ports), so position + 1 is not always the number
+            printed on the box. Empty means position + 1. */
+        QList<int> portNumbers;
         bool rdmCapable;
         /**
          * Everything else the plugin happens to know, as ordered name/value

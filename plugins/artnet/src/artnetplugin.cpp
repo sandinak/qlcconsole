@@ -303,6 +303,7 @@ QList<QLCIOPlugin::Device> ArtNetPlugin::discoveredDevices() const
                                   .arg(n.subSwitch).arg(n.swOut[p]);
                 dev.portUniverses << quint32((n.netSwitch << 8)
                                              + (n.subSwitch << 4) + n.swOut[p]);
+                dev.portNumbers << p + 1;
             }
 
             /* Everything the reply told us that does not fit the fixed fields.

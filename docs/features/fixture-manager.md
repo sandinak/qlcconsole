@@ -223,7 +223,7 @@ fixtures still in the inventory last:
 | **Make / model**, **Mode** | From its definition. |
 | **Ch** | How many channels it takes. |
 | **Connection** | DMX, or a network fixture's transport and the name its IP goes by ("WLED lantern-2"), or the IP when it has none ("WLED 172.18.2.50"). Point at it for the IP. |
-| **Goes to** | Where its universe goes: the output and device ("Art-Net → CS1 (172.18.2.211) port 1"), or nothing; point at it for all of it when the column is narrow. |
+| **Goes to** | Where its universe goes: the output and device ("Art-Net → CS1 (172.18.2.211) · port 1 · universe 0:0:0" — port is the socket on the node, universe its Art-Net address), or nothing; point at it for all of it when the column is narrow. |
 | **Mounted on** | The same words as Fixture Properties: "Truss FOH · 2.5 m along", "Tower T2 · shelf 3", "free / on the floor". |
 
 - **Save CSV…** — every column plus the fixture ID, the first and last

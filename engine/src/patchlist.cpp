@@ -83,8 +83,40 @@ QString PatchList::universeOutput(Doc *doc, quint32 universe)
             {
                 const QString alias = iomap->targetAlias(ip);
                 where = alias.isEmpty() ? ip : QStringLiteral("%1 (%2)").arg(alias, ip);
+                /* Same words as the Connections tab: "port N" is the socket
+                   on the node, only when the node says (or was declared
+                   with) which one; "universe n:s:u" is the Art-Net
+                   port-address. This said "port 1" for port-address 0. */
                 if (pp.contains(QStringLiteral("outputUni")))
-                    where += QStringLiteral(" port %1").arg(pp.value(QStringLiteral("outputUni")).toInt() + 1);
+                {
+                    const quint32 pa = pp.value(QStringLiteral("outputUni")).toUInt();
+                    int number = 0;
+                    if (op->plugin() != nullptr)
+                    {
+                        foreach (const QLCIOPlugin::Device &d, op->plugin()->discoveredDevices())
+                        {
+                            if (number == 0 && d.line == op->output() && d.address == ip
+                                    && d.portUniverses.contains(pa))
+                            {
+                                const int k = d.portUniverses.indexOf(pa);
+                                number = d.portNumbers.value(k, k + 1);
+                            }
+                        }
+                    }
+                    if (number == 0)
+                    {
+                        foreach (const InputOutputMap::ManualTarget &mt, iomap->manualTargets())
+                        {
+                            if (mt.address == ip && mt.ports.contains(pa))
+                                number = mt.ports.indexOf(pa) + 1;
+                        }
+                    }
+                    const QString uni = QStringLiteral("%1:%2:%3").arg((pa >> 8) & 0x7F)
+                                            .arg((pa >> 4) & 0x0F).arg(pa & 0x0F);
+                    where += number > 0
+                        ? QObject::tr(" · port %1 · universe %2").arg(number).arg(uni)
+                        : QObject::tr(" · universe %1").arg(uni);
+                }
             }
             else
             {
