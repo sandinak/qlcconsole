@@ -225,6 +225,38 @@ static TickStats runFlatout(Doc *doc, const QList<Function*> &funcs, int ticks, 
     return summarize(ms);
 }
 
+// ---- optional function churn (--churn-ms) for realtime/soak ----------------
+// The 24 h soak cycled looks every 1-2 min, and the crashes there needed that
+// churn: every start runs a Scene's first write() (a FadeChannel per value)
+// while the universe threads are writing -- and dropping -- the same faders.
+// Every g_churnMs, toggle a few random Scenes/Collections/Chasers: start the
+// stopped ones, stop the running ones.
+static int g_churnMs = 0;
+static qint64 g_churnOps = 0;
+static void churnTick(Doc *doc, QRandomGenerator &rng)
+{
+    static QList<quint32> pool;
+    if (pool.isEmpty())
+        for (Function *f : doc->functions())
+            if (f && (f->type() == Function::SceneType || f->type() == Function::CollectionType
+                      || f->type() == Function::ChaserType))
+                pool << f->id();
+    if (pool.isEmpty())
+        return;
+    MasterTimer *mt = doc->masterTimer();
+    for (int k = 0; k < 4; k++)
+    {
+        Function *f = doc->function(pool.at(rng.bounded(pool.size())));
+        if (f == nullptr)
+            continue;
+        if (f->isRunning())
+            f->stop(FunctionParent::master());
+        else
+            f->start(mt, FunctionParent::master());
+        g_churnOps++;
+    }
+}
+
 // ---- REALTIME tick cadence probe (runs in MasterTimer thread) ---------------
 class CadenceProbe : public QObject
 {
@@ -265,11 +297,20 @@ static int runRealtime(Doc *doc, const QList<Function*> &funcs, int seconds, con
 
     QElapsedTimer wall; wall.start();
     double rssPeak = probe.rssStart;
+    QRandomGenerator churnRng(spec.seed);
+    qint64 nextChurn = g_churnMs;
     while (wall.elapsed() < qint64(seconds) * 1000)
     {
         QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
         rssPeak = qMax(rssPeak, residentMB());
+        if (g_churnMs > 0 && wall.elapsed() >= nextChurn)
+        {
+            churnTick(doc, churnRng);
+            nextChurn += g_churnMs;
+        }
     }
+    if (g_churnMs > 0)
+        fprintf(stdout, "realtime: churn toggled %lld functions\n", g_churnOps);
     probe.rssEnd = residentMB();
 
     mt->stop();
@@ -420,10 +461,17 @@ static int runSoak(Doc *doc, const QList<Function*> &funcs, int seconds, int sam
     double rss0 = residentMB(), rssPeak = rss0;
     int fd0 = openFdCount();
 
+    QRandomGenerator churnRng(1);
+    qint64 nextChurn = g_churnMs;
     while (wall.elapsed() < qint64(seconds) * 1000)
     {
         QCoreApplication::processEvents(QEventLoop::AllEvents, 100);
         rssPeak = qMax(rssPeak, residentMB());
+        if (g_churnMs > 0 && wall.elapsed() >= nextChurn)
+        {
+            churnTick(doc, churnRng);
+            nextChurn += g_churnMs;
+        }
         if (wall.elapsed() >= nextSample)
         {
             double t = wall.elapsed() / 1000.0;
@@ -431,7 +479,8 @@ static int runSoak(Doc *doc, const QList<Function*> &funcs, int seconds, int sam
             int fd = openFdCount();
             int rf = mt->runningFunctions();
             samples.append({t, rss, fd, rf});
-            fprintf(stdout, "soak: t=%6.0fs  rss=%7.1f MB  fd=%d  runningFuncs=%d\n", t, rss, fd, rf);
+            fprintf(stdout, "soak: t=%6.0fs  rss=%7.1f MB  fd=%d  runningFuncs=%d  churn=%lld\n",
+                    t, rss, fd, rf, g_churnOps);
             fflush(stdout);
             nextSample += qint64(sampleSec) * 1000;
         }
@@ -900,6 +949,8 @@ int main(int argc, char *argv[])
     QCommandLineOption oScripts("scripts", "Script function count", "n", "0");
     QCommandLineOption oSequences("sequences", "Sequence function count", "n", "0");
     QCommandLineOption oShows("shows", "Show function count", "n", "0");
+    QCommandLineOption oChurn("churn-ms", "realtime/soak: every N ms toggle 4 random Scenes/Collections/Chasers (look cycling)", "ms", "0");
+    QCommandLineOption oUserFix("user-fixtures-dir", "with --load: also load the fixture definitions (.qxf) in this dir", "dir", "");
     QCommandLineOption oJson("json", "emit RESULT_JSON lines for the orchestrator");
     QCommandLineOption oScenario("scenario", "scenario name (for JSON)", "name", "adhoc");
     QCommandLineOption oLoad("load", "engine modes: load a real .qxw instead of building a synthetic show", "file", "");
@@ -912,7 +963,7 @@ int main(int argc, char *argv[])
                   oMode, oTicks, oSecs, oFreq, oFix, oScr,
                   oScripts, oSequences, oShows, oJson, oScenario,
                   oSampleSec, oGoldenFile, oGoldenVerify, oChaosAggr, oLoad, oStart, oInject, oEffDir,
-                  oArtnet, oPluginDir});
+                  oArtnet, oPluginDir, oChurn, oUserFix});
     p.process(app);
 
     const QStringList args = p.positionalArguments();
@@ -945,6 +996,7 @@ int main(int argc, char *argv[])
     spec.shows          = p.value(oShows).toInt();
     spec.seed           = p.value(oSeed).toUInt();
     g_json              = p.isSet(oJson);
+    g_churnMs           = p.value(oChurn).toInt();
     g_scenario          = p.value(oScenario);
     const QString fixDir = p.value(oFix);
     const QString scrDir = p.value(oScr);
@@ -1007,6 +1059,8 @@ int main(int argc, char *argv[])
             // Run a REAL workspace instead of a synthetic show.
             QDir fdir(fixDir);
             doc->fixtureDefCache()->loadMap(fdir);
+            if (!p.value(oUserFix).isEmpty())   // the show's user fixture definitions
+                doc->fixtureDefCache()->load(QDir(p.value(oUserFix)));
             doc->rgbScriptsCache()->load(QDir(scrDir));   // so RGBMatrix algos resolve
             QString err;
             if (!loadWorkspace(doc, loadPath, err))
