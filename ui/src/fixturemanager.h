@@ -150,6 +150,14 @@ private:
      *  renaming that same row is inline (Enter/F2/double-click) instead. */
     void deleteUniverse(quint32 universe);
 
+    /** Universe rows selected in the fixtures list, in the order they were
+     *  PICKED (a ctrl-click appends; a shift-click range appends in list
+     *  order) -- the order "Patch N selected universes to…" puts them on a
+     *  node's ports, as in the Connections tab. */
+    QList<quint32> orderedSelectedUniverses();
+    /** Bring m_universePickOrder in line with what is selected now. */
+    void syncUniversePickOrder();
+
     /** Remove a previously created channels group */
     void removeChannelsGroup();
 
@@ -241,6 +249,12 @@ private:
     /** Universe the fixture-list context menu was opened in, so "Add fixture"
      *  defaults to it. invalidUniverse() = no context (toolbar / empty space). */
     quint32 m_ctxUniverse;
+
+    /** Patching a universe row's output: the Connections tab's questions
+     *  and rules (shared, not copied). */
+    class UniversePatcher *m_patcher = nullptr;
+    /** Selected universe rows in the order they were clicked. */
+    QList<quint32> m_universePickOrder;
 
     QSplitter* m_splitter;
     FixtureTreeWidget* m_fixtures_tree;

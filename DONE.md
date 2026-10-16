@@ -113,6 +113,50 @@ it was drag selecting other things vs dragging to folder."
   `deletingAPaletteSaysWhereItIsUsed`.
 
 ---
+### 2026-10-16 — Fixture Manager: patch a universe from its row *(feat/fixtures-universe-patch)*
+
+Branson: "right click on universe in fixtures list should let me patch".
+
+- **Shared, not copied**: the Connections tab's patch logic moved out of
+  `ConnectionsTree` into `UniversePatcher` (`ui/src/universepatcher.{h,cpp}`,
+  a QObject with no view): `pickPluginLine`, `askTargetPort` (free ports
+  first, held ports refused, Another address…, Broadcast),
+  `visibleTargets`/`targetPortChoices`, `patchTarget`/`applyTarget`/
+  `universeOnTarget`, `retargetPatch`, `planOrderedPatch`/
+  `applyOrderedPatch`/`patchSelectionTo`, `unpatchLegs`, and the
+  "Art-Net → CS1 (ip) · port N · universe n:s:u" leg text the By-universe
+  list shows. Every change emits `patchChanged()` once; `ConnectionsTree`
+  keeps its private methods as forwarders (and `using` aliases for the
+  structs), and rebuilds on that signal — `connectionstree_test` unchanged,
+  57/57.
+- **`patchUniverse(u)`** (was `ConnectionsTree::patchUnpatchedUniverseTo`):
+  protocol → interface → port, each opened on the current patch, applied as
+  a one-universe `applyOrderedPatch` — so it now replaces patch 0 and is ONE
+  undo step (Connections' "Patch to…" on an unpatched universe had no undo
+  capture before; it does now).
+- **Universe row menu** (`FixtureManager::slotContextMenuRequested`):
+  unpatched → **Patch output…**; patched → a disabled **Output: …** line,
+  **Change interface / target…** (`retargetPatch`; for a target-less
+  protocol, **Patch output…** instead) and **Unpatch output**; several
+  universe rows selected → **Patch N selected universes to…** / **Unpatch
+  N selected universes** (shared wording, `UniversePatcher::patchSelectionText()`
+  etc.) in click order (`m_universePickOrder`, the Connections rule);
+  **Show in Connections** via a new `ShowStatus` action
+  `connections.universe` (App registers it with the existing
+  open-Connections lambda). Fixture rows' menu is unchanged.
+- **Row label**: `FixtureTreeWidget::updateUniverseLabels()` rewrites the
+  "— destination" suffix in place (no rebuild, the selection stays) on
+  `patchChanged()` and, a zero-delay hop later, on `PatchUndo::changed()` —
+  so Undo Patch Change in Connections shows here too.
+- **Fixed on the way**: *Delete Universe…* from this menu did nothing —
+  `m_ctxUniverse` is cleared as soon as the menu closes, before the action
+  read it. Now read from a local taken before.
+- Tests: `ui/test/fixtureuniversepatch` (offscreen, I/O plugin stub, no
+  network): menu offers, patch to a picked port + label + one-step undo,
+  change target, unpatch + undo, 4 picked out of order onto a 4-port node,
+  plural unpatch counts only the patched ones, fixture row menu untouched,
+  Show in Connections hands over the universe. Help: fixture-manager.md
+  "Patching a universe's output", whats-new, other-improvements.
 
 ### 2026-10-16 — Connections: patch / unpatch several universes at once *(fix/connections-multipatch)*
 

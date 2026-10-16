@@ -26,6 +26,8 @@
 
 #include <QWidget>
 
+#include "universepatcher.h"
+
 class QTreeWidgetItem;
 class QTreeWidget;
 class QTimer;
@@ -182,32 +184,16 @@ private:
     /** Bring m_selectionOrder in line with what is selected now. */
     void syncSelectionOrder();
 
-    /** One universe of a multi-universe patch, and where it lands. */
-    struct OrderedPatchEntry
-    {
-        quint32 universe = 0;
-        quint32 line = 0;       ///< the plugin line it goes out on
-        bool targeted = false;  ///< false: broadcast, or no target concept
-        quint32 port = 0;       ///< port address on the target, if targeted
-        QString portName;       ///< how the port reads to the operator
-        quint32 owner = 0;      ///< conflicts only: who already sends there
-    };
-    /** "Patch these N universes to that device", worked out before anything
-     *  is changed, so it can be shown, confirmed, and tested without a
-     *  dialog. Universe k goes to port k; what does not fit is left alone. */
-    struct OrderedPatch
-    {
-        QString pluginName;
-        QString address;                    ///< empty: no target / broadcast
-        QList<OrderedPatchEntry> entries;   ///< will be patched, in order
-        QList<quint32> overflow;            ///< more universes than ports
-        QList<OrderedPatchEntry> conflicts; ///< port already another's
-    };
-    /** Pair @p universes (in this order) with @p ports (in this order) on
-     *  @p address. @p linesAsPorts: a plugin with no targets, whose
-     *  consecutive LINES are the ports, starting at @p line. An empty
-     *  @p address without @p linesAsPorts patches every one to @p line with
-     *  no target (broadcast). */
+    /* The patch logic itself lives in UniversePatcher, shared with every
+       other list a universe can be patched from (the Fixture Manager's
+       universe rows); these are its names here, kept so this view and its
+       tests read as they always have. */
+    using OrderedPatchEntry = UniversePatcher::OrderedPatchEntry;
+    using OrderedPatch = UniversePatcher::OrderedPatch;
+    using TargetChoice = UniversePatcher::TargetChoice;
+    using TargetPortChoice = UniversePatcher::TargetPortChoice;
+    using UnpatchLeg = UniversePatcher::UnpatchLeg;
+
     OrderedPatch planOrderedPatch(const QList<quint32> &universes,
                                   const QString &pluginName, quint32 line,
                                   const QString &address,
@@ -220,27 +206,9 @@ private:
     /** The dialogs in front of planOrderedPatch()/applyOrderedPatch(). */
     void patchSelectionTo(const QList<quint32> &universes);
 
-    /** A device this console knows on one interface: heard from, declared by
-     *  hand, or only named by a patch that already points at it. */
-    struct TargetChoice
-    {
-        QString address;
-        QString label;          ///< as the device row reads: "name (address)"
-        QList<quint32> ports;   ///< its port addresses, each once, in port order
-        QList<int> numbers;     ///< physical port number per entry, 1-based; 0 unknown
-        bool heard = false;     ///< answered (discovered), not just configured
-    };
     /** Every device listed under @p line of @p pluginName, in tree order. */
     QList<TargetChoice> visibleTargets(const QString &pluginName, quint32 line) const;
 
-    /** One port of one visible device, as the target picker offers it. */
-    struct TargetPortChoice
-    {
-        QString address;
-        quint32 port = 0;       ///< port address
-        quint32 owner = 0;      ///< who already sends there, or invalidUniverse()
-        QString text;           ///< the picker's line for it
-    };
     /** Every port of visibleTargets(), free ones first then the ones another
      *  universe than @p universe already sends to, each saying which. */
     QList<TargetPortChoice> targetPortChoices(const QString &pluginName, quint32 line,
@@ -254,15 +222,6 @@ private:
                        quint32 universe, bool allowBroadcast,
                        QString &address, quint32 &port);
 
-    /** One patch a selected row stands for, as its own "Unpatch" removes. */
-    struct UnpatchLeg
-    {
-        quint32 universe = 0;
-        QString pluginName;
-        quint32 line = 0;
-        bool output = true;
-        bool pending = false;   ///< a pending row: clear its pending legs
-    };
     /** What "Unpatch" on each selected row would remove, deduplicated. */
     QList<UnpatchLeg> selectedUnpatchLegs() const;
     /** Remove all of them as ONE undo step and one rebuild. */
@@ -385,6 +344,8 @@ private:
        moments means "not yet", not "nothing there". */
     class QElapsedTimer *m_since;
     QTreeWidget *m_tree;
+    /** Asks the patch questions and makes the change (shared). */
+    UniversePatcher *m_patcher = nullptr;
     /** On the right: what the selected universe is sending. */
     class UniverseOutputView *m_output;
     /* Nodes announce themselves about once a second, so a periodic rebuild
