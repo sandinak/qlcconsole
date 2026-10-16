@@ -1386,9 +1386,13 @@ bool ShowEmbedding::writeTransferFolder(const QString &folder, QStringList *writ
         put(subFolder(it.kind) + QLatin1Char('/') + name, it.bytes);
     }
     if (m_doc->monitorProperties() != nullptr)
+    {
         foreach (const HeadLayout &l, m_doc->monitorProperties()->headLayouts())
+        {
             if (l.isValid())
                 put(QStringLiteral("HeadLayouts/") + HeadLayoutLibrary::fileNameFor(l.key),
                     HeadLayoutLibrary::toJson(l));
+        }
+    }
     return ok;
 }
