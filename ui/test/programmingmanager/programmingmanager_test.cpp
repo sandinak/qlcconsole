@@ -2057,18 +2057,29 @@ void ProgrammingManager_Test::pressAndMoveOnARowDragsIt()
 
     QWidget *vp = tree->viewport();
     QTest::mousePress(vp, Qt::LeftButton, Qt::NoModifier, from);
+
+    // The move past the drag distance should start a drag of the pressed row
+    // -- not a rubber-band selection of the rows passed over. QDrag::exec()
+    // returns at once on the offscreen platform but runs a nested loop on a
+    // real one (xcb under xvfb in CI), so read the drag's payload from inside
+    // that loop and cancel it; and also right after, for the offscreen case.
+    QByteArray dragged;
+    auto grab = [tree, &dragged]() {
+        QDrag *drag = tree->findChild<QDrag *>();
+        if (drag != nullptr && dragged.isEmpty() && drag->mimeData() != nullptr)
+            dragged = drag->mimeData()->data(FunctionsTreeWidget::functionDragMimeType());
+        QDrag::cancel();
+    };
+    QTimer::singleShot(0, tree, grab);
+    QTimer::singleShot(500, tree, []() { QDrag::cancel(); }); // never hang
     QMouseEvent move(QEvent::MouseMove, QPointF(to), QPointF(vp->mapToGlobal(to)),
                      Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
     QApplication::sendEvent(vp, &move);
+    if (dragged.isEmpty())
+        grab();
 
-    // The move past the drag distance started a drag of the pressed row (the
-    // offscreen platform ends it at once; the QDrag is still around until the
-    // next event-loop turn) -- not a rubber-band selection of the rows passed.
-    QDrag *drag = tree->findChild<QDrag *>();
-    QVERIFY(drag != nullptr);
-    QVERIFY(drag->mimeData()->hasFormat(FunctionsTreeWidget::functionDragMimeType()));
-    QByteArray ids = drag->mimeData()->data(FunctionsTreeWidget::functionDragMimeType());
-    QDataStream stream(&ids, QIODevice::ReadOnly);
+    QVERIFY(dragged.isEmpty() == false);
+    QDataStream stream(&dragged, QIODevice::ReadOnly);
     quint32 fid = Function::invalidId();
     stream >> fid;
     QCOMPARE(fid, tree->itemFunctionId(first));
