@@ -20,6 +20,8 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QDebug>
+#include <QSet>
+#include <algorithm>
 
 #include "powerdistribution.h"
 #include "fixturepower.h"
@@ -325,7 +327,23 @@ namespace PowerEstimator
 {
     const double MoverStandbyFraction = 0.15;   // movers idle at ~15% of rated
     const double NonMoverStandbyWatts = 2.0;     // small LED-driver idle when dark
-    const double FallbackWattsPerChannel = 40.0;
+    const double FallbackMoverWatts = 150.0;
+    const double FallbackFixtureWatts = 50.0;
+    const double FallbackWattsPerDimmerChannel = 40.0;
+}
+
+static bool isMover(const Fixture *fx)
+{
+    return fx->type() == QLCFixtureDef::MovingHead || fx->type() == QLCFixtureDef::Scanner;
+}
+
+static int intensityChannels(const Fixture *fx)
+{
+    int n = 0;
+    foreach (const QLCChannel *ch, fx->fixtureMode()->channels())
+        if (ch->group() == QLCChannel::Intensity && ch->controlByte() == QLCChannel::MSB)
+            n++;
+    return n;
 }
 
 double PowerEstimator::intensityFraction(const Fixture *fx, const PreGMReader &read)
@@ -402,8 +420,18 @@ static double measuredAmps(const Fixture *fx, const std::function<uchar(int)> &v
     return (m.limitFactor(asks) < 1.0) ? qMax(m.maxAmps, m.standby) : asks;
 }
 
-// Full-on draw of a fixture: its rated power, or a channel-count estimate when
-// the definition declares none.
+PowerEstimator::Basis PowerEstimator::basis(const Fixture *fx)
+{
+    if (fx == NULL || fx->fixtureMode() == NULL)
+        return NoLoad;
+    if (PowerModel::build(fx, fx->powerProfile()).isValid())
+        return Measured;
+    if (fx->fixtureMode()->physical().powerConsumption() > 0)
+        return Rated;
+    return intensityChannels(fx) > 0 ? Guessed : NoLoad;
+}
+
+// Full-on draw of a fixture: measured, else its rated power, else a guess.
 double PowerEstimator::fixtureFullWatts(const Fixture *fx)
 {
     if (fx == NULL || fx->fixtureMode() == NULL)
@@ -414,20 +442,17 @@ double PowerEstimator::fixtureFullWatts(const Fixture *fx)
     if (measured >= 0.0)
         return measured * fixtureVoltage(fx);
 
-    double rated = fx->fixtureMode()->physical().powerConsumption();
-    if (rated <= 0.0)
-    {
-        int intensityChans = 0;
-        const QVector<QLCChannel*> chans = fx->fixtureMode()->channels();
-        for (int i = 0; i < chans.size(); i++)
-        {
-            const QLCChannel *ch = chans.at(i);
-            if (ch->group() == QLCChannel::Intensity && ch->controlByte() == QLCChannel::MSB)
-                intensityChans++;
-        }
-        rated = intensityChans * FallbackWattsPerChannel;
-    }
-    return rated;
+    const double rated = fx->fixtureMode()->physical().powerConsumption();
+    if (rated > 0.0)
+        return rated;
+
+    // Nothing that lights: nothing to guess from.
+    const int intensity = intensityChannels(fx);
+    if (intensity == 0)
+        return 0.0;
+    if (fx->type() == QLCFixtureDef::Dimmer)
+        return intensity * FallbackWattsPerDimmerChannel;
+    return isMover(fx) ? FallbackMoverWatts : FallbackFixtureWatts;
 }
 
 double PowerEstimator::fixtureWatts(const Fixture *fx, const PreGMReader &read)
@@ -447,8 +472,7 @@ double PowerEstimator::fixtureWatts(const Fixture *fx, const PreGMReader &read)
         return 0.0;
 
     const double frac = intensityFraction(fx, read);
-    const bool mover = (fx->type() == QLCFixtureDef::MovingHead ||
-                        fx->type() == QLCFixtureDef::Scanner);
+    const bool mover = isMover(fx);
 
     // Standby is drawn even when dark: movers idle a fraction of rated
     // (motors/logic/fans); non-movers draw a small fixed LED-driver idle. The
@@ -476,6 +500,54 @@ double PowerEstimator::estimateWatts(Doc *doc, const PreGMReader &read,
         total += w;
     }
     return total;
+}
+
+QList<PowerEstimator::TypeLoad> PowerEstimator::byType(Doc *doc, const QHash<quint32, double> &watts,
+                                                       const QHash<quint32, double> &amps)
+{
+    QList<TypeLoad> rows;
+    if (doc == NULL)
+        return rows;
+
+    // A definition used in several modes is told apart by its mode.
+    QHash<const QLCFixtureDef *, QSet<const QLCFixtureMode *>> modesOf;
+    foreach (Fixture *fx, doc->fixtures())
+        if (fx != NULL && fx->fixtureDef() != NULL)
+            modesOf[fx->fixtureDef()].insert(fx->fixtureMode());
+
+    QHash<QString, int> rowOf;
+    foreach (Fixture *fx, doc->fixtures())
+    {
+        if (fx == NULL)
+            continue;
+        const QLCFixtureDef *def = fx->fixtureDef();
+        QString name = (def != NULL) ? def->manufacturer() + QLatin1Char(' ') + def->model()
+                                     : fx->name();
+        if (def != NULL && fx->fixtureMode() != NULL && modesOf.value(def).size() > 1)
+            name += QStringLiteral(" (%1)").arg(fx->fixtureMode()->name());
+
+        int r = rowOf.value(name, -1);
+        if (r < 0)
+        {
+            TypeLoad t;
+            t.name = name;
+            t.basis = basis(fx);
+            t.ratedWatts = (fx->fixtureMode() != NULL) ? fx->fixtureMode()->physical().powerConsumption() : 0;
+            r = rows.size();
+            rows << t;
+            rowOf.insert(name, r);
+        }
+        TypeLoad &t = rows[r];
+        // Fixtures of one type can be measured or capped apart: the most any one draws.
+        t.fullWatts = qMax(t.fullWatts, fixtureFullWatts(fx));
+        t.count++;
+        t.watts += watts.value(fx->id(), 0.0);
+        t.amps += amps.value(fx->id(), 0.0);
+    }
+
+    std::stable_sort(rows.begin(), rows.end(),
+                     [](const TypeLoad &a, const TypeLoad &b) { return a.watts > b.watts; });
+    return rows;
 }
 
 // Resolve a scene's programmed channel values statically (its own direct values

@@ -6,6 +6,114 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-16 — A look's Speed and Spread survive picking an effect; Speed Masters window closes cleanly *(fix/speedmaster-dblclick-reset)*
+
+Branson: "when I set something on the speed masters .. and then double click
+on the icon it resets those."
+
+- **What reset**: a look's *Speed:* (`__speedMaster`) and its host Spread
+  (`__spread*`) live in the effect palette's param map beside the script's
+  own params. `LookEditor::slotEffectScriptChanged()` clears that map on
+  every effect change and carries back only params the **new script
+  declares** (`carryOverParams()`); no script declares the look-level ones,
+  so clicking or double-clicking another effect's tile (icon) in the effect
+  picker -- the picker applies each pick at once, to preview it -- put the
+  look back on *As the look* with no spread. Going back to the first effect
+  didn't bring them back; only Cancel did. Now both are carried across an
+  effect change (a preset that pins one still wins). The one-shot length
+  (`__durationMs`) deliberately stays with the effect it was set for.
+- **Not the cause, checked**: double-clicking a footer speed-master button
+  (two clicks, opens/raises the window twice), the window's beat lights,
+  names, tempo fields, or the look itself (re-opened in the editor), and
+  re-picking the **same** effect in the picker change nothing. The
+  masters themselves (count, names, follow/ratio, BPM, rate, pause, inputs)
+  are saved with the show (`SpeedMasters::saveXML`, engine test
+  `mastersAreSavedWithTheShow`); the footer's beat style/when are in
+  QSettings (`workspace/speedFooterBeat*`), read once at start and on the
+  View menu -- nothing re-reads defaults over them. A look's Speed/Spread
+  save with the palette (now also checked in the new test).
+- **Found on the way** (Speed Masters window): a name typed but not yet
+  left when the window went (with the main window) fired `editingFinished`
+  into a half-destroyed panel -- a Qt assertion, a crash without one. The
+  destructor now keeps the typed name and disconnects the fields. Leaving a
+  name field without changing it no longer marks the show modified.
+- **Tests**: `LookEditor_Test::aLooksSpeedMasterAndSpreadSurviveADoubleClick`
+  (look re-opened; the current effect's tile double-clicked; another effect
+  tried and back; Done; palette XML round trip -- fails without the fix);
+  `SpeedMastersPanel_Test::doubleClickingAMasterChangesNothing` (every
+  setting incl. 6 masters, follow, pause, rate, tapped and fractional BPM,
+  an input, beat style/when; footer buttons and panel widgets
+  double-clicked; no modified flag; the close-with-a-typed-name crash).
+### 2026-10-16 — Programming tab: drag scenes/palettes/folders into folders; folder menu *(fix/programming-drag-to-folder)*
+
+Branson: "I can't seem to drag a scene to a folder in the programming view";
+"I can't right click on an empty folder to delete it"; "when I first tried ..
+it was drag selecting other things vs dragging to folder."
+
+- **Why**: the nav tree (`m_funcTree`) was never given a drag mode at
+  construction (`programmingmanager.cpp` ~L117-136 on release/0.1.0), so until
+  a function was opened it was `NoDragDrop`: press-and-move rubber-band
+  selected rows. Opening a scene/EFX/matrix switched it to Qt `InternalMove`
+  (L916/L1047), and opening a collection/chaser/show to external mode, whose
+  `FunctionsTreeWidget::dragMoveEvent/dropEvent` (functionstreewidget.cpp
+  L1099-1108 / L1125-1131) only accepted functions on a *Collection* row —
+  never on a folder. Palette drops worked but palette *folders* weren't
+  draggable, and an empty palette folder made via "New folder…" in the
+  palettes-only tree was tagged FunctionNode (invisible root has no kind), so
+  it refused palette drops.
+- **Fix**: the nav tree is in external drag mode from the start and always;
+  `FunctionsTreeWidget::canDropMimeOn()/dropMimeOn()` (used by
+  dragMove/drop) take functions, palettes and folders (new
+  `application/x-qlcconsole-folders` payload) onto a folder / a row (joins its
+  folder) / the category or empty space (top level), type-checked, never a
+  folder into itself; sets paths, `Doc::setModified()`, rebuilds the tree on
+  the next turn (re-creating empty sub-folders) and emits
+  `folderContentsMoved()` (Programming re-nests collection member rows). A
+  Collection row still takes dropped functions as members; payload for the
+  collection/chaser/show editors and the looks canvas unchanged. Drop target
+  outlined (custom paint), autoscroll + hover-to-open (autoExpandDelay 600).
+  `folderItem()` gives invisible-root folders PaletteNode. Function Manager
+  rebuilds its tree on show (keeps selection) so moves made here appear there.
+- **Folder menu** (both trees): Rename / Delete Folder; Delete on an empty
+  folder is immediate, with contents asks and moves them up a level
+  (`removeFolderKeepContents`, nothing deleted). "New Folder" now creates
+  under the right-clicked row (it used the selection).
+- No undo for folder moves (the tab's undo is per-scene look edits; Function
+  Manager has none for moves either).
+- Tests (programmingmanager_test): `scenesDragIntoAFolderAndBackOut`
+  (incl. save/load round-trip, collection open, collection-row membership),
+  `aFolderDragsIntoAnotherFolder`, `palettesAndTheirFoldersDragIntoFolders`,
+  `deletingAFolderKeepsWhatIsInIt`, `pressAndMoveOnARowDragsIt` (QTest press
+  + move on an unselected row starts a QDrag carrying only that row). The
+  first and last fail with the old construction. Help: programming-tab.md
+  "Filing into folders", whats-new.
+- **Remove from container** (Branson: "No ability to remove from side
+  menu", 3 rows under a collection offered only Duplicate/Delete): nested
+  member rows now carry their index (chaser step / collection member) and,
+  for shows, track + ShowFunction ids; the menu offers **Remove from “X”** /
+  **Remove N from “X”** / **Remove N from their K containers** (per
+  container). `removeMembers()` takes out exactly that membership
+  (collection `removeFunction`, chaser `removeStep` by index, show
+  `removeShowFunction`; a running show is left alone with a note), asks
+  first for chaser steps/show items, re-nests the rows and refreshes the open
+  editor. Delete on such rows reads **Delete Function Everywhere…** and the
+  question lists every collection/chaser/show using each function. No undo
+  (the tab's undo is scene look edits only). Test
+  `rowsUnderAContainerComeOutOfIt`.
+- **Delete with "where is it used"** (Branson: "can't remove anything here ..
+  no delete .. AND delete should check for usage and warn"): one helper,
+  `ProgrammerController::paletteUsage()/functionUsage()/usageLines()` (scene
+  look rows, effect-look palette-slot bindings; collections, chaser steps,
+  show tracks), used by the palette and function delete questions and the
+  look editor's "used by N scene(s)". Palettes can't be referenced by VC
+  widgets / cue lists, so none listed. `Doc::deletePalette()` now also clears
+  effect-look slot bindings to it (before: a dangling id, which a later
+  palette reusing the id would have been picked up by). ⌫/Delete on either
+  tree deletes the selection (or the selected folder). No undo. Test
+  `deletingAPaletteSaysWhereItIsUsed`.
+
+---
+
 ### 2026-10-16 — Connections: patch / unpatch several universes at once *(fix/connections-multipatch)*
 
 Branson: "when I select a group to patch or unpatch from the universes

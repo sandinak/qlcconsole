@@ -119,6 +119,28 @@ public:
         const QHash<quint32, QHash<quint32, uchar>> &values,
         quint32 excludeSceneId = (quint32)~0) const;
 
+    /** One place a palette or function is used, for "where is this used"
+     *  questions before a delete (and the look editor's "used by" line). */
+    struct Usage
+    {
+        enum Kind { SceneLook, EffectBinding, CollectionMember, ChaserStep, ShowItem };
+        Kind kind;
+        quint32 ownerId;   ///< the scene / effect palette / container using it
+        QString ownerName;
+        int position;      ///< 1-based look row / chaser step; slot-less = 0
+        QString slot;      ///< EffectBinding: the effect's palette slot
+    };
+
+    /** Scenes that have palette $pid as a look (with the look's row) and
+     *  effect looks that bind it to one of their slots. */
+    QList<Usage> paletteUsage(quint32 pid) const;
+
+    /** Collections, chasers (each step) and shows that use function $fid. */
+    QList<Usage> functionUsage(quint32 fid) const;
+
+    /** One readable line per use ("Scene “Base” — look 2"). */
+    static QStringList usageLines(const QList<Usage> &uses);
+
     QList<quint32> collectionsContaining(quint32 sceneId) const;
     bool replaceSceneInCollection(quint32 collectionId,
                                   quint32 oldSceneId,

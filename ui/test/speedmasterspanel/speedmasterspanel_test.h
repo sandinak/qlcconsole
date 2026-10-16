@@ -42,6 +42,7 @@ private slots:
     void theFooterShowsEachMastersTempo();
     void aMastersInputsAreMappedInItsWindow();
     void theBeatIsABlinkABarOrNothingAlwaysOrWhilePlaying();
+    void doubleClickingAMasterChangesNothing();
 
 private:
     Doc *m_doc = nullptr;

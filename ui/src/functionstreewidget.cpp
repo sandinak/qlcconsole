@@ -26,6 +26,8 @@
 #include <QDropEvent>
 #include <QKeyEvent>
 #include <QDrag>
+#include <QPainter>
+#include <QTimer>
 
 #include "functionstreewidget.h"
 #include "qlcpalette.h"
@@ -69,6 +71,54 @@ static quint32 collectionForDropTarget(Doc *doc, QTreeWidgetItem *item)
 }
 // MIME type for palette drag/drop to external widgets
 static const char* PALETTE_DRAG_MIME_TYPE = "application/x-qlcplus-palettes";
+
+// MIME type for dragging folders into other folders (Programming tab / external
+// mode). Stream of (int NodeKind, QString full folder path).
+static const char* FOLDER_DRAG_MIME_TYPE = "application/x-qlcconsole-folders";
+
+// Folder paths carry a trailing '/' on category nodes ("Scene/") and none on
+// sub-folders ("Scene/Act 1"); compare them without it.
+static QString strippedPath(QString path)
+{
+    while (path.endsWith('/'))
+        path.chop(1);
+    return path;
+}
+
+// Full folder path a function lives in, e.g. "Scene" or "Scene/Act 1".
+static QString functionFullPath(const Function *f)
+{
+    const QString rel = strippedPath(f->path(true));
+    const QString type = Function::typeToString(f->type());
+    return rel.isEmpty() ? type : type + "/" + rel;
+}
+
+// Full folder path a palette lives in, e.g. "Palettes" or "Palettes/Color".
+static QString paletteFullPath(const QLCPalette *p)
+{
+    const QString path = strippedPath(p->path());
+    return path.isEmpty() ? QString(PALETTE_CATEGORY) : path;
+}
+
+static void setFunctionFullPath(Function *f, const QString &full)
+{
+    // Function::setPath() strips the "Type/" prefix; the bare category needs
+    // its slash so that happens ("Scene/" -> "").
+    const QString type = Function::typeToString(f->type());
+    f->setPath(full == type ? type + "/" : full);
+}
+
+static void setPaletteFullPath(QLCPalette *p, const QString &full)
+{
+    // Stored like new palettes are ("Palettes/Color/"); the bare root is "".
+    p->setPath(full == QString(PALETTE_CATEGORY) ? QString() : full + "/");
+}
+
+// Is $path the folder $folder itself or inside it?
+static bool pathIsUnder(const QString &path, const QString &folder)
+{
+    return path == folder || path.startsWith(folder + "/");
+}
 
 // Top-level function-TYPE category node. When the owning tree has
 // type-ordering-by-role enabled (typeOrderByRole()), categories sort by a
@@ -129,6 +179,7 @@ FunctionsTreeWidget::FunctionsTreeWidget(Doc *doc, QWidget *parent) :
   , m_displayFilter(ShowAll)
   , m_typeOrderByRole(false)
   , m_externalDragMode(false)
+  , m_dropOnRoot(false)
 {
     sortItems(COL_NAME, Qt::AscendingOrder);
 
@@ -673,7 +724,11 @@ QTreeWidgetItem *FunctionsTreeWidget::folderItem(QString name)
             {
                 parentNode = m_foldersMap[level + "/"];
                 type = parentNode->data(COL_NAME, Qt::UserRole + 1).toInt();
-                kind = itemNodeKind(parentNode);
+                // In a palettes-only tree the "Palettes/" category is the
+                // invisible root, which carries no kind: its folders are
+                // still palette folders (or palette drops onto them fail).
+                kind = (parentNode == invisibleRootItem())
+                        ? PaletteNode : itemNodeKind(parentNode);
             }
             fullPath = level;
             continue;
@@ -759,10 +814,14 @@ void FunctionsTreeWidget::slotItemChanged(QTreeWidgetItem *item)
             fullPath.append("/");
         fullPath.append(item->text(COL_NAME));
 
+        const bool renamed = (item->text(COL_PATH) != fullPath);
         m_foldersMap.remove(item->text(COL_PATH));
         item->setText(COL_PATH, fullPath);
         m_foldersMap[fullPath] = item;
         slotUpdateChildrenPath(item);
+        // A folder rename re-files whatever is inside it: save-worthy.
+        if (renamed && item->childCount() > 0)
+            m_doc->setModified();
     }
     blockSignals(false);
 }
@@ -810,6 +869,11 @@ const char* FunctionsTreeWidget::paletteDragMimeType()
     return PALETTE_DRAG_MIME_TYPE;
 }
 
+const char* FunctionsTreeWidget::folderDragMimeType()
+{
+    return FOLDER_DRAG_MIME_TYPE;
+}
+
 void FunctionsTreeWidget::setExternalDragMode(bool enable)
 {
     m_externalDragMode = enable;
@@ -841,8 +905,8 @@ QMimeData* FunctionsTreeWidget::buildMimeData(const QList<QTreeWidgetItem*> &ite
     // This is used by Qt's built-in drag when setDragEnabled(true) is called
     if (m_externalDragMode)
     {
-        // Functions and palettes get separate payloads/MIME types so each
-        // drop target picks only what it understands (function targets
+        // Functions, palettes and folders get separate payloads/MIME types so
+        // each drop target picks only what it understands (function targets
         // never see palette IDs and vice-versa).
         QByteArray fnData;
         QDataStream fnStream(&fnData, QIODevice::WriteOnly);
@@ -850,9 +914,20 @@ QMimeData* FunctionsTreeWidget::buildMimeData(const QList<QTreeWidgetItem*> &ite
         QByteArray palData;
         QDataStream palStream(&palData, QIODevice::WriteOnly);
         int palCount = 0;
+        QByteArray folderData;
+        QDataStream folderStream(&folderData, QIODevice::WriteOnly);
+        int folderCount = 0;
 
         foreach (QTreeWidgetItem *item, items)
         {
+            if (item == NULL)
+                continue;
+            if (isUserFolder(item))
+            {
+                folderStream << int(itemNodeKind(item)) << strippedPath(item->text(COL_PATH));
+                folderCount++;
+                continue;
+            }
             if (itemNodeKind(item) == PaletteNode)
             {
                 const quint32 pid = itemPaletteId(item);
@@ -867,7 +942,7 @@ QMimeData* FunctionsTreeWidget::buildMimeData(const QList<QTreeWidgetItem*> &ite
             if (var.isValid())
             {
                 quint32 fid = var.toUInt();
-                if (fid != Function::invalidId())
+                if (fid != Function::invalidId() && m_doc->function(fid) != NULL)
                 {
                     fnStream << fid;
                     fnCount++;
@@ -875,15 +950,18 @@ QMimeData* FunctionsTreeWidget::buildMimeData(const QList<QTreeWidgetItem*> &ite
             }
         }
 
-        if (fnCount > 0 || palCount > 0)
+        if (fnCount > 0 || palCount > 0 || folderCount > 0)
         {
             QMimeData *mimeData = new QMimeData();
             if (fnCount > 0)
                 mimeData->setData(FUNCTION_DRAG_MIME_TYPE, fnData);
             if (palCount > 0)
                 mimeData->setData(PALETTE_DRAG_MIME_TYPE, palData);
+            if (folderCount > 0)
+                mimeData->setData(FOLDER_DRAG_MIME_TYPE, folderData);
             return mimeData;
         }
+        return NULL;
     }
 
     // Fall back to default behavior
@@ -1005,49 +1083,14 @@ void FunctionsTreeWidget::mouseMoveEvent(QMouseEvent *event)
 
 void FunctionsTreeWidget::startExternalDrag()
 {
-    // Collect function and palette IDs from selected items into separate
-    // payloads (each drop target reads only the MIME type it understands).
-    QByteArray fnData;
-    QDataStream fnStream(&fnData, QIODevice::WriteOnly);
-    int fnCount = 0;
-    QByteArray palData;
-    QDataStream palStream(&palData, QIODevice::WriteOnly);
-    int palCount = 0;
-
-    foreach (QTreeWidgetItem *item, m_draggedItems)
-    {
-        if (itemNodeKind(item) == PaletteNode)
-        {
-            const quint32 pid = itemPaletteId(item);
-            if (pid != QLCPalette::invalidId())
-            {
-                palStream << pid;
-                palCount++;
-            }
-            continue;
-        }
-        QVariant var = item->data(COL_NAME, Qt::UserRole);
-        if (var.isValid())
-        {
-            quint32 fid = var.toUInt();
-            Function *func = m_doc->function(fid);
-            if (func != NULL)
-            {
-                fnStream << fid;
-                fnCount++;
-            }
-        }
-    }
-
-    if (fnCount == 0 && palCount == 0)
+    // Same payload Qt's own drag would carry (buildMimeData), so a drop target
+    // never sees a difference between the two ways a drag can start.
+    const bool wasExternal = m_externalDragMode;
+    m_externalDragMode = true;
+    QMimeData *mimeData = buildMimeData(m_draggedItems);
+    m_externalDragMode = wasExternal;
+    if (mimeData == NULL)
         return;
-
-    // Create mime data with function and/or palette IDs
-    QMimeData *mimeData = new QMimeData();
-    if (fnCount > 0)
-        mimeData->setData(FUNCTION_DRAG_MIME_TYPE, fnData);
-    if (palCount > 0)
-        mimeData->setData(PALETTE_DRAG_MIME_TYPE, palData);
 
     // Create and execute the drag
     QDrag *drag = new QDrag(this);
@@ -1072,7 +1115,8 @@ void FunctionsTreeWidget::dragEnterEvent(QDragEnterEvent *event)
     if (m_externalDragMode)
     {
         if (event->mimeData()->hasFormat(PALETTE_DRAG_MIME_TYPE)
-                || event->mimeData()->hasFormat(FUNCTION_DRAG_MIME_TYPE))
+                || event->mimeData()->hasFormat(FUNCTION_DRAG_MIME_TYPE)
+                || event->mimeData()->hasFormat(FOLDER_DRAG_MIME_TYPE))
             event->acceptProposedAction();
         else
             event->ignore();
@@ -1085,31 +1129,362 @@ void FunctionsTreeWidget::dragMoveEvent(QDragMoveEvent *event)
 {
     if (m_externalDragMode)
     {
+        // Let the view auto-scroll and auto-expand a hovered folder; it ignores
+        // our MIME types itself, so decide acceptance afterwards.
+        QTreeWidget::dragMoveEvent(event);
+
         QTreeWidgetItem *target = itemAt(event->position().toPoint());
-        if (event->mimeData()->hasFormat(PALETTE_DRAG_MIME_TYPE))
-        {
-            // A folder, a palette leaf (join its folder), the Palettes category,
-            // or the empty root are valid targets.
-            if (target == NULL || itemNodeKind(target) == PaletteNode)
-                event->acceptProposedAction();
-            else
-                event->ignore();
-            return;
-        }
-        if (event->mimeData()->hasFormat(FUNCTION_DRAG_MIME_TYPE))
-        {
-            // Functions can be dropped onto a Collection node (or into its
-            // expanded member list) to add them to that collection.
-            if (collectionForDropTarget(m_doc, target) != Function::invalidId())
-                event->acceptProposedAction();
-            else
-                event->ignore();
-            return;
-        }
-        event->ignore();
+        const bool ok = canDropMimeOn(event->mimeData(), target);
+        if (ok)
+            event->acceptProposedAction();
+        else
+            event->ignore();
+        viewport()->update();
         return;
     }
     QTreeWidget::dragMoveEvent(event);
+}
+
+void FunctionsTreeWidget::dragLeaveEvent(QDragLeaveEvent *event)
+{
+    m_dropHighlight = QPersistentModelIndex();
+    m_dropOnRoot = false;
+    viewport()->update();
+    QTreeWidget::dragLeaveEvent(event);
+}
+
+void FunctionsTreeWidget::paintEvent(QPaintEvent *event)
+{
+    QTreeWidget::paintEvent(event);
+
+    if (m_dropOnRoot == false && m_dropHighlight.isValid() == false)
+        return;
+
+    QPainter painter(viewport());
+    QColor c = palette().color(QPalette::Highlight);
+    painter.setPen(QPen(c, 2));
+    c.setAlpha(40);
+    painter.setBrush(c);
+    QRect r;
+    if (m_dropHighlight.isValid())
+    {
+        r = visualRect(m_dropHighlight);
+        r.setLeft(0);
+        r.setRight(viewport()->width() - 1);
+    }
+    else
+    {
+        r = viewport()->rect();
+    }
+    painter.drawRoundedRect(r.adjusted(1, 1, -1, -1), 3, 3);
+}
+
+QString FunctionsTreeWidget::dropFolderPath(QTreeWidgetItem *target, NodeKind kind,
+                                            const QString &typeName) const
+{
+    // Empty space: the top level of the item's own category.
+    if (target == NULL)
+        return typeName;
+
+    if (itemNodeKind(target) != kind)
+        return QString();
+
+    // A leaf joins its sibling's folder.
+    QTreeWidgetItem *folder = target;
+    if (target->text(COL_PATH).isEmpty())
+    {
+        folder = target->parent();
+        // Top-level leaf: only palettes (palettes-only tree) live there.
+        if (folder == NULL)
+            return kind == PaletteNode ? typeName : QString();
+        // A nested collection member row isn't a folder.
+        if (folder->text(COL_PATH).isEmpty())
+            return QString();
+    }
+
+    const QString path = strippedPath(folder->text(COL_PATH));
+    // Functions stay within their own type's category.
+    if (path != typeName && path.startsWith(typeName + "/") == false)
+        return QString();
+    return path;
+}
+
+bool FunctionsTreeWidget::handleFolderDrop(const QMimeData *mime, QTreeWidgetItem *target,
+                                           bool apply)
+{
+    QTreeWidgetItem *highlight = NULL;
+    bool any = false;
+    bool changed = false;
+    QStringList keepFolders;
+    QString reveal;
+
+    auto noteDest = [&](const QString &dest) {
+        any = true;
+        if (reveal.isEmpty())
+            reveal = dest;
+        if (highlight == NULL)
+            highlight = m_foldersMap.value(dest + "/", m_foldersMap.value(dest, NULL));
+    };
+
+    if (mime->hasFormat(FUNCTION_DRAG_MIME_TYPE))
+    {
+        QByteArray data = mime->data(FUNCTION_DRAG_MIME_TYPE);
+        QDataStream stream(&data, QIODevice::ReadOnly);
+        while (stream.atEnd() == false)
+        {
+            quint32 fid = Function::invalidId();
+            stream >> fid;
+            Function *f = m_doc->function(fid);
+            if (f == NULL)
+                continue;
+            const QString dest = dropFolderPath(target, FunctionNode,
+                                                Function::typeToString(f->type()));
+            if (dest.isEmpty())
+                continue;
+            noteDest(dest);
+            if (apply && functionFullPath(f) != dest)
+            {
+                setFunctionFullPath(f, dest);
+                changed = true;
+            }
+        }
+    }
+
+    if (mime->hasFormat(PALETTE_DRAG_MIME_TYPE))
+    {
+        QByteArray data = mime->data(PALETTE_DRAG_MIME_TYPE);
+        QDataStream stream(&data, QIODevice::ReadOnly);
+        while (stream.atEnd() == false)
+        {
+            quint32 pid = QLCPalette::invalidId();
+            stream >> pid;
+            QLCPalette *p = m_doc->palette(pid);
+            if (p == NULL)
+                continue;
+            const QString dest = dropFolderPath(target, PaletteNode, PALETTE_CATEGORY);
+            if (dest.isEmpty())
+                continue;
+            noteDest(dest);
+            if (apply && paletteFullPath(p) != dest)
+            {
+                setPaletteFullPath(p, dest);
+                changed = true;
+            }
+        }
+    }
+
+    if (mime->hasFormat(FOLDER_DRAG_MIME_TYPE))
+    {
+        QByteArray data = mime->data(FOLDER_DRAG_MIME_TYPE);
+        QDataStream stream(&data, QIODevice::ReadOnly);
+        while (stream.atEnd() == false)
+        {
+            int kind = FunctionNode;
+            QString oldPath;
+            stream >> kind >> oldPath;
+            const int slash = oldPath.lastIndexOf('/');
+            if (slash <= 0)
+                continue; // a category, never movable
+            const QString category = oldPath.left(oldPath.indexOf('/'));
+            const QString dest = dropFolderPath(target, NodeKind(kind), category);
+            // Not into itself or one of its own sub-folders.
+            if (dest.isEmpty() || pathIsUnder(dest, oldPath))
+                continue;
+            noteDest(dest);
+            const QString newPath = dest + oldPath.mid(slash);
+            if (apply && newPath != oldPath)
+            {
+                keepFolders << reRootFolder(oldPath, newPath);
+                changed = true;
+            }
+        }
+    }
+
+    if (apply == false)
+    {
+        m_dropOnRoot = any && highlight == invisibleRootItem();
+        m_dropHighlight = (any && highlight != NULL && highlight != invisibleRootItem())
+                ? QPersistentModelIndex(indexFromItem(highlight)) : QPersistentModelIndex();
+        // Dropping on empty space of a palettes-only tree = its root.
+        if (any && target == NULL && m_displayFilter == PalettesOnly)
+            m_dropOnRoot = true;
+    }
+    else if (changed)
+    {
+        m_doc->setModified();
+        scheduleRebuild(keepFolders, reveal);
+    }
+    return any;
+}
+
+bool FunctionsTreeWidget::canDropMimeOn(const QMimeData *mime, QTreeWidgetItem *target)
+{
+    m_dropHighlight = QPersistentModelIndex();
+    m_dropOnRoot = false;
+    if (mime == NULL)
+        return false;
+
+    // Function(s) onto a Collection node (or into its expanded member list)
+    // add them to that collection.
+    if (mime->hasFormat(FUNCTION_DRAG_MIME_TYPE))
+    {
+        const quint32 cid = collectionForDropTarget(m_doc, target);
+        if (cid != Function::invalidId())
+        {
+            QTreeWidgetItem *node = target;
+            while (node != NULL && node->data(COL_NAME, Qt::UserRole).toUInt() != cid)
+                node = node->parent();
+            if (node != NULL)
+                m_dropHighlight = QPersistentModelIndex(indexFromItem(node));
+            return true;
+        }
+    }
+
+    // Otherwise into the folder under the cursor.
+    return handleFolderDrop(mime, target, false);
+}
+
+bool FunctionsTreeWidget::dropMimeOn(const QMimeData *mime, QTreeWidgetItem *target)
+{
+    m_dropHighlight = QPersistentModelIndex();
+    m_dropOnRoot = false;
+    viewport()->update();
+    if (mime == NULL)
+        return false;
+
+    // Function(s) dropped onto a Collection node → add them as members. The
+    // owner (ProgrammingManager) performs the membership change and refresh;
+    // dedup and circular-reference checks live there.
+    if (mime->hasFormat(FUNCTION_DRAG_MIME_TYPE))
+    {
+        const quint32 containerId = collectionForDropTarget(m_doc, target);
+        if (containerId != Function::invalidId())
+        {
+            QList<quint32> fids;
+            QByteArray data = mime->data(FUNCTION_DRAG_MIME_TYPE);
+            QDataStream stream(&data, QIODevice::ReadOnly);
+            while (stream.atEnd() == false)
+            {
+                quint32 fid = 0;
+                stream >> fid;
+                fids << fid;
+            }
+            if (fids.isEmpty() == false)
+                emit functionsDroppedOnCollection(containerId, fids);
+            return true;
+        }
+    }
+
+    // Otherwise: move the dragged functions / palettes / folders into the
+    // folder under the cursor (no Qt item reparenting; the tree rebuilds).
+    return handleFolderDrop(mime, target, true);
+}
+
+QStringList FunctionsTreeWidget::reRootFolder(const QString &oldPath, const QString &newPath)
+{
+    // Folders under oldPath, re-rooted: recreated after the rebuild so empty
+    // ones don't vanish (folders only exist through what's filed in them).
+    QStringList keep;
+    foreach (const QString &key, m_foldersMap.keys())
+    {
+        const QString k = strippedPath(key);
+        if (key.endsWith('/') == false && pathIsUnder(k, oldPath))
+            keep << newPath + k.mid(oldPath.length());
+    }
+
+    if (oldPath.startsWith(QString(PALETTE_CATEGORY) + "/"))
+    {
+        foreach (QLCPalette *p, m_doc->palettes())
+        {
+            if (p == NULL)
+                continue;
+            const QString full = paletteFullPath(p);
+            if (pathIsUnder(full, oldPath))
+                setPaletteFullPath(p, newPath + full.mid(oldPath.length()));
+        }
+    }
+    else
+    {
+        foreach (Function *f, m_doc->functions())
+        {
+            const QString full = functionFullPath(f);
+            if (pathIsUnder(full, oldPath))
+                setFunctionFullPath(f, newPath + full.mid(oldPath.length()));
+        }
+    }
+    return keep;
+}
+
+void FunctionsTreeWidget::scheduleRebuild(const QStringList &keepFolders, const QString &revealPath)
+{
+    QTimer::singleShot(0, this, [this, keepFolders, revealPath]() {
+        updateTree();
+        clearSelection();
+        foreach (const QString &path, keepFolders)
+        {
+            // Only within a category the tree shows (folderItem() would
+            // otherwise invent a top-level node).
+            const QString category = path.left(path.indexOf('/'));
+            if (m_foldersMap.contains(category + "/") && path.contains('/'))
+                folderItem(path);
+        }
+        QTreeWidgetItem *dest = m_foldersMap.value(revealPath,
+                                                   m_foldersMap.value(revealPath + "/", NULL));
+        if (dest != NULL && dest != invisibleRootItem())
+        {
+            for (QTreeWidgetItem *it = dest; it != NULL; it = it->parent())
+                it->setExpanded(true);
+            scrollToItem(dest);
+        }
+        emit folderContentsMoved();
+    });
+}
+
+bool FunctionsTreeWidget::isUserFolder(const QTreeWidgetItem *item) const
+{
+    if (item == NULL || item == invisibleRootItem())
+        return false;
+    const QString path = item->text(COL_PATH);
+    // Leaves have no path; categories end in '/' ("Scene/", "Palettes/").
+    return path.isEmpty() == false && path.endsWith('/') == false;
+}
+
+int FunctionsTreeWidget::folderContentCount(const QTreeWidgetItem *item) const
+{
+    if (isUserFolder(item) == false)
+        return 0;
+    const QString folder = strippedPath(item->text(COL_PATH));
+    int count = 0;
+    if (itemNodeKind(item) == PaletteNode)
+    {
+        foreach (QLCPalette *p, m_doc->palettes())
+            if (p != NULL && pathIsUnder(paletteFullPath(p), folder))
+                count++;
+    }
+    else
+    {
+        foreach (Function *f, m_doc->functions())
+            if (pathIsUnder(functionFullPath(f), folder))
+                count++;
+    }
+    return count;
+}
+
+void FunctionsTreeWidget::removeFolderKeepContents(QTreeWidgetItem *item)
+{
+    if (isUserFolder(item) == false)
+        return;
+    const QString oldPath = strippedPath(item->text(COL_PATH));
+    const QString parentPath = oldPath.left(oldPath.lastIndexOf('/'));
+    const bool hadContents = folderContentCount(item) > 0;
+
+    // Everything inside moves up one level; the folder itself is dropped from
+    // the re-rooted list (it becomes the parent).
+    QStringList keep = reRootFolder(oldPath, parentPath);
+    keep.removeAll(parentPath);
+    if (hadContents)
+        m_doc->setModified();
+    scheduleRebuild(keep, parentPath);
 }
 
 void FunctionsTreeWidget::dropEvent(QDropEvent *event)
@@ -1119,77 +1494,15 @@ void FunctionsTreeWidget::dropEvent(QDropEvent *event)
     // External/Programming mode.
     if (m_externalDragMode)
     {
-        // Function(s) dropped onto a Collection node → add them as members. The
-        // owner (ProgrammingManager) performs the membership change and refresh;
-        // dedup and circular-reference checks live there.
-        if (event->mimeData()->hasFormat(FUNCTION_DRAG_MIME_TYPE))
-        {
-            const quint32 containerId = collectionForDropTarget(m_doc, dropItem);
-            if (containerId == Function::invalidId())
-            {
-                event->ignore();
-                return;
-            }
-
-            QList<quint32> fids;
-            QByteArray data = event->mimeData()->data(FUNCTION_DRAG_MIME_TYPE);
-            QDataStream stream(&data, QIODevice::ReadOnly);
-            while (stream.atEnd() == false)
-            {
-                quint32 fid = 0;
-                stream >> fid;
-                fids << fid;
-            }
-
-            m_draggedItems.clear();
-            event->acceptProposedAction();
-            if (fids.isEmpty() == false)
-                emit functionsDroppedOnCollection(containerId, fids);
-            return;
-        }
-
-        // Otherwise: move the dragged palettes into the folder under the cursor
-        // (don't do any Qt item reparenting; the owner rebuilds).
-        if (event->mimeData()->hasFormat(PALETTE_DRAG_MIME_TYPE) == false)
-        {
-            event->ignore();
-            return;
-        }
-
-        // Resolve the destination folder path.
-        QString destPath;
-        if (dropItem == NULL)
-            destPath = QString(); // root
-        else if (itemPaletteId(dropItem) != QLCPalette::invalidId())
-            destPath = (dropItem->parent() != NULL)
-                    ? dropItem->parent()->text(COL_PATH) : QString(); // join sibling's folder
-        else
-            destPath = dropItem->text(COL_PATH); // a folder (or Palettes root => "")
-
-        QList<quint32> ids;
-        QByteArray data = event->mimeData()->data(PALETTE_DRAG_MIME_TYPE);
-        QDataStream stream(&data, QIODevice::ReadOnly);
-        while (stream.atEnd() == false)
-        {
-            quint32 pid = 0;
-            stream >> pid;
-            ids << pid;
-        }
-
-        bool changed = false;
-        foreach (quint32 pid, ids)
-        {
-            QLCPalette *p = m_doc->palette(pid);
-            if (p != NULL && p->path() != destPath)
-            {
-                p->setPath(destPath);
-                changed = true;
-            }
-        }
         m_draggedItems.clear();
-        event->acceptProposedAction();
-        if (changed)
-            emit paletteDroppedToFolder();
+        // dragMoveEvent() let the base view auto-scroll; end that here as
+        // QAbstractItemView::dropEvent() would.
+        stopAutoScroll();
+        setState(NoState);
+        if (dropMimeOn(event->mimeData(), dropItem))
+            event->acceptProposedAction();
+        else
+            event->ignore();
         return;
     }
 

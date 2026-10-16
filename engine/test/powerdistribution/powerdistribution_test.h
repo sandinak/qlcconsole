@@ -33,6 +33,11 @@ private slots:
     void reassignMovesFixture();
     void directSourceAutoCreatesCircuit();
     void xmlRoundTrip();
+
+    void aPixelBarWithNoPowerIsGuessedPerFixtureNotPerChannel();
+    void guessesForMoversDimmerPacksAndUnlitFixtures();
+    void aRatedFixtureScalesWithItsLevel();
+    void theLoadGroupsByTypeBiggestFirst();
 };
 
 #endif

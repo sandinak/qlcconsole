@@ -185,8 +185,44 @@ namespace PowerEstimator
     extern const double MoverStandbyFraction;
     /** Fixed standby for non-movers (LED-driver idle), in watts, drawn when dark. */
     extern const double NonMoverStandbyWatts;
-    /** Per-intensity-channel watts used when a fixture has no rated power */
-    extern const double FallbackWattsPerChannel;
+    /** A fixture whose definition gives no power, and that has not been
+     *  measured, is guessed at. Channel count is no guide for LED gear (a
+     *  40-pixel bar has 120 colour channels and draws a few tens of watts --
+     *  at 40 W a channel it read 4.8 kW), so the guess is per fixture: a
+     *  mover's, or a small LED fixture's. Only a dimmer pack, whose every
+     *  channel is its own load, is still counted by channel. */
+    extern const double FallbackMoverWatts;
+    extern const double FallbackFixtureWatts;
+    extern const double FallbackWattsPerDimmerChannel;
+
+    /** Where a fixture's full-on figure comes from */
+    enum Basis
+    {
+        Measured,       //!< its own meter readings (PowerProfile)
+        Rated,          //!< the definition's PowerConsumption
+        Guessed,        //!< nothing given: one of the Fallback* guesses
+        NoLoad          //!< nothing to go on and nothing that lights
+    };
+
+    /** How fixtureFullWatts() arrives at @p fx's figure */
+    Basis basis(const Fixture *fx);
+
+    /** One row of the load, per definition and mode */
+    struct TypeLoad
+    {
+        QString name;           //!< "Manufacturer Model" (mode when several)
+        int count = 0;          //!< fixtures of it
+        Basis basis = Rated;
+        double ratedWatts = 0;  //!< the definition's PowerConsumption (0: none)
+        double fullWatts = 0;   //!< one fixture at full, as the estimate has it (the most of any)
+        double watts = 0;       //!< all of them, now
+        double amps = 0;        //!< all of them, now
+    };
+
+    /** The load grouped by fixture definition, biggest draw first. @p watts
+     *  and @p amps are per fixture id, as the caller worked them out. */
+    QList<TypeLoad> byType(Doc *doc, const QHash<quint32, double> &watts,
+                           const QHash<quint32, double> &amps);
 
     /** Combined intensity (dimmer x colour) of a fixture, in [0, 1] */
     double intensityFraction(const Fixture *fx, const PreGMReader &read);

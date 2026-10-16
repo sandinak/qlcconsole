@@ -529,7 +529,7 @@ void App::init()
         ProgrammingManager *pm = new ProgrammingManager(m_tab, m_doc);
         connect(pm, &ProgrammingManager::requestSave, this, &App::slotFileSave);
         connect(pm, &ProgrammingManager::powerEstimateChanged, this,
-                [this](double amps, double kw, bool overload) {
+                [this](double amps, double kw, bool overload, const QString &detail) {
             if (m_statusPowerLabel == NULL)
                 return;
             if (amps <= 0.0 && kw <= 0.0)   // cleared (Operate mode) → hide the chip
@@ -547,6 +547,8 @@ void App::init()
                 : QString();
             if (m_statusPowerLabel->styleSheet() != sheet)   // every 500 ms: only on a change
                 m_statusPowerLabel->setStyleSheet(sheet);
+            if (!detail.isEmpty() && m_statusPowerLabel->toolTip() != detail)
+                m_statusPowerLabel->setToolTip(detail);
             m_statusPowerLabel->show();
         });
         w = pm;
