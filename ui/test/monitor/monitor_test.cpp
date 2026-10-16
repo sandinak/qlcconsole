@@ -3545,6 +3545,117 @@ void Monitor_Test::aMoverOnADeckIsNotBuriedInIt()
     delete doc;
 }
 
+/* "the truss editor shows the fixtures just under the cross member as it
+   should be .. but the rig view shows them down a bit?"
+ *
+   The elevation draws a mover on a truss or pipe CENTRED on the point it is
+   rigged at (and the hit test agrees), so that is where a rigger drags it to
+   sit it under the bar -- the drop (mountZOffset) records it. The 3D rig view
+   then seated the body below that same point, top flush with it, so every
+   head placed by eye in the editor hung half a body lower in the overview,
+   clear of the bar it was clamped to. Seating belongs to what the elevations
+   seat too: a tower shelf, a deck, a riser. A truss or pipe mount is centred
+   in both.
+ *
+   QLC_HUNG_SHOTS=<dir> saves the frames this measures. */
+void Monitor_Test::aMoverHungOnATrussIsAtTheSameHeightInEveryView()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    Truss *bar = props->addTruss();
+    bar->setName("Bar 1"); bar->setType(Truss::Horizontal);
+    bar->setOrigin(QVector3D(7.0f, 1.0f, 3.0f));
+    bar->setDirection(QPointF(1.0, 0.0));
+    bar->setLength(3.0f);
+    bar->setWidth(0.29f);
+
+    Fixture *head = makeMover(doc, 14.0, 0, "Hung Spot", QVector3D(8.5f, 1.0f, 3.0f));
+    QVERIFY(head != nullptr);
+    FixtureRigProps rp;
+    rp.trussId = bar->id();
+    rp.trussOffset = 1.5f;
+    rp.mountingType = Truss::TopHung;
+    rp.trussMountSide = FixtureRigProps::UnderHung;
+    rp.mountZOffset = -0.2f;                     // dropped below the bar, as rigged
+    props->setFixtureRigProps(head->id(), rp);
+
+    const QString shots = qEnvironmentVariable("QLC_HUNG_SHOTS");
+
+    /* Where the fixture's drawn body is centred vertically, as a fraction of
+       its own drawn height away from the rig point: 0 = centred on it, +0.5 =
+       entirely below it. */
+    auto bodyOffset = [&](StructureStudioView::Plane plane, const char *tag,
+                          QPointF *centroid) -> double {
+        StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+        v.resize(760, 600);
+        v.setPlane(plane);
+        if (plane == StructureStudioView::Angled)
+            v.setAngledView(15.0, 20.0);
+        v.setAmbient(1.0);
+        v.grab();                    // flush the first layout, see the shelf test
+        v.reload();
+        v.m_zoomed = true;
+        const QImage img = v.grab().toImage();
+
+        const PreviewItem saved = props->m_fixtureItems.value(head->id()).m_baseItem;
+        props->removeFixture(head->id());
+        const QImage base = v.grab().toImage();
+        props->m_fixtureItems[head->id()].m_baseItem = saved;
+        props->setFixtureRigProps(head->id(), rp);
+
+        if (!shots.isEmpty())
+            img.save(QDir(shots).filePath(QString("hung-%1.png").arg(tag)));
+
+        const double dpr = img.devicePixelRatio();
+        const QPointF at = v.w2s(v.fixtureCentre(head->id())) * dpr;
+        double sumX = 0.0, sumY = 0.0; int n = 0, top = img.height(), bottom = -1;
+        for (int y = 0; y < img.height(); ++y)
+            for (int x = 0; x < img.width(); ++x)
+            {
+                const QColor a = img.pixelColor(x, y), b = base.pixelColor(x, y);
+                if (qAbs(a.red() - b.red()) + qAbs(a.green() - b.green())
+                    + qAbs(a.blue() - b.blue()) <= 24)
+                    continue;
+                sumX += x; sumY += y; ++n;
+                top = qMin(top, y); bottom = qMax(bottom, y);
+            }
+        if (n < 50)
+            return 99.0;
+        if (centroid != nullptr)
+            *centroid = QPointF(sumX / n, sumY / n) / dpr;
+        return (sumY / n - at.y()) / qMax(1, bottom - top + 1);
+    };
+
+    QPointF front, angled;
+    const double inEditor = bodyOffset(StructureStudioView::Front, "front", &front);
+    const double inRig    = bodyOffset(StructureStudioView::Angled, "angled", &angled);
+    QVERIFY2(inEditor < 50.0 && inRig < 50.0, "the fixture drew almost nothing");
+
+    QVERIFY2(qAbs(inEditor) < 0.2,
+             qPrintable(QString("the elevation no longer centres a truss-hung mover "
+                                "on its rig point (offset %1 of its height)")
+                        .arg(inEditor, 0, 'f', 2)));
+    QVERIFY2(qAbs(inRig - inEditor) < 0.2,
+             qPrintable(QString("the rig view hangs a truss-hung mover %1 of its "
+                                "height lower than the truss editor shows it")
+                        .arg(inRig - inEditor, 0, 'f', 2)));
+
+    /* And picking it in the rig view finds it where it is drawn. */
+    {
+        StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+        v.resize(760, 600);
+        v.setPlane(StructureStudioView::Angled);
+        v.setAngledView(15.0, 20.0);
+        v.grab();
+        v.reload();
+        v.m_zoomed = true;
+        v.grab();
+        QCOMPARE(v.hitTestFixture(angled), head->id());
+    }
+    delete doc;
+}
+
 /* "when selecting a feature on the bar.truss editor .. should show the
    fixture width on the horizontal .. and the fixture height on the
    vertical like it does on the studio editor." drawDimensions() already
