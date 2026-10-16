@@ -14,50 +14,56 @@ vocabulary) and `POSITION_ARCH.md`.
 
 ---
 
-## Decisions for Branson (recommended answer first)
+## Decisions for Branson
 
-1. **Where do the lights sit at full spread (+5)?**
-   *Rec: ends included.* The first light lands on one end, the last on the
+**Decided 2026-10-16:**
+
+- **Grouping (Q4).** The **Cross** control offers both readings of "1 2 3
+  cross 4 5 6": *groups swap sides* (`4 5 6 | 1 2 3` at −5) and *each group
+  flips in place / mirror* (`3 2 1 | 6 5 4`). **Pairs move as blocks**: each
+  pair keeps its two points and the pairs cross as units (`5 6 3 4 1 2` at
+  −5), i.e. Group = pairs + Cross = groups swap sides. "Share a point" was not
+  what was meant for pairs; it stays only as a separate, minor option because
+  it costs one flag in the maths (members' offset = 0) — drop it if unwanted.
+
+**Pending Branson's review** (recommended answer first):
+
+1. **Where do the lights sit at full spread (+5)?** *Pending Branson's
+   review.* Rec: ends included — the first light on one end, the last on the
    other, the rest evenly between, so the end handles are exactly where the
-   outer beams land. (The other option is equal cells with half a gap at each
-   end.) One light: the centre.
-2. **What does the Spread slider do?** *Rec: linear in distance along the
-   line, from the centre.* 0 = every light on the centre point; +5 = the full
-   even spread (Q1); +2.5 = the same pattern squeezed into the middle half;
-   negative = the same distances on the **other** side of centre (beams cross),
-   −5 = fully crossed. Nothing goes past the ends: to go wider, drag an end.
-   Step 0.1.
-3. **Which light goes to which point?** *Rec: by where the lights hang*,
-   measured along the line (stage-left light → the stage-left end), so +5 never
-   crosses beams by accident and −5 always does. Option: "Look order" (the
-   group's head order, then loose fixtures in the look's order) for when you
-   want a deliberate scramble. The line's own direction then doesn't matter.
-4. **Grouping — which of these did you mean?** (diagrams below.) *Rec: offer
-   all of them with three small controls:* **Group** (each light / pairs /
-   threes / halves), **Cross** (whole groups swap sides / each group flips in
-   place), and **Share a point** (a group's lights land together).
-   - "1 2 3 cross 4 5 6" → *Halves, groups cross*: at −5 the two halves swap
-     sides as blocks, each half keeping its order: `4 5 6 | 1 2 3`. (The
-     alternative, *Halves, cross within*, gives `3 2 1 | 6 5 4`.)
-   - "1 and 2 .. then 3 and 4" → most likely *Pairs share a point* (1+2 on one
-     spot, 3+4 on the next, 5+6 on the last). Alternatives: *Pairs, groups
-     cross* (`5 6 3 4 1 2` at −5) or *Pairs, cross within* (`2 1 4 3 6 5`).
-5. **Spread lives on the look, not the target.** *Rec: yes* — the Aim look
-   (palette) carries Spread/Group/Cross, like an effect's Spread row, so two
-   looks can aim at the same line with different spreads (duplicate the look).
+   outer beams land. (Alternative: equal cells, half a gap at each end.) One
+   light: the centre.
+2. **What does the Spread slider do?** *Pending Branson's review.* Rec:
+   linear in distance along the line, from the centre. 0 = every light on the
+   centre point; +5 = the full even spread (Q1); +2.5 = the same pattern
+   squeezed into the middle half; negative = the same distances on the
+   **other** side of centre (beams cross), −5 = fully crossed. Nothing goes
+   past the ends: to go wider, drag an end. Step 0.1.
+3. **Which light goes to which point?** *Pending Branson's review.* Rec: by
+   where the lights hang, measured along the line (stage-left light → the
+   stage-left end), so +5 never crosses beams by accident and −5 always does.
+   Option: "Look order" (the group's head order, then loose fixtures in the
+   look's order). The line's own direction then doesn't matter.
+4. *(Grouping — decided, above.)*
+5. **Spread lives on the look, not the target.** *Pending Branson's review.*
+   Rec: the Aim look (palette) carries Spread/Group/Cross, like an effect's
+   Spread row, so two looks can aim at the same line with different spreads
+   (duplicate the look).
 6. **Double-click on a line inserts a point** — but double-click on a target
-   opens its edit dialog today. *Rec:* on a line, double-click the curve =
-   add point, double-click a mid point = remove it, double-click the centre
-   marker (or right-click → Edit…) = the dialog. Point targets unchanged.
-7. **3D Rig Overview: show, don't edit, in the first cut.** *Rec: yes* —
-   targets are display-only there today; the Lighting Studio's Top / Front /
-   Side views already give full 3D (plan moves X/Y, Front/Side move height).
-   Dragging handles in 3D is a later step if you want it.
-8. **Animation.** *Rec: accept for now:* moving the slider moves the beams
-   live; a cue crossfade from a +5 look to a −5 look fades pan/tilt (beams
-   travel straight in pan/tilt space, close to but not exactly along the
-   line). A spread that *breathes* on a speed master is an effect (P4).
-9. **Follow spot / effects pointed at a line** use its centre point. *Rec: yes.*
+   opens its edit dialog today. *Pending Branson's review.* Rec: on a line,
+   double-click the curve = add point, double-click a mid point = remove it,
+   double-click the centre marker (or right-click → Edit…) = the dialog. Point
+   targets unchanged.
+7. **3D Rig Overview: show, don't edit, in the first cut.** *Pending
+   Branson's review.* Rec: yes — targets are display-only there today; the
+   Lighting Studio's Top / Front / Side views already give full 3D. Dragging
+   handles in 3D is a later step if wanted.
+8. **Animation.** *Pending Branson's review.* Rec: moving the slider moves the
+   beams live; a cue crossfade from a +5 look to a −5 look fades pan/tilt
+   (beams travel straight in pan/tilt space, close to but not exactly along
+   the line). A spread that *breathes* on a speed master is an effect (P4).
+9. **Follow spot / effects pointed at a line** use its centre point. *Pending
+   Branson's review.* Rec: yes.
 
 ---
 
@@ -118,18 +124,20 @@ for groups and loose fixtures in two separate calls.
 
 1. Order the N lights (Q3), slot k ∈ 0..N−1 at `u = k/(N−1)` along the line
    (Q1), i.e. offset from centre `d = u − ½` (−½..+½).
-2. Split into groups of G (Q4). Group centre `D` = mean of its members' `d`
-   (with *Share a point*: groups are re-spaced evenly end to end, members
-   `e = 0`); member offset `e = d − D`.
+2. Split into groups of G (Q4: each light / pairs / threes / halves). Group
+   centre `D` = mean of its members' `d`; member offset `e = d − D`. A group
+   keeps its members' points relative to its centre, so pairs move as blocks.
+   (Optional *Share a point*: groups re-spaced evenly end to end, `e = 0`.)
 3. With spread `s` (−5..+5), `A = |s|/5`:
    `fraction = ½ + A·(σg·D + σm·e)`, where σg = σm = +1 for s ≥ 0, and for
-   s < 0 either σg = −1 (*groups cross*) or σm = −1 (*cross within*).
-   G = 1 with *groups cross* is the plain full mirror.
+   s < 0 either σg = −1 (Cross = *groups swap sides*) or σm = −1
+   (Cross = *each group flips in place / mirror*).
+   G = 1 with *groups swap sides* is the plain full mirror.
 4. Aim point = `curve.pointAt(fraction)` + the target's position; solve as
    today.
 
 Halves with an odd count: the middle light belongs to neither half and stays
-on the centre. Defaults: spread +5, group 1, groups cross, order along the line
+on the centre. Defaults: spread +5, group 1, Cross = groups swap sides, order along the line
 — i.e. a fresh line look is "evenly distributed", P1's whole behaviour.
 
 ### Six lights, line A→B (positions along the line)
@@ -143,24 +151,24 @@ Each light            A---------------------------------------B
              +2.5               1   2   3   4   5   6
                -5     6       5       4       3       2       1
 
-Halves, groups cross  ("1 2 3 cross 4 5 6")
+Halves, groups swap sides  ("1 2 3 cross 4 5 6", option A)
                +5     1       2       3       4       5       6
              -2.5               4   5   6   1   2   3
                -5     4       5       6       1       2       3
 
-Halves, cross within
+Halves, each flips in place / mirror  ("1 2 3 cross 4 5 6", option B)
                +5     1       2       3       4       5       6
                -5     3       2       1       6       5       4
 
-Pairs, groups cross
+Pairs, groups swap sides  ("1 and 2 .. then 3 and 4" -- chosen: blocks)
                +5     1       2       3       4       5       6
                -5     5       6       3       4       1       2
 
-Pairs, cross within
+Pairs, each flips in place / mirror
                +5     1       2       3       4       5       6
                -5     2       1       4       3       6       5
 
-Pairs share a point   ("1 and 2 .. then 3 and 4")
+Pairs share a point   (optional extra; not what was meant for pairs)
                +5     1+2                 3+4                 5+6
              +2.5               1+2       3+4       5+6
                -5     5+6                 3+4                 1+2
@@ -197,7 +205,8 @@ With a line chosen it adds:
 ```
 Aim at:  [Line: DS edge        v]
 Spread:  cross -5 |----------|----------| +5 spread     [ +5.0 ]
-Group:   [Each light v]  Cross: [Whole groups v]  [ ] Share a point
+Group:   [Each light v]  Cross: [Groups swap sides v]  [ ] Share a point
+         (Cross: "Groups swap sides" | "Each group flips in place (mirror)")
 Order:   [Along the line v]
          A  1   2   3   4   5   6  B        <- live strip: numbered dots
 ```
@@ -247,7 +256,9 @@ round-trip, and an old-format file loads unchanged.
   line. Engine unit tests + offscreen UI test of the gestures; help topic.
 - **P2 — Spread slider** (−5..+5), the look-editor rows, live strip, params
   saved.
-- **P3 — Grouping**: Group / Cross / Share (+ Order option).
+- **P3 — Grouping**: Group (each / pairs / threes / halves), Cross (groups
+  swap sides / each group flips in place), optional Share a point (+ Order
+  option).
 - **P4 (later, if wanted)** — spread on a control-surface fader; a "breathe"
   effect sweeping spread on a speed master; editing handles in the Rig
   Overview; effects that chase along the line.
