@@ -1100,7 +1100,7 @@ void Scene::processValue(MasterTimer *timer, QList<Universe*> ua, uint fadeIn, S
         m_fadersMap[universe->id()] = fader;
     }
 
-    FadeChannel *fc = fader->getChannelFader(doc(), universe, scv.fxi, scv.channel);
+    GenericFader::ChannelRef fc = fader->getChannelFader(doc(), universe, scv.fxi, scv.channel);
     int chIndex = fc->channelIndex(scv.channel);
 
     /** If a blend Function has been set, check if this channel needs to

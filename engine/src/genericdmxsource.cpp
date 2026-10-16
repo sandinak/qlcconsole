@@ -133,7 +133,7 @@ void GenericDMXSource::writeDMX(MasterTimer* timer, QList<Universe *> ua)
                 m_fadersMap[universe->id()] = fader;
             }
 
-            FadeChannel *fc = fader->getChannelFader(m_doc, universe, fixture->id(), channelIndex);
+            GenericFader::ChannelRef fc = fader->getChannelFader(m_doc, universe, fixture->id(), channelIndex);
             fc->setCurrent(it.value());
             fc->setTarget(it.value());
         }

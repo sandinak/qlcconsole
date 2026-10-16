@@ -2195,10 +2195,10 @@ void ProgrammerController::writeChannelLive(quint32 fixtureId, quint32 channel, 
         }
     }
 
-    FadeChannel *fc = fader->getChannelFader(m_doc, universe, fixtureId, channel);
+    GenericFader::ChannelRef fc = fader->getChannelFader(m_doc, universe, fixtureId, channel);
     if (fc->universe() == Universe::invalid())
     {
-        fader->remove(fc);
+        fader->remove(fc.get());
         return;
     }
 
@@ -2213,6 +2213,9 @@ void ProgrammerController::writeChannelLive(quint32 fixtureId, quint32 channel, 
     fc->setTarget(value);
     fc->setReady(false);
     fc->setElapsed(0);
+    // routing the edit may ask a universe for a fader: not while holding this
+    // one, which that universe's thread may be waiting on
+    fc.release();
 
     // Edit-routing for Save, same as VCSlider: let an owning running Scene
     // absorb the edit if one exists, else stash it in the programmer values

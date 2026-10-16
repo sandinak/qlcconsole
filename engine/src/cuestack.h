@@ -28,11 +28,11 @@
 
 #include "dmxsource.h"
 #include "cue.h"
+#include "genericfader.h"
 
 class QXmlStreamReader;
 class QXmlStreamWriter;
 class UniverseArray;
-class GenericFader;
 class MasterTimer;
 class FadeChannel;
 class Doc;
@@ -250,7 +250,7 @@ public:
 private:
     int next();
     int previous();
-    FadeChannel *getFader(QList<Universe *> universes, quint32 universeID, quint32 fixtureID, quint32 channel);
+    GenericFader::ChannelRef getFader(QList<Universe *> universes, quint32 universeID, quint32 fixtureID, quint32 channel);
     void updateFaderValues(FadeChannel *fc, uchar value, uint fadeTime);
     void switchCue(int from, int to, const QList<Universe *> ua);
 

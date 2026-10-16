@@ -453,26 +453,26 @@ void VCXYPad::writeScenePositions(MasterTimer *timer, QList<Universe *> universe
         {
             if (sc.m_subType == QLCChannel::MSB)
             {
-                FadeChannel *fc = fader->getChannelFader(m_doc, universes[sc.m_universe], sc.m_fixture, sc.m_channel);
-                updateSceneChannel(fc, panCoarse);
+                GenericFader::ChannelRef fc = fader->getChannelFader(m_doc, universes[sc.m_universe], sc.m_fixture, sc.m_channel);
+                updateSceneChannel(fc.get(), panCoarse);
             }
             else
             {
-                FadeChannel *fc = fader->getChannelFader(m_doc, universes[sc.m_universe], sc.m_fixture, sc.m_channel);
-                updateSceneChannel(fc, panFine);
+                GenericFader::ChannelRef fc = fader->getChannelFader(m_doc, universes[sc.m_universe], sc.m_fixture, sc.m_channel);
+                updateSceneChannel(fc.get(), panFine);
             }
         }
         else
         {
             if (sc.m_subType == QLCChannel::MSB)
             {
-                FadeChannel *fc = fader->getChannelFader(m_doc, universes[sc.m_universe], sc.m_fixture, sc.m_channel);
-                updateSceneChannel(fc, tiltCoarse);
+                GenericFader::ChannelRef fc = fader->getChannelFader(m_doc, universes[sc.m_universe], sc.m_fixture, sc.m_channel);
+                updateSceneChannel(fc.get(), tiltCoarse);
             }
             else
             {
-                FadeChannel *fc = fader->getChannelFader(m_doc, universes[sc.m_universe], sc.m_fixture, sc.m_channel);
-                updateSceneChannel(fc, tiltFine);
+                GenericFader::ChannelRef fc = fader->getChannelFader(m_doc, universes[sc.m_universe], sc.m_fixture, sc.m_channel);
+                updateSceneChannel(fc.get(), tiltFine);
             }
         }
     }

@@ -546,7 +546,7 @@ void EFXFixture::setPointPanTilt(QList<Universe *> universes, QSharedPointer<Gen
     if (m_firstMsbChannel != QLCChannel::invalid())
     {
         quint32 panValue = quint32(pan);
-        FadeChannel *fc = fader->getChannelFader(doc(), uni, head().fxi, m_firstMsbChannel);
+        GenericFader::ChannelRef fc = fader->getChannelFader(doc(), uni, head().fxi, m_firstMsbChannel);
         if (m_firstLsbChannel != QLCChannel::invalid())
         {
             if (fader->handleSecondary())
@@ -556,19 +556,19 @@ void EFXFixture::setPointPanTilt(QList<Universe *> universes, QSharedPointer<Gen
             }
             else
             {
-                FadeChannel *lsbFc = fader->getChannelFader(doc(), uni, head().fxi, m_firstLsbChannel);
-                updateFaderValues(lsbFc, quint32((pan - floor(pan)) * float(UCHAR_MAX)));
+                GenericFader::ChannelRef lsbFc = fader->getChannelFader(doc(), uni, head().fxi, m_firstLsbChannel);
+                updateFaderValues(lsbFc.get(), quint32((pan - floor(pan)) * float(UCHAR_MAX)));
             }
         }
         if (m_parent->isRelative())
             fc->addFlag(FadeChannel::Relative);
 
-        updateFaderValues(fc, panValue);
+        updateFaderValues(fc.get(), panValue);
     }
     if (m_secondMsbChannel != QLCChannel::invalid())
     {
         quint32 tiltValue = quint32(tilt);
-        FadeChannel *fc = fader->getChannelFader(doc(), uni, head().fxi, m_secondMsbChannel);
+        GenericFader::ChannelRef fc = fader->getChannelFader(doc(), uni, head().fxi, m_secondMsbChannel);
         if (m_secondLsbChannel != QLCChannel::invalid())
         {
             if (fader->handleSecondary())
@@ -578,14 +578,14 @@ void EFXFixture::setPointPanTilt(QList<Universe *> universes, QSharedPointer<Gen
             }
             else
             {
-                FadeChannel *lsbFc = fader->getChannelFader(doc(), uni, head().fxi, m_secondLsbChannel);
-                updateFaderValues(lsbFc, quint32((tilt - floor(tilt)) * float(UCHAR_MAX)));
+                GenericFader::ChannelRef lsbFc = fader->getChannelFader(doc(), uni, head().fxi, m_secondLsbChannel);
+                updateFaderValues(lsbFc.get(), quint32((tilt - floor(tilt)) * float(UCHAR_MAX)));
             }
         }
         if (m_parent->isRelative())
             fc->addFlag(FadeChannel::Relative);
 
-        updateFaderValues(fc, tiltValue);
+        updateFaderValues(fc.get(), tiltValue);
     }
 }
 
@@ -600,7 +600,7 @@ void EFXFixture::setPointDimmer(QList<Universe *> universes, QSharedPointer<Gene
     if (m_firstMsbChannel != QLCChannel::invalid())
     {
         quint32 dimmerValue = quint32(dimmer);
-        FadeChannel *fc = fader->getChannelFader(doc(), uni, head().fxi, m_firstMsbChannel);
+        GenericFader::ChannelRef fc = fader->getChannelFader(doc(), uni, head().fxi, m_firstMsbChannel);
 
         if (m_firstLsbChannel != QLCChannel::invalid())
         {
@@ -610,7 +610,7 @@ void EFXFixture::setPointDimmer(QList<Universe *> universes, QSharedPointer<Gene
                 dimmerValue = (dimmerValue << 8) + quint32((dimmer - floor(dimmer)) * float(UCHAR_MAX));
             }
         }
-        updateFaderValues(fc, dimmerValue);
+        updateFaderValues(fc.get(), dimmerValue);
     }
 }
 
@@ -630,12 +630,12 @@ void EFXFixture::setPointRGB(QList<Universe *> universes, QSharedPointer<Generic
     {
         QColor pixel = m_rgbGradient.pixel(x, y);
 
-        FadeChannel *fc = fader->getChannelFader(doc(), uni, fxi->id(), rgbChannels[0]);
-        updateFaderValues(fc, pixel.red());
+        GenericFader::ChannelRef fc = fader->getChannelFader(doc(), uni, fxi->id(), rgbChannels[0]);
+        updateFaderValues(fc.get(), pixel.red());
         fc = fader->getChannelFader(doc(), uni, fxi->id(), rgbChannels[1]);
-        updateFaderValues(fc, pixel.green());
+        updateFaderValues(fc.get(), pixel.green());
         fc = fader->getChannelFader(doc(), uni, fxi->id(), rgbChannels[2]);
-        updateFaderValues(fc, pixel.blue());
+        updateFaderValues(fc.get(), pixel.blue());
     }
 }
 

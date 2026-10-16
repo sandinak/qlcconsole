@@ -325,7 +325,7 @@ void VCAudioTriggers::writeDMX(MasterTimer *timer, QList<Universe *> universes)
                 fader->setEnabled(m_button->isChecked() ? true : false);
             }
 
-            FadeChannel *fc = fader->getChannelFader(m_doc, universes[universe], Fixture::invalidId(), absAddress);           
+            GenericFader::ChannelRef fc = fader->getChannelFader(m_doc, universes[universe], Fixture::invalidId(), absAddress);           
             fc->setStart(fc->current());
             fc->setTarget(m_volumeBar->m_value);
             fc->setReady(false);
@@ -354,7 +354,7 @@ void VCAudioTriggers::writeDMX(MasterTimer *timer, QList<Universe *> universes)
                     lastUniverse = universe;
                 }
 
-                FadeChannel *fc = fader->getChannelFader(m_doc, universes[universe], Fixture::invalidId(), absAddress);
+                GenericFader::ChannelRef fc = fader->getChannelFader(m_doc, universes[universe], Fixture::invalidId(), absAddress);
                 fc->setStart(fc->current());
                 fc->setTarget(sb->m_value);
                 fc->setReady(false);

@@ -37,6 +37,7 @@ private slots:
     void anUnpatchedFixturesValuesAreShownNotWritten();
     void replaceAllSwapsTheWholeSet();
     void aFaderRebuiltEveryTickIsNeverSeenEmpty();
+    void aChannelBeingSetUpStaysPutWhileTheUniverseWrites();
     void writeLoop();
     void adjustIntensity();
 

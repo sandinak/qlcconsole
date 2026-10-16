@@ -163,7 +163,7 @@ bool ScriptRunner::write(MasterTimer *timer, QList<Universe *> universes)
                 m_fadersMap[val.m_universe] = fader;
             }
 
-            FadeChannel *fc = fader->getChannelFader(m_doc, universes[val.m_universe], val.m_fixtureID, val.m_channel);
+            GenericFader::ChannelRef fc = fader->getChannelFader(m_doc, universes[val.m_universe], val.m_fixtureID, val.m_channel);
 
             fc->setStart(fc->current());
             fc->setTarget(val.m_value);

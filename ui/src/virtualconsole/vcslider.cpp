@@ -1466,10 +1466,10 @@ void VCSlider::writeDMXLevel(MasterTimer *timer, QList<Universe *> universes)
                 }
             }
 
-            FadeChannel *fc = fader->getChannelFader(m_doc, universes[universe], lch.fixture, lch.channel);
+            GenericFader::ChannelRef fc = fader->getChannelFader(m_doc, universes[universe], lch.fixture, lch.channel);
             if (fc->universe() == Universe::invalid())
             {
-                fader->remove(fc);
+                fader->remove(fc.get());
                 continue;
             }
 
@@ -1512,6 +1512,7 @@ void VCSlider::writeDMXLevel(MasterTimer *timer, QList<Universe *> universes)
             fc->setTarget(modLevel);
             fc->setReady(false);
             fc->setElapsed(0);
+            fc.release();
 
             CaptureManager *cm = m_doc->captureManager();
             if (cm != NULL && cm->isCapturing())
@@ -1641,11 +1642,11 @@ void VCSlider::writeDMXParameter(MasterTimer *timer, QList<Universe *> universes
             }
         }
 
-        FadeChannel *fc = fader->getChannelFader(m_doc, universes[universe],
+        GenericFader::ChannelRef fc = fader->getChannelFader(m_doc, universes[universe],
                                                  fid, ch);
         if (fc->universe() == Universe::invalid())
         {
-            fader->remove(fc);
+            fader->remove(fc.get());
             return;
         }
 
@@ -1660,6 +1661,9 @@ void VCSlider::writeDMXParameter(MasterTimer *timer, QList<Universe *> universes
         fc->setTarget(val);
         fc->setReady(false);
         fc->setElapsed(0);
+        // routing the edit below may ask a universe for a fader: not while
+        // holding this one, which that universe's thread may be waiting on
+        fc.release();
 
         // Edit-routing: if a running Scene "owns" this (fid, ch),
         // mutate the scene in place — Scene::setValue injects into

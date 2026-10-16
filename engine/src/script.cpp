@@ -782,7 +782,7 @@ QString Script::handleSetFixture(const QList<QStringList>& tokens, QList<Univers
                     m_fadersMap[universe] = fader;
                 }
 
-                FadeChannel *fc = fader->getChannelFader(doc, universes[universe], fxi->id(), ch);
+                GenericFader::ChannelRef fc = fader->getChannelFader(doc, universes[universe], fxi->id(), ch);
                 fc->setTarget(value);
                 fc->setFadeTime(time);
 
