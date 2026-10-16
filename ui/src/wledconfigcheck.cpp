@@ -251,9 +251,9 @@ void WledConfigCheck::replied(const QString &ip, QNetworkReply *reply)
        every unreachable WLED every 30 s. And said once when a device stops
        answering, and once when it is back -- not on every check. */
     if (!ok && m_answered.value(ip, true))
-        qInfo() << "WLED" << ip << "does not answer:" << reply->errorString();
+        qDebug() << "WLED" << ip << "does not answer:" << reply->errorString();
     else if (ok && !m_answered.value(ip, true))
-        qInfo() << "WLED" << ip << "answers again";
+        qDebug() << "WLED" << ip << "answers again";
 
     receive(ip, ok ? reply->readAll() : QByteArray(), ok);
 }
