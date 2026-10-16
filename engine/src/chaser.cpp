@@ -1039,7 +1039,10 @@ void Chaser::write(MasterTimer* timer, QList<Universe *> universes)
     if (m_startupAction.m_action == ChaserPauseRequest)
     {
         qDebug() << "[Chaser] Request PAUSE" << m_startupAction.m_fadeMode;
-        m_runner->setAction(m_startupAction);
+        // Straight to the runner, not as its pending action: that would
+        // take the place of a GO (or a jump) asked for in the same breath
+        // -- "GO cue 3" on a paused list resumed it and stayed put.
+        m_runner->setPause(m_startupAction.m_fadeMode ? true : false, universes);
         m_startupAction.m_action = ChaserNoAction;
     }
 

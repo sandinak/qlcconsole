@@ -57,7 +57,9 @@ class QLC_ENGINE_EXPORT ShowControl final : public QObject
 public:
     explicit ShowControl(Doc *doc, QObject *parent = nullptr);
 
-    enum Command { Go, Stop, Pause, Resume, Load, AllOff, Reset, Back };
+    /** SubGo / SubBack: through the sub-cues of the cue playing
+     *  (SUBCUES_DESIGN.md) -- OSC /subgo and /subback; MSC has none. */
+    enum Command { Go, Stop, Pause, Resume, Load, AllOff, Reset, Back, SubGo, SubBack };
 
     /** Where a command came from: OSC, MSC, or this console (a key, the
      *  footer, the Virtual Console). */
@@ -96,14 +98,25 @@ public:
      *  such list or cue); commandHandled() says what happened either way. */
     bool execute(const Request &request);
 
-    /** The cue GO with no cue goes to next, on a stopped list; -1: none. */
-    int loadedStep(quint32 chaserId) const { return m_loaded.value(chaserId, -1); }
+    /** The cue GO with no cue goes to next, on a stopped list; -1: none.
+     *  For a LOADed sub-cue, its parent step (loadedSubCue() says which). */
+    int loadedStep(quint32 chaserId) const { return m_loaded.value(chaserId).step; }
+    /** The sub-cue LOADed in loadedStep() (LOAD 4.2); -1 for a main cue,
+     *  or none. */
+    int loadedSubCue(quint32 chaserId) const { return m_loaded.value(chaserId).subCue; }
 
     /** The step a GO with no cue plays next on @a chaser -- what's on
      *  standby: the loaded cue; else, playing, the next not skipped; else
      *  the first not skipped. -1: none (the end of a single-shot list, or
      *  every step skipped). */
     int standbyStep(const Chaser *chaser) const;
+    /** The sub-cue of standbyStep() on standby: a LOADed sub-cue; -1 when
+     *  what's on standby is a main cue. */
+    int standbySubCue(const Chaser *chaser) const;
+
+    /** Cue @a step (sub-cue @a subCue, -1 for the cue itself) of
+     *  @a chaser as a command names it: "4", "4.2". */
+    static QString cueName(const Chaser *chaser, int step, int subCue);
 
 signals:
     /** A command arrived and was carried out (@a done), or not, with a
@@ -177,11 +190,17 @@ private slots:
 private:
     QString listName(const Chaser *chaser) const;
     void go(Chaser *chaser, int step);
+    void goSubCue(Chaser *chaser, int step, int subCue);
 
 private:
     Doc *m_doc;
     quint32 m_mainCueList;
-    QHash<quint32, int> m_loaded;       ///< chaser id -> step on standby
+    struct Standby
+    {
+        int step = -1;
+        int subCue = -1;                ///< a LOADed sub-cue of step; -1: none
+    };
+    QHash<quint32, Standby> m_loaded;   ///< chaser id -> cue on standby
     int m_mscDeviceId;
     bool m_mscEnabled;
     QString m_mscInputPlugin;           ///< empty: any input
