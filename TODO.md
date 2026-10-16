@@ -348,16 +348,16 @@ rig edits, bulk repatching, cross-show consistency checks.
   or a bundled rtprio limits.d rule) is a separate, bigger decision — not
   done, flagged as its own backlog item below.
 
-  **Windows — MMCSS ("Pro Audio" thread characteristics), ROUGHED IN,
-  UNVERIFIED, NO TEST PATH AVAILABLE.** Architecturally different from the
-  unix path: `mastertimer-win32.cpp`'s timer callback runs on a Windows
-  thread-pool worker (`CreateTimerQueueTimer`), not a thread this code owns,
-  so the boost happens inside the callback itself, `thread_local`-guarded to
-  run once per actual OS thread. No revert on stop (would need to run on the
-  same pool thread that acquired it, which nothing here tracks) — released
-  when that thread exits at process end. This one has had zero real-world
-  testing of any kind; treat as a rough sketch, not a working feature, until
-  someone with a Windows box confirms it.
+  **Windows — MMCSS ("Pro Audio" thread characteristics), on its own timer
+  thread (2026-10-16).** `mastertimer-win32.cpp` used to tick from a
+  `CreateTimerQueueTimer` thread-pool callback; once ticks overran (Windows
+  soak dry run, STRESS show) the pool started a worker per overlapping tick:
+  111 -> 872 threads, 803 MB private, 40 s ticks, and MMCSS refused each new
+  worker (565, too many threads). Now one dedicated thread on a
+  high-resolution waitable timer (timeBeginPeriod(1) fallback), absolute
+  deadlines, re-anchor on overrun like the unix loop, MMCSS asked once and
+  reverted at stop. mastertimer_test covers an overrunning tick (one thread,
+  one tick at a time, no catch-up burst) and stop() during a tick.
 
 - **Linux: package a way to actually grant SCHED_FIFO (2026-09-02, follow-on
   to the item above, not started)** — the DMX timer thread's real-time
