@@ -53,6 +53,7 @@ typedef struct
     Universe::BlendMode m_blendMode;    //! The original Function blend mode
     int m_intensityOverrideId;          //! An ID to control the step intensity
     int m_pIntensityOverrideId;         //! An ID to control the step parent intensity
+    bool m_subCues;                     //! Its function is a chase held as sub-cues (Sub GO)
 } ChaserRunnerStep;
 
 class ChaserRunner final : public QObject
@@ -120,6 +121,15 @@ public:
     bool isExternalClock() const { return m_externalClock; }
 
     /**
+     * Held as sub-cues (SUBCUES_DESIGN.md): this chase plays as a step's
+     * sub-cues on a Sub GO. Its holds are not counted (a step changes only on
+     * an action), a step change lands at once (the outer chase quantizes Sub
+     * GO), and a step index is taken in list order, whatever the run order.
+     */
+    void setSubCueHeld(bool enable) { m_subCueHeld = enable; }
+    bool isSubCueHeld() const { return m_subCueHeld; }
+
+    /**
      * Compute next step for manual fading
      */
     int computeNextStep(int currentStepIndex) const;
@@ -174,6 +184,8 @@ private:
     ChaserAction m_pendingAction;           //! Action to be performed on steps at the next write call
     int m_lastRunStepIdx;                   //! Index of the last step ran
     bool m_externalClock;                   //! If true, steps advance only on explicit action (show-clock driven)
+    bool m_subCueHeld = false;              //! Played as sub-cues: steps change only on an action
+    ChaserAction m_pendingSubAction;        //! A Sub GO / Sub Back / jump to a sub-cue for the next write
     quint32 m_lastFunctionID;               //! ID of the last Function ran (Scene only)
     QElapsedTimer *m_roundTime;             //! Counts the time between steps
     /** On a speed master: its last whole beat counted (none yet: min). */
@@ -185,9 +197,24 @@ private:
     /** The clock a held GO waits on, in beats (or bars). */
     double goClockUnits() const;
 
+    /** GO on the beat for Sub GO: as m_goHeldIn. */
+    qint64 m_subGoHeldIn = std::numeric_limits<qint64>::min();
+
 public:
-    /** A GO is being held for the beat (the cue list shows it). */
-    bool goHeld() const { return m_goHeldIn != std::numeric_limits<qint64>::min(); }
+    /** A GO (or Sub GO) is being held for the beat (the cue list shows it). */
+    bool goHeld() const { return m_goHeldIn != std::numeric_limits<qint64>::min()
+                                 || m_subGoHeldIn != std::numeric_limits<qint64>::min(); }
+
+    /** The running step at the current index, or null. */
+    ChaserRunnerStep *currentIndexStep() const;
+private:
+    /** Stop a running step's function; a chase held as its sub-cues is let
+     *  go of (no longer held). */
+    void stopStepFunction(ChaserRunnerStep *step, bool preserveAttributes = false);
+    /** Pass a pending Sub GO / Sub Back / sub-cue jump on to the chase
+     *  playing as the current step's sub-cues. */
+    void applySubAction(const ChaserAction &action);
+
 private:
     QVector<int> m_order;                   //! Array of step indices in a randomized order
 

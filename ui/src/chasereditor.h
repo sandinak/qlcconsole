@@ -159,6 +159,19 @@ private slots:
 
 private:
     int getCurrentIndex();
+    /** The step row @a item is, or is under (a sub-cue row); -1 for none. */
+    int topLevelIndex(QTreeWidgetItem *item) const;
+
+    /************************************************************************
+     * Sub-cues (SUBCUES_DESIGN.md)
+     ************************************************************************/
+private:
+    /** List a chase step's steps under its row: read-only, numbered. */
+    void updateSubCueItems(QTreeWidgetItem *item, const ChaserStep &step);
+    /** Its sub-cue rows' numbers: their own, or (grey) "<parent>.<n>". */
+    void updateSubCueNumbers(QTreeWidgetItem *item);
+    /** Edit Chase…: open step @a index's chase in the Function Manager. */
+    void editSubCueChase(int index);
 
     /************************************************************************
      * Utilities

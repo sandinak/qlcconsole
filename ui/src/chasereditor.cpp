@@ -39,6 +39,7 @@
 #include <QAction>
 
 #include "functionstreewidget.h"
+#include "functionmanager.h"
 #include "functionselection.h"
 #include "speeddialwidget.h"
 #include "speedmasterspanel.h"
@@ -67,6 +68,51 @@
 #define COL_NOTES    6
 #define COL_SPEED    7
 #define COL_CUE      8
+#define COL_SUBCUES  9
+
+#define PROP_SUBCUE_CHASE (Qt::UserRole + 1)    // COL_SUBCUES: the step is a chase
+#define PROP_OWN_CUE      Qt::UserRole          // a sub-cue row's COL_CUE: its own number
+
+namespace
+{
+/* The Sub-cues column: Own timing / Sub GO, for a step that is a chase --
+   no editor on any other step. */
+class SubCuesDelegate final : public QStyledItemDelegate
+{
+public:
+    SubCuesDelegate(const QStringList &strings, QObject *parent)
+        : QStyledItemDelegate(parent), m_strings(strings) {}
+
+    QWidget *createEditor(QWidget *parent, const QStyleOptionViewItem &,
+                          const QModelIndex &index) const override
+    {
+        if (index.data(PROP_SUBCUE_CHASE).toBool() == false)
+            return nullptr;
+        QComboBox *combo = new QComboBox(parent);
+        combo->addItems(m_strings);
+        return combo;
+    }
+    void setEditorData(QWidget *editor, const QModelIndex &index) const override
+    {
+        static_cast<QComboBox *>(editor)->setCurrentIndex(index.data(Qt::UserRole).toInt());
+    }
+    void setModelData(QWidget *editor, QAbstractItemModel *model,
+                      const QModelIndex &index) const override
+    {
+        QComboBox *combo = static_cast<QComboBox *>(editor);
+        model->setData(index, combo->currentIndex(), Qt::UserRole);
+        model->setData(index, combo->currentText(), Qt::DisplayRole);
+    }
+    void updateEditorGeometry(QWidget *editor, const QStyleOptionViewItem &option,
+                              const QModelIndex &) const override
+    {
+        editor->setGeometry(option.rect);
+    }
+
+private:
+    const QStringList m_strings;
+};
+}
 
 ChaserEditor::ChaserEditor(QWidget* parent, Chaser* chaser, Doc* doc, bool liveMode)
     : QWidget(parent)
@@ -129,26 +175,63 @@ ChaserEditor::ChaserEditor(QWidget* parent, Chaser* chaser, Doc* doc, bool liveM
                                                  "step's position."));
     m_tree->header()->moveSection(m_tree->header()->visualIndex(COL_CUE), 1);
 
+    /* Sub-cues (SUBCUES_DESIGN.md): a chase step lists its chase's steps
+       under it (4.1, 4.2...), read-only, and says how they advance. */
+    m_tree->setColumnCount(COL_SUBCUES + 1);
+    m_tree->headerItem()->setText(COL_SUBCUES, tr("Sub-cues"));
+    m_tree->headerItem()->setToolTip(COL_SUBCUES, tr("For a step that is a chase: its steps are "
+                                                     "its sub-cues. Own timing: they run on by "
+                                                     "themselves. Sub GO: each waits for a Sub GO "
+                                                     "while GO goes on to the next cue."));
+    m_tree->setItemDelegateForColumn(COL_SUBCUES, new SubCuesDelegate(
+        { tr("Own timing"), tr("Sub GO") }, this));
+    m_tree->setRootIsDecorated(true);
+    m_tree->setItemsExpandable(true);
+    if (m_chaser->type() == Function::SequenceType)
+        m_tree->header()->setSectionHidden(COL_SUBCUES, true);
+    connect(m_tree, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem *item, int) {
+        if (item != NULL && item->parent() != NULL)
+            editSubCueChase(m_tree->indexOfTopLevelItem(item->parent()));
+    });
+
     m_tree->setProperty("helpTopic", QStringLiteral("show-control.md#cues-and-cue-lists"));
     m_tree->headerItem()->setToolTip(COL_NUM, tr("Untick a step to skip it: GO, Next, Back and "
                                                  "the steps that run on by themselves pass over "
                                                  "it. Picked by itself, it still plays."));
 
-    /* Right-click: skip the selected steps, or use them again. */
+    /* Right-click: skip the selected steps, or use them again; edit the
+       chase a step (or a sub-cue row) is. */
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(m_tree, &QWidget::customContextMenuRequested, this, [this](const QPoint &pos) {
         QList<int> rows;
         for (QTreeWidgetItem *it : m_tree->selectedItems())
             rows << m_tree->indexOfTopLevelItem(it);
-        if (rows.isEmpty())
+        const int chaseRow = topLevelIndex(m_tree->itemAt(pos));
+        Chaser *chase = m_chaser->subCueChase(chaseRow);
+        if (rows.isEmpty() && chase == NULL)
             return;
         QMenu menu(this);
-        QAction *skip = menu.addAction(rows.count() == 1 ? tr("Skip This Step")
-                                                         : tr("Skip %1 Steps").arg(rows.count()));
-        QAction *use = menu.addAction(rows.count() == 1 ? tr("Use This Step")
-                                                        : tr("Use %1 Steps").arg(rows.count()));
+        QAction *skip = NULL, *use = NULL, *edit = NULL;
+        if (!rows.isEmpty())
+        {
+            skip = menu.addAction(rows.count() == 1 ? tr("Skip This Step")
+                                                    : tr("Skip %1 Steps").arg(rows.count()));
+            use = menu.addAction(rows.count() == 1 ? tr("Use This Step")
+                                                   : tr("Use %1 Steps").arg(rows.count()));
+        }
+        if (chase != NULL)
+        {
+            if (!menu.isEmpty())
+                menu.addSeparator();
+            edit = menu.addAction(tr("Edit Chase “%1”…").arg(chase->name()));
+        }
         QAction *picked = menu.exec(m_tree->viewport()->mapToGlobal(pos));
-        if (picked != skip && picked != use)
+        if (picked != NULL && picked == edit)
+        {
+            editSubCueChase(chaseRow);
+            return;
+        }
+        if (picked == NULL || (picked != skip && picked != use))
             return;
         for (int row : rows)
             m_chaser->setStepSkipped(row, picked == skip);
@@ -500,7 +583,7 @@ void ChaserEditor::slotAddClicked()
     int insertionPoint = m_tree->topLevelItemCount();
     QTreeWidgetItem* item = m_tree->currentItem();
     if (item != NULL)
-        insertionPoint = m_tree->indexOfTopLevelItem(item) + 1;
+        insertionPoint = topLevelIndex(item) + 1;
 
     if (m_chaser->type() == Function::SequenceType)
     {
@@ -746,10 +829,17 @@ void ChaserEditor::setCueText(QTreeWidgetItem *item, const ChaserStep &step)
         item->setText(COL_CUE, text);
     item->setForeground(COL_CUE, own ? m_tree->palette().brush(QPalette::Text)
                                      : m_tree->palette().brush(QPalette::Disabled, QPalette::Text));
+    const bool blocked = m_tree->blockSignals(true);
+    updateSubCueNumbers(item);
+    m_tree->blockSignals(blocked);
 }
 
 void ChaserEditor::slotItemChanged(QTreeWidgetItem *item, int column)
 {
+    // A sub-cue row is read-only: its chase's own editor changes it.
+    if (item == NULL || item->parent() != NULL)
+        return;
+
     QString itemText = item->text(column);
     quint32 newValue = Function::stringToSpeed(itemText);
     int idx = m_tree->indexOfTopLevelItem(item);
@@ -870,6 +960,12 @@ void ChaserEditor::slotItemChanged(QTreeWidgetItem *item, int column)
         const int i = item->data(COL_SPEED, Qt::UserRole).toInt();
         step.speedMaster = (i >= 0 && i < values.size()) ? values.at(i) : int(SpeedMasters::Inherit);
     }
+    else if (column == COL_SUBCUES)
+    {
+        if (qobject_cast<Chaser *>(m_doc->function(step.fid)) != NULL)
+            step.subCues = item->data(COL_SUBCUES, Qt::UserRole).toInt() == 1
+                               ? ChaserStep::SubGo : ChaserStep::Auto;
+    }
     if (updateTreeNeeded)
         updateTree();
 
@@ -947,7 +1043,7 @@ void ChaserEditor::slotPasteClicked()
     QTreeWidgetItem* currentItem = m_tree->currentItem();
     if (currentItem != NULL)
     {
-        insertionPoint = m_tree->indexOfTopLevelItem(currentItem) + 1;
+        insertionPoint = topLevelIndex(currentItem) + 1;
         currentItem->setSelected(false);
     }
     else
@@ -1286,7 +1382,99 @@ int ChaserEditor::getCurrentIndex()
 {
     // Return the index of the current selected item
     // Return -1 if nothing is selected
-    return m_tree->indexOfTopLevelItem(m_tree->currentItem());
+    return topLevelIndex(m_tree->currentItem());
+}
+
+int ChaserEditor::topLevelIndex(QTreeWidgetItem *item) const
+{
+    if (item == NULL)
+        return -1;
+    while (item->parent() != NULL)
+        item = item->parent();
+    return m_tree->indexOfTopLevelItem(item);
+}
+
+void ChaserEditor::editSubCueChase(int index)
+{
+    Chaser *chase = m_chaser->subCueChase(index);
+    FunctionManager *fm = FunctionManager::instance();
+    if (chase == NULL || fm == NULL)
+        return;
+    // Queued: opening it there replaces this editor, which mustn't go
+    // while one of its own slots is still running.
+    const quint32 id = chase->id();
+    QMetaObject::invokeMethod(fm, [fm, id]() { fm->selectFunction(id); }, Qt::QueuedConnection);
+}
+
+void ChaserEditor::updateSubCueItems(QTreeWidgetItem *item, const ChaserStep &step)
+{
+    // Rebuilt each time: the chase's steps may have changed where they live.
+    const bool open = item->isExpanded();
+    qDeleteAll(item->takeChildren());
+    Chaser *inner = m_chaser->type() == Function::ChaserType
+                        ? qobject_cast<Chaser *>(m_doc->function(step.fid)) : NULL;
+    if (inner == NULL || inner == m_chaser)
+        return;
+
+    const QList<ChaserStep> steps = inner->steps();
+    for (int j = 0; j < steps.count(); ++j)
+    {
+        const ChaserStep &sub = steps.at(j);
+        QTreeWidgetItem *child = new QTreeWidgetItem(item);
+        child->setFlags(Qt::ItemIsEnabled);             // read-only: Edit Chase… changes them
+        child->setData(COL_CUE, PROP_OWN_CUE, sub.cueNumber.trimmed());
+        child->setToolTip(COL_NAME, tr("A sub-cue: step %1 of “%2”. Double-click to edit that chase.")
+                                        .arg(j + 1).arg(inner->name()));
+        Function *f = m_doc->function(sub.fid);
+        if (f != NULL)
+        {
+            child->setText(COL_NAME, f->name());
+            child->setIcon(COL_NAME, f->getIcon());
+        }
+        QFont font = m_tree->font();
+        font.setStrikeOut(sub.skip);
+        child->setFont(COL_NAME, font);
+        const QBrush grey = m_tree->palette().brush(QPalette::Disabled, QPalette::Text);
+        if (sub.skip)
+            child->setForeground(COL_NAME, grey);
+
+        // Its fades and hold as its chase plays them.
+        auto speed = [](Chaser::SpeedMode mode, uint common, uint own) {
+            if (mode == Chaser::Common)
+                return Function::speedToString(common);
+            if (mode == Chaser::PerStep)
+                return Function::speedToString(own);
+            return QString();
+        };
+        child->setText(COL_FADEIN, speed(inner->fadeInMode(), inner->fadeInSpeed(), sub.fadeIn));
+        child->setText(COL_FADEOUT, speed(inner->fadeOutMode(), inner->fadeOutSpeed(), sub.fadeOut));
+        const uint duration = inner->durationMode() == Chaser::PerStep ? sub.duration : inner->duration();
+        const uint fadeIn = inner->fadeInMode() == Chaser::Common ? inner->fadeInSpeed() : sub.fadeIn;
+        child->setText(COL_HOLD, Function::speedToString(Function::speedSubtract(duration, fadeIn)));
+        child->setText(COL_DURATION, Function::speedToString(duration));
+        child->setText(COL_NOTES, sub.note);
+        for (int col = 0; col < m_tree->columnCount(); ++col)
+            if (col != COL_NAME && col != COL_CUE)
+                child->setForeground(col, grey);
+    }
+    updateSubCueNumbers(item);
+    if (open)
+        item->setExpanded(true);
+}
+
+void ChaserEditor::updateSubCueNumbers(QTreeWidgetItem *item)
+{
+    // Its own number, or (grey) "<parent>.<n>" -- what show control finds.
+    const QString parent = item->text(COL_CUE);
+    for (int j = 0; j < item->childCount(); ++j)
+    {
+        QTreeWidgetItem *child = item->child(j);
+        const QString own = child->data(COL_CUE, PROP_OWN_CUE).toString();
+        child->setText(COL_CUE, own.isEmpty() ? QString("%1.%2").arg(parent).arg(j + 1) : own);
+        child->setForeground(COL_CUE, own.isEmpty()
+            ? m_tree->palette().brush(QPalette::Disabled, QPalette::Text)
+            : m_tree->palette().brush(QPalette::Text));
+    }
 }
 
 void ChaserEditor::slotRestartTest()
@@ -1387,7 +1575,7 @@ void ChaserEditor::handleDropEvent(QDropEvent *event)
     // list if dropped on empty space.
     int insertionPoint = m_tree->topLevelItemCount();
     if (QTreeWidgetItem *target = m_tree->itemAt(qlcEventPos(event)))
-        insertionPoint = m_tree->indexOfTopLevelItem(target) + 1;
+        insertionPoint = topLevelIndex(target) + 1;
 
     bool addedAny = false;
     while (!stream.atEnd())
@@ -1578,6 +1766,17 @@ void ChaserEditor::updateItem(QTreeWidgetItem* item, ChaserStep& step)
         item->setData(COL_SPEED, Qt::UserRole, qMax(0, i));
         item->setText(COL_SPEED, step.speedMaster == SpeedMasters::Inherit
                                      ? QString() : m_doc->speedMasters()->assignmentName(step.speedMaster));
+    }
+    {
+        // A chase step: how its sub-cues advance, and the sub-cues under it.
+        const bool chase = m_chaser->type() == Function::ChaserType
+                           && qobject_cast<Chaser *>(function) != NULL;
+        item->setData(COL_SUBCUES, PROP_SUBCUE_CHASE, chase);
+        item->setData(COL_SUBCUES, Qt::UserRole, step.subCues == ChaserStep::SubGo ? 1 : 0);
+        item->setText(COL_SUBCUES, !chase ? QString()
+                                          : step.subCues == ChaserStep::SubGo ? tr("Sub GO")
+                                                                              : tr("Own timing"));
+        updateSubCueItems(item, step);
     }
     step.fid = function->id();
 

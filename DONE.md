@@ -46,6 +46,25 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
   fall-back. **Timecode source saved with the show** (`<Timecode Source>`;
   absent/unknown universe = any; cleared on a new show).
 
+### 2026-10-15 — Sub-cues P1 + P2 *(on feat/sub-cues)*
+
+[SUBCUES_DESIGN.md](SUBCUES_DESIGN.md). A chase used as a cue-list step
+lists its steps under it as 4.1, 4.2…; set to **Sub GO** they wait for Sub
+GO while GO goes on to the next cue.
+
+- **Engine** — `ChaserStep::subCues` (Auto / SubGo, `SubCues="SubGo"` only
+  when set); a SubGo step starts its chase held on its first playable step
+  (`ChaserRunner::setSubCueHeld`: holds not counted, own fades, list
+  order); `ChaserSubNextStep` / `ChaserSubPreviousStep` / `ChaserSubSetStep`
+  on the outer chase, quantized like GO; numbering and lookup
+  (`subCue`, `findSubCue`, `findCueOrSubCue`), `currentSubCueIndex`,
+  `nextSubCueIndex`, `jumpToSubCue`. Tests: `engine/test/subcues`.
+- **UI** — chaser editor disclosure + Sub-cues column + Edit Chase…; VC cue
+  list nesting, highlight, Sub GO / Sub Back buttons, click to jump; footer
+  "Sub: 4.2 · Next: 5"; ⌥⌘↩ / ⌥⌘⇧↩. Tests: `ui/test/subcues`.
+- Not yet: P3 show control, P4 step-based effects (TODO.md). Not tried on
+  the rig.
+
 ### 2026-10-15 — Release prep: 0.1.0 labels, universal build, kronk fixes *(on release/0.1.0)*
 
 - **Version shown is the release** (VERSION): About box (build id + commit

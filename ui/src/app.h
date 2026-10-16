@@ -22,6 +22,7 @@
 #define APP_H
 
 #include <QMainWindow>
+#include <QKeySequence>
 #include <QApplication>
 #include <QString>
 #include <QList>
@@ -51,6 +52,7 @@ class QLabel;
 class QSlider;
 class App;
 class StartupWindow;
+class Chaser;
 
 /** @addtogroup ui UI
  * @{
@@ -402,6 +404,8 @@ private:
     QAction* m_controlPanicAction;
     QAction* m_cueGoAction = nullptr;       ///< the main cue list's GO
     QAction* m_cueBackAction = nullptr;
+    QAction* m_cueSubGoAction = nullptr;    ///< its Sub GO (SUBCUES_DESIGN.md)
+    QAction* m_cueSubBackAction = nullptr;
     QAction* m_dumpDmxAction;
     QAction* m_liveEditAction;
     QAction* m_liveEditVirtualConsoleAction;
@@ -590,6 +594,16 @@ private slots:
 
     /** Poll + refresh the global engine-load chip (and timecode chip). */
     void slotUpdateHealthFooter();
+
+public:
+    /** The footer's sub-cue part for @a list (SUBCUES_DESIGN.md): "Sub: 4.2"
+     *  (what Sub GO plays), "Sub: (end of 4)", or empty when the cue playing
+     *  has no sub-cues on Sub GO. */
+    static QString standbySubCueText(const Chaser *list);
+    /** Sub GO and Sub Back on the main cue list: ⌥⌘↩ and ⌥⌘⇧↩ on macOS
+     *  (beside GO ⌘↩ and Back ⌘⇧↩). */
+    static QKeySequence cueSubGoShortcut();
+    static QKeySequence cueSubBackShortcut();
 
 private:
     QLabel* m_statusModeLabel;

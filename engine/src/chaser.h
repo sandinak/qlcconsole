@@ -27,6 +27,7 @@
 
 #include "function.h"
 #include "scene.h"
+#include "chaserstep.h"
 #include "chaserrunner.h"
 
 class QFile;
@@ -250,6 +251,72 @@ public:
 
 private:
     QString m_cueListNumber;
+
+    /*********************************************************************
+     * Sub-cues (SUBCUES_DESIGN.md)
+     *********************************************************************/
+public:
+    /** Step @a index's function as a chase -- its steps are the step's
+     *  sub-cues -- or null when it isn't one (or isn't there). */
+    Chaser *subCueChase(int index) const;
+    /** How step @a index's sub-cues advance (ChaserStep::subCues). */
+    ChaserStep::SubCueMode stepSubCues(int index) const;
+    void setStepSubCues(int index, ChaserStep::SubCueMode mode);
+    /** Step @a index is a chase held as sub-cues: SubGo, and its function
+     *  is a chase. */
+    bool isSubGoStep(int index) const;
+    /** Any step is (the cue list shows Sub GO). */
+    bool hasSubGoSteps() const;
+    /** How many sub-cues step @a index has: its chase's steps; 0 when it
+     *  isn't a chase. */
+    int subCueCount(int index) const;
+    /** Sub-cue @a subIndex of step @a index: the inner step's own cue
+     *  number, else "<parent>.<n>" counting from 1 ("4.2"). Empty for one
+     *  that isn't there. */
+    QString subCue(int index, int subIndex) const;
+    /** The sub-cue whose cue is @a cue (cuesMatch()): true and its step and
+     *  sub-cue in @a index and @a subIndex; false for none. Sub-cues only. */
+    bool findSubCue(const QString &cue, int *index, int *subIndex) const;
+    /** A cue by number as show control reads one: a step (its sub-cue -1)
+     *  -- a main cue numbered "4.1" wins -- else a sub-cue. */
+    bool findCueOrSubCue(const QString &cue, int *index, int *subIndex) const;
+
+    /** The sub-cue playing in the step playing: its chase's step, or -1
+     *  when the step playing isn't a chase (or nothing plays). */
+    int currentSubCueIndex() const;
+    /** What Sub GO plays next in the step playing, or -1: none left, or
+     *  the step isn't held as sub-cues. */
+    int nextSubCueIndex() const;
+    /** What Sub Back plays, or -1. */
+    int previousSubCueIndex() const;
+
+    /** The next step from @a from, @a delta (+1 / -1) at a time in list
+     *  order, that isn't skipped; -1 at the end. From -1 (forward) or
+     *  stepsCount() (backward): the first. */
+    int nextPlayableStep(int from, int delta) const;
+
+    /** Sub GO, Sub Back, and a jump to sub-cue @a subIndex of step @a index
+     *  (that step first, if it isn't the one playing). ChaserActions, as
+     *  setAction() takes them; a stopped chase plays the jump when started. */
+    void subGo();
+    void subBack();
+    void jumpToSubCue(int index, int subIndex);
+
+    /** This chase plays as a step's sub-cues (ChaserRunner::setSubCueHeld):
+     *  set by the chase whose step it is, before it starts it. */
+    void setSubCueHeld(bool held);
+    bool isSubCueHeld() const;
+
+    /** About to be started again in this tick, having just been stopped (a
+     *  step's chase whose next step is the same chase): until the new run
+     *  starts, actions are kept for it, and the run being torn down neither
+     *  takes them nor plays. Only when stopped (and not paused), so the
+     *  start is sure to follow; false otherwise. */
+    bool beginRestart();
+
+private:
+    bool m_subCueHeld = false;
+    bool m_restarting = false;
 
 public:
 
