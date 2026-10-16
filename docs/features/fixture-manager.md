@@ -222,16 +222,48 @@ fixtures still in the inventory last:
 | **Fixture** | Its name. |
 | **Make / model**, **Mode** | From its definition. |
 | **Ch** | How many channels it takes. |
-| **Connection** | DMX, or a network fixture's transport and IP ("WLED 172.18.2.50"). |
-| **Goes to** | Where its universe goes: the output and device ("Art-Net → CS1 (172.18.2.211) port 1"), or nothing. |
+| **Connection** | DMX, or a network fixture's transport and the name its IP goes by ("WLED lantern-2"), or the IP when it has none ("WLED 172.18.2.50"). Point at it for the IP. |
+| **Goes to** | Where its universe goes: the output and device ("Art-Net → CS1 (172.18.2.211) port 1"), or nothing; point at it for all of it when the column is narrow. |
 | **Mounted on** | The same words as Fixture Properties: "Truss FOH · 2.5 m along", "Tower T2 · shelf 3", "free / on the floor". |
 
 - **Save CSV…** — every column plus the fixture ID, the first and last
   channel, X/Y/Z on the plot (in the plot's units) and a note, for a
-  spreadsheet or a label printer.
+  spreadsheet or another label program.
 - **Save PDF…** — a landscape Letter page, a table per universe headed
   with where that universe goes, the header row repeated on each page.
 - **Copy** — the CSV on the clipboard, to paste straight into a sheet.
+- **Labels…** — a label per fixture, as a PDF (below).
+
+#### Labels
+
+**Labels…** in the patch list makes a label to stick on each fixture (or
+its case), saved as a PDF to print from Preview. Each label has:
+
+- the fixture's **name**, large;
+- its **address**, large: universe and first channel, one-based — "U3 · 101"
+  ("not patched" for a fixture in the inventory, "clash · U1 · 12" for one
+  in an address clash) — with the universe's name, when it has one, smaller
+  beside it;
+- its **mode and channels** — "16-channel · 16 ch";
+- for a network fixture, a line of its own: its transport and the name its
+  IP goes by — "WLED · lantern-2" — or the IP when it has no name
+  ("WLED · 172.18.2.50");
+- **where it hangs**, the same words as the Mounted on column.
+
+A name too long for the label is set smaller, then cut short with "…";
+nothing runs off the edge.
+
+Pick the **stock** — the choice is remembered for next time:
+
+| Stock | What it is |
+|---|---|
+| **Avery 5160** (the default) | US Letter sheets, 30 labels (3 across, 10 down), each 2⅝ × 1 in. Avery's 5260, 5960, 8160 and other "30 per sheet" labels are the same layout. |
+| **62 mm roll** | A continuous 62 mm roll (Brother DK-22205 and the like), one 62 × 29 mm label a page; the printer cuts between them. |
+
+and **which fixtures**: all of them, or the rows selected in the list (the
+default when some are). The dialog says how many labels that is and, on
+sheets, how many sheets. Print the PDF at **100% / actual size** — "fit to
+page" shrinks it and the labels no longer line up with the sheet.
 
 ## The head-layout grid editor
 

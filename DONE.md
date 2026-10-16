@@ -89,6 +89,23 @@ SHOW_EMBEDDING_DESIGN.md, P0–P3.
 - **Not yet tried by hand:** opening a .qlcc on a machine without the
   definitions (the Windows VM), and Review… on a real difference.
 
+### 2026-10-15 — Patch-list labels *(on feat/patch-labels)*
+
+- **Labels…** in the patch list (`engine/src/patchlabels.{h,cpp}`,
+  `ui/src/patchlabelsdialog.{h,cpp}`): a label per fixture — all, or the
+  selected rows (the default when there are some) — saved as a PDF
+  (QPdfWriter) to print from Preview. Name and `U3 · 101` large, the
+  universe's name smaller beside the address; mode · channels, a network
+  fixture's own line (`WLED · lantern-2` — the IP's target alias,
+  `PatchList::Row::host`; the IP when it has none, and on mouseover in the
+  patch list's Connection column) and the mount description small; each
+  line shrinks to fit, then elides. Stocks are data
+  (`PatchLabels::sheets()`): **Avery 5160** (Letter, 3 × 10, 2⅝ × 1 in, the
+  default) and a **62 mm roll** (62 × 29 mm, one a page, landscape); the
+  choice is remembered (`patchlist/labelsheet`). No QR code. Docs:
+  fixture-manager.md "Labels", whats-new. Tests: `patchlabels_test` (14),
+  `patchlistdialog_test` (+5, settings in a scratch INI).
+
 ### 2026-10-15 — Release prep: 0.1.0 labels, universal build, kronk fixes *(on release/0.1.0)*
 
 - **Version shown is the release** (VERSION): About box (build id + commit

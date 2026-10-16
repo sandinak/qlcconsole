@@ -20,6 +20,7 @@
 #ifndef PATCHLISTDIALOG_TEST_H
 #define PATCHLISTDIALOG_TEST_H
 
+#include <QTemporaryDir>
 #include <QObject>
 
 class Doc;
@@ -29,6 +30,7 @@ class PatchListDialog_Test final : public QObject
     Q_OBJECT
 
 private slots:
+    void initTestCase();
     void init();
     void cleanup();
 
@@ -38,8 +40,16 @@ private slots:
     void savePdfAsksWhereAndWrites();
     void f1OpensThePatchListHelp();
 
+    void selectedRowsAreInListOrder();
+    void labelsOpensTheLabelsDialog();
+    void labelsAreForAllOrTheSelectedRows();
+    void theLabelStockIsRemembered();
+    void saveLabelsAsksWhereAndWrites();
+    void aNetworkFixturesIpIsOnMouseover();
+
 private:
     Doc *m_doc = nullptr;
+    QTemporaryDir m_settingsDir;           //!< QSettings, not the user's
 };
 
 #endif

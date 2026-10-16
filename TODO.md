@@ -119,8 +119,6 @@ before building):
   - **Rig Overview frame rate** — maybe automatic (30, lower when the
     engine is busy): the overview now draws on every core, which competes
     with the DMX engine on a 6-core machine. Decide from the soak.
-- **Patch-list labels** — the patch list (Fixtures → Patch List…) exports
-  CSV and PDF; still to come: printing a label per fixture from it.
 - **Stage and inventory across show files** — keep a stage layout
   (structures, platforms, scenery) and the hardware inventory (fixtures,
   network gear, their patch) outside any one show, and bring them into a

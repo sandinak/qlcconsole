@@ -21,13 +21,19 @@
 #include <QTemporaryDir>
 #include <QTableWidget>
 #include <QApplication>
+#include <QRegularExpression>
 #include <QFileDialog>
+#include <QComboBox>
+#include <QLabel>
 #include <QPushButton>
 #include <QClipboard>
+#include <QSettings>
 #include <functional>
 #include <memory>
 
+#include "patchlabelsdialog.h"
 #include "patchlistdialog.h"
+#include "inputoutputmap.h"
 #include "fixture.h"
 #include "doc.h"
 
@@ -68,6 +74,40 @@ Fixture *dimmer(Doc *doc, const QString &name, quint32 universe, quint32 address
     return f;
 }
 } // namespace
+
+/* The stock remembered goes to a scratch settings file, never the user's. */
+void PatchListDialog_Test::initTestCase()
+{
+    QVERIFY(m_settingsDir.isValid());
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, m_settingsDir.path());
+    QSettings().remove(SETTINGS_PATCH_LABEL_SHEET);
+}
+
+/* The pages in a PDF: its page objects ("/Type /Page", not "/Pages"). */
+static int pdfPages(const QString &path)
+{
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly))
+        return -1;
+    static const QRegularExpression page(QStringLiteral("/Type\\s*/Page(?![a-zA-Z])"));
+    int n = 0;
+    QRegularExpressionMatchIterator it = page.globalMatch(QString::fromLatin1(f.readAll()));
+    while (it.hasNext())
+    {
+        it.next();
+        n++;
+    }
+    return n;
+}
+
+static QStringList rowNames(const QList<PatchList::Row> &rows)
+{
+    QStringList out;
+    foreach (const PatchList::Row &r, rows)
+        out << r.name;
+    return out;
+}
 
 void PatchListDialog_Test::init()
 {
@@ -148,6 +188,136 @@ void PatchListDialog_Test::f1OpensThePatchListHelp()
 {
     PatchListDialog dlg(m_doc);
     QCOMPARE(dlg.property("helpTopic").toString(), QString("fixture-manager.md#the-patch-list"));
+}
+
+void PatchListDialog_Test::selectedRowsAreInListOrder()
+{
+    PatchListDialog dlg(m_doc);
+    QVERIFY(dlg.selectedRows().isEmpty());
+    QItemSelectionModel *sel = dlg.table()->selectionModel();
+    sel->select(dlg.table()->model()->index(2, 0), QItemSelectionModel::Select | QItemSelectionModel::Rows);
+    sel->select(dlg.table()->model()->index(0, 0), QItemSelectionModel::Select | QItemSelectionModel::Rows);
+    QCOMPARE(rowNames(dlg.selectedRows()), QStringList({ "Front", "Spare" }));
+}
+
+void PatchListDialog_Test::labelsOpensTheLabelsDialog()
+{
+    PatchListDialog dlg(m_doc);
+    QPushButton *labels = dlg.findChild<QPushButton *>("patchListLabels");
+    QVERIFY(labels != nullptr);
+    int seen = -1;
+    QString help;
+    whenModal<PatchLabelsDialog>([&seen, &help](PatchLabelsDialog *ld) {
+        seen = ld->rows().size();
+        help = ld->property("helpTopic").toString();
+        ld->reject();
+    });
+    labels->click();
+    QCOMPARE(seen, 3);
+    QCOMPARE(help, QString("fixture-manager.md#labels"));
+}
+
+void PatchListDialog_Test::labelsAreForAllOrTheSelectedRows()
+{
+    PatchListDialog dlg(m_doc);
+    const QList<PatchList::Row> all = dlg.list().rows();
+
+    // Nothing selected: all of them, and "selected" can't be picked.
+    {
+        PatchLabelsDialog ld(all, QList<PatchList::Row>(), "Labels", "labels.pdf");
+        QVERIFY(!ld.selectedOnly());
+        ld.setSelectedOnly(true);
+        QVERIFY(!ld.selectedOnly());
+        QCOMPARE(ld.rows().size(), 3);
+        QCOMPARE(ld.findChild<QLabel *>("labelCount")->text(), QString("3 labels, on 1 sheet"));
+    }
+
+    // A selection: those, unless all is asked for.
+    const QList<PatchList::Row> picked = { all.at(1) };
+    PatchLabelsDialog ld(all, picked, "Labels", "labels.pdf");
+    QVERIFY(ld.selectedOnly());
+    QCOMPARE(rowNames(ld.rows()), QStringList({ "Back" }));
+    QCOMPARE(ld.findChild<QLabel *>("labelCount")->text(), QString("1 label, on 1 sheet"));
+    ld.setSelectedOnly(false);
+    QCOMPARE(ld.rows().size(), 3);
+}
+
+void PatchListDialog_Test::theLabelStockIsRemembered()
+{
+    QSettings().remove(SETTINGS_PATCH_LABEL_SHEET);
+    const QList<PatchList::Row> all = PatchList::build(m_doc).rows();
+    {
+        PatchLabelsDialog ld(all, QList<PatchList::Row>(), "Labels", "labels.pdf");
+        QCOMPARE(ld.sheetKey(), QString("avery5160"));      // the default
+        ld.findChild<QComboBox *>("labelSheet")->setCurrentIndex(
+            ld.findChild<QComboBox *>("labelSheet")->findData("roll62"));
+        QCOMPARE(ld.sheetKey(), QString("roll62"));
+        QCOMPARE(ld.findChild<QLabel *>("labelCount")->text(), QString("3 labels"));
+    }
+    QCOMPARE(QSettings().value(SETTINGS_PATCH_LABEL_SHEET).toString(), QString("roll62"));
+    PatchLabelsDialog again(all, QList<PatchList::Row>(), "Labels", "labels.pdf");
+    QCOMPARE(again.sheetKey(), QString("roll62"));
+
+    // A stock that has gone away: the default.
+    QSettings().setValue(SETTINGS_PATCH_LABEL_SHEET, "no such stock");
+    PatchLabelsDialog gone(all, QList<PatchList::Row>(), "Labels", "labels.pdf");
+    QCOMPARE(gone.sheetKey(), QString("avery5160"));
+    QSettings().remove(SETTINGS_PATCH_LABEL_SHEET);
+}
+
+void PatchListDialog_Test::saveLabelsAsksWhereAndWrites()
+{
+    QTemporaryDir dir;
+    const QList<PatchList::Row> all = PatchList::build(m_doc).rows();
+    PatchLabelsDialog ld(all, QList<PatchList::Row>(), "Labels", "labels.pdf");
+    ld.setSheetKey("roll62");
+    QPushButton *save = ld.findChild<QPushButton *>("saveLabelsPdf");
+    QVERIFY(save != nullptr);
+
+    const QString path = dir.filePath("labels.pdf");
+    whenModal<QFileDialog>([path](QFileDialog *fd) {
+        fd->setDirectory(QFileInfo(path).absolutePath());
+        fd->selectFile(path);
+        static_cast<QDialog *>(fd)->done(QDialog::Accepted);
+    });
+    save->click();
+    QCOMPARE(ld.result(), int(QDialog::Accepted));
+    QCOMPARE(pdfPages(path), 3);                // the roll: a label a page
+
+    ld.setSheetKey("avery5160");
+    QString error;
+    QVERIFY2(ld.savePdf(path, &error), qPrintable(error));
+    QCOMPARE(pdfPages(path), 1);
+    QVERIFY(!ld.savePdf("/nonexistent-dir/labels.pdf", &error));
+    QVERIFY(!error.isEmpty());
+    QSettings().remove(SETTINGS_PATCH_LABEL_SHEET);
+}
+
+void PatchListDialog_Test::aNetworkFixturesIpIsOnMouseover()
+{
+    Fixture *f = dimmer(m_doc, "Lantern", 1, 0);
+    f->setConnection(Fixture::Network);
+    f->setTransport(Fixture::WledTransport);
+    f->setIPAddress("172.18.2.51");
+    Fixture *g = dimmer(m_doc, "Lantern B", 2, 0);
+    g->setConnection(Fixture::Network);
+    g->setTransport(Fixture::WledTransport);
+    g->setIPAddress("172.18.2.52");
+    m_doc->inputOutputMap()->setTargetAlias("172.18.2.51", "lantern-2");
+
+    PatchListDialog dlg(m_doc);
+    QCOMPARE(dlg.table()->item(2, 1)->text(), QString("Lantern"));
+    QCOMPARE(dlg.table()->item(3, 1)->text(), QString("Lantern B"));
+    // The name it goes by, as the label has it; the IP on mouseover.
+    QCOMPARE(dlg.table()->item(2, PatchListDialog::ConnectionColumn)->text(), QString("WLED lantern-2"));
+    QCOMPARE(dlg.table()->item(2, PatchListDialog::ConnectionColumn)->toolTip(),
+             QString("WLED to lantern-2 (172.18.2.51)"));
+    // No name: the IP, there and on mouseover.
+    QCOMPARE(dlg.table()->item(3, PatchListDialog::ConnectionColumn)->text(), QString("WLED 172.18.2.52"));
+    QCOMPARE(dlg.table()->item(3, PatchListDialog::ConnectionColumn)->toolTip(),
+             QString("WLED to 172.18.2.52"));
+    // DMX: nothing to add.
+    QVERIFY(dlg.table()->item(0, PatchListDialog::ConnectionColumn)->toolTip().isEmpty());
 }
 
 QTEST_MAIN(PatchListDialog_Test)

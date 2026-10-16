@@ -139,6 +139,8 @@ PatchList PatchList::build(Doc *doc, const QList<quint32> &ids)
         if (r.network)
         {
             r.ip = f->ipAddress();
+            if (!r.ip.isEmpty())
+                r.host = doc->inputOutputMap()->targetAlias(r.ip);
             r.transport = f->transport() == Fixture::WledTransport ? QStringLiteral("WLED")
                                                                    : QStringLiteral("Art-Net");
         }
