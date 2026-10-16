@@ -23,6 +23,7 @@
 #include <QElapsedTimer>
 #include <QPointer>
 #include <QWidget>
+#include "qlcui_export.h"
 
 class ShowControlListener;
 class QPushButton;
@@ -47,7 +48,7 @@ class Doc;
  * source the footer's MTC chip picks, so either way the change is live.
  * Status follows the listener's and the timecode source's signals.
  */
-class ShowControlSyncPage final : public QWidget
+class QLC_UI_EXPORT ShowControlSyncPage final : public QWidget
 {
     Q_OBJECT
 
