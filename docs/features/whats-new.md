@@ -17,6 +17,10 @@ The latest changes, newest first. Each links to the guide with the detail.
   stay). Delete on those rows now reads **Delete Function Everywhere…** and
   says where else the function is used. See
   [Taking something out](programming-tab.md#taking-something-out-of-a-collection-chaser-or-show).
+- **Deleting says where it's used.** Deleting a palette or a function in the
+  Programming tab (menu or ⌫) lists every scene look, effect-look slot,
+  collection, chaser step and show track using it before you confirm. See
+  [Deleting palettes and functions](programming-tab.md#deleting-palettes-and-functions).
 
 ### Sub-cues
 

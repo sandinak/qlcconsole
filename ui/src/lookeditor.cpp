@@ -38,6 +38,7 @@
 #include <QTextBrowser>
 #include <QDialog>
 #include "lookeditor.h"
+#include "programmercontroller.h"
 #include "fadetimespin.h"
 #include "effectbrowser.h"
 #include "qlcfixturedefcache.h"
@@ -1038,13 +1039,13 @@ void LookEditor::setPalette(quint32 paletteId)
     if (folder.endsWith('/'))
         folder.chop(1);
 
-    int uses = 0;
-    foreach (Function *fn, m_doc->functions())
-    {
-        Scene *s = qobject_cast<Scene*>(fn);
-        if (s != NULL && s->palettes().contains(paletteId))
-            uses++;
-    }
+    // Same "where is it used" as the delete question (ProgrammerController).
+    QSet<quint32> usingScenes;
+    if (ProgrammerController *pc = m_doc->programmer())
+        for (const ProgrammerController::Usage &u : pc->paletteUsage(paletteId))
+            if (u.kind == ProgrammerController::Usage::SceneLook)
+                usingScenes.insert(u.ownerId);
+    const int uses = usingScenes.size();
     QString info = folder.isEmpty() ? QString() : folder + "  •  ";
     info += tr("used by %n scene(s)", "", uses);
     m_title->setText(info);

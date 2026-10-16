@@ -889,6 +889,23 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     QShortcut *undoSc = new QShortcut(QKeySequence::Undo, this);
     undoSc->setContext(Qt::WidgetWithChildrenShortcut);
     connect(undoSc, &QShortcut::activated, this, &ProgrammingManager::slotUndo);
+
+    // Delete / Backspace (⌫ on a Mac) on either tree: delete what's selected —
+    // asking first, with where it's used.
+    for (FunctionsTreeWidget *tree : { m_funcTree, m_paletteTree })
+    {
+        for (const QKeySequence &key : { QKeySequence(Qt::Key_Delete),
+                                         QKeySequence(Qt::Key_Backspace) })
+        {
+            QShortcut *sc = new QShortcut(key, tree);
+            sc->setContext(Qt::WidgetShortcut);
+            // WidgetShortcut: only with the tree itself focused, so ⌫ in an
+            // inline rename editor stays a text edit.
+            connect(sc, &QShortcut::activated, this, [this, tree]() {
+                deleteTreeSelection(tree);
+            });
+        }
+    }
 }
 
 ProgrammingManager::~ProgrammingManager()
@@ -2472,53 +2489,41 @@ void ProgrammingManager::deleteFunctions(const QList<quint32> &fids)
         m_doc->deleteFunction(fid);
 }
 
-QStringList ProgrammingManager::functionUsers(quint32 fid) const
+// "Where is this used" lines for a delete question, capped so the dialog
+// stays on screen.
+static QString usageBlock(const QStringList &lines)
 {
-    QStringList users;
-    foreach (Function *f, m_doc->functions())
-    {
-        if (f == NULL || f->id() == fid)
-            continue;
-        bool uses = false;
-        if (Collection *c = qobject_cast<Collection*>(f))
-            uses = c->functions().contains(fid);
-        else if (Chaser *ch = qobject_cast<Chaser*>(f))
-        {
-            foreach (const ChaserStep &st, ch->steps())
-                if (st.fid == fid) { uses = true; break; }
-        }
-        else if (Show *sh = qobject_cast<Show*>(f))
-        {
-            foreach (Track *trk, sh->tracks())
-            {
-                if (trk == NULL)
-                    continue;
-                foreach (ShowFunction *sf, trk->showFunctions())
-                    if (sf != NULL && sf->functionID() == fid) { uses = true; break; }
-                if (uses)
-                    break;
-            }
-        }
-        if (uses)
-            users << f->name();
-    }
-    users.sort(Qt::CaseInsensitive);
-    return users;
+    const int kMax = 12;
+    QStringList shown = lines.mid(0, kMax);
+    for (QString &l : shown)
+        l.prepend(QStringLiteral("  • "));
+    QString out = shown.join("\n");
+    if (lines.size() > kMax)
+        out += "\n" + QObject::tr("  … and %1 more").arg(lines.size() - kMax);
+    return out;
 }
 
 QString ProgrammingManager::deleteFunctionsMessage(const QList<quint32> &fids) const
 {
+    ProgrammerController *pc = m_doc->programmer();
     QStringList names;
-    QStringList usedLines;
+    QString used;
+    int usedCount = 0;
     for (quint32 fid : fids)
     {
         Function *f = m_doc->function(fid);
         if (f == NULL)
             continue;
         names.append(f->name());
-        const QStringList users = functionUsers(fid);
-        if (users.isEmpty() == false)
-            usedLines << tr("“%1” is used in: %2").arg(f->name()).arg(users.join(", "));
+        const QStringList lines = (pc != NULL)
+            ? ProgrammerController::usageLines(pc->functionUsage(fid)) : QStringList();
+        if (lines.isEmpty() == false)
+        {
+            usedCount++;
+            used += QString("\n\n") + tr("“%1” is used in %n place(s):", "", lines.size())
+                        .arg(f->name())
+                    + "\n" + usageBlock(lines);
+        }
     }
     if (names.isEmpty())
         return QString();
@@ -2531,10 +2536,108 @@ QString ProgrammingManager::deleteFunctionsMessage(const QList<quint32> &fids) c
     msg += QString("\n\n") + tr("This deletes the function itself, everywhere — "
                                  "not just from one collection or chaser. "
                                  "To only take it out of one, use “Remove from …”.");
-    if (usedLines.isEmpty() == false)
-        msg += QString("\n\n") + usedLines.join("\n")
-             + QString("\n") + tr("It will be removed from those too.");
+    if (usedCount > 0)
+        msg += used + QString("\n\n")
+             + tr("Deleting takes it out of all of those.");
+    else
+        msg += QString("\n\n") + tr("Nothing else uses it.");
     return msg;
+}
+
+QString ProgrammingManager::deletePalettesMessage(const QList<quint32> &pids) const
+{
+    ProgrammerController *pc = m_doc->programmer();
+    QStringList names;
+    QString used;
+    bool anyLook = false;
+    bool anyBinding = false;
+    for (quint32 pid : pids)
+    {
+        QLCPalette *p = m_doc->palette(pid);
+        if (p == NULL)
+            continue;
+        names << p->name();
+        const QList<ProgrammerController::Usage> uses =
+            (pc != NULL) ? pc->paletteUsage(pid) : QList<ProgrammerController::Usage>();
+        if (uses.isEmpty())
+            continue;
+        for (const ProgrammerController::Usage &u : uses)
+        {
+            if (u.kind == ProgrammerController::Usage::SceneLook)
+                anyLook = true;
+            else
+                anyBinding = true;
+        }
+        used += QString("\n\n") + tr("“%1” is used in %n place(s):", "", uses.size())
+                    .arg(p->name())
+                + "\n" + usageBlock(ProgrammerController::usageLines(uses));
+    }
+    if (names.isEmpty())
+        return QString();
+
+    QString msg = names.size() > 1
+        ? tr("Delete %1 palettes?\n\n%2").arg(names.size()).arg(names.join(", "))
+        : tr("Delete palette “%1”?").arg(names.first());
+    if (used.isEmpty())
+        return msg + QString("\n\n") + tr("Nothing uses it.");
+
+    msg += used + QString("\n");
+    if (anyLook)
+        msg += QString("\n") + tr("Those scenes lose that look; their other looks "
+                                  "and values stay.");
+    if (anyBinding)
+        msg += QString("\n") + tr("Those effect looks lose that slot's palette and "
+                                  "use their look's colours instead.");
+    return msg;
+}
+
+bool ProgrammingManager::deletePalettes(const QList<quint32> &pids, bool confirm)
+{
+    const QString msg = deletePalettesMessage(pids);
+    if (msg.isEmpty())
+        return false;
+    if (confirm && QMessageBox::question(this,
+            pids.size() > 1 ? tr("Delete palettes") : tr("Delete palette"), msg,
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
+        return false;
+
+    // By id: each delete rebuilds the tree (paletteRemoved).
+    for (quint32 pid : pids)
+        m_doc->deletePalette(pid);
+    m_paletteTree->updateTree();
+    return true;
+}
+
+void ProgrammingManager::deleteTreeSelection(FunctionsTreeWidget *tree)
+{
+    if (tree == NULL)
+        return;
+    const QList<QTreeWidgetItem*> sel = tree->selectedItems();
+    if (sel.isEmpty())
+        return;
+
+    // A lone folder: delete it (contents move up).
+    if (sel.size() == 1 && tree->isUserFolder(sel.first()))
+    {
+        deleteTreeFolder(tree, sel.first());
+        return;
+    }
+
+    if (tree == m_paletteTree)
+    {
+        QList<quint32> pids;
+        for (QTreeWidgetItem *it : sel)
+        {
+            const quint32 pid = tree->itemPaletteId(it);
+            if (pid != QLCPalette::invalidId() && !pids.contains(pid))
+                pids << pid;
+        }
+        deletePalettes(pids);
+    }
+    else
+    {
+        deleteFunctions(funcTreeTargetIds(sel.first()));
+    }
 }
 
 QList<ProgrammingManager::MemberRef> ProgrammingManager::funcTreeMemberTargets(QTreeWidgetItem *clicked) const
@@ -2781,31 +2884,7 @@ void ProgrammingManager::slotPaletteTreeMenu(const QPoint &pos)
 
     if (chosen == aDelete)
     {
-        // Count how many scenes reference these palettes so the operator knows
-        // the looks that will lose them (deletePalette detaches them cleanly).
-        QSet<quint32> usingScenes;
-        foreach (Function *f, m_doc->functions())
-        {
-            Scene *s = qobject_cast<Scene*>(f);
-            if (s == NULL)
-                continue;
-            foreach (quint32 pid2, targetPalettes)
-                if (s->palettes().contains(pid2))
-                    usingScenes.insert(s->id());
-        }
-        QString msg = targetPalettes.size() > 1
-            ? tr("Delete these %1 palettes?").arg(targetPalettes.size())
-            : tr("Delete this palette?");
-        if (usingScenes.isEmpty() == false)
-            msg += QString("\n\n") + tr("%n scene(s) use them; the look will be "
-                       "removed from those scenes.", "", usingScenes.count());
-        if (QMessageBox::question(this, tr("Delete palette"), msg,
-                QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
-            return;
-        // Collect ids first — the first delete rebuilds the tree.
-        foreach (quint32 delId, targetPalettes)
-            m_doc->deletePalette(delId);
-        m_paletteTree->updateTree();
+        deletePalettes(targetPalettes);
         return;
     }
 

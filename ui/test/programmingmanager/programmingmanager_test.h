@@ -128,6 +128,11 @@ private slots:
      *  function twice loses only the step picked. "Delete" on such a row says
      *  it deletes the function everywhere and lists where it is used. */
     void rowsUnderAContainerComeOutOfIt();
+    /** "can't remove anything here .. no delete .. AND delete should check
+     *  for usage and warn the user with a popup that shows where": deleting a
+     *  palette names every scene look and effect-look slot using it, and
+     *  takes it out of them; Delete/Backspace on the palette tree deletes. */
+    void deletingAPaletteSaysWhereItIsUsed();
 
 private:
     Doc* m_doc;

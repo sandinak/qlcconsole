@@ -99,6 +99,16 @@ hold and timing go with it. **Delete Function Everywhere…** on such a row is
 different: it deletes the function itself, from every collection, chaser and
 show; the question names where it is used.
 
+### Deleting palettes and functions
+
+Right-click → **Delete**, or select and press **⌫** (Delete), in either tree.
+The question lists every place the palette or function is used — each scene
+and which look row, each effect look whose slot uses the palette, each
+collection, chaser step and show track — and says what happens: scenes lose
+that look (their other looks and values stay), effect looks lose that slot's
+palette and use their look's colours, collections/chasers/shows lose it. With
+a folder selected, ⌫ deletes the folder the same way as its menu item.
+
 ## Building a look, step by step
 
 1. Open the **Programming** tab.

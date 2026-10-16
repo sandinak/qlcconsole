@@ -260,8 +260,16 @@ private:
      *  their timing) unless $confirm is false. Returns how many were removed. */
     int removeMembers(const QList<MemberRef> &refs, bool confirm = true);
 
-    /** Names of the collections, chasers and shows that use $fid. */
-    QStringList functionUsers(quint32 fid) const;
+    /** The confirmation text for deleting palettes $pids: where each is used
+     *  (scene looks, effect-look slots) and what deleting does to them. */
+    QString deletePalettesMessage(const QList<quint32> &pids) const;
+
+    /** Delete palettes $pids after asking (unless $confirm is false). */
+    bool deletePalettes(const QList<quint32> &pids, bool confirm = true);
+
+    /** Delete/Backspace on a tree: the selection's functions or palettes, or
+     *  the selected folder. */
+    void deleteTreeSelection(FunctionsTreeWidget *tree);
 
     /** The confirmation text for deleting $fids (says it is the function
      *  itself, everywhere, and where else each one is used). */

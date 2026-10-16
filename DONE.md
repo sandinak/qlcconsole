@@ -62,6 +62,17 @@ it was drag selecting other things vs dragging to folder."
   question lists every collection/chaser/show using each function. No undo
   (the tab's undo is scene look edits only). Test
   `rowsUnderAContainerComeOutOfIt`.
+- **Delete with "where is it used"** (Branson: "can't remove anything here ..
+  no delete .. AND delete should check for usage and warn"): one helper,
+  `ProgrammerController::paletteUsage()/functionUsage()/usageLines()` (scene
+  look rows, effect-look palette-slot bindings; collections, chaser steps,
+  show tracks), used by the palette and function delete questions and the
+  look editor's "used by N scene(s)". Palettes can't be referenced by VC
+  widgets / cue lists, so none listed. `Doc::deletePalette()` now also clears
+  effect-look slot bindings to it (before: a dangling id, which a later
+  palette reusing the id would have been picked up by). ⌫/Delete on either
+  tree deletes the selection (or the selected folder). No undo. Test
+  `deletingAPaletteSaysWhereItIsUsed`.
 
 ---
 

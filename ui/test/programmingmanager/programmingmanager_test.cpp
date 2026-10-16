@@ -73,6 +73,7 @@
 #undef protected
 
 #include "collection.h"
+#include "programmercontroller.h"
 #include "chaser.h"
 #include "chaserstep.h"
 #include "show.h"
@@ -2211,4 +2212,66 @@ void ProgrammingManager_Test::rowsUnderAContainerComeOutOfIt()
     QCOMPARE(mgr.removeMembers(refs, false), 1);
     QVERIFY(trk->showFunctions().isEmpty());
     QVERIFY(m_doc->function(startup) != nullptr);
+}
+
+void ProgrammingManager_Test::deletingAPaletteSaysWhereItIsUsed()
+{
+    QLCPalette *red = new QLCPalette(QLCPalette::Color, m_doc);
+    red->setName("Red");
+    red->setValue(QColor(Qt::red).name());
+    m_doc->addPalette(red);
+    QLCPalette *blue = new QLCPalette(QLCPalette::Color, m_doc);
+    blue->setName("Blue");
+    blue->setValue(QColor(Qt::blue).name());
+    m_doc->addPalette(blue);
+    QLCPalette *sinelon = new QLCPalette(QLCPalette::Effect, m_doc);
+    sinelon->setName("Sinelon");
+    m_doc->addPalette(sinelon);
+    sinelon->setEffectPaletteBinding("color", red->id());
+    QLCPalette *unused = new QLCPalette(QLCPalette::Dimmer, m_doc);
+    unused->setName("Spare");
+    unused->setValue(100);
+    m_doc->addPalette(unused);
+
+    Scene *base = new Scene(m_doc);
+    base->setName("00-00.00-Base");
+    m_doc->addFunction(base);
+    base->addPalette(blue->id());
+    base->addPalette(red->id());   // look 2
+
+    ProgrammingManager mgr(nullptr, m_doc);
+
+    // The shared "where is it used" helper.
+    const QList<ProgrammerController::Usage> uses = m_doc->programmer()->paletteUsage(red->id());
+    QCOMPARE(uses.size(), 2);
+    const QStringList lines = ProgrammerController::usageLines(uses);
+    QVERIFY(lines.contains(QString("Scene “00-00.00-Base” — look 2")));
+    QVERIFY(lines.contains(QString("Effect look “Sinelon” — its “color” slot")));
+
+    const QString msg = mgr.deletePalettesMessage({ red->id() });
+    QVERIFY(msg.contains("00-00.00-Base"));
+    QVERIFY(msg.contains("look 2"));
+    QVERIFY(msg.contains("Sinelon"));
+    QVERIFY(msg.contains("lose that look"));
+    QVERIFY(mgr.deletePalettesMessage({ unused->id() }).contains("Nothing uses it"));
+
+    const quint32 redId = red->id();
+    QVERIFY(mgr.deletePalettes({ redId }, false));
+    QVERIFY(m_doc->palette(redId) == nullptr);
+    QCOMPARE(base->palettes(), QList<quint32>() << blue->id());
+    QVERIFY(sinelon->effectPaletteBindings().contains("color") == false);
+
+    // Delete/Backspace on the palette tree: an empty folder goes at once.
+    mgr.resize(1200, 800);
+    mgr.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&mgr));
+    FunctionsTreeWidget *tree = mgr.m_paletteTree;
+    QTreeWidgetItem *folder = tree->ensurePaletteFolder("Palettes/Empty");
+    QVERIFY(folder != nullptr);
+    tree->clearSelection();
+    tree->setCurrentItem(folder);
+    folder->setSelected(true);
+    tree->setFocus();
+    QTest::keyClick(tree, Qt::Key_Backspace);
+    QTRY_VERIFY(tree->m_foldersMap.contains("Palettes/Empty") == false);
 }
