@@ -72,7 +72,60 @@
 #undef private
 #undef protected
 
+#include "collection.h"
+#include "programmercontroller.h"
+#include "chaser.h"
+#include "chaserstep.h"
+#include "show.h"
+#include "track.h"
+#include "showfunction.h"
+#include <QBuffer>
+#include <QDrag>
+#include <QXmlStreamWriter>
+
 #include "programmingmanager_test.h"
+
+/* The payload the Programming tab's own trees put on a drag of $items. */
+static QMimeData *treeMimeData(FunctionsTreeWidget *tree, const QList<QTreeWidgetItem *> &items)
+{
+    if (items.contains(nullptr))
+        return nullptr;
+    return tree->buildMimeData(items);
+}
+
+static QTreeWidgetItem *funcRow(FunctionsTreeWidget *tree, Doc *doc, quint32 fid)
+{
+    Function *f = doc->function(fid);
+    return f != nullptr ? tree->functionItem(f) : nullptr;
+}
+
+/* Save $doc and load it into a fresh Doc: what a reopened show would hold. */
+static Doc *roundTrip(Doc *doc, QObject *parent)
+{
+    QBuffer buf;
+    buf.open(QIODevice::WriteOnly);
+    {
+        QXmlStreamWriter w(&buf);
+        w.writeStartDocument();
+        w.writeStartElement(QStringLiteral("Workspace"));
+        doc->saveXML(&w);
+        w.writeEndElement();
+        w.writeEndDocument();
+    }
+    buf.close();
+
+    Doc *loaded = new Doc(parent);
+    QXmlStreamReader r(buf.data());
+    r.readNextStartElement(); // Workspace
+    while (r.readNextStartElement())
+    {
+        if (r.name() == QLatin1String("Engine"))
+            loaded->loadXML(r, false);
+        else
+            r.skipCurrentElement();
+    }
+    return loaded;
+}
 
 /* Real QMimeData for a palette, built the same way FunctionsTreeWidget's own
  * external drag would (m_paletteTree->setExternalDragMode(true) is set
@@ -1792,3 +1845,485 @@ void ProgrammingManager_Test::thePowerChipSaysWhatItsFigureIsMadeOf()
 }
 
 QTEST_MAIN(ProgrammingManager_Test)
+
+void ProgrammingManager_Test::scenesDragIntoAFolderAndBackOut()
+{
+    auto scene = [this](const QString &name, const QString &path) {
+        Scene *sc = new Scene(m_doc);
+        sc->setName(name);
+        m_doc->addFunction(sc);
+        sc->setPath(path);
+        return sc->id();
+    };
+    const quint32 a = scene("01-01.00-Walk in", QString());
+    const quint32 b = scene("01-02.00-Preshow", QString());
+    const quint32 c = scene("02-01.00-Opener", QStringLiteral("Act 1"));
+    Collection *coll = new Collection(m_doc);
+    coll->setName("Opening");
+    m_doc->addFunction(coll);
+
+    ProgrammingManager mgr(nullptr, m_doc);
+    FunctionsTreeWidget *tree = mgr.m_funcTree;
+    tree->updateTree();
+    // Drag is on from the start, before anything has been opened.
+    QVERIFY(tree->dragEnabled());
+    QCOMPARE(tree->dragDropMode(), QAbstractItemView::DragDrop);
+
+    QTreeWidgetItem *act1 = tree->m_foldersMap.value("Scene/Act 1");
+    QVERIFY(act1 != nullptr);
+    QVERIFY(tree->isUserFolder(act1));
+
+    // Two scenes at once onto the folder.
+    QScopedPointer<QMimeData> mime(treeMimeData(tree,
+        { funcRow(tree, m_doc, a), funcRow(tree, m_doc, b) }));
+    QVERIFY(mime != nullptr);
+    // The payload the collection/chaser/show editors read is still there.
+    QVERIFY(mime->hasFormat(FunctionsTreeWidget::functionDragMimeType()));
+    QVERIFY(tree->canDropMimeOn(mime.data(), act1));
+    m_doc->resetModified();
+    QVERIFY(tree->dropMimeOn(mime.data(), act1));
+    QCoreApplication::processEvents(); // the tree rebuilds on the next turn
+    QCOMPARE(m_doc->function(a)->path(true), QString("Act 1"));
+    QCOMPARE(m_doc->function(b)->path(true), QString("Act 1"));
+    QVERIFY(m_doc->isModified());
+    // The tree rebuilds itself after the drop and shows them in the folder.
+    QTRY_VERIFY(funcRow(tree, m_doc, a) != nullptr
+                && funcRow(tree, m_doc, a)->parent() == tree->m_foldersMap.value("Scene/Act 1"));
+
+    // Persisted: a saved and reopened show has them in the folder.
+    {
+        QScopedPointer<Doc> loaded(roundTrip(m_doc, nullptr));
+        QCOMPARE(loaded->function(a)->path(true), QString("Act 1"));
+        QCOMPARE(loaded->function(b)->path(true), QString("Act 1"));
+        QCOMPARE(loaded->function(c)->path(true), QString("Act 1"));
+    }
+
+    // With a collection open (the tree used to switch modes here and refuse
+    // folder drops), a scene still files into a folder...
+    mgr.loadFunctionEditor(coll);
+    QTreeWidgetItem *sceneCat = tree->m_foldersMap.value("Scene/");
+    QVERIFY(sceneCat != nullptr);
+    mime.reset(treeMimeData(tree, { funcRow(tree, m_doc, a) }));
+    QVERIFY(mime != nullptr);
+    QVERIFY(tree->dropMimeOn(mime.data(), sceneCat));
+    QCoreApplication::processEvents(); // the tree rebuilds on the next turn     // ...back out to the top
+    QCOMPARE(m_doc->function(a)->path(true), QString());
+    QTRY_VERIFY(funcRow(tree, m_doc, a) != nullptr
+                && funcRow(tree, m_doc, a)->parent() == tree->m_foldersMap.value("Scene/"));
+
+    // Empty space is the top level too.
+    mime.reset(treeMimeData(tree, { funcRow(tree, m_doc, b) }));
+    QVERIFY(mime != nullptr);
+    QVERIFY(tree->canDropMimeOn(mime.data(), nullptr));
+    QVERIFY(tree->dropMimeOn(mime.data(), nullptr));
+    QCoreApplication::processEvents(); // the tree rebuilds on the next turn
+    QCOMPARE(m_doc->function(b)->path(true), QString());
+
+    // Onto a sibling scene: joins that scene's folder.
+    QTRY_VERIFY(funcRow(tree, m_doc, c) != nullptr);
+    mime.reset(treeMimeData(tree, { funcRow(tree, m_doc, b) }));
+    QVERIFY(mime != nullptr);
+    QVERIFY(tree->dropMimeOn(mime.data(), funcRow(tree, m_doc, c)));
+    QCoreApplication::processEvents(); // the tree rebuilds on the next turn
+    QCOMPARE(m_doc->function(b)->path(true), QString("Act 1"));
+
+    // A scene can't go into another type's folder (the Collection category).
+    QTRY_VERIFY(tree->m_foldersMap.value("Collection/") != nullptr);
+    mime.reset(treeMimeData(tree, { funcRow(tree, m_doc, a) }));
+    QVERIFY(mime != nullptr);
+    QVERIFY(tree->canDropMimeOn(mime.data(), tree->m_foldersMap.value("Collection/")) == false);
+
+    // A collection row still takes the scene as a member.
+    QSignalSpy members(tree, &FunctionsTreeWidget::functionsDroppedOnCollection);
+    QVERIFY(tree->canDropMimeOn(mime.data(), funcRow(tree, m_doc, coll->id())));
+    QVERIFY(tree->dropMimeOn(mime.data(), funcRow(tree, m_doc, coll->id())));
+    QCoreApplication::processEvents(); // the tree rebuilds on the next turn
+    QCOMPARE(members.count(), 1);
+    QCOMPARE(members.first().at(0).toUInt(), coll->id());
+    QCOMPARE(m_doc->function(a)->path(true), QString()); // not moved
+}
+
+void ProgrammingManager_Test::aFolderDragsIntoAnotherFolder()
+{
+    auto scene = [this](const QString &name, const QString &path) {
+        Scene *sc = new Scene(m_doc);
+        sc->setName(name);
+        m_doc->addFunction(sc);
+        sc->setPath(path);
+        return sc->id();
+    };
+    const quint32 a = scene("A", QStringLiteral("Act 1"));
+    const quint32 b = scene("B", QStringLiteral("Act 2"));
+    const quint32 c = scene("C", QStringLiteral("Act 2/Fight"));
+
+    ProgrammingManager mgr(nullptr, m_doc);
+    FunctionsTreeWidget *tree = mgr.m_funcTree;
+    tree->updateTree();
+    // An empty sub-folder too: it must survive the move.
+    tree->clearSelection();
+    tree->folderItem("Scene/Act 2/Empty");
+
+    QTreeWidgetItem *act2 = tree->m_foldersMap.value("Scene/Act 2");
+    QScopedPointer<QMimeData> mime(treeMimeData(tree, { act2 }));
+    QVERIFY(mime != nullptr);
+    QVERIFY(mime->hasFormat(FunctionsTreeWidget::folderDragMimeType()));
+
+    // Not into itself or below itself.
+    QVERIFY(tree->canDropMimeOn(mime.data(), act2) == false);
+    QVERIFY(tree->canDropMimeOn(mime.data(), tree->m_foldersMap.value("Scene/Act 2/Fight")) == false);
+
+    QVERIFY(tree->dropMimeOn(mime.data(), tree->m_foldersMap.value("Scene/Act 1")));
+    QCoreApplication::processEvents(); // the tree rebuilds on the next turn
+    QCOMPARE(m_doc->function(a)->path(true), QString("Act 1"));
+    QCOMPARE(m_doc->function(b)->path(true), QString("Act 1/Act 2"));
+    QCOMPARE(m_doc->function(c)->path(true), QString("Act 1/Act 2/Fight"));
+    QTRY_VERIFY(tree->m_foldersMap.contains("Scene/Act 1/Act 2/Empty"));
+    QVERIFY(tree->m_foldersMap.contains("Scene/Act 2") == false);
+
+    // And back out to the top level.
+    mime.reset(treeMimeData(tree, { tree->m_foldersMap.value("Scene/Act 1/Act 2") }));
+    QVERIFY(mime != nullptr);
+    QVERIFY(tree->dropMimeOn(mime.data(), nullptr));
+    QCoreApplication::processEvents(); // the tree rebuilds on the next turn
+    QCOMPARE(m_doc->function(b)->path(true), QString("Act 2"));
+    QCOMPARE(m_doc->function(c)->path(true), QString("Act 2/Fight"));
+    QTRY_VERIFY(tree->m_foldersMap.contains("Scene/Act 2/Empty"));
+}
+
+void ProgrammingManager_Test::palettesAndTheirFoldersDragIntoFolders()
+{
+    auto palette = [this](const QString &name, const QString &path) {
+        QLCPalette *p = new QLCPalette(QLCPalette::Dimmer, m_doc);
+        p->setName(name);
+        m_doc->addPalette(p);
+        p->setPath(path);
+        return p->id();
+    };
+    const quint32 full = palette("Full", QStringLiteral("Palettes/Dimmer/"));
+    const quint32 half = palette("Half", QStringLiteral("Palettes/Dimmer/"));
+    const quint32 warm = palette("Warm", QStringLiteral("Palettes/Warm/"));
+
+    ProgrammingManager mgr(nullptr, m_doc);
+    FunctionsTreeWidget *tree = mgr.m_paletteTree;
+    tree->updateTree();
+
+    // An empty folder, as "New folder…" makes it, takes a palette.
+    QTreeWidgetItem *fresh = tree->ensurePaletteFolder("Palettes/Fresh");
+    QVERIFY(fresh != nullptr);
+    QScopedPointer<QMimeData> mime(treeMimeData(tree,
+        { tree->paletteItem(m_doc->palette(full)), tree->paletteItem(m_doc->palette(half)) }));
+    QVERIFY(mime != nullptr);
+    QVERIFY(mime->hasFormat(FunctionsTreeWidget::paletteDragMimeType()));
+    QVERIFY(tree->canDropMimeOn(mime.data(), fresh));
+    QVERIFY(tree->dropMimeOn(mime.data(), fresh));
+    QCoreApplication::processEvents(); // the tree rebuilds on the next turn
+    QCOMPARE(m_doc->palette(full)->path(), QString("Palettes/Fresh/"));
+    QCOMPARE(m_doc->palette(half)->path(), QString("Palettes/Fresh/"));
+
+    // A palette folder into another, and the paths persist.
+    QTRY_VERIFY(tree->m_foldersMap.value("Palettes/Fresh") != nullptr
+                && tree->m_foldersMap.value("Palettes/Fresh")->childCount() == 2);
+    mime.reset(treeMimeData(tree, { tree->m_foldersMap.value("Palettes/Fresh") }));
+    QVERIFY(mime != nullptr);
+    QVERIFY(tree->dropMimeOn(mime.data(), tree->m_foldersMap.value("Palettes/Warm")));
+    QCoreApplication::processEvents(); // the tree rebuilds on the next turn
+    QCOMPARE(m_doc->palette(full)->path(), QString("Palettes/Warm/Fresh/"));
+    QCOMPARE(m_doc->palette(warm)->path(), QString("Palettes/Warm/"));
+    {
+        QScopedPointer<Doc> loaded(roundTrip(m_doc, nullptr));
+        QCOMPARE(loaded->palette(full)->path(), QString("Palettes/Warm/Fresh/"));
+    }
+
+    // Empty space = the palette list's top level.
+    QTRY_VERIFY(tree->paletteItem(m_doc->palette(half)) != nullptr);
+    mime.reset(treeMimeData(tree, { tree->paletteItem(m_doc->palette(half)) }));
+    QVERIFY(mime != nullptr);
+    QVERIFY(tree->dropMimeOn(mime.data(), nullptr));
+    QCoreApplication::processEvents(); // the tree rebuilds on the next turn
+    QCOMPARE(m_doc->palette(half)->path(), QString());
+
+    // The same payload still builds a look on the canvas: the palette drag
+    // the canvas tests use is this tree's own buildMimeData().
+    QScopedPointer<QMimeData> pal(paletteMimeData(tree, m_doc->palette(warm)));
+    QVERIFY(pal != nullptr && pal->hasFormat(FunctionsTreeWidget::paletteDragMimeType()));
+}
+
+void ProgrammingManager_Test::deletingAFolderKeepsWhatIsInIt()
+{
+    Scene *sc = new Scene(m_doc);
+    sc->setName("Opener");
+    m_doc->addFunction(sc);
+    sc->setPath("Act 1/Fight");
+
+    ProgrammingManager mgr(nullptr, m_doc);
+    FunctionsTreeWidget *tree = mgr.m_funcTree;
+    tree->updateTree();
+
+    // An empty folder goes without a question.
+    tree->clearSelection();
+    QTreeWidgetItem *empty = tree->folderItem("Scene/Act 1/Empty");
+    QVERIFY(tree->isUserFolder(empty));
+    QCOMPARE(tree->folderContentCount(empty), 0);
+    QVERIFY(mgr.deleteTreeFolder(tree, empty)); // confirm on: no dialog when empty
+    QTRY_VERIFY(tree->m_foldersMap.contains("Scene/Act 1/Empty") == false);
+    QVERIFY(tree->m_foldersMap.contains("Scene/Act 1/Fight"));
+
+    // A folder with a scene in it: the scene moves up, nothing is deleted.
+    QTreeWidgetItem *act1 = tree->m_foldersMap.value("Scene/Act 1");
+    QCOMPARE(tree->folderContentCount(act1), 1);
+    QVERIFY(mgr.deleteTreeFolder(tree, act1, false));
+    QVERIFY(m_doc->function(sc->id()) != nullptr);
+    QCOMPARE(sc->path(true), QString("Fight"));
+    QTRY_VERIFY(tree->m_foldersMap.contains("Scene/Fight"));
+    QVERIFY(tree->m_foldersMap.contains("Scene/Act 1") == false);
+
+    // Categories aren't folders: nothing to delete there.
+    QVERIFY(tree->isUserFolder(tree->m_foldersMap.value("Scene/")) == false);
+    QVERIFY(mgr.deleteTreeFolder(tree, tree->m_foldersMap.value("Scene/"), false) == false);
+
+    // Palettes: same.
+    QLCPalette *p = new QLCPalette(QLCPalette::Dimmer, m_doc);
+    p->setName("Full");
+    m_doc->addPalette(p);
+    p->setPath("Palettes/Dimmer/");
+    mgr.m_paletteTree->updateTree();
+    QTreeWidgetItem *dim = mgr.m_paletteTree->m_foldersMap.value("Palettes/Dimmer");
+    QVERIFY(mgr.m_paletteTree->isUserFolder(dim));
+    QVERIFY(mgr.deleteTreeFolder(mgr.m_paletteTree, dim, false));
+    QVERIFY(m_doc->palette(p->id()) != nullptr);
+    QCOMPARE(p->path(), QString());
+}
+
+void ProgrammingManager_Test::pressAndMoveOnARowDragsIt()
+{
+    for (int i = 0; i < 6; i++)
+    {
+        Scene *sc = new Scene(m_doc);
+        sc->setName(QString("Scene %1").arg(i));
+        m_doc->addFunction(sc);
+    }
+
+    ProgrammingManager mgr(nullptr, m_doc);
+    mgr.resize(1200, 800);
+    mgr.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&mgr));
+    FunctionsTreeWidget *tree = mgr.m_funcTree;
+    tree->updateTree();
+    QTreeWidgetItem *cat = tree->m_foldersMap.value("Scene/");
+    QVERIFY(cat != nullptr);
+    cat->setExpanded(true);
+    tree->clearSelection();
+
+    QTreeWidgetItem *first = cat->child(0);
+    QTreeWidgetItem *last = cat->child(4);
+    const QPoint from = tree->visualItemRect(first).center();
+    const QPoint to = tree->visualItemRect(last).center();
+    QVERIFY(from.y() < to.y());
+
+    QWidget *vp = tree->viewport();
+    QTest::mousePress(vp, Qt::LeftButton, Qt::NoModifier, from);
+
+    // The move past the drag distance should start a drag of the pressed row
+    // -- not a rubber-band selection of the rows passed over. QDrag::exec()
+    // returns at once on the offscreen platform but runs a nested loop on a
+    // real one (xcb under xvfb in CI), so read the drag's payload from inside
+    // that loop and cancel it; and also right after, for the offscreen case.
+    QByteArray dragged;
+    auto grab = [tree, &dragged]() {
+        QDrag *drag = tree->findChild<QDrag *>();
+        if (drag != nullptr && dragged.isEmpty() && drag->mimeData() != nullptr)
+            dragged = drag->mimeData()->data(FunctionsTreeWidget::functionDragMimeType());
+        QDrag::cancel();
+    };
+    QTimer::singleShot(0, tree, grab);
+    QTimer::singleShot(500, tree, []() { QDrag::cancel(); }); // never hang
+    QMouseEvent move(QEvent::MouseMove, QPointF(to), QPointF(vp->mapToGlobal(to)),
+                     Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(vp, &move);
+    if (dragged.isEmpty())
+        grab();
+
+    QVERIFY(dragged.isEmpty() == false);
+    QDataStream stream(&dragged, QIODevice::ReadOnly);
+    quint32 fid = Function::invalidId();
+    stream >> fid;
+    QCOMPARE(fid, tree->itemFunctionId(first));
+    QVERIFY(stream.atEnd());
+    QCOMPARE(tree->selectedItems().count(), 1);
+    QCOMPARE(tree->selectedItems().first(), first);
+
+    QTest::mouseRelease(vp, Qt::LeftButton, Qt::NoModifier, to);
+}
+
+void ProgrammingManager_Test::rowsUnderAContainerComeOutOfIt()
+{
+    auto scene = [this](const QString &name) {
+        Scene *sc = new Scene(m_doc);
+        sc->setName(name);
+        m_doc->addFunction(sc);
+        return sc->id();
+    };
+    const quint32 startup = scene("0.0.1-Startup");
+    const quint32 shout = scene("0.0.2-Shout");
+    const quint32 walk = scene("0.0.3-Walk");
+
+    Collection *coll = new Collection(m_doc);
+    coll->setName("0.0.4-SHOUT");
+    m_doc->addFunction(coll);
+    coll->addFunction(startup);
+    coll->addFunction(shout);
+    coll->addFunction(walk);
+
+    Chaser *chaser = new Chaser(m_doc);
+    chaser->setName("Cues");
+    m_doc->addFunction(chaser);
+    chaser->addStep(ChaserStep(walk));
+    chaser->addStep(ChaserStep(shout));
+    chaser->addStep(ChaserStep(walk)); // the same scene twice
+
+    ProgrammingManager mgr(nullptr, m_doc);
+    FunctionsTreeWidget *tree = mgr.m_funcTree;
+    tree->updateTree();
+
+    // Open the collection: its members show nested under its row.
+    mgr.loadFunctionEditor(coll);
+    QTreeWidgetItem *collRow = tree->functionItem(coll);
+    QVERIFY(collRow != nullptr);
+    QCOMPARE(collRow->childCount(), 3);
+    auto memberRow = [](QTreeWidgetItem *parent, const QString &name) -> QTreeWidgetItem * {
+        for (int i = 0; i < parent->childCount(); i++)
+            if (parent->child(i)->text(0).endsWith(name))
+                return parent->child(i);
+        return nullptr;
+    };
+
+    // Two selected under it -> two refs to that collection.
+    tree->clearSelection();
+    memberRow(collRow, "Startup")->setSelected(true);
+    memberRow(collRow, "Walk")->setSelected(true);
+    QList<ProgrammingManager::MemberRef> refs =
+        mgr.funcTreeMemberTargets(memberRow(collRow, "Walk"));
+    QCOMPARE(refs.size(), 2);
+    QCOMPARE(refs.at(0).container, coll->id());
+    QCOMPARE(refs.at(1).container, coll->id());
+    // A real (top-level) scene row is not a member row.
+    QVERIFY(mgr.funcTreeMemberTargets(tree->functionItem(m_doc->function(shout))).isEmpty());
+
+    // "Delete" on one of them says it's the function itself, and where it's used.
+    const QString msg = mgr.deleteFunctionsMessage({ walk });
+    QVERIFY(msg.contains("everywhere"));
+    QVERIFY(msg.contains("0.0.4-SHOUT"));
+    QVERIFY(msg.contains("Cues"));
+
+    m_doc->resetModified();
+    QCOMPARE(mgr.removeMembers(refs, false), 2);
+    QCOMPARE(coll->functions(), QList<quint32>() << shout);
+    // Only the membership: the scenes are still in the show.
+    QVERIFY(m_doc->function(startup) != nullptr);
+    QVERIFY(m_doc->function(walk) != nullptr);
+    QVERIFY(m_doc->isModified());
+    // The nested rows follow.
+    collRow = tree->functionItem(coll);
+    QCOMPARE(collRow->childCount(), 1);
+
+    // A chaser holding Walk twice: take out the third step only.
+    mgr.loadFunctionEditor(chaser);
+    QTreeWidgetItem *chRow = tree->functionItem(chaser);
+    QCOMPARE(chRow->childCount(), 3);
+    QTreeWidgetItem *third = nullptr;
+    for (int i = 0; i < chRow->childCount(); i++)
+        if (chRow->child(i)->data(0, Qt::UserRole + 3).toInt() == 2)
+            third = chRow->child(i);
+    QVERIFY(third != nullptr);
+    refs = mgr.funcTreeMemberTargets(third);
+    QCOMPARE(refs.size(), 1);
+    QCOMPARE(refs.first().stepIndex, 2);
+    QCOMPARE(mgr.removeMembers(refs, false), 1);
+    QCOMPARE(chaser->stepsCount(), 2);
+    QCOMPARE(chaser->steps().at(0).fid, walk);
+    QCOMPARE(chaser->steps().at(1).fid, shout);
+
+    // A show: an item placed on a track comes off it.
+    Show *show = new Show(m_doc);
+    show->setName("Preshow");
+    m_doc->addFunction(show);
+    Track *trk = new Track(Function::invalidId(), show);
+    trk->setName("Lights");
+    show->addTrack(trk);
+    QVERIFY(trk->createShowFunction(startup) != nullptr);
+    tree->updateTree();
+    mgr.syncMemberNodes(Function::invalidId());
+    mgr.loadFunctionEditor(show);
+    QTreeWidgetItem *showRow = tree->functionItem(show);
+    QVERIFY(showRow != nullptr && showRow->childCount() == 1);
+    QTreeWidgetItem *placed = showRow->child(0)->child(0);
+    QVERIFY(placed != nullptr);
+    refs = mgr.funcTreeMemberTargets(placed);
+    QCOMPARE(refs.size(), 1);
+    QCOMPARE(refs.first().container, show->id());
+    QCOMPARE(mgr.removeMembers(refs, false), 1);
+    QVERIFY(trk->showFunctions().isEmpty());
+    QVERIFY(m_doc->function(startup) != nullptr);
+}
+
+void ProgrammingManager_Test::deletingAPaletteSaysWhereItIsUsed()
+{
+    QLCPalette *red = new QLCPalette(QLCPalette::Color, m_doc);
+    red->setName("Red");
+    red->setValue(QColor(Qt::red).name());
+    m_doc->addPalette(red);
+    QLCPalette *blue = new QLCPalette(QLCPalette::Color, m_doc);
+    blue->setName("Blue");
+    blue->setValue(QColor(Qt::blue).name());
+    m_doc->addPalette(blue);
+    QLCPalette *sinelon = new QLCPalette(QLCPalette::Effect, m_doc);
+    sinelon->setName("Sinelon");
+    m_doc->addPalette(sinelon);
+    sinelon->setEffectPaletteBinding("color", red->id());
+    QLCPalette *unused = new QLCPalette(QLCPalette::Dimmer, m_doc);
+    unused->setName("Spare");
+    unused->setValue(100);
+    m_doc->addPalette(unused);
+
+    Scene *base = new Scene(m_doc);
+    base->setName("00-00.00-Base");
+    m_doc->addFunction(base);
+    base->addPalette(blue->id());
+    base->addPalette(red->id());   // look 2
+
+    ProgrammingManager mgr(nullptr, m_doc);
+
+    // The shared "where is it used" helper.
+    const QList<ProgrammerController::Usage> uses = m_doc->programmer()->paletteUsage(red->id());
+    QCOMPARE(uses.size(), 2);
+    const QStringList lines = ProgrammerController::usageLines(uses);
+    QVERIFY(lines.contains(QString("Scene “00-00.00-Base” — look 2")));
+    QVERIFY(lines.contains(QString("Effect look “Sinelon” — its “color” slot")));
+
+    const QString msg = mgr.deletePalettesMessage({ red->id() });
+    QVERIFY(msg.contains("00-00.00-Base"));
+    QVERIFY(msg.contains("look 2"));
+    QVERIFY(msg.contains("Sinelon"));
+    QVERIFY(msg.contains("lose that look"));
+    QVERIFY(mgr.deletePalettesMessage({ unused->id() }).contains("Nothing uses it"));
+
+    const quint32 redId = red->id();
+    QVERIFY(mgr.deletePalettes({ redId }, false));
+    QVERIFY(m_doc->palette(redId) == nullptr);
+    QCOMPARE(base->palettes(), QList<quint32>() << blue->id());
+    QVERIFY(sinelon->effectPaletteBindings().contains("color") == false);
+
+    // Delete/Backspace on the palette tree: an empty folder goes at once.
+    mgr.resize(1200, 800);
+    mgr.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&mgr));
+    FunctionsTreeWidget *tree = mgr.m_paletteTree;
+    QTreeWidgetItem *folder = tree->ensurePaletteFolder("Palettes/Empty");
+    QVERIFY(folder != nullptr);
+    tree->clearSelection();
+    tree->setCurrentItem(folder);
+    folder->setSelected(true);
+    tree->setFocus();
+    QTest::keyClick(tree, Qt::Key_Backspace);
+    QTRY_VERIFY(tree->m_foldersMap.contains("Palettes/Empty") == false);
+}

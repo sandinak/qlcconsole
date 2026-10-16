@@ -102,6 +102,39 @@ private slots:
     void aRenamedFixedTargetShowsItsNewName();
     void thePowerChipSaysWhatItsFigureIsMadeOf();
 
+    /** "I can't seem to drag a scene to a folder in the programming view":
+     *  scenes dropped on a folder move into it (with or without a collection
+     *  open), onto the category/empty space move back out, the show is
+     *  modified and the paths survive save + load; a drop on a collection row
+     *  still adds members, and the payload still carries the function ids the
+     *  collection/chaser/show editors read. */
+    void scenesDragIntoAFolderAndBackOut();
+    /** A folder dragged onto another folder moves inside it with everything
+     *  in it; never into itself. */
+    void aFolderDragsIntoAnotherFolder();
+    /** Palettes and palette folders drag into folders too, including an
+     *  empty folder just made from the menu. */
+    void palettesAndTheirFoldersDragIntoFolders();
+    /** "I can't right click on an empty folder to delete it": Delete Folder
+     *  removes an empty folder outright; a folder with things in it hands
+     *  them to its parent folder — nothing is deleted. */
+    void deletingAFolderKeepsWhatIsInIt();
+    /** "it was drag selecting other things vs dragging to folder": press on
+     *  a row that isn't selected and move -> it's a drag of that row, not a
+     *  rubber-band selection growing over the rows passed. */
+    void pressAndMoveOnARowDragsIt();
+    /** "No ability to remove from side menu": rows shown under a collection /
+     *  chaser / show come out of it (membership only; the functions stay),
+     *  one or several, from one or several containers; a chaser that holds a
+     *  function twice loses only the step picked. "Delete" on such a row says
+     *  it deletes the function everywhere and lists where it is used. */
+    void rowsUnderAContainerComeOutOfIt();
+    /** "can't remove anything here .. no delete .. AND delete should check
+     *  for usage and warn the user with a popup that shows where": deleting a
+     *  palette names every scene look and effect-look slot using it, and
+     *  takes it out of them; Delete/Backspace on the palette tree deletes. */
+    void deletingAPaletteSaysWhereItIsUsed();
+
 private:
     Doc* m_doc;
 };

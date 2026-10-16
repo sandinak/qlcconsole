@@ -4,6 +4,24 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## October 2026
 
+### Programming
+
+- **Drag scenes and palettes into folders.** In the Programming tab, a scene
+  (or several, or a whole folder) dragged onto a folder moves into it, and
+  onto the type's heading or empty space moves back out; pressing on a row
+  and moving now always drags it, where before it could rubber-band select
+  instead. Right-click a folder to rename or delete it — deleting keeps what
+  was in it. See [Filing into folders](programming-tab.md#filing-into-folders).
+- **Take things out of a collection, chaser or show from the side tree.**
+  Right-click rows listed under one → **Remove from “…”** (the functions
+  stay). Delete on those rows now reads **Delete Function Everywhere…** and
+  says where else the function is used. See
+  [Taking something out](programming-tab.md#taking-something-out-of-a-collection-chaser-or-show).
+- **Deleting says where it's used.** Deleting a palette or a function in the
+  Programming tab (menu or ⌫) lists every scene look, effect-look slot,
+  collection, chaser step and show track using it before you confirm. See
+  [Deleting palettes and functions](programming-tab.md#deleting-palettes-and-functions).
+
 ### Sub-cues
 
 - **Cues inside a cue.** A chase used as a step of a cue list lists its
