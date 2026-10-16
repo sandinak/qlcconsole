@@ -211,9 +211,9 @@ void PatchLabels_Test::aNetworkLabelCarriesItsIp()
     QCOMPARE(PatchLabels::label(r).detail, QStringLiteral("RGB · 3 ch"));
     QCOMPARE(PatchLabels::label(r).network, QStringLiteral("WLED · 172.18.2.50"));
 
-    // The name it goes by, when it has one.
+    // The name it goes by, when it has one: the name alone.
     r.host = QStringLiteral("lantern-2");
-    QCOMPARE(PatchLabels::label(r).network, QStringLiteral("WLED · lantern-2 (172.18.2.50)"));
+    QCOMPARE(PatchLabels::label(r).network, QStringLiteral("WLED · lantern-2"));
 
     // A host name for its address.
     r.host.clear();
@@ -273,7 +273,7 @@ void PatchLabels_Test::aLabelFromTheShow()
     l = PatchLabels::label(rs.at(1));
     QCOMPARE(l.address, QStringLiteral("U3 · 1"));
     QVERIFY(l.universe.isEmpty());
-    QCOMPARE(l.network, QStringLiteral("WLED · lantern-2 (172.18.2.51)"));
+    QCOMPARE(l.network, QStringLiteral("WLED · lantern-2"));
 }
 
 void PatchLabels_Test::thePdfHasAPagePerSheet()

@@ -45,6 +45,7 @@ private slots:
     void labelsAreForAllOrTheSelectedRows();
     void theLabelStockIsRemembered();
     void saveLabelsAsksWhereAndWrites();
+    void aNetworkFixturesIpIsOnMouseover();
 
 private:
     Doc *m_doc = nullptr;

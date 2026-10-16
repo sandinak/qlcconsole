@@ -132,7 +132,7 @@ The latest changes, newest first. Each links to the guide with the detail.
   ([The patch list](fixture-manager.md#the-patch-list))
 - **A label per fixture** from the patch list: **Labels…** saves a PDF —
   the name and the address (U3 · 101) large, the universe's name, the mode
-  and channels, a network fixture's IP and where it hangs small — on Avery 5160 sheets (30 to a Letter page) or a 62 mm
+  and channels, a network fixture's name and where it hangs small — on Avery 5160 sheets (30 to a Letter page) or a 62 mm
   roll, for all the fixtures or the selected rows.
   ([Labels](fixture-manager.md#labels))
 - **Patch Others Like This.** Right-click a structure: the other

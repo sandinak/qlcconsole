@@ -13,8 +13,9 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
   selected rows (the default when there are some) — saved as a PDF
   (QPdfWriter) to print from Preview. Name and `U3 · 101` large, the
   universe's name smaller beside the address; mode · channels, a network
-  fixture's own line (`WLED · lantern-2 (172.18.2.51)` — the IP's target
-  alias, `PatchList::Row::host`) and the mount description small; each
+  fixture's own line (`WLED · lantern-2` — the IP's target alias,
+  `PatchList::Row::host`; the IP when it has none, and on mouseover in the
+  patch list's Connection column) and the mount description small; each
   line shrinks to fit, then elides. Stocks are data
   (`PatchLabels::sheets()`): **Avery 5160** (Letter, 3 × 10, 2⅝ × 1 in, the
   default) and a **62 mm roll** (62 × 29 mm, one a page, landscape); the

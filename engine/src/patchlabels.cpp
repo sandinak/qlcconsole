@@ -127,13 +127,11 @@ PatchLabels::Label PatchLabels::label(const PatchList::Row &row)
 
     if (row.network)
     {
-        QString where;
-        if (row.ip.isEmpty())
-            where = QStringLiteral("(no IP)");
-        else if (row.host.isEmpty() || row.host == row.ip)
-            where = row.ip;
-        else
-            where = QStringLiteral("%1 (%2)").arg(row.host, row.ip);
+        /* Its name, which the crew reads; the IP only when it has none
+           (the patch list shows the IP on mouseover). */
+        QString where = row.host;
+        if (where.isEmpty())
+            where = row.ip.isEmpty() ? QStringLiteral("(no IP)") : row.ip;
         l.network = row.transport.isEmpty() ? where
                                             : QStringLiteral("%1 · %2").arg(row.transport, where);
     }

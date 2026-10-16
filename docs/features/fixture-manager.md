@@ -222,8 +222,8 @@ fixtures still in the inventory last:
 | **Fixture** | Its name. |
 | **Make / model**, **Mode** | From its definition. |
 | **Ch** | How many channels it takes. |
-| **Connection** | DMX, or a network fixture's transport and IP ("WLED 172.18.2.50"). |
-| **Goes to** | Where its universe goes: the output and device ("Art-Net → CS1 (172.18.2.211) port 1"), or nothing. |
+| **Connection** | DMX, or a network fixture's transport and the name its IP goes by ("WLED lantern-2"), or the IP when it has none ("WLED 172.18.2.50"). Point at it for the IP. |
+| **Goes to** | Where its universe goes: the output and device ("Art-Net → CS1 (172.18.2.211) port 1"), or nothing; point at it for all of it when the column is narrow. |
 | **Mounted on** | The same words as Fixture Properties: "Truss FOH · 2.5 m along", "Tower T2 · shelf 3", "free / on the floor". |
 
 - **Save CSV…** — every column plus the fixture ID, the first and last
@@ -245,9 +245,9 @@ its case), saved as a PDF to print from Preview. Each label has:
   in an address clash) — with the universe's name, when it has one, smaller
   beside it;
 - its **mode and channels** — "16-channel · 16 ch";
-- for a network fixture, a line of its own: its transport and IP, with the
-  name that IP goes by when it has one — "WLED · 172.18.2.50",
-  "WLED · lantern-2 (172.18.2.50)";
+- for a network fixture, a line of its own: its transport and the name its
+  IP goes by — "WLED · lantern-2" — or the IP when it has no name
+  ("WLED · 172.18.2.50");
 - **where it hangs**, the same words as the Mounted on column.
 
 A name too long for the label is set smaller, then cut short with "…";

@@ -33,6 +33,7 @@
 
 #include "patchlabelsdialog.h"
 #include "patchlistdialog.h"
+#include "inputoutputmap.h"
 #include "fixture.h"
 #include "doc.h"
 
@@ -290,6 +291,33 @@ void PatchListDialog_Test::saveLabelsAsksWhereAndWrites()
     QVERIFY(!ld.savePdf("/nonexistent-dir/labels.pdf", &error));
     QVERIFY(!error.isEmpty());
     QSettings().remove(SETTINGS_PATCH_LABEL_SHEET);
+}
+
+void PatchListDialog_Test::aNetworkFixturesIpIsOnMouseover()
+{
+    Fixture *f = dimmer(m_doc, "Lantern", 1, 0);
+    f->setConnection(Fixture::Network);
+    f->setTransport(Fixture::WledTransport);
+    f->setIPAddress("172.18.2.51");
+    Fixture *g = dimmer(m_doc, "Lantern B", 2, 0);
+    g->setConnection(Fixture::Network);
+    g->setTransport(Fixture::WledTransport);
+    g->setIPAddress("172.18.2.52");
+    m_doc->inputOutputMap()->setTargetAlias("172.18.2.51", "lantern-2");
+
+    PatchListDialog dlg(m_doc);
+    QCOMPARE(dlg.table()->item(2, 1)->text(), QString("Lantern"));
+    QCOMPARE(dlg.table()->item(3, 1)->text(), QString("Lantern B"));
+    // The name it goes by, as the label has it; the IP on mouseover.
+    QCOMPARE(dlg.table()->item(2, PatchListDialog::ConnectionColumn)->text(), QString("WLED lantern-2"));
+    QCOMPARE(dlg.table()->item(2, PatchListDialog::ConnectionColumn)->toolTip(),
+             QString("WLED to lantern-2 (172.18.2.51)"));
+    // No name: the IP, there and on mouseover.
+    QCOMPARE(dlg.table()->item(3, PatchListDialog::ConnectionColumn)->text(), QString("WLED 172.18.2.52"));
+    QCOMPARE(dlg.table()->item(3, PatchListDialog::ConnectionColumn)->toolTip(),
+             QString("WLED to 172.18.2.52"));
+    // DMX: nothing to add.
+    QVERIFY(dlg.table()->item(0, PatchListDialog::ConnectionColumn)->toolTip().isEmpty());
 }
 
 QTEST_MAIN(PatchListDialog_Test)

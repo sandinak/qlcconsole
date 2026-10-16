@@ -41,6 +41,9 @@ class PatchListDialog : public QDialog
     Q_OBJECT
 
 public:
+    /** The table's columns that say where a fixture's data goes. */
+    enum { ConnectionColumn = 5, GoesToColumn = 6 };
+
     PatchListDialog(Doc *doc, QWidget *parent = NULL);
 
     const PatchList &list() const { return m_list; }

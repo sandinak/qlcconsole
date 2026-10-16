@@ -64,7 +64,7 @@ public:
         QString address;       //!< "U3 · 101", "not patched", "clash · U1 · 12"
         QString universe;      //!< the universe's name, when it has one: "Stage left"
         QString detail;        //!< "16-channel · 16 ch"
-        QString network;       //!< "WLED · 172.18.2.50", "WLED · lantern-2 (172.18.2.50)"
+        QString network;       //!< "WLED · lantern-2", or "WLED · 172.18.2.50" when the IP has no name
         QString mount;         //!< "Truss FOH · 2.5 m along"
     };
 
