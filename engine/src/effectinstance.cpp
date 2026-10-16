@@ -2235,6 +2235,37 @@ EffectInstance::parseIntents(const QJSValue &intents,
         }
     }
 
+    /* A master dimmer is the fixture's, not a head's: each head of a two-arm
+       beam sends its own level to the one channel. Those are one effect's
+       heads, so the brightest takes it -- as scales they went on to multiply
+       (EffectScriptRunner::composeWrites(), right for two EFFECTS on one
+       dimmer), and confetti's lit arm times its dark one left it black. */
+    QHash<qint64, int> scaled;              // (universe, address) -> index in writes
+    for (int i = 0; i < writes.size(); )
+    {
+        const DmxWrite &w = writes.at(i);
+        if (w.scale < 0)
+        {
+            ++i;
+            continue;
+        }
+        const qint64 key = (qint64(w.universeId) << 32) | quint32(w.addr);
+        auto it = scaled.constFind(key);
+        if (it == scaled.constEnd())
+        {
+            scaled.insert(key, i);
+            ++i;
+            continue;
+        }
+        DmxWrite &kept = writes[it.value()];
+        if (w.scale > kept.scale)
+        {
+            kept.scale = w.scale;
+            kept.value = w.value;
+        }
+        writes.removeAt(i);
+    }
+
     return writes;
 }
 

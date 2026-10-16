@@ -297,5 +297,32 @@ QList<LookStackCheck::Issue> LookStackCheck::check(Doc *doc, const Scene *scene)
                                       "set %1, and no effect here uses it, so it shows nowhere.")
                               .arg(colourNo) };
     }
+
+    // 6. A colour that is black: it lights nothing, and an effect that takes
+    //    the look's colours (confetti, a chase) gets black from it too. A
+    //    "White" saved as #000000 made a whole look dark with nothing to say why.
+    foreach (quint32 pid, pals)
+    {
+        QLCPalette *p = doc->palette(pid);
+        if (p == nullptr || p->type() != QLCPalette::Color || p->values().isEmpty())
+            continue;
+        bool black = true;
+        for (const QVariant &v : p->values())
+        {
+            QColor rgb, wauv;
+            if (!QLCPalette::stringToColor(v.toString(), rgb, wauv) || !rgb.isValid()
+                || rgb.red() || rgb.green() || rgb.blue()
+                || (wauv.isValid() && (wauv.red() || wauv.green() || wauv.blue())))
+            {
+                black = false;
+                break;
+            }
+        }
+        if (black)
+            out << Issue{ p->id(), Issue::Warning,
+                          QObject::tr("Black: %1 is all zero, so the heads it colours give no "
+                                      "light, and an effect that takes the look's colours gets "
+                                      "black from it. Set its colour again.").arg(nameOf(p)) };
+    }
     return out;
 }

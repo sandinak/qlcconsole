@@ -660,6 +660,22 @@ void LookStack_Test::theCheckerSaysWhatWontWork()
     got = issuesFor({ colour(kBlue), colour(kRed), third, dimmer(255) });
     QVERIFY2(about(got, third, "Colour 3"), qPrintable(dump(got)));
 
+    // A colour saved black (a "White" at #000000000000): it lights nothing,
+    // and confetti over it takes black from it.
+    QLCPalette *black = new QLCPalette(QLCPalette::Color, m_doc);
+    black->setValue(QStringLiteral("#000000000000"));
+    m_doc->addPalette(black);
+    got = issuesFor({ black, dimmer(62), effect("lookcolour.js") });
+    QVERIFY2(about(got, black, "Black"), qPrintable(dump(got)));
+    QLCPalette *white = new QLCPalette(QLCPalette::Color, m_doc);
+    white->setValue(QStringLiteral("#000000ff0000"));    // RGB off, the white LED on
+    m_doc->addPalette(white);
+    got = issuesFor({ white, dimmer(62) });
+    QVERIFY2(!about(got, white, "Black"), qPrintable(dump(got)));
+    // The clean look above stays clean: a real colour is not black.
+    got = issuesFor({ colour(kBlue), dimmer(255) });
+    QVERIFY2(!about(got, nullptr, "Black"), qPrintable(dump(got)));
+
     // No targets.
     got = issuesFor({ colour(kBlue) }, false);
     QVERIFY2(about(got, nullptr, "No targets"), qPrintable(dump(got)));

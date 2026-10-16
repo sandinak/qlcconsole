@@ -1589,6 +1589,85 @@ void EffectInstance_Test::aDimmerInTheHeadBreathesAndTheWheelHoldsItsColour()
              qPrintable(QString("a dim blue should keep the wheel on blue, not %1").arg(wheelOut)));
 }
 
+void EffectInstance_Test::aSharedDimmerTakesItsBrightestHead()
+{
+    /* A two-arm beam: one master dimmer outside its heads, an RGB set in
+       each. Confetti lights one arm and leaves the other dark: the dimmer is
+       the lit arm's, not the lit arm's times the dark one's (which was 0, and
+       the fixture stayed black). */
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("TwoArmBeam");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    QLCChannel *dim = new QLCChannel(); dim->setName("Intensity"); dim->setPreset(QLCChannel::IntensityMasterDimmer);
+    QList<QLCChannel *> chans = { dim };
+    const QLCChannel::Preset rgb[] = { QLCChannel::IntensityRed, QLCChannel::IntensityGreen,
+                                       QLCChannel::IntensityBlue };
+    for (int h = 0; h < 2; h++)
+        for (int k = 0; k < 3; k++)
+        {
+            QLCChannel *c = new QLCChannel();
+            c->setName(QString("Colour %1.%2").arg(h).arg(k));
+            c->setPreset(rgb[k]);
+            chans << c;
+        }
+    for (int c = 0; c < chans.size(); c++)
+    {
+        def->addChannel(chans.at(c));
+        mode->insertChannel(chans.at(c), c);
+    }
+    for (int h = 0; h < 2; h++)
+    {
+        QLCFixtureHead head;
+        for (int k = 0; k < 3; k++)
+            head.addChannel(quint32(1 + h * 3 + k));
+        mode->insertHead(-1, head);
+    }
+    mode->cacheHeads();
+    def->addMode(mode);
+    Fixture *beam = new Fixture(m_doc);
+    beam->setFixtureDefinition(def, mode);
+    beam->setUniverse(0); beam->setAddress(20);
+    QVERIFY(m_doc->addFixture(beam));
+    QCOMPARE(beam->masterIntensityChannel(), quint32(0));
+    QCOMPARE(beam->heads(), 2);
+
+    QLCPalette *confetti = new QLCPalette(QLCPalette::Effect, m_doc);
+    confetti->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/confetti.js");
+    QVERIFY(m_doc->addPalette(confetti));
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixture(beam->id());
+    scene->addPalette(confetti->id());
+    EffectInstance inst(m_doc, scene->id(), confetti->id());
+    QVERIFY(inst.isValid());
+    int cols = 0, rows = 0;
+    const QList<EffectInstance::EffectCell> cells = inst.effectiveCells(cols, rows);
+    QCOMPARE(cells.size(), 2);
+
+    QJSEngine *js = inst.m_script.engine();
+    for (int lit = 0; lit < 2; lit++)          // the lit arm first, then last
+    {
+        QJSValue intents = js->newArray(2);
+        for (int h = 0; h < 2; h++)
+        {
+            const int i = (cells.at(h).head == lit) ? 200 : 0;
+            QJSValue o = js->newObject();
+            o.setProperty("r", i); o.setProperty("g", i); o.setProperty("b", i);
+            o.setProperty("dimmer", i / 255.0);
+            intents.setProperty(quint32(h), o);
+        }
+        const QList<EffectInstance::DmxWrite> out =
+            EffectScriptRunner::composeWrites(inst.parseIntents(intents, cells));
+        int n = 0, dimOut = -1;
+        foreach (const EffectInstance::DmxWrite &w, out)
+            if (w.fixtureId == beam->id() && w.channel == 0) { ++n; dimOut = w.value; }
+        QCOMPARE(n, 1);
+        QVERIFY2(qAbs(dimOut - 200) <= 1,
+                 qPrintable(QString("arm %1 lit: the shared dimmer got %2").arg(lit).arg(dimOut)));
+    }
+}
+
 void EffectInstance_Test::effectsOnOneChannelLayerAsADeskDoes()
 {
     auto w = [](int addr, int value, bool replace, float scale = -1.0f, int base = 0) {
