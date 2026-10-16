@@ -30,10 +30,10 @@
 
 #include "dmxsource.h"
 #include "cue.h"
+#include "genericfader.h"
 
 class QXmlStreamReader;
 class QXmlStreamWriter;
-class GenericFader;
 class MasterTimer;
 class FadeChannel;
 class CueStack;
@@ -155,7 +155,7 @@ public:
     void writeDMX(MasterTimer* timer, QList<Universe*> ua) override;
 
 private:
-    FadeChannel *getFader(QList<Universe *> universes, quint32 universeID,
+    GenericFader::ChannelRef getFader(QList<Universe *> universes, quint32 universeID,
                           quint32 fixtureID, quint32 channel);
 
 private:

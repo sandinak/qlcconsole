@@ -363,7 +363,7 @@ void PowerMeasureDialog::drive(const Step &step)
             m_universe = quint32(u);
         }
         auto set = [&](int offset, uchar value) {
-            FadeChannel *fc = m_fader->getChannelFader(m_doc, ua.at(u), Fixture::invalidId(),
+            GenericFader::ChannelRef fc = m_fader->getChannelFader(m_doc, ua.at(u), Fixture::invalidId(),
                                                        m_fixture->address() + quint32(offset));
             fc->setCurrent(value);
             fc->setTarget(value);

@@ -32,9 +32,9 @@
 
   #include "rgbscriptv4.h"
 #include "function.h"
+#include "genericfader.h"
 
 class FixtureGroup;
-class GenericFader;
 class FadeChannel;
 class QDir;
 
@@ -277,7 +277,7 @@ private:
     /** Check if the engine needs to be re-created */
     void checkEngineCreation();
 
-    FadeChannel *getFader(Universe *universe, quint32 fixtureID, quint32 channel);
+    GenericFader::ChannelRef getFader(Universe *universe, quint32 fixtureID, quint32 channel);
     void updateFaderValues(FadeChannel *fc, uchar value, uint fadeTime);
 
     /** Update FadeChannels when $map has changed since last time */

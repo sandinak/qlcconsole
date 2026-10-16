@@ -24,7 +24,7 @@
 #include <functional>
 #include <QList>
 #include <QHash>
-#include <QReadWriteLock>
+#include <mutex>
 
 #include "universe.h"
 #include "scenevalue.h"
@@ -113,10 +113,43 @@ public:
     bool deleteRequested();
     void requestDelete();
 
-    /** Returns a reference of a FadeChannel for the provided $fixtureID and $channel.
-     *  If no FadeChannel is found, a new one is created and added to m_channels.
-     *  Also, new channels will have a start value set depending on their type */
-    FadeChannel *getChannelFader(const Doc *doc, Universe *universe, quint32 fixtureID, quint32 channel);
+    /** A FadeChannel of this fader, with the fader's channels locked for as
+     *  long as it is held. The universe this fader belongs to writes it on
+     *  its own thread -- stepping its channels, and dropping the ones that are
+     *  done -- and a QHash moves its entries when one is added or removed: a
+     *  bare FadeChannel pointer, kept past the lock, wrote into whatever had
+     *  moved there (heap corruption under load). Keep it only as long as the
+     *  channel is being set up; don't hold two from different faders, nor
+     *  ask a Universe for a fader, while holding one. */
+    class ChannelRef
+    {
+    public:
+        ChannelRef(std::unique_lock<std::recursive_mutex> &&lock, FadeChannel *fc)
+            : m_lock(std::move(lock)), m_fc(fc) {}
+        ChannelRef() = default;
+        ChannelRef(ChannelRef &&) = default;
+        ChannelRef &operator=(ChannelRef &&) = default;
+        ChannelRef(const ChannelRef &) = delete;
+        ChannelRef &operator=(const ChannelRef &) = delete;
+
+        FadeChannel *get() const { return m_fc; }
+        FadeChannel *operator->() const { return m_fc; }
+        FadeChannel &operator*() const { return *m_fc; }
+        explicit operator bool() const { return m_fc != nullptr; }
+
+        /** Let go of the channel (and the lock) before the end of the scope */
+        void release() { m_fc = nullptr; m_lock = std::unique_lock<std::recursive_mutex>(); }
+
+    private:
+        std::unique_lock<std::recursive_mutex> m_lock;
+        FadeChannel *m_fc = nullptr;
+    };
+
+    /** Returns the FadeChannel for the provided $fixtureID and $channel,
+     *  locked (see ChannelRef). If no FadeChannel is found, a new one is
+     *  created and added to m_channels. Also, new channels will have a start
+     *  value set depending on their type */
+    ChannelRef getChannelFader(const Doc *doc, Universe *universe, quint32 fixtureID, quint32 channel);
 
     /** Get all channels in a non-modifiable hashmap */
     QHash <quint32,FadeChannel> channels() const;
@@ -200,7 +233,9 @@ private:
     int m_priority;
     bool m_handleSecondary;
     QHash <quint32,FadeChannel> m_channels;
-    mutable QReadWriteLock m_channelsLock;
+    /** Guards m_channels and the FadeChannels in it. Recursive: a caller
+     *  holding a ChannelRef may ask for another channel of the same fader. */
+    mutable std::recursive_mutex m_channelsLock;
     qreal m_intensity;
     qreal m_parentIntensity;
     bool m_paused;

@@ -808,11 +808,11 @@ void RGBMatrix::roundCheck()
         roundElapsed(duration());
 }
 
-FadeChannel *RGBMatrix::getFader(Universe *universe, quint32 fixtureID, quint32 channel)
+GenericFader::ChannelRef RGBMatrix::getFader(Universe *universe, quint32 fixtureID, quint32 channel)
 {
     // get the universe Fader first. If doesn't exist, create it
     if (universe == NULL)
-        return NULL;
+        return GenericFader::ChannelRef();
 
     QSharedPointer<GenericFader> fader = m_fadersMap.value(universe->id(), QSharedPointer<GenericFader>());
     if (fader.isNull())
@@ -955,8 +955,8 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
 
             quint32 universeIndex = floor((absAddress + channelList.at(i)) / 512);
 
-            FadeChannel *fc = getFader(universes.at(universeIndex), grpHead.fxi, channelList.at(i));
-            updateFaderValues(fc, valueList.at(i), fadeTime);
+            GenericFader::ChannelRef fc = getFader(universes.at(universeIndex), grpHead.fxi, channelList.at(i));
+            updateFaderValues(fc.get(), valueList.at(i), fadeTime);
         }
     }
 }

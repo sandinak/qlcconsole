@@ -86,8 +86,9 @@ void GenericFader_Test::addRemove()
     QVERIFY(fader->m_channels.contains(chHash) == true);
     QCOMPARE(fader->m_channels.count(), 1);
 
-    FadeChannel *fc3 = fader->getChannelFader(m_doc, ua[0], 0, 0);
-    fader->remove(fc3);
+    GenericFader::ChannelRef fc3 = fader->getChannelFader(m_doc, ua[0], 0, 0);
+    fader->remove(fc3.get());
+    fc3.release();
     QVERIFY(fader->m_channels.contains(chHash) == false);
     QCOMPARE(fader->m_channels.count(), 0);
 
@@ -308,6 +309,51 @@ void GenericFader_Test::aFaderRebuiltEveryTickIsNeverSeenEmpty()
     delete universe;
 
     QCOMPARE(emptySeen.load(), 0);
+}
+
+/* The soak's heap corruption. A function sets a channel up on the timer
+   thread while the universe writes the same fader on its own -- stepping the
+   channels and dropping the ones that are done. A QHash moves its entries
+   when one is removed or added, so a FadeChannel pointer kept past the lookup
+   pointed at another channel, or at a freed slot, by the time it was set. The
+   channel handed out stays locked until the caller is done with it. */
+void GenericFader_Test::aChannelBeingSetUpStaysPutWhileTheUniverseWrites()
+{
+    QList<Universe*> ua = m_doc->inputOutputMap()->universes();
+    QVERIFY(ua.count() > 0);
+    Universe *uni = ua.at(0);
+    QSharedPointer<GenericFader> fader(new GenericFader());
+
+    std::atomic<bool> done(false);
+    QThread *universe = QThread::create([&]() {
+        while (!done.load())
+        {
+            fader->write(uni);   // each channel reaches its target, and goes
+            QThread::yieldCurrentThread();
+        }
+    });
+    universe->start();
+
+    int moved = 0;
+    // absolute addresses clear of the fixture init() patches at 10
+    for (int i = 0; i < 500000; ++i)
+    {
+        const quint32 ch = 100 + quint32(i % 256);
+        GenericFader::ChannelRef fc = fader->getChannelFader(m_doc, uni, Fixture::invalidId(), ch);
+        fc->setStart(fc->current());
+        fc->setTarget(uchar(i));
+        fc->setFadeTime(0);
+        fc->setElapsed(0);
+        fc->setReady(false);
+        fc->addFlag(FadeChannel::AutoRemove);
+        if (fc->channel() != ch)
+            ++moved;
+    }
+    done = true;
+    universe->wait();
+    delete universe;
+
+    QCOMPARE(moved, 0);
 }
 
 QTEST_APPLESS_MAIN(GenericFader_Test)

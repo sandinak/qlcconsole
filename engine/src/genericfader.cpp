@@ -110,7 +110,7 @@ void GenericFader::add(const FadeChannel& ch)
 {
     quint32 hash = channelHash(ch.fixture(), ch.channel());
 
-    QWriteLocker l(&m_channelsLock);
+    std::lock_guard<std::recursive_mutex> l(m_channelsLock);
     QHash<quint32,FadeChannel>::iterator channelIterator = m_channels.find(hash);
     if (channelIterator != m_channels.end())
     {
@@ -128,7 +128,7 @@ void GenericFader::add(const FadeChannel& ch)
 void GenericFader::replace(const FadeChannel &ch)
 {
     quint32 hash = channelHash(ch.fixture(), ch.channel());
-    QWriteLocker l(&m_channelsLock);
+    std::lock_guard<std::recursive_mutex> l(m_channelsLock);
     m_channels.insert(hash, ch);
 }
 
@@ -138,14 +138,14 @@ void GenericFader::remove(FadeChannel *ch)
         return;
 
     quint32 hash = channelHash(ch->fixture(), ch->channel());
-    QWriteLocker l(&m_channelsLock);
+    std::lock_guard<std::recursive_mutex> l(m_channelsLock);
     if (m_channels.remove(hash) == 0)
         qDebug() << "No FadeChannel found with hash" << hash;
 }
 
 void GenericFader::removeAll()
 {
-    QWriteLocker l(&m_channelsLock);
+    std::lock_guard<std::recursive_mutex> l(m_channelsLock);
     foreach (const FadeChannel &fc, m_channels)
         if (fc.isInert())
             showOnFixture(fc, 0);
@@ -159,7 +159,7 @@ void GenericFader::replaceAll(const QList<FadeChannel> &channels)
     for (const FadeChannel &fc : channels)
         next.insert(channelHash(fc.fixture(), fc.channel()), fc);
 
-    QWriteLocker l(&m_channelsLock);
+    std::lock_guard<std::recursive_mutex> l(m_channelsLock);
     // Unpatched channels dropped from the set go dark on the fixture.
     for (auto it = m_channels.constBegin(); it != m_channels.constEnd(); ++it)
         if (it.value().isInert() && !next.contains(it.key()))
@@ -177,10 +177,8 @@ void GenericFader::requestDelete()
     m_deleteRequest = true;
 }
 
-FadeChannel *GenericFader::getChannelFader(const Doc *doc, Universe *universe, quint32 fixtureID, quint32 channel)
+GenericFader::ChannelRef GenericFader::getChannelFader(const Doc *doc, Universe *universe, quint32 fixtureID, quint32 channel)
 {
-    if (doc != nullptr)
-        m_doc = doc;
     FadeChannel fc(doc, fixtureID, channel);
     quint32 primary = fc.primaryChannel();
     quint32 hash;
@@ -191,13 +189,17 @@ FadeChannel *GenericFader::getChannelFader(const Doc *doc, Universe *universe, q
     else
         hash = channelHash(fc.fixture(), fc.channel());
 
-    m_channelsLock.lockForRead();
+    // Held from the lookup until the caller is done with the channel: the
+    // universe thread's write() steps and removes channels under this lock.
+    std::unique_lock<std::recursive_mutex> lock(m_channelsLock);
+    if (doc != nullptr)
+        m_doc = doc;
+
     // search for existing FadeChannel
     QHash<quint32,FadeChannel>::iterator channelIterator = m_channels.find(hash);
     if (channelIterator != m_channels.end())
     {
         FadeChannel *fcFound = &channelIterator.value();
-        m_channelsLock.unlock();
 
         if (handleSecondary() &&
             fcFound->channelCount() == 1 &&
@@ -209,9 +211,8 @@ FadeChannel *GenericFader::getChannelFader(const Doc *doc, Universe *universe, q
             if (universe && fcFound->address() != QLCChannel::invalid())
                 fcFound->setCurrent(universe->preGMValue(fcFound->address() + 1), 1);
         }
-        return fcFound;
+        return ChannelRef(std::move(lock), fcFound);
     }
-    m_channelsLock.unlock();
 
     // set current universe value -- none for an inert channel (a fixture in
     // the inventory): it has no address, and sends nothing.
@@ -219,22 +220,21 @@ FadeChannel *GenericFader::getChannelFader(const Doc *doc, Universe *universe, q
         fc.setCurrent(universe->preGMValue(fc.address()));
 
     // new channel. Add to GenericFader
-    QWriteLocker l(&m_channelsLock);
     channelIterator = m_channels.insert(hash, fc);
     //qDebug() << "Added new fader with hash" << hash;
 
-    return &channelIterator.value();
+    return ChannelRef(std::move(lock), &channelIterator.value());
 }
 
 QHash<quint32, FadeChannel> GenericFader::channels() const
 {
-    QReadLocker l(&m_channelsLock);
+    std::lock_guard<std::recursive_mutex> l(m_channelsLock);
     return m_channels;
 }
 
 int GenericFader::channelsCount() const
 {
-    QReadLocker l(&m_channelsLock);
+    std::lock_guard<std::recursive_mutex> l(m_channelsLock);
     return m_channels.count();
 }
 
@@ -254,7 +254,7 @@ void GenericFader::write(Universe *universe)
     //qDebug() << "[GenericFader] writing channels: " << this << m_channels.count();
 
     // iterate through all the channels handled by this fader
-    QWriteLocker l(&m_channelsLock);
+    std::lock_guard<std::recursive_mutex> l(m_channelsLock);
     QMutableHashIterator <quint32,FadeChannel> it(m_channels);
     while (it.hasNext() == true)
     {
@@ -431,7 +431,7 @@ void GenericFader::setFadeOut(bool enable, uint fadeTime)
     if (fadeTime == 0)
         return;
 
-    QWriteLocker l(&m_channelsLock); // mutates FadeChannel fields — needs exclusive lock
+    std::lock_guard<std::recursive_mutex> l(m_channelsLock);
     QMutableHashIterator <quint32,FadeChannel> it(m_channels);
     while (it.hasNext() == true)
     {
@@ -458,7 +458,7 @@ void GenericFader::setFadeOut(bool enable, uint fadeTime, const QHash<quint32, u
 {
     m_fadeOut = enable;
 
-    QWriteLocker l(&m_channelsLock); // mutates FadeChannel fields — needs exclusive lock
+    std::lock_guard<std::recursive_mutex> l(m_channelsLock);
     QMutableHashIterator <quint32,FadeChannel> it(m_channels);
     while (it.hasNext() == true)
     {
@@ -480,7 +480,7 @@ void GenericFader::setFadeOut(bool enable, uint fadeTime, const QHash<quint32, u
 
 void GenericFader::setChannelTimings(const std::function<bool(const FadeChannel &, uint &, uint &)> &timing)
 {
-    QWriteLocker l(&m_channelsLock);
+    std::lock_guard<std::recursive_mutex> l(m_channelsLock);
     QMutableHashIterator <quint32,FadeChannel> it(m_channels);
     while (it.hasNext() == true)
     {
@@ -506,7 +506,7 @@ void GenericFader::setMonitoring(bool enable)
 void GenericFader::resetCrossfade()
 {
     qDebug() << name() << "resetting crossfade channels";
-    QWriteLocker l(&m_channelsLock); // mutates FadeChannel flags — needs exclusive lock
+    std::lock_guard<std::recursive_mutex> l(m_channelsLock);
     QMutableHashIterator <quint32,FadeChannel> it(m_channels);
     while (it.hasNext() == true)
     {
