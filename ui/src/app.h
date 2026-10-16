@@ -285,6 +285,10 @@ public slots:
     void slotFileImport();
     QFile::FileError slotFileSave();
     QFile::FileError slotFileSaveAs();
+    /** File → Collect for Transfer…: the show as a .qlcc in a folder of its
+     *  own, with Fixtures/, EffectScripts/, RGBScripts/ and HeadLayouts/
+     *  beside it (SHOW_EMBEDDING_DESIGN.md §6). */
+    void slotFileCollectForTransfer();
 
     void slotControlMonitor();
     /** Open the rig overview (View menu). Delegates to the Monitor, which owns

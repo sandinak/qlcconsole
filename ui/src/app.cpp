@@ -1828,6 +1828,15 @@ void App::initMenuBar()
     fileMenu->addSeparator();
     fileMenu->addAction(m_fileSaveAction);
     fileMenu->addAction(m_fileSaveAsAction);
+    {
+        QAction *collect = new QAction(tr("Collect for &Transfer…"), this);
+        collect->setObjectName(QStringLiteral("fileCollectForTransfer"));
+        collect->setToolTip(tr("Write the show and every definition and script it uses "
+                               "that is not part of the app into one folder, to take to "
+                               "another computer"));
+        connect(collect, &QAction::triggered, this, &App::slotFileCollectForTransfer);
+        fileMenu->addAction(collect);
+    }
     fileMenu->addSeparator();
     fileMenu->addAction(m_appSettingsAction);      // → app menu (Preferences) on macOS
     // Quit: m_quitAction only exists when there's no window manager (kiosk/RPi).
@@ -2591,6 +2600,54 @@ QFile::FileError App::slotFileSaveAs()
 
     updateFileOpenMenu(fn);
     return error;
+}
+
+void App::slotFileCollectForTransfer()
+{
+    if (!confirmSaveWithoutDefinitions())
+        return;
+
+    const QString base = m_fileName.isEmpty() ? tr("Show") : QFileInfo(m_fileName).completeBaseName();
+    const QString start = m_fileName.isEmpty() ? QDir::homePath() : QFileInfo(m_fileName).absolutePath();
+    const QString parent = QFileDialog::getExistingDirectory(this,
+        tr("Collect for Transfer: where to make the “%1” folder").arg(base), start);
+    if (parent.isEmpty())
+        return;
+
+    const QDir dir(QDir(parent).absoluteFilePath(base));
+    if (dir.exists() && !dir.entryList(QDir::AllEntries | QDir::NoDotAndDotDot).isEmpty()
+        && QMessageBox::question(this, tr("Collect for Transfer"),
+               tr("There is already a folder called “%1” there. Files in it with the same "
+                  "names will be replaced.\n\nCollect into it anyway?").arg(base),
+               QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel) != QMessageBox::Yes)
+        return;
+    if (!QDir().mkpath(dir.absolutePath()))
+    {
+        QMessageBox::warning(this, tr("Collect for Transfer"),
+                             tr("Could not make the folder %1.").arg(dir.absolutePath()));
+        return;
+    }
+
+    /* The show as a .qlcc (it carries the same files), saved as a copy: this
+       window goes on with the show it has open. */
+    const QString show = dir.absoluteFilePath(base + KExtWorkspaceConsole);
+    const QFile::FileError error = saveXML(show, true);
+    if (error != QFile::NoError)
+    {
+        handleFileError(error);
+        return;
+    }
+    QStringList written;
+    const bool ok = m_doc->showEmbedding()->writeTransferFolder(dir.absolutePath(), &written);
+    if (!ok)
+        QMessageBox::warning(this, tr("Collect for Transfer"),
+            tr("The show is in %1, but some of the files it uses could not be written there.")
+                .arg(dir.absolutePath()));
+    else
+        QMessageBox::information(this, tr("Collect for Transfer"),
+            tr("Collected in %1: the show, and %n file(s) it uses that are not part of the "
+               "app (fixture definitions, scripts, LED maps).", "", written.size())
+                .arg(QDir::toNativeSeparators(dir.absolutePath())));
 }
 
 /*****************************************************************************
@@ -3452,8 +3509,8 @@ QFile::FileError App::loadXML(const QString& fileName)
        it loads: where this computer has none, or a different one, the show's
        own (SHOW_EMBEDDING_DESIGN.md). Its folder's Fixtures/, EffectScripts/
        and RGBScripts/ too, for what neither has. */
-    m_doc->showEmbedding()->readWorkspace(fileName);
-    m_doc->showEmbedding()->apply(QFileInfo(fileName).absolutePath());
+    if (m_doc->showEmbedding()->readWorkspace(fileName))
+        m_doc->showEmbedding()->apply(QFileInfo(fileName).absolutePath());
 
     // Every definition it needs on this computer before it loads.
     prepareShowDefinitions(fileName);

@@ -6,6 +6,30 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-16 — Shows that carry their own definitions and scripts *(on feat/show-embedding, not merged)*
+
+SHOW_EMBEDDING_DESIGN.md, P0–P3.
+
+- **P0:** effect scripts, effect presets, bundles, head layouts, gobos and
+  network gear use the per-platform user folder (USERQLCPLUSDIR), not the
+  Mac's path everywhere; the shipped effect scripts/presets/bundles come
+  from EFFECTSCRIPTDIR/EFFECTPRESETDIR/BUNDLEDIR in qlcconfig.h. Files a
+  Windows/Linux user saved at the old (wrong) path are not moved.
+- **P1/P2:** `engine/src/showembedding.{h,cpp}` (Doc::showEmbedding()). A
+  .qlcc saves an `Embedded` section (exact bytes, CDATA or base64,
+  SHA-256, From/FromModified/Embedded, KeptAgainst); opening compares with
+  this computer's: show-only → used from a temp working folder (footer
+  note, Install on This Computer); identical → nothing; different → the
+  show's wins (substituted in QLCFixtureDefCache / scanned first in
+  EffectScriptCache / RGBScriptsCache show overrides), footer warning,
+  Review… (ShowDifferencesDialog). Closing restores this computer's.
+  ShowStatus Ok entries are now footer *notes* ("Ready · 1 note").
+- **P3:** File → Collect for Transfer…; the show's folder's Fixtures/,
+  EffectScripts/, RGBScripts/ searched last.
+- Tests: showembedding_test, showdifferences_test, qlcfile_test.
+- **Not yet tried by hand:** opening a .qlcc on a machine without the
+  definitions (the Windows VM), and Review… on a real difference.
+
 ### 2026-10-15 — Release prep: 0.1.0 labels, universal build, kronk fixes *(on release/0.1.0)*
 
 - **Version shown is the release** (VERSION): About box (build id + commit

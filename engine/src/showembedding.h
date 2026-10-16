@@ -121,8 +121,9 @@ public:
      * The file
      *********************************************************************/
     /** Read the <Embedded> section of workspace @p fileName (it comes
-     *  before <Engine>, so only the start of the file is read). False when
-     *  the file cannot be read; true, with no items, when it has none. */
+     *  before <Engine>, so only the start of the file is read). False, and
+     *  nothing changed, when it is not a workspace that can be read; true,
+     *  with no items, when it has none. */
     bool readWorkspace(const QString &fileName);
     /** Read an <Embedded> element (the reader on its start). */
     bool loadXML(QXmlStreamReader &xml);
@@ -180,6 +181,14 @@ public:
 
     /** Tests: delete replaced files rather than move them to the Trash. */
     static void setDeleteInsteadOfTrash(bool on);
+
+    /*********************************************************************
+     * Collect for Transfer
+     *********************************************************************/
+    /** Write the items (collect() first) as files in @p folder: Fixtures/,
+     *  EffectScripts/, RGBScripts/, and the show's LED maps as HeadLayouts/.
+     *  @p written gets each file's path. False when one cannot be written. */
+    bool writeTransferFolder(const QString &folder, QStringList *written = nullptr) const;
 
     /*********************************************************************
      * Helpers

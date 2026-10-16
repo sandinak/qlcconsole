@@ -53,6 +53,8 @@ private slots:
     void installTheShowsReplacesThisComputersFile();
     void saveNeverSwapsVersions();
     void closingPutsThisComputersBack();
+    void aFileThatIsNotAShowLeavesTheOpenOneAlone();
+    void aCollectedFolderOpensCompleteAsQxw();
 
 private:
     /** A computer: HOME at a fresh folder, with these user files. */

@@ -29,6 +29,8 @@
 #include "qlcfixturedef.h"
 #include "rgbscriptv4.h"
 #include "qlcpalette.h"
+#include "monitorproperties.h"
+#include "headlayout.h"
 #include "rgbmatrix.h"
 #include "fixture.h"
 #include "qlcfile.h"
@@ -747,6 +749,69 @@ void ShowEmbedding_Test::closingPutsThisComputersBack()
     QVERIFY(doc->rgbScriptsCache()->scriptFile("My RGB").isEmpty());
     QVERIFY(doc->effectScriptRunner()->cache()->scriptPath("my-chase").isEmpty());
     delete doc;
+}
+
+void ShowEmbedding_Test::aFileThatIsNotAShowLeavesTheOpenOneAlone()
+{
+    const QString path = buildShow();
+    newComputer();
+    Doc *doc = startDoc();
+    open(doc, path);
+    QCOMPARE(doc->showEmbedding()->showOnly().size(), 3);
+    QVERIFY(!doc->showEmbedding()->readWorkspace(m_root->filePath("not-there.qlcc")));
+    QVERIFY(write(m_root->filePath("notes.qlcc"), "<?xml version='1.0'?><!DOCTYPE Notes><Notes/>"));
+    QVERIFY(!doc->showEmbedding()->readWorkspace(m_root->filePath("notes.qlcc")));
+    QCOMPARE(doc->showEmbedding()->showOnly().size(), 3);
+    delete doc;
+}
+
+void ShowEmbedding_Test::aCollectedFolderOpensCompleteAsQxw()
+{
+    const QString path = buildShow();
+    // On A: what it carries, collected into a folder beside a .qxw of it.
+    Doc *doc = startDoc();
+    open(doc, path);
+    HeadLayout map;
+    map.key = "Test Maker|Step Row|4ch";
+    map.size = QSize(2, 2);
+    map.cells << QPoint(0, 0) << QPoint(1, 0) << QPoint(0, 1) << QPoint(1, 1);
+    doc->monitorProperties()->setHeadLayout(map);
+    doc->showEmbedding()->collect();
+    const QString folder = m_root->filePath("transfer/Show");
+    QStringList written;
+    QVERIFY(doc->showEmbedding()->writeTransferFolder(folder, &written));
+    QCOMPARE(written.size(), 4);
+    QVERIFY(QFile::exists(folder + "/HeadLayouts/" + HeadLayoutLibrary::fileNameFor(map.key)));
+    QVERIFY(read(folder + "/HeadLayouts/" + HeadLayoutLibrary::fileNameFor(map.key)).contains("Test Maker|Step Row|4ch"));
+    QVERIFY(QFile::exists(folder + "/Fixtures/Test-Maker-Step-Row.qxf"));
+    QVERIFY(QFile::exists(folder + "/EffectScripts/my-chase.js"));
+    QVERIFY(QFile::exists(folder + "/RGBScripts/my-rgb.js"));
+    QCOMPARE(read(folder + "/EffectScripts/my-chase.js"), effectJs(true));
+    save(doc, folder + "/Show.qxw", false);
+    delete doc;
+
+    // A clean computer: complete, from the folder.
+    newComputer();
+    doc = startDoc();
+    open(doc, folder + "/Show.qxw");
+    Fixture *row = fixtureNamed(doc, "Row 1");
+    QVERIFY(row != nullptr && !row->definitionUnavailable());
+    QCOMPARE(row->channels(), quint32(4));
+    QVERIFY(under(row->fixtureDef()->definitionSourceFile(), folder));
+    QVERIFY(under(lookNamed(doc, "Chase look")->scriptPath(), folder));
+    QVERIFY(under(matrixScriptFile(doc), folder));
+    QCOMPARE(doc->showEmbedding()->showOnly().size(), 3);
+    foreach (const ShowEmbedding::Item &it, doc->showEmbedding()->showOnly())
+    {
+        QVERIFY(it.fromShowFolder);
+        QCOMPARE(it.from, QString("showfolder"));
+    }
+    // Saved as a .qlcc from there: it carries them.
+    save(doc, m_root->filePath("transfer/again.qlcc"), true);
+    QCOMPARE(doc->showEmbedding()->items().size(), 3);
+    delete doc;
+    // ...and the folder's files were never touched by closing it.
+    QVERIFY(QFile::exists(folder + "/Fixtures/Test-Maker-Step-Row.qxf"));
 }
 
 QTEST_MAIN(ShowEmbedding_Test)

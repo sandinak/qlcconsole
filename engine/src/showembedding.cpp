@@ -37,6 +37,8 @@
 #include "rgbscriptv4.h"
 #include "qlcpalette.h"
 #include "qlcchannel.h"
+#include "monitorproperties.h"
+#include "headlayout.h"
 #include "rgbmatrix.h"
 #include "qlcfile.h"
 #include "fixture.h"
@@ -385,8 +387,10 @@ bool ShowEmbedding::discard(const QString &path) const
 
 bool ShowEmbedding::readWorkspace(const QString &fileName)
 {
-    m_items.clear();
-    m_problems.clear();
+    /* Not a show (a file that is not there, say): what is open stays as it
+       is -- nothing read, nothing cleared. */
+    if (fileName.isEmpty() || !QFileInfo(fileName).isFile())
+        return false;
     QXmlStreamReader *xml = QLCFile::getXMLReader(fileName);
     if (xml == nullptr || xml->device() == nullptr || xml->hasError())
     {
@@ -397,6 +401,13 @@ bool ShowEmbedding::readWorkspace(const QString &fileName)
     while (!xml->atEnd())
         if (xml->readNext() == QXmlStreamReader::DTD)
             break;
+    if (xml->hasError() || xml->dtdName() != QLatin1String("Workspace"))
+    {
+        QLCFile::releaseXMLReader(xml);
+        return false;
+    }
+    m_items.clear();
+    m_problems.clear();
     if (xml->readNextStartElement())          // <Workspace>
     {
         while (xml->readNextStartElement())
@@ -1345,10 +1356,39 @@ bool ShowEmbedding::installShows(const QString &key, QString *error)
 }
 
 /*****************************************************************************
- * Saving: which files
+ * Collect for Transfer
  *****************************************************************************/
 
 bool ShowEmbedding::embedsIn(const QString &fileName)
 {
     return fileName.endsWith(KExtWorkspaceConsole, Qt::CaseInsensitive);
+}
+
+bool ShowEmbedding::writeTransferFolder(const QString &folder, QStringList *written) const
+{
+    const QDir root(folder);
+    bool ok = true;
+    auto put = [&](const QString &rel, const QByteArray &bytes) {
+        const QString path = root.absoluteFilePath(rel);
+        if (writeFile(path, bytes))
+        {
+            if (written != nullptr)
+                *written << path;
+        }
+        else
+            ok = false;
+    };
+    for (const Item &it : m_items)
+    {
+        QString name = safeFileName(it.file);
+        if (it.kind == FixtureDefinition && !name.endsWith(KExtFixture, Qt::CaseInsensitive))
+            name = fixtureFileName(it);
+        put(subFolder(it.kind) + QLatin1Char('/') + name, it.bytes);
+    }
+    if (m_doc->monitorProperties() != nullptr)
+        foreach (const HeadLayout &l, m_doc->monitorProperties()->headLayouts())
+            if (l.isValid())
+                put(QStringLiteral("HeadLayouts/") + HeadLayoutLibrary::fileNameFor(l.key),
+                    HeadLayoutLibrary::toJson(l));
+    return ok;
 }

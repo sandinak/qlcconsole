@@ -4,6 +4,27 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## October 2026
 
+### Shows that travel
+
+- **A .qlcc carries its own definitions and scripts.** Saving embeds every
+  fixture definition, effect script and RGB script the show uses that isn't
+  part of the app, so it opens complete on another computer — no more red
+  stand-ins for your own fixtures. A .qxw is saved as before.
+- **Differences warn; the show keeps its own.** Where this computer's copy
+  differs, the show's is used and the footer says so; **Review…** shows
+  which looks newer and whether switching is safe for the modes and
+  settings the show uses, with **Use This Computer's**, **Keep the Show's**
+  and **Install the Show's**. Ones only the show has are a footer note with
+  **Install on This Computer**. Save never swaps versions behind your back.
+- **File → Collect for Transfer…** writes the show and those files into one
+  folder; a show's folder's Fixtures/, EffectScripts/ and RGBScripts/ are
+  searched when it opens.
+- On **Windows and Linux**, your own effect scripts, LED maps, presets,
+  bundles, gobos and network gear are now found: they live in the same user
+  folder as your fixture definitions (they were looked for at the Mac's
+  path).
+- See [Opening a show on another computer](fixture-manager.md#opening-a-show-on-another-computer).
+
 ### Show control
 
 - **QLab can fire the lights' cues.** A chase's steps have **cue numbers**

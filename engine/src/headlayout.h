@@ -106,6 +106,11 @@ namespace HeadLayoutLibrary
     HeadLayout load(const QString &key);
     /** Keep @p layout in the library (replacing any for its key). */
     bool save(const HeadLayout &layout);
+    /** The file name a map for @p key is kept under ("Make|Model|Mode"
+     *  made safe for any file system, ".json"). */
+    QString fileNameFor(const QString &key);
+    /** @p layout as the library writes it. */
+    QByteArray toJson(const HeadLayout &layout);
 }
 
 /** @} */
