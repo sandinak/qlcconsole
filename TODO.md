@@ -97,7 +97,8 @@ before building):
   - **Sub-cues** — a step whose function is a chaser shown inline (4.1,
     4.2), a "Sub GO" for the cue playing, the same idea for step-based
     effects.
-  - **Sending to QLab** — OSC / MSC out.
+  - **Sending to QLab** — OSC / MSC out. Its home is ready: the "QLab out"
+    section of Connections → Show control & sync (`ShowControlSyncPage`).
   - **Duplicate a structure's setup** (Branson, 2026-10-15; replaces the
     one-off "tower patch rule") — from one structure (T1) and the fixtures
     on it, set up its likes (T2, T3…): the same fixtures placed and mounted

@@ -886,6 +886,8 @@ void App::initDoc()
     /* Cues fired from outside (QLab): OSC on a port of our own, MSC on a
        patched MIDI input (SHOW_CONTROL_DESIGN.md). */
     m_showControlListener = new ShowControlListener(m_doc, this);
+    if (InputOutputManager::instance() != NULL)
+        InputOutputManager::instance()->setShowControlListener(m_showControlListener);
     QTimer *wledRecheck = new QTimer(this);
     wledRecheck->setSingleShot(true);
     wledRecheck->setInterval(1500);
@@ -3139,6 +3141,15 @@ void App::slotHelpAbout()
     ab.exec();
 }
 
+void App::showShowControlSettings()
+{
+    if (InputOutputManager::instance() == NULL || m_tab == NULL)
+        return;
+    // By label, so a Connections detached into its own window comes forward too.
+    showContext(tr("Connections"));
+    InputOutputManager::instance()->showShowControlPage();
+}
+
 void App::slotAppSettings()
 {
     AppSettings settings(this, this);
@@ -4493,6 +4504,9 @@ void App::initStatusBar()
             slotTimecodeStatusChanged();
         });
         connect(tc, SIGNAL(runningChanged(bool)), this, SLOT(slotTimecodeStatusChanged()));
+        // The source is picked here or in Connections' Show control & sync page.
+        connect(tc, &TimecodeSource::sourceUniverseChanged,
+                this, &App::slotTimecodeStatusChanged);
     }
     slotTimecodeStatusChanged();
 
@@ -4704,14 +4718,13 @@ bool App::eventFilter(QObject *watched, QEvent *event)
             const double jit  = tc->jitterMs();
             const double ivl  = tc->avgIntervalMs();
             QString verdict;
-            if (!tc->isRunning())
-                verdict = tr("held (no fresh code)");
-            else if (qAbs(rate - 1.0) <= 0.05 && jit < 40.0)
-                verdict = tr("✓ healthy");
-            else if (qAbs(rate - 1.0) <= 0.15 && jit < 120.0)
-                verdict = tr("~ usable");
-            else
-                verdict = tr("⚠ unstable");
+            switch (tc->health())
+            {
+                case TimecodeSource::Healthy:  verdict = tr("✓ healthy"); break;
+                case TimecodeSource::Usable:   verdict = tr("~ usable"); break;
+                case TimecodeSource::Unstable: verdict = tr("⚠ unstable"); break;
+                default:                       verdict = tr("held (no fresh code)"); break;
+            }
 
             QAction *sh = menu.addAction(tr("Sync: %1").arg(verdict));
             sh->setEnabled(false);
@@ -4757,7 +4770,11 @@ bool App::eventFilter(QObject *watched, QEvent *event)
         anyA->setActionGroup(grp);
         anyA->setChecked(cur < 0);
         connect(anyA, &QAction::triggered, this, [this, tc]() {
-            if (tc) tc->setSourceUniverse(-1);
+            if (tc && tc->sourceUniverse() != -1)
+            {
+                tc->setSourceUniverse(-1);
+                m_doc->setModified();      // saved with the show
+            }
             slotTimecodeStatusChanged();
         });
 
@@ -4803,7 +4820,11 @@ bool App::eventFilter(QObject *watched, QEvent *event)
             a->setActionGroup(grp);
             a->setChecked(qint32(uniID) == cur);
             connect(a, &QAction::triggered, this, [this, tc, uniID]() {
-                if (tc) tc->setSourceUniverse(qint32(uniID));
+                if (tc && tc->sourceUniverse() != qint32(uniID))
+                {
+                    tc->setSourceUniverse(qint32(uniID));
+                    m_doc->setModified();  // saved with the show
+                }
                 slotTimecodeStatusChanged();   // reflect the selection immediately
             });
         }

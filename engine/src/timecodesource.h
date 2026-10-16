@@ -45,7 +45,11 @@
 // means the timeline runs away.
 #define SHOW_TC_HOLD_MS 1000
 
+class QXmlStreamReader;
+class QXmlStreamWriter;
 class QTimer;
+
+#define KXMLQLCTimecode QStringLiteral("Timecode")
 
 /** @addtogroup engine Engine
  * @{
@@ -87,6 +91,12 @@ public:
     qint32 sourceUniverse() const;
     void setSourceUniverse(qint32 universe);
 
+    /** The override is the show's: a universe of its patch. Saved with the
+     *  workspace as <Timecode Source="N"/> (nothing when it's "any");
+     *  Doc drops a loaded one that names no universe of the show. */
+    bool loadXML(QXmlStreamReader &root);
+    bool saveXML(QXmlStreamWriter *doc) const;
+
     /** Universe that most recently delivered timecode (-1 if none yet). */
     qint32 lastUniverse() const;
 
@@ -98,6 +108,19 @@ public:
     /** Mean interval between position updates, in ms (the effective update rate). */
     double avgIntervalMs() const;
 
+    /** The verdict on the measurements above -- one place for the
+     *  thresholds, shared by the footer chip, the calibration dialog and
+     *  Connections' Show control & sync page. */
+    enum Health
+    {
+        NoSource,   ///< no timecode has arrived yet
+        Held,       ///< it arrived, but nothing fresh within the watchdog window
+        Healthy,    ///< rate within 5% of real time, jitter under 40 ms
+        Usable,     ///< rate within 15%, jitter under 120 ms
+        Unstable    ///< worse than that
+    };
+    Health health() const;
+
 public slots:
     /** Push a new absolute position received on the given universe. */
     void updateTimeCode(quint32 universe, quint32 msPosition, uchar fps);
@@ -108,6 +131,9 @@ signals:
 
     /** Emitted when the running/stopped state flips. */
     void runningChanged(bool running);
+
+    /** Emitted when the override (sourceUniverse()) changes. */
+    void sourceUniverseChanged(qint32 universe);
 
 private slots:
     void slotWatchdogTimeout();

@@ -4,6 +4,12 @@ QLab — or anything else that speaks **MIDI Show Control** (MSC) or **OSC**
 — can fire qlcconsole's cues by number: QLab runs the sound and video, and
 its cues GO the lights.
 
+Everything that controls or clocks the show from outside is set up in one
+place: **Connections → Show control &amp; sync** — OSC in, MIDI Show Control
+in, and MIDI timecode, each with what it last heard. (It used to be a group
+in the Settings dialog; that group now just has an **Open** button that
+takes you there. Your settings carried over unchanged.)
+
 ## Cues and cue lists
 
 A **cue list** is a chase (a chaser). Its steps are the **cues**.
@@ -51,10 +57,10 @@ A **cue list** is a chase (a chaser). Its steps are the **cues**.
 
 ## OSC — QLab's Network cue
 
-1. **Settings → Show control (QLab)**: tick **Listen for OSC cue commands**
-   and pick a port (53100 by default). It's off until you turn it on,
-   because anyone on the network could fire a cue. The dialog shows this
-   computer's address to send to.
+1. **Connections → Show control &amp; sync → OSC in**: tick **Listen for OSC
+   cue commands** and pick a port (53100 by default). It's off until you
+   turn it on, because anyone on the network could fire a cue. It takes
+   effect at once, and the page shows this computer's address to send to.
 2. In QLab, point a network patch at that address and port. If QLab runs on
    the same computer, use 127.0.0.1 — and a port other than 53000 and
    53001, which QLab uses itself.
@@ -78,9 +84,16 @@ given as an argument can be a number or text.
 
 1. **Connections**: patch the MIDI port QLab sends on as an **input** of any
    universe (the same as for MIDI timecode).
-2. **Settings → Show control (QLab)**: **Answer MIDI Show Control** is on;
-   set the **device** number QLab sends to (1 by default). A message to the
-   all-call device (127) is always answered.
+2. **Connections → Show control &amp; sync → MIDI Show Control in**: **Answer
+   MIDI Show Control** is on; set the **device** number QLab sends to (1 by
+   default). A message to the all-call device (127) is always answered.
+   **Listen on** is **All MIDI inputs** (the default) or the one port QLab
+   sends on. The choice names the port, not a universe, and belongs to
+   this computer, so it holds for every show. Under it the page says where
+   MSC can come in — the universes with that input patched — or, if the
+   chosen port isn't patched in this show, says so in red: MSC isn't
+   answered then (it doesn't quietly fall back to every input). **Patch a
+   MIDI input…** goes to where inputs are patched.
 3. In QLab, a **MIDI cue** sending MSC with the command format **Lighting**
    (or Moving Lights, or All Types), the command, and the cue number — and
    the cue list, for a list other than the main one.
@@ -91,10 +104,26 @@ ALL_OFF, RESET and TIMED_GO (as GO) are answered too.
 
 ## Checking the hookup
 
-The Settings dialog's Show control group says whether it's listening, and
-shows the **last command** that arrived and what came of it — "GO cue 12.5
-— Main", or why not: "no such cue in Main", "no main cue list (mark one in
-its chaser)". Fire a cue from QLab and look there first.
+**Connections → Show control &amp; sync** says whether OSC is listening —
+green, or in red why it can't, such as "Can't listen for OSC on port 53100"
+when another program has the port (pick another) — and, for OSC and MSC
+each, the **last command** that arrived, when, and what came of it: "GO
+cue 12.5 — Main", or why not: "no such cue in Main", "no main cue list
+(mark one in its chaser)". An OSC message that isn't a cue command shows
+its address ("/qlab/hello — not a cue command"), so a typo in QLab shows
+up too; an MSC command says which universe's input it came in on. Fire a
+cue from QLab and look there first.
+
+The same page's **MIDI timecode** section picks which universe's MIDI input
+timecode is taken from (the same choice as the footer's **MTC** chip) and
+saves that choice with the show (it's a universe of the show's patch; a
+show that names a universe it doesn't have follows any), and shows the
+code as it arrives with its **sync health**: healthy, usable or
+unstable, from how fast it runs against real time, its jitter and how
+often it updates.
+
+**QLab out** — firing QLab's cues from here — isn't built yet; the page
+keeps a place for it.
 
 ## See also
 

@@ -151,6 +151,7 @@ add_library(${module_name}
     helpbrowser.cpp helpbrowser.h
     helpshots.cpp helpshots.h
     showcontrollistener.cpp showcontrollistener.h
+    showcontrolsyncpage.cpp showcontrolsyncpage.h
     universecombo.cpp universecombo.h
     powerdistributiondialog.cpp powerdistributiondialog.h
     powerdistributionwidget.cpp powerdistributionwidget.h

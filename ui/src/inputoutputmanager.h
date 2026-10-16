@@ -61,6 +61,12 @@ public:
     /** Select @p universe in the list, showing its patch. */
     void selectUniverse(quint32 universe);
 
+    /** Bring the Show control & sync page to the front. */
+    void showShowControlPage();
+
+    /** Hand the page the App's show-control listener (created after this). */
+    void setShowControlListener(class ShowControlListener *listener);
+
     /** Match the main window's icon/text display preference
      *  (workspace/tabLabelMode) — mirrors Monitor::applyToolbarLabelMode(). */
     void applyToolbarLabelMode();
@@ -122,6 +128,7 @@ private:
     class UniversePatchGrid *m_patchGrid;
     QAction *m_undoPatchAction;
     class ConnectionsTree *m_devicesTree;
+    class ShowControlSyncPage *m_showControlPage;
     QSplitter* m_splitter;
     QToolBar *m_toolbar;
     QAction* m_addUniverseAction;

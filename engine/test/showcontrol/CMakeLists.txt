@@ -5,6 +5,7 @@ target_include_directories(showcontrol_test PRIVATE
     ../../../plugins/interfaces
     ../../src
     ../common
+    ../iopluginstub
 )
 
 target_link_libraries(showcontrol_test PRIVATE

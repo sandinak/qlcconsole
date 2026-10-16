@@ -24,6 +24,28 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
   it would replace the .icns in the Dock). `StartupWMClass` in both
   .desktop files.
 
+### 2026-10-15 — Connections → Show control & sync *(feat/connections-showcontrol)*
+
+- **One page for outside control and sync** (`ui/src/showcontrolsyncpage.*`,
+  a fourth Connections sub-tab): OSC in (on, port, listening / can't, last
+  command + time), MSC in (on, device, the MIDI inputs it answers on with
+  Patch a MIDI input…, last command + time + universe), MIDI timecode
+  (source — the footer chip's pick — code, sync health), QLab out kept as a
+  note. Edits save to the same `showcontrol/...` keys and apply at once.
+- **Settings → Show control** is a pointer with **Open** (keeps the
+  dialog's changes, opens Connections at the page).
+- Engine: `ShowControl::commandFrom` (OSC / MSC+universe / local);
+  `TimecodeSource::health()` is the one verdict (chip, calibration dialog,
+  page) and `sourceUniverseChanged` keeps chip and page in step.
+- Tests: showcontrol_ui_test (page, own QSettings + HOME), showcontrol_test,
+  timecodesource_test.
+- **MSC on one port**: Listen on All MIDI inputs (default) or one, saved
+  machine-wide by plugin + input name (`showcontrol/mscInputPlugin`,
+  `showcontrol/mscInput`); `ShowControl::acceptsMscFrom()` filters the
+  SysEx path; a chosen port not patched in the show is shown in red, no
+  fall-back. **Timecode source saved with the show** (`<Timecode Source>`;
+  absent/unknown universe = any; cleared on a new show).
+
 ### 2026-10-15 — Release prep: 0.1.0 labels, universal build, kronk fixes *(on release/0.1.0)*
 
 - **Version shown is the release** (VERSION): About box (build id + commit

@@ -85,4 +85,26 @@ void TimecodeSource_Test::overrideFilter()
     QCOMPARE(tc.lastUniverse(), qint32(1));
 }
 
+/* One verdict for the chip, the calibration dialog and Connections; the
+   source override announces itself so they all follow one pick. */
+void TimecodeSource_Test::healthAndSourceSignal()
+{
+    TimecodeSource tc;
+    QCOMPARE(tc.health(), TimecodeSource::NoSource);
+
+    tc.updateTimeCode(0, 1000, 30);
+    QVERIFY(tc.health() != TimecodeSource::NoSource);
+    QVERIFY(tc.health() != TimecodeSource::Held);
+    QTRY_COMPARE_WITH_TIMEOUT(tc.health(), TimecodeSource::Held, SHOW_TC_HOLD_MS * 3);
+
+    QSignalSpy spy(&tc, &TimecodeSource::sourceUniverseChanged);
+    tc.setSourceUniverse(2);
+    tc.setSourceUniverse(2);            // no change, no signal
+    tc.setSourceUniverse(-5);           // any negative is "any"
+    QCOMPARE(spy.count(), 2);
+    QCOMPARE(spy.at(0).at(0).toInt(), 2);
+    QCOMPARE(spy.at(1).at(0).toInt(), -1);
+    QCOMPARE(tc.sourceUniverse(), qint32(-1));
+}
+
 QTEST_MAIN(TimecodeSource_Test)

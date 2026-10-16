@@ -20,7 +20,7 @@
 #ifndef SHOWCONTROL_UI_TEST_H
 #define SHOWCONTROL_UI_TEST_H
 
-#include <QVariantList>
+#include <QTemporaryDir>
 #include <QObject>
 
 class Chaser;
@@ -39,11 +39,20 @@ private slots:
     void oscFromTheNetworkFiresTheCue();
     void theChaserEditorSetsCuesAndTheList();
 
+    // Connections' Show control & sync page
+    void thePageShowsTheCurrentSettings();
+    void editingThePageChangesTheListener();
+    void aCommandReceivedShowsAsLast();
+    void aPortInUseShowsAnError();
+    void theTimecodeSourceAndHealth();
+    void mscOnOneChosenInput();
+
 private:
     Chaser *makeList(int steps);
 
     Doc *m_doc = nullptr;
-    QVariantList m_saved;
+    QTemporaryDir m_settingsDir;
+    QByteArray m_realHome;
 };
 
 #endif
