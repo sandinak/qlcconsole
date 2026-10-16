@@ -17,6 +17,12 @@ if [ "$TARGET" != "ui" ] && [ "$TARGET" != "qmlui" ]; then
   exit 1
 fi
 
+# No modal may wait for a click: on a real display (xcb, cocoa) the
+# Programming tab's first-run guide and App's recovery offer would. Offscreen
+# and minimal skip them anyway; each UI test sets this too
+# (ui/test/common/testsettings.cpp), this covers anything run from here.
+export QLC_NO_RECOVERY_PROMPT=1
+
 IS_CI=0
 if [ "$CURRUSER" == "runner" ] \
     || [ "$CURRUSER" == "buildbot" ] \
