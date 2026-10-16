@@ -69,6 +69,11 @@ public:
      *  caller that removes fixture rows in place calls it to catch up. */
     void refreshInventoryCounts();
 
+    /** Rewrite every universe row's label -- its name and where it goes --
+     *  in place, after its output patch changed, without a rebuild (which
+     *  would lose the selection the patch was made from). */
+    void updateUniverseLabels();
+
     /** Toggle whether each fixture row expands to show its individual heads
      *  as draggable children (see headDragMimeType()) -- off by default even
      *  when constructed without the ShowHeads flag baked in, and meant to be

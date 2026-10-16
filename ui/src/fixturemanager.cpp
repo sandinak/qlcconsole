@@ -77,6 +77,11 @@
 #include "doc.h"
 #include "programmercontroller.h"
 #include "monitor/monitor.h"
+#include "universepatcher.h"
+#include "outputpatch.h"
+#include "qlcioplugin.h"
+#include "patchundo.h"
+#include "showstatus.h"
 
 // Bumped when the power pane was added as a third section: an older 2-section
 // saved state would collapse the new pane to zero width and hide it.
@@ -170,6 +175,27 @@ FixtureManager::FixtureManager(QWidget* parent, Doc* doc)
     });
     connect(m_doc, SIGNAL(fixtureRemoved(quint32)),
             this, SLOT(slotFixtureRemoved(quint32)));
+
+    /* Patching a universe row's output (its context menu) asks what the
+       Connections tab asks, through the same code. A patch changed -- here,
+       or put back by Undo Patch Change in Connections -- relabels the
+       universe rows in place: a rebuild would drop the selection. PatchUndo
+       says "changed" before a change as well as after an undo, hence the
+       zero-delay hop to read the patch once it has landed. */
+    m_patcher = new UniversePatcher(m_doc, this);
+    connect(m_patcher, &UniversePatcher::patchChanged, this, [this]() {
+        if (m_fixtures_tree != NULL)
+            m_fixtures_tree->updateUniverseLabels();
+    });
+    if (m_doc->inputOutputMap() != NULL && m_doc->inputOutputMap()->patchUndo() != NULL)
+        connect(m_doc->inputOutputMap()->patchUndo(), &PatchUndo::changed, this, [this]() {
+            QTimer::singleShot(0, this, [this]() {
+                if (m_fixtures_tree != NULL)
+                    m_fixtures_tree->updateUniverseLabels();
+            });
+        });
+    connect(m_fixtures_tree, &QTreeWidget::itemSelectionChanged,
+            this, &FixtureManager::syncUniversePickOrder);
 
     connect(m_doc, SIGNAL(channelsGroupRemoved(quint32)),
             this, SLOT(slotChannelsGroupRemoved(quint32)));
@@ -2893,11 +2919,75 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
         menu.addAction(m_addRGBAction);
     }
 
-    // A universe row itself: delete it (renaming is inline; how it reaches
-    // hardware is the Connections tab's job).
+    // A universe row itself: where it goes (patch, change, unpatch -- the
+    // Connections tab's questions, through UniversePatcher), and deleting
+    // it. Renaming is inline.
     QAction *deleteUni = NULL;
-    if (ctxIsUniverseRow)
+    QAction *patchOut = NULL;
+    QAction *retargetOut = NULL;
+    QAction *unpatchOut = NULL;
+    QAction *pluralPatch = NULL;
+    QAction *pluralUnpatch = NULL;
+    QAction *showInConnections = NULL;
+    const quint32 ctxUni = m_ctxUniverse;
+    QString ctxPlugin;
+    quint32 ctxLine = 0;
+    QList<quint32> pickedUnis;
+    QList<UniversePatcher::UnpatchLeg> pickedLegs;
+    if (ctxIsUniverseRow && m_patcher != NULL)
     {
+        menu.addSeparator();
+
+        /* Several universe rows selected: the plural actions, named with
+           their count, first -- the same two the Connections tab offers,
+           in the order the universes were picked. */
+        pickedUnis = orderedSelectedUniverses();
+        if (pickedUnis.count() > 1 && pickedUnis.contains(ctxUni))
+        {
+            pluralPatch = menu.addAction(UniversePatcher::patchSelectionText(pickedUnis.count()));
+            pickedLegs = m_patcher->outputLegs(pickedUnis);
+            QSet<quint32> withPatch;
+            foreach (const UniversePatcher::UnpatchLeg &l, pickedLegs)
+                withPatch.insert(l.universe);
+            if (withPatch.isEmpty() == false)
+                pluralUnpatch = menu.addAction(
+                    UniversePatcher::unpatchSelectionText(withPatch.count()));
+            menu.addSeparator();
+        }
+
+        /* This one universe: where it goes now, said in the menu itself,
+           then what can be done about it. */
+        InputOutputMap *iomap = m_doc->inputOutputMap();
+        Universe *u = iomap != NULL ? iomap->universe(ctxUni) : NULL;
+        for (int i = 0; u != NULL && i < u->outputPatchesCount() && ctxPlugin.isEmpty(); i++)
+        {
+            OutputPatch *op = u->outputPatch(i);
+            if (op != NULL && op->plugin() != NULL && op->isPending() == false)
+            {
+                ctxPlugin = op->plugin()->name();
+                ctxLine = op->output();
+            }
+        }
+        const QStringList legs = m_patcher->outputText(ctxUni);
+        if (legs.isEmpty())
+        {
+            patchOut = menu.addAction(tr("Patch output…"));
+            patchOut->setToolTip(tr("Choose the protocol, interface and node port this "
+                                    "universe goes out on"));
+        }
+        else
+        {
+            QAction *where = menu.addAction(tr("Output: %1").arg(legs.join(QStringLiteral(" · "))));
+            where->setEnabled(false);
+            if (ctxPlugin.isEmpty() == false && m_patcher->supportsTargets(ctxPlugin))
+                retargetOut = menu.addAction(tr("Change interface / target…"));
+            else
+                patchOut = menu.addAction(tr("Patch output…"));
+            unpatchOut = menu.addAction(tr("Unpatch output"));
+        }
+        if (ShowStatus::instance()->actionLabel(QStringLiteral("connections.universe")).isEmpty() == false)
+            showInConnections = menu.addAction(tr("Show in Connections"));
+
         menu.addSeparator();
         deleteUni = menu.addAction(tr("Delete Universe…"));
     }
@@ -3023,6 +3113,37 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
     if (chosen == NULL)
         return;
 
+    if (patchOut != NULL && chosen == patchOut)
+    {
+        m_patcher->patchUniverse(ctxUni);
+        return;
+    }
+    if (retargetOut != NULL && chosen == retargetOut)
+    {
+        m_patcher->retargetPatch(ctxUni, ctxPlugin, ctxLine);
+        return;
+    }
+    if (unpatchOut != NULL && chosen == unpatchOut)
+    {
+        m_patcher->unpatchLegs(m_patcher->outputLegs(QList<quint32>() << ctxUni));
+        return;
+    }
+    if (pluralPatch != NULL && chosen == pluralPatch)
+    {
+        m_patcher->patchSelectionTo(pickedUnis);
+        return;
+    }
+    if (pluralUnpatch != NULL && chosen == pluralUnpatch)
+    {
+        m_patcher->unpatchLegs(pickedLegs);
+        return;
+    }
+    if (showInConnections != NULL && chosen == showInConnections)
+    {
+        ShowStatus::instance()->runAction(QStringLiteral("connections.universe"), this,
+                                          QVariantList() << ctxUni);
+        return;
+    }
     if (readdress != NULL && chosen == readdress)
     {
         patchOrReaddress(readdressIds);
@@ -3193,7 +3314,8 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
     }
     else if (chosen == deleteUni)
     {
-        deleteUniverse(m_ctxUniverse);
+        // m_ctxUniverse is cleared as soon as the menu closes (above).
+        deleteUniverse(ctxUni);
     }
     else if (chosen == addPowerSource)
     {
@@ -3282,6 +3404,36 @@ void FixtureManager::deleteUniverse(quint32 universe)
 
     m_doc->setModified();
     updateView();
+}
+
+void FixtureManager::syncUniversePickOrder()
+{
+    if (m_fixtures_tree == NULL)
+        return;
+    /* What is selected now, in list order; then the picking order of what is
+       still selected, with what is new appended -- one ctrl-click adds one, a
+       shift-click range several in list order, a plain click starts again. */
+    QList<quint32> now;
+    for (QTreeWidgetItemIterator it(m_fixtures_tree, QTreeWidgetItemIterator::Selected); *it; ++it)
+    {
+        const QVariant uv = (*it)->data(KColumnName, PROP_UNIVERSE);
+        if (uv.isValid() && now.contains(uv.toUInt()) == false)
+            now << uv.toUInt();
+    }
+    QList<quint32> order;
+    foreach (quint32 u, m_universePickOrder)
+        if (now.contains(u))
+            order << u;
+    foreach (quint32 u, now)
+        if (order.contains(u) == false)
+            order << u;
+    m_universePickOrder = order;
+}
+
+QList<quint32> FixtureManager::orderedSelectedUniverses()
+{
+    syncUniversePickOrder();
+    return m_universePickOrder;
 }
 
 void FixtureManager::slotChannelGroupContextMenuRequested(const QPoint &pos)

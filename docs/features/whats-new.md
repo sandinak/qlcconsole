@@ -16,6 +16,13 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Outputs
 
+- **Patch a universe from the Fixture Manager.** Right-click a universe row
+  in the fixtures list: **Patch output…**, or on a patched one the menu says
+  where it goes and offers **Change interface / target…** and **Unpatch
+  output**; with several selected, **Patch N selected universes to…** /
+  **Unpatch N selected universes**, in the order you clicked them. The same
+  questions and undo as Connections. See
+  [Patching a universe's output](fixture-manager.md#patching-a-universes-output).
 - **Patch or unpatch several universes at once.** In Connections, select
   universes and right-click: **Patch N selected universes to…** puts them on
   a device's ports in the order you clicked them (more universes than ports:
