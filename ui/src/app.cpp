@@ -1121,9 +1121,14 @@ void App::initDoc()
     /* Outputs in trouble -- WLED devices that stop answering or fade to a
        weak signal, Art-Net / E1.31 outputs that can't send, Art-Net nodes
        that stop answering: the footer, whichever plugin says so. */
+    /* By name, not by member pointer: QLCIOPlugin is compiled into the engine
+       and into every plugin, so on Windows its signal has no single exporting
+       DLL, and a pointer-to-member connection there silently never fires. */
     if (QTimer *t = findChild<QTimer *>(QStringLiteral("fixtureReadinessTimer")))
+    {
         foreach (QLCIOPlugin *plugin, m_doc->ioPluginCache()->plugins())
-            connect(plugin, &QLCIOPlugin::targetProblemsChanged, t, QOverload<>::of(&QTimer::start));
+            connect(plugin, SIGNAL(targetProblemsChanged()), t, SLOT(start()));
+    }
 
     /* Load audio decoder plugins
      * This doesn't use a AudioPluginCache::systemPluginDirectory() cause

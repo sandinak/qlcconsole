@@ -302,16 +302,18 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     /* An output going into or out of trouble shows within a moment rather
        than at the next five-second tick -- coalesced, since one dead node
        can take many universes with it at once. Only while on screen. */
-    QTimer *problemRefresh = new QTimer(this);
+    m_problemRefresh = new QTimer(this);
+    QTimer *problemRefresh = m_problemRefresh;
     problemRefresh->setSingleShot(true);
     problemRefresh->setInterval(250);
     connect(problemRefresh, SIGNAL(timeout()), this, SLOT(refresh()));
+    /* By name (see App: on Windows QLCIOPlugin's signal has no single
+       exporting DLL, and a member-pointer connection never fires there). */
     if (m_doc != NULL && m_doc->ioPluginCache() != NULL)
+    {
         foreach (QLCIOPlugin *plugin, m_doc->ioPluginCache()->plugins())
-            connect(plugin, &QLCIOPlugin::targetProblemsChanged, problemRefresh, [this, problemRefresh]() {
-                if (isVisible())
-                    problemRefresh->start();
-            });
+            connect(plugin, SIGNAL(targetProblemsChanged()), this, SLOT(slotTargetProblemsChanged()));
+    }
 
     /* Live input. Devices is the tab you are on when asking "is that surface
        actually sending anything", and it was the only one of the three that
@@ -339,6 +341,12 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
  *  the universe, not at any one of them. Lighting all of them is the honest
  *  answer; picking one would be inventing a relationship.
  */
+void ConnectionsTree::slotTargetProblemsChanged()
+{
+    if (isVisible() && m_problemRefresh != nullptr)
+        m_problemRefresh->start();
+}
+
 void ConnectionsTree::slotInputActivity(quint32 universe, quint32 channel,
                                         uchar value)
 {

@@ -839,7 +839,11 @@ void ArtNet_Test::controllerReportsAndClearsProblems()
     const QHostAddress node("172.18.2.10");
     QObject owner;
     ArtNetController *ctrl = testController(&owner, node, { 1 });
-    QSignalSpy changed(ctrl, &ArtNetController::problemsChanged);
+    /* By name, not &ArtNetController::problemsChanged: this test links the
+       artnet plugin DLL, and on Windows a member pointer into another DLL is
+       an import thunk that moc's signal lookup never matches ("Null signal").
+       ArtNetController isn't dllexport'ed (see qlcengine_export.h). */
+    QSignalSpy changed(ctrl, SIGNAL(problemsChanged()));
     ctrl->m_testNowMs = 0;
 
     // Heard, answering, port 2 (Port-Address 1) outputting
