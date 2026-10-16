@@ -88,6 +88,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 from wsclient import WSClient, WSError  # noqa: E402
 
 WIN = sys.platform == "win32"
+# --heap-track (macOS): the app runs with MallocStackLogging=lite, and the
+# phase folder gets a heap summary and a vmmap summary 10 minutes in and then
+# every hour -- diff two of them to see what grew.
+HEAP_TRACK = False
 if WIN:
     EXE = r"C:\qlcconsole\qlcconsole.exe"        # --win-exe
     UNTITLED_AUTOSAVE = os.path.join(os.environ.get("USERPROFILE", os.path.expanduser("~")),
@@ -431,8 +435,9 @@ def start_app(port, log_path, ticklog):
     subprocess.run(["open", "-n", "-a", APP,
                     "--stdout", log_path, "--stderr", log_path,
                     "--env", "QLC_TICKLOG=%d" % ticklog,
-                    "--env", "QLC_NO_RECOVERY_PROMPT=1",
-                    "--args", "-d", "1", "-w", "-wp", str(port)], check=True)
+                    "--env", "QLC_NO_RECOVERY_PROMPT=1"]
+                   + (["--env", "MallocStackLogging=lite"] if HEAP_TRACK else [])
+                   + ["--args", "-d", "1", "-w", "-wp", str(port)], check=True)
     for _ in range(120):
         pids = app_pids()
         if pids:
@@ -676,6 +681,7 @@ def run_phase(run, name, show, hours, port, ticklog, sample_s, rng):
             run.event(name, drv.start_block())
         tl = TickLog(log_path)
         misses, next_sample, next_reload = 0, time.time(), time.time() + 3600
+        next_heap = time.time() + 600
         while not stopping() and time.time() < end:
             if pid not in app_pids():
                 stats["crashes"] += 1
@@ -704,6 +710,18 @@ def run_phase(run, name, show, hours, port, ticklog, sample_s, rng):
                 ws = connect_ws(port, tries=20)
                 if ws:
                     drv.ws = ws
+            if HEAP_TRACK and not WIN and time.time() >= next_heap:
+                next_heap = time.time() + 3600
+                stamp = "%s-%05d" % (launch, int(time.time() - started))
+                for tool, args in (("heap", ["heap", "-s", str(pid)]),
+                                   ("vmmap", ["vmmap", "--summary", str(pid)])):
+                    try:
+                        r = subprocess.run(args, capture_output=True, text=True, timeout=300)
+                        with open(os.path.join(phase_dir, "%s-%s.txt" % (tool, stamp)), "w") as f:
+                            f.write(r.stdout)
+                    except (OSError, subprocess.TimeoutExpired) as e:
+                        run.event(name, "%s snapshot failed: %s" % (tool, e))
+                run.event(name, "heap snapshot %s" % stamp)
             if time.time() >= next_sample:
                 next_sample += sample_s
                 if WIN:
@@ -852,6 +870,8 @@ def main():
     ap.add_argument("--keep-outputs", dest="strip_outputs", action="store_false",
                     help="run the shows as they are, outputs and all")
     ap.add_argument("--stop", action="store_true", help="ask the soak in --out to stop")
+    ap.add_argument("--heap-track", action="store_true",
+                    help="macOS: MallocStackLogging=lite + hourly heap/vmmap summaries")
     if WIN:
         ap.add_argument("--win-exe", default=EXE)
         ap.add_argument("--win-launch", choices=("task", "direct"), default="task",
@@ -860,6 +880,8 @@ def main():
         ap.add_argument("--detach", action="store_true",
                         help="run through a scheduled task, past the end of the SSH session")
     a = ap.parse_args()
+    global HEAP_TRACK
+    HEAP_TRACK = a.heap_track
 
     if a.stop:
         ask_stop(a.out)
