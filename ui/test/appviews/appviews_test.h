@@ -56,6 +56,10 @@ private slots:
      *  production run": a show's definitions come from this computer. */
     void aShowsDefinitionsComeFromTheShowCache();
 
+    /** "set the h,w,d by the configured measurement type": one Settings
+     *  entry, kept for the person, read by the fixture editor too. */
+    void settingsChoosesTheUnits();
+
 private:
     App *m_app;
 };

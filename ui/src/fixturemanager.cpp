@@ -63,6 +63,7 @@
 #include "addchannelsgroup.h"
 #include <functional>
 #include "fixturemanager.h"
+#include "measurementunits.h"
 #include <QShortcut>
 #include "fixtureremap.h"
 #include "addrgbpanel.h"
@@ -1244,19 +1245,22 @@ QString FixtureManager::fixtureInfo(const Fixture *fixture) const
         const QLCPhysical physical = fixtureMode->physical();
         info += title.arg(tr("Physical"));
 
-        float mmInch = 0.0393700787;
-        float kgLbs = 2.20462262;
-        QString mm("%1mm (%2\")");
-        QString kg("%1kg (%2 lbs)");
+        // In the person's unit (Settings -> Units), what the file holds after.
+        typedef MeasurementUnits MU;
+        const MU::LengthUnit unit = MU::preferredLength();
+        const MU::WeightUnit wunit = MU::weightUnitFor(unit);
+        auto len = [unit](int mm) {
+            return unit == MU::Millimetres ? MU::formatLength(mm, unit)
+                   : QStringLiteral("%1 (%2 mm)").arg(MU::formatLength(mm, unit)).arg(mm);
+        };
         QString W("%1W");
-        info += genInfo.arg(tr("Width")).arg(mm.arg(physical.width()))
-                                        .arg(physical.width() * mmInch, 0, 'g', 4);
-        info += genInfo.arg(tr("Height")).arg(mm.arg(physical.height()))
-                                         .arg(physical.height() * mmInch, 0, 'g', 4);
-        info += genInfo.arg(tr("Depth")).arg(mm.arg(physical.depth()))
-                                        .arg(physical.depth() * mmInch, 0, 'g', 4);
-        info += genInfo.arg(tr("Weight")).arg(kg.arg(physical.weight()))
-                                         .arg(physical.weight() * kgLbs, 0, 'g', 4);
+        info += genInfo.arg(tr("Width")).arg(len(physical.width()));
+        info += genInfo.arg(tr("Height")).arg(len(physical.height()));
+        info += genInfo.arg(tr("Depth")).arg(len(physical.depth()));
+        info += genInfo.arg(tr("Weight")).arg(wunit == MU::Kilograms
+                ? MU::formatWeight(physical.weight(), wunit)
+                : QStringLiteral("%1 (%2)").arg(MU::formatWeight(physical.weight(), wunit),
+                                                MU::formatWeight(physical.weight(), MU::Kilograms)));
         info += genInfo.arg(tr("Power consumption")).arg(W.arg(physical.powerConsumption()));
         info += genInfo.arg(tr("DMX Connector")).arg(physical.dmxConnector());
 

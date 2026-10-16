@@ -29,6 +29,7 @@
 #include <QDialogButtonBox>
 
 #include "appsettings.h"
+#include "measurementunits.h"
 #include "app.h"
 
 AppSettings::AppSettings(App *app, QWidget *parent)
@@ -90,6 +91,31 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     tabLayout->addWidget(m_tabLabelModeCombo);
     tabLayout->addStretch();
     mainLayout->addWidget(tabGroup);
+
+    // --- Units ---
+    // One choice for the person, whatever show is open: fixture dimensions
+    // and weights (here and in the fixture definition editor) show in it.
+    QGroupBox *unitsGroup = new QGroupBox(tr("Units"), this);
+    unitsGroup->setObjectName(QStringLiteral("settingsUnits"));
+    unitsGroup->setProperty("helpTopic", QStringLiteral("fixture-manager.md"));
+    QHBoxLayout *unitsLayout = new QHBoxLayout(unitsGroup);
+    unitsLayout->addWidget(new QLabel(tr("Lengths and weights in:"), unitsGroup));
+    m_unitsCombo = new QComboBox(unitsGroup);
+    m_unitsCombo->setObjectName(QStringLiteral("settingsUnitsCombo"));
+    for (MeasurementUnits::LengthUnit u : { MeasurementUnits::Millimetres,
+                                            MeasurementUnits::Centimetres,
+                                            MeasurementUnits::Metres,
+                                            MeasurementUnits::Inches,
+                                            MeasurementUnits::Feet })
+        m_unitsCombo->addItem(MeasurementUnits::name(u), int(u));
+    m_unitsCombo->setCurrentIndex(qMax(0, m_unitsCombo->findData(int(MeasurementUnits::preferredLength()))));
+    m_unitsCombo->setToolTip(tr("How fixture dimensions and weights are shown, here and in "
+                                "the fixture definition editor. Any unit can still be typed "
+                                "(7.5\", 19 cm, 26 lb); fixture files keep millimetres and "
+                                "kilograms either way."));
+    unitsLayout->addWidget(m_unitsCombo);
+    unitsLayout->addStretch();
+    mainLayout->addWidget(unitsGroup);
 
     // --- Effects ---
     QGroupBox *fxGroup = new QGroupBox(tr("Effects"), this);
@@ -163,6 +189,9 @@ void AppSettings::accept()
     // Apply tab label mode
     const int mode = m_tabLabelModeCombo->currentData().toInt();
     m_app->setTabLabelMode(mode);
+
+    MeasurementUnits::setPreferredLength(
+        MeasurementUnits::LengthUnit(m_unitsCombo->currentData().toInt()));
 
     // Effect script editor preference (read by the Look Editor authoring flow).
     QSettings().setValue(QStringLiteral("effectscript/editor"),

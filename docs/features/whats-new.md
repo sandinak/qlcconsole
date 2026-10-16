@@ -4,6 +4,15 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## October 2026
 
+### Fixture definitions
+
+- **Sizes and weights in your own units.** **Settings → Units** picks mm,
+  cm, m, inches or feet (weight in kg or lb to match); the fixture
+  editor's Physical tab shows width, height, depth and weight in it, and
+  takes any unit typed with the number — `7.5"`, `6' 3"`, `19.05 cm`,
+  `26.5 lbs`. Files still keep millimetres and kilograms. See
+  [The fixture editor](fixture-manager.md#the-fixture-editor).
+
 ### Sub-cues
 
 - **Cues inside a cue.** A chase used as a step of a cue list lists its

@@ -25,6 +25,7 @@
 #include <QTabWidget>
 #include <QTabBar>
 #include <QDialog>
+#include <QComboBox>
 
 #include "appviews_test.h"
 
@@ -35,6 +36,8 @@
 #include "monitor.h"
 #define protected public
 #include "app.h"
+#include "appsettings.h"
+#include "measurementunits.h"
 #include "functionmanager.h"
 #define private public
 #define protected public
@@ -436,6 +439,29 @@ void AppViews_Test::aShowsDefinitionsComeFromTheShowCache()
 
     qputenv("USERPROFILE", realProfile);
 #endif
+}
+
+void AppViews_Test::settingsChoosesTheUnits()
+{
+    QCOMPARE(MeasurementUnits::preferredLength(), MeasurementUnits::Millimetres);
+    {
+        AppSettings dlg(m_app);
+        QComboBox *units = dlg.findChild<QComboBox *>(QStringLiteral("settingsUnitsCombo"));
+        QVERIFY(units != nullptr);
+        QCOMPARE(units->count(), 5);
+        QCOMPARE(units->currentData().toInt(), int(MeasurementUnits::Millimetres));
+        units->setCurrentIndex(units->findData(int(MeasurementUnits::Inches)));
+        dlg.accept();
+    }
+    QCOMPARE(MeasurementUnits::preferredLength(), MeasurementUnits::Inches);
+    {
+        AppSettings dlg(m_app);
+        QComboBox *units = dlg.findChild<QComboBox *>(QStringLiteral("settingsUnitsCombo"));
+        QCOMPARE(units->currentData().toInt(), int(MeasurementUnits::Inches));
+        dlg.reject();   // Cancel keeps it
+    }
+    QCOMPARE(MeasurementUnits::preferredLength(), MeasurementUnits::Inches);
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Millimetres);
 }
 
 QTEST_MAIN(AppViews_Test)

@@ -10,6 +10,14 @@ under `~/.claude/.../memory/`.
 
 ## Small fixes and leftovers
 
+- **Grid units vs Settings → Units (2026-10-16, needs Branson)** — the new
+  app-wide Settings → Units drives fixture sizes/weights; the Studio /
+  Rig Overview grid still has its own Meters/Feet, saved **per show**
+  (`MonitorProperties::gridUnits`, the `Units` attribute in the .qxw).
+  Asked: make the grid follow the preference (keep reading the show's value
+  for old files? seed the preference from it on first run?) or keep it per
+  show. Nothing changed there yet.
+
 - **Layers panel: a row the plot can't select loses its selection on any
   rebuild (2026-10-15)** — clicking a fixture the plot can't select (stacked
   inside a tower in plan view) now keeps its row selected, but the next

@@ -6,6 +6,39 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-16 — Fixture sizes and weights in your own units *(on feat/unit-aware-dimensions, not merged)*
+
+- **One preference: Settings → Units** (`units/length` in qlcconsole's
+  settings: mm / cm / m / in / ft; weight follows, kg for the metric ones,
+  lb for in/ft). The fixture editor reads the same key from qlcconsole's
+  settings (as it does the toolbar style) and re-reads it each time the
+  Physical page is shown; its page has a note saying where to change it.
+- **Parse/format in one place**, `engine/src/measurementunits.*`
+  (`MeasurementUnits`): `7.5"`, `7.5 in`, `0.625'`, `6' 3"`, `6 ft 3 in`,
+  `190.5mm`, `19.05 cm`, `0.19 m`, `1 m 20 cm`, `7,5 in`; `12 kg`,
+  `26.5 lb(s)`, `400 g`, `5 lb 4 oz`. A bare number is the preferred unit;
+  after feet (pounds) a trailing bare number is inches (ounces). Refused:
+  negatives, `1,200` (thousands or decimal?), unknown units, two bare
+  numbers, a weight unit in a length and vice versa.
+- **Field** `ui/src/measurementedit.*` (a QLineEdit): holds the exact
+  typed mm/kg; red + tooltip on nonsense, value unchanged; commits on
+  Return/leaving and before the page is read. Used for width/height/depth/
+  weight on the editor's Physical page (fixture-wide and per-mode); the
+  Fixture Manager info panel shows sizes/weight in the same unit.
+- **Storage unchanged** (stock-QLC+ compatible): whole mm, halves up
+  (`toStoredMm`: 7.5" = 190.5 mm → 191), weight as kg double. A stored
+  whole mm is shown with the fewest decimals that mean that same mm
+  (191 → 7.5 in, 190 → 7.48 in, 300 → 11.8 in). Weight is no longer cut to
+  the old spin box's 2 decimals. Limits as before: 9999 mm, 999.99 kg.
+- Tests: `engine/test/measurementunits` (all forms, invalid, every mm
+  0..9999 round-trips in every unit, preference), `ui/test/editphysical`
+  (offscreen: `7.5"` with inches → 7.5 in / 191 mm, with mm → 190.5 mm,
+  invalid, uncommitted text, follows the preference), appviews
+  `settingsChoosesTheUnits`.
+- **Not done, waiting on Branson:** the Studio/Rig Overview grid's
+  Meters/Feet is saved **per show** (`MonitorProperties` `Units` in the
+  .qxw), so it was left alone (see TODO).
+
 ### 2026-10-15 — Linux: a test gate that can't skip quietly, and the app icon *(feat/linux-gate-icon)*
 
 - **Test gate counts what it ran** (`platforms/linux/unittest.sh`). The
