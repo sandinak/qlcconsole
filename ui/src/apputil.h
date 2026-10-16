@@ -184,7 +184,10 @@ namespace AppUtil
      * address was taken (fixture ids); "fixtures.duplicates" -- names more
      * than one fixture has (names); "definitions.failed" -- definition files
      * that could not be read (files); "universes.nooutput" -- universes
-     * fixtures are patched on with no output (universe indexes).
+     * fixtures are patched on with no output (universe indexes);
+     * "outputs.problems" -- network outputs their plugins report in trouble
+     * (QLCIOPlugin::outputProblems()), one per problem (the first universe
+     * each hits).
      */
     void updateFixtureReadiness(Doc *doc);
 

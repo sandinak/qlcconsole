@@ -39,6 +39,8 @@
 #include "universe.h"
 #include "qlcfile.h"
 #include "doc.h"
+#include "apputil.h"
+#include "showstatus.h"
 
 #undef private
 #undef protected
@@ -1215,4 +1217,86 @@ void ConnectionsTree_Test::byUniverseListsEveryUniverseWithWhereItGoes()
     tree.m_byUniverse->setChecked(false);
     QVERIFY(tree.m_tree->rootIsDecorated());
     QVERIFY(!itemsOfKind(tree.m_tree, KIND_PLUGIN).isEmpty());
+}
+
+/****************************************************************************
+ * Output problems
+ ****************************************************************************/
+
+static QList<QTreeWidgetItem *> rowsWithText(QTreeWidget *tree, const QString &text)
+{
+    QList<QTreeWidgetItem *> out;
+    foreach (QTreeWidgetItem *it, allItems(tree))
+        if (it->text(COL_DETAIL).contains(text))
+            out << it;
+    return out;
+}
+
+void ConnectionsTree_Test::outputProblemsShowOnTheRowAndClear()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setOutputPatch(0, stub->name(), "", 0, false, 0) == true);
+
+    const QString problem("Art-Net to 172.18.2.50: not reachable since 20:14");
+    stub->m_outputProblems[0] = QStringList() << problem;
+
+    ConnectionsTree tree(m_doc);
+    tree.refresh();
+
+    QList<QTreeWidgetItem *> rows = rowsWithText(tree.m_tree, problem);
+    QCOMPARE(rows.count(), 1);
+    QVERIFY(rows.first()->data(COL_NAME, ROLE_UNIVERSE).toUInt() == 0);
+    QCOMPARE(rows.first()->foreground(COL_DETAIL).color(), QColor(220, 90, 90));
+    QVERIFY(rows.first()->toolTip(COL_NAME).contains("not reachable since 20:14"));
+
+    // The universe list says it too
+    tree.m_byUniverse->setChecked(true);
+    rows = rowsWithText(tree.m_tree, problem);
+    QCOMPARE(rows.count(), 1);
+    QCOMPARE(rows.first()->text(COL_NAME).left(2), QString("1:"));
+
+    // Fixed: the plugin says so, the tree (on screen) catches up by itself
+    tree.m_byUniverse->setChecked(false);
+    tree.show();
+    stub->m_outputProblems.clear();
+    stub->emitTargetProblemsChanged();
+    QTRY_VERIFY(rowsWithText(tree.m_tree, problem).isEmpty());
+    foreach (QTreeWidgetItem *it, allItems(tree.m_tree))
+        QVERIFY(it->text(COL_DETAIL).contains("not reachable") == false);
+}
+
+void ConnectionsTree_Test::outputProblemsReachTheFooterOncePerProblem()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    while (iom->universesCount() < 4)
+        QVERIFY(iom->addUniverse());
+    for (quint32 u = 0; u < 4; u++)
+        QVERIFY(iom->setOutputPatch(u, stub->name(), "", 0, false, 0) == true);
+
+    // One dead node behind universes 2 and 3; universe 4 has its own trouble
+    const QString dead("Art-Net node CR041R (172.18.2.10): stopped answering since 20:14");
+    const QString shorted("Art-Net node CS1 (172.18.2.211), port 1 (0:0:3): DMX output short since 20:15");
+    stub->m_outputProblems[1] = QStringList() << dead;
+    stub->m_outputProblems[2] = QStringList() << dead;
+    stub->m_outputProblems[3] = QStringList() << shorted;
+
+    AppUtil::updateFixtureReadiness(m_doc);
+    ShowStatus::Entry e;
+    foreach (const ShowStatus::Entry &x, ShowStatus::instance()->allEntries())
+        if (x.key == "outputs.problems")
+            e = x;
+    QCOMPARE(e.key, QString("outputs.problems"));
+    QCOMPARE(e.items.count(), 2);
+    QCOMPARE(e.items.at(0), dead + " (universes 2, 3)");
+    QCOMPARE(e.items.at(1), shorted + " (universe 4)");
+    // The fix opens the first universe each one hits
+    QCOMPARE(e.itemData, (QVariantList{ 1u, 3u }));
+
+    // Cleared once the plugin stops reporting it
+    stub->m_outputProblems.clear();
+    AppUtil::updateFixtureReadiness(m_doc);
+    foreach (const ShowStatus::Entry &x, ShowStatus::instance()->allEntries())
+        QVERIFY(x.key != "outputs.problems");
 }

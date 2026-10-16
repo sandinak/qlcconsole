@@ -14,6 +14,19 @@ The latest changes, newest first. Each links to the guide with the detail.
   Sub Back buttons, and the footer says **Sub: 4.2 · Next: 5**. Older
   shows play as before. See [Sub-cues](show-control.md#sub-cues).
 
+### Outputs
+
+- **Art-Net and E1.31 say when an output is in trouble** — in the footer
+  and in red on the universe's row in Connections: an address that can't
+  be reached, an Art-Net node that stopped answering, a node port reporting
+  a DMX short or no longer outputting. Judged with a delay each way, so they
+  don't flicker, and they clear by themselves. See
+  [When an output is in trouble](other-improvements.md#when-an-output-is-in-trouble).
+- **The log no longer flaps** "is failing" / "recovered" for a node that
+  isn't there: one line when it starts, one when it has really recovered.
+- **A node port's DMX short shows as a short.** Connections had the
+  "short" and "merging" flags of a node's ports the wrong way round.
+
 ### Show control
 
 - **QLab can fire the lights' cues.** A chase's steps have **cue numbers**

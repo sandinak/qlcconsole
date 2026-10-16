@@ -89,6 +89,12 @@ public:
     /** @reimp */
     QStringList outputs() override;
 
+    /** @reimp Outputs whose sends are failing (see SendHealth) */
+    QStringList targetProblems() const override;
+
+    /** @reimp The same, for one patched universe */
+    QStringList outputProblems(quint32 output, quint32 universe) const override;
+
     /** @reimp */
     QString outputInfo(quint32 output) override;
 

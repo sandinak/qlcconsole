@@ -62,6 +62,8 @@
 #include "ioplugincache.h"
 #include "fixturedefcheck.h"
 #include "inputoutputmap.h"
+#include "outputpatch.h"
+#include "universe.h"
 #include "qlcfixturedefcache.h"
 
 /****************************************************************************
@@ -666,6 +668,60 @@ void AppUtil::updateFixtureReadiness(Doc *doc)
                 QCoreApplication::translate("AppUtil", "Checked every few seconds. Weaker than -75 dBm "
                                             "drops on stage Wi-Fi."),
                 items, ips);
+    }
+
+    /* Network outputs in trouble, as their plugins judge it -- sends that
+       keep failing, Art-Net nodes that stopped answering, node ports that
+       report a fault (QLCIOPlugin::outputProblems()). Asked per patch so
+       each line can say which universes it hits and the fix can open the
+       first of them in Connections; one line per problem, not per universe,
+       because fifty universes behind one dead node are one problem. */
+    {
+        InputOutputMap *io = doc->inputOutputMap();
+        QStringList order;
+        QMap<QString, QList<quint32> > hit;
+        foreach (Universe *u, io->universes())
+        {
+            if (u == NULL)
+                continue;
+            for (int i = 0; i < u->outputPatchesCount(); i++)
+            {
+                OutputPatch *op = u->outputPatch(i);
+                if (op == NULL || op->plugin() == NULL)
+                    continue;
+                foreach (const QString &problem, op->plugin()->outputProblems(op->output(), u->id()))
+                {
+                    if (hit.contains(problem) == false)
+                        order << problem;
+                    if (hit[problem].contains(u->id()) == false)
+                        hit[problem] << u->id();
+                }
+            }
+        }
+        QStringList items;
+        QVariantList universes;
+        foreach (const QString &problem, order)
+        {
+            const QList<quint32> &unis = hit[problem];
+            QStringList nums;
+            foreach (quint32 id, unis)
+                nums << QString::number(id + 1);
+            items << (unis.count() == 1
+                ? QCoreApplication::translate("AppUtil", "%1 (universe %2)").arg(problem, nums.first())
+                : QCoreApplication::translate("AppUtil", "%1 (universes %2)").arg(problem, nums.join(", ")));
+            universes << unis.first();
+        }
+        if (items.isEmpty())
+            status->clearStatus("outputs.problems");
+        else
+            status->setStatus("outputs.problems", ShowStatus::Warning,
+                QCoreApplication::translate("AppUtil", "%n network output problem(s)",
+                                            "", items.count()),
+                QCoreApplication::translate("AppUtil", "Outputs that can't send, Art-Net nodes that "
+                                            "stopped answering, and node ports reporting a "
+                                            "fault. Each shows once it has lasted, and clears "
+                                            "once it has stayed fixed."),
+                items, universes);
     }
 
     /* A universe fixtures are patched on, with nowhere to send it. */

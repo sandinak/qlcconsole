@@ -106,6 +106,11 @@ private slots:
      *  universe: all of them, in order, each saying where it goes. */
     void byUniverseListsEveryUniverseWithWhereItGoes();
 
+    /* Output problems a plugin reports (QLCIOPlugin::outputProblems()):
+       on the row, in both views, and in the footer -- and gone once fixed. */
+    void outputProblemsShowOnTheRowAndClear();
+    void outputProblemsReachTheFooterOncePerProblem();
+
 private:
     Doc *m_doc;
 };
