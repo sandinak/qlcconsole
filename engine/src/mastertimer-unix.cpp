@@ -156,7 +156,7 @@ static void setTimerThreadRealtime(int nsTickTime)
 
 MasterTimerPrivate::MasterTimerPrivate(MasterTimer* masterTimer)
     : QThread(masterTimer)
-    , m_run(false)
+    , m_run(0)
 {
     Q_ASSERT(masterTimer != NULL);
 #if defined(Q_OS_MACOS) || defined(Q_OS_IOS)
@@ -169,9 +169,20 @@ MasterTimerPrivate::~MasterTimerPrivate()
     stop();
 }
 
+/* The run flag is set here, before the thread exists, not by the thread
+   itself: a stop() that came in before the new thread got as far as setting
+   it would otherwise be undone, and stop()'s wait() would never return. */
+void MasterTimerPrivate::start()
+{
+    if (isRunning())
+        return;
+    m_run.storeRelease(1);
+    QThread::start();
+}
+
 void MasterTimerPrivate::stop()
 {
-    m_run = false;
+    m_run.storeRelease(0);
     wait();
 }
 
@@ -201,10 +212,6 @@ int MasterTimerPrivate::compareTime(struct timespec *time1, struct timespec *tim
 
 void MasterTimerPrivate::run()
 {
-    /* Don't start another thread */
-    if (m_run == true)
-        return;
-
     MasterTimer* mt = qobject_cast <MasterTimer*> (parent());
     Q_ASSERT(mt != NULL);
 
@@ -243,14 +250,10 @@ void MasterTimerPrivate::run()
     {
         qWarning() << Q_FUNC_INFO << "Unable to get the time accurately:"
                    << strerror(errno) << "- Stopping MasterTimerPrivate";
-        m_run = false;
-    }
-    else
-    {
-        m_run = true;
+        m_run.storeRelease(0);
     }
 
-    while (m_run == true)
+    while (m_run.loadAcquire() != 0)
     {
         /* Add nsTickTime to the finish time, to calculate the end timestamp of this loop */
         finish->tv_sec += (finish->tv_nsec + nsTickTime) / 1000000000L;
@@ -265,7 +268,7 @@ void MasterTimerPrivate::run()
         {
             qWarning() << Q_FUNC_INFO << "Unable to get the current time:"
                        << strerror(errno);
-            m_run = false;
+            m_run.storeRelease(0);
             break;
         }
 
