@@ -49,6 +49,19 @@ it was drag selecting other things vs dragging to folder."
   + move on an unselected row starts a QDrag carrying only that row). The
   first and last fail with the old construction. Help: programming-tab.md
   "Filing into folders", whats-new.
+- **Remove from container** (Branson: "No ability to remove from side
+  menu", 3 rows under a collection offered only Duplicate/Delete): nested
+  member rows now carry their index (chaser step / collection member) and,
+  for shows, track + ShowFunction ids; the menu offers **Remove from “X”** /
+  **Remove N from “X”** / **Remove N from their K containers** (per
+  container). `removeMembers()` takes out exactly that membership
+  (collection `removeFunction`, chaser `removeStep` by index, show
+  `removeShowFunction`; a running show is left alone with a note), asks
+  first for chaser steps/show items, re-nests the rows and refreshes the open
+  editor. Delete on such rows reads **Delete Function Everywhere…** and the
+  question lists every collection/chaser/show using each function. No undo
+  (the tab's undo is scene look edits only). Test
+  `rowsUnderAContainerComeOutOfIt`.
 
 ---
 

@@ -89,6 +89,16 @@ Both the scenes/functions tree and the Palettes tab keep things in folders.
 
 Folders are saved with the show and show the same in the Functions tab.
 
+### Taking something out of a collection, chaser or show
+
+An open collection, chaser or show lists what is in it underneath its row.
+Right-click one of those rows (or several, ⇧/⌘-click) and pick **Remove from
+“…”**: they come out of it and the functions themselves stay. Taking a step
+out of a chaser, or an item off a show's track, asks first, since its fade,
+hold and timing go with it. **Delete Function Everywhere…** on such a row is
+different: it deletes the function itself, from every collection, chaser and
+show; the question names where it is used.
+
 ## Building a look, step by step
 
 1. Open the **Programming** tab.

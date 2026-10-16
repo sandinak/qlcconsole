@@ -122,6 +122,12 @@ private slots:
      *  a row that isn't selected and move -> it's a drag of that row, not a
      *  rubber-band selection growing over the rows passed. */
     void pressAndMoveOnARowDragsIt();
+    /** "No ability to remove from side menu": rows shown under a collection /
+     *  chaser / show come out of it (membership only; the functions stay),
+     *  one or several, from one or several containers; a chaser that holds a
+     *  function twice loses only the step picked. "Delete" on such a row says
+     *  it deletes the function everywhere and lists where it is used. */
+    void rowsUnderAContainerComeOutOfIt();
 
 private:
     Doc* m_doc;

@@ -12,6 +12,11 @@ The latest changes, newest first. Each links to the guide with the detail.
   and moving now always drags it, where before it could rubber-band select
   instead. Right-click a folder to rename or delete it — deleting keeps what
   was in it. See [Filing into folders](programming-tab.md#filing-into-folders).
+- **Take things out of a collection, chaser or show from the side tree.**
+  Right-click rows listed under one → **Remove from “…”** (the functions
+  stay). Delete on those rows now reads **Delete Function Everywhere…** and
+  says where else the function is used. See
+  [Taking something out](programming-tab.md#taking-something-out-of-a-collection-chaser-or-show).
 
 ### Sub-cues
 

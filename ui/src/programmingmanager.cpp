@@ -84,6 +84,12 @@
 #include "monitor/monitor.h"
 #include <QTabWidget>
 
+// Nav-tree member rows (functions nested under a collection / chaser / show
+// track): their index in the container, and for shows the track id (on the
+// track row) / ShowFunction id (on the placed function's row).
+#define MEMBER_INDEX_ROLE (Qt::UserRole + 3)
+#define SHOW_ITEM_ROLE    (Qt::UserRole + 4)
+
 ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     : QWidget(parent)
     , m_doc(doc)
@@ -2145,6 +2151,29 @@ void ProgrammingManager::slotFuncTreeMenu(const QPoint &pos)
         menu.addSeparator();
     }
 
+    // Rows nested under a collection / chaser / show: take them out of it
+    // (membership only — "Delete" below deletes the function itself).
+    const QList<MemberRef> memberRefs = funcTreeMemberTargets(clickedItem);
+    QAction *aRemoveMember = NULL;
+    if (memberRefs.isEmpty() == false)
+    {
+        QSet<quint32> containers;
+        for (const MemberRef &r : memberRefs)
+            containers.insert(r.container);
+        Function *c = m_doc->function(memberRefs.first().container);
+        QString text;
+        if (containers.size() == 1 && c != NULL)
+            text = memberRefs.size() > 1
+                ? tr("Remove %1 from “%2”").arg(memberRefs.size()).arg(c->name())
+                : tr("Remove from “%1”").arg(c->name());
+        else
+            text = tr("Remove %1 from their %2 containers")
+                       .arg(memberRefs.size()).arg(containers.size());
+        aRemoveMember = menu.addAction(text);
+        aRemoveMember->setToolTip(tr("Takes them out of it; the functions themselves stay."));
+        menu.addSeparator();
+    }
+
     // Duplicate / Delete first, but only when a function is actually targeted —
     // on empty space or a folder the menu is just the "New …" palette.
     QAction *aDuplicate = NULL;
@@ -2154,9 +2183,15 @@ void ProgrammingManager::slotFuncTreeMenu(const QPoint &pos)
         aDuplicate = menu.addAction(targetIds.size() > 1
                                         ? tr("Duplicate %1 Functions").arg(targetIds.size())
                                         : tr("Duplicate"));
-        aDelete = menu.addAction(targetIds.size() > 1
-                                     ? tr("Delete %1 Functions").arg(targetIds.size())
-                                     : tr("Delete"));
+        // On nested rows say plainly that this deletes the function itself.
+        if (memberRefs.isEmpty() == false)
+            aDelete = menu.addAction(targetIds.size() > 1
+                                         ? tr("Delete %1 Functions Everywhere…").arg(targetIds.size())
+                                         : tr("Delete Function Everywhere…"));
+        else
+            aDelete = menu.addAction(targetIds.size() > 1
+                                         ? tr("Delete %1 Functions").arg(targetIds.size())
+                                         : tr("Delete"));
         menu.addSeparator();
     }
 
@@ -2210,6 +2245,11 @@ void ProgrammingManager::slotFuncTreeMenu(const QPoint &pos)
     if (chosen == aDelete)
     {
         deleteFunctions(targetIds);
+        return;
+    }
+    if (chosen == aRemoveMember)
+    {
+        removeMembers(memberRefs);
         return;
     }
     if (chosen == aRenameFolder)
@@ -2416,29 +2456,9 @@ void ProgrammingManager::deleteFunctions(const QList<quint32> &fids)
     if (fids.isEmpty())
         return;
 
-    QStringList names;
-    int inContainers = 0;   // how many targets are referenced by a chaser/collection
-    for (quint32 fid : fids)
-    {
-        if (Function *f = m_doc->function(fid))
-        {
-            names.append(f->name());
-            if (functionUsageCount(fid) > 0)
-                inContainers++;
-        }
-    }
-    if (names.isEmpty())
+    const QString msg = deleteFunctionsMessage(fids);
+    if (msg.isEmpty())
         return;
-
-    QString msg = fids.size() > 1
-        ? tr("Delete %1 functions?\n\n%2").arg(names.size()).arg(names.join(", "))
-        : tr("Delete function \"%1\"?").arg(names.first());
-    // These may be shown as members of an open collection/chaser; deleting is
-    // GLOBAL, not just an unlink, so call that out.
-    if (inContainers > 0)
-        msg += tr("\n\nThis also removes %1 from every chaser and collection that uses %2.")
-                   .arg(inContainers > 1 || fids.size() > 1 ? tr("them") : tr("it"))
-                   .arg(inContainers > 1 || fids.size() > 1 ? tr("them") : tr("it"));
 
     if (QMessageBox::question(this, tr("Delete Functions"), msg,
                               QMessageBox::Yes | QMessageBox::No, QMessageBox::No)
@@ -2450,6 +2470,208 @@ void ProgrammingManager::deleteFunctions(const QList<quint32> &fids)
     // these) — so any QTreeWidgetItem* captured before the loop would dangle.
     for (quint32 fid : fids)
         m_doc->deleteFunction(fid);
+}
+
+QStringList ProgrammingManager::functionUsers(quint32 fid) const
+{
+    QStringList users;
+    foreach (Function *f, m_doc->functions())
+    {
+        if (f == NULL || f->id() == fid)
+            continue;
+        bool uses = false;
+        if (Collection *c = qobject_cast<Collection*>(f))
+            uses = c->functions().contains(fid);
+        else if (Chaser *ch = qobject_cast<Chaser*>(f))
+        {
+            foreach (const ChaserStep &st, ch->steps())
+                if (st.fid == fid) { uses = true; break; }
+        }
+        else if (Show *sh = qobject_cast<Show*>(f))
+        {
+            foreach (Track *trk, sh->tracks())
+            {
+                if (trk == NULL)
+                    continue;
+                foreach (ShowFunction *sf, trk->showFunctions())
+                    if (sf != NULL && sf->functionID() == fid) { uses = true; break; }
+                if (uses)
+                    break;
+            }
+        }
+        if (uses)
+            users << f->name();
+    }
+    users.sort(Qt::CaseInsensitive);
+    return users;
+}
+
+QString ProgrammingManager::deleteFunctionsMessage(const QList<quint32> &fids) const
+{
+    QStringList names;
+    QStringList usedLines;
+    for (quint32 fid : fids)
+    {
+        Function *f = m_doc->function(fid);
+        if (f == NULL)
+            continue;
+        names.append(f->name());
+        const QStringList users = functionUsers(fid);
+        if (users.isEmpty() == false)
+            usedLines << tr("“%1” is used in: %2").arg(f->name()).arg(users.join(", "));
+    }
+    if (names.isEmpty())
+        return QString();
+
+    QString msg = names.size() > 1
+        ? tr("Delete %1 functions?\n\n%2").arg(names.size()).arg(names.join(", "))
+        : tr("Delete function “%1”?").arg(names.first());
+    // These may be shown nested under a collection/chaser/show; deleting is
+    // GLOBAL, not an unlink — say so, and where they're used.
+    msg += QString("\n\n") + tr("This deletes the function itself, everywhere — "
+                                 "not just from one collection or chaser. "
+                                 "To only take it out of one, use “Remove from …”.");
+    if (usedLines.isEmpty() == false)
+        msg += QString("\n\n") + usedLines.join("\n")
+             + QString("\n") + tr("It will be removed from those too.");
+    return msg;
+}
+
+QList<ProgrammingManager::MemberRef> ProgrammingManager::funcTreeMemberTargets(QTreeWidgetItem *clicked) const
+{
+    QList<MemberRef> refs;
+    const QList<QTreeWidgetItem*> selected = m_funcTree->selectedItems();
+    const QList<QTreeWidgetItem*> rows =
+        (clicked != NULL && selected.contains(clicked)) ? selected
+            : (clicked != NULL ? QList<QTreeWidgetItem*>{clicked} : QList<QTreeWidgetItem*>{});
+
+    for (QTreeWidgetItem *it : rows)
+    {
+        QTreeWidgetItem *parent = it->parent();
+        if (parent == NULL || it->text(1).isEmpty() == false)
+            continue;
+        const QVariant idx = it->data(0, MEMBER_INDEX_ROLE);
+        if (idx.isValid() == false)
+            continue; // a real row of the tree, not a nested member
+        MemberRef r;
+        r.fid = m_funcTree->itemFunctionId(it);
+        if (r.fid == Function::invalidId())
+            continue;
+
+        const QVariant trackId = parent->data(0, SHOW_ITEM_ROLE);
+        if (trackId.isValid() && parent->parent() != NULL)
+        {
+            // Show → track row → placed function.
+            Show *sh = qobject_cast<Show*>(
+                m_doc->function(m_funcTree->itemFunctionId(parent->parent())));
+            if (sh == NULL)
+                continue;
+            r.container = sh->id();
+            r.trackId = trackId.toUInt();
+            r.showFuncId = it->data(0, SHOW_ITEM_ROLE).toUInt();
+        }
+        else
+        {
+            Function *c = m_doc->function(m_funcTree->itemFunctionId(parent));
+            if (qobject_cast<Collection*>(c) == NULL && qobject_cast<Chaser*>(c) == NULL)
+                continue;
+            r.container = c->id();
+            r.stepIndex = idx.toInt();
+        }
+        refs << r;
+    }
+    return refs;
+}
+
+int ProgrammingManager::removeMembers(const QList<MemberRef> &refs, bool confirm)
+{
+    if (refs.isEmpty())
+        return 0;
+
+    // Chaser steps and show items carry their own timing; say it goes with them.
+    bool timed = false;
+    for (const MemberRef &r : refs)
+    {
+        Function *c = m_doc->function(r.container);
+        if (qobject_cast<Chaser*>(c) != NULL || qobject_cast<Show*>(c) != NULL)
+            timed = true;
+    }
+    if (confirm && timed)
+    {
+        const QString msg = tr("Take %n item(s) out of the chaser / show?", "", refs.size())
+                + QString("\n\n")
+                + tr("The functions themselves stay; the step's fade, hold and "
+                     "note (or the show item's timing) go with it.");
+        if (QMessageBox::question(this, tr("Remove from container"), msg,
+                QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
+            return 0;
+    }
+
+    // Per container; chaser steps highest index first so the rest keep theirs.
+    QList<MemberRef> sorted = refs;
+    std::sort(sorted.begin(), sorted.end(), [](const MemberRef &a, const MemberRef &b) {
+        return a.container != b.container ? a.container < b.container
+                                          : a.stepIndex > b.stepIndex;
+    });
+
+    int removed = 0;
+    QSet<quint32> changed;
+    QStringList skippedShows;
+    for (const MemberRef &r : sorted)
+    {
+        Function *c = m_doc->function(r.container);
+        if (Collection *col = qobject_cast<Collection*>(c))
+        {
+            if (col->removeFunction(r.fid))
+            {
+                removed++;
+                changed.insert(r.container);
+            }
+        }
+        else if (Chaser *ch = qobject_cast<Chaser*>(c))
+        {
+            if (r.stepIndex >= 0 && r.stepIndex < ch->stepsCount()
+                    && ch->steps().at(r.stepIndex).fid == r.fid
+                    && ch->removeStep(r.stepIndex))
+            {
+                removed++;
+                changed.insert(r.container);
+            }
+        }
+        else if (Show *sh = qobject_cast<Show*>(c))
+        {
+            // A running show's runner holds its items: leave it alone.
+            if (sh->isRunning())
+            {
+                if (skippedShows.contains(sh->name()) == false)
+                    skippedShows << sh->name();
+                continue;
+            }
+            Track *trk = sh->track(r.trackId);
+            ShowFunction *sf = (trk != NULL) ? trk->showFunction(r.showFuncId) : NULL;
+            if (sf != NULL && sf->functionID() == r.fid && trk->removeShowFunction(sf, true))
+            {
+                removed++;
+                changed.insert(r.container);
+                emit sh->changed(sh->id());
+            }
+        }
+    }
+
+    if (removed > 0)
+    {
+        m_doc->setModified();
+        // Re-nest the open container's members, and refresh its editor.
+        if (m_memberContainer != Function::invalidId())
+            syncMemberNodes(m_memberContainer);
+        if (changed.contains(m_canvasFunction) && m_funcEditor != NULL)
+            if (Function *open = m_doc->function(m_canvasFunction))
+                loadFunctionEditor(open);
+    }
+    if (skippedShows.isEmpty() == false && confirm)
+        QMessageBox::information(this, tr("Show is running"),
+            tr("Stop %1 first to take items out of it.").arg(skippedShows.join(", ")));
+    return removed;
 }
 
 void ProgrammingManager::slotPaletteTreeMenu(const QPoint &pos)
@@ -2745,6 +2967,9 @@ QTreeWidgetItem *ProgrammingManager::addMemberLeaf(QTreeWidgetItem *parentNode, 
                 : mname);
     ci->setIcon(0, mf->getIcon());
     ci->setData(0, Qt::UserRole, mid); // so itemFunctionId() resolves it
+    // Where in its container (collection member / chaser step), so "Remove
+    // from …" takes out exactly this one (a chaser can hold a function twice).
+    ci->setData(0, MEMBER_INDEX_ROLE, orderIdx - 1);
     // Read-only nav: selectable + double-click to edit, not draggable.
     ci->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
 
@@ -2778,6 +3003,7 @@ void ProgrammingManager::addMemberChildren(QTreeWidgetItem *treeNode,
             QTreeWidgetItem *tn = new QTreeWidgetItem(treeNode);
             tn->setText(0, trk->name().isEmpty() ? tr("Track") : trk->name());
             tn->setData(0, Qt::UserRole, Function::invalidId()); // not a function
+            tn->setData(0, SHOW_ITEM_ROLE, trk->id());
             tn->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
 
             QList<ShowFunction*> sfs = trk->showFunctions();
@@ -2791,7 +3017,10 @@ void ProgrammingManager::addMemberChildren(QTreeWidgetItem *treeNode,
                 if (sf == NULL)
                     continue;
                 idx++;
-                addMemberLeaf(tn, sf->functionID(), idx, width, true, visited, depth);
+                QTreeWidgetItem *leaf =
+                    addMemberLeaf(tn, sf->functionID(), idx, width, true, visited, depth);
+                if (leaf != NULL)
+                    leaf->setData(0, SHOW_ITEM_ROLE, sf->id());
             }
             tn->setExpanded(true);
         }

@@ -73,6 +73,11 @@
 #undef protected
 
 #include "collection.h"
+#include "chaser.h"
+#include "chaserstep.h"
+#include "show.h"
+#include "track.h"
+#include "showfunction.h"
 #include <QBuffer>
 #include <QDrag>
 #include <QXmlStreamWriter>
@@ -2095,4 +2100,115 @@ void ProgrammingManager_Test::pressAndMoveOnARowDragsIt()
     QCOMPARE(tree->selectedItems().first(), first);
 
     QTest::mouseRelease(vp, Qt::LeftButton, Qt::NoModifier, to);
+}
+
+void ProgrammingManager_Test::rowsUnderAContainerComeOutOfIt()
+{
+    auto scene = [this](const QString &name) {
+        Scene *sc = new Scene(m_doc);
+        sc->setName(name);
+        m_doc->addFunction(sc);
+        return sc->id();
+    };
+    const quint32 startup = scene("0.0.1-Startup");
+    const quint32 shout = scene("0.0.2-Shout");
+    const quint32 walk = scene("0.0.3-Walk");
+
+    Collection *coll = new Collection(m_doc);
+    coll->setName("0.0.4-SHOUT");
+    m_doc->addFunction(coll);
+    coll->addFunction(startup);
+    coll->addFunction(shout);
+    coll->addFunction(walk);
+
+    Chaser *chaser = new Chaser(m_doc);
+    chaser->setName("Cues");
+    m_doc->addFunction(chaser);
+    chaser->addStep(ChaserStep(walk));
+    chaser->addStep(ChaserStep(shout));
+    chaser->addStep(ChaserStep(walk)); // the same scene twice
+
+    ProgrammingManager mgr(nullptr, m_doc);
+    FunctionsTreeWidget *tree = mgr.m_funcTree;
+    tree->updateTree();
+
+    // Open the collection: its members show nested under its row.
+    mgr.loadFunctionEditor(coll);
+    QTreeWidgetItem *collRow = tree->functionItem(coll);
+    QVERIFY(collRow != nullptr);
+    QCOMPARE(collRow->childCount(), 3);
+    auto memberRow = [](QTreeWidgetItem *parent, const QString &name) -> QTreeWidgetItem * {
+        for (int i = 0; i < parent->childCount(); i++)
+            if (parent->child(i)->text(0).endsWith(name))
+                return parent->child(i);
+        return nullptr;
+    };
+
+    // Two selected under it -> two refs to that collection.
+    tree->clearSelection();
+    memberRow(collRow, "Startup")->setSelected(true);
+    memberRow(collRow, "Walk")->setSelected(true);
+    QList<ProgrammingManager::MemberRef> refs =
+        mgr.funcTreeMemberTargets(memberRow(collRow, "Walk"));
+    QCOMPARE(refs.size(), 2);
+    QCOMPARE(refs.at(0).container, coll->id());
+    QCOMPARE(refs.at(1).container, coll->id());
+    // A real (top-level) scene row is not a member row.
+    QVERIFY(mgr.funcTreeMemberTargets(tree->functionItem(m_doc->function(shout))).isEmpty());
+
+    // "Delete" on one of them says it's the function itself, and where it's used.
+    const QString msg = mgr.deleteFunctionsMessage({ walk });
+    QVERIFY(msg.contains("everywhere"));
+    QVERIFY(msg.contains("0.0.4-SHOUT"));
+    QVERIFY(msg.contains("Cues"));
+
+    m_doc->resetModified();
+    QCOMPARE(mgr.removeMembers(refs, false), 2);
+    QCOMPARE(coll->functions(), QList<quint32>() << shout);
+    // Only the membership: the scenes are still in the show.
+    QVERIFY(m_doc->function(startup) != nullptr);
+    QVERIFY(m_doc->function(walk) != nullptr);
+    QVERIFY(m_doc->isModified());
+    // The nested rows follow.
+    collRow = tree->functionItem(coll);
+    QCOMPARE(collRow->childCount(), 1);
+
+    // A chaser holding Walk twice: take out the third step only.
+    mgr.loadFunctionEditor(chaser);
+    QTreeWidgetItem *chRow = tree->functionItem(chaser);
+    QCOMPARE(chRow->childCount(), 3);
+    QTreeWidgetItem *third = nullptr;
+    for (int i = 0; i < chRow->childCount(); i++)
+        if (chRow->child(i)->data(0, Qt::UserRole + 3).toInt() == 2)
+            third = chRow->child(i);
+    QVERIFY(third != nullptr);
+    refs = mgr.funcTreeMemberTargets(third);
+    QCOMPARE(refs.size(), 1);
+    QCOMPARE(refs.first().stepIndex, 2);
+    QCOMPARE(mgr.removeMembers(refs, false), 1);
+    QCOMPARE(chaser->stepsCount(), 2);
+    QCOMPARE(chaser->steps().at(0).fid, walk);
+    QCOMPARE(chaser->steps().at(1).fid, shout);
+
+    // A show: an item placed on a track comes off it.
+    Show *show = new Show(m_doc);
+    show->setName("Preshow");
+    m_doc->addFunction(show);
+    Track *trk = new Track(Function::invalidId(), show);
+    trk->setName("Lights");
+    show->addTrack(trk);
+    QVERIFY(trk->createShowFunction(startup) != nullptr);
+    tree->updateTree();
+    mgr.syncMemberNodes(Function::invalidId());
+    mgr.loadFunctionEditor(show);
+    QTreeWidgetItem *showRow = tree->functionItem(show);
+    QVERIFY(showRow != nullptr && showRow->childCount() == 1);
+    QTreeWidgetItem *placed = showRow->child(0)->child(0);
+    QVERIFY(placed != nullptr);
+    refs = mgr.funcTreeMemberTargets(placed);
+    QCOMPARE(refs.size(), 1);
+    QCOMPARE(refs.first().container, show->id());
+    QCOMPARE(mgr.removeMembers(refs, false), 1);
+    QVERIFY(trk->showFunctions().isEmpty());
+    QVERIFY(m_doc->function(startup) != nullptr);
 }
