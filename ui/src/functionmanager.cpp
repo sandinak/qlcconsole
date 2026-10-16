@@ -202,6 +202,28 @@ void FunctionManager::slotPaletteRemoved(quint32 id)
 void FunctionManager::showEvent(QShowEvent* ev)
 {
     qDebug() << Q_FUNC_INFO;
+    // Pick up folder moves made elsewhere (the Programming tab files functions
+    // into folders by drag). Rebuild quietly and keep the selection, so the
+    // open editor isn't torn down.
+    if (m_tree != NULL)
+    {
+        QList<quint32> selected;
+        foreach (QTreeWidgetItem *item, m_tree->selectedItems())
+            selected << m_tree->itemFunctionId(item);
+        m_tree->updateTree();
+        const bool wasBlocked = m_tree->blockSignals(true);
+        foreach (quint32 fid, selected)
+        {
+            Function *f = m_doc->function(fid);
+            QTreeWidgetItem *item = (f != NULL) ? m_tree->functionItem(f) : NULL;
+            if (item != NULL)
+            {
+                item->setSelected(true);
+                m_tree->scrollToItem(item);
+            }
+        }
+        m_tree->blockSignals(wasBlocked);
+    }
     emit functionManagerActive(true);
     QWidget::showEvent(ev);
 }

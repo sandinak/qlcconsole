@@ -36,7 +36,8 @@ Three panes:
 
 - **Left — Scenes / functions.** A filterable tree of every function
   (Scene/Chaser/Collection/EFX/RGB Matrix/Show) in folders. Single-click
-  selects; double-click opens it in the canvas.
+  selects; double-click opens it in the canvas. See
+  [Filing into folders](#filing-into-folders).
 - **Center — canvas.** A toolbar — **Highlight**, **Flash**, **Tap** and
   **Save Positions** as buttons; **Park** (park selected, unpark all),
   **Move in black** (mark, unmark, auto move-in-black and its lead time),
@@ -65,6 +66,28 @@ Double-clicking a fixture group opens its layout view in the canvas. A
 **← Back to &lt;scene&gt;** button there returns you to the scene you came
 from; if you open an effect while in a group's view, the tab goes back to
 that scene first, with the effect showing.
+
+## Filing into folders
+
+Both the scenes/functions tree and the Palettes tab keep things in folders.
+
+- **Drag to file.** Press on a scene (or any function, or a palette) and
+  drag it onto a folder — it moves in. Drop it on another row and it joins
+  that row's folder; drop it on the type's heading (**Scene**, **Chaser**…)
+  or on empty space below the list to take it back out to the top. Select
+  several first (⇧/⌘-click) to move them together. The folder it will land
+  in is outlined while you drag, and hovering over a closed folder opens it.
+- **Folders move too.** Drag a folder onto another folder and it goes inside
+  it with everything in it.
+- A scene stays among scenes, a chaser among chasers: a folder of another
+  type doesn't take it. Dropping a scene **on a Collection's row** adds it
+  to that collection instead of filing it.
+- **Right-click a folder** for **Rename Folder**, **Delete Folder** and the
+  usual **New …** items, which then create inside it. Deleting an empty
+  folder just removes it. Deleting one with things in it asks first, and
+  what was in it moves up a level — nothing is deleted.
+
+Folders are saved with the show and show the same in the Functions tab.
 
 ## Building a look, step by step
 

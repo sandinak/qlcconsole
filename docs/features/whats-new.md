@@ -4,6 +4,15 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## October 2026
 
+### Programming
+
+- **Drag scenes and palettes into folders.** In the Programming tab, a scene
+  (or several, or a whole folder) dragged onto a folder moves into it, and
+  onto the type's heading or empty space moves back out; pressing on a row
+  and moving now always drags it, where before it could rubber-band select
+  instead. Right-click a folder to rename or delete it — deleting keeps what
+  was in it. See [Filing into folders](programming-tab.md#filing-into-folders).
+
 ### Sub-cues
 
 - **Cues inside a cue.** A chase used as a step of a cue list lists its

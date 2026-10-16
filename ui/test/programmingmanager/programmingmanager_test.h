@@ -101,6 +101,28 @@ private slots:
      *  Targets list. */
     void aRenamedFixedTargetShowsItsNewName();
 
+    /** "I can't seem to drag a scene to a folder in the programming view":
+     *  scenes dropped on a folder move into it (with or without a collection
+     *  open), onto the category/empty space move back out, the show is
+     *  modified and the paths survive save + load; a drop on a collection row
+     *  still adds members, and the payload still carries the function ids the
+     *  collection/chaser/show editors read. */
+    void scenesDragIntoAFolderAndBackOut();
+    /** A folder dragged onto another folder moves inside it with everything
+     *  in it; never into itself. */
+    void aFolderDragsIntoAnotherFolder();
+    /** Palettes and palette folders drag into folders too, including an
+     *  empty folder just made from the menu. */
+    void palettesAndTheirFoldersDragIntoFolders();
+    /** "I can't right click on an empty folder to delete it": Delete Folder
+     *  removes an empty folder outright; a folder with things in it hands
+     *  them to its parent folder — nothing is deleted. */
+    void deletingAFolderKeepsWhatIsInIt();
+    /** "it was drag selecting other things vs dragging to folder": press on
+     *  a row that isn't selected and move -> it's a drag of that row, not a
+     *  rubber-band selection growing over the rows passed. */
+    void pressAndMoveOnARowDragsIt();
+
 private:
     Doc* m_doc;
 };

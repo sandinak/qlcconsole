@@ -6,6 +6,52 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-16 — Programming tab: drag scenes/palettes/folders into folders; folder menu *(fix/programming-drag-to-folder)*
+
+Branson: "I can't seem to drag a scene to a folder in the programming view";
+"I can't right click on an empty folder to delete it"; "when I first tried ..
+it was drag selecting other things vs dragging to folder."
+
+- **Why**: the nav tree (`m_funcTree`) was never given a drag mode at
+  construction (`programmingmanager.cpp` ~L117-136 on release/0.1.0), so until
+  a function was opened it was `NoDragDrop`: press-and-move rubber-band
+  selected rows. Opening a scene/EFX/matrix switched it to Qt `InternalMove`
+  (L916/L1047), and opening a collection/chaser/show to external mode, whose
+  `FunctionsTreeWidget::dragMoveEvent/dropEvent` (functionstreewidget.cpp
+  L1099-1108 / L1125-1131) only accepted functions on a *Collection* row —
+  never on a folder. Palette drops worked but palette *folders* weren't
+  draggable, and an empty palette folder made via "New folder…" in the
+  palettes-only tree was tagged FunctionNode (invisible root has no kind), so
+  it refused palette drops.
+- **Fix**: the nav tree is in external drag mode from the start and always;
+  `FunctionsTreeWidget::canDropMimeOn()/dropMimeOn()` (used by
+  dragMove/drop) take functions, palettes and folders (new
+  `application/x-qlcconsole-folders` payload) onto a folder / a row (joins its
+  folder) / the category or empty space (top level), type-checked, never a
+  folder into itself; sets paths, `Doc::setModified()`, rebuilds the tree on
+  the next turn (re-creating empty sub-folders) and emits
+  `folderContentsMoved()` (Programming re-nests collection member rows). A
+  Collection row still takes dropped functions as members; payload for the
+  collection/chaser/show editors and the looks canvas unchanged. Drop target
+  outlined (custom paint), autoscroll + hover-to-open (autoExpandDelay 600).
+  `folderItem()` gives invisible-root folders PaletteNode. Function Manager
+  rebuilds its tree on show (keeps selection) so moves made here appear there.
+- **Folder menu** (both trees): Rename / Delete Folder; Delete on an empty
+  folder is immediate, with contents asks and moves them up a level
+  (`removeFolderKeepContents`, nothing deleted). "New Folder" now creates
+  under the right-clicked row (it used the selection).
+- No undo for folder moves (the tab's undo is per-scene look edits; Function
+  Manager has none for moves either).
+- Tests (programmingmanager_test): `scenesDragIntoAFolderAndBackOut`
+  (incl. save/load round-trip, collection open, collection-row membership),
+  `aFolderDragsIntoAnotherFolder`, `palettesAndTheirFoldersDragIntoFolders`,
+  `deletingAFolderKeepsWhatIsInIt`, `pressAndMoveOnARowDragsIt` (QTest press
+  + move on an unselected row starts a QDrag carrying only that row). The
+  first and last fail with the old construction. Help: programming-tab.md
+  "Filing into folders", whats-new.
+
+---
+
 ### 2026-10-16 — Connections: patch / unpatch several universes at once *(fix/connections-multipatch)*
 
 Branson: "when I select a group to patch or unpatch from the universes

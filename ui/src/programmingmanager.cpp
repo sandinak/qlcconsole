@@ -133,6 +133,14 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     // Shift/Ctrl-click to select several functions at once, then drag, delete or
     // duplicate them together. mimeData() already streams every selected id.
     m_funcTree->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    // Drag is ALWAYS on, with the tree's own payload: press on any row and move
+    // drags it (or the selection it belongs to) — into a folder, onto a
+    // collection row, or out to the open collection/chaser/show/canvas. Before,
+    // the tree had no drag mode at all until a function was opened, so a
+    // press-and-move rubber-band-selected rows instead of dragging them, and
+    // with a collection open a scene couldn't be dropped on a folder.
+    m_funcTree->setExternalDragMode(true);
+    m_funcTree->setAutoExpandDelay(600); // hover a folder to open it mid-drag
     m_funcTree->updateTree();
 
     QHBoxLayout *navToolbar = new QHBoxLayout;
@@ -684,6 +692,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     m_paletteTree->setSortingEnabled(true);
     m_paletteTree->sortByColumn(0, Qt::AscendingOrder);
     m_paletteTree->setExternalDragMode(true);
+    m_paletteTree->setAutoExpandDelay(600);
     m_paletteTree->setContextMenuPolicy(Qt::CustomContextMenu);
     // Multi-select so several palettes can be dragged onto a look together, or
     // saved as a Bundle in one action from the context menu.
@@ -761,12 +770,15 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     connect(m_paletteTree, SIGNAL(customContextMenuRequested(QPoint)),
             this, SLOT(slotPaletteTreeMenu(QPoint)));
 
-    // Drag palettes onto folders to re-file them. Defer the rebuild: this fires
-    // from the tree's dropEvent, and updateTree() deletes the items Qt's drag
-    // machinery still references (use-after-free) if done synchronously.
-    connect(m_paletteTree, &FunctionsTreeWidget::paletteDroppedToFolder,
-            this, [this]() {
-        QTimer::singleShot(0, this, [this]() { m_paletteTree->updateTree(); m_doc->setModified(); });
+    // Drag scenes/functions/palettes/folders onto folders to re-file them. The
+    // trees set the paths and rebuild themselves (deferred, outside the drop);
+    // the nav tree's rebuild drops the nested collection/chaser member rows, so
+    // put those back.
+    connect(m_funcTree, &FunctionsTreeWidget::folderContentsMoved, this, [this]() {
+        const quint32 c = m_memberContainer;
+        m_memberContainer = Function::invalidId();
+        if (c != Function::invalidId())
+            syncMemberNodes(c);
     });
 
     // Drag scene(s) / other collection(s) onto a collection node in the nav tree
@@ -913,7 +925,6 @@ void ProgrammingManager::loadCanvas(quint32 sceneId)
     m_lookEditor->setPalette(QLCPalette::invalidId());
     if (Monitor::instance() != NULL)
         Monitor::instance()->setActiveScene(sceneId);
-    m_funcTree->setExternalDragMode(false); // only collections/chasers need it
     // Keep the collection/chaser context (its nested subtree) when drilling
     // into one of ITS member scenes, so you can go back and forth; clear it
     // only when opening an unrelated scene.
@@ -1044,7 +1055,6 @@ void ProgrammingManager::loadFunctionEditor(Function *f)
         break;
     }
 
-    m_funcTree->setExternalDragMode(dragIn);
     // If this function is nested inside the current container's tree (e.g. a
     // collection under the open chaser), keep that context + subtree — just
     // show/preview the selected function. Otherwise establish a new context.
@@ -1092,7 +1102,6 @@ void ProgrammingManager::loadGroupEditor(quint32 groupId)
     if (Monitor::instance() != NULL)
         Monitor::instance()->setActiveScene(Function::invalidId());
 
-    m_funcTree->setExternalDragMode(false);
     syncMemberNodes(Function::invalidId());
     clearEditors();
 
@@ -2125,6 +2134,17 @@ void ProgrammingManager::slotFuncTreeMenu(const QPoint &pos)
 
     QMenu menu(this);
 
+    // A folder row: rename / delete it (its contents are kept, see
+    // deleteTreeFolder) — "New …" below then creates inside it.
+    QAction *aRenameFolder = NULL;
+    QAction *aDeleteFolder = NULL;
+    if (m_funcTree->isUserFolder(clickedItem))
+    {
+        aRenameFolder = menu.addAction(tr("Rename Folder"));
+        aDeleteFolder = menu.addAction(tr("Delete Folder"));
+        menu.addSeparator();
+    }
+
     // Duplicate / Delete first, but only when a function is actually targeted —
     // on empty space or a folder the menu is just the "New …" palette.
     QAction *aDuplicate = NULL;
@@ -2192,8 +2212,26 @@ void ProgrammingManager::slotFuncTreeMenu(const QPoint &pos)
         deleteFunctions(targetIds);
         return;
     }
+    if (chosen == aRenameFolder)
+    {
+        m_funcTree->editItem(clickedItem, 0);
+        return;
+    }
+    if (chosen == aDeleteFolder)
+    {
+        deleteTreeFolder(m_funcTree, clickedItem);
+        return;
+    }
     if (chosen == aFolder)
     {
+        // Create it where the user right-clicked (addFolder() works from the
+        // selection, which a right-click doesn't move).
+        if (clickedItem != NULL)
+        {
+            m_funcTree->clearSelection();
+            m_funcTree->setCurrentItem(clickedItem);
+            clickedItem->setSelected(true);
+        }
         m_funcTree->addFolder();
         return;
     }
@@ -2461,6 +2499,15 @@ void ProgrammingManager::slotPaletteTreeMenu(const QPoint &pos)
     menu.addSeparator();
     QAction *aNewFolder = menu.addAction(tr("New folder…"));
 
+    QTreeWidgetItem *clickedPalItem = m_paletteTree->itemAt(pos);
+    QAction *aRenameFolder = NULL;
+    QAction *aDeleteFolder = NULL;
+    if (m_paletteTree->isUserFolder(clickedPalItem))
+    {
+        aRenameFolder = menu.addAction(tr("Rename folder"));
+        aDeleteFolder = menu.addAction(tr("Delete folder"));
+    }
+
     // Palettes the menu acts on: the whole selection if the clicked row is part
     // of it, else just the clicked row.
     const QList<quint32> targetPalettes =
@@ -2497,6 +2544,16 @@ void ProgrammingManager::slotPaletteTreeMenu(const QPoint &pos)
     if (chosen == aBundle)
     {
         saveBundleFromPalettes(targetPalettes);
+        return;
+    }
+    if (chosen == aRenameFolder)
+    {
+        m_paletteTree->editItem(clickedPalItem, 0);
+        return;
+    }
+    if (chosen == aDeleteFolder)
+    {
+        deleteTreeFolder(m_paletteTree, clickedPalItem);
         return;
     }
 
@@ -2601,6 +2658,32 @@ void ProgrammingManager::slotPaletteTreeMenu(const QPoint &pos)
         m_doc->setModified();
         m_paletteTree->updateTree();
     }
+}
+
+bool ProgrammingManager::deleteTreeFolder(FunctionsTreeWidget *tree, QTreeWidgetItem *item,
+                                          bool confirm)
+{
+    if (tree == NULL || tree->isUserFolder(item) == false)
+        return false;
+
+    const int count = tree->folderContentCount(item);
+    if (confirm && count > 0)
+    {
+        // Where its contents go: the parent folder, or the top level.
+        QTreeWidgetItem *parent = item->parent();
+        const QString where = (parent != NULL && tree->isUserFolder(parent))
+                ? tr("the “%1” folder").arg(parent->text(0))
+                : tr("the top level");
+        const QString msg = tr("Delete the folder “%1”?").arg(item->text(0))
+                + QString("\n\n")
+                + tr("The %n item(s) in it move up to %1. Nothing is deleted.", "", count)
+                      .arg(where);
+        if (QMessageBox::question(this, tr("Delete folder"), msg,
+                QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
+            return false;
+    }
+    tree->removeFolderKeepContents(item);
+    return true;
 }
 
 void ProgrammingManager::syncMemberNodes(quint32 containerId)

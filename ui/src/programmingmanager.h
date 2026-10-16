@@ -243,6 +243,13 @@ private:
      *  first deletion rebuilds the tree and invalidates every item pointer. */
     void deleteFunctions(const QList<quint32> &fids);
 
+    /** Delete the user folder $item of $tree. Its functions/palettes and
+     *  sub-folders move up into the parent folder — nothing is deleted. A
+     *  folder with something in it asks first (unless $confirm is false).
+     *  Returns true if the folder was removed. */
+    bool deleteTreeFolder(FunctionsTreeWidget *tree, QTreeWidgetItem *item,
+                          bool confirm = true);
+
     /** Add @p fids to collection @p containerId (skipping self / duplicates /
      *  cycles) and refresh the nav tree + canvas editor if they show it. Called
      *  when functions are dropped onto a collection node in the nav tree. */
