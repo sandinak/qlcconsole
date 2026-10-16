@@ -230,8 +230,8 @@ UniversePatchGrid::UniversePatchGrid(Doc *doc, QWidget *parent)
 
     connect(m_table, &QTableWidget::itemChanged, this, &UniversePatchGrid::onItemChanged);
     connect(m_table, &QTableWidget::itemSelectionChanged, this, &UniversePatchGrid::onSelectionChanged);
-    connect(m_ioMap, SIGNAL(universeAdded(quint32)), this, SLOT(reload()));
-    connect(m_ioMap, SIGNAL(universeRemoved(quint32)), this, SLOT(reload()));
+    connect(m_ioMap, SIGNAL(universeAdded(quint32)), this, SLOT(scheduleReload()));
+    connect(m_ioMap, SIGNAL(universeRemoved(quint32)), this, SLOT(scheduleReload()));
 
     // Live input-activity indicator: flash the input field when data arrives
     // (same signal the Detailed view uses). Highlighting the existing cell keeps
