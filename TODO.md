@@ -538,6 +538,22 @@ rig edits, bulk repatching, cross-show consistency checks.
      .qxf files into, and Fetch Definitions rereads it. Windows CI now runs
      the rig view on D3D11 (WARP): GPU-vs-CPU matches as on Metal/GL, and the
      pictures are kept (rig-shots-windows artifact).
+  8. Windows "slow ticks, 640% CPU" on the STRESS show (2026-10-16, VM, 8
+     vCPU i7-10700K, headless, outputs stripped). Stack-sampled (a ctypes
+     SuspendThread + dbghelp StackWalk64 sampler; nothing installed). The
+     build measured, da40149e5, predated d5f527e35: the 16 busy universe
+     threads spent ~40% of a core each formatting Universe::writeBlended's
+     per-tick qDebug (QTextStream/QLocale/toLocal8Bit -- dear on MinGW),
+     holding their fader locks, so the timer thread sat in
+     Universe::requestFader's mutex: 68 ms mean tick (94% over), 660% CPU.
+     release/0.1.0 (d7fe56924) already ran it at 7.9 ms / 0.3% over / 300%
+     CPU -- but leaked ~5000 kernel handles a second (3 M handles, +300 MB in
+     10 min): MinGW's std::recursive_mutex is never destroyed and winpthreads
+     gives each one an Event. GenericFader's lock is QRecursiveMutex on
+     Windows now (fix/win-tick-perf): handles flat at ~1600, private bytes
+     flat, 8.1 ms / 0.2% over / 287% CPU. What's left is ordinary engine work
+     (Scene::processValue, the universe threads' GenericFader::write); Linux
+     on ender does the same show at 2.3 ms / ~165%.
 
 - **Warning backlog outside the `-Werror` set (OPEN, 2026-08-25)** — a
   tree-wide `-Wall -Wextra` sweep reports ~1100
