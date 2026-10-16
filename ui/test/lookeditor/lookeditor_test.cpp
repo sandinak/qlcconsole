@@ -304,12 +304,12 @@ void LookEditor_Test::effectsArePickedFromABrowserWithWledsOwn()
     QCOMPARE(look->name(), QString("WLED Chase"));
     QCOMPARE(EffectBrowser::recent().first(), QString("3:Chase"));
 
-    // One with no port: the device runs it; the look gets WLED's controls.
-    browser->search()->setText("fireworks");
-    QListWidgetItem *fireworks = rowNamed("Fireworks", "WLED");
-    QVERIFY(fireworks != nullptr);
-    emit browser->list()->itemClicked(fireworks);
-    QCOMPARE(look->wledEffect(), QString("Fireworks"));
+    // One with no port (a 2D one): the device runs it; the look gets WLED's controls.
+    browser->search()->setText("game of life");
+    QListWidgetItem *life = rowNamed("Game Of Life", "WLED");
+    QVERIFY(life != nullptr);
+    emit browser->list()->itemClicked(life);
+    QCOMPARE(look->wledEffect(), QString("Game Of Life"));
     QVERIFY(look->scriptPath().endsWith("wled-device.js"));
 
     // An ordinary effect is not a WLED one.

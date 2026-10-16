@@ -16992,10 +16992,10 @@ void Monitor_Test::aWledLanternShowsItsEffectLedByLed()
     f = lp.frame(lantern, values(28), 16, Qt::red, 0.5, true);
     QCOMPARE(f.leds.count(QColor(128, 0, 0)), 13);
 
-    // Fireworks has none (yet): colour 1, and it says what it is not showing.
-    f = lp.frame(lantern, values(42), 16, Qt::red, 1.0, true);
+    // Game Of Life (2D) has none: colour 1, and it says what it is not showing.
+    f = lp.frame(lantern, values(172), 16, Qt::red, 1.0, true);
     QCOMPARE(f.source, LanternPixels::Flat);
-    QCOMPARE(f.tag, QString("WLED: Fireworks"));
+    QCOMPARE(f.tag, QString("WLED: Game Of Life"));
     QCOMPARE(f.leds.count(QColor(255, 0, 0)), 16);
     // Solid is exactly that.
     f = lp.frame(lantern, values(0), 16, Qt::red, 1.0, true);
