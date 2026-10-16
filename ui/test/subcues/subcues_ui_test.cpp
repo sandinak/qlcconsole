@@ -34,6 +34,7 @@
 #undef private
 #undef protected
 #include "functionparent.h"
+#include "showcontrol.h"
 #include "chaserstep.h"
 #include "chaser.h"
 #include "scene.h"
@@ -353,6 +354,45 @@ void SubCuesUi_Test::subGoAndSubBackHaveTheirShortcuts()
     QVERIFY(!taken.contains(App::cueSubGoShortcut()));
     QVERIFY(!taken.contains(App::cueSubBackShortcut()));
     QVERIFY(App::cueSubGoShortcut() != App::cueSubBackShortcut());
+}
+
+/* P3: show control's LOAD 4.2 -- the footer's and the cue list's "Next:"
+   say the sub-cue, by its number and its own name. */
+void SubCuesUi_Test::aLoadedSubCueIsWhatNextSays()
+{
+    Chaser *inner = makeInner(3);
+    Chaser *list = makeList(3, 1, inner, ChaserStep::SubGo);
+    ShowControl *sc = m_doc->showControl();
+    sc->setMainCueList(list->id());
+    QWidget w;
+    VCCueList cl(&w, m_doc);
+    cl.setChaser(list->id());
+
+    QCOMPARE(App::standbyNextText(nullptr, list), QString());
+    QCOMPARE(App::standbyNextText(sc, list), QString("Next: 1 \u2014 Cue 1"));
+
+    QVERIFY(sc->execute({ ShowControl::Load, "2.3", QString() }));
+    QCOMPARE(App::standbyNextText(sc, list), QString("Next: 2.3 \u2014 Inner 3"));
+    cl.updateStandby();
+    QVERIFY2(cl.m_standbyLabel->text().startsWith(QString("Next: 2.3 \u2014 Inner 3")),
+             qPrintable(cl.m_standbyLabel->text()));
+
+    // A main cue LOADed instead: that's what it says.
+    QVERIFY(sc->execute({ ShowControl::Load, "3", QString() }));
+    QCOMPARE(App::standbyNextText(sc, list), QString("Next: 3 \u2014 Cue 3"));
+    cl.updateStandby();
+    QVERIFY(cl.m_standbyLabel->text().startsWith(QString("Next: 3 \u2014 Cue 3")));
+
+    // GO 2.2 over OSC's way in (show control): cue 2 at 2.2, and the
+    // footer's Sub GO part follows on from there.
+    QVERIFY(sc->execute({ ShowControl::Go, "2.2", QString() }));
+    tick();
+    QCOMPARE(list->currentStepIndex(), 1);
+    QCOMPARE(list->currentSubCueIndex(), 1);
+    QCOMPARE(App::standbySubCueText(list), QString("Sub: 2.3"));
+    QVERIFY(sc->execute({ ShowControl::SubGo, QString(), QString() }));
+    tick();
+    QCOMPARE(App::standbySubCueText(list), QString("Sub: (end of 2)"));
 }
 
 QTEST_MAIN(SubCuesUi_Test)

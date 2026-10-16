@@ -40,6 +40,7 @@ private slots:
     void aCueListWithoutSubGoHasNoSubGoButton();
     void theFooterSaysWhatSubGoPlays();
     void subGoAndSubBackHaveTheirShortcuts();
+    void aLoadedSubCueIsWhatNextSays();
 
 private:
     Chaser *makeInner(int steps);

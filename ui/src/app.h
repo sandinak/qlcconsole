@@ -53,6 +53,7 @@ class QSlider;
 class App;
 class StartupWindow;
 class Chaser;
+class ShowControl;
 
 /** @addtogroup ui UI
  * @{
@@ -604,6 +605,11 @@ public:
      *  (what Sub GO plays), "Sub: (end of 4)", or empty when the cue playing
      *  has no sub-cues on Sub GO. */
     static QString standbySubCueText(const Chaser *list);
+    /** The footer's "Next:" part for @a list: what GO plays -- a LOADed
+     *  sub-cue as its number and its own name ("Next: 4.2 — Wash"), a cue
+     *  as its number and its function's ("Next: 5 — Blackout") -- or
+     *  "Next: (end of <list>)". */
+    static QString standbyNextText(const ShowControl *sc, const Chaser *list);
     /** Sub GO and Sub Back on the main cue list: ⌥⌘↩ and ⌥⌘⇧↩ on macOS
      *  (beside GO ⌘↩ and Back ⌘⇧↩). */
     static QKeySequence cueSubGoShortcut();

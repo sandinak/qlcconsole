@@ -1751,18 +1751,16 @@ void App::initActions()
     m_cueSubGoAction = new QAction(tr("Sub GO (Main Cue List)"), this);
     m_cueSubGoAction->setShortcut(cueSubGoShortcut());
     m_cueSubGoAction->setShortcutContext(Qt::ApplicationShortcut);
+    // Through show control, as GO is: what came of it is reported the
+    // same way (Connections → Show control & sync, last command).
     connect(m_cueSubGoAction, &QAction::triggered, this, [this]() {
-        Chaser *list = m_doc->showControl()->cueList(QString());
-        if (list != NULL && list->isRunning())
-            list->subGo();
+        m_doc->showControl()->execute({ ShowControl::SubGo, QString(), QString() });
     });
     m_cueSubBackAction = new QAction(tr("Sub Back (Main Cue List)"), this);
     m_cueSubBackAction->setShortcut(cueSubBackShortcut());
     m_cueSubBackAction->setShortcutContext(Qt::ApplicationShortcut);
     connect(m_cueSubBackAction, &QAction::triggered, this, [this]() {
-        Chaser *list = m_doc->showControl()->cueList(QString());
-        if (list != NULL && list->isRunning())
-            list->subBack();
+        m_doc->showControl()->execute({ ShowControl::SubBack, QString(), QString() });
     });
 
     m_helpIndexAction = new QAction(tr("QLC+ Reference (online)"), this);
@@ -5346,17 +5344,7 @@ void App::slotUpdateStandby()
         m_statusStandby->hide();
         return;
     }
-    const int next = sc->standbyStep(list);
-    QString text;
-    if (next < 0)
-        text = tr("Next: (end of %1)").arg(list->name());
-    else
-    {
-        const Function *f = m_doc->function(list->steps().at(next).fid);
-        text = tr("Next: %1").arg(list->stepCue(next));
-        if (f != NULL)
-            text += QStringLiteral(" \u2014 ") + f->name();
-    }
+    QString text = standbyNextText(sc, list);
     // The cue playing has sub-cues on Sub GO: what Sub GO plays first
     // ("Sub: 4.2 · Next: 5"), or that there are none left in it.
     const QString sub = standbySubCueText(list);
@@ -5365,6 +5353,28 @@ void App::slotUpdateStandby()
     if (m_statusStandby->text() != text)
         m_statusStandby->setText(text);
     m_statusStandby->show();
+}
+
+QString App::standbyNextText(const ShowControl *sc, const Chaser *list)
+{
+    if (sc == NULL || list == NULL)
+        return QString();
+    const int next = sc->standbyStep(list);
+    if (next < 0)
+        return tr("Next: (end of %1)").arg(list->name());
+
+    const int sub = sc->standbySubCue(list);
+    const Chaser *named = sub < 0 ? list : list->subCueChase(next);
+    const int index = sub < 0 ? next : sub;
+    QString text = tr("Next: %1").arg(ShowControl::cueName(list, next, sub));
+    const QList<ChaserStep> steps = named != NULL ? named->steps() : QList<ChaserStep>();
+    const Doc *doc = list->doc();
+    if (doc != NULL && index < steps.count())
+    {
+        if (const Function *f = doc->function(steps.at(index).fid))
+            text += QStringLiteral(" \u2014 ") + f->name();
+    }
+    return text;
 }
 
 QKeySequence App::cueSubGoShortcut()
@@ -5424,7 +5434,27 @@ void App::slotFillStandbyMenu()
             sc->execute({ ShowControl::Load, cue, QString() });
         });
         a->setCheckable(true);
-        a->setChecked(i == sc->standbyStep(list));
+        a->setChecked(i == sc->standbyStep(list) && sc->standbySubCue(list) < 0);
+
+        // A cue on Sub GO: its sub-cues, indented under it (LOAD 4.2).
+        if (!list->isSubGoStep(i))
+            continue;
+        const Chaser *inner = list->subCueChase(i);
+        const QList<ChaserStep> subSteps = inner->steps();
+        for (int j = 0; j < subSteps.count(); ++j)
+        {
+            const QString subCue = list->subCue(i, j);
+            QString subLabel = QStringLiteral("    ") + subCue;
+            if (const Function *sf = m_doc->function(subSteps.at(j).fid))
+                subLabel += QStringLiteral(" \u2014 ") + sf->name();
+            if (subSteps.at(j).skip)
+                subLabel += tr(" (skipped)");
+            QAction *sa = load->addAction(subLabel, this, [sc, subCue]() {
+                sc->execute({ ShowControl::Load, subCue, QString() });
+            });
+            sa->setCheckable(true);
+            sa->setChecked(i == sc->standbyStep(list) && j == sc->standbySubCue(list));
+        }
     }
     menu->addSeparator();
     const quint32 id = list->id();
