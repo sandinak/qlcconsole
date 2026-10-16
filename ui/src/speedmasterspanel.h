@@ -47,6 +47,7 @@ class SpeedMastersPanel final : public QWidget
 
 public:
     explicit SpeedMastersPanel(Doc *doc, QWidget *parent = nullptr);
+    ~SpeedMastersPanel();
 
     /** The one panel, made on first use and raised after; @p focus, a
      *  master's index, puts the cursor on its tempo. */

@@ -6,6 +6,45 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-16 — A look's Speed and Spread survive picking an effect; Speed Masters window closes cleanly *(fix/speedmaster-dblclick-reset)*
+
+Branson: "when I set something on the speed masters .. and then double click
+on the icon it resets those."
+
+- **What reset**: a look's *Speed:* (`__speedMaster`) and its host Spread
+  (`__spread*`) live in the effect palette's param map beside the script's
+  own params. `LookEditor::slotEffectScriptChanged()` clears that map on
+  every effect change and carries back only params the **new script
+  declares** (`carryOverParams()`); no script declares the look-level ones,
+  so clicking or double-clicking another effect's tile (icon) in the effect
+  picker -- the picker applies each pick at once, to preview it -- put the
+  look back on *As the look* with no spread. Going back to the first effect
+  didn't bring them back; only Cancel did. Now both are carried across an
+  effect change (a preset that pins one still wins). The one-shot length
+  (`__durationMs`) deliberately stays with the effect it was set for.
+- **Not the cause, checked**: double-clicking a footer speed-master button
+  (two clicks, opens/raises the window twice), the window's beat lights,
+  names, tempo fields, or the look itself (re-opened in the editor), and
+  re-picking the **same** effect in the picker change nothing. The
+  masters themselves (count, names, follow/ratio, BPM, rate, pause, inputs)
+  are saved with the show (`SpeedMasters::saveXML`, engine test
+  `mastersAreSavedWithTheShow`); the footer's beat style/when are in
+  QSettings (`workspace/speedFooterBeat*`), read once at start and on the
+  View menu -- nothing re-reads defaults over them. A look's Speed/Spread
+  save with the palette (now also checked in the new test).
+- **Found on the way** (Speed Masters window): a name typed but not yet
+  left when the window went (with the main window) fired `editingFinished`
+  into a half-destroyed panel -- a Qt assertion, a crash without one. The
+  destructor now keeps the typed name and disconnects the fields. Leaving a
+  name field without changing it no longer marks the show modified.
+- **Tests**: `LookEditor_Test::aLooksSpeedMasterAndSpreadSurviveADoubleClick`
+  (look re-opened; the current effect's tile double-clicked; another effect
+  tried and back; Done; palette XML round trip -- fails without the fix);
+  `SpeedMastersPanel_Test::doubleClickingAMasterChangesNothing` (every
+  setting incl. 6 masters, follow, pause, rate, tapped and fractional BPM,
+  an input, beat style/when; footer buttons and panel widgets
+  double-clicked; no modified flag; the close-with-a-typed-name crash).
+
 ### 2026-10-16 — Connections: patch / unpatch several universes at once *(fix/connections-multipatch)*
 
 Branson: "when I select a group to patch or unpatch from the universes

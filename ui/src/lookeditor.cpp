@@ -2935,6 +2935,20 @@ void LookEditor::slotEffectScriptChanged(int /*index*/)
         p->clearEffectParamValues();
         carryOverParams(p, path);
     }
+    /* What the look keeps time with and how it spreads are the look's, not
+       the effect's: no script declares them, so carryOverParams() never
+       does, and trying another effect in the picker put the look back on
+       "As the look" with no spread ("when I set something on the speed
+       masters .. and then double click on the icon it resets those"). A
+       preset that pins one of them still wins. The one-shot length stays
+       with the effect it was set for. */
+    for (auto it = prevParams.constBegin(); it != prevParams.constEnd(); ++it)
+    {
+        const bool lookLevel = it.key() == QLatin1String("__speedMaster")
+                               || it.key().startsWith(SpreadLayer::paramName(""));
+        if (lookLevel && !p->effectParamValues().contains(it.key()))
+            p->setEffectParamValue(it.key(), it.value());
+    }
     // Wipe old input bindings since the effect changed.
     p->clearEffectInputBindings();
     maybeAutoName(p);

@@ -400,4 +400,119 @@ void SpeedMastersPanel_Test::theBeatIsABlinkABarOrNothingAlwaysOrWhilePlaying()
     look->m_running = false;
 }
 
+/* "when I set something on the speed masters .. and then double click on
+   the icon it resets those" */
+void SpeedMastersPanel_Test::doubleClickingAMasterChangesNothing()
+{
+    SpeedMasters *sm = m_doc->speedMasters();
+    sm->setCount(6);
+    for (int i = 0; i < 6; ++i)
+    {
+        Scene *look = new Scene(m_doc);
+        m_doc->addFunction(look);
+        look->setSpeedMaster(SpeedMasters::Master1 + i);
+    }
+    const SpeedMasterButton::BeatStyle wasStyle = SpeedMastersFooter::beatStyle();
+    const SpeedMastersFooter::BeatWhen wasWhen = SpeedMastersFooter::beatWhen();
+    auto restore = qScopeGuard([&]() {
+        SpeedMastersFooter::setBeatStyle(wasStyle);
+        SpeedMastersFooter::setBeatWhen(wasWhen);
+    });
+    SpeedMastersFooter::setBeatStyle(SpeedMasterButton::Bar);
+    SpeedMastersFooter::setBeatWhen(SpeedMastersFooter::Always);
+
+    sm->setName(0, "Pars");
+    sm->setBpm(0, 133.5);
+    sm->setRate(0, 1.25);
+    QVERIFY(sm->setFollow(1, 0, 2.0));
+    sm->setBpm(2, 97);
+    sm->setPaused(2, true);
+    sm->setInput(3, SpeedMasters::TapControl, 1, 42);
+    for (int i = 0; i < 4; ++i)
+        sm->tap(4);
+    sm->setBpm(5, 87.25);           // more decimals than the panel shows
+
+    auto state = [sm]() {
+        QStringList s;
+        s << QString::number(sm->count());
+        for (int i = 0; i < sm->count(); ++i)
+        {
+            quint32 u = 0, ch = 0;
+            const bool in = sm->input(i, SpeedMasters::TapControl, &u, &ch);
+            s << QString("%1|%2|%3|%4|%5|%6|%7|%8|%9")
+                 .arg(sm->name(i)).arg(int(sm->mode(i))).arg(sm->follows(i)).arg(sm->ratio(i))
+                 .arg(sm->setBpm(i), 0, 'f', 6).arg(sm->rate(i)).arg(sm->isPaused(i))
+                 .arg(in).arg(QString("%1/%2").arg(u).arg(ch));
+        }
+        s << QString::number(int(SpeedMastersFooter::beatStyle()))
+          << QString::number(int(SpeedMastersFooter::beatWhen()));
+        return s;
+    };
+    const QStringList before = state();
+    m_doc->resetModified();
+    // A real double click: press, release, the double-click press, release
+    // (QTest::mouseDClick alone never releases, so a button never clicks).
+    auto doubleClick = [](QWidget *w) {
+        QTest::mouseClick(w, Qt::LeftButton);
+        QTest::mouseDClick(w, Qt::LeftButton);
+        QTest::mouseRelease(w, Qt::LeftButton);
+    };
+
+    QWidget win;
+    SpeedMastersFooter *footer = new SpeedMastersFooter(m_doc, &win);
+    win.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&win));
+    QTRY_VERIFY(footer->button(5)->isVisible());
+
+    auto findPanel = []() -> SpeedMastersPanel * {
+        foreach (QWidget *w, QApplication::topLevelWidgets())
+            if (qobject_cast<SpeedMastersPanel *>(w) != nullptr && w->isVisible())
+                return qobject_cast<SpeedMastersPanel *>(w);
+        return nullptr;
+    };
+    for (int i = 0; i < 6; ++i)
+    {
+        QSignalSpy clicks(footer->button(i), &QToolButton::clicked);
+        doubleClick(footer->button(i));
+        QTest::qWait(100);
+        QCOMPARE(clicks.count(), 2);
+        QCOMPARE(state(), before);
+    }
+    SpeedMastersPanel *panel = findPanel();
+    QVERIFY(panel != nullptr);
+    for (int i = 0; i < 6; ++i)
+    {
+        const SpeedMastersPanel::Row &r = panel->row(i);
+        for (QWidget *w : { (QWidget *)r.light, (QWidget *)r.name, (QWidget *)r.bpm, (QWidget *)r.rateText })
+        {
+            doubleClick(w);
+            QTest::qWait(50);
+            QCOMPARE(state(), before);
+        }
+    }
+    // Moving on from a field without changing it changes nothing either.
+    for (int i = 0; i < 6; ++i)
+    {
+        panel->row(i).bpm->setFocus();
+        panel->row(i).name->setFocus();
+        QTest::qWait(20);
+        QCOMPARE(state(), before);
+    }
+    QTest::qWait(600);              // the lights and the footer tick
+    QCOMPARE(state(), before);
+    QVERIFY(!m_doc->isModified());  // nothing was changed, so nothing to save
+
+    /* The window goes with the main window, a name field still focused:
+       losing focus as it goes said "edited" into a panel already gone (a
+       Qt assertion; a crash without one). */
+    panel->activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(panel));
+    panel->row(1).name->setFocus();
+    QTRY_VERIFY(panel->row(1).name->hasFocus());
+    QTest::keyClicks(panel->row(1).name, "Movers");
+    QCOMPARE(sm->name(1), QString("Speed 2"));      // not until it's left
+    delete panel;
+    QCOMPARE(sm->name(1), QString("Movers"));         // ... or the window goes
+}
+
 QTEST_MAIN(SpeedMastersPanel_Test)
