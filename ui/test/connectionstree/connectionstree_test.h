@@ -122,6 +122,13 @@ private slots:
     /* A click or the periodic rebuild never scrolls the list sideways. */
     void clickingARowDoesNotScrollSideways();
 
+    /* A target address is picked from the ports visible on the interface. */
+    void targetPickerListsFreePortsFirst();
+    void patchToPicksAVisiblePort();
+    void patchToAUsedPortChangesNothing();
+    void patchToAnAddressTypedByHand();
+    void retargetOffersTheVisiblePortsWithTheCurrentOne();
+
 private:
     Doc *m_doc;
 };

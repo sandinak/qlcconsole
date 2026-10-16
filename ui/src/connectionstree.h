@@ -218,6 +218,40 @@ private:
     /** The dialogs in front of planOrderedPatch()/applyOrderedPatch(). */
     void patchSelectionTo(const QList<quint32> &universes);
 
+    /** A device this console knows on one interface: heard from, declared by
+     *  hand, or only named by a patch that already points at it. */
+    struct TargetChoice
+    {
+        QString address;
+        QString label;          ///< as the device row reads: "name (address)"
+        QList<quint32> ports;   ///< its port addresses, each once, in port order
+        QList<int> numbers;     ///< physical port number per entry, 1-based; 0 unknown
+        bool heard = false;     ///< answered (discovered), not just configured
+    };
+    /** Every device listed under @p line of @p pluginName, in tree order. */
+    QList<TargetChoice> visibleTargets(const QString &pluginName, quint32 line) const;
+
+    /** One port of one visible device, as the target picker offers it. */
+    struct TargetPortChoice
+    {
+        QString address;
+        quint32 port = 0;       ///< port address
+        quint32 owner = 0;      ///< who already sends there, or invalidUniverse()
+        QString text;           ///< the picker's line for it
+    };
+    /** Every port of visibleTargets(), free ones first then the ones another
+     *  universe than @p universe already sends to, each saying which. */
+    QList<TargetPortChoice> targetPortChoices(const QString &pluginName, quint32 line,
+                                              quint32 universe) const;
+    /** "Send it where?" for one universe: a visible device's port, another
+     *  address typed by hand, or (with @p allowBroadcast) broadcast. In:
+     *  the current target to preselect (@p address empty: none). Out: the
+     *  choice, @p address empty for broadcast. False when cancelled, or when
+     *  the port picked carries another universe already (said, nothing done). */
+    bool askTargetPort(const QString &title, const QString &pluginName, quint32 line,
+                       quint32 universe, bool allowBroadcast,
+                       QString &address, quint32 &port);
+
     /** One patch a selected row stands for, as its own "Unpatch" removes. */
     struct UnpatchLeg
     {

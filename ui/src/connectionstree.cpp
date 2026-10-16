@@ -2005,6 +2005,12 @@ static void setExpandedDeep(QTreeWidgetItem *item, bool expanded)
     }
 }
 
+/** A port address the way the port rows and a node's own panel print it. */
+static QString portAddressText(quint32 pa)
+{
+    return QString("%1:%2:%3").arg((pa >> 8) & 0x7F).arg((pa >> 4) & 0x0F).arg(pa & 0x0F);
+}
+
 /** True when this plugin can aim a patch at a node/port, not just a line. */
 static bool pluginSupportsTargetsIn(Doc *doc, const QString &pluginName)
 {
@@ -3003,6 +3009,18 @@ void ConnectionsTree::patchUniverseTo(const QString &pluginName, quint32 line,
     }
 
     bool done = false;
+    QString targetAddr;
+    quint32 targetPort = 0;
+    if (output && pluginSupportsTargetsIn(m_doc, pluginName))
+    {
+        /* Where on this interface it goes, asked before anything changes. */
+        if (askTargetPort(tr("Patch universe"), pluginName, line, uniId, true,
+                          targetAddr, targetPort) == false)
+        {
+            refresh();
+            return;
+        }
+    }
     if (output)
     {
         /* Replace, not append.
@@ -3015,6 +3033,8 @@ void ConnectionsTree::patchUniverseTo(const QString &pluginName, quint32 line,
            to one line, which is also what the engine enforces, so appending
            would simply be refused. */
         done = iomap->setOutputPatch(uniId, pluginName, QString(), line, false, 0);
+        if (done && targetAddr.isEmpty() == false)
+            applyTarget(uniId, pluginName, line, targetAddr, targetPort);
     }
     else
     {
@@ -3499,6 +3519,17 @@ void ConnectionsTree::patchUnpatchedUniverseTo(quint32 universe)
     if (pickPluginLine(p, true, line) == false)
         return;
 
+    /* Same "which node, which port" question a port row already answers --
+       asked here instead since there is no port row yet to have clicked, and
+       asked BEFORE anything is patched: a cancel, or a port another universe
+       holds, leaves the universe as it was rather than half-patched. */
+    QString addr;
+    quint32 portAddr = 0;
+    if (p->supportsOutputTargets()
+            && askTargetPort(tr("Patch universe"), pluginName, line, universe,
+                             true, addr, portAddr) == false)
+        return;
+
     const int index = iomap->outputPatchesCount(universe);
     if (iomap->setOutputPatch(universe, pluginName, QString(), line, false, index) == false)
     {
@@ -3506,28 +3537,8 @@ void ConnectionsTree::patchUnpatchedUniverseTo(quint32 universe)
                              tr("Could not patch that universe to %1.").arg(pluginName));
         return;
     }
-
-    /* Same "which node, which port" question a port row already answers --
-       asked here instead since there is no port row yet to have clicked.
-       Left blank, this is a deliberate broadcast patch, not an abandoned
-       dialog: nothing further to configure. */
-    if (p->supportsOutputTargets())
-    {
-        bool ok = false;
-        const QString addr = QInputDialog::getText(
-            this, tr("Patch universe"),
-            tr("Target address (a node IP, or a broadcast address). "
-               "Leave empty to broadcast:"),
-            QLineEdit::Normal, QString(), &ok).trimmed();
-        if (ok && addr.isEmpty() == false)
-        {
-            const int portAddr = QInputDialog::getInt(
-                this, tr("Patch universe"),
-                tr("Port address on that target:"), 0, 0, 32767, 1, &ok);
-            if (ok)
-                applyTarget(universe, pluginName, line, addr, quint32(portAddr));
-        }
-    }
+    if (addr.isEmpty() == false)
+        applyTarget(universe, pluginName, line, addr, portAddr);
 
     m_doc->setModified();
     refresh();
@@ -3869,12 +3880,10 @@ void ConnectionsTree::retargetPatch(quint32 universe, const QString &pluginName,
         undoMap->patchUndo()->capture(QList<quint32>() << universe,
                                       tr("retarget universe %1").arg(universe + 1));
 
-    bool ok = false;
-    const QString addr = QInputDialog::getText(
-        this, tr("Retarget patch"),
-        tr("Send this universe to which address? Leave empty to broadcast:"),
-        QLineEdit::Normal, targeted ? curAddr : QString(), &ok).trimmed();
-    if (ok == false)
+    QString addr = targeted ? curAddr : QString();
+    quint32 wanted = curPort;
+    if (askTargetPort(tr("Retarget patch"), pluginName, line, universe, true,
+                      addr, wanted) == false)
         return;
 
     /* An empty address means broadcast, which is a real and deliberate choice
@@ -3903,52 +3912,13 @@ void ConnectionsTree::retargetPatch(quint32 universe, const QString &pluginName,
         return;
     }
 
-    /* Asked as net:subnet:universe, the same terms the port rows show and the
-       node's own panel prints, rather than the packed 15-bit number the
-       protocol stores. */
-    const QString cur = QString("%1:%2:%3").arg((curPort >> 8) & 0x7F)
-                        .arg((curPort >> 4) & 0x0F).arg(curPort & 0x0F);
-    const QString txt = QInputDialog::getText(
-        this, tr("Retarget patch"),
-        tr("Port address on %1, as net:subnet:universe:").arg(addr),
-        QLineEdit::Normal, targeted ? cur : QString("0:0:0"), &ok).trimmed();
-    if (ok == false)
-        return;
-
-    const QStringList parts = txt.split(':');
-    bool okNet = false, okSub = false, okUni = false;
-    const uint net = parts.value(0).toUInt(&okNet);
-    const uint sub = parts.value(1).toUInt(&okSub);
-    const uint uni = parts.value(2).toUInt(&okUni);
-    if (parts.count() != 3 || !okNet || !okSub || !okUni
-            || net > 127 || sub > 15 || uni > 15)
-    {
-        QMessageBox::warning(this, tr("Retarget patch"),
-            tr("\"%1\" is not a port address. Expected net:subnet:universe, "
-               "with net 0-127 and subnet and universe 0-15.").arg(txt));
-        return;
-    }
-
-    const quint32 wanted = quint32((net << 8) | (sub << 4) | uni);
+    /* askTargetPort() has already refused a port another universe holds, so
+       failing here means the patch this was invoked on has gone. */
     if (applyTarget(universe, pluginName, line, addr, wanted) == false)
     {
-        /* Two reasons it can fail, and they need opposite fixes: the port is
-           spoken for, or the patch this was invoked on has gone. Reporting the
-           second for both sent people looking for a patch that was fine. */
-        const quint32 owner = universeOnTarget(pluginName, line, addr, wanted, universe);
-        if (owner != InputOutputMap::invalidUniverse())
-            QMessageBox::warning(this, tr("Retarget patch"),
-                tr("Universe %1 already sends to %2 port %3:%4:%5.\n\nOne port "
-                   "carries one universe: pointing this one there too would "
-                   "leave both writing to it, and the fixtures showing "
-                   "whichever arrived last. Move universe %1 first, or pick "
-                   "another port.")
-                    .arg(owner + 1).arg(addr)
-                    .arg(net).arg(sub).arg(uni));
-        else
-            QMessageBox::warning(this, tr("Retarget patch"),
-                                 tr("That universe is no longer patched to %1.")
-                                     .arg(pluginName));
+        QMessageBox::warning(this, tr("Retarget patch"),
+                             tr("That universe is no longer patched to %1.")
+                                 .arg(pluginName));
         return;
     }
     m_doc->setModified();
@@ -4041,18 +4011,58 @@ void ConnectionsTree::retargetSelection(const QString &pluginName)
     }
 
     bool ok = false;
-    const QString addr = QInputDialog::getText(
-        this, tr("Retarget %1 universes").arg(unis.count()),
-        tr("Send all %1 selected universes to which address?").arg(unis.count()),
-        QLineEdit::Normal, QString(), &ok).trimmed();
-    if (ok == false || addr.isEmpty())
-        return;
+    /* The devices this interface lists come first, as in every other patch
+       question here; the first port to number up from then starts at that
+       device's first free one. */
+    QString addr;
+    QString firstText("0:0:0");
+    const QList<TargetChoice> known = visibleTargets(plug, lines.first());
+    if (known.isEmpty() == false)
+    {
+        QStringList labels;
+        foreach (const TargetChoice &t, known)
+            labels << (t.ports.isEmpty() ? t.label
+                       : tr("%1 — %2 port(s)").arg(t.label).arg(t.ports.count()));
+        const QString other = tr("Another address…");
+        labels << other;
+        const QString pick = QInputDialog::getItem(this,
+            tr("Retarget %1 universes").arg(unis.count()),
+            tr("Send all %1 selected universes to which device?").arg(unis.count()),
+            labels, 0, false, &ok);
+        if (ok == false)
+            return;
+        const int idx = labels.indexOf(pick);
+        if (idx >= 0 && idx < known.count())
+        {
+            const TargetChoice &t = known.at(idx);
+            addr = t.address;
+            foreach (quint32 pa, t.ports)
+            {
+                const quint32 owner = universeOnTarget(plug, lines.first(), addr, pa,
+                                                       InputOutputMap::invalidUniverse());
+                if (owner == InputOutputMap::invalidUniverse() || unis.contains(owner))
+                {
+                    firstText = portAddressText(pa);
+                    break;
+                }
+            }
+        }
+    }
+    if (addr.isEmpty())
+    {
+        addr = QInputDialog::getText(
+            this, tr("Retarget %1 universes").arg(unis.count()),
+            tr("Send all %1 selected universes to which address?").arg(unis.count()),
+            QLineEdit::Normal, QString(), &ok).trimmed();
+        if (ok == false || addr.isEmpty())
+            return;
+    }
 
     const QString txt = QInputDialog::getText(
         this, tr("Retarget %1 universes").arg(unis.count()),
         tr("Port address for the FIRST of them, as net:subnet:universe.\n"
            "The rest follow on consecutive ports."),
-        QLineEdit::Normal, QString("0:0:0"), &ok).trimmed();
+        QLineEdit::Normal, firstText, &ok).trimmed();
     if (ok == false)
         return;
 
@@ -4136,10 +4146,260 @@ void ConnectionsTree::retargetSelection(const QString &pluginName)
  * Multi-universe patch / unpatch
  *********************************************************************/
 
-/** A port address the way the port rows and a node's own panel print it. */
-static QString portAddressText(quint32 pa)
+
+/** net:subnet:universe back to a port address; false if it is not one. */
+static bool parsePortAddress(const QString &txt, quint32 &pa)
 {
-    return QString("%1:%2:%3").arg((pa >> 8) & 0x7F).arg((pa >> 4) & 0x0F).arg(pa & 0x0F);
+    const QStringList parts = txt.trimmed().split(':');
+    bool okNet = false, okSub = false, okUni = false;
+    const uint net = parts.value(0).toUInt(&okNet);
+    const uint sub = parts.value(1).toUInt(&okSub);
+    const uint uni = parts.value(2).toUInt(&okUni);
+    if (parts.count() != 3 || !okNet || !okSub || !okUni
+            || net > 127 || sub > 15 || uni > 15)
+        return false;
+    pa = quint32((net << 8) | (sub << 4) | uni);
+    return true;
+}
+
+QList<ConnectionsTree::TargetChoice>
+ConnectionsTree::visibleTargets(const QString &pluginName, quint32 line) const
+{
+    QList<TargetChoice> choices;
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    QLCIOPlugin *p = m_doc->ioPluginCache() != NULL
+        ? m_doc->ioPluginCache()->plugin(pluginName) : NULL;
+    if (iomap == NULL || p == NULL)
+        return choices;
+
+    /* Built the way refresh() builds the device rows -- heard from first,
+       then declared by hand, then only named by a patch -- so a choice reads
+       like the tree it was picked from. */
+    QSet<QString> seen;
+    const QString self = p->outputs().value(int(line));
+    foreach (const QLCIOPlugin::Device &dev, p->discoveredDevices())
+    {
+        if (dev.line != line || dev.address == self || seen.contains(dev.address))
+            continue;
+        seen.insert(dev.address);
+        TargetChoice c;
+        c.address = dev.address;
+        c.heard = true;
+        const QString alias = iomap->targetAlias(dev.address);
+        const QString shown = alias.isEmpty()
+            ? (dev.name.isEmpty() ? dev.address : dev.name) : alias;
+        c.label = shown == dev.address ? shown : tr("%1 (%2)").arg(shown).arg(dev.address);
+        /* Ports sharing a port address are one destination on the wire
+           (see refresh()), so they count once. */
+        for (int i = 0; i < dev.portUniverses.count(); i++)
+        {
+            const quint32 pa = dev.portUniverses.at(i);
+            if (c.ports.contains(pa))
+                continue;
+            c.ports << pa;
+            c.numbers << i + 1;
+        }
+        choices << c;
+    }
+    const int lineCount = p->outputs().count();
+    foreach (const InputOutputMap::ManualTarget &mt, iomap->manualTargets())
+    {
+        const quint32 mline = mt.line < quint32(lineCount) ? mt.line : 0;
+        if (mt.plugin != pluginName || mline != line || seen.contains(mt.address))
+            continue;
+        seen.insert(mt.address);
+        TargetChoice c;
+        c.address = mt.address;
+        const QString alias = iomap->targetAlias(mt.address);
+        c.label = alias.isEmpty() ? mt.address : tr("%1 (%2)").arg(alias).arg(mt.address);
+        for (int i = 0; i < mt.ports.count(); i++)
+        {
+            if (c.ports.contains(mt.ports.at(i)))
+                continue;
+            c.ports << mt.ports.at(i);
+            c.numbers << i + 1;
+        }
+        choices << c;
+    }
+    /* A node nothing has answered from, but that a patch on this interface
+       already sends to: the tree lists it, so the picker does too, with the
+       port addresses those patches use (its physical ports are unknown). */
+    for (quint32 u = 0; u < iomap->universesCount(); u++)
+    {
+        QString a;
+        quint32 pa = 0;
+        if (patchTarget(u, pluginName, line, a, pa) == false || a.isEmpty())
+            continue;
+        int at = -1;
+        for (int i = 0; i < choices.count(); i++)
+            if (choices.at(i).address == a)
+                at = i;
+        if (at < 0)
+        {
+            if (seen.contains(a))
+                continue;
+            seen.insert(a);
+            TargetChoice c;
+            c.address = a;
+            const QString alias = iomap->targetAlias(a);
+            c.label = alias.isEmpty() ? a : tr("%1 (%2)").arg(alias).arg(a);
+            choices << c;
+            at = choices.count() - 1;
+        }
+        TargetChoice &c = choices[at];
+        if (c.heard == false && c.ports.contains(pa) == false)
+        {
+            c.ports << pa;
+            c.numbers << 0;
+        }
+    }
+    return choices;
+}
+
+/** How a port reads everywhere in this view: its physical number when the
+    device has told us (or was declared with) one, then its Art-Net
+    port-address as net:subnet:universe. */
+static QString portWhereText(int number, quint32 pa)
+{
+    return number > 0
+        ? QObject::tr("port %1 · universe %2").arg(number).arg(portAddressText(pa))
+        : QObject::tr("universe %1").arg(portAddressText(pa));
+}
+
+QList<ConnectionsTree::TargetPortChoice>
+ConnectionsTree::targetPortChoices(const QString &pluginName, quint32 line,
+                                   quint32 universe) const
+{
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    QList<TargetPortChoice> freePorts, usedPorts;
+    foreach (const TargetChoice &t, visibleTargets(pluginName, line))
+    {
+        for (int i = 0; i < t.ports.count(); i++)
+        {
+            TargetPortChoice c;
+            c.address = t.address;
+            c.port = t.ports.at(i);
+            c.owner = universeOnTarget(pluginName, line, t.address, c.port, universe);
+            const QString where = QString("%1 — %2").arg(t.label)
+                                      .arg(portWhereText(t.numbers.value(i), c.port));
+            if (c.owner == InputOutputMap::invalidUniverse())
+            {
+                c.text = tr("%1 — free").arg(where);
+                freePorts << c;
+            }
+            else
+            {
+                Universe *o = iomap != NULL ? iomap->universe(c.owner) : NULL;
+                c.text = tr("%1 — used by %2").arg(where)
+                    .arg(o != NULL ? tr("%1: %2").arg(o->id() + 1).arg(o->name())
+                                   : tr("universe %1").arg(c.owner + 1));
+                usedPorts << c;
+            }
+        }
+    }
+    return freePorts + usedPorts;
+}
+
+bool ConnectionsTree::askTargetPort(const QString &title, const QString &pluginName,
+                                    quint32 line, quint32 universe, bool allowBroadcast,
+                                    QString &address, quint32 &port)
+{
+    const QString curAddr = address;
+    const quint32 curPort = port;
+    bool ok = false;
+
+    /* "should be able to select an unused Artnet->DMX or other interface if
+       they're visible": every port of every device this interface lists,
+       the free ones first. Ports another universe holds stay in the list,
+       below, saying who -- picking one is refused, never half-done. */
+    const QList<TargetPortChoice> ports = targetPortChoices(pluginName, line, universe);
+    const QString other = tr("Another address…");
+    const QString bcast = tr("Broadcast (no target)");
+    bool typeIt = ports.isEmpty();
+    if (typeIt == false)
+    {
+        QStringList labels;
+        int current = 0;
+        for (int i = 0; i < ports.count(); i++)
+        {
+            const TargetPortChoice &c = ports.at(i);
+            const bool isCurrent = (c.address == curAddr && c.port == curPort);
+            if (isCurrent)
+                current = i;
+            labels << (isCurrent ? tr("%1  (current)").arg(c.text) : c.text);
+        }
+        labels << other;
+        if (allowBroadcast)
+            labels << bcast;
+        const QString pick = QInputDialog::getItem(this, title,
+            tr("Send it to which port?"), labels, current, false, &ok);
+        if (ok == false)
+            return false;
+        const int idx = labels.indexOf(pick);
+        if (pick == bcast)
+        {
+            address.clear();
+            return true;
+        }
+        if (idx >= 0 && idx < ports.count())
+        {
+            const TargetPortChoice &c = ports.at(idx);
+            if (c.owner != InputOutputMap::invalidUniverse())
+            {
+                QMessageBox::warning(this, title,
+                    tr("Universe %1 already sends to %2 %3.\n\nOne port carries "
+                       "one universe. Move universe %1 first, or pick another port.")
+                        .arg(c.owner + 1).arg(c.address).arg(portAddressText(c.port)));
+                return false;
+            }
+            address = c.address;
+            port = c.port;
+            return true;
+        }
+        typeIt = true;
+    }
+
+    /* Typed by hand: a node not heard from yet, on the bench or off this
+       subnet. Deliberately no reachability check. */
+    const QString addr = QInputDialog::getText(this, title,
+        allowBroadcast ? tr("Target address (a node IP, or a broadcast address). "
+                            "Leave empty to broadcast:")
+                       : tr("Target address (a node IP, or a broadcast address):"),
+        QLineEdit::Normal, curAddr, &ok).trimmed();
+    if (ok == false)
+        return false;
+    if (addr.isEmpty())
+    {
+        if (allowBroadcast == false)
+            return false;
+        address.clear();
+        return true;
+    }
+    const QString txt = QInputDialog::getText(this, title,
+        tr("Universe on %1, as net:subnet:universe:").arg(addr), QLineEdit::Normal,
+        curAddr.isEmpty() ? QString("0:0:0") : portAddressText(curPort), &ok).trimmed();
+    if (ok == false)
+        return false;
+    quint32 pa = 0;
+    if (parsePortAddress(txt, pa) == false)
+    {
+        QMessageBox::warning(this, title,
+            tr("\"%1\" is not a port address. Expected net:subnet:universe, "
+               "with net 0-127 and subnet and universe 0-15.").arg(txt));
+        return false;
+    }
+    const quint32 owner = universeOnTarget(pluginName, line, addr, pa, universe);
+    if (owner != InputOutputMap::invalidUniverse())
+    {
+        QMessageBox::warning(this, title,
+            tr("Universe %1 already sends to %2 %3.\n\nOne port carries "
+               "one universe. Move universe %1 first, or pick another port.")
+                .arg(owner + 1).arg(addr).arg(portAddressText(pa)));
+        return false;
+    }
+    address = addr;
+    port = pa;
+    return true;
 }
 
 void ConnectionsTree::syncSelectionOrder()
@@ -4375,54 +4635,24 @@ void ConnectionsTree::patchSelectionTo(const QList<quint32> &universes)
     }
     else
     {
-        /* The devices known on this interface -- heard from, or declared by
-           hand -- each with the ports it has, which is what "patch these to
-           that 4-port node" needs to know. Built the way refresh() builds the
-           device rows, so the choice reads like the tree. */
+        /* The devices known on this interface -- heard from, declared by
+           hand, or only aimed at by a patch -- each with the ports it has,
+           which is what "patch these to that 4-port node" needs to know. */
         struct Choice { QString address; QString label; QList<quint32> ports; QStringList names; };
         QList<Choice> choices;
-        QSet<QString> seen;
-        const QString self = p->outputs().value(int(line));
-        foreach (const QLCIOPlugin::Device &dev, p->discoveredDevices())
+        foreach (const TargetChoice &t, visibleTargets(pluginName, line))
         {
-            if (dev.line != line || dev.address == self || seen.contains(dev.address))
-                continue;
-            seen.insert(dev.address);
             Choice c;
-            c.address = dev.address;
-            const QString alias = iomap->targetAlias(dev.address);
-            const QString shown = alias.isEmpty()
-                ? (dev.name.isEmpty() ? dev.address : dev.name) : alias;
-            c.label = shown == dev.address ? shown : tr("%1 (%2)").arg(shown).arg(dev.address);
-            /* Ports sharing a port address are one destination on the wire
-               (see refresh()), so they count once. */
-            for (int i = 0; i < dev.portUniverses.count(); i++)
+            c.address = t.address;
+            c.label = t.label;
+            /* A node only a patch names has told us none of its ports: the
+               ones in use are not the list to fill, so number up from a
+               port address instead, as for an address typed in. */
+            if (t.numbers.contains(0) == false)
             {
-                const quint32 pa = dev.portUniverses.at(i);
-                if (c.ports.contains(pa))
-                    continue;
-                c.ports << pa;
-                c.names << tr("port %1 (%2)").arg(i + 1).arg(portAddressText(pa));
-            }
-            choices << c;
-        }
-        const int lineCount = p->outputs().count();
-        foreach (const InputOutputMap::ManualTarget &mt, iomap->manualTargets())
-        {
-            const quint32 mline = mt.line < quint32(lineCount) ? mt.line : 0;
-            if (mt.plugin != pluginName || mline != line || seen.contains(mt.address))
-                continue;
-            seen.insert(mt.address);
-            Choice c;
-            c.address = mt.address;
-            const QString alias = iomap->targetAlias(mt.address);
-            c.label = alias.isEmpty() ? mt.address : tr("%1 (%2)").arg(alias).arg(mt.address);
-            for (int i = 0; i < mt.ports.count(); i++)
-            {
-                if (c.ports.contains(mt.ports.at(i)))
-                    continue;
-                c.ports << mt.ports.at(i);
-                c.names << tr("port %1 (%2)").arg(i + 1).arg(portAddressText(mt.ports.at(i)));
+                c.ports = t.ports;
+                for (int i = 0; i < t.ports.count(); i++)
+                    c.names << portWhereText(t.numbers.value(i), t.ports.at(i));
             }
             choices << c;
         }

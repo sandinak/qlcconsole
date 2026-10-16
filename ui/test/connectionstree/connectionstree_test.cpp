@@ -26,6 +26,8 @@
 #include <QSettings>
 #include <QSplitter>
 #include <QContextMenuEvent>
+#include <QInputDialog>
+#include <QMessageBox>
 
 #define protected public
 #define private public
@@ -1640,4 +1642,200 @@ void ConnectionsTree_Test::clickingARowDoesNotScrollSideways()
     QApplication::processEvents();
     QCOMPARE(v->value(), v->maximum());
     QCOMPARE(h->value(), side);
+}
+
+/** Answer the dialogs the code under test is about to open, in order. An
+    answer to a list is the first item starting with it ("#N" picks the Nth);
+    to a text box, the text itself; "<cancel>" cancels. Every list offered
+    lands in @p lists, every message box's text in @p messages. */
+class DialogAnswers : public QObject
+{
+public:
+    DialogAnswers(const QStringList &answers) : m_answers(answers)
+    {
+        m_timer.setInterval(5);
+        connect(&m_timer, &QTimer::timeout, this, [this]() { step(); });
+        m_timer.start();
+    }
+    QList<QStringList> lists;
+    QStringList messages;
+    int left() const { return m_answers.count(); }
+
+private:
+    void step()
+    {
+        QWidget *w = QApplication::activeModalWidget();
+        if (w == nullptr)
+            return;
+        if (QMessageBox *mb = qobject_cast<QMessageBox *>(w))
+        {
+            messages << mb->text();
+            mb->accept();
+            return;
+        }
+        QInputDialog *d = qobject_cast<QInputDialog *>(w);
+        if (d == nullptr || m_answers.isEmpty())
+            return;
+        const QString a = m_answers.takeFirst();
+        if (a == "<cancel>")
+        {
+            d->reject();
+            return;
+        }
+        const QStringList items = d->comboBoxItems();
+        if (items.isEmpty() == false)
+        {
+            lists << items;
+            QString pick;
+            if (a.startsWith('#'))
+                pick = items.value(a.mid(1).toInt());
+            else
+                foreach (const QString &it, items)
+                    if (pick.isEmpty() && it.startsWith(a))
+                        pick = it;
+            if (pick.isEmpty())
+            {
+                d->reject();
+                return;
+            }
+            d->setTextValue(pick);
+        }
+        else
+            d->setTextValue(a);
+        d->accept();
+    }
+    QStringList m_answers;
+    QTimer m_timer;
+};
+
+/** The four-port node, with universe 8 already sending to its second port. */
+static IOPluginStub *nodeWithOnePortTaken(Doc *doc, ConnectionsTree &tree)
+{
+    IOPluginStub *stub = fourPortNode(doc);
+    InputOutputMap *iom = doc->inputOutputMap();
+    iom->setOutputPatch(7, stub->name(), "", 0, false, 0);
+    tree.applyTarget(7, stub->name(), 0, "172.18.2.50", 1);
+    return stub;
+}
+
+/* "when patching .. and target address comes up .. should be able to select
+   an unused Artnet->DMX or other interface if they're visible". */
+void ConnectionsTree_Test::targetPickerListsFreePortsFirst()
+{
+    ConnectionsTree tree(m_doc);
+    IOPluginStub *stub = nodeWithOnePortTaken(m_doc, tree);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    // Declared by hand, with two ports; and one only a patch names.
+    iom->addManualTarget(stub->name(), 0, "10.0.0.7");
+    iom->addManualPort("10.0.0.7", 16);
+    iom->addManualPort("10.0.0.7", 17);
+    QVERIFY(iom->setOutputPatch(6, stub->name(), "", 0, false, 0));
+    QVERIFY(tree.applyTarget(6, stub->name(), 0, "10.0.0.9", 5));
+
+    const QList<ConnectionsTree::TargetPortChoice> c =
+        tree.targetPortChoices(stub->name(), 0, 0);
+    QStringList texts;
+    foreach (const ConnectionsTree::TargetPortChoice &x, c)
+        texts << x.text;
+    QCOMPARE(texts, QStringList()
+        << "Quad (172.18.2.50) — port 1 · universe 0:0:0 — free"
+        << "Quad (172.18.2.50) — port 3 · universe 0:0:2 — free"
+        << "Quad (172.18.2.50) — port 4 · universe 0:0:3 — free"
+        << "10.0.0.7 — port 1 · universe 0:1:0 — free"
+        << "10.0.0.7 — port 2 · universe 0:1:1 — free"
+        << "Quad (172.18.2.50) — port 2 · universe 0:0:1 — used by 8: Universe 8"
+        << "10.0.0.9 — universe 0:0:5 — used by 7: Universe 7");
+
+    // Asked for universe 8 itself, its own port is not "used".
+    bool ownFree = false;
+    foreach (const ConnectionsTree::TargetPortChoice &x,
+             tree.targetPortChoices(stub->name(), 0, 7))
+        if (x.port == 1 && x.address == "172.18.2.50")
+            ownFree = (x.owner == InputOutputMap::invalidUniverse());
+    QVERIFY(ownFree);
+
+    // Another line lists none of them.
+    QVERIFY(tree.targetPortChoices(stub->name(), 1, 0).isEmpty());
+}
+
+void ConnectionsTree_Test::patchToPicksAVisiblePort()
+{
+    ConnectionsTree tree(m_doc);
+    IOPluginStub *stub = nodeWithOnePortTaken(m_doc, tree);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+
+    DialogAnswers answers(QStringList() << "#0" << "Quad (172.18.2.50) — port 3");
+    tree.patchUnpatchedUniverseTo(0);
+    QCOMPARE(answers.left(), 0);
+    QCOMPARE(answers.lists.count(), 2);
+    QVERIFY(answers.lists.at(1).contains("Another address…"));
+    QVERIFY(answers.lists.at(1).contains("Broadcast (no target)"));
+    QString a;
+    quint32 p = 99;
+    QVERIFY(tree.patchTarget(0, stub->name(), 0, a, p));
+    QCOMPARE(a, QString("172.18.2.50"));
+    QCOMPARE(p, quint32(2));
+    QCOMPARE(iom->outputPatchesCount(0), 1);
+}
+
+void ConnectionsTree_Test::patchToAUsedPortChangesNothing()
+{
+    ConnectionsTree tree(m_doc);
+    nodeWithOnePortTaken(m_doc, tree);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+
+    {
+        DialogAnswers answers(QStringList() << "#0" << "Quad (172.18.2.50) — port 2");
+        tree.patchUnpatchedUniverseTo(0);
+        QCOMPARE(answers.messages.count(), 1);
+        QVERIFY2(answers.messages.first().contains("Universe 8 already sends"),
+                 qPrintable(answers.messages.first()));
+        QCOMPARE(iom->outputPatchesCount(0), 0);       // never half-patched
+    }
+
+    // Cancelling the target question leaves it unpatched too.
+    DialogAnswers cancel(QStringList() << "#0" << "<cancel>");
+    tree.patchUnpatchedUniverseTo(0);
+    QCOMPARE(iom->outputPatchesCount(0), 0);
+}
+
+void ConnectionsTree_Test::patchToAnAddressTypedByHand()
+{
+    ConnectionsTree tree(m_doc);
+    IOPluginStub *stub = nodeWithOnePortTaken(m_doc, tree);
+
+    {
+        DialogAnswers answers(QStringList() << "#0" << "Another address…"
+                                            << "10.1.1.1" << "0:1:2");
+        tree.patchUnpatchedUniverseTo(0);
+        QCOMPARE(answers.left(), 0);
+    }
+    QString a;
+    quint32 p = 99;
+    QVERIFY(tree.patchTarget(0, stub->name(), 0, a, p));
+    QCOMPARE(a, QString("10.1.1.1"));
+    QCOMPARE(p, quint32(0x12));
+
+    // Typing a port another universe holds is refused the same way.
+    DialogAnswers clash(QStringList() << "#0" << "Another address…"
+                                      << "172.18.2.50" << "0:0:1");
+    tree.patchUnpatchedUniverseTo(1);
+    QCOMPARE(clash.messages.count(), 1);
+    QCOMPARE(m_doc->inputOutputMap()->outputPatchesCount(1), 0);
+}
+
+void ConnectionsTree_Test::retargetOffersTheVisiblePortsWithTheCurrentOne()
+{
+    ConnectionsTree tree(m_doc);
+    IOPluginStub *stub = nodeWithOnePortTaken(m_doc, tree);
+
+    DialogAnswers answers(QStringList() << "Quad (172.18.2.50) — port 4");
+    tree.retargetPatch(7, stub->name(), 0);
+    QCOMPARE(answers.left(), 0);
+    QVERIFY(answers.lists.first().contains(
+        "Quad (172.18.2.50) — port 2 · universe 0:0:1 — free  (current)"));
+    QString a;
+    quint32 p = 99;
+    QVERIFY(tree.patchTarget(7, stub->name(), 0, a, p));
+    QCOMPARE(p, quint32(3));
 }
