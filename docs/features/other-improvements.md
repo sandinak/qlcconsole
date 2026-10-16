@@ -412,6 +412,16 @@ each carrying a set of fixtures. A live amperage/wattage estimate appears in
 the footer in Design mode; a circuit-assignment dialog can auto-bin-pack
 fixtures onto circuits, and UPS/battery entries get a runtime estimate.
 
+Each fixture counts as its full power times its level (dimmer times the
+average of its colours), before the Grand Master; dark, a mover idles at 15%
+of it and anything else at 2 W. Full power is the fixture's own readings if
+it has been measured, else its definition's power. A definition that gives
+none is guessed at per fixture — 150 W a mover, 50 W anything else, 40 W a
+channel for a dimmer pack — never per channel for LED gear, where a 40-pixel
+bar's 120 colour channels once read 4.8 kW. Hover the footer's figure for
+the biggest draws, where each comes from, and which definitions have no
+power to go on.
+
 ### A fixture's maximum draw
 
 Some fixtures are power hogs — a wall-washer bar pulling 6 A at full — and

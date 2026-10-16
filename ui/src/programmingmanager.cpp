@@ -1823,7 +1823,7 @@ void ProgrammingManager::updatePowerEstimateActive()
         else
         {
             m_powerTimer->stop();
-            emit powerEstimateChanged(0.0, 0.0, false);   // clear the chip in Operate
+            emit powerEstimateChanged(0.0, 0.0, false, QString());   // clear the chip in Operate
         }
     }
 }
@@ -1864,6 +1864,7 @@ void ProgrammingManager::recomputePower()
     double totalAmps = 0.0;
     bool overload = false;
     QSet<quint32> assigned;
+    QHash<quint32, double> fixtureAmps;   // for the tooltip's breakdown
 
     foreach (const PowerSource &src, pd->sources())
     {
@@ -1876,6 +1877,7 @@ void ProgrammingManager::recomputePower()
             {
                 cw += perFixture.value(fxId, 0.0);
                 assigned.insert(fxId);
+                fixtureAmps.insert(fxId, perFixture.value(fxId, 0.0) / cir.effectiveVoltage(srcV));
             }
             totalWatts += cw;
             sourceWatts += cw;
@@ -1901,10 +1903,74 @@ void ProgrammingManager::recomputePower()
             continue;
         totalWatts += it.value();
         totalAmps += it.value() / defaultVoltage;
+        fixtureAmps.insert(it.key(), it.value() / defaultVoltage);
     }
 
     // Push the estimate to the app's always-visible status-bar chip.
-    emit powerEstimateChanged(totalAmps, totalWatts / 1000.0, overload);
+    const QString detail = powerDetailText(PowerEstimator::byType(m_doc, perFixture, fixtureAmps),
+                                           totalAmps, totalWatts / 1000.0, defaultVoltage);
+    emit powerEstimateChanged(totalAmps, totalWatts / 1000.0, overload, detail);
+}
+
+QString ProgrammingManager::powerDetailText(const QList<PowerEstimator::TypeLoad> &rows,
+                                            double amps, double kw, double defaultVoltage)
+{
+    auto watts = [](double w) {
+        return (w >= 1000.0) ? tr("%1 kW").arg(w / 1000.0, 0, 'f', 2)
+                             : tr("%1 W").arg(w, 0, 'f', 0);
+    };
+
+    QStringList lines;
+    lines << tr("Estimated load: %1 A, %2 kW").arg(amps, 0, 'f', 1).arg(kw, 0, 'f', 2);
+    lines << tr("What is lit now, before the Grand Master; at %1 V where no circuit gives a voltage.")
+                 .arg(defaultVoltage, 0, 'f', 0);
+
+    const int shown = 6;
+    QStringList guessed;
+    bool anyRows = false;
+    for (int i = 0; i < rows.size(); ++i)
+    {
+        const PowerEstimator::TypeLoad &t = rows.at(i);
+        if (t.basis == PowerEstimator::Guessed)
+            guessed << t.name;
+        if (i >= shown || t.watts <= 0.0)
+            continue;
+        if (!anyRows)
+        {
+            lines << QString() << tr("Biggest draws:");
+            anyRows = true;
+        }
+        QString how;
+        switch (t.basis)
+        {
+            case PowerEstimator::Measured:
+                how = tr("measured, %1 each at full").arg(watts(t.fullWatts));
+                // A reading far over the definition's rating is worth a second look.
+                if (t.ratedWatts > 0 && t.fullWatts > 2.0 * t.ratedWatts)
+                    how += tr(" -- the definition says %1; check the readings").arg(watts(t.ratedWatts));
+                break;
+            case PowerEstimator::Rated:
+                how = tr("rated %1 each").arg(watts(t.fullWatts));
+                break;
+            case PowerEstimator::Guessed:
+                how = tr("no power in its definition: guessed at %1 each").arg(watts(t.fullWatts));
+                break;
+            case PowerEstimator::NoLoad:
+                break;
+        }
+        lines << tr("  %1 x %2: %3 A (%4), %5").arg(t.count).arg(t.name)
+                     .arg(t.amps, 0, 'f', 1).arg(watts(t.watts)).arg(how);
+    }
+
+    lines << QString()
+          << tr("Each fixture draws its full power times its level (dimmer times the "
+                "average of its colours); dark, a mover idles at 15% of it and anything "
+                "else at 2 W. A measured fixture uses its own readings.");
+    if (!guessed.isEmpty())
+        lines << tr("No power given for: %1. Set the power in the definition (or measure "
+                    "the fixture) for a real figure.").arg(guessed.join(QStringLiteral(", ")));
+    lines << QString() << tr("Click to open the circuits editor.");
+    return lines.join(QLatin1Char('\n'));
 }
 
 void ProgrammingManager::openCircuitsDialog()

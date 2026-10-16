@@ -42,6 +42,13 @@ On `release/0.1.0`. Universal (Apple silicon + Intel), macOS 12+.
 
 ## Needs the real rig / hardware
 
+- **Re-check the Oppsk wall-washer readings (2026-10-16)** — the 24 bars in
+  DanceHysteria-0.4 carry Full 12.3 A / Half 2.7 / Standby 0.4 (White 6.6,
+  R/G/B 2.3) against a definition rated 100 W: at 120 V that is 1.48 kW a
+  bar at full and 48 W dark, 9.6 A for the 24 doing nothing. A DC-side or
+  whole-chain reading would explain it; re-measure one bar on its mains lead.
+  The V-Show PL-4003 definition has no power at all (now guessed at 50 W).
+
 - **Rig test pass** — run `RIG_TEST_PLAN.md`, fix any ❌ (the gate on the
   freeze list).
 - **WLED on a real device** — Branson tested some 2026-10-11: hit or miss,

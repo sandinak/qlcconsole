@@ -21,6 +21,62 @@
 
 #include "powerdistribution.h"
 #include "powerdistribution_test.h"
+#include "qlcfixturehead.h"
+#include "qlcfixturemode.h"
+#include "qlcfixturedef.h"
+#include "qlcphysical.h"
+#include "qlcchannel.h"
+#include "fixture.h"
+#include "doc.h"
+
+/* A definition of @p type: @p heads heads of @p presets each, after
+   @p master (a master dimmer, when not Custom); rated @p watts (0: none). */
+static QLCFixtureDef *makeDef(const QString &model, QLCFixtureDef::FixtureType type, int watts,
+                              int heads, const QList<QLCChannel::Preset> &presets,
+                              QLCChannel::Preset master = QLCChannel::Custom)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel(model);
+    def->setType(type);
+    QLCPhysical phys;
+    phys.setPowerConsumption(watts);
+    def->setPhysical(phys);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("Mode");
+    int n = 0;
+    auto add = [&](QLCChannel::Preset preset) {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(QString("ch%1").arg(n));
+        ch->setPreset(preset);
+        def->addChannel(ch);
+        mode->insertChannel(ch, quint32(n));
+        return quint32(n++);
+    };
+    if (master != QLCChannel::Custom)
+        add(master);
+    for (int h = 0; h < heads; ++h)
+    {
+        QLCFixtureHead head;
+        foreach (QLCChannel::Preset p, presets)
+            head.addChannel(add(p));
+        mode->insertHead(-1, head);
+    }
+    def->addMode(mode);
+    return def;
+}
+
+static Fixture *place(Doc *doc, QLCFixtureDef *def, quint32 address)
+{
+    Fixture *fx = new Fixture(doc);
+    fx->setFixtureDefinition(def, def->modes().first());
+    fx->setAddress(address);
+    doc->addFixture(fx);
+    return fx;
+}
+
+static const QList<QLCChannel::Preset> kRGB = {
+    QLCChannel::IntensityRed, QLCChannel::IntensityGreen, QLCChannel::IntensityBlue };
 
 void PowerDistribution_Test::defaults()
 {
@@ -202,4 +258,107 @@ void PowerDistribution_Test::xmlRoundTrip()
     QVERIFY(!buf2.contains("PowerDistribution"));
 }
 
-QTEST_APPLESS_MAIN(PowerDistribution_Test)
+
+/* A 40-pixel RGB bar with no power in its definition (the V-Show PL-4003 in
+   DanceHysteria): 120 colour channels. At 40 W a channel it was 4.8 kW a bar,
+   and 32 of them at a 35% blue read 173 A on the status bar. */
+void PowerDistribution_Test::aPixelBarWithNoPowerIsGuessedPerFixtureNotPerChannel()
+{
+    Doc doc(this);
+    QScopedPointer<QLCFixtureDef> def(makeDef("Pixel Bar", QLCFixtureDef::LEDBarPixels, 0, 40, kRGB));
+    Fixture *bar = place(&doc, def.data(), 0);
+    QCOMPARE(bar->channels(), quint32(120));
+
+    QCOMPARE(PowerEstimator::basis(bar), PowerEstimator::Guessed);
+    QCOMPARE(PowerEstimator::fixtureFullWatts(bar), PowerEstimator::FallbackFixtureWatts);
+
+    // Blue at 121 on every pixel: a third of the colours at 47%.
+    PowerEstimator::PreGMReader blue = [](quint32, quint32 a) -> uchar { return (a % 3 == 2) ? 121 : 0; };
+    const double frac = 121.0 / 255.0 / 3.0;
+    QCOMPARE(PowerEstimator::intensityFraction(bar, blue), frac);
+    const double expect = PowerEstimator::NonMoverStandbyWatts
+            + (PowerEstimator::FallbackFixtureWatts - PowerEstimator::NonMoverStandbyWatts) * frac;
+    QVERIFY(qAbs(PowerEstimator::fixtureWatts(bar, blue) - expect) < 1e-9);
+    QVERIFY(PowerEstimator::fixtureWatts(bar, blue) < 10.0);
+}
+
+void PowerDistribution_Test::guessesForMoversDimmerPacksAndUnlitFixtures()
+{
+    Doc doc(this);
+    QScopedPointer<QLCFixtureDef> mover(makeDef("Mover", QLCFixtureDef::MovingHead, 0, 1,
+                                                { QLCChannel::IntensityRed, QLCChannel::IntensityGreen },
+                                                QLCChannel::IntensityDimmer));
+    QScopedPointer<QLCFixtureDef> pack(makeDef("Pack", QLCFixtureDef::Dimmer, 0, 6,
+                                               { QLCChannel::IntensityDimmer }));
+    QScopedPointer<QLCFixtureDef> fan(makeDef("Fan", QLCFixtureDef::Fan, 0, 1,
+                                              { QLCChannel::SpeedPanSlowFast }));
+    Fixture *m = place(&doc, mover.data(), 0);
+    Fixture *p = place(&doc, pack.data(), 10);
+    Fixture *f = place(&doc, fan.data(), 20);
+
+    QCOMPARE(PowerEstimator::fixtureFullWatts(m), PowerEstimator::FallbackMoverWatts);
+    // A dimmer pack's channels are each a load of their own.
+    QCOMPARE(PowerEstimator::fixtureFullWatts(p), 6 * PowerEstimator::FallbackWattsPerDimmerChannel);
+    QCOMPARE(PowerEstimator::basis(p), PowerEstimator::Guessed);
+    // Nothing that lights: nothing guessed.
+    QCOMPARE(PowerEstimator::basis(f), PowerEstimator::NoLoad);
+    QCOMPARE(PowerEstimator::fixtureFullWatts(f), 0.0);
+    PowerEstimator::PreGMReader full = [](quint32, quint32) -> uchar { return 255; };
+    QCOMPARE(PowerEstimator::fixtureWatts(f, full), 0.0);
+}
+
+void PowerDistribution_Test::aRatedFixtureScalesWithItsLevel()
+{
+    Doc doc(this);
+    QScopedPointer<QLCFixtureDef> par(makeDef("Par", QLCFixtureDef::ColorChanger, 100, 1, kRGB,
+                                              QLCChannel::IntensityDimmer));
+    Fixture *fx = place(&doc, par.data(), 0);
+    QCOMPARE(PowerEstimator::basis(fx), PowerEstimator::Rated);
+    QCOMPARE(PowerEstimator::fixtureFullWatts(fx), 100.0);
+
+    PowerEstimator::PreGMReader dark = [](quint32, quint32) -> uchar { return 0; };
+    PowerEstimator::PreGMReader full = [](quint32, quint32) -> uchar { return 255; };
+    // Dimmer at 48 (19%), colours full.
+    PowerEstimator::PreGMReader low = [](quint32, quint32 a) -> uchar { return a == 0 ? 48 : 255; };
+    QCOMPARE(PowerEstimator::fixtureWatts(fx, dark), PowerEstimator::NonMoverStandbyWatts);
+    QCOMPARE(PowerEstimator::fixtureWatts(fx, full), 100.0);
+    const double expect = 2.0 + 98.0 * 48.0 / 255.0;
+    QVERIFY(qAbs(PowerEstimator::fixtureWatts(fx, low) - expect) < 1e-9);
+}
+
+void PowerDistribution_Test::theLoadGroupsByTypeBiggestFirst()
+{
+    Doc doc(this);
+    QScopedPointer<QLCFixtureDef> par(makeDef("Par", QLCFixtureDef::ColorChanger, 100, 1, kRGB,
+                                              QLCChannel::IntensityDimmer));
+    QScopedPointer<QLCFixtureDef> bar(makeDef("Bar", QLCFixtureDef::LEDBarPixels, 0, 8, kRGB));
+    QHash<quint32, double> watts, amps;
+    for (int i = 0; i < 3; ++i)
+    {
+        Fixture *fx = place(&doc, par.data(), quint32(i * 4));
+        watts.insert(fx->id(), 60.0);
+        amps.insert(fx->id(), 0.5);
+    }
+    for (int i = 0; i < 2; ++i)
+    {
+        Fixture *fx = place(&doc, bar.data(), quint32(100 + i * 24));
+        watts.insert(fx->id(), 120.0);
+        amps.insert(fx->id(), 1.0);
+    }
+
+    const QList<PowerEstimator::TypeLoad> rows = PowerEstimator::byType(&doc, watts, amps);
+    QCOMPARE(rows.size(), 2);
+    QCOMPARE(rows.at(0).name, QString("Test Bar"));
+    QCOMPARE(rows.at(0).count, 2);
+    QCOMPARE(rows.at(0).watts, 240.0);
+    QCOMPARE(rows.at(0).amps, 2.0);
+    QCOMPARE(rows.at(0).basis, PowerEstimator::Guessed);
+    QCOMPARE(rows.at(0).fullWatts, PowerEstimator::FallbackFixtureWatts);
+    QCOMPARE(rows.at(1).name, QString("Test Par"));
+    QCOMPARE(rows.at(1).count, 3);
+    QCOMPARE(rows.at(1).watts, 180.0);
+    QCOMPARE(rows.at(1).ratedWatts, 100.0);
+    QCOMPARE(rows.at(1).basis, PowerEstimator::Rated);
+}
+
+QTEST_MAIN(PowerDistribution_Test)
