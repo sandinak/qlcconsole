@@ -112,6 +112,12 @@ static QString displayPluginName(const QString &pluginName)
     return pluginName;
 }
 
+/** A port address the way the port rows and a node's own panel print it. */
+static QString portAddressText(quint32 pa)
+{
+    return QString("%1:%2:%3").arg((pa >> 8) & 0x7F).arg((pa >> 4) & 0x0F).arg(pa & 0x0F);
+}
+
 /* A list whose rows are what gets picked: bringing an item into view moves
    it up or down, never sideways. QTreeView::scrollTo() also scrolls to show
    the item's CELL -- and the rebuild re-sets the current row on column 0, so
@@ -1086,11 +1092,16 @@ void ConnectionsTree::refresh()
                     seenPortAddr.insert(pa);
 
                     QTreeWidgetItem *pt = new QTreeWidgetItem(ditem);
-                    pt->setText(COL_NAME, tr("port %1").arg(p + 1));
+                    pt->setText(COL_NAME, tr("port %1").arg(dev.portNumbers.value(p, p + 1)));
+                    /* "port" is the socket on the box, numbered as the node
+                       numbers it; "universe" is the Art-Net port-address it
+                       listens to (the plugin's "ArtNet Universe"), as
+                       net:subnet:universe. Two numbers, two names. */
+                    const QString uniText = p < dev.portUniverses.count()
+                        ? tr("universe %1").arg(portAddressText(pa)) : dev.portLabels.at(p);
                     pt->setText(COL_DETAIL, shared
-                        ? tr("%1  (same address as an earlier port)")
-                              .arg(dev.portLabels.at(p))
-                        : dev.portLabels.at(p));
+                        ? tr("%1  (same address as an earlier port)").arg(uniText)
+                        : uniText);
                     pt->setData(COL_NAME, ROLE_KIND, KIND_PORT);
                     pt->setData(COL_NAME, ROLE_PLUGIN, plugin->name());
                     pt->setData(COL_NAME, ROLE_LINE, quint32(line));
@@ -1151,9 +1162,7 @@ void ConnectionsTree::refresh()
                         const quint32 pa = mt.ports.at(p);
                         QTreeWidgetItem *pt = new QTreeWidgetItem(ditem);
                         pt->setText(COL_NAME, tr("port %1").arg(p + 1));
-                        pt->setText(COL_DETAIL, QString("%1:%2:%3")
-                                    .arg((pa >> 8) & 0x7F).arg((pa >> 4) & 0x0F)
-                                    .arg(pa & 0x0F));
+                        pt->setText(COL_DETAIL, tr("universe %1").arg(portAddressText(pa)));
                         pt->setData(COL_NAME, ROLE_KIND, KIND_PORT);
                         pt->setData(COL_NAME, ROLE_PLUGIN, plugin->name());
                         pt->setData(COL_NAME, ROLE_LINE, quint32(line));
@@ -1272,13 +1281,13 @@ void ConnectionsTree::refresh()
                                 if (gport == NULL)
                                 {
                                     gport = new QTreeWidgetItem(ghost);
+                                    /* Which socket on the box is not known --
+                                       nothing has answered to say -- so no
+                                       "port N" is invented from the address
+                                       (that read "port 2" for universe 0:0:1
+                                       while the patch said "port 1"). */
                                     gport->setText(COL_NAME,
-                                        tr("port %1").arg((portAddr & 0x0F) + 1));
-                                    gport->setText(COL_DETAIL,
-                                        QString("%1:%2:%3")
-                                            .arg((portAddr >> 8) & 0x7F)
-                                            .arg((portAddr >> 4) & 0x0F)
-                                            .arg(portAddr & 0x0F));
+                                        tr("universe %1").arg(portAddressText(portAddr)));
                                     gport->setData(COL_NAME, ROLE_KIND, KIND_PORT);
                                     gport->setData(COL_NAME, ROLE_PLUGIN, plugin->name());
                                     gport->setData(COL_NAME, ROLE_LINE, quint32(line));
@@ -1427,7 +1436,7 @@ void ConnectionsTree::refresh()
                         if (pp.contains("outputIP"))
                             where += tr(" → %1").arg(pp.value("outputIP").toString());
                         if (pp.contains("outputUni"))
-                            where += tr(" port %1").arg(pp.value("outputUni").toInt() & 0x0F);
+                            where += tr(" universe %1").arg(portAddressText(pp.value("outputUni").toUInt()));
                         uprops << Prop(uni->outputPatchesCount() > 1
                                        ? tr("Output %1").arg(oi + 1) : tr("Output"),
                                        where);
@@ -1525,10 +1534,7 @@ void ConnectionsTree::refresh()
 
                         const quint32 portAddr = params.value("outputUni", u->id()).toUInt();
                         QTreeWidgetItem *pt = new QTreeWidgetItem(ditem);
-                        pt->setText(COL_NAME, tr("port · %1:%2:%3")
-                                        .arg((portAddr >> 8) & 0x7F)
-                                        .arg((portAddr >> 4) & 0x0F)
-                                        .arg(portAddr & 0x0F));
+                        pt->setText(COL_NAME, tr("universe %1").arg(portAddressText(portAddr)));
                         pt->setForeground(COL_NAME, errBrush);
                         parentForUniverse = pt;
                     }
@@ -2003,12 +2009,6 @@ static void setExpandedDeep(QTreeWidgetItem *item, bool expanded)
         for (int c = 0; c < it->childCount(); c++)
             stack << it->child(c);
     }
-}
-
-/** A port address the way the port rows and a node's own panel print it. */
-static QString portAddressText(quint32 pa)
-{
-    return QString("%1:%2:%3").arg((pa >> 8) & 0x7F).arg((pa >> 4) & 0x0F).arg(pa & 0x0F);
 }
 
 /** True when this plugin can aim a patch at a node/port, not just a line. */
@@ -3565,8 +3565,8 @@ void ConnectionsTree::patchUniverseToPort(const QString &pluginName, quint32 lin
     bool ok = false;
     const QString pick = QInputDialog::getItem(
         this, tr("Patch to port"),
-        tr("Patch which universe to %1 port %2?")
-            .arg(deviceAddress).arg(portAddress & 0x0F),
+        tr("Patch which universe to %1 universe %2?")
+            .arg(deviceAddress).arg(portAddressText(portAddress)),
         names, 0, false, &ok);
     if (ok == false || pick.isEmpty())
         return;
@@ -4197,7 +4197,7 @@ ConnectionsTree::visibleTargets(const QString &pluginName, quint32 line) const
             if (c.ports.contains(pa))
                 continue;
             c.ports << pa;
-            c.numbers << i + 1;
+            c.numbers << dev.portNumbers.value(i, i + 1);
         }
         choices << c;
     }
@@ -4480,7 +4480,7 @@ ConnectionsTree::OrderedPatch ConnectionsTree::planOrderedPatch(
         if (k < portNames.count())
             e.portName = portNames.at(k);
         else if (targeted)
-            e.portName = portAddressText(e.port);
+            e.portName = tr("universe %1").arg(portAddressText(e.port));
         else
         {
             const QString ln = p->lineDescription(e.line, true);
@@ -5335,8 +5335,15 @@ void ConnectionsTree::buildUniverseList()
     m_tree->setRootIsDecorated(false);
 
     /* Where an output leg goes, in words: the protocol, and the device by its
-       name where it has one ("Art-Net → CS1 (172.18.2.211) port 1"). */
-    auto legText = [iomap](OutputPatch *op) {
+       name where it has one ("Art-Net → CS1 (172.18.2.211) · port 1 ·
+       universe 0:0:0"). "port" is the socket on the node, named only when
+       the node has said (or was declared with) which one carries that
+       universe; "universe" is the Art-Net port-address, as the device rows
+       and the plugin's own "ArtNet Universe" have it. This said "port 1" for
+       outputUni 0 while the device row said "0:0:0" -- two numbers, one
+       name. */
+    QHash<QString, QList<TargetChoice> > targetsByLine;   // asked once per rebuild
+    auto legText = [this, iomap, &targetsByLine](OutputPatch *op) {
         const QString plugin = op->plugin() != NULL ? op->plugin()->name() : op->pluginName();
         const QMap<QString, QVariant> pp = op->getPluginParameters();
         const QString ip = pp.value(QStringLiteral("outputIP")).toString();
@@ -5346,7 +5353,17 @@ void ConnectionsTree::buildUniverseList()
             const QString alias = iomap->targetAlias(ip);
             where = alias.isEmpty() ? ip : QStringLiteral("%1 (%2)").arg(alias, ip);
             if (pp.contains(QStringLiteral("outputUni")))
-                where += QObject::tr(" port %1").arg(pp.value(QStringLiteral("outputUni")).toInt() + 1);
+            {
+                const quint32 pa = pp.value(QStringLiteral("outputUni")).toUInt();
+                int number = 0;
+                const QString key = QString("%1|%2").arg(plugin).arg(op->output());
+                if (op->plugin() != NULL && targetsByLine.contains(key) == false)
+                    targetsByLine.insert(key, visibleTargets(plugin, op->output()));
+                foreach (const TargetChoice &t, targetsByLine.value(key))
+                    if (t.address == ip && t.ports.contains(pa))
+                        number = t.numbers.value(t.ports.indexOf(pa));
+                where += QStringLiteral(" · ") + portWhereText(number, pa);
+            }
         }
         else
         {

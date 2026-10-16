@@ -420,9 +420,9 @@ void ConnectionsTree_Test::manualTargetPortsAreRendered()
 
     // Shown in Art-Net's own net:subnet:universe terms, which is what is
     // printed on the node's panel, not the packed 15-bit number.
-    QCOMPARE(dev->child(0)->text(COL_DETAIL), QString("0:1:1"));
+    QCOMPARE(dev->child(0)->text(COL_DETAIL), QString("universe 0:1:1"));
     QCOMPARE(dev->child(0)->data(COL_NAME, ROLE_PORTADDR).toUInt(), quint32(0x011));
-    QCOMPARE(dev->child(1)->text(COL_DETAIL), QString("0:1:2"));
+    QCOMPARE(dev->child(1)->text(COL_DETAIL), QString("universe 0:1:2"));
 }
 
 /****************************************************************************
@@ -1838,4 +1838,59 @@ void ConnectionsTree_Test::retargetOffersTheVisiblePortsWithTheCurrentOne()
     quint32 p = 99;
     QVERIFY(tree.patchTarget(7, stub->name(), 0, a, p));
     QCOMPARE(p, quint32(3));
+}
+
+static QTreeWidgetItem *rowNamed(QTreeWidget *tree, const QString &prefix)
+{
+    foreach (QTreeWidgetItem *it, allItems(tree))
+        if (it->text(COL_NAME).startsWith(prefix))
+            return it;
+    return NULL;
+}
+
+/* "port 1..4" on the universe list, "0:0:1" on the device's port row and
+   "port 2" for the same port on an unheard node: one name, three numbers.
+   Now "port N" is the socket on the node as the node numbers it, and
+   "universe n:s:u" is the Art-Net port-address -- everywhere. */
+void ConnectionsTree_Test::portAndUniverseReadTheSameEverywhere()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    stub->m_supportsTargets = true;
+    // A node whose first and third sockets are inputs: its two outputs are
+    // ports 2 and 4, listening to 0:0:5 and 0:0:6.
+    QLCIOPlugin::Device node = makeDevice(0, "Duo", "172.18.2.70");
+    node.portLabels << "0:0:5" << "0:0:6";
+    node.portUniverses << 5 << 6;
+    node.portNumbers << 2 << 4;
+    stub->m_devices << node;
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    while (iom->universesCount() < 4)
+        iom->addUniverse();
+
+    ConnectionsTree tree(m_doc);
+    QVERIFY(iom->setOutputPatch(1, stub->name(), "", 0, false, 0));
+    QVERIFY(tree.applyTarget(1, stub->name(), 0, "172.18.2.70", 6));
+    QVERIFY(iom->setOutputPatch(2, stub->name(), "", 0, false, 0));
+    QVERIFY(tree.applyTarget(2, stub->name(), 0, "172.18.2.80", 1));   // never heard
+    tree.refresh();
+
+    QTreeWidgetItem *heard = rowNamed(tree.m_tree, "port 4 → 2:");
+    QVERIFY(heard != NULL);
+    QVERIFY2(heard->text(COL_DETAIL).startsWith("universe 0:0:6"),
+             qPrintable(heard->text(COL_DETAIL)));
+    QVERIFY(rowNamed(tree.m_tree, "port 2") != NULL);     // the free one
+    // Unheard: which socket is unknown, so none is made up.
+    QVERIFY(rowNamed(tree.m_tree, "universe 0:0:1 → 3:") != NULL);
+    QVERIFY(rowNamed(tree.m_tree, "port 2 → 3:") == NULL);
+
+    tree.m_byUniverse->setChecked(true);
+    tree.refresh();
+    QTreeWidgetItem *u2 = universeRow(tree.m_tree, 1);
+    QTreeWidgetItem *u3 = universeRow(tree.m_tree, 2);
+    QVERIFY(u2 != NULL && u3 != NULL);
+    QVERIFY2(u2->text(COL_DETAIL).contains("172.18.2.70 · port 4 · universe 0:0:6"),
+             qPrintable(u2->text(COL_DETAIL)));
+    QVERIFY2(u3->text(COL_DETAIL).contains("172.18.2.80 · universe 0:0:1"),
+             qPrintable(u3->text(COL_DETAIL)));
+    QVERIFY(u3->text(COL_DETAIL).contains("port") == false);
 }

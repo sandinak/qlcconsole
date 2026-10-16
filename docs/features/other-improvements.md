@@ -20,7 +20,8 @@ Because Devices follows the wiring, a patched universe appears only under
 the output it goes to, and only unpatched ones gather in their own
 **Unpatched** folder. Tick **By universe** for the other way round: every
 universe in number order, each with where it goes ("Art-Net → CS1
-(172.18.2.211) port 1", "WLED → 172.18.2.55", or "not patched") and what it
+(172.18.2.211) · port 1 · universe 0:0:0", "WLED → 172.18.2.55", or "not
+patched") and what it
 carries — same right-click actions, renamed inline the same way. The choice
 is remembered. By universe, only the universes **in use** are listed — a
 fixture patched into it, an output or an input — with a line at the foot

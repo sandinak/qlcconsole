@@ -129,6 +129,9 @@ private slots:
     void patchToAnAddressTypedByHand();
     void retargetOffersTheVisiblePortsWithTheCurrentOne();
 
+    /* "port" is the node's socket, "universe" its port-address: everywhere. */
+    void portAndUniverseReadTheSameEverywhere();
+
 private:
     Doc *m_doc;
 };
