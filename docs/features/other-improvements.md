@@ -44,7 +44,31 @@ it is ("Front Par, channel 1 — Dimmer").
 
 Right-click an interface to patch a universe to it or configure the
 protocol; right-click a universe to rename it, set its feedback line or
-input profile, unpatch it, or delete it. (The Devices tab keeps all of this
+input profile, unpatch it, or delete it. Those act on the one row you
+right-clicked.
+
+**Several universes at once.** Ctrl-click (⌘-click on a Mac) universes —
+in either view, patched or not — and right-click one of them:
+
+- **Patch N selected universes to…** asks the protocol, the interface and
+  the device, then the port to start from. The universes go onto the ports
+  **in the order you clicked them**, not the order they are listed: the
+  first one you picked on the starting port, the second on the next, and so
+  on (a shift-click range counts in list order). Before anything changes it
+  shows the whole plan to confirm. If there are more universes than ports,
+  the ones that fit are patched and the rest are named and left as they
+  were. A port another universe already sends to is skipped (one port, one
+  universe) and the plan says whose it is; universes in the same selection
+  can swap ports freely. Choose **Broadcast** to put them all on the
+  interface with no target, or **Another address…** to number up from a
+  port address you type. On a protocol without devices (a multi-universe
+  USB widget) they go onto consecutive interfaces.
+- **Unpatch N selected universes** removes the patch from every one of them
+  at once.
+- **Retarget N selected universes…** re-aims already-patched universes at
+  one node on consecutive port addresses, also in clicked order.
+
+Each is one step for **Undo Patch Change**. (The Devices tab keeps all of this
 to one row over the list — **By universe**, **Show unused…**, a one-line
 "Right-click a row for what it can do" whose tooltip has the whole
 explanation, the search status, **Undo Patch Change** and **Rescan** — so

@@ -6,6 +6,49 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-16 — Connections: patch / unpatch several universes at once *(fix/connections-multipatch)*
+
+Branson: "when I select a group to patch or unpatch from the universes
+listing in connection it doesn't work — 4 U patched to a 4-port Art-Net
+device should go onto those ports in selected order; 4 U unpatched should
+all go at the same time."
+
+- **Why it didn't work**: every universe-row action in
+  `ConnectionsTree::slotContextMenu()` acted on the row under the pointer
+  only (by design: "right-clicking one row while twelve are selected must
+  not quietly act on twelve"). The one plural action, *Retarget N selected
+  universes…*, only counted already-patched output rows, so a selection of
+  unpatched universes got the single-row *Patch to…* and a multi-select
+  *Unpatch from this interface* removed one patch.
+- **Selection order**: `m_selectionOrder`, kept from `itemSelectionChanged`
+  (not during a rebuild): what is still selected keeps its place, new picks
+  append — one per ctrl-click, a shift-click range in list order.
+- **Patch N selected universes to…** (both views, any mix of patched /
+  unpatched / pending): protocol → interface → device (discovered or
+  declared on that interface, with its ports; or *Another address…* +
+  first port address; or *Broadcast*) → starting port. Universe k goes to
+  port k. `planOrderedPatch()` works it out first and the plan is shown to
+  confirm: overflow (more universes than ports) is named and left alone —
+  no wrap, no silent drop; a port held by an UNSELECTED universe is skipped
+  with the owner named (the one-port-one-universe rule `applyTarget()`
+  already enforces), while universes in the same run may swap ports.
+  `applyOrderedPatch()`: one undo capture, patch 0 replaced (as
+  `patchUniverseTo()` does), two passes so a universe moving off a port
+  frees it first, one rebuild. Protocols without targets (DMX USB) use
+  consecutive lines as the ports.
+- **Unpatch N selected universes**: what each row's own Unpatch removes
+  (output leg, input, or a pending patch; feedback rows skipped), one undo
+  step, one rebuild.
+- *Retarget N selected universes…* now numbers in picked order too.
+- Plural actions are handled in `handleUniversalMenuAction()`, so every
+  per-kind branch honours them; single-row actions unchanged.
+- Tests (`connectionstree_test`): picked order incl. rebuild / ctrl-deselect
+  / shift range; 5 picked onto a 4-port node out of list order (overflow,
+  untouched unselected universe, swap, one undo, one rebuild; menu offers
+  it); a held port skipped; 4 unpatched from the real context menu in one
+  step and one rebuild. Help: other-improvements.md (Connections &amp;
+  patch), whats-new.md, the Devices hint tooltip.
+
 ### 2026-10-15 — Linux: a test gate that can't skip quietly, and the app icon *(feat/linux-gate-icon)*
 
 - **Test gate counts what it ran** (`platforms/linux/unittest.sh`). The

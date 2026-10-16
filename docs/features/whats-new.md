@@ -16,6 +16,13 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Outputs
 
+- **Patch or unpatch several universes at once.** In Connections, select
+  universes and right-click: **Patch N selected universes to…** puts them on
+  a device's ports in the order you clicked them (more universes than ports:
+  the rest are named and left alone), and **Unpatch N selected universes**
+  removes them all in one go — each one undo step. See
+  [Connections &amp; patch](other-improvements.md#connections--patch).
+
 - **Art-Net and E1.31 say when an output is in trouble** — in the footer
   and in red on the universe's row in Connections: an address that can't
   be reached, an Art-Net node that stopped answering, a node port reporting

@@ -23,6 +23,7 @@
 #include <QtTest>
 #include <QScrollBar>
 #include <QMenu>
+#include <QSettings>
 
 #define protected public
 #define private public
@@ -160,6 +161,9 @@ void ConnectionsTree_Test::init()
 
 void ConnectionsTree_Test::cleanup()
 {
+    /* "By universe" is remembered across sessions; a test that turned it on
+       must not leave every later test looking at the universe list. */
+    QSettings().setValue(QStringLiteral("connections/byUniverse"), false);
     delete m_doc;
     m_doc = NULL;
 }
@@ -927,6 +931,261 @@ void ConnectionsTree_Test::bulkRetargetNumbersPortsUpwardAndIsOneUndoStep()
                  "undo left a target behind on one of the universes");
     }
     QVERIFY(iom->patchUndo()->canUndo() == false);
+}
+
+/****************************************************************************
+ * Multi-universe patch / unpatch
+ ****************************************************************************/
+
+/** The By-universe list, every universe showing, on screen so it can be
+    clicked. */
+static void showUniverseList(ConnectionsTree &tree)
+{
+    tree.resize(1000, 600);
+    tree.m_showUnused->setChecked(true);
+    tree.m_byUniverse->setChecked(true);
+    tree.show();
+    tree.refresh();
+    QApplication::processEvents();
+}
+
+static QTreeWidgetItem *universeRow(QTreeWidget *tree, quint32 id)
+{
+    foreach (QTreeWidgetItem *it, allItems(tree))
+        if (it->data(COL_NAME, ROLE_UNIVERSE).isValid()
+                && it->data(COL_NAME, ROLE_UNIVERSE).toUInt() == id)
+            return it;
+    return NULL;
+}
+
+/** Click a universe's row the way a hand does, with @p mod held. */
+static void clickUniverse(ConnectionsTree &tree, quint32 id,
+                          Qt::KeyboardModifiers mod = Qt::NoModifier)
+{
+    QTreeWidgetItem *row = universeRow(tree.m_tree, id);
+    QVERIFY(row != NULL);
+    const QPoint at = tree.m_tree->visualItemRect(row).center();
+    QTest::mouseClick(tree.m_tree->viewport(), Qt::LeftButton, mod, at);
+    QApplication::processEvents();
+}
+
+/** Pick @p text (by prefix) from the context menu opened on @p id's row. */
+static QStringList contextMenuOn(ConnectionsTree &tree, quint32 id, const QString &pick)
+{
+    QStringList seen;
+    QTimer::singleShot(0, [&seen, pick]() {
+        QMenu *m = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+        if (m == NULL)
+            return;
+        QAction *chosen = NULL;
+        foreach (QAction *a, m->actions())
+        {
+            seen << a->text();
+            if (chosen == NULL && pick.isEmpty() == false && a->text().startsWith(pick))
+                chosen = a;
+        }
+        if (chosen != NULL)
+        {
+            m->setActiveAction(chosen);
+            QTest::keyClick(m, Qt::Key_Return);
+        }
+        else
+            m->close();
+    });
+    QTreeWidgetItem *row = universeRow(tree.m_tree, id);
+    tree.slotContextMenu(tree.m_tree->visualItemRect(row).center());
+    QApplication::processEvents();
+    return seen;
+}
+
+static IOPluginStub *fourPortNode(Doc *doc)
+{
+    IOPluginStub *stub = stubOf(doc);
+    stub->m_supportsTargets = true;
+    QLCIOPlugin::Device node = makeDevice(0, "Quad", "172.18.2.50");
+    for (quint32 p = 0; p < 4; p++)
+    {
+        node.portLabels << QString("0:0:%1").arg(p);
+        node.portUniverses << p;
+    }
+    stub->m_devices << node;
+    InputOutputMap *iom = doc->inputOutputMap();
+    while (iom->universesCount() < 8)
+        iom->addUniverse();
+    return stub;
+}
+
+void ConnectionsTree_Test::selectionRemembersTheOrderUniversesWerePicked()
+{
+    fourPortNode(m_doc);
+    ConnectionsTree tree(m_doc);
+    showUniverseList(tree);
+
+    // Listed 1..8; picked 3, then 1, 4, 2. A selection model can only ever
+    // say "1, 2, 3, 4" -- the order is what has to be remembered.
+    clickUniverse(tree, 2);
+    clickUniverse(tree, 0, Qt::ControlModifier);
+    clickUniverse(tree, 3, Qt::ControlModifier);
+    clickUniverse(tree, 1, Qt::ControlModifier);
+    QCOMPARE(tree.orderedSelectedUniverses(), QList<quint32>() << 2 << 0 << 3 << 1);
+
+    // The five-second rebuild clears and restores the selection: not a
+    // reason to forget the order.
+    tree.refresh();
+    QApplication::processEvents();
+    QCOMPARE(tree.orderedSelectedUniverses(), QList<quint32>() << 2 << 0 << 3 << 1);
+
+    // Ctrl-clicking one off drops just that one.
+    clickUniverse(tree, 0, Qt::ControlModifier);
+    QCOMPARE(tree.orderedSelectedUniverses(), QList<quint32>() << 2 << 3 << 1);
+
+    // A plain click starts again; a shift-click range adds in list order.
+    clickUniverse(tree, 6);
+    clickUniverse(tree, 4, Qt::ShiftModifier);
+    QCOMPARE(tree.orderedSelectedUniverses(), QList<quint32>() << 6 << 4 << 5);
+}
+
+void ConnectionsTree_Test::multiPatchPutsThemOnTheDevicePortsInPickedOrder()
+{
+    IOPluginStub *stub = fourPortNode(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    // An unselected universe, patched elsewhere: must not move.
+    QVERIFY(iom->setOutputPatch(7, stub->name(), "", 1, false, 0));
+
+    ConnectionsTree tree(m_doc);
+    showUniverseList(tree);
+
+    // Five picked for a four-port node, out of list order: 3, 1, 4, 2, 6.
+    clickUniverse(tree, 2);
+    clickUniverse(tree, 0, Qt::ControlModifier);
+    clickUniverse(tree, 3, Qt::ControlModifier);
+    clickUniverse(tree, 1, Qt::ControlModifier);
+    clickUniverse(tree, 5, Qt::ControlModifier);
+    const QList<quint32> picked = tree.orderedSelectedUniverses();
+    QCOMPARE(picked, QList<quint32>() << 2 << 0 << 3 << 1 << 5);
+
+    // The menu now offers it for the whole selection, by count.
+    const QStringList offered = contextMenuOn(tree, 0, QString());
+    QVERIFY2(offered.contains("Patch 5 selected universes to…"), qPrintable(offered.join(" | ")));
+
+    const QList<quint32> ports = QList<quint32>() << 0 << 1 << 2 << 3;
+    const ConnectionsTree::OrderedPatch plan = tree.planOrderedPatch(
+        picked, stub->name(), 0, "172.18.2.50", ports, QStringList(), false);
+    QCOMPARE(plan.entries.count(), 4);
+    QCOMPARE(plan.overflow, QList<quint32>() << 5);   // said, not wrapped or dropped
+    QVERIFY(plan.conflicts.isEmpty());
+
+    int rebuilds = 0;
+    connect(tree.m_tree->model(), &QAbstractItemModel::modelReset, [&rebuilds]() { rebuilds++; });
+    QCOMPARE(tree.applyOrderedPatch(plan), 4);
+    QCOMPARE(rebuilds, 1);                             // one rebuild, not one per universe
+
+    // Port k carries the k-th one PICKED.
+    for (int k = 0; k < 4; k++)
+    {
+        QString a;
+        quint32 p = 99;
+        QVERIFY(tree.patchTarget(picked.at(k), stub->name(), 0, a, p));
+        QCOMPARE(a, QString("172.18.2.50"));
+        QCOMPARE(p, quint32(k));
+    }
+    // The one that did not fit, and the one not selected, are as they were.
+    QCOMPARE(iom->outputPatchesCount(5), 0);
+    QCOMPARE(iom->outputPatchesCount(7), 1);
+    QCOMPARE(iom->outputPatch(7)->output(), quint32(1));
+
+    // Re-ordering the same four across the same four ports is not a clash
+    // with themselves.
+    const QList<quint32> reversed = QList<quint32>() << 1 << 3 << 0 << 2;
+    const ConnectionsTree::OrderedPatch again = tree.planOrderedPatch(
+        reversed, stub->name(), 0, "172.18.2.50", ports, QStringList(), false);
+    QVERIFY(again.conflicts.isEmpty());
+    QCOMPARE(tree.applyOrderedPatch(again), 4);
+    for (int k = 0; k < 4; k++)
+    {
+        QString a;
+        quint32 p = 99;
+        QVERIFY(tree.patchTarget(reversed.at(k), stub->name(), 0, a, p));
+        QCOMPARE(p, quint32(k));
+    }
+
+    // One undo step for the whole set.
+    QVERIFY(iom->patchUndo()->undo());
+    for (int k = 0; k < 4; k++)
+    {
+        QString a;
+        quint32 p = 99;
+        QVERIFY(tree.patchTarget(picked.at(k), stub->name(), 0, a, p));
+        QCOMPARE(p, quint32(k));
+    }
+}
+
+void ConnectionsTree_Test::multiPatchSkipsAPortAnotherUniverseHolds()
+{
+    IOPluginStub *stub = fourPortNode(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    ConnectionsTree tree(m_doc);
+    // Universe 8 already sends to the node's port 3.
+    QVERIFY(iom->setOutputPatch(7, stub->name(), "", 0, false, 0));
+    QVERIFY(tree.applyTarget(7, stub->name(), 0, "172.18.2.50", 2));
+
+    const QList<quint32> picked = QList<quint32>() << 3 << 2 << 1 << 0;
+    const ConnectionsTree::OrderedPatch plan = tree.planOrderedPatch(
+        picked, stub->name(), 0, "172.18.2.50",
+        QList<quint32>() << 0 << 1 << 2 << 3, QStringList(), false);
+
+    // The third one picked would land on universe 8's port: skipped, and who
+    // holds it is said. The rest keep their positions -- port k is still
+    // the k-th pick, nothing shuffles up into the gap.
+    QCOMPARE(plan.conflicts.count(), 1);
+    QCOMPARE(plan.conflicts.first().universe, quint32(1));
+    QCOMPARE(plan.conflicts.first().owner, quint32(7));
+    QCOMPARE(tree.applyOrderedPatch(plan), 3);
+    QCOMPARE(iom->outputPatchesCount(1), 0);
+    QString a;
+    quint32 p = 99;
+    QVERIFY(tree.patchTarget(0, stub->name(), 0, a, p));
+    QCOMPARE(p, quint32(3));
+    QVERIFY(tree.patchTarget(7, stub->name(), 0, a, p));
+    QCOMPARE(p, quint32(2));                           // untouched
+}
+
+void ConnectionsTree_Test::multiUnpatchRemovesEveryOneInOneStep()
+{
+    IOPluginStub *stub = fourPortNode(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    for (quint32 u = 0; u < 5; u++)
+        QVERIFY(iom->setOutputPatch(u, stub->name(), "", u % 4, false, 0));
+
+    ConnectionsTree tree(m_doc);
+    showUniverseList(tree);
+    clickUniverse(tree, 3);
+    clickUniverse(tree, 0, Qt::ControlModifier);
+    clickUniverse(tree, 2, Qt::ControlModifier);
+    clickUniverse(tree, 1, Qt::ControlModifier);
+
+    int rebuilds = 0;
+    connect(tree.m_tree->model(), &QAbstractItemModel::modelReset, [&rebuilds]() { rebuilds++; });
+
+    // From the menu, as Branson would: all four go at once.
+    const QStringList offered = contextMenuOn(tree, 1, "Unpatch 4 selected universes");
+    QVERIFY2(offered.contains("Unpatch 4 selected universes"), qPrintable(offered.join(" | ")));
+    // ...and the single-row action is still there for the row under the pointer.
+    QVERIFY(offered.contains("Unpatch from this interface"));
+
+    for (quint32 u = 0; u < 4; u++)
+        QCOMPARE(iom->outputPatchesCount(u), 0);
+    QCOMPARE(iom->outputPatchesCount(4), 1);           // not selected: kept
+    QCOMPARE(rebuilds, 1);
+
+    // One press of Undo Patch Change puts all four back.
+    QVERIFY(iom->patchUndo()->canUndo());
+    QVERIFY(iom->patchUndo()->undo());
+    for (quint32 u = 0; u < 4; u++)
+    {
+        QCOMPARE(iom->outputPatchesCount(u), 1);
+        QCOMPARE(iom->outputPatch(u)->output(), u % 4);
+    }
 }
 
 /****************************************************************************

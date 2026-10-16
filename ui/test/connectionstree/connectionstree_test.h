@@ -88,6 +88,14 @@ private slots:
     /** Two universes may share a NIC, but not a node port. */
     void twoUniversesCannotTargetTheSameNodePort();
 
+    /* Patching and unpatching several selected universes at once
+       ("when I select a group to patch or unpatch from the universes
+       listing in connection it doesn't work") */
+    void selectionRemembersTheOrderUniversesWerePicked();
+    void multiPatchPutsThemOnTheDevicePortsInPickedOrder();
+    void multiPatchSkipsAPortAnotherUniverseHolds();
+    void multiUnpatchRemovesEveryOneInOneStep();
+
     /* Reachability probing */
     void rescanProbesUnheardTargetsOnly();
     void rescanProbesAddressesNamedByPatches();

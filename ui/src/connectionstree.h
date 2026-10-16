@@ -172,6 +172,65 @@ private:
     void retargetSelection(const QString &pluginName);
     /** Universes selected in the tree, in row order, deduplicated. */
     QList<quint32> selectedUniverses(QString &pluginName, QList<quint32> &lines) const;
+
+    /** Every selected universe -- patched, pending or not patched -- in the
+     *  order they were PICKED, not the order they are listed in. A ctrl-click
+     *  appends; a shift-click range appends what it adds in list order. */
+    QList<quint32> orderedSelectedUniverses();
+    /** Bring m_selectionOrder in line with what is selected now. */
+    void syncSelectionOrder();
+
+    /** One universe of a multi-universe patch, and where it lands. */
+    struct OrderedPatchEntry
+    {
+        quint32 universe = 0;
+        quint32 line = 0;       ///< the plugin line it goes out on
+        bool targeted = false;  ///< false: broadcast, or no target concept
+        quint32 port = 0;       ///< port address on the target, if targeted
+        QString portName;       ///< how the port reads to the operator
+        quint32 owner = 0;      ///< conflicts only: who already sends there
+    };
+    /** "Patch these N universes to that device", worked out before anything
+     *  is changed, so it can be shown, confirmed, and tested without a
+     *  dialog. Universe k goes to port k; what does not fit is left alone. */
+    struct OrderedPatch
+    {
+        QString pluginName;
+        QString address;                    ///< empty: no target / broadcast
+        QList<OrderedPatchEntry> entries;   ///< will be patched, in order
+        QList<quint32> overflow;            ///< more universes than ports
+        QList<OrderedPatchEntry> conflicts; ///< port already another's
+    };
+    /** Pair @p universes (in this order) with @p ports (in this order) on
+     *  @p address. @p linesAsPorts: a plugin with no targets, whose
+     *  consecutive LINES are the ports, starting at @p line. An empty
+     *  @p address without @p linesAsPorts patches every one to @p line with
+     *  no target (broadcast). */
+    OrderedPatch planOrderedPatch(const QList<quint32> &universes,
+                                  const QString &pluginName, quint32 line,
+                                  const QString &address,
+                                  const QList<quint32> &ports,
+                                  const QStringList &portNames,
+                                  bool linesAsPorts) const;
+    /** Carry out a plan as ONE undo step and one rebuild. Returns how many
+     *  universes were patched. */
+    int applyOrderedPatch(const OrderedPatch &plan);
+    /** The dialogs in front of planOrderedPatch()/applyOrderedPatch(). */
+    void patchSelectionTo(const QList<quint32> &universes);
+
+    /** One patch a selected row stands for, as its own "Unpatch" removes. */
+    struct UnpatchLeg
+    {
+        quint32 universe = 0;
+        QString pluginName;
+        quint32 line = 0;
+        bool output = true;
+        bool pending = false;   ///< a pending row: clear its pending legs
+    };
+    /** What "Unpatch" on each selected row would remove, deduplicated. */
+    QList<UnpatchLeg> selectedUnpatchLegs() const;
+    /** Remove all of them as ONE undo step and one rebuild. */
+    void unpatchLegs(const QList<UnpatchLeg> &legs);
     /** Write outputIP / outputUni onto the patch of this universe on this line. */
     /** Which universe already sends to a node port, or invalidUniverse().
      *
@@ -301,6 +360,21 @@ private:
        so a pointer would dangle. */
     QSet<quint32> m_activeUniverses;
     QTimer *m_activityTimer;
+
+    /* Selected universes in the order they were clicked. A selection model
+       only knows WHAT is selected, and lists it in row order, so the order
+       someone picked them in -- which is the order they want them on a
+       node's ports -- has to be recorded as it happens. */
+    QList<quint32> m_selectionOrder;
+
+    /* The plural actions of the menu that is open right now, so every
+       per-kind branch of slotContextMenu() handles them the same way (see
+       handleUniversalMenuAction()). Reset every time a menu opens. */
+    class QAction *m_pluralRetarget = nullptr;
+    class QAction *m_pluralPatch = nullptr;
+    class QAction *m_pluralUnpatch = nullptr;
+    QList<quint32> m_pluralUniverses;
+    QList<UnpatchLeg> m_pluralLegs;
 };
 
 #endif
