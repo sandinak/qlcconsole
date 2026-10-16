@@ -650,6 +650,16 @@ rig edits, bulk repatching, cross-show consistency checks.
   the first — it is a per-patch-row fact.
 
 
+- **Verify node IP setting (ArtIpProg) on a real node (2026-10-16)** — built on
+  `fix/artnet-unconfigured-nodes` (see DONE.md 2026-10-16), tested only against
+  a sink. On the rig: a factory-fresh node, Connections → **Rescan** (does it
+  appear amber? if not, add the alias the docs give and Rescan again) →
+  right-click → **Set node IP address…** → Ask the node, then Apply. Watch
+  with `tools/artnetprobe --listen` from another machine if it misbehaves.
+  Open: whether the limited-broadcast poll really leaves by the named
+  interface on macOS/Windows (IP_PKTINFO), and whether nodes answer
+  ArtIpProg from the old or new address (both are accepted).
+
 - **Art-Net node configuration (ArtAddress) — send path built and proven, but
   no node here applies it (2026-08-26)** — `artnet-config.py` at the repo root
   builds and sends ArtAddress (OpCode 0x6000); the plugin defines

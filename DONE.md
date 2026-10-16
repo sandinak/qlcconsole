@@ -6,6 +6,52 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-16 — Art-Net: new nodes without an address are found, flagged, and can be given one *(fix/artnet-unconfigured-nodes — NOT yet verified on a real node)*
+
+Branson put a new node on the show network and it didn't appear until its IP
+was set. The "DMX-Workshop configure" tooling was only ever `artnet-config.py`
+(ArtAddress: names / port addresses, unicast to a known IP); nothing in the app
+could see or address a node off this computer's subnets.
+
+**Why it didn't appear** (any of these is enough):
+- The periodic poll (`ArtNetController::slotSendPoll`) goes only to the line's
+  subnet broadcast (172.18.2.255), every 3 s, and only on lines with an output
+  open; Rescan sent the same. A node on 2.x.x.x may ignore a broadcast for a
+  subnet it isn't on.
+- A node that answers to its *own* subnet broadcast (2.255.255.255 — Art-Net 3
+  behaviour, and what the CR041R does with .255) is dropped by the host's IP
+  stack: the address isn't a broadcast address of any local interface. No
+  socket option changes that; only an address on that network does.
+- If an answer did arrive, it was listed like any other node — nothing said it
+  was unusable, and there was no way to set its IP (ArtIpProg was defined,
+  never built).
+
+**Changed**
+- Rescan also sends one ArtPoll to 255.255.255.255 per physical interface,
+  named via IP_PKTINFO (`QNetworkDatagram::setInterfaceIndex`) so it leaves by
+  that cable. The 3 s poll is unchanged (one datagram, to the subnet broadcast).
+- `Device::attention`: a node whose IP is in no line's subnet is listed amber
+  with "on its factory Art-Net address, not this network: set its IP" (or the
+  169.254 / 0.0.0.0 / other-network variants).
+- ArtIpProg / ArtIpProgReply (0xf800 / 0xf900, 34 bytes, Art-Net 4 incl.
+  gateway) in `ArtNetPacketizer`; `ArtNetPlugin::sendIpProg` sends it **unicast
+  only, through the line whose subnet holds the node**, and refuses otherwise —
+  it carries no MAC, so a broadcast one would re-address every node.
+- `ArtNetNodeSetup` dialog (right-click a node → **Set node IP address…**,
+  through new `QLCIOPlugin::canConfigureDevice/configureDevice`): fixed / DHCP /
+  factory default, "Ask the node" query, confirm before any write, shows the
+  reply. For an unreachable node: explains, and shows the temporary-alias
+  command (macOS `ifconfig alias`, Linux `ip addr add`, Windows `netsh`) — shown,
+  never run.
+- Status2 DHCP bits were swapped (bit 1 is "using DHCP", bit 2 "capable").
+- Controller sends go through a test sink (`m_testSink`); 16 new artnet tests
+  + 1 connectionstree test, none touch a network.
+
+**To verify on the rig:** the limited-broadcast poll actually leaving by vlan0
+(not the default route), a factory node answering it, and a real node applying
+ArtIpProg. Passive capture on vlan0 wasn't possible from the agent (BPF is
+root-only).
+
 ### 2026-10-15 — Linux: a test gate that can't skip quietly, and the app icon *(feat/linux-gate-icon)*
 
 - **Test gate counts what it ran** (`platforms/linux/unittest.sh`). The

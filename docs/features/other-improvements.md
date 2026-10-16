@@ -100,6 +100,65 @@ on **another** subnet never hears that broadcast, so it gets one unicast
 ArtPoll every 3 seconds as well. E1.31 has no reply from a receiver, so
 for E1.31 only "can't send" is shown.
 
+### Setting up a new Art-Net node
+
+A node fresh out of the box usually isn't on your network yet: Art-Net
+nodes ship on a **2.x.x.x** or **10.x.x.x** address, some on their maker's
+own default (192.168.0.x, say), and one set to DHCP with no DHCP server
+gives itself **169.254.x.x**. Connections lists such a node **amber**, with
+what to do first in its detail — "on its factory Art-Net address, not this
+network: set its IP" — instead of as a usable green node.
+
+**Rescan** (Connections, or the patch grid's **Rescan Devices**) is what
+finds one: on top of the usual poll to each interface's own broadcast
+address, it sends one ArtPoll to the **limited broadcast**
+(255.255.255.255) out of each interface — one small datagram per interface,
+only when you press it. A node on a foreign address may ignore the usual
+poll, but every network stack takes that one.
+
+Whether its answer gets back depends on the node. If it answers to this
+computer's address or to 255.255.255.255, it appears. If it answers to its
+**own** network's broadcast (2.255.255.255) — as Art-Net 3 nodes do — the
+operating system throws the answer away before any program sees it, and the
+node can't appear until this computer has an address on that network too
+(below).
+
+To set its address: right-click the node → **Set node IP address…**. The
+dialog shows the node (name, address, MAC, interface), and:
+
+- **Fixed address** (IP, subnet mask, optionally a gateway), **DHCP** (if
+  the node says it supports it) or **Factory default address**.
+- **Ask the node** asks for its current settings and changes nothing.
+- **Apply to node…** asks you to confirm — node, MAC, old and new
+  settings, the interface it goes out of — and only then sends. It's sent
+  **once**, as an ArtIpProg, to the node's **current** address. The node's
+  answer (or "no answer within 3 s") is shown underneath. Anything patched
+  to the old address stops reaching the node; re-point it afterwards.
+- It won't send an address that's this computer's own, another node's, a
+  network or broadcast address, or a broken mask.
+
+**A node not on any of this computer's networks can't be sent to.** The
+dialog says so and doesn't offer **Apply**. ArtIpProg has to go to the
+node's own address, and it doesn't say which node it is for — broadcast, it
+would re-address **every** node on the cable that accepts it — so the
+console never broadcasts it. Instead, give this computer a temporary
+address on the node's network. The dialog shows the exact command for the
+interface the node was heard on, for example on a Mac:
+
+    sudo ifconfig vlan0 alias 2.255.255.250 netmask 255.0.0.0
+
+(Linux: `sudo ip addr add 2.255.255.250/8 dev vlan0`; Windows, as
+administrator: `netsh interface ipv4 add address "Ethernet" 2.255.255.250
+255.0.0.0`.) Then **Rescan**: the node answers, is no longer amber, and
+**Set node IP address…** can send to it.
+When it's done, remove the address (the dialog shows that command too) and
+**Rescan** again to find the node at its new address.
+
+Nothing about a node is ever changed without that confirmation; hearing a
+node, Rescan and opening the dialog send nothing to it. Nodes set from a
+front panel or a web page may ignore ArtIpProg — the dialog then says it
+got no answer.
+
 ### WLED output
 
 A new output plugin for Wi-Fi LED controllers running WLED (lanterns,
