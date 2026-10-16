@@ -39,6 +39,7 @@
 #include "qlcchannel.h"
 #include "programmerflasher.h"
 #include "effectscriptrunner.h"
+#include "showembedding.h"
 
 #include "monitorproperties.h"
 #include "powerdistribution.h"
@@ -175,6 +176,7 @@ Doc::Doc(QObject* parent, int universes)
     // because the runner only needs to know about starts/stops to create
     // or destroy instances; the actual DMX work is driven by its QTimer.
     m_effectScriptRunner = new EffectScriptRunner(this);
+    m_showEmbedding = new ShowEmbedding(this);
     connect(m_masterTimer, SIGNAL(functionStarted(quint32)),
             m_effectScriptRunner, SLOT(slotFunctionStarted(quint32)));
     connect(m_masterTimer, SIGNAL(functionStopped(quint32)),
@@ -364,6 +366,10 @@ void Doc::clearContents()
     m_loadStatus = Cleared;
 
     m_programmer->clearProgrammerSelection();
+
+    /* The show is gone: this computer's definitions and scripts again. */
+    if (m_showEmbedding != nullptr)
+        m_showEmbedding->restoreComputer();
 
     emit cleared();
 }

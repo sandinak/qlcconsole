@@ -237,6 +237,9 @@ public:
     /** Retrieve the value of the property with the given name */
     QString property(QString propName);
 
+    /** Every property set on this matrix: name, value. */
+    QMap<QString, QString> properties() const { return m_properties; }
+
 private:
     /** A map of the custom properties for this matrix */
     QMap<QString, QString>m_properties;

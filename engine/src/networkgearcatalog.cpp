@@ -18,10 +18,12 @@
 #include <algorithm>
 
 #include "networkgearcatalog.h"
+#include "qlcconfig.h"
 #include "inputoutputmap.h"
 #include "qlcfile.h"
 
-#define USERNETWORKGEARDIR "Library/Application Support/qlcconsole/NetworkGear"
+// The per-platform user folder, as fixture definitions (it was the Mac's on all).
+#define USERNETWORKGEARDIR USERQLCPLUSDIR "/NetworkGear"
 
 namespace
 {

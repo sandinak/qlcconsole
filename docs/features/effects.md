@@ -370,7 +370,9 @@ as "&lt;name&gt; (RGB Matrix)".
 ## Writing your own
 
 An effect is a JavaScript file in your **EffectScripts** folder
-(`~/Library/Application Support/qlcconsole/EffectScripts` on a Mac); it
+(`~/Library/Application Support/qlcconsole/EffectScripts` on a Mac,
+`%USERPROFILE%\qlcconsole\EffectScripts` on Windows,
+`~/.qlcconsole/EffectScripts` on Linux); it
 appears in the browser next time the app starts. The script is handed every
 fixture (each head of a pixel fixture), the look's colours and its own
 settings each tick, and returns what each should do. See the

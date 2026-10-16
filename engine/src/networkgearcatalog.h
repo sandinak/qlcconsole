@@ -5,7 +5,8 @@
   Models of network gear -- ArtNet/sACN nodes, USB interfaces, wireless DMX
   transmitters -- to place a NetworkNode from, with its transport and ports
   already filled in. A built-in list of common gear, plus the operator's own
-  models as JSON files in ~/Library/Application Support/qlcconsole/NetworkGear
+  models as JSON files in NetworkGear in the user folder (~/Library/Application
+  Support/qlcconsole on macOS)
   (one model, or an array of them, per file):
 
       { "manufacturer": "ENTTEC", "model": "ODE Mk3",

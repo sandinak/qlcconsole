@@ -6,9 +6,11 @@
   maintains a name → absolute-path map that the UI and engine use.
 
   Search order (first found wins on name collision):
-    1. <app>/Resources/EffectScripts/        — bundled
-    2. ~/Library/…/QLC+/EffectScripts/       — user scripts
-    3. <project-dir>/effects/                — project-local (added on load)
+    1. the open show's own copies            — embedded in it (setShowDirectories)
+    2. <user folder>/EffectScripts/          — user scripts
+    3. <app>/Resources/EffectScripts/        — bundled
+    4. RGB Matrix scripts, user then bundled
+    5. added directories, then the show's folder (EffectScripts/, RGBScripts/)
 
   Licensed under the Apache License, Version 2.0 (the "License");
 */
@@ -48,6 +50,15 @@ public:
      *  for a folder of RGB Matrix scripts. */
     void addDirectory(const QDir &dir, bool rgb = false);
 
+    /** The open show's own copies of scripts (SHOW_EMBEDDING_DESIGN.md):
+     *  @p effects and @p rgb are searched BEFORE every other folder, so the
+     *  show's version is the one used. @p fallbackEffects / @p fallbackRgb
+     *  (the show's own folder) are searched after every other, for what this
+     *  computer does not have. Rescans. Empty strings: none. */
+    void setShowDirectories(const QString &effects, const QString &rgb,
+                            const QString &fallbackEffects = QString(),
+                            const QString &fallbackRgb = QString());
+
     /** Display names of all discovered scripts (sorted, from effect.name). */
     QStringList scriptNames() const;
 
@@ -82,6 +93,9 @@ public:
     // RGBScript (QLC+ RGB Matrix) library — run via the EffectScript compat host.
     static QDir systemRgbScriptsDirectory();
     static QDir userRgbScriptsDirectory();
+    /** Tests: the app's own (shipped) script folders somewhere else; empty
+     *  strings restore them. */
+    static void setSystemDirectoriesOverride(const QString &effects, const QString &rgb);
 
 private:
     void scanDir(const QDir &dir, bool rgb = false);
@@ -99,6 +113,8 @@ private:
     QStringList               m_displayNames;
     QList<QDir>               m_extraDirs;
     QList<QDir>               m_extraRgbDirs;
+    QString                   m_showDir, m_showRgbDir;
+    QString                   m_fallbackDir, m_fallbackRgbDir;
 };
 
 #endif // EFFECTSCRIPTCACHE_H

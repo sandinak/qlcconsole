@@ -208,6 +208,14 @@ namespace AppUtil
      *  updateFixtureReadiness(). */
     void updateLoadProblems(const QString &errorLog);
 
+    /** The footer's word on what the show carries (SHOW_EMBEDDING_DESIGN.md):
+     *  "embedded.showonly" -- definitions and scripts only the show has, in
+     *  use from it (information, Install on this computer); "embedded.differ"
+     *  -- ones that differ from this computer's, the show's in use (a
+     *  warning, Review…); "embedded.problems" -- copies that could not be
+     *  read. Item data: each one's ShowEmbedding key. */
+    void updateShowEmbeddingStatus(Doc *doc);
+
     /** The address @p n after IPv4 @p ip (n = 0: @p ip itself), the last
      *  octet carrying into the one before it -- one each for a batch of
      *  network fixtures. Empty when @p ip is not an IPv4 address or the run

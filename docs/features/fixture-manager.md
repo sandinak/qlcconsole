@@ -454,6 +454,65 @@ show opens, each definition comes from your library, else the show cache,
 else — if it's an online-only file in cloud storage — it's fetched (with a
 "Waiting for the cloud…" window you can Skip) and then cached.
 
+### Opening a show on another computer
+
+A **.qlcc carries its own copies** of every fixture definition, effect
+script and RGB Matrix script it uses that isn't part of the app — your own
+definitions, ones linked in from the old QLC+ folder, ones from the show
+cache. Saving writes each one into the show file exactly as it is on disk
+(a few KB each); the ones that ship with the app stay out. A **.qxw** is
+saved as before, without them, so stock QLC+ can still open it.
+
+When the show opens, each copy is compared with this computer's:
+
+| This computer… | What happens |
+|---|---|
+| has none | The show's copy is used while the show is open. The footer notes **"N definitions came with this show"** (a note — the show is still Ready); **Install on This Computer** puts them in your user folder. |
+| has the same, byte for byte | Nothing to say. |
+| has a **different** one | The **show's** copy is used — nothing changes under a patched rig by itself — and the footer warns **"N items in this show differ from this computer's"**. |
+
+**Review…** on that warning lists each difference with:
+
+- **Which looks newer** — "Updated on this computer since the show was
+  saved", "This computer has an older copy", or "Can't tell which is
+  newer" (from the file's time when it was saved into the show, and the
+  file's time here).
+- **Safe to switch?** — *Compatible* when every mode the show's fixtures
+  use is in this computer's copy with the same channels in the same order,
+  and every setting the show's looks and RGB matrices set is still there,
+  of the same kind. Otherwise *Not compatible*, naming the fixtures or
+  looks and what changed ("Mode “4ch” is 5 channels here, 4 in the show:
+  2 fixtures would need re-patching").
+- **Use This Computer's** — the show switches now (asking first when it's
+  not compatible) and carries this computer's copy from the next save.
+  A switch that would need re-patching — a mode that's gone, or fixtures
+  that would grow into the next one — is refused, naming them.
+  **Use This Computer's for All Compatible** does every safe one at once.
+- **Keep the Show's** — stop warning about it. Remembered in the show,
+  until this computer's copy changes again.
+- **Install the Show's** — writes the show's copy over this computer's
+  (asking first; the old file goes to the Trash), so every show opened here
+  uses it.
+
+**Save never swaps versions:** it writes the copy the show is using. A
+newer definition on this computer reaches the show only through **Use This
+Computer's**. Opening another show starts from this computer's copies
+again.
+
+#### Collect for Transfer
+
+**File → Collect for Transfer…** makes a folder named after the show
+holding the show as a .qlcc and, beside it, **Fixtures/**, **EffectScripts/**,
+**RGBScripts/** and **HeadLayouts/** (the show's LED maps) — everything it
+uses that isn't part of the app, as plain files. The show you have open
+stays as it is.
+
+Opening a show also looks in its own folder's **Fixtures/**,
+**EffectScripts/** and **RGBScripts/** for anything neither the show nor
+this computer has, so a collected folder opens complete even as a .qxw,
+and definitions kept beside a show are found. (A copy in the show file
+comes first, then this computer's, then the show's folder.)
+
 ## Terminology
 
 | Term | Meaning |
@@ -467,3 +526,4 @@ else — if it's an online-only file in cloud storage — it's fetched (with a
 | **Address clash** | A fixture the show file puts on channels another already uses; loaded unpatched and kept until re-patched. |
 | **Included / Local definition** | Shipped with the app, or your own file (which replaces an included one of the same make and model). |
 | **Show cache** | This computer's copy of every non-shipped definition a show uses, so the show opens without the original files. |
+| **The show's own copy** | A definition or script saved inside a .qlcc. Used when this computer has none or a different one, until you choose otherwise in **Review…**. |

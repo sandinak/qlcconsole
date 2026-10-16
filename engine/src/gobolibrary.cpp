@@ -17,7 +17,8 @@
 #include "qlcconfig.h"
 #include "qlcfile.h"
 
-#define USERGOBODIR "Library/Application Support/qlcconsole/Gobos"
+// The per-platform user folder, as fixture definitions (it was the Mac's on all).
+#define USERGOBODIR USERQLCPLUSDIR "/Gobos"
 
 namespace
 {

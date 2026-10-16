@@ -499,6 +499,11 @@ bool QLCFixtureDefCache::cacheForShows(const QLCFixtureDef *def) const
         || def->model() == QLatin1String("Generic"))
         return false;
     const QString from = def->definitionSourceFile();
+    /* A show's own copy (embedded in it) is not this computer's: caching it
+       would quietly make it the computer's copy for every other show. */
+    if (!m_showCopiesDir.isEmpty()
+        && QFileInfo(from).absoluteFilePath().startsWith(QDir(m_showCopiesDir).absolutePath() + QLatin1Char('/')))
+        return false;
     const QString to = showCacheFile(def->manufacturer(), def->model());
     if (from.isEmpty() || QFileInfo(from).absoluteFilePath() == QFileInfo(to).absoluteFilePath())
         return QFile::exists(to);
@@ -518,6 +523,30 @@ bool QLCFixtureDefCache::cacheForShows(const QLCFixtureDef *def) const
     dst.close();
     QFile::remove(to);
     return QFile::rename(to + QStringLiteral(".part"), to);
+}
+
+QLCFixtureDef *QLCFixtureDefCache::substitute(QLCFixtureDef *def)
+{
+    if (def == nullptr)
+        return nullptr;
+    for (int i = 0; i < m_defs.size(); ++i)
+    {
+        QLCFixtureDef *existing = m_defs.at(i);
+        if (existing != def && existing->manufacturer() == def->manufacturer()
+            && existing->model() == def->model())
+        {
+            m_defs[i] = def;
+            return existing;
+        }
+    }
+    if (!m_defs.contains(def))
+        m_defs << def;
+    return nullptr;
+}
+
+bool QLCFixtureDefCache::take(QLCFixtureDef *def)
+{
+    return m_defs.removeAll(def) > 0;
 }
 
 bool QLCFixtureDefCache::loadFromShowCache(const QString &manufacturer, const QString &model)

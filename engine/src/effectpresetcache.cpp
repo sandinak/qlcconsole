@@ -6,6 +6,7 @@
 */
 
 #include "effectpresetcache.h"
+#include "qlcconfig.h"
 #include "qlcfile.h"
 
 #include <QJsonDocument>
@@ -16,8 +17,8 @@
 #include <QRegularExpression>
 #include <QDebug>
 
-#define EFFECTPRESETDIR     "Resources/EffectPresets"
-#define USEREFFECTPRESETDIR "Library/Application Support/qlcconsole/EffectPresets"
+// Per-platform user folder (USERQLCPLUSDIR); system folder from qlcconfig.h.
+#define USEREFFECTPRESETDIR USERQLCPLUSDIR "/EffectPresets"
 
 EffectPresetCache::EffectPresetCache(QObject *parent)
     : QObject(parent)

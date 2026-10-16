@@ -235,6 +235,21 @@ public:
      *  then known. */
     bool loadFromShowCache(const QString &manufacturer, const QString &model);
 
+    /** Put @p def in place of the definition of the same manufacturer and
+     *  model, and hand that one back -- not deleted: the caller keeps it, to
+     *  put it back later (a show using its own copy of a definition, for as
+     *  long as it is open). Added, and nullptr returned, when there was
+     *  none. Fixtures keep pointing at whichever they were given. */
+    QLCFixtureDef *substitute(QLCFixtureDef *def);
+    /** Take @p def out of the cache without deleting it. False when it was
+     *  not in it. */
+    bool take(QLCFixtureDef *def);
+
+    /** Files under @p path are a show's own copies (the show embedding's
+     *  working folder): never copied into the show cache. Empty: none. */
+    void setShowCopiesDirectory(const QString &path) { m_showCopiesDir = path; }
+    QString showCopiesDirectory() const { return m_showCopiesDir; }
+
     /** Load a QLC native fixture definition from the file specified in $path */
     bool loadQXF(const QString& path, bool isUser = false);
 
@@ -246,6 +261,7 @@ private:
     QList <QLCFixtureDef*> m_defs;
     QMap<QString, QString> m_failedDefinitions;   //!< path -> why it failed
     QList<Duplicate> m_duplicates;
+    QString m_showCopiesDir;
 };
 
 /** @} */
