@@ -101,7 +101,8 @@ private:
      *  universe" actions have no line context of their own to work from --
      *  unlike everything else in this menu, which is reached by right-
      *  clicking a specific line row. */
-    bool pickPluginLine(class QLCIOPlugin *p, bool output, quint32 &lineOut);
+    bool pickPluginLine(class QLCIOPlugin *p, bool output, quint32 &lineOut,
+                        int current = -1);
     /** "Add an interface…" -- resolve a line on @p p (asking direction and
      *  which line as needed) and pin it visible. Shared by the protocol
      *  row's own action and the host row's "Add a protocol" picker, so the
@@ -166,7 +167,8 @@ private:
     /** Repoint the FEEDBACK patch of this universe at a node / port. */
     void retargetFeedback(quint32 universe);
 
-    /** Repoint an existing output patch at a different node / port. */
+    /** Repoint an existing output patch: its interface (asked again, the
+     *  current one preselected), then its node / port on that interface. */
     void retargetPatch(quint32 universe, const QString &pluginName, quint32 line);
     /** Repoint every selected universe at one node, numbering the ports up. */
     void retargetSelection(const QString &pluginName);

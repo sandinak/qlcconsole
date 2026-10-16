@@ -1658,6 +1658,7 @@ public:
         m_timer.start();
     }
     QList<QStringList> lists;
+    QStringList preselected;    ///< what each list opened on
     QStringList messages;
     int left() const { return m_answers.count(); }
 
@@ -1677,15 +1678,19 @@ private:
         if (d == nullptr || m_answers.isEmpty())
             return;
         const QString a = m_answers.takeFirst();
+        const QStringList items = d->comboBoxItems();
+        if (items.isEmpty() == false)
+        {
+            lists << items;
+            preselected << d->textValue();
+        }
         if (a == "<cancel>")
         {
             d->reject();
             return;
         }
-        const QStringList items = d->comboBoxItems();
         if (items.isEmpty() == false)
         {
-            lists << items;
             QString pick;
             if (a.startsWith('#'))
                 pick = items.value(a.mid(1).toInt());
@@ -1829,10 +1834,10 @@ void ConnectionsTree_Test::retargetOffersTheVisiblePortsWithTheCurrentOne()
     ConnectionsTree tree(m_doc);
     IOPluginStub *stub = nodeWithOnePortTaken(m_doc, tree);
 
-    DialogAnswers answers(QStringList() << "Quad (172.18.2.50) — port 4");
+    DialogAnswers answers(QStringList() << "#0" << "Quad (172.18.2.50) — port 4");
     tree.retargetPatch(7, stub->name(), 0);
     QCOMPARE(answers.left(), 0);
-    QVERIFY(answers.lists.first().contains(
+    QVERIFY(answers.lists.at(1).contains(
         "Quad (172.18.2.50) — port 2 · universe 0:0:1 — free  (current)"));
     QString a;
     quint32 p = 99;
@@ -1893,4 +1898,57 @@ void ConnectionsTree_Test::portAndUniverseReadTheSameEverywhere()
     QVERIFY2(u3->text(COL_DETAIL).contains("172.18.2.80 · universe 0:0:1"),
              qPrintable(u3->text(COL_DETAIL)));
     QVERIFY(u3->text(COL_DETAIL).contains("port") == false);
+}
+
+/* "Re-patching a universe that's already patched must ask for the network
+   interface again (currently it reuses the old one) -- offer the interfaces
+   with the current one preselected." */
+void ConnectionsTree_Test::repatchAsksTheInterfaceAgain()
+{
+    IOPluginStub *stub = fourPortNode(m_doc);         // the node is on line 0
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    ConnectionsTree tree(m_doc);
+    QVERIFY(iom->setOutputPatch(6, stub->name(), "", 1, false, 0));
+    QVERIFY(tree.applyTarget(6, stub->name(), 1, "10.0.0.1", 3));
+
+    {
+        DialogAnswers answers(QStringList() << "#0" << "Quad (172.18.2.50) — port 2");
+        tree.retargetPatch(6, stub->name(), 1);
+        QCOMPARE(answers.left(), 0);
+        QCOMPARE(answers.lists.count(), 2);
+        QCOMPARE(answers.preselected.first(), answers.lists.first().at(1));  // where it is
+    }
+    QCOMPARE(iom->universe(6)->outputPatch(0)->output(), quint32(0));
+    QString a;
+    quint32 p = 99;
+    QVERIFY(tree.patchTarget(6, stub->name(), 0, a, p));
+    QCOMPARE(a, QString("172.18.2.50"));
+    QCOMPARE(p, quint32(1));
+
+    // One undo step puts it back on its old interface and node.
+    QVERIFY(iom->patchUndo()->undo());
+    QCOMPARE(iom->universe(6)->outputPatch(0)->output(), quint32(1));
+    QVERIFY(tree.patchTarget(6, stub->name(), 1, a, p));
+    QCOMPARE(a, QString("10.0.0.1"));
+
+    // Cancelling the interface question changes nothing.
+    {
+        DialogAnswers cancel(QStringList() << "<cancel>");
+        tree.retargetPatch(6, stub->name(), 1);
+    }
+    QCOMPARE(iom->universe(6)->outputPatch(0)->output(), quint32(1));
+
+    // Patching a selection asks too, opening on the line they are on.
+    QVERIFY(iom->setOutputPatch(5, stub->name(), "", 1, false, 0));
+    {
+        DialogAnswers sel(QStringList() << "<cancel>");
+        tree.patchSelectionTo(QList<quint32>() << 5 << 6);
+        QCOMPARE(sel.lists.count(), 1);
+        QCOMPARE(sel.preselected.first(), sel.lists.first().at(1));
+    }
+
+    // And the menu says it does more than the target now.
+    showUniverseList(tree);
+    const QStringList offered = contextMenuOn(tree, 6, QString());
+    QVERIFY2(offered.contains("Change interface / target…"), qPrintable(offered.join(" | ")));
 }

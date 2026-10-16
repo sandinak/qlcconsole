@@ -2294,7 +2294,7 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
             QAction *ren = menu.addAction(tr("Rename universe…"));
             QAction *retgt = (item->data(COL_NAME, ROLE_OUTPUT).toBool()
                               && pluginSupportsTargetsIn(m_doc, plugin))
-                ? menu.addAction(tr("Change target address / port…")) : NULL;
+                ? menu.addAction(tr("Change interface / target…")) : NULL;
             QAction *unp = menu.addAction(tr("Unpatch from this interface"));
             menu.addSeparator();
             QAction *del = menu.addAction(tr("Delete universe entirely…"));
@@ -2515,7 +2515,7 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
            over -- which is what a node swapped for a spare, or renumbered on
            its front panel, used to cost. */
         QAction *retgt = (output && pluginSupportsTargetsIn(m_doc, plugin))
-            ? menu.addAction(tr("Change target address / port…")) : NULL;
+            ? menu.addAction(tr("Change interface / target…")) : NULL;
 
         /* DMX-USB and MIDI widgets have no per-patch parameters at all --
            their real settings (DMX output speed/mode, MIDI init template,
@@ -2869,7 +2869,8 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
     handleUniversalMenuAction(chosen, item, collapseAll, expandAll, addUniv, delUniv);
 }
 
-bool ConnectionsTree::pickPluginLine(QLCIOPlugin *p, bool output, quint32 &lineOut)
+bool ConnectionsTree::pickPluginLine(QLCIOPlugin *p, bool output, quint32 &lineOut,
+                                     int current)
 {
     if (p == NULL)
         return false;
@@ -2901,7 +2902,8 @@ bool ConnectionsTree::pickPluginLine(QLCIOPlugin *p, bool output, quint32 &lineO
     bool ok = false;
     const QString picked = QInputDialog::getItem(
         this, tr("Choose an interface"),
-        tr("Which interface should this go out on?"), labels, 0, false, &ok);
+        tr("Which interface should this go out on?"), labels,
+        current >= 0 && current < labels.count() ? current : 0, false, &ok);
     if (ok == false)
         return false;
 
@@ -3272,7 +3274,7 @@ void ConnectionsTree::rerouteLine(const QString &pluginName, quint32 oldLine,
         return;
 
     quint32 newLine = 0;
-    if (pickPluginLine(p, true, newLine) == false)
+    if (pickPluginLine(p, true, newLine, int(oldLine)) == false)
         return;
     if (newLine == oldLine)
         return;
@@ -3880,11 +3882,49 @@ void ConnectionsTree::retargetPatch(quint32 universe, const QString &pluginName,
         undoMap->patchUndo()->capture(QList<quint32>() << universe,
                                       tr("retarget universe %1").arg(universe + 1));
 
-    QString addr = targeted ? curAddr : QString();
+    /* "Re-patching a universe that's already patched must ask for the
+       network interface again": it kept the old one, so a universe on the
+       wrong NIC could only be moved by unpatching it and starting over.
+       Asked first, the current one preselected -- and only when there is
+       more than one to choose. */
+    quint32 newLine = line;
+    QLCIOPlugin *p = m_doc->ioPluginCache() != NULL
+        ? m_doc->ioPluginCache()->plugin(pluginName) : NULL;
+    if (p != NULL && pickPluginLine(p, true, newLine, int(line)) == false)
+        return;
+
+    QString addr = (targeted && newLine == line) ? curAddr : QString();
     quint32 wanted = curPort;
-    if (askTargetPort(tr("Retarget patch"), pluginName, line, universe, true,
+    if (askTargetPort(tr("Retarget patch"), pluginName, newLine, universe, true,
                       addr, wanted) == false)
         return;
+
+    /* Both answered: now move it, keeping the patch's own settings. */
+    if (newLine != line)
+    {
+        InputOutputMap *iomap = m_doc->inputOutputMap();
+        Universe *uni = iomap ? iomap->universe(universe) : NULL;
+        bool moved = false;
+        for (int i = 0; uni != NULL && i < uni->outputPatchesCount(); i++)
+        {
+            OutputPatch *op = uni->outputPatch(i);
+            if (op != NULL && op->plugin() != NULL
+                    && op->plugin()->name() == pluginName && op->output() == line)
+            {
+                moved = iomap->setOutputPatch(universe, pluginName, QString(),
+                                              newLine, false, i);
+                break;
+            }
+        }
+        if (moved == false)
+        {
+            QMessageBox::warning(this, tr("Retarget patch"),
+                                 tr("That universe is no longer patched to %1.")
+                                     .arg(pluginName));
+            return;
+        }
+        line = newLine;
+    }
 
     /* An empty address means broadcast, which is a real and deliberate choice
        -- it is how you drive every node on a segment at once -- so clear the
@@ -4617,8 +4657,21 @@ void ConnectionsTree::patchSelectionTo(const QList<quint32> &universes)
     if (p == NULL)
         return;
 
+    /* Asked every time, the interface the selection is on now preselected:
+       re-patching must be able to move them to another one. */
+    int current = -1;
+    foreach (quint32 u, universes)
+    {
+        Universe *uni = iomap->universe(u);
+        for (int i = 0; current < 0 && uni != NULL && i < uni->outputPatchesCount(); i++)
+        {
+            OutputPatch *op = uni->outputPatch(i);
+            if (op != NULL && op->plugin() == p)
+                current = int(op->output());
+        }
+    }
     quint32 line = 0;
-    if (pickPluginLine(p, true, line) == false)
+    if (pickPluginLine(p, true, line, current) == false)
         return;
 
     QString address;

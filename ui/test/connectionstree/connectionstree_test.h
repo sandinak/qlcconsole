@@ -132,6 +132,9 @@ private slots:
     /* "port" is the node's socket, "universe" its port-address: everywhere. */
     void portAndUniverseReadTheSameEverywhere();
 
+    /* Re-patching asks the interface again, the current one preselected. */
+    void repatchAsksTheInterfaceAgain();
+
 private:
     Doc *m_doc;
 };
