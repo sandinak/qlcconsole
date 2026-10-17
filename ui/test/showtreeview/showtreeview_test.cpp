@@ -1444,6 +1444,18 @@ void ShowTreeView_Test::pictureOfARealShow()
         for (const CueList &l : p.lists)
             list = &l;
     QVERIFY(list != nullptr);
+    // QLC_SHOWTREE_TRACKING=1: the list made Tracking (on the copy in
+    // memory), the command line shown.
+    const bool tracking = !qEnvironmentVariableIsEmpty("QLC_SHOWTREE_TRACKING");
+    if (tracking)
+    {
+        m_doc->showTree()->setListMode(list->id, ListMode::Tracking);
+        view.setCommandLineVisible(true);
+        // An edit replaces the tree: read the list again.
+        for (const Production &p : m_doc->showTree()->productions())
+            for (const CueList &l : p.lists)
+                list = &l;
+    }
     const int index = qMin(2, int(list->cues.count()) - 1);
     const Cue &cue = list->cues.at(index);
     if (!cue.layers.isEmpty())
@@ -1459,6 +1471,8 @@ void ShowTreeView_Test::pictureOfARealShow()
     view.selectNode(cue.id);
     QTest::qWait(50);
     QVERIFY(view.grab().save(QString(shot).replace(".png", "-cue.png")));
+    if (tracking)
+        view.setCommandLineVisible(false);
 }
 
 QTEST_MAIN(ShowTreeView_Test)

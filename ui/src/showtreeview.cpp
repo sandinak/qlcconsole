@@ -545,26 +545,31 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     }
     m_pages->addWidget(m_listPage);
 
-    // A cue
-    m_cuePage = new QWidget(m_pages);
+    // A cue (scrolls: its layers and what passes on can be long)
+    QScrollArea *cueScroll = new QScrollArea(m_pages);
+    cueScroll->setWidgetResizable(true);
+    cueScroll->setFrameShape(QFrame::NoFrame);
+    m_cuePage = cueScroll;
     {
-        QFormLayout *f = new QFormLayout(m_cuePage);
-        m_cueNumber = new QLineEdit(m_cuePage);
+        QWidget *inner = new QWidget(cueScroll);
+        QFormLayout *f = new QFormLayout(inner);
+        cueScroll->setWidget(inner);
+        m_cueNumber = new QLineEdit(inner);
         m_cueNumber->setObjectName("stCueNumber");
-        m_cueName = new QLineEdit(m_cuePage);
+        m_cueName = new QLineEdit(inner);
         m_cueName->setObjectName("stCueName");
-        m_cueNote = new QLineEdit(m_cuePage);
-        m_cueMode = new QComboBox(m_cuePage);
+        m_cueNote = new QLineEdit(inner);
+        m_cueMode = new QComboBox(inner);
         m_cueMode->setObjectName("stCueMode");
         for (CueMode m : { CueMode::ListDefault, CueMode::Track, CueMode::Block, CueMode::CueOnly })
             m_cueMode->addItem(cueModeLabel(m), int(m));
         m_cueMode->setToolTip(tr("Track: starts from the cue before. Block: starts from nothing. "
                                  "Cue-only: its changes don't pass on to the next cue."));
-        auto seconds = [this]() {
-            QDoubleSpinBox *s = new QDoubleSpinBox(m_cuePage);
+        auto seconds = [inner]() {
+            QDoubleSpinBox *s = new QDoubleSpinBox(inner);
             s->setDecimals(2);
             s->setRange(0, 3600);
-            s->setSuffix(tr(" s"));
+            s->setSuffix(ShowTreeView::tr(" s"));
             return s;
         };
         m_cueFadeIn = seconds();
@@ -576,19 +581,19 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         f->addRow(tr("Name"), m_cueName);
         f->addRow(tr("Note"), m_cueNote);
         f->addRow(tr("Mode"), m_cueMode);
-        m_cueBase = new QCheckBox(tr("The list's base cue (released layers go back to it)"), m_cuePage);
+        m_cueBase = new QCheckBox(tr("The list's base cue (released layers go back to it)"), inner);
         m_cueBase->setObjectName("stCueBase");
         f->addRow(QString(), m_cueBase);
         connect(m_cueBase, &QCheckBox::toggled, this, &ShowTreeView::slotCueBaseToggled);
         {
             // Includes (D8): this cue plays their output under its own,
             // in order -- the later wins.
-            QWidget *inc = new QWidget(m_cuePage);
+            QWidget *inc = new QWidget(inner);
             QHBoxLayout *h = new QHBoxLayout(inc);
             h->setContentsMargins(0, 0, 0, 0);
             m_cueIncludes = new QListWidget(inc);
             m_cueIncludes->setObjectName("stCueIncludes");
-            m_cueIncludes->setMaximumHeight(72);
+            m_cueIncludes->setMaximumHeight(60);
             m_cueIncludes->setToolTip(tr("Cues this cue includes: their output, as if you stood in them, "
                                          "under this cue's own. The later in the list wins."));
             h->addWidget(m_cueIncludes, 1);
@@ -639,15 +644,15 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         f->addRow(tr("Fade in"), m_cueFadeIn);
         f->addRow(tr("Fade out"), m_cueFadeOut);
         f->addRow(tr("Hold"), m_cueHold);
-        m_cueLooks = new QLabel(m_cuePage);
+        m_cueLooks = new QLabel(inner);
         m_cueLooks->setWordWrap(true);
         m_cueLooks->setObjectName("stCueLooks");
         f->addRow(tr("Cue looks"), m_cueLooks);
-        m_cueLayers = new QLabel(m_cuePage);
+        m_cueLayers = new QLabel(inner);
         m_cueLayers->setWordWrap(true);
         m_cueLayers->setTextFormat(Qt::RichText);
         f->addRow(tr("Layers"), m_cueLayers);
-        m_cueNext = new QLabel(m_cuePage);
+        m_cueNext = new QLabel(inner);
         m_cueNext->setWordWrap(true);
         f->addRow(tr("Next cue receives"), m_cueNext);
         for (QLineEdit *e : { m_cueNumber, m_cueName, m_cueNote })
