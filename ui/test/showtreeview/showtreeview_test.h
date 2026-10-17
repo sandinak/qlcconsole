@@ -40,6 +40,7 @@ private slots:
     void aPaletteOnTheCueIsACueLookAndTheHintSaysWhatItReaches();
     void layerRowsShowOwnAndInheritedValues();
     void beamRowsSayWhatTheyApplyTo();
+    void goboLooksMatchByNamePerType();
     void oneOffValuesGoToRecentNotAll();
     void noneAndClear();
     void cueFieldsEditTheCue();

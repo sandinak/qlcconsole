@@ -2943,8 +2943,19 @@ ProgrammerController::updatePaletteForChannelType(QLCPalette *pal,
         return PaletteChanged;
     }
 
-    case QLCPalette::Dimmer:
     case QLCPalette::Gobo:
+        // A gobo by name: the edit picks the slot for this fixture's type
+        // only; the others keep finding theirs by the name.
+        if (pal->isGoboByName() && ref != NULL && !QLCPalette::definitionKey(ref).isEmpty())
+        {
+            const QString def = QLCPalette::definitionKey(ref);
+            if (pal->goboValueFor(ref) == int(rawValue) && pal->goboValues().contains(def))
+                return PaletteUnchanged;
+            pal->setGoboValue(def, int(rawValue));
+            return PaletteChanged;
+        }
+        Q_FALLTHROUGH();
+    case QLCPalette::Dimmer:
     case QLCPalette::Shutter:
         if (pal->intValue1() == int(rawValue))
             return PaletteUnchanged;

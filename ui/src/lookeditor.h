@@ -104,6 +104,8 @@ private slots:
     void slotSingleCapabilityPicked(int index);
     /** "Wheel of" changed: list that fixture type's gobos/shutter states. */
     void slotSingleSourcePicked(int index);
+    /** A Gobo look's name was typed: it matches by it on other types. */
+    void slotGoboNameEdited();
     void slotBeamChanged(int);
     /** Per-look fade override (checkbox + seconds spin) changed. */
     void slotFadeTimeChanged();
@@ -222,6 +224,13 @@ private:
     QComboBox *m_singleSourceCombo;    //!< which fixture type's wheel to browse
     QList<ChannelSource> m_singleSources;
     QString m_singleSourceKey;         //!< last type chosen, kept across palettes
+    QWidget *m_goboNameRow;            //!< Gobo: "Name on other types"
+    QLineEdit *m_goboNameEdit;
+    QLabel *m_goboMatches;             //!< Gobo: what each type plays for it
+    /** Gobo: the value the look plays on the browsed type (by name, or as
+     *  picked for it); -1 when it doesn't apply to it. */
+    int goboValueForSource(const QLCPalette *p) const;
+    void updateGoboMatches();
 
     // Strobe page
     QSlider *m_strobeSlider;   //!< 0-100 → rate 0.0-1.0

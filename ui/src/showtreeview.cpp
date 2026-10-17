@@ -1200,15 +1200,22 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
         value->setWordWrap(true);
 
         QLabel *reach = new QLabel(m_rowsHost);
+        reach->setObjectName(QStringLiteral("stReach:%1").arg(key));
         if (!addEffect && !isEffectKey(key))
         {
+            // What it applies to: the value itself where there is one (a
+            // Gobo by name reaches only the wheels that have that gobo).
+            Look probe;
+            probe.key = key;
+            if (rl->values.contains(key))
+                probe = rl->values.value(key).look;
             int n = 0, total = 0;
-            m_st->lookReach(rl->target, key, &n, &total);
+            m_st->lookReach(rl->target, probe, &n, &total);
             if (total > 0 && n < total)
             {
                 reach->setText(tr("applies to %1 of %2").arg(n).arg(total));
                 QStringList names;
-                for (quint32 fid : m_st->lookMisses(rl->target, key))
+                for (quint32 fid : m_st->lookMisses(rl->target, probe))
                     if (const Fixture *f = m_doc->fixture(fid))
                         names << f->name();
                 if (names.count() > 12)

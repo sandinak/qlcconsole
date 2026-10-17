@@ -36,6 +36,7 @@
 #include "fixturegroup.h"
 #include "showtreemodel.h"
 #include "qlcpalette.h"
+#include "scenevalue.h"
 #include "collection.h"
 #include "chaserstep.h"
 #include "resource_paths.h"
@@ -1007,6 +1008,121 @@ void ShowTree_Test::lookReachCountsFixturesThatHaveIt()
     QCOMPARE(reach, 3);
     QCOMPARE(m_doc->showTree()->lookMisses(t, KeyGobo), QList<quint32>({ m_fixtures[0], m_fixtures[1] }));
     QVERIFY(m_doc->showTree()->lookMisses(t, KeyDimmer).isEmpty());
+}
+
+/* §3A / §10.7: a gobo look by name finds that gobo on each type's own wheel
+   (or the slot picked for the type); a type without it ignores it. */
+void ShowTree_Test::goboPalettesMatchByNamePerFixtureType()
+{
+    auto spot = [this](const QString &make, const QString &model, quint32 address) {
+        QLCFixtureDef *def = m_doc->fixtureDefCache()->fixtureDef(make, model);
+        Fixture *f = new Fixture(m_doc);
+        f->setName(model);
+        f->setFixtureDefinition(def, def->modes().first());
+        f->setAddress(address);
+        m_doc->addFixture(f);
+        return f;
+    };
+    QVERIFY(m_doc->fixtureDefCache()->fixtureDef("Chauvet", "MiN Spot RGBW") != nullptr);
+    Fixture *chauvet = spot("Chauvet", "MiN Spot RGBW", 100);
+    Fixture *contest = spot("Contest", "PSC-930", 200);
+    Fixture *sharpy = spot("Clay Paky", "Sharpy", 300);
+    Fixture *dim = m_doc->fixture(m_fixtures[0]);
+
+    QLCPalette *gobo = new QLCPalette(QLCPalette::Gobo, m_doc);
+    gobo->setName("Dots");
+    gobo->setValue(71);
+    m_doc->addPalette(gobo);
+
+    // As it always was: one DMX value on every gobo channel.
+    QVERIFY(!gobo->isGoboByName());
+    QCOMPARE(gobo->goboValueFor(chauvet), 71);
+    QCOMPARE(gobo->goboValueFor(contest), 71);
+    QCOMPARE(gobo->goboValueFor(sharpy), 71);
+    QCOMPARE(gobo->goboValueFor(dim), -1);
+
+    // By name: each wheel's own Dots (its middle); the Sharpy has none.
+    gobo->setGoboName("dots");
+    QCOMPARE(gobo->goboValueFor(chauvet), (65 + 77) / 2);
+    QCOMPARE(gobo->goboValueFor(contest), (20 + 29) / 2);   // not "Dots Shake"
+    QCOMPARE(gobo->goboValueFor(sharpy), -1);
+    QVERIFY(QLCPalette::sameGoboName("Break-up", "break up"));
+
+    // A slot picked for a type wins over the name.
+    gobo->setGoboValue(QLCPalette::definitionKey(sharpy), 9);
+    QCOMPARE(QLCPalette::definitionKey(sharpy), QString("Clay Paky/Sharpy"));
+    QCOMPARE(gobo->goboValueFor(sharpy), 9);
+    gobo->setGoboValue(QLCPalette::definitionKey(contest), 25);
+    QCOMPARE(gobo->goboValueFor(contest), 25);
+    gobo->removeGoboValue(QLCPalette::definitionKey(contest));
+
+    // A picture names its glass too, with its folder: Chauvet's own
+    // gobo00006 is another gobo.
+    QLCPalette *pic = new QLCPalette(QLCPalette::Gobo, m_doc);
+    pic->setGoboName("ClayPaky/gobo00006");
+    m_doc->addPalette(pic);
+    QCOMPARE(pic->goboValueFor(sharpy), (4 + 7) / 2);
+    QCOMPARE(pic->goboValueFor(chauvet), -1);
+    pic->setGoboName("claypaky/GOBO00003");
+    QCOMPARE(pic->goboValueFor(chauvet), (65 + 77) / 2);       // its Dots is that glass
+
+    // What a scene plays: only the fixtures it applies to, each its slot.
+    const QList<SceneValue> vals = gobo->valuesFromFixtures(m_doc, { chauvet->id(), contest->id(),
+                                                                     sharpy->id(), dim->id() });
+    QHash<quint32, int> got;
+    for (const SceneValue &sv : vals)
+        got.insert(sv.fxi, sv.value);
+    QCOMPARE(got.count(), 3);
+    QCOMPARE(got.value(chauvet->id()), 71);
+    QCOMPARE(got.value(contest->id()), 24);
+    QCOMPARE(got.value(sharpy->id()), 9);
+
+    // "applies to N of M" counts the look itself.
+    gobo->removeGoboValue(QLCPalette::definitionKey(sharpy));
+    Target t;
+    t.groups << group("AT-All", { chauvet->id(), contest->id(), sharpy->id(), dim->id() })->id();
+    Look look;
+    look.key = KeyGobo;
+    look.palettes << gobo->id();
+    int reach = 0, total = 0;
+    m_doc->showTree()->lookReach(t, look, &reach, &total);
+    QCOMPARE(reach, 2);
+    QCOMPARE(total, 4);
+    QCOMPARE(m_doc->showTree()->lookMisses(t, look), QList<quint32>({ sharpy->id(), dim->id() }));
+    m_doc->showTree()->lookReach(t, KeyGobo, &reach, &total);     // the channel alone
+    QCOMPARE(reach, 3);
+
+    // Saved and loaded with the show; a plain one saves as before.
+    gobo->setGoboValue(QLCPalette::definitionKey(sharpy), 9);
+    QByteArray xml;
+    {
+        QBuffer buffer(&xml);
+        buffer.open(QIODevice::WriteOnly);
+        QXmlStreamWriter w(&buffer);
+        gobo->saveXML(&w);
+    }
+    QVERIFY(xml.contains("GoboName=\"dots\""));
+    QLCPalette back(QLCPalette::Undefined);
+    QXmlStreamReader r(xml);
+    r.readNextStartElement();
+    QVERIFY(back.loadXML(r));
+    QCOMPARE(back.goboName(), QString("dots"));
+    QCOMPARE(back.goboValues(), gobo->goboValues());
+    QCOMPARE(back.goboValueFor(contest), 24);
+    QScopedPointer<QLCPalette> copy(gobo->createCopy());
+    QCOMPARE(copy->goboValueFor(sharpy), 9);
+
+    QLCPalette plain(QLCPalette::Gobo);
+    plain.setValue(40);
+    QByteArray plainXml;
+    {
+        QBuffer buffer(&plainXml);
+        buffer.open(QIODevice::WriteOnly);
+        QXmlStreamWriter w(&buffer);
+        plain.saveXML(&w);
+    }
+    QVERIFY(!plainXml.contains("Gobo"  "Name"));
+    QVERIFY(!plainXml.contains("GoboValue"));
 }
 
 /****************************************************************************

@@ -313,6 +313,42 @@ private:
     quint32 m_stageTargetId = UINT_MAX;
 
     /************************************************************************
+     * Gobo by name (type == Gobo only), SHOW_TREE_DESIGN.md §3A / §10.7
+     ************************************************************************/
+public:
+    /** The gobo this look means, by name ("Breakup"). Empty: the look is a
+     *  plain DMX value() on every fixture's gobo channel (as it always was).
+     *  Named, it resolves per fixture definition: goboValueFor(). */
+    QString goboName() const { return m_goboName; }
+    void setGoboName(const QString &name) { m_goboName = name; }
+    bool isGoboByName() const { return m_type == Gobo && !m_goboName.isEmpty(); }
+
+    /** The slot picked by hand for a fixture definition (its
+     *  definitionKey()): wins over the name match. */
+    QMap<QString, int> goboValues() const { return m_goboValues; }
+    void setGoboValue(const QString &definition, int value) { m_goboValues[definition] = value; }
+    void removeGoboValue(const QString &definition) { m_goboValues.remove(definition); }
+    void setGoboValues(const QMap<QString, int> &values) { m_goboValues = values; }
+
+    /** "Manufacturer/Model": what goboValues() are keyed by. */
+    static QString definitionKey(const Fixture *fixture);
+
+    /** The DMX value this Gobo look puts on @a fixture's gobo channel, or
+     *  -1 when it doesn't apply to it (no gobo channel; named, and neither
+     *  picked for its type nor a gobo of that name on its wheel). In order:
+     *  the slot picked for its definition; else, named, the gobo capability
+     *  of that name (its name, or its picture as "ClayPaky/gobo00006";
+     *  case, spaces, '-' and '_' ignored), its middle value; else, unnamed,
+     *  value(). Only the gobo channel the look writes to (the first). */
+    int goboValueFor(const Fixture *fixture) const;
+    /** Whether two gobo names are the same gobo ("Break-up" = "breakup"). */
+    static bool sameGoboName(const QString &a, const QString &b);
+
+private:
+    QString m_goboName;
+    QMap<QString, int> m_goboValues;
+
+    /************************************************************************
      * Effect script (type == Effect only)
      ************************************************************************/
 public:

@@ -146,6 +146,10 @@ public:
     void lookReach(const ShowTree::Target &target, const QString &key, int *reach, int *total) const;
     /** The target's fixtures a look of @a key can't reach (they ignore it). */
     QList<quint32> lookMisses(const ShowTree::Target &target, const QString &key) const;
+    /** The same for @a look itself: a Gobo look by name reaches only the
+     *  fixtures whose wheel has that gobo (or one picked for their type). */
+    void lookReach(const ShowTree::Target &target, const ShowTree::Look &look, int *reach, int *total) const;
+    QList<quint32> lookMisses(const ShowTree::Target &target, const ShowTree::Look &look) const;
 
     /** What a person reads for @a target: its groups' and fixtures' names,
      *  or the function's. */

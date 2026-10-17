@@ -62,6 +62,7 @@ private slots:
     void theTreeSavesAndLoadsWithTheShow();
     void aShowWithoutATreeSavesAsBefore();
     void lookReachCountsFixturesThatHaveIt();
+    void goboPalettesMatchByNamePerFixtureType();
 
     // Preview: the selected cue on the rig (Design mode)
     void previewPlaysTheSelectedCue();

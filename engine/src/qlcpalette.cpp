@@ -20,6 +20,7 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QFileInfo>
+#include <QDir>
 #include <QtMath>
 #include <QDebug>
 
@@ -37,6 +38,7 @@
 #include "qlccapability.h"
 #include "qlcfixturehead.h"
 #include "qlcfixturemode.h"
+#include "qlcfixturedef.h"
 #include "scenevalue.h"
 #include "scene.h"
 #include "doc.h"
@@ -73,6 +75,8 @@ QLCPalette *QLCPalette::createCopy()
     copy->setFanningAmount(this->fanningAmount());
     copy->setFanningValue(this->fanningValue());
     copy->setStageTargetId(this->stageTargetId());
+    copy->setGoboName(this->goboName());
+    copy->setGoboValues(this->goboValues());
     copy->setScriptPath(this->scriptPath());
     copy->setPersistent(this->persistent());
     copy->setEffectPreset(this->effectPreset());
@@ -914,8 +918,11 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                 const quint32 goboCh = fixture->fixtureMode() != NULL
                     ? fixture->fixtureMode()->channelNumber(QLCChannel::Gobo, QLCChannel::MSB)
                     : QLCChannel::invalid();
-                if (goboCh != QLCChannel::invalid())
-                    list << SceneValue(id, goboCh, uchar(value().toUInt()));
+                // Named: the slot of that name on this fixture's own wheel
+                // (or the one picked for its type); none, and it ignores it.
+                const int gv = goboValueFor(fixture);
+                if (goboCh != QLCChannel::invalid() && gv >= 0)
+                    list << SceneValue(id, goboCh, uchar(gv));
             }
             break;
             case Zoom:
@@ -1563,6 +1570,20 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
         }
         // readNextStartElement() has consumed </Palette> — reader is at EndElement.
     }
+    else if (m_type == Gobo)
+    {
+        m_goboName = attrs.value(QStringLiteral("GoboName")).toString();
+        while (doc.readNextStartElement())
+        {
+            if (doc.name() == QLatin1String("GoboValue"))
+            {
+                const QString def = doc.attributes().value(QStringLiteral("Fixture")).toString();
+                if (!def.isEmpty())
+                    m_goboValues[def] = doc.attributes().value(QStringLiteral("Value")).toInt();
+            }
+            doc.skipCurrentElement();
+        }
+    }
     else
     {
         // No children: skip from <Palette> StartElement to </Palette> EndElement.
@@ -1652,6 +1673,10 @@ bool QLCPalette::saveXML(QXmlStreamWriter *doc)
         case Undefined: break;
     }
 
+    /* a gobo by name */
+    if (m_type == Gobo && !m_goboName.isEmpty())
+        doc->writeAttribute(QStringLiteral("GoboName"), m_goboName);
+
     /* write stage target linkage */
     if (m_stageTargetId != UINT_MAX)
         doc->writeAttribute(KXMLQLCPaletteStageTarget, QString::number(m_stageTargetId));
@@ -1663,6 +1688,18 @@ bool QLCPalette::saveXML(QXmlStreamWriter *doc)
         doc->writeAttribute(KXMLQLCPaletteFanLayout, fanningLayoutToString(m_fanningLayout));
         doc->writeAttribute(KXMLQLCPaletteFanAmount, QString::number(m_fanningAmount));
         doc->writeAttribute(KXMLQLCPaletteFanValue, fanningValue().toString());
+    }
+
+    /* a gobo's slot picked per fixture type */
+    if (m_type == Gobo)
+    {
+        for (auto it = m_goboValues.constBegin(); it != m_goboValues.constEnd(); ++it)
+        {
+            doc->writeStartElement(QStringLiteral("GoboValue"));
+            doc->writeAttribute(QStringLiteral("Fixture"), it.key());
+            doc->writeAttribute(QStringLiteral("Value"), QString::number(it.value()));
+            doc->writeEndElement();
+        }
     }
 
     /* write Effect-palette sub-elements */
@@ -1747,4 +1784,69 @@ QColor QLCPalette::colorValue() const
             return rgb;
     }
     return QColor();
+}
+
+/****************************************************************************
+ * Gobo by name
+ ****************************************************************************/
+
+QString QLCPalette::definitionKey(const Fixture *fixture)
+{
+    if (fixture == nullptr || fixture->fixtureDef() == nullptr)
+        return QString();
+    return QStringLiteral("%1/%2").arg(fixture->fixtureDef()->manufacturer(),
+                                        fixture->fixtureDef()->model());
+}
+
+static QString goboKey(const QString &name)
+{
+    QString out;
+    for (const QChar c : name)
+        if (!c.isSpace() && c != QLatin1Char('-') && c != QLatin1Char('_'))
+            out += c.toLower();
+    return out;
+}
+
+bool QLCPalette::sameGoboName(const QString &a, const QString &b)
+{
+    const QString ka = goboKey(a);
+    return !ka.isEmpty() && ka == goboKey(b);
+}
+
+int QLCPalette::goboValueFor(const Fixture *fixture) const
+{
+    if (m_type != Gobo || fixture == nullptr || fixture->fixtureMode() == nullptr)
+        return -1;
+    const quint32 goboCh = fixture->fixtureMode()->channelNumber(QLCChannel::Gobo, QLCChannel::MSB);
+    if (goboCh == QLCChannel::invalid())
+        return -1;
+
+    const QString def = definitionKey(fixture);
+    if (!def.isEmpty() && m_goboValues.contains(def))
+        return qBound(0, m_goboValues.value(def), 255);
+
+    if (m_goboName.isEmpty())
+        return m_values.isEmpty() ? -1 : qBound(0, value().toInt(), 255);
+
+    // Its wheel's gobo of that name: the capability's own name, or its
+    // picture ("ClayPaky/gobo00006.svg" -> "ClayPaky/gobo00006": the folder
+    // counts, a Chauvet/gobo00006 is other glass).
+    const QLCChannel *ch = fixture->channel(goboCh);
+    if (ch == nullptr)
+        return -1;
+    for (QLCCapability *cap : ch->capabilities())
+    {
+        bool match = sameGoboName(cap->name(), m_goboName);
+        if (!match && cap->presetType() == QLCCapability::Picture)
+        {
+            // The resource may be resolved to a full path: its folder and
+            // file name are what name the glass.
+            const QFileInfo picture(cap->resource(0).toString());
+            match = sameGoboName(picture.dir().dirName() + QLatin1Char('/') + picture.completeBaseName(),
+                                 m_goboName);
+        }
+        if (match)
+            return (int(cap->min()) + int(cap->max())) / 2;
+    }
+    return -1;
 }

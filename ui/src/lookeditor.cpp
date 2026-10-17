@@ -549,6 +549,7 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     m_singleSourceLabel = new QLabel(tr("Wheel of"), single);
     sourceRow->addWidget(m_singleSourceLabel);
     m_singleSourceCombo = new QComboBox(single);
+    m_singleSourceCombo->setObjectName("singleSourceCombo");
     m_singleSourceCombo->setToolTip(tr("The look stores one DMX value; each fixture "
                                        "type has its own wheel. Pick the type whose "
                                        "gobos to choose from."));
@@ -567,6 +568,7 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     m_singleChannel = NULL;
     pickRow->addWidget(m_singlePreview);
     m_singleCombo = new QComboBox(single);
+    m_singleCombo->setObjectName("singleCapabilityCombo");
     pickRow->addWidget(m_singleCombo, 1);
     QHBoxLayout *sl = new QHBoxLayout();
     sv->addLayout(sl);
@@ -577,6 +579,26 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     m_singleValue = new QLabel("0", single);
     m_singleValue->setMinimumWidth(32);
     sl->addWidget(m_singleValue);
+    // Gobo: one look, the same gobo on every type's own wheel, by name.
+    m_goboNameRow = new QWidget(single);
+    QHBoxLayout *gn = new QHBoxLayout(m_goboNameRow);
+    gn->setContentsMargins(0, 0, 0, 0);
+    gn->addWidget(new QLabel(tr("Gobo name"), m_goboNameRow));
+    m_goboNameEdit = new QLineEdit(m_goboNameRow);
+    m_goboNameEdit->setObjectName("goboNameEdit");
+    m_goboNameEdit->setPlaceholderText(tr("(the same DMX value on every type)"));
+    m_goboNameEdit->setToolTip(tr("Other fixture types play their own gobo of this name. A slot "
+                                  "picked above is kept for that type and wins over the name."));
+    gn->addWidget(m_goboNameEdit, 1);
+    sv->addWidget(m_goboNameRow);
+    m_goboMatches = new QLabel(single);
+    m_goboMatches->setObjectName("goboMatches");
+    m_goboMatches->setWordWrap(true);
+    m_goboMatches->setTextFormat(Qt::PlainText);
+    sv->addWidget(m_goboMatches);
+    m_goboNameRow->setVisible(false);
+    m_goboMatches->setVisible(false);
+    connect(m_goboNameEdit, &QLineEdit::editingFinished, this, &LookEditor::slotGoboNameEdited);
     m_pageSingle = m_stack->addWidget(single);
     connect(m_singleSlider, SIGNAL(valueChanged(int)),
             this, SLOT(slotSingleValueChanged(int)));
@@ -1201,8 +1223,25 @@ void LookEditor::setPalette(quint32 paletteId)
         m_singleSourceCombo->setVisible(choose);
         m_singleChannel = m_singleSources.isEmpty() ? NULL
                                                     : m_singleSources.at(source).channel;
-        fillSingleCapabilities(p->intValue1());
-        updateSinglePreview(p->intValue1());
+        // A gobo by name shows the browsed type's own slot for it.
+        int shown = p->intValue1();
+        if (p->isGoboByName() && goboValueForSource(p) >= 0)
+            shown = goboValueForSource(p);
+        if (shown != p->intValue1())
+        {
+            m_singleSlider->setValue(shown);
+            m_singleValue->setText(QString::number(shown));
+        }
+        fillSingleCapabilities(shown);
+        updateSinglePreview(shown);
+        const bool gobo = p->type() == QLCPalette::Gobo;
+        m_goboNameRow->setVisible(gobo);
+        m_goboMatches->setVisible(gobo);
+        if (gobo)
+        {
+            m_goboNameEdit->setText(p->goboName());
+            updateGoboMatches();
+        }
         m_stack->setCurrentIndex(m_pageSingle);
         setMaximumHeight(340);
         break;
@@ -1633,8 +1672,94 @@ void LookEditor::slotSingleValueChanged(int v)
     if (p == NULL)
         return;
     p->setValue(v);
+    if (p->type() == QLCPalette::Gobo)
+    {
+        // The slot is picked for the type being browsed; the look is named
+        // after it (first pick, or changing this type's own pick), so the
+        // other types play their gobo of that name.
+        const int src = m_singleSourceCombo->currentIndex();
+        const Fixture *fxi = (src >= 0 && src < m_singleSources.size() && !m_singleSources.at(src).fixtures.isEmpty())
+                             ? m_doc->fixture(m_singleSources.at(src).fixtures.first()) : NULL;
+        const QString def = QLCPalette::definitionKey(fxi);
+        auto capName = [this](int value) {
+            if (m_singleChannel == NULL || value < 0)
+                return QString();
+            for (const QLCCapability *cap : m_singleChannel->capabilities())
+                if (value >= cap->min() && value <= cap->max())
+                    return cap->name();
+            return QString();
+        };
+        if (!def.isEmpty())
+        {
+            const QString was = capName(p->goboValues().value(def, -1));
+            const QString now = capName(v);
+            if (!now.isEmpty() && (p->goboName().isEmpty() || QLCPalette::sameGoboName(p->goboName(), was)))
+            {
+                p->setGoboName(now);
+                m_goboNameEdit->setText(now);
+            }
+            p->setGoboValue(def, v);
+        }
+        updateGoboMatches();
+    }
     m_doc->setModified();
     emit paletteChanged(m_paletteId);
+}
+
+int LookEditor::goboValueForSource(const QLCPalette *p) const
+{
+    const int src = m_singleSourceCombo->currentIndex();
+    if (p == NULL || src < 0 || src >= m_singleSources.size() || m_singleSources.at(src).fixtures.isEmpty())
+        return -1;
+    return p->goboValueFor(m_doc->fixture(m_singleSources.at(src).fixtures.first()));
+}
+
+void LookEditor::slotGoboNameEdited()
+{
+    if (m_loading)
+        return;
+    QLCPalette *p = m_doc->palette(m_paletteId);
+    if (p == NULL || p->type() != QLCPalette::Gobo)
+        return;
+    const QString name = m_goboNameEdit->text().trimmed();
+    if (name == p->goboName())
+        return;
+    p->setGoboName(name);
+    updateGoboMatches();
+    m_doc->setModified();
+    emit paletteChanged(m_paletteId);
+}
+
+void LookEditor::updateGoboMatches()
+{
+    // What each fixture type plays for this look: "Sharpy: Breakup (picked)",
+    // "XL-450: no gobo of that name -- ignores it".
+    const QLCPalette *p = m_doc->palette(m_paletteId);
+    if (p == NULL || p->type() != QLCPalette::Gobo || !p->isGoboByName() || m_singleSources.isEmpty())
+    {
+        m_goboMatches->clear();
+        return;
+    }
+    QStringList lines;
+    for (const ChannelSource &src : m_singleSources)
+    {
+        const Fixture *fxi = src.fixtures.isEmpty() ? NULL : m_doc->fixture(src.fixtures.first());
+        const int v = p->goboValueFor(fxi);
+        QString what;
+        if (v < 0)
+            what = tr("no gobo of that name: ignores it");
+        else
+        {
+            QString cap;
+            for (const QLCCapability *c : src.channel->capabilities())
+                if (v >= c->min() && v <= c->max())
+                    cap = c->name();
+            const bool picked = p->goboValues().contains(QLCPalette::definitionKey(fxi));
+            what = picked ? tr("%1 (picked for this type)").arg(cap) : tr("%1 (by name)").arg(cap);
+        }
+        lines << tr("%1: %2").arg(src.label, what);
+    }
+    m_goboMatches->setText(lines.join(QLatin1Char('\n')));
 }
 
 QString LookEditor::slotPicture(QLCCapability *cap, QString *swapName) const
@@ -1707,6 +1832,15 @@ void LookEditor::slotSingleSourcePicked(int index)
         return;
     m_singleSourceKey = m_singleSources.at(index).key;
     m_singleChannel = m_singleSources.at(index).channel;
+    // A gobo by name: show this type's own slot for it.
+    const QLCPalette *p = m_doc->palette(m_paletteId);
+    if (p != NULL && p->isGoboByName() && goboValueForSource(p) >= 0)
+    {
+        const bool was = m_loading;
+        m_loading = true;
+        m_singleSlider->setValue(goboValueForSource(p));
+        m_loading = was;
+    }
     fillSingleCapabilities(m_singleSlider->value());
     updateSinglePreview(m_singleSlider->value());
 }

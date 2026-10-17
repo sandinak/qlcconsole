@@ -736,6 +736,45 @@ QList<quint32> ShowTreeController::lookMisses(const Target &target, const QStrin
     return out;
 }
 
+/** Whether @a look itself reaches @a fxi: its attribute's channels, and
+    for a Gobo look a slot on that fixture's wheel. */
+static bool lookReachesFixture(const Doc *doc, const Fixture *fxi, const Look &look)
+{
+    if (!fixtureReaches(fxi, look.key))
+        return false;
+    if (look.key != KeyGobo || look.none || look.palettes.isEmpty())
+        return true;
+    for (quint32 pid : look.palettes)
+    {
+        const QLCPalette *p = const_cast<Doc *>(doc)->palette(pid);
+        if (p == nullptr || p->type() != QLCPalette::Gobo || p->goboValueFor(fxi) >= 0)
+            return true;
+    }
+    return false;
+}
+
+void ShowTreeController::lookReach(const Target &target, const Look &look, int *reach, int *total) const
+{
+    const QList<quint32> ids = targetFixtures(m_doc, target);
+    int n = 0;
+    for (quint32 id : ids)
+        if (lookReachesFixture(m_doc, m_doc->fixture(id), look))
+            ++n;
+    if (reach != nullptr)
+        *reach = n;
+    if (total != nullptr)
+        *total = int(ids.count());
+}
+
+QList<quint32> ShowTreeController::lookMisses(const Target &target, const Look &look) const
+{
+    QList<quint32> out;
+    for (quint32 id : targetFixtures(m_doc, target))
+        if (!lookReachesFixture(m_doc, m_doc->fixture(id), look))
+            out << id;
+    return out;
+}
+
 QString ShowTreeController::targetLabel(const Target &target) const
 {
     if (target.isOpaque())

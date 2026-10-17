@@ -382,6 +382,92 @@ void ShowTreeView_Test::beamRowsSayWhatTheyApplyTo()
     QVERIFY(found);
 }
 
+void ShowTreeView_Test::goboLooksMatchByNamePerType()
+{
+    for (const char *dir : { "Chauvet", "Contest", "Clay_Paky" })
+        QVERIFY(m_doc->fixtureDefCache()->load(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures/" + dir)));
+    auto spot = [this](const QString &make, const QString &model, quint32 address) {
+        QLCFixtureDef *def = m_doc->fixtureDefCache()->fixtureDef(make, model);
+        Fixture *f = new Fixture(m_doc);
+        f->setName(model);
+        f->setFixtureDefinition(def, def->modes().first());
+        f->setAddress(address);
+        m_doc->addFixture(f);
+        return f;
+    };
+    Fixture *chauvet = spot("Chauvet", "MiN Spot RGBW", 100);
+    Fixture *contest = spot("Contest", "PSC-930", 200);
+    Fixture *sharpy = spot("Clay Paky", "Sharpy", 300);
+    FixtureGroup *mixed = group("AT-All", 0, 1);
+    for (Fixture *f : { chauvet, contest, sharpy })
+        mixed->assignFixture(f->id());
+
+    // A gobo look made the old way: one DMX value (Chauvet's Dots).
+    QLCPalette *gobo = new QLCPalette(QLCPalette::Gobo, m_doc);
+    gobo->setName("Dots");
+    gobo->setValue(10);
+    m_doc->addPalette(gobo);
+
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(list, -1, "One");
+    Target t;
+    t.groups << mixed->id();
+    const quint32 l1 = st->addLayer(c1, t);
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(gobo->id())));
+
+    ShowTreeView view(nullptr, m_doc);
+    auto reachText = [&view]() {
+        // The rows of an earlier page go later: let them go first.
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        QLabel *l = view.findChild<QLabel *>("stReach:" + KeyGobo);
+        return l == nullptr ? QString() : l->text();
+    };
+    QVERIFY(view.selectNode(l1, c1));
+    QCOMPARE(reachText(), QString("applies to 3 of 4"));      // every gobo channel
+
+    // Pick Dots on the Chauvet's wheel in the Look Editor: the look is
+    // named for it, and the Contest finds its own Dots by that name.
+    view.editPalette(gobo->id());
+    LookEditor *ed = view.lookEditor();
+    QComboBox *source = ed->findChild<QComboBox *>("singleSourceCombo");
+    QComboBox *caps = ed->findChild<QComboBox *>("singleCapabilityCombo");
+    QVERIFY(source != nullptr && caps != nullptr);
+    int ci = -1;
+    for (int i = 0; i < source->count(); ++i)
+        if (source->itemText(i).contains("MiN Spot"))
+            ci = i;
+    QVERIFY(ci >= 0);
+    source->setCurrentIndex(ci);
+    QMetaObject::invokeMethod(source, "activated", Q_ARG(int, ci));
+    const int dots = caps->findText("Dots");
+    QVERIFY(dots >= 0);
+    caps->setCurrentIndex(dots);
+    QMetaObject::invokeMethod(caps, "activated", Q_ARG(int, dots));
+    QCOMPARE(gobo->goboName(), QString("Dots"));
+    QCOMPARE(gobo->goboValues().value("Chauvet/MiN Spot RGBW"), 71);
+    QCOMPARE(gobo->goboValueFor(contest), 24);
+    QCOMPARE(gobo->goboValueFor(sharpy), -1);
+    QLineEdit *name = ed->findChild<QLineEdit *>("goboNameEdit");
+    QCOMPARE(name->text(), QString("Dots"));
+    const QString matches = ed->findChild<QLabel *>("goboMatches")->text();
+    QVERIFY2(matches.contains("PSC-930: Dots (by name)"), qPrintable(matches));
+    QVERIFY2(matches.contains("Sharpy: no gobo of that name"), qPrintable(matches));
+
+    // The row counts it now: the Sharpy (and the dimmer) ignore it.
+    QVERIFY(view.selectNode(c1));
+    QVERIFY(view.selectNode(l1, c1));
+    QCOMPARE(reachText(), QString("applies to 2 of 4"));
+
+    // Typing a name the Sharpy has: it plays it, the others keep their pick
+    // or find it too.
+    name->setText("Gobo 3");
+    QMetaObject::invokeMethod(name, "editingFinished");
+    QCOMPARE(gobo->goboName(), QString("Gobo 3"));
+    QCOMPARE(gobo->goboValueFor(sharpy), (12 + 15) / 2);
+    QCOMPARE(gobo->goboValueFor(chauvet), 71);                 // picked for its type
+}
+
 void ShowTreeView_Test::oneOffValuesGoToRecentNotAll()
 {
     FixtureGroup *towers = group("Towers", 0, 2);
