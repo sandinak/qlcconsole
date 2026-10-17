@@ -316,6 +316,35 @@ bool ShowTreeController::setCueLook(quint32 cueId, const Look &look)
     });
 }
 
+bool ShowTreeController::setTargetLook(quint32 cueId, const Target &target, const Look &look)
+{
+    if (target.isEmpty() || target.isOpaque())
+        return false;
+    const quint32 newLayer = newId();
+    return edit(tr("Set %1").arg(keyLabel(look.key)), [&](QList<Production> &ps) {
+        Cue *c = cueIn(ps, cueId);
+        if (c == nullptr)
+            return false;
+        Layer *l = nullptr;
+        for (Layer &have : c->layers)
+            if (have.target == target)
+                l = &have;
+        if (l == nullptr)
+        {
+            Layer fresh;
+            fresh.id = newLayer;
+            fresh.target = target;
+            c->layers << fresh;
+            l = &c->layers.last();
+        }
+        const Look *was = l->look(look.key);
+        if (was != nullptr && *was == look)
+            return false;
+        l->setLook(look);
+        return true;
+    });
+}
+
 bool ShowTreeController::setLayerRelease(quint32 cueId, quint32 layerId, bool release)
 {
     return edit(release ? tr("Release layer") : tr("Carry layer"), [&](QList<Production> &ps) {

@@ -306,6 +306,7 @@ public:
     }
     quint32 cue = ShowTree::invalidId();
     quint32 layer = ShowTree::invalidId();
+    ShowTree::Target target;            //!< a carried-in layer's
 
 protected:
     void dragEnterEvent(QDragEnterEvent *e) override
@@ -316,7 +317,7 @@ protected:
     void dropEvent(QDropEvent *e) override
     {
         const QList<quint32> pals = idsFromMime(e->mimeData(), FunctionsTreeWidget::paletteDragMimeType());
-        if (!pals.isEmpty() && m_view->dropPalettes(cue, layer, pals))
+        if (!pals.isEmpty() && m_view->dropPalettes(cue, layer, pals, target))
             e->acceptProposedAction();
     }
 
@@ -879,6 +880,7 @@ QString ShowTreeView::originText(const CueList &list, const ResolvedValue &value
 void ShowTreeView::updateInspector()
 {
     m_inspectorUpdating = true;
+    m_pageCue = invalidId();
     const NodeKind kind = currentKind();
     const quint32 id = currentId();
 
@@ -936,6 +938,7 @@ void ShowTreeView::updateInspector()
 void ShowTreeView::showCuePage(const CueList &list, int index)
 {
     const Cue &cue = list.cues.at(index);
+    m_pageCue = cue.id;
     m_cueNumber->setText(cue.number);
     m_cueNumber->setPlaceholderText(QString::number(index + 1));
     m_cueName->setText(cue.name);
@@ -997,11 +1000,17 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
     DropPage *page = static_cast<DropPage *>(m_layerPage);
     page->cue = cue.id;
     page->layer = own == nullptr ? invalidId() : own->id;
+    page->target = rl == nullptr ? Target() : rl->target;
 
-    // Clear the rows
+    // Clear the rows. Later, not now: a row's own ⋯ may be what is being
+    // clicked (its menu's action edits the tree, which rebuilds this page).
     while (QLayoutItem *item = m_rows->takeAt(0))
     {
-        delete item->widget();
+        if (QWidget *w = item->widget())
+        {
+            w->hide();
+            w->deleteLater();
+        }
         delete item;
     }
     m_rowText.clear();
@@ -1109,15 +1118,10 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
         const quint32 layerId = own == nullptr ? invalidId() : own->id;
         const Target target = rl->target;
         connect(more, &QToolButton::clicked, this, [this, cueId, layerId, key, more, target]() {
-            quint32 lid = layerId;
-            if (lid == invalidId())
-            {
-                // A tracked layer: bring it into this cue first.
-                lid = m_st->addLayer(cueId, target);
-                if (lid == invalidId())
-                    return;
-            }
-            attributeMenu(cueId, lid, key, more->mapToGlobal(QPoint(0, more->height())));
+            // A carried-in layer (no layer id) becomes the cue's own when a
+            // value is set on it, in the same undo step.
+            const QPoint at = more->mapToGlobal(QPoint(0, more->height()));
+            attributeMenu(cueId, layerId, layerId == invalidId() ? target : Target(), key, at);
         });
 
         m_rows->addWidget(label, row, 0);
@@ -1136,7 +1140,8 @@ QStringList ShowTreeView::attributeRows() const
     return m_rowText;
 }
 
-void ShowTreeView::attributeMenu(quint32 cueId, quint32 layerId, const QString &key, const QPoint &globalPos)
+void ShowTreeView::attributeMenu(quint32 cueId, quint32 layerId, const Target &target,
+                                 const QString &key, const QPoint &globalPos)
 {
     QMenu menu(this);
     // Set to: the palettes of this kind, recent ones first.
@@ -1162,27 +1167,37 @@ void ShowTreeView::attributeMenu(quint32 cueId, quint32 layerId, const QString &
     for (QLCPalette *p : pals)
     {
         const quint32 pid = p->id();
-        set->addAction(p->name(), this, [this, cueId, layerId, pid]() {
-            dropPalettes(cueId, layerId, { pid });
+        set->addAction(p->name(), this, [this, cueId, layerId, target, pid]() {
+            dropPalettes(cueId, layerId, { pid }, target);
         });
     }
     set->setEnabled(!pals.isEmpty());
 
     if (key == KeyDimmer)
     {
-        menu.addAction(tr("One-off level…"), this, [this, cueId, layerId]() {
+        menu.addAction(tr("One-off level…"), this, [this, cueId, layerId, target]() {
             bool ok = false;
             const int pc = QInputDialog::getInt(this, tr("Dimmer"), tr("Level (%)"), 100, 0, 100, 1, &ok);
-            if (ok)
-                setOneOffDimmer(cueId, layerId, pc);
+            if (!ok)
+                return;
+            const quint32 pid = inlinePalette(cueId, layerId, target, QLCPalette::Dimmer,
+                                              { qBound(0, qRound(pc * 255.0 / 100.0), 255) },
+                                              tr("%1%").arg(pc));
+            if (pid != QLCPalette::invalidId())
+                applyLook(cueId, layerId, target, m_st->lookForPalette(pid));
         });
     }
     else if (key == KeyColour)
     {
-        menu.addAction(tr("One-off colour…"), this, [this, cueId, layerId]() {
+        menu.addAction(tr("One-off colour…"), this, [this, cueId, layerId, target]() {
             const QColor c = QColorDialog::getColor(Qt::white, this, tr("Colour"));
-            if (c.isValid())
-                setOneOffColour(cueId, layerId, c);
+            if (!c.isValid())
+                return;
+            const quint32 pid = inlinePalette(cueId, layerId, target, QLCPalette::Color,
+                                              { QLCPalette::colorToString(c, QColor(Qt::black)) },
+                                              tr("%1-ish").arg(c.name()));
+            if (pid != QLCPalette::invalidId())
+                applyLook(cueId, layerId, target, m_st->lookForPalette(pid));
         });
     }
     if (isEffectKey(key) && key != QLatin1String("Effect."))
@@ -1202,33 +1217,76 @@ void ShowTreeView::attributeMenu(quint32 cueId, quint32 layerId, const QString &
         for (QLCPalette *p : owners)
         {
             const quint32 pid = p->id();
-            own->addAction(p->name(), this, [this, cueId, layerId, key, pid]() {
-                setEffectOwn(cueId, layerId, key, { pid });
+            own->addAction(p->name(), this, [this, cueId, layerId, key, pid, target]() {
+                setEffectOwn(cueId, layerId, key, { pid }, target);
             });
         }
         own->addSeparator();
-        own->addAction(tr("None of its own"), this, [this, cueId, layerId, key]() {
-            setEffectOwn(cueId, layerId, key, {});
+        own->addAction(tr("None of its own"), this, [this, cueId, layerId, key, target]() {
+            setEffectOwn(cueId, layerId, key, {}, target);
         });
     }
     if (key != QLatin1String("Effect."))
     {
         menu.addSeparator();
-        menu.addAction(tr("None (off here)"), this, [this, cueId, layerId, key]() {
-            setAttributeNone(cueId, layerId, key);
+        menu.addAction(tr("None (off here)"), this, [this, cueId, layerId, key, target]() {
+            Look l;
+            l.key = key;
+            l.none = true;
+            applyLook(cueId, layerId, target, l);
         });
-        menu.addAction(tr("Clear (inherit)"), this, [this, cueId, layerId, key]() {
-            clearAttribute(cueId, layerId, key);
-        });
+        // Clearing only means something where it is set.
+        if (layerId != invalidId() || target.isEmpty())
+            menu.addAction(tr("Clear (inherit)"), this, [this, cueId, layerId, key]() {
+                clearAttribute(cueId, layerId, key);
+            });
     }
     menu.exec(globalPos);
 }
 
+bool ShowTreeView::applyLook(quint32 cueId, quint32 layerId, const Target &target, const Look &look)
+{
+    if (layerId != invalidId())
+        return m_st->setLayerLook(cueId, layerId, look);
+    if (!target.isEmpty())
+        return m_st->setTargetLook(cueId, target, look);
+    return m_st->setCueLook(cueId, look);
+}
+
+quint32 ShowTreeView::inlinePalette(quint32 cueId, quint32 layerId, const Target &target,
+                                    QLCPalette::PaletteType type, const QVariantList &values,
+                                    const QString &value)
+{
+    // Named for where it was made: "30% · 1.0.1 Towers" (D21).
+    const CueList *list = m_st->listOfCue(cueId);
+    const Cue *cue = m_st->cue(cueId);
+    if (list == nullptr || cue == nullptr)
+        return QLCPalette::invalidId();
+    QString where;
+    if (layerId != invalidId() && cue->layer(layerId) != nullptr)
+    {
+        const Layer *l = cue->layer(layerId);
+        where = l->name.isEmpty() ? m_st->targetLabel(l->target) : l->name;
+    }
+    else if (!target.isEmpty())
+        where = m_st->targetLabel(target);
+    else
+        where = tr("cue");
+    const quint32 pid = m_st->createInlinePalette(type, values,
+                                                  QStringLiteral("%1 \u00b7 %2 %3")
+                                                  .arg(value, m_st->cueLabel(*list, list->indexOf(cueId)), where));
+    if (pid != QLCPalette::invalidId())
+        noteRecent(LibPalette, pid);
+    return pid;
+}
+
 void ShowTreeView::slotCueEdited()
 {
-    if (m_inspectorUpdating || currentKind() != CueNode)
+    // The cue the page was showing -- focus leaving a field can come after
+    // the tree has moved on to another cue.
+    if (m_inspectorUpdating || m_pageCue == invalidId())
         return;
-    const Cue *c = m_st->cue(currentId());
+    const Cue *c = m_st->cue(m_pageCue);
     if (c == nullptr)
         return;
     Cue cue = *c;
@@ -1417,7 +1475,8 @@ bool ShowTreeView::dropFunctions(quint32 cueId, const QList<quint32> &functions)
     return last != invalidId();
 }
 
-bool ShowTreeView::dropPalettes(quint32 cueId, quint32 layerId, const QList<quint32> &palettes)
+bool ShowTreeView::dropPalettes(quint32 cueId, quint32 layerId, const QList<quint32> &palettes,
+                                const Target &target)
 {
     // Colours dropped together are colour 1, 2, 3; anything else, one look
     // per palette (the last of a kind wins).
@@ -1453,12 +1512,7 @@ bool ShowTreeView::dropPalettes(quint32 cueId, quint32 layerId, const QList<quin
     // base; an effect's own looks come from its ⋯ (kept simple for P1).
     bool done = false;
     for (const Look &l : looks)
-    {
-        if (layerId == invalidId())
-            done |= m_st->setCueLook(cueId, l);
-        else
-            done |= m_st->setLayerLook(cueId, layerId, l);
-    }
+        done |= applyLook(cueId, layerId, target, l);
     return done;
 }
 
@@ -1560,78 +1614,59 @@ bool ShowTreeView::dropCue(quint32 cueId, quint32 onCueId, bool include)
 
 bool ShowTreeView::setOneOffDimmer(quint32 cueId, quint32 layerId, int percent)
 {
-    const CueList *list = m_st->listOfCue(cueId);
-    if (list == nullptr)
-        return false;
-    const Cue *cue = m_st->cue(cueId);
-    const Layer *layer = layerId == invalidId() ? nullptr : cue->layer(layerId);
-    const QString where = QStringLiteral("%1 %2").arg(m_st->cueLabel(*list, list->indexOf(cueId)),
-                                                      layer == nullptr ? tr("cue")
-                                                      : (layer->name.isEmpty() ? m_st->targetLabel(layer->target)
-                                                                               : layer->name));
-    const quint32 pid = m_st->createInlinePalette(QLCPalette::Dimmer,
-                                                  { qBound(0, qRound(percent * 255.0 / 100.0), 255) },
-                                                  tr("%1% · %2").arg(percent).arg(where));
-    if (pid == QLCPalette::invalidId())
-        return false;
-    noteRecent(LibPalette, pid);
-    return layerId == invalidId() ? m_st->setCueLook(cueId, m_st->lookForPalette(pid))
-                                  : m_st->setLayerLook(cueId, layerId, m_st->lookForPalette(pid));
+    const quint32 pid = inlinePalette(cueId, layerId, Target(), QLCPalette::Dimmer,
+                                      { qBound(0, qRound(percent * 255.0 / 100.0), 255) },
+                                      tr("%1%").arg(percent));
+    return pid != QLCPalette::invalidId() && applyLook(cueId, layerId, Target(), m_st->lookForPalette(pid));
 }
 
 bool ShowTreeView::setOneOffColour(quint32 cueId, quint32 layerId, const QColor &colour)
 {
-    const CueList *list = m_st->listOfCue(cueId);
-    if (list == nullptr)
-        return false;
-    const Cue *cue = m_st->cue(cueId);
-    const Layer *layer = layerId == invalidId() ? nullptr : cue->layer(layerId);
-    const QString where = QStringLiteral("%1 %2").arg(m_st->cueLabel(*list, list->indexOf(cueId)),
-                                                      layer == nullptr ? tr("cue")
-                                                      : (layer->name.isEmpty() ? m_st->targetLabel(layer->target)
-                                                                               : layer->name));
-    const quint32 pid = m_st->createInlinePalette(QLCPalette::Color,
-                                                  { QLCPalette::colorToString(colour, QColor(Qt::black)) },
-                                                  tr("%1-ish · %2").arg(colour.name(), where));
-    if (pid == QLCPalette::invalidId())
-        return false;
-    noteRecent(LibPalette, pid);
-    return layerId == invalidId() ? m_st->setCueLook(cueId, m_st->lookForPalette(pid))
-                                  : m_st->setLayerLook(cueId, layerId, m_st->lookForPalette(pid));
+    const quint32 pid = inlinePalette(cueId, layerId, Target(), QLCPalette::Color,
+                                      { QLCPalette::colorToString(colour, QColor(Qt::black)) },
+                                      tr("%1-ish").arg(colour.name()));
+    return pid != QLCPalette::invalidId() && applyLook(cueId, layerId, Target(), m_st->lookForPalette(pid));
 }
 
 bool ShowTreeView::setEffectOwn(quint32 cueId, quint32 layerId, const QString &key,
-                                const QList<quint32> &palettes)
+                                const QList<quint32> &palettes, const Target &target)
 {
     const Cue *cue = m_st->cue(cueId);
-    if (cue == nullptr)
+    const CueList *list = m_st->listOfCue(cueId);
+    if (cue == nullptr || list == nullptr)
         return false;
     const Look *have = nullptr;
-    if (layerId == invalidId())
-        have = cue->look(key);
-    else if (const Layer *l = cue->layer(layerId))
-        have = l->look(key);
-    if (have == nullptr || have->none)
+    if (layerId != invalidId())
     {
-        // Set where it is inherited from: copy the effect here first.
-        const CueList *list = m_st->listOfCue(cueId);
+        if (const Layer *l = cue->layer(layerId))
+            have = l->look(key);
+    }
+    else if (target.isEmpty())
+    {
+        have = cue->look(key);
+    }
+    Look look;
+    if (have != nullptr && !have->none)
+    {
+        look = *have;
+    }
+    else
+    {
+        // Inherited: take the effect as it plays here, and set it here.
+        const Target t = layerId != invalidId() && cue->layer(layerId) != nullptr
+                         ? cue->layer(layerId)->target : target;
+        if (t.isEmpty())
+            return false;
         const QList<ResolvedCue> r = resolve(*list);
-        const ResolvedLayer *rl = nullptr;
-        if (layerId != invalidId())
-            rl = r.at(list->indexOf(cueId)).layer(cue->layer(layerId)->target);
+        const ResolvedLayer *rl = r.at(list->indexOf(cueId)).layer(t);
         if (rl == nullptr || !rl->values.contains(key))
             return false;
-        Look l = rl->values.value(key).look;
-        l.own = palettes;
-        for (quint32 p : palettes)
-            noteRecent(LibPalette, p);
-        return m_st->setLayerLook(cueId, layerId, l);
+        look = rl->values.value(key).look;
     }
-    Look l = *have;
-    l.own = palettes;
+    look.own = palettes;
     for (quint32 p : palettes)
         noteRecent(LibPalette, p);
-    return layerId == invalidId() ? m_st->setCueLook(cueId, l) : m_st->setLayerLook(cueId, layerId, l);
+    return applyLook(cueId, layerId, target, look);
 }
 
 bool ShowTreeView::clearAttribute(quint32 cueId, quint32 layerId, const QString &key)

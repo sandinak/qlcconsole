@@ -180,6 +180,16 @@ void ShowTreeView_Test::trackedLayersShowGreyWithWhereTheyCameFrom()
     QVERIFY(tracked != nullptr);
     view.tree()->setCurrentItem(tracked);
     QCOMPARE(rowFor(view.attributeRows(), "Colour"), QString("Colour | Blue | tracked from 1 One"));
+
+    // A palette set on it there makes it cue 2's own layer -- one undo step.
+    const quint32 red = colour(Qt::red, "Red");
+    QVERIFY(view.dropPalettes(c2, invalidId(), { red }, t1));
+    QCOMPARE(st->cue(c2)->layers.count(), 2);
+    QCOMPARE(st->cue(c2)->layers.last().target, t1);
+    QCOMPARE(st->cue(c2)->layers.last().looks.first().palettes, QList<quint32>({ red }));
+    QVERIFY(st->cue(c2)->looks.isEmpty());          // not a cue look
+    QVERIFY(st->undo());
+    QCOMPARE(st->cue(c2)->layers.count(), 1);
     QVERIFY(view.selectNode(c2));
     QCOMPARE(view.currentKind(), ShowTreeView::CueNode);
 }

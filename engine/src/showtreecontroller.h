@@ -96,6 +96,9 @@ public:
     bool removeLayer(quint32 cueId, quint32 layerId);
     bool setLayerLook(quint32 cueId, quint32 layerId, const ShowTree::Look &look);
     bool setCueLook(quint32 cueId, const ShowTree::Look &look);
+    /** Set a look on the cue's own layer for @a target -- made one first if
+     *  the layer is only carried in (tracked, included): one undo step. */
+    bool setTargetLook(quint32 cueId, const ShowTree::Target &target, const ShowTree::Look &look);
     bool setLayerRelease(quint32 cueId, quint32 layerId, bool release);
     bool setListMode(quint32 listId, ShowTree::ListMode mode);
     bool setBaseCue(quint32 listId, quint32 cueId);

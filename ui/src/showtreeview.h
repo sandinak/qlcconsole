@@ -25,6 +25,7 @@
 #include <QList>
 
 #include "showtreemodel.h"
+#include "qlcpalette.h"
 
 class QStackedWidget;
 class QDoubleSpinBox;
@@ -106,8 +107,11 @@ public:
     bool dropTargets(quint32 cueId, const QList<quint32> &groups, const QList<quint32> &fixtures);
     /** Functions dropped on a cue: opaque function layers. */
     bool dropFunctions(quint32 cueId, const QList<quint32> &functions);
-    /** Palettes dropped on a layer (or, with no layer, on the cue's looks). */
-    bool dropPalettes(quint32 cueId, quint32 layerId, const QList<quint32> &palettes);
+    /** Palettes dropped on a layer (or, with no layer, on the cue's looks;
+     *  with no layer but a @a target, on a layer only carried into the cue,
+     *  which then becomes the cue's own). */
+    bool dropPalettes(quint32 cueId, quint32 layerId, const QList<quint32> &palettes,
+                      const ShowTree::Target &target = ShowTree::Target());
     /** What a drop of @a mime on (@a cueId, @a layerId) would do, before it
      *  is let go of: "Blue → cue look: reaches 2 of 3 layers". */
     QString dropHint(quint32 cueId, quint32 layerId, const QMimeData *mime) const;
@@ -128,7 +132,8 @@ public:
     bool clearAttribute(quint32 cueId, quint32 layerId, const QString &key);
     /** An effect's own Colour/Dimmer looks (they apply inside it only). */
     bool setEffectOwn(quint32 cueId, quint32 layerId, const QString &effectKey,
-                      const QList<quint32> &palettes);
+                      const QList<quint32> &palettes,
+                      const ShowTree::Target &target = ShowTree::Target());
     bool setAttributeNone(quint32 cueId, quint32 layerId, const QString &key);
 
     /** The attribute rows the inspector shows for the selected layer, as
@@ -171,7 +176,13 @@ private:
     void showCuePage(const ShowTree::CueList &list, int index);
     void showLayerPage(const ShowTree::CueList &list, int index, const ShowTree::Layer *own,
                        const ShowTree::ResolvedLayer *resolved);
-    void attributeMenu(quint32 cueId, quint32 layerId, const QString &key, const QPoint &globalPos);
+    void attributeMenu(quint32 cueId, quint32 layerId, const ShowTree::Target &target,
+                       const QString &key, const QPoint &globalPos);
+    /** Set @a look on the layer, on the carried-in @a target, or the cue. */
+    bool applyLook(quint32 cueId, quint32 layerId, const ShowTree::Target &target,
+                   const ShowTree::Look &look);
+    quint32 inlinePalette(quint32 cueId, quint32 layerId, const ShowTree::Target &target,
+                          QLCPalette::PaletteType type, const QVariantList &values, const QString &value);
     QString lookText(const ShowTree::Look &look) const;
     QString originText(const ShowTree::CueList &list, const ShowTree::ResolvedValue &value) const;
     QString paletteName(quint32 id) const;
@@ -228,6 +239,7 @@ private:
 
     QTimer *m_libraryTimer = nullptr;
     QList<quint32> m_expanded;
+    quint32 m_pageCue = 0xFFFFFFFF;      //!< the cue the cue page shows
     bool m_reloading = false;
     bool m_inspectorUpdating = false;
 };
