@@ -30,7 +30,16 @@
 #include <QXmlStreamReader>
 #include <QtTest>
 
+#define private public
+#define protected public
+#include "mastertimer.h"
+#include "universe.h"
+#undef protected
+#undef private
+
 #include "showtreecontroller.h"
+#include "inputoutputmap.h"
+#include "chaseraction.h"
 #include "functionstreewidget.h"
 #include "fixturegroupsource.h"
 #include "qlcfixturedefcache.h"
@@ -466,6 +475,36 @@ void ShowTreeView_Test::goboLooksMatchByNamePerType()
     QCOMPARE(gobo->goboName(), QString("Gobo 3"));
     QCOMPARE(gobo->goboValueFor(sharpy), (12 + 15) / 2);
     QCOMPARE(gobo->goboValueFor(chauvet), 71);                 // picked for its type
+
+    // Looser (Branson 2026-10-17): a plural finds the singular...
+    name->setText("Turbines");
+    QMetaObject::invokeMethod(name, "editingFinished");
+    QCOMPARE(int(gobo->resolveGobo(contest).how), int(QLCPalette::GoboSingular));
+    QVERIFY(gobo->goboValueFor(contest) >= 0);
+    QVERIFY2(ed->findChild<QLabel *>("goboMatches")->text().contains("PSC-930: Turbine (by name, singular/plural)"),
+             qPrintable(ed->findChild<QLabel *>("goboMatches")->text()));
+
+    // ...but a name that fits several slots on a type isn't guessed: that
+    // type ignores it, the row says it's ambiguous and offers the pick.
+    name->setText("Shake");
+    QMetaObject::invokeMethod(name, "editingFinished");
+    QCOMPARE(int(gobo->resolveGobo(contest).how), int(QLCPalette::GoboAmbiguous));
+    QCOMPARE(gobo->goboValueFor(contest), -1);
+    QCOMPARE(gobo->goboValueFor(sharpy), -1);
+    QCOMPARE(gobo->goboValueFor(chauvet), 71);
+    QVERIFY2(ed->findChild<QLabel *>("goboMatches")->text().contains("PSC-930: ambiguous (Dot Shake / Dots Shake"),
+             qPrintable(ed->findChild<QLabel *>("goboMatches")->text()));
+    QVERIFY(view.selectNode(c1));
+    QVERIFY(view.selectNode(l1, c1));
+    QVERIFY2(reachText().startsWith("applies to 1 of 4 — ambiguous"), qPrintable(reachText()));
+    QLabel *reach = view.findChild<QLabel *>("stReach:" + KeyGobo);
+    QVERIFY(reach->text().contains("<a href=\"pick\">"));
+    QVERIFY2(reach->toolTip().contains("PSC-930: Dot Shake / Dots Shake"), qPrintable(reach->toolTip()));
+    QVERIFY(reach->toolTip().contains("Sharpy: "));
+    const QStringList amb = st->lookAmbiguities(t, *st->cue(c1)->layer(l1)->look(KeyGobo));
+    QCOMPARE(amb.count(), 2);                                   // one line a type
+    emit reach->linkActivated("pick");                          // the per-type pick
+    QCOMPARE(view.lookEditor()->paletteId(), gobo->id());
 }
 
 void ShowTreeView_Test::oneOffValuesGoToRecentNotAll()
@@ -919,6 +958,108 @@ void ShowTreeView_Test::selectingACuePreviewsItOnTheRig()
     QVERIFY(view.previewText().startsWith("Live: editing is blind"));
     m_doc->setMode(Doc::Design);
     QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Playing));
+    view.hide();
+}
+
+/* The DMX the universe would send, by stepping the timer by hand (no output
+   thread, nothing goes out). */
+static QHash<quint32, uchar> settleDmx(Doc *doc, int ticks = 10)
+{
+    for (int i = 0; i < ticks; ++i)
+    {
+        doc->masterTimer()->timerTick();
+        QList<Universe *> ua = doc->inputOutputMap()->claimUniverses();
+        ua.first()->processFaders();
+        doc->inputOutputMap()->releaseUniverses(false);
+    }
+    QHash<quint32, uchar> out;
+    QList<Universe *> ua = doc->inputOutputMap()->claimUniverses();
+    for (int i = 0; i < 6; ++i)
+        out.insert(quint32(i), uchar(ua.first()->preGMValues().at(i)));
+    doc->inputOutputMap()->releaseUniverses(false);
+    return out;
+}
+
+static void goList(Doc *doc, Chaser *c)
+{
+    ChaserAction action;
+    action.m_action = ChaserNextStep;
+    action.m_stepIndex = -1;
+    action.m_masterIntensity = 1.0;
+    action.m_stepIntensity = 1.0;
+    action.m_fadeMode = Chaser::FromFunction;
+    c->setAction(action);
+    if (!c->isRunning())
+        c->start(doc->masterTimer(), FunctionParent::master());
+}
+
+/* Branson 2026-10-17: in Design whatever is in edit is visible, also while
+   its own list runs for real; in Perform the running list owns the stage. */
+void ShowTreeView_Test::inDesignTheEditShowsOverItsRunningList()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    const quint32 d50 = dimmer(127, "Half");
+    const quint32 d100 = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "Full Show");
+    const quint32 c1 = st->addCue(list, -1, "One");
+    Target t;
+    t.groups << towers->id();
+    const quint32 l1 = st->addLayer(c1, t);
+    st->setLayerLook(c1, l1, st->lookForPalette(d100));
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(list)->chaser));
+    QVERIFY(chaser != nullptr);
+
+    ShowTreeView view(nullptr, m_doc);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+
+    // The list runs cue One at full, for real.
+    goList(m_doc, chaser);
+    QCOMPARE(int(settleDmx(m_doc)[0]), 255);
+
+    // Design: select the running cue and edit its dimmer DOWN -- the edit
+    // is what shows (HTP stacking alone would keep the running 255).
+    QVERIFY(view.selectNode(l1, c1));
+    QCOMPARE(st->previewedCue(), c1);
+    QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Playing));
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(d50)));
+    QCoreApplication::processEvents();
+    QCOMPARE(view.previewText(), QString("▶ On the rig: 1 One, over Full Show running"));
+    QHash<quint32, uchar> v = settleDmx(m_doc);
+    QCOMPARE(int(v[0]), 127);
+    QCOMPARE(int(v[1]), 127);
+    QVERIFY(chaser->isRunning());
+
+    // Stopping the preview (select the list): the running cue is back.
+    QVERIFY(view.selectNode(list));
+    QCOMPARE(st->previewedCue(), invalidId());
+    v = settleDmx(m_doc);
+    QCOMPARE(int(v[0]), 255);
+    QVERIFY(chaser->isRunning());
+    // ...and so it is on leaving the tab.
+    QVERIFY(view.selectNode(c1));
+    QCOMPARE(int(settleDmx(m_doc)[0]), 127);
+    view.hide();
+    QCOMPARE(int(settleDmx(m_doc)[0]), 255);
+    QVERIFY(chaser->isRunning());
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+
+    // Perform (Live): the running list owns the stage; no preview, and an
+    // edit lands on GO.
+    chaser->stop(FunctionParent::master());
+    settleDmx(m_doc);
+    m_doc->setMode(Doc::Operate);
+    goList(m_doc, chaser);
+    QCOMPARE(int(settleDmx(m_doc)[0]), 127);     // cue One, as edited
+    QVERIFY(view.selectNode(l1, c1));
+    QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::NotDesign));
+    QVERIFY(st->previewFunctions().isEmpty());
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(d100)));
+    QCOMPARE(int(settleDmx(m_doc)[0]), 127);     // blind until GO
+    QVERIFY(view.previewText().startsWith("Live: editing is blind"));
+    m_doc->setMode(Doc::Design);
     view.hide();
 }
 

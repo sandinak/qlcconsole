@@ -1744,9 +1744,13 @@ void LookEditor::updateGoboMatches()
     for (const ChannelSource &src : m_singleSources)
     {
         const Fixture *fxi = src.fixtures.isEmpty() ? NULL : m_doc->fixture(src.fixtures.first());
-        const int v = p->goboValueFor(fxi);
+        const QLCPalette::GoboResolution r = p->resolveGobo(fxi);
+        const int v = r.value;
         QString what;
-        if (v < 0)
+        if (r.how == QLCPalette::GoboAmbiguous)
+            what = tr("ambiguous (%1): ignores it; pick one on its wheel")
+                   .arg(r.candidates.join(QStringLiteral(" / ")));
+        else if (v < 0)
             what = tr("no gobo of that name: ignores it");
         else
         {
@@ -1754,8 +1758,13 @@ void LookEditor::updateGoboMatches()
             for (const QLCCapability *c : src.channel->capabilities())
                 if (v >= c->min() && v <= c->max())
                     cap = c->name();
-            const bool picked = p->goboValues().contains(QLCPalette::definitionKey(fxi));
-            what = picked ? tr("%1 (picked for this type)").arg(cap) : tr("%1 (by name)").arg(cap);
+            switch (r.how)
+            {
+                case QLCPalette::GoboPicked: what = tr("%1 (picked for this type)").arg(cap); break;
+                case QLCPalette::GoboSingular: what = tr("%1 (by name, singular/plural)").arg(cap); break;
+                case QLCPalette::GoboPartial: what = tr("%1 (closest name)").arg(cap); break;
+                default: what = tr("%1 (by name)").arg(cap); break;
+            }
         }
         lines << tr("%1: %2").arg(src.label, what);
     }

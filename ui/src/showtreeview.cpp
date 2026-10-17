@@ -891,14 +891,18 @@ QString ShowTreeView::previewText() const
     switch (m_st->previewState())
     {
         case ShowTreeController::PreviewState::Playing:
+        {
+            // Design: the edit wins over a list running for real, which
+            // keeps going underneath and comes back when the preview stops.
+            const QStringList running = m_st->listsRunning();
+            if (!running.isEmpty())
+                return tr("▶ On the rig: %1, over %2 running").arg(cue, running.join(", "));
             return tr("▶ On the rig: %1").arg(cue);
+        }
         case ShowTreeController::PreviewState::Dark:
             return tr("▶ On the rig: %1 (plays nothing yet)").arg(cue);
         case ShowTreeController::PreviewState::NotDesign:
             return tr("Live: editing is blind, changes reach the stage on GO");
-        case ShowTreeController::PreviewState::ListRunning:
-            return tr("%1 is running: not previewed; changes show when the cue plays again")
-                   .arg(list == nullptr ? QString() : list->name);
         case ShowTreeController::PreviewState::Off:
         break;
     }
@@ -910,7 +914,8 @@ void ShowTreeView::slotPreviewChanged()
     m_previewLabel->setText(previewText());
     m_previewLabel->setToolTip(m_st->previewState() == ShowTreeController::PreviewState::Playing
                                ? tr("Design mode: the selected cue plays on the rig, and changes show at "
-                                    "once. Leaving the tab or selecting no cue stops it.")
+                                    "once, also over a cue list running for real (it keeps going "
+                                    "underneath). Leaving the tab or selecting no cue stops it.")
                                : QString());
 }
 
@@ -1213,14 +1218,32 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
             m_st->lookReach(rl->target, probe, &n, &total);
             if (total > 0 && n < total)
             {
-                reach->setText(tr("applies to %1 of %2").arg(n).arg(total));
                 QStringList names;
                 for (quint32 fid : m_st->lookMisses(rl->target, probe))
                     if (const Fixture *f = m_doc->fixture(fid))
                         names << f->name();
                 if (names.count() > 12)
                     names = names.mid(0, 12) << tr("…and %1 more").arg(names.count() - 12);
-                reach->setToolTip(tr("Without it (they ignore this look):\n%1").arg(names.join(QLatin1Char('\n'))));
+                QString tip = tr("Without it (they ignore this look):\n%1").arg(names.join(QLatin1Char('\n')));
+                // A gobo name that fits several slots on a type isn't
+                // guessed: say so, and offer the per-type pick.
+                const QStringList ambiguous = m_st->lookAmbiguities(rl->target, probe);
+                const quint32 pickPid = probe.palettes.value(0, QLCPalette::invalidId());
+                if (!ambiguous.isEmpty() && pickPid != QLCPalette::invalidId())
+                {
+                    reach->setText(tr("applies to %1 of %2 — ambiguous: <a href=\"pick\">pick per type…</a>")
+                                   .arg(n).arg(total));
+                    reach->setTextFormat(Qt::RichText);
+                    connect(reach, &QLabel::linkActivated, this, [this, pickPid]() { editPalette(pickPid); });
+                    tip += tr("\n\nThe name fits more than one gobo on:\n%1\nPick the one it means for "
+                              "that type in the Look Editor (\"Wheel of\").")
+                           .arg(ambiguous.join(QLatin1Char('\n')));
+                }
+                else
+                {
+                    reach->setText(tr("applies to %1 of %2").arg(n).arg(total));
+                }
+                reach->setToolTip(tip);
             }
         }
 

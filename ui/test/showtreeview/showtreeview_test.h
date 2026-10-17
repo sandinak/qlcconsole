@@ -53,6 +53,7 @@ private slots:
     void anEffectGetsLooksOfItsOwn();
     void theLookEditorEditsARowsPalette();
     void selectingACuePreviewsItOnTheRig();
+    void inDesignTheEditShowsOverItsRunningList();
     void pictureOfARealShow();
 
 private:

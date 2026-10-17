@@ -20,6 +20,7 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QFileInfo>
+#include <QSet>
 #include <QDir>
 #include <QtMath>
 #include <QDebug>
@@ -589,7 +590,7 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                             QLCChannel *ch = mode ? mode->channel(wheelCh) : nullptr;
                             if (!ch)
                                 continue;
-                            // Walk all 256 slots; keep the one whose colour is
+                            // Walk all 256 gobos; keep the one whose colour is
                             // closest (squared RGB distance) to col.
                             int bestDmx  = -1;
                             qint64 bestDist = LLONG_MAX;
@@ -1813,40 +1814,154 @@ bool QLCPalette::sameGoboName(const QString &a, const QString &b)
     return !ka.isEmpty() && ka == goboKey(b);
 }
 
-int QLCPalette::goboValueFor(const Fixture *fixture) const
+/** Tier 2's key: the words without "gobo" and numbers, run together, with
+    trailing digits and a plural 's' dropped ("Gobo 3 Dots" -> "dot"). */
+static QString goboStem(const QString &name)
 {
-    if (m_type != Gobo || fixture == nullptr || fixture->fixtureMode() == nullptr)
+    QString out;
+    QString word;
+    auto flush = [&out, &word]() {
+        bool digits = !word.isEmpty();
+        for (const QChar c : word)
+            if (!c.isDigit())
+                digits = false;
+        if (!digits && word != QLatin1String("gobo") && word != QLatin1String("gobos"))
+            out += word;
+        word.clear();
+    };
+    for (const QChar c : name)
+    {
+        if (c.isLetterOrNumber())
+            word += c.toLower();
+        else
+            flush();
+    }
+    flush();
+    while (!out.isEmpty() && out.at(out.size() - 1).isDigit())
+        out.chop(1);
+    if (out.size() > 2 && out.endsWith(QLatin1Char('s')) && !out.endsWith(QLatin1String("ss")))
+        out.chop(1);
+    return out;
+}
+
+int QLCPalette::matchGoboName(const QString &wanted, const QList<QStringList> &gobos,
+                              GoboMatch *how, QList<int> *ambiguous)
+{
+    if (how != nullptr)
+        *how = GoboNoMatch;
+    if (ambiguous != nullptr)
+        ambiguous->clear();
+    if (goboKey(wanted).isEmpty())
         return -1;
+
+    auto decide = [how, ambiguous, &gobos](const QList<int> &found, GoboMatch tier) {
+        /* The same name twice on a wheel (an "Open", a glass repeated in its
+           shake range) is one gobo: its first slot. Different names are a
+           guess, not taken. */
+        QSet<QString> names;
+        for (int i : found)
+            names.insert(goboKey(gobos.at(i).value(0)));
+        if (found.count() == 1 || names.count() == 1)
+        {
+            if (how != nullptr)
+                *how = tier;
+            return found.first();
+        }
+        if (how != nullptr)
+            *how = GoboAmbiguous;
+        if (ambiguous != nullptr)
+            *ambiguous = found;
+        return -1;
+    };
+
+    // 1. Exact: the slot's name or its picture.
+    QList<int> found;
+    for (int i = 0; i < gobos.count(); ++i)
+        for (const QString &n : gobos.at(i))
+            if (sameGoboName(n, wanted))
+            {
+                found << i;
+                break;
+            }
+    if (!found.isEmpty())
+        return decide(found, GoboExact);
+
+    // A picture ("ClayPaky/gobo00006") is that glass or nothing.
+    if (wanted.contains(QLatin1Char('/')))
+        return -1;
+
+    // 2. Singular/plural, without "gobo" and numbers.
+    const QString stem = goboStem(wanted);
+    if (stem.isEmpty())
+        return -1;
+    for (int i = 0; i < gobos.count(); ++i)
+        if (!gobos.at(i).isEmpty() && goboStem(gobos.at(i).first()) == stem)
+            found << i;
+    if (!found.isEmpty())
+        return decide(found, GoboSingular);
+
+    // 3. The one slot whose name starts with or contains it.
+    if (stem.size() < 3)
+        return -1;
+    for (int i = 0; i < gobos.count(); ++i)
+        if (!gobos.at(i).isEmpty() && goboKey(gobos.at(i).first()).contains(stem))
+            found << i;
+    if (!found.isEmpty())
+        return decide(found, GoboPartial);
+    return -1;
+}
+
+QLCPalette::GoboResolution QLCPalette::resolveGobo(const Fixture *fixture) const
+{
+    GoboResolution r;
+    if (m_type != Gobo || fixture == nullptr || fixture->fixtureMode() == nullptr)
+        return r;
     const quint32 goboCh = fixture->fixtureMode()->channelNumber(QLCChannel::Gobo, QLCChannel::MSB);
     if (goboCh == QLCChannel::invalid())
-        return -1;
+        return r;
 
     const QString def = definitionKey(fixture);
     if (!def.isEmpty() && m_goboValues.contains(def))
-        return qBound(0, m_goboValues.value(def), 255);
+    {
+        r.value = qBound(0, m_goboValues.value(def), 255);
+        r.how = GoboPicked;
+        return r;
+    }
 
     if (m_goboName.isEmpty())
-        return m_values.isEmpty() ? -1 : qBound(0, value().toInt(), 255);
+    {
+        if (!m_values.isEmpty())
+        {
+            r.value = qBound(0, value().toInt(), 255);
+            r.how = GoboRaw;
+        }
+        return r;
+    }
 
-    // Its wheel's gobo of that name: the capability's own name, or its
-    // picture ("ClayPaky/gobo00006.svg" -> "ClayPaky/gobo00006": the folder
-    // counts, a Chauvet/gobo00006 is other glass).
+    // Its wheel's slots: the capability's own name, then its picture
+    // ("ClayPaky/gobo00006.svg" -> "ClayPaky/gobo00006").
     const QLCChannel *ch = fixture->channel(goboCh);
     if (ch == nullptr)
-        return -1;
-    for (QLCCapability *cap : ch->capabilities())
+        return r;
+    const QList<QLCCapability *> caps = ch->capabilities();
+    QList<QStringList> gobos;
+    for (QLCCapability *cap : caps)
     {
-        bool match = sameGoboName(cap->name(), m_goboName);
-        if (!match && cap->presetType() == QLCCapability::Picture)
+        QStringList names(cap->name());
+        if (cap->presetType() == QLCCapability::Picture)
         {
             // The resource may be resolved to a full path: its folder and
             // file name are what name the glass.
             const QFileInfo picture(cap->resource(0).toString());
-            match = sameGoboName(picture.dir().dirName() + QLatin1Char('/') + picture.completeBaseName(),
-                                 m_goboName);
+            names << picture.dir().dirName() + QLatin1Char('/') + picture.completeBaseName();
         }
-        if (match)
-            return (int(cap->min()) + int(cap->max())) / 2;
+        gobos << names;
     }
-    return -1;
+    QList<int> ambiguous;
+    const int at = matchGoboName(m_goboName, gobos, &r.how, &ambiguous);
+    if (at >= 0)
+        r.value = (int(caps.at(at)->min()) + int(caps.at(at)->max())) / 2;
+    for (int i : ambiguous)
+        r.candidates << caps.at(i)->name();
+    return r;
 }

@@ -382,4 +382,77 @@ void QLCPalette_Test::aColourLookOnAGroupOnlyLightsTheGroupsHeads()
     bar->setFixtureDefinition(nullptr, nullptr);    // def is on the stack
 }
 
+/* Each row: a wheel (gobos ';'-separated; a slot's picture after a '|'),
+   the name looked for, the slot it should land on (-1: none), how, and the
+   gobos an ambiguous match names. */
+void QLCPalette_Test::goboNamesMatchInTiers_data()
+{
+    QTest::addColumn<QString>("wheel");
+    QTest::addColumn<QString>("wanted");
+    QTest::addColumn<int>("slot");
+    QTest::addColumn<int>("how");
+    QTest::addColumn<QString>("ambiguous");
+
+    const int exact = QLCPalette::GoboExact, singular = QLCPalette::GoboSingular,
+              partial = QLCPalette::GoboPartial, amb = QLCPalette::GoboAmbiguous,
+              none = QLCPalette::GoboNoMatch;
+    const QString wheel = "Open;Dots;Dots Shake;Breakup;Gobo 3;Flame|ClayPaky/gobo00006;Bars 2";
+
+    // 1. Exact, ignoring case, spaces, '-' and '_'.
+    QTest::newRow("exact") << wheel << "Dots" << 1 << exact << "";
+    QTest::newRow("exact, case/space/-/_") << wheel << "dots_SHAKE" << 2 << exact << "";
+    QTest::newRow("exact, break-up") << wheel << "Break-Up" << 3 << exact << "";
+    QTest::newRow("exact wins over plural") << "Dot;Dots" << "Dots" << 1 << exact << "";
+    QTest::newRow("exact picture, folder counts") << wheel << "ClayPaky/gobo00006" << 5 << exact << "";
+    QTest::newRow("picture of other glass") << wheel << "Chauvet/gobo00006" << -1 << none << "";
+    QTest::newRow("same name twice is one gobo") << "Open;Dots;Open" << "open" << 0 << exact << "";
+    QTest::newRow("'Gobo 3' is that slot only") << wheel << "Gobo 3" << 4 << exact << "";
+    QTest::newRow("'Gobo 4': no partial on a number") << wheel << "Gobo 4" << -1 << none << "";
+
+    // 2. Singular/plural; the word "gobo" and numbers don't count.
+    QTest::newRow("singular finds plural") << wheel << "Dot" << 1 << singular << "";
+    QTest::newRow("plural finds singular") << "Open;Dot;Star" << "Dots" << 1 << singular << "";
+    QTest::newRow("'Gobo 3 Dots'") << "Open;Dots" << "Gobo 3 Dots" << 1 << singular << "";
+    QTest::newRow("'Bar' = 'Bars 2'") << wheel << "Bar" << 6 << singular << "";
+    QTest::newRow("'gobo-flames 7'") << wheel << "gobo-flames 7" << 5 << singular << "";
+    QTest::newRow("plural, two names") << "Dots 1;Dots 2;Star" << "Dot" << -1 << amb << "Dots 1,Dots 2";
+    QTest::newRow("exact beats two plurals") << "Dot;Dots 2;Star" << "Dot" << 0 << exact << "";
+
+    // 3. One slot starting with / containing it.
+    QTest::newRow("unique prefix") << "Open;Breakup Rotating;Star" << "Breakup" << 1 << partial << "";
+    QTest::newRow("unique contains") << "Open;Big Star;Bars" << "star" << 1 << partial << "";
+    QTest::newRow("prefix, only the shake") << "Open;Dots Shake;Star" << "Dots" << 1 << partial << "";
+    QTest::newRow("two contain it") << "Open;Dots Shake;Dots Rotating" << "Dots" << -1 << amb << "Dots Shake,Dots Rotating";
+    QTest::newRow("too short to contain") << "Open;Tower;Star" << "To" << -1 << none << "";
+    QTest::newRow("pictures aren't partial") << wheel << "ClayPaky/gobo" << -1 << none << "";
+
+    QTest::newRow("nothing like it") << wheel << "Cloud" << -1 << none << "";
+    QTest::newRow("empty name") << wheel << "  " << -1 << none << "";
+}
+
+void QLCPalette_Test::goboNamesMatchInTiers()
+{
+    QFETCH(QString, wheel);
+    QFETCH(QString, wanted);
+    QFETCH(int, slot);
+    QFETCH(int, how);
+    QFETCH(QString, ambiguous);
+
+    QList<QStringList> gobos;
+    QStringList names;
+    for (const QString &s : wheel.split(';'))
+    {
+        gobos << s.split('|');
+        names << s.split('|').first();
+    }
+    QLCPalette::GoboMatch got = QLCPalette::GoboPicked;
+    QList<int> amb;
+    QCOMPARE(QLCPalette::matchGoboName(wanted, gobos, &got, &amb), slot);
+    QCOMPARE(int(got), how);
+    QStringList ambNames;
+    for (int i : amb)
+        ambNames << names.at(i);
+    QCOMPARE(ambNames.join(','), ambiguous);
+}
+
 QTEST_GUILESS_MAIN(QLCPalette_Test)

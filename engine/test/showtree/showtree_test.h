@@ -69,7 +69,7 @@ private slots:
     void anEditShowsOnThePreviewAtOnce();
     void aSceneTwoPreviewedCuesShareRunsOn();
     void noPreviewInLiveMode();
-    void theListRunningForRealWins();
+    void inDesignTheEditWinsOverARunningList();
 
     // Import (§7)
     void importReadsScenesIncludesAndOpaqueFunctions();

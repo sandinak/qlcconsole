@@ -167,6 +167,18 @@ void GenericFader::replaceAll(const QList<FadeChannel> &channels)
     m_channels.swap(next);
 }
 
+void GenericFader::setChannelsFlag(int flag, bool on)
+{
+    std::lock_guard<ChannelsLock> l(m_channelsLock);
+    for (auto it = m_channels.begin(); it != m_channels.end(); ++it)
+    {
+        if (on)
+            it.value().addFlag(flag);
+        else
+            it.value().removeFlag(flag);
+    }
+}
+
 bool GenericFader::deleteRequested()
 {
     return m_deleteRequest;
@@ -335,7 +347,13 @@ void GenericFader::write(Universe *universe)
         //qDebug() << "[GenericFader] >>> uni:" << universe->id() << ", address:" << address << ", value:" << value << "int:" << compIntensity;
         if (flags & FadeChannel::Override)
         {
-            universe->write(address, value, true);
+            // Every byte of a 16-bit channel (a fader handling secondary
+            // channels holds both in one FadeChannel), MSB first.
+            if (channelCount == 1)
+                universe->write(address, uchar(value), true);
+            else
+                for (int i = 0; i < channelCount; i++)
+                    universe->write(address + i, ((uchar *)&value)[channelCount - 1 - i], true);
             continue;
         }
         else if (flags & FadeChannel::Relative)

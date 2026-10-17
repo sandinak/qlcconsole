@@ -266,28 +266,31 @@ void Universe::requestFaderPriority(QSharedPointer<GenericFader> fader, Universe
 {
     QMutexLocker fadersLocker(&m_fadersMutex);
     int pos = m_faders.indexOf(fader);
-    int newPos = 0;
 
     if (pos == -1)
         return;
 
+    /* Out, then back in where requestFader() would put a new one of that
+       priority: after the last fader at or below it. (Searched with the
+       fader still in the list, a lower priority than its own never found
+       a place and was not set.) */
+    m_faders.removeAt(pos);
+    fader->setPriority(priority);
+    int newPos = 0;
     for (int i = m_faders.count() - 1; i >= 0; i--)
     {
-        QSharedPointer<GenericFader> f = m_faders.at(i);
+        const QSharedPointer<GenericFader> &f = m_faders.at(i);
         if (!f.isNull() && f->priority() <= priority)
         {
-            newPos = i;
-            fader->setPriority(priority);
+            newPos = i + 1;
             break;
         }
     }
+    m_faders.insert(newPos, fader);
 
     if (newPos != pos)
-    {
-        m_faders.move(pos, newPos);
         qDebug() << "[Universe]" << id() << ": Generic fader moved from" << pos
-                 << "to" << m_faders.indexOf(fader) << ". Count:" << m_faders.count();
-    }
+                 << "to" << newPos << ". Count:" << m_faders.count();
 }
 
 QList<QSharedPointer<GenericFader> > Universe::faders()

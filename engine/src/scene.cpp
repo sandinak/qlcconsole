@@ -1090,7 +1090,7 @@ void Scene::processValue(MasterTimer *timer, QList<Universe*> ua, uint fadeIn, S
         // fadePriority() is normally Auto; the Show timeline lowers it to
         // Background so a Virtual Console action (Auto) overrides this scene on
         // the channels it touches (Operate-mode VC-vs-timeline arbitration).
-        fader = universe->requestFader(Universe::FaderPriority(fadePriority()));
+        fader = universe->requestFader(Universe::FaderPriority(editFaderPriority()));
         fader->adjustIntensity(getAttributeValue(Intensity));
         fader->setBlendMode(blendMode());
         fader->setName(name());
@@ -1130,6 +1130,8 @@ void Scene::processValue(MasterTimer *timer, QList<Universe*> ua, uint fadeIn, S
 
     fc->setStart(fc->current(chIndex), chIndex);
     fc->setTarget(scv.value, chIndex);
+    if (m_editOverrideApplied)
+        fc->addFlag(FadeChannel::Override);
 
     if (fc->canFade() == false)
     {
@@ -1228,6 +1230,17 @@ void Scene::handleFadersEnd(MasterTimer *timer)
     // thread. Lock scope ends before setBlendFunctionID() below, which re-locks.
     {
         QMutexLocker locker(&m_valueListMutex);
+        /* Let go of by the edit as it stops: the fade-out runs HTP again, so
+           an intensity fades into what plays underneath rather than forcing
+           it down to zero. (The fader keeps its place: an LTP channel fades
+           to the value under it.) */
+        if (m_editOverrideApplied && !m_editOverride)
+        {
+            foreach (QSharedPointer<GenericFader> fader, m_fadersMap)
+                if (!fader.isNull())
+                    fader->setChannelsFlag(FadeChannel::Override, false);
+            m_editOverrideApplied = false;
+        }
         if (m_transitionOut.isActive() && tempoType() != Beats)
         {
             /* Leaving by a transition: every channel fades out, each head
@@ -1306,6 +1319,7 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
         QMutexLocker locker(&m_valueListMutex);
         if (m_fadersMap.isEmpty())
         {
+            m_editOverrideApplied = m_editOverride;
             // full build already resolves positions and palette values
             m_reaimRequested = false;
             m_repaletteRequested = false;
@@ -1387,7 +1401,12 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
             }
             m_applyTransitionIn = false;   // the start only, not a later re-aim
         }
-        else if (m_reaimRequested || m_repaletteRequested)
+        else
+        {
+            applyEditOverride(ua);
+        }
+
+        if (m_reaimRequested || m_repaletteRequested)
         {
             // Re-resolve palettes into the EXISTING faders (replace channels in
             // place, 0-time) instead of tearing the fader map down and rebuilding
@@ -1415,6 +1434,8 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
                 fc.setTarget(v);
                 fc.setCurrent(v);
                 fc.setFadeTime(0);
+                if (m_editOverrideApplied)
+                    fc.addFlag(FadeChannel::Override);
                 m_fadersMap[universe]->replace(fc);
             };
 
@@ -1445,6 +1466,39 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
         incrementElapsed();
         if (timer->isBeat() && tempoType() == Beats)
             incrementElapsedBeats();
+    }
+}
+
+void Scene::setEditOverride(bool on)
+{
+    m_editOverride = on;
+}
+
+bool Scene::editOverride() const
+{
+    return m_editOverride;
+}
+
+int Scene::editFaderPriority() const
+{
+    const int own = fadePriority();
+    return m_editOverrideApplied ? qMax(own, int(Universe::Override)) : own;
+}
+
+void Scene::applyEditOverride(QList<Universe *> ua)
+{
+    const bool want = m_editOverride;
+    if (want == m_editOverrideApplied)
+        return;
+    m_editOverrideApplied = want;
+    const Universe::FaderPriority priority = Universe::FaderPriority(editFaderPriority());
+    for (auto it = m_fadersMap.constBegin(); it != m_fadersMap.constEnd(); ++it)
+    {
+        if (it.value().isNull())
+            continue;
+        if (it.key() < quint32(ua.count()) && ua.at(int(it.key())) != nullptr)
+            ua.at(int(it.key()))->requestFaderPriority(it.value(), priority);
+        it.value()->setChannelsFlag(FadeChannel::Override, want);
     }
 }
 

@@ -21,6 +21,7 @@
 #include <QXmlStreamWriter>
 #include <QBuffer>
 #include <QTimer>
+#include <QSet>
 #include <QDebug>
 #include <algorithm>
 
@@ -28,10 +29,12 @@
 #include "effectscriptrunner.h"
 #include "effectscriptcache.h"
 #include "qlcfixturemode.h"
+#include "qlcfixturedef.h"
 #include "speedmasters.h"
 #include "fixturegroup.h"
 #include "collection.h"
 #include "qlcchannel.h"
+#include "qlcpalette.h"
 #include "chaserstep.h"
 #include "mastertimer.h"
 #include "fixture.h"
@@ -772,6 +775,35 @@ QList<quint32> ShowTreeController::lookMisses(const Target &target, const Look &
     for (quint32 id : targetFixtures(m_doc, target))
         if (!lookReachesFixture(m_doc, m_doc->fixture(id), look))
             out << id;
+    return out;
+}
+
+QStringList ShowTreeController::lookAmbiguities(const Target &target, const Look &look) const
+{
+    QStringList out;
+    if (look.key != KeyGobo || look.none || look.palettes.isEmpty())
+        return out;
+    QSet<QString> seen;
+    for (quint32 id : targetFixtures(m_doc, target))
+    {
+        const Fixture *fxi = m_doc->fixture(id);
+        const QString def = QLCPalette::definitionKey(fxi);
+        if (fxi == nullptr || seen.contains(def) || lookReachesFixture(m_doc, fxi, look))
+            continue;
+        for (quint32 pid : look.palettes)
+        {
+            const QLCPalette *p = m_doc->palette(pid);
+            if (p == nullptr)
+                continue;
+            const QLCPalette::GoboResolution r = p->resolveGobo(fxi);
+            if (r.how != QLCPalette::GoboAmbiguous)
+                continue;
+            seen.insert(def);
+            const QString model = fxi->fixtureDef() != nullptr ? fxi->fixtureDef()->model() : fxi->name();
+            out << tr("%1: %2").arg(model, r.candidates.join(QStringLiteral(" / ")));
+            break;
+        }
+    }
     return out;
 }
 
@@ -1803,6 +1835,23 @@ void ShowTreeController::stopPreview()
     syncPreview();
 }
 
+QStringList ShowTreeController::listsRunning() const
+{
+    QStringList names;
+    for (const Production &p : m_productions)
+        for (const CueList &l : p.lists)
+            if (const Function *f = m_doc->function(l.chaser))
+                if (f->isRunning())
+                    names << l.name;
+    return names;
+}
+
+static void setEditOverride(Function *f, bool on)
+{
+    if (Scene *s = qobject_cast<Scene *>(f))
+        s->setEditOverride(on);
+}
+
 void ShowTreeController::syncPreview()
 {
     const PreviewState before = m_previewState;
@@ -1812,23 +1861,19 @@ void ShowTreeController::syncPreview()
     PreviewState state = PreviewState::Off;
     const CueList *list = m_previewCue == invalidId() ? nullptr : listOfCue(m_previewCue);
     const Cue *c = list == nullptr ? nullptr : list->cue(m_previewCue);
-    const Function *chaser = list == nullptr ? nullptr : m_doc->function(list->chaser);
     if (c == nullptr)
     {
         m_previewCue = invalidId();
     }
     else if (m_doc->mode() != Doc::Design)
     {
+        // Live: the running list owns the stage; edits land on GO.
         state = PreviewState::NotDesign;
-    }
-    else if (chaser != nullptr && chaser->isRunning())
-    {
-        // The list is on for real (footer GO, a VC cue list): the show
-        // wins, and edits reach the stage when that cue plays again.
-        state = PreviewState::ListRunning;
     }
     else
     {
+        // Design: what is in edit is what shows -- also over a list running
+        // for real (its own or another), which keeps going underneath.
         if (const Collection *coll = qobject_cast<const Collection *>(m_doc->function(c->collection)))
             for (quint32 fid : coll->functions())
                 if (m_doc->function(fid) != nullptr && !want.contains(fid))
@@ -1837,14 +1882,20 @@ void ShowTreeController::syncPreview()
     }
 
     // Start first, stop after: a scene both cues play is never let go of,
-    // so it runs on (no re-fade, effects keep their phase).
+    // so it runs on (no re-fade, effects keep their phase). The preview's
+    // scenes win on stage (Scene::setEditOverride: above the Auto faders,
+    // LTP on every channel), so a running cue at full can't hide a dimmer
+    // edited down; an opaque function (EFX, a matrix) mixes as it would.
     MasterTimer *timer = m_doc->masterTimer();
     for (quint32 fid : want)
     {
         // start() is a no-op for a parent the function already has, and
         // brings back one something else stopped (Stop all, a mode change).
         if (Function *f = m_doc->function(fid))
+        {
+            setEditOverride(f, true);
             f->start(timer, previewParent());
+        }
     }
     bool stoppedAny = false;
     for (quint32 fid : runningBefore)
@@ -1853,6 +1904,9 @@ void ShowTreeController::syncPreview()
             continue;
         if (Function *f = m_doc->function(fid))
         {
+            // Back to plain HTP/LTP first: if the real list holds it too, it
+            // plays on as the list's; if not, it fades into what's under it.
+            setEditOverride(f, false);
             f->stop(previewParent());
             stoppedAny = true;
         }
@@ -1875,22 +1929,30 @@ void ShowTreeController::slotModeChanged()
     // stopAllFunctions): what the preview ran is gone, start it afresh.
     // Into Operate the preview stops -- Live edits are blind until GO.
     if (m_doc->mode() == Doc::Design)
+    {
+        for (quint32 fid : m_previewRunning)
+            setEditOverride(m_doc->function(fid), false);
         m_previewRunning.clear();
+    }
     syncPreview();
 }
 
 void ShowTreeController::slotTimerFunctionStarted(quint32 fid)
 {
-    // The previewed cue's list started for real: give the stage to it.
-    if (m_previewCue == invalidId())
+    // A list started or stopped for real under a preview: the preview stays
+    // (Design: the edit wins), only what the header says changes.
+    if (m_previewCue == invalidId() || m_previewState != PreviewState::Playing)
         return;
-    const CueList *list = listOfCue(m_previewCue);
-    if (list != nullptr && list->chaser == fid)
-        syncPreview();
+    for (const Production &p : m_productions)
+        for (const CueList &l : p.lists)
+            if (l.chaser == fid)
+            {
+                emit previewChanged();
+                return;
+            }
 }
 
 void ShowTreeController::slotTimerFunctionStopped(quint32 fid)
 {
-    // ...and when it stops, the preview comes back.
     slotTimerFunctionStarted(fid);
 }

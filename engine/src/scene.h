@@ -22,6 +22,7 @@
 #define SCENE_H
 
 #include <QMutex>
+#include <atomic>
 #include <QHash>
 #include <QList>
 
@@ -423,6 +424,26 @@ public:
 
     /** @reimp */
     void setPause(bool enable) override;
+
+    /** The scene being edited wins on stage (the Show Tree's Design-mode
+     *  preview): its faders go above the Auto ones (Universe::Override) and
+     *  write every channel LTP, so a dimmer edited down shows under a cue
+     *  running at full (HTP would keep the higher). The other channels stay
+     *  whatever else plays them. Off again: back to its own priority and
+     *  HTP, in place -- the scene keeps running if something else holds it,
+     *  and a fade-out then ends in what plays underneath. Any thread; the
+     *  DMX thread applies it at the next write. */
+    void setEditOverride(bool on);
+    bool editOverride() const;
+
+private:
+    /** Bring the faders in line with setEditOverride(). Under
+     *  m_valueListMutex. */
+    void applyEditOverride(QList<Universe *> ua);
+    int editFaderPriority() const;
+
+    std::atomic<bool> m_editOverride { false };
+    bool m_editOverrideApplied = false;   //!< what the faders were built with
 
 private:
     /** Internal helper method to abtract Scene value processing */

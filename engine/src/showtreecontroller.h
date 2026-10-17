@@ -150,6 +150,10 @@ public:
      *  fixtures whose wheel has that gobo (or one picked for their type). */
     void lookReach(const ShowTree::Target &target, const ShowTree::Look &look, int *reach, int *total) const;
     QList<quint32> lookMisses(const ShowTree::Target &target, const ShowTree::Look &look) const;
+    /** A Gobo look by name that is ambiguous on some of @a target's fixture
+     *  types (several slots match, so it is not guessed): one entry per
+     *  type, "Model: Dots Shake / Dots Rotating". Empty: none. */
+    QStringList lookAmbiguities(const ShowTree::Target &target, const ShowTree::Look &look) const;
 
     /** What a person reads for @a target: its groups' and fixtures' names,
      *  or the function's. */
@@ -229,13 +233,16 @@ public:
         Off,            //!< nothing wanted
         Playing,        //!< the wanted cue plays
         NotDesign,      //!< Live (Operate) mode: edits are blind until GO
-        ListRunning,    //!< its cue list runs for real: not competed with
         Dark            //!< the cue plays nothing
     };
 
     /** Play cue @a cueId on the rig as a preview, as the Programming tab
-     *  does with its canvas: Design mode only, and never while the cue's own
-     *  list is running for real (it would fight the show). The cue's members
+     *  does with its canvas: Design mode only. In Design what is in edit is
+     *  what shows: also over a list running for real (the cue's own or
+     *  another), which keeps going underneath and is what remains when the
+     *  preview stops; the preview's scenes win on the channels they play
+     *  (Scene::setEditOverride). In Live the running list owns the stage
+     *  and nothing previews (NotDesign). The cue's members
      *  (its generated scenes and opaque functions) run under previewParent(),
      *  so a scene two previewed cues share keeps running when the preview
      *  moves on, and every bake re-takes the preview at once: an edit shows
@@ -248,6 +255,8 @@ public:
     PreviewState previewState() const { return m_previewState; }
     /** What the preview runs now. */
     QList<quint32> previewFunctions() const { return m_previewRunning; }
+    /** The names of the cue lists running for real (their chaser runs). */
+    QStringList listsRunning() const;
     /** The parent preview functions run under: stopping it never stops
      *  anything a chaser, a VC widget or another tab started. */
     static FunctionParent previewParent();

@@ -333,14 +333,48 @@ public:
     /** "Manufacturer/Model": what goboValues() are keyed by. */
     static QString definitionKey(const Fixture *fixture);
 
-    /** The DMX value this Gobo look puts on @a fixture's gobo channel, or
-     *  -1 when it doesn't apply to it (no gobo channel; named, and neither
-     *  picked for its type nor a gobo of that name on its wheel). In order:
-     *  the slot picked for its definition; else, named, the gobo capability
-     *  of that name (its name, or its picture as "ClayPaky/gobo00006";
-     *  case, spaces, '-' and '_' ignored), its middle value; else, unnamed,
-     *  value(). Only the gobo channel the look writes to (the first). */
-    int goboValueFor(const Fixture *fixture) const;
+    /** How a Gobo look found its slot on a fixture's wheel. */
+    enum GoboMatch
+    {
+        GoboNoMatch = 0,    //!< nothing of that name: the fixture ignores it
+        GoboPicked,         //!< the slot picked for its type (goboValues())
+        GoboRaw,            //!< unnamed: value() as it always was
+        GoboExact,          //!< same name (case, space, '-' and '_' ignored)
+        GoboSingular,       //!< "Dot" = "Dots" = "Gobo 3 Dots"
+        GoboPartial,        //!< the one slot whose name starts with/contains it
+        GoboAmbiguous       //!< a tier found several: not guessed, ignored
+    };
+
+    struct GoboResolution
+    {
+        int value = -1;                 //!< DMX value, -1: not applied
+        GoboMatch how = GoboNoMatch;
+        QStringList candidates;         //!< GoboAmbiguous: the slots' names
+    };
+
+    /** What this Gobo look puts on @a fixture's gobo channel (the first
+     *  wheel) and how it got there. In order: the slot picked for its
+     *  definition; unnamed, value(); named, matchGoboName() over the wheel's
+     *  capabilities (its middle value). */
+    GoboResolution resolveGobo(const Fixture *fixture) const;
+    /** resolveGobo()'s value: -1 when the look doesn't apply to @a fixture. */
+    int goboValueFor(const Fixture *fixture) const { return resolveGobo(fixture).value; }
+
+    /** The name match, in tiers; the first tier that finds anything decides:
+     *  1. exact, ignoring case, spaces, '-' and '_' (a slot's name, or its
+     *     picture as "ClayPaky/gobo00006" -- the folder counts: Chauvet's
+     *     gobo00006 is other glass);
+     *  2. singular/plural, ignoring the word "gobo" and numbers ("Dot" =
+     *     "Dots" = "Gobo 3 Dots");
+     *  3. the one slot whose name starts with or contains it (3+ letters).
+     *  Tiers 2 and 3 compare slot names only, never pictures, and are not
+     *  tried for a picture name (one with a '/'). @a gobos: each slot's
+     *  names, its own name first, then its picture's. Returns the slot's
+     *  index, or -1: none (@a how GoboNoMatch), or more than one in the
+     *  deciding tier (GoboAmbiguous, their indexes in @a ambiguous). The
+     *  same name on several slots is one gobo (its first slot). */
+    static int matchGoboName(const QString &wanted, const QList<QStringList> &gobos,
+                             GoboMatch *how = nullptr, QList<int> *ambiguous = nullptr);
     /** Whether two gobo names are the same gobo ("Break-up" = "breakup"). */
     static bool sameGoboName(const QString &a, const QString &b);
 

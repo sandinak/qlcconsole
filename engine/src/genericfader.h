@@ -112,6 +112,10 @@ public:
      *  in between saw an empty fader and sent a blank frame. */
     void replaceAll(const QList<FadeChannel> &channels);
 
+    /** Add ($on) or remove @a flag on every channel this fader holds, e.g.
+     *  FadeChannel::Override on a scene that is to win over the rest. */
+    void setChannelsFlag(int flag, bool on);
+
     /** Get/Set a request of deletion of this fader */
     bool deleteRequested();
     void requestDelete();
