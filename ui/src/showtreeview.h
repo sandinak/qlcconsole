@@ -149,6 +149,9 @@ public:
     quint32 editedPalette() const;
     LookEditor *lookEditor() const { return m_lookEditor; }
 
+    /** What the header says about the preview: "▶ On the rig: 1 One". */
+    QString previewText() const;
+
     bool isPinned(int kind, quint32 id) const;
     void setPinned(int kind, quint32 id, bool pinned);
 
@@ -164,8 +167,13 @@ public slots:
     /** Import a chaser as a cue list (§7): shows the report. */
     void importChaser(quint32 chaserId, bool showReport = true);
 
+protected:
+    void showEvent(QShowEvent *ev) override;
+    void hideEvent(QHideEvent *ev) override;
+
 private slots:
     void slotTreeSelectionChanged();
+    void slotPreviewChanged();
     void slotTreeContextMenu(const QPoint &pos);
     void slotLibraryContextMenu(const QPoint &pos);
     void slotImportMenuAboutToShow();
@@ -198,6 +206,8 @@ private:
     void noteRecent(int kind, quint32 id, const QString &label = QString());
     QTreeWidgetItem *findItem(quint32 id, quint32 cueId) const;
     void saveExpanded();
+    /** Preview the selected cue (Design mode, tab on screen), else stop. */
+    void syncPreview();
 
     Doc *m_doc;
     ShowTreeController *m_st;
@@ -212,6 +222,7 @@ private:
     QToolButton *m_import;
     QMenu *m_importMenu;
     QLabel *m_hint;
+    QLabel *m_previewLabel;
 
     QTreeWidget *m_tree;
 

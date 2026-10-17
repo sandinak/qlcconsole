@@ -879,6 +879,198 @@ void ShowTree_Test::lookReachCountsFixturesThatHaveIt()
 }
 
 /****************************************************************************
+ * Preview
+ ****************************************************************************/
+
+void ShowTree_Test::previewPlaysTheSelectedCue()
+{
+    FixtureGroup *a = group("Towers", { m_fixtures[0] });
+    FixtureGroup *b = group("USTs", { m_fixtures[2] });
+    const quint32 d50 = dimmer(127, "Half");
+    const quint32 d100 = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    st->setLayerLook(c1, st->addLayer(c1, groupTarget(a->id())), st->lookForPalette(d50));
+    st->setLayerLook(c2, st->addLayer(c2, groupTarget(b->id())), st->lookForPalette(d100));
+
+    QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Off));
+    st->previewCue(c1);
+    QCOMPARE(st->previewedCue(), c1);
+    QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Playing));
+    QHash<quint32, uchar> v = settle();
+    QCOMPARE(int(v[0]), 127);
+    QCOMPARE(int(v[2]), 0);
+
+    // Another cue switches it.
+    st->previewCue(c2);
+    v = settle();
+    QCOMPARE(int(v[0]), 0);
+    QCOMPARE(int(v[2]), 255);
+
+    // ...and stopping it lets go of everything; the chaser never ran.
+    st->stopPreview();
+    QCOMPARE(st->previewedCue(), invalidId());
+    QVERIFY(st->previewFunctions().isEmpty());
+    v = settle();
+    QCOMPARE(int(v[0]), 0);
+    QCOMPARE(int(v[2]), 0);
+    QVERIFY(!m_doc->function(st->cueList(listId)->chaser)->isRunning());
+
+    // A deleted cue stops its preview.
+    st->previewCue(c1);
+    QVERIFY(st->removeCue(c1));
+    QCOMPARE(st->previewedCue(), invalidId());
+    v = settle();
+    QCOMPARE(int(v[0]), 0);
+}
+
+void ShowTree_Test::anEditShowsOnThePreviewAtOnce()
+{
+    FixtureGroup *a = group("Towers", { m_fixtures[0] });
+    FixtureGroup *b = group("USTs", { m_fixtures[2] });
+    const quint32 d50 = dimmer(127, "Half");
+    const quint32 d100 = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 l1 = st->addLayer(c1, groupTarget(a->id()));
+    st->setLayerLook(c1, l1, st->lookForPalette(d50));
+
+    st->previewCue(c1);
+    QCOMPARE(int(settle()[0]), 127);
+    const quint32 old = st->previewFunctions().first();
+
+    // A changed look bakes a new scene: the preview takes it at once.
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(d100)));
+    QHash<quint32, uchar> v = settle();
+    QCOMPARE(int(v[0]), 255);
+    QVERIFY(!st->previewFunctions().contains(old));
+    QVERIFY(!m_doc->function(old)->isRunning());
+
+    // A new layer shows too, and undo takes it back off the rig.
+    st->setLayerLook(c1, st->addLayer(c1, groupTarget(b->id())), st->lookForPalette(d50));
+    QCOMPARE(int(settle()[2]), 127);
+    QVERIFY(st->undo());
+    QVERIFY(st->undo());
+    v = settle();
+    QCOMPARE(int(v[2]), 0);
+    QCOMPARE(int(v[0]), 255);
+
+    // The scene let go of goes at the next bake (the app sweeps for it).
+    st->bake();
+    QVERIFY(m_doc->function(old) == nullptr);
+}
+
+void ShowTree_Test::aSceneTwoPreviewedCuesShareRunsOn()
+{
+    FixtureGroup *a = group("Towers", { m_fixtures[0] });
+    FixtureGroup *b = group("USTs", { m_fixtures[1] });
+    const quint32 d50 = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    st->setLayerLook(c1, st->addLayer(c1, groupTarget(a->id())), st->lookForPalette(d50));
+    st->setLayerLook(c2, st->addLayer(c2, groupTarget(b->id())), st->lookForPalette(d50));
+
+    st->previewCue(c1);
+    tick(5);
+    Scene *shared = qobject_cast<Scene *>(m_doc->function(st->previewFunctions().first()));
+    QVERIFY(shared != nullptr);
+    const quint32 elapsed = shared->elapsed();
+    QSignalSpy stopped(shared, SIGNAL(stopped(quint32)));
+    st->previewCue(c2);           // Towers tracks into Two: the same scene
+    QHash<quint32, uchar> v = settle(5);
+    QCOMPARE(stopped.count(), 0);
+    QVERIFY(shared->isRunning());
+    QVERIFY(shared->elapsed() > elapsed);
+    QCOMPARE(int(v[0]), 127);
+    QCOMPARE(int(v[1]), 127);
+}
+
+void ShowTree_Test::noPreviewInLiveMode()
+{
+    FixtureGroup *a = group("Towers", { m_fixtures[0] });
+    const quint32 d50 = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    st->setLayerLook(c1, st->addLayer(c1, groupTarget(a->id())), st->lookForPalette(d50));
+
+    st->previewCue(c1);
+    QCOMPARE(int(settle()[0]), 127);
+
+    // Live: the preview goes, and selecting a cue there plays nothing.
+    m_doc->setMode(Doc::Operate);
+    QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::NotDesign));
+    QVERIFY(st->previewFunctions().isEmpty());
+    QCOMPARE(int(settle()[0]), 0);
+    st->previewCue(c1);
+    QCOMPARE(int(settle()[0]), 0);
+
+    // Back in Design it comes back (the app stopped everything first).
+    stopAll();
+    m_doc->setMode(Doc::Design);
+    QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Playing));
+    QCOMPARE(int(settle()[0]), 127);
+}
+
+void ShowTree_Test::theListRunningForRealWins()
+{
+    FixtureGroup *a = group("Towers", { m_fixtures[0] });
+    FixtureGroup *b = group("USTs", { m_fixtures[2] });
+    const quint32 d50 = dimmer(127, "Half");
+    const quint32 d100 = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    st->setLayerLook(c1, st->addLayer(c1, groupTarget(a->id())), st->lookForPalette(d50));
+    st->setLayerLook(c2, st->addLayer(c2, groupTarget(b->id())), st->lookForPalette(d100));
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+
+    // Running from the footer: selecting cue Two previews nothing.
+    go(chaser);
+    tick(5);
+    st->previewCue(c2);
+    QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::ListRunning));
+    QVERIFY(st->previewFunctions().isEmpty());
+    QHash<quint32, uchar> v = settle();
+    QCOMPARE(int(v[0]), 127);
+    QCOMPARE(int(v[2]), 0);
+    // Stopping the (empty) preview leaves the show alone.
+    st->stopPreview();
+    tick(5);
+    QVERIFY(chaser->isRunning());
+
+    // The list stops: a wanted preview comes back.
+    st->previewCue(c2);
+    chaser->stop(FunctionParent::master());
+    tick(5);
+    QCoreApplication::processEvents();
+    QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Playing));
+    v = settle();
+    QCOMPARE(int(v[0]), 0);
+    QCOMPARE(int(v[2]), 255);
+
+    // It starts while previewing: the preview gives the stage to it.
+    go(chaser);
+    tick(2);
+    QCoreApplication::processEvents();
+    QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::ListRunning));
+    v = settle();
+    QCOMPARE(int(v[0]), 127);
+    QCOMPARE(int(v[2]), 0);
+    // GO again: the show moves on, nothing of the preview hangs on.
+    go(chaser);
+    v = settle();
+    QCOMPARE(int(v[0]), 0);
+    QCOMPARE(int(v[2]), 255);
+}
+
+/****************************************************************************
  * Import
  ****************************************************************************/
 

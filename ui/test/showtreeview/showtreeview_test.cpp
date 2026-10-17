@@ -602,6 +602,64 @@ void ShowTreeView_Test::theLookEditorEditsARowsPalette()
 /* QLC_SHOWTREE_SHOW=<a COPY of a show> QLC_SHOWTREE_SHOT=<png>: load it,
    import its first chaser and picture the tab -- a look at the real thing,
    offscreen. Skipped without the variables. */
+void ShowTreeView_Test::selectingACuePreviewsItOnTheRig()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    FixtureGroup *usts = group("USTs", 2, 2);
+    const quint32 d50 = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 c2 = st->addCue(list, 0, "Two");
+    Target t1, t2;
+    t1.groups << towers->id();
+    t2.groups << usts->id();
+    st->setLayerLook(c1, st->addLayer(c1, t1), st->lookForPalette(d50));
+    const quint32 l2 = st->addLayer(c2, t2);
+    st->setLayerLook(c2, l2, st->lookForPalette(d50));
+
+    ShowTreeView view(nullptr, m_doc);
+    // Off screen (another tab): selecting plays nothing.
+    QVERIFY(view.selectNode(c1));
+    QCOMPARE(st->previewedCue(), invalidId());
+
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QCOMPARE(st->previewedCue(), c1);           // shown: the selected cue plays
+    QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Playing));
+    QCOMPARE(view.previewText(), QString("▶ On the rig: 1 One"));
+    QCOMPARE(view.findChild<QLabel *>("stPreview")->text(), view.previewText());
+    QVERIFY(!st->previewFunctions().isEmpty());
+
+    // A layer in another cue plays that cue.
+    QVERIFY(view.selectNode(l2, c2));
+    QCOMPARE(st->previewedCue(), c2);
+    // The list itself, or nothing: no preview.
+    QVERIFY(view.selectNode(list));
+    QCOMPARE(st->previewedCue(), invalidId());
+    QVERIFY(view.previewText().isEmpty());
+
+    // Leaving the tab stops it; coming back brings it back.
+    QVERIFY(view.selectNode(c1));
+    QCOMPARE(st->previewedCue(), c1);
+    view.hide();
+    QCOMPARE(st->previewedCue(), invalidId());
+    QVERIFY(st->previewFunctions().isEmpty());
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QCOMPARE(st->previewedCue(), c1);
+
+    // Live: blind. Selecting doesn't touch the stage, and the header says so.
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(st->previewFunctions().isEmpty());
+    QVERIFY(view.selectNode(c2));
+    QVERIFY(st->previewFunctions().isEmpty());
+    QVERIFY(view.previewText().startsWith("Live: editing is blind"));
+    m_doc->setMode(Doc::Design);
+    QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Playing));
+    view.hide();
+}
+
 void ShowTreeView_Test::pictureOfARealShow()
 {
     const QString path = qEnvironmentVariable("QLC_SHOWTREE_SHOW");

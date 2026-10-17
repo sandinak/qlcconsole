@@ -20,6 +20,8 @@
 #include <QStackedWidget>
 #include <QDoubleSpinBox>
 #include <QDragEnterEvent>
+#include <QShowEvent>
+#include <QHideEvent>
 #include <QTreeWidget>
 #include <QInputDialog>
 #include <QColorDialog>
@@ -392,6 +394,11 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     m_import->setPopupMode(QToolButton::InstantPopup);
     connect(m_importMenu, &QMenu::aboutToShow, this, &ShowTreeView::slotImportMenuAboutToShow);
     bar->addStretch(1);
+    // What the rig shows: the selected cue (Design), or nothing (Live).
+    m_previewLabel = new QLabel(this);
+    m_previewLabel->setObjectName("stPreview");
+    bar->addWidget(m_previewLabel);
+    bar->addSpacing(12);
     m_hint = new QLabel(this);
     m_hint->setObjectName("stDropHint");
     bar->addWidget(m_hint);
@@ -612,6 +619,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     }
 
     connect(m_st, &ShowTreeController::changed, this, &ShowTreeView::slotTreeChanged);
+    connect(m_st, &ShowTreeController::previewChanged, this, &ShowTreeView::slotPreviewChanged);
     // The Library follows the show's groups and palettes -- once per burst
     // (a show loading adds them one by one).
     m_libraryTimer = new QTimer(this);
@@ -832,6 +840,67 @@ void ShowTreeView::slotTreeSelectionChanged()
         return;
     updateInspector();
     updateButtons();
+    syncPreview();
+}
+
+/****************************************************************************
+ * Preview
+ ****************************************************************************/
+
+void ShowTreeView::showEvent(QShowEvent *ev)
+{
+    QWidget::showEvent(ev);
+    syncPreview();
+}
+
+void ShowTreeView::hideEvent(QHideEvent *ev)
+{
+    // Don't leave a cue on the rig when the tab is left.
+    m_st->stopPreview();
+    QWidget::hideEvent(ev);
+}
+
+void ShowTreeView::syncPreview()
+{
+    // A cue, or a layer in one, plays that cue; the controller decides
+    // whether it may (Design mode, its list not running for real).
+    const quint32 cueId = currentCueId();
+    if (!isVisible() || cueId == invalidId())
+        m_st->stopPreview();
+    else
+        m_st->previewCue(cueId);
+    slotPreviewChanged();
+}
+
+QString ShowTreeView::previewText() const
+{
+    const quint32 cueId = m_st->previewedCue();
+    const CueList *list = cueId == invalidId() ? nullptr : m_st->listOfCue(cueId);
+    const QString cue = list == nullptr ? QString() : m_st->cueLabel(*list, list->indexOf(cueId));
+    switch (m_st->previewState())
+    {
+        case ShowTreeController::PreviewState::Playing:
+            return tr("▶ On the rig: %1").arg(cue);
+        case ShowTreeController::PreviewState::Dark:
+            return tr("▶ On the rig: %1 (plays nothing yet)").arg(cue);
+        case ShowTreeController::PreviewState::NotDesign:
+            return tr("Live: editing is blind, changes reach the stage on GO");
+        case ShowTreeController::PreviewState::ListRunning:
+            return tr("%1 is running: not previewed; changes show when the cue plays again")
+                   .arg(list == nullptr ? QString() : list->name);
+        case ShowTreeController::PreviewState::Off:
+        break;
+    }
+    return QString();
+}
+
+void ShowTreeView::slotPreviewChanged()
+{
+    m_previewLabel->setText(previewText());
+    m_previewLabel->setToolTip(m_st->previewState() == ShowTreeController::PreviewState::Playing
+                               ? tr("Design mode: the selected cue plays on the rig, and changes show at "
+                                    "once. Leaving the tab or selecting no cue stops it.")
+                               : QString());
 }
 
 void ShowTreeView::updateButtons()

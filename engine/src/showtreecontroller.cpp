@@ -20,6 +20,7 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QBuffer>
+#include <QTimer>
 #include <QDebug>
 #include <algorithm>
 
@@ -32,6 +33,7 @@
 #include "collection.h"
 #include "qlcchannel.h"
 #include "chaserstep.h"
+#include "mastertimer.h"
 #include "fixture.h"
 #include "chaser.h"
 #include "scene.h"
@@ -55,6 +57,16 @@ ShowTreeController::ShowTreeController(Doc *doc)
 {
     connect(m_doc, &Doc::functionRemoved, this, &ShowTreeController::slotFunctionRemoved);
     connect(m_doc, &Doc::paletteRemoved, this, &ShowTreeController::slotPaletteRemoved);
+    connect(m_doc, &Doc::modeChanged, this, &ShowTreeController::slotModeChanged);
+    m_sweepTimer = new QTimer(this);
+    m_sweepTimer->setSingleShot(true);
+    m_sweepTimer->setInterval(250);
+    connect(m_sweepTimer, &QTimer::timeout, this, &ShowTreeController::bake);
+    // From the DMX thread: queued, so the preview is only ever touched here.
+    connect(m_doc->masterTimer(), &MasterTimer::functionStarted,
+            this, &ShowTreeController::slotTimerFunctionStarted, Qt::QueuedConnection);
+    connect(m_doc->masterTimer(), &MasterTimer::functionStopped,
+            this, &ShowTreeController::slotTimerFunctionStopped, Qt::QueuedConnection);
 }
 
 ShowTreeController::~ShowTreeController()
@@ -938,6 +950,10 @@ void ShowTreeController::bake()
     dropUnusedInlinePalettes();
 
     m_baking = false;
+
+    // The previewed cue may play something else now: re-take it, so an
+    // edit shows on the rig at once.
+    syncPreview();
 }
 
 void ShowTreeController::deleteUnused(const QSet<quint32> &keep, QSet<quint32> &generated)
@@ -1572,6 +1588,10 @@ void ShowTreeController::saveXML(QXmlStreamWriter *doc) const
 
 void ShowTreeController::reset()
 {
+    // The show is going: let go of what the preview plays (the functions
+    // are still there; Doc deletes them after this).
+    stopPreview();
+    m_sweepTimer->stop();     // nothing of the old show is left to sweep
     m_productions.clear();
     m_generatedScenes.clear();
     m_generatedCollections.clear();
@@ -1586,6 +1606,7 @@ void ShowTreeController::reset()
 
 void ShowTreeController::slotFunctionRemoved(quint32 fid)
 {
+    m_previewRunning.removeAll(fid);
     m_generatedScenes.remove(fid);
     m_generatedCollections.remove(fid);
     m_generatedChasers.remove(fid);
@@ -1595,4 +1616,127 @@ void ShowTreeController::slotFunctionRemoved(quint32 fid)
 void ShowTreeController::slotPaletteRemoved(quint32 pid)
 {
     m_inlinePalettes.remove(pid);
+}
+
+/****************************************************************************
+ * Preview
+ ****************************************************************************/
+
+FunctionParent ShowTreeController::previewParent()
+{
+    // Its own parent: a chaser's collection, a VC button or the Programming
+    // tab holding the same scene keep it when the preview lets go, and the
+    // preview never stops what they started (a Master parent would).
+    return FunctionParent(FunctionParent::AutoVCWidget, 0xFFFFFF53);
+}
+
+void ShowTreeController::previewCue(quint32 cueId)
+{
+    if (cue(cueId) == nullptr)
+    {
+        stopPreview();
+        return;
+    }
+    // Again for the same cue is fine: it brings back what something else
+    // stopped (Stop all), and changes nothing otherwise.
+    m_previewCue = cueId;
+    syncPreview();
+}
+
+void ShowTreeController::stopPreview()
+{
+    m_previewCue = invalidId();
+    syncPreview();
+}
+
+void ShowTreeController::syncPreview()
+{
+    const PreviewState before = m_previewState;
+    const QList<quint32> runningBefore = m_previewRunning;
+
+    QList<quint32> want;
+    PreviewState state = PreviewState::Off;
+    const CueList *list = m_previewCue == invalidId() ? nullptr : listOfCue(m_previewCue);
+    const Cue *c = list == nullptr ? nullptr : list->cue(m_previewCue);
+    const Function *chaser = list == nullptr ? nullptr : m_doc->function(list->chaser);
+    if (c == nullptr)
+    {
+        m_previewCue = invalidId();
+    }
+    else if (m_doc->mode() != Doc::Design)
+    {
+        state = PreviewState::NotDesign;
+    }
+    else if (chaser != nullptr && chaser->isRunning())
+    {
+        // The list is on for real (footer GO, a VC cue list): the show
+        // wins, and edits reach the stage when that cue plays again.
+        state = PreviewState::ListRunning;
+    }
+    else
+    {
+        if (const Collection *coll = qobject_cast<const Collection *>(m_doc->function(c->collection)))
+            for (quint32 fid : coll->functions())
+                if (m_doc->function(fid) != nullptr && !want.contains(fid))
+                    want << fid;
+        state = want.isEmpty() ? PreviewState::Dark : PreviewState::Playing;
+    }
+
+    // Start first, stop after: a scene both cues play is never let go of,
+    // so it runs on (no re-fade, effects keep their phase).
+    MasterTimer *timer = m_doc->masterTimer();
+    for (quint32 fid : want)
+    {
+        // start() is a no-op for a parent the function already has, and
+        // brings back one something else stopped (Stop all, a mode change).
+        if (Function *f = m_doc->function(fid))
+            f->start(timer, previewParent());
+    }
+    bool stoppedAny = false;
+    for (quint32 fid : runningBefore)
+    {
+        if (want.contains(fid))
+            continue;
+        if (Function *f = m_doc->function(fid))
+        {
+            f->stop(previewParent());
+            stoppedAny = true;
+        }
+    }
+    m_previewRunning = want;
+    m_previewState = state;
+
+    // A generated scene the preview let go of, that nothing plays any more,
+    // goes at the next bake; it is still running for a tick, so sweep then.
+    if (stoppedAny)
+        m_sweepTimer->start();
+
+    if (state != before || want != runningBefore)
+        emit previewChanged();
+}
+
+void ShowTreeController::slotModeChanged()
+{
+    // Into Design the app has stopped every function (MasterTimer
+    // stopAllFunctions): what the preview ran is gone, start it afresh.
+    // Into Operate the preview stops -- Live edits are blind until GO.
+    if (m_doc->mode() == Doc::Design)
+        m_previewRunning.clear();
+    syncPreview();
+}
+
+void ShowTreeController::slotTimerFunctionStarted(quint32 fid)
+{
+    // The previewed cue's list started for real: give the stage to it.
+    if (m_previewCue == invalidId())
+        return;
+    const CueList *list = listOfCue(m_previewCue);
+    if (list != nullptr && list->chaser == fid)
+        syncPreview();
+}
+
+void ShowTreeController::slotTimerFunctionStopped(quint32 fid)
+{
+    // ...and when it stops, the preview comes back.
+    slotTimerFunctionStarted(fid);
 }

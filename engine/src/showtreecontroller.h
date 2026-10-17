@@ -27,11 +27,13 @@
 #include <QSet>
 
 #include "qlcengine_export.h"
+#include "functionparent.h"
 #include "showtreemodel.h"
 #include "qlcpalette.h"
 
 class QXmlStreamReader;
 class QXmlStreamWriter;
+class QTimer;
 class Scene;
 class Doc;
 
@@ -199,6 +201,59 @@ private:
     QSet<quint32> m_inlinePalettes;
     /** What a generated function plays, for describeGenerated(). */
     QHash<quint32, QString> m_generatedLabels;
+
+    /************************************************************************
+     * Preview (Design mode): the selected cue on the rig
+     ************************************************************************/
+public:
+    /** Why a wanted preview is (not) on the rig. */
+    enum class PreviewState
+    {
+        Off,            //!< nothing wanted
+        Playing,        //!< the wanted cue plays
+        NotDesign,      //!< Live (Operate) mode: edits are blind until GO
+        ListRunning,    //!< its cue list runs for real: not competed with
+        Dark            //!< the cue plays nothing
+    };
+
+    /** Play cue @a cueId on the rig as a preview, as the Programming tab
+     *  does with its canvas: Design mode only, and never while the cue's own
+     *  list is running for real (it would fight the show). The cue's members
+     *  (its generated scenes and opaque functions) run under previewParent(),
+     *  so a scene two previewed cues share keeps running when the preview
+     *  moves on, and every bake re-takes the preview at once: an edit shows
+     *  on the rig immediately. Another cue switches the preview. */
+    void previewCue(quint32 cueId);
+    /** Stop the preview (leaving the tab, nothing selected). */
+    void stopPreview();
+    /** The cue the preview was asked for (invalid: none). */
+    quint32 previewedCue() const { return m_previewCue; }
+    PreviewState previewState() const { return m_previewState; }
+    /** What the preview runs now. */
+    QList<quint32> previewFunctions() const { return m_previewRunning; }
+    /** The parent preview functions run under: stopping it never stops
+     *  anything a chaser, a VC widget or another tab started. */
+    static FunctionParent previewParent();
+
+signals:
+    /** The preview started, stopped or moved to another cue. */
+    void previewChanged();
+
+private slots:
+    void slotModeChanged();
+    void slotTimerFunctionStarted(quint32 fid);
+    void slotTimerFunctionStopped(quint32 fid);
+
+private:
+    /** Bring what runs in line with the wanted cue (after a bake, a mode
+     *  change, the list starting or stopping). */
+    void syncPreview();
+
+    quint32 m_previewCue = 0xFFFFFFFF;
+    PreviewState m_previewState = PreviewState::Off;
+    QList<quint32> m_previewRunning;
+    /** Sweeps, by a bake, the generated scenes the preview let go of. */
+    QTimer *m_sweepTimer = nullptr;
 
     /************************************************************************
      * Import (§7)

@@ -60,6 +60,13 @@ private slots:
     void aShowWithoutATreeSavesAsBefore();
     void lookReachCountsFixturesThatHaveIt();
 
+    // Preview: the selected cue on the rig (Design mode)
+    void previewPlaysTheSelectedCue();
+    void anEditShowsOnThePreviewAtOnce();
+    void aSceneTwoPreviewedCuesShareRunsOn();
+    void noPreviewInLiveMode();
+    void theListRunningForRealWins();
+
     // Import (§7)
     void importReadsScenesIncludesAndOpaqueFunctions();
     void importedListPlaysAsTheChaserDid();

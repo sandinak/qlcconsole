@@ -49,6 +49,7 @@ private slots:
     void dropsOnTheTreeWidget();
     void anEffectGetsLooksOfItsOwn();
     void theLookEditorEditsARowsPalette();
+    void selectingACuePreviewsItOnTheRig();
     void pictureOfARealShow();
 
 private:
