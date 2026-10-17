@@ -114,6 +114,13 @@ private slots:
     void sceneExcludedFixturesAreNotWritten();
     void exclusionIsThreadSafeWithLivePreview();
 
+    // P3: group sets, child layers, overlap
+    void groupSetsAreOneTargetAndKeepTracking();
+    void childLayersExcludeTheirFixturesFromTheParent();
+    void overlappingLayersLowerWins();
+    void childLayerEditsWhileTheDmxThreadRuns();
+    void anImportedOverlapMixesAsTheChaserDid();
+
 private:
     quint32 dimmer(int level, const QString &name);
     quint32 colour(const QString &name);

@@ -50,6 +50,14 @@ const QString KeyZoom = QStringLiteral("Beam.Zoom");
 const QString KeyBeam = QStringLiteral("Beam.Beam");
 const QString KeyShutter = QStringLiteral("Shutter");
 const QString KeyEffectPrefix = QStringLiteral("Effect.");
+const QString KeySpread = QStringLiteral("Position.Spread");
+const QString KeyGrouping = QStringLiteral("Position.Grouping");
+const QString KeyCross = QStringLiteral("Position.Cross");
+
+bool isLineParamKey(const QString &key)
+{
+    return key == KeySpread || key == KeyGrouping || key == KeyCross;
+}
 
 QString effectKey(const QString &kind)
 {
@@ -67,8 +75,8 @@ bool isEffectKey(const QString &key)
    own Colour/Dimmer follow it, which is what makes them its own. */
 static int keyRank(const QString &key)
 {
-    static const QStringList base = { KeyColour, KeyDimmer, KeyPosition, KeyGobo,
-                                      KeyZoom, KeyBeam, KeyShutter };
+    static const QStringList base = { KeyColour, KeyDimmer, KeyPosition, KeySpread, KeyGrouping,
+                                      KeyCross, KeyGobo, KeyZoom, KeyBeam, KeyShutter };
     static const QStringList effects = { QStringLiteral("Color"), QStringLiteral("Dimmer"),
                                          QStringLiteral("Position"), QStringLiteral("Beam"),
                                          QStringLiteral("Other") };
@@ -97,6 +105,12 @@ QString keyLabel(const QString &key)
         return QStringLiteral("Zoom");
     if (key == KeyBeam)
         return QStringLiteral("Focus / Frost / Iris");
+    if (key == KeySpread)
+        return QStringLiteral("Spread");
+    if (key == KeyGrouping)
+        return QStringLiteral("Grouping");
+    if (key == KeyCross)
+        return QStringLiteral("Cross");
     if (isEffectKey(key))
     {
         const QString kind = key.mid(KeyEffectPrefix.length());
@@ -116,7 +130,7 @@ QString keyLabel(const QString &key)
 bool Look::operator==(const Look &other) const
 {
     return key == other.key && palettes == other.palettes && own == other.own
-           && none == other.none;
+           && none == other.none && value == other.value;
 }
 
 static QList<quint32> sortedIds(QList<quint32> ids)
@@ -137,6 +151,12 @@ QList<Target> Layer::pieces() const
         t.groups << g;
         out << t;
     }
+    for (quint32 set : target.sets)
+    {
+        Target t;
+        t.sets << set;
+        out << t;
+    }
     if (!target.fixtures.isEmpty())
     {
         Target t;
@@ -150,8 +170,13 @@ QString Target::signature() const
 {
     if (isOpaque())
         return QStringLiteral("x:%1").arg(function);
-    return QStringLiteral("g:%1|f:%2").arg(idsToString(sortedIds(groups)),
-                                           idsToString(sortedIds(fixtures)));
+    QString sig = QStringLiteral("g:%1|f:%2").arg(idsToString(sortedIds(groups)),
+                                                  idsToString(sortedIds(fixtures)));
+    // Only when there are sets: a target without one reads as it always did
+    // (generated scenes are found again by it).
+    if (!sets.isEmpty())
+        sig += QStringLiteral("|s:") + idsToString(sortedIds(sets));
+    return sig;
 }
 
 QString cueModeToString(CueMode mode)
@@ -192,13 +217,13 @@ static void setLookIn(QList<Look> &looks, const Look &look)
     {
         if (looks.at(i).key != look.key)
             continue;
-        if (look.palettes.isEmpty() && !look.none)
+        if (look.palettes.isEmpty() && !look.none && look.value.isEmpty())
             looks.removeAt(i);
         else
             looks[i] = look;
         return;
     }
-    if (!look.palettes.isEmpty() || look.none)
+    if (!look.palettes.isEmpty() || look.none || !look.value.isEmpty())
         looks.append(look);
 }
 
@@ -412,11 +437,12 @@ QList<ResolvedLayer> settled(const QList<ResolvedLayer> &from)
 struct Resolver
 {
     const CueList &list;
+    LineAimTest isLineAim;
     QVector<ResolvedCue> out;
     QVector<int> state;     // 0 not yet, 1 in progress, 2 done
 
-    explicit Resolver(const CueList &l)
-        : list(l), out(l.cues.count()), state(l.cues.count(), 0)
+    Resolver(const CueList &l, const LineAimTest &lineAim)
+        : list(l), isLineAim(lineAim), out(l.cues.count()), state(l.cues.count(), 0)
     {
     }
 
@@ -545,12 +571,57 @@ struct Resolver
             r.origin = Origin::Own;
             r.fromCue = cue.id;
 
+            // A child layer (§3.5): under which layer, how deep.
+            r.parent = Target();
+            r.depth = 0;
+            {
+                QList<quint32> seen { layer.id };
+                const Layer *up = layer.parent == invalidId() ? nullptr : cue.layer(layer.parent);
+                while (up != nullptr && !seen.contains(up->id))
+                {
+                    if (r.depth == 0)
+                        r.parent = up->target;
+                    ++r.depth;
+                    seen << up->id;
+                    up = up->parent == invalidId() ? nullptr : cue.layer(up->parent);
+                }
+            }
+            const bool child = r.depth > 0;
+
             if (!layer.target.isOpaque())
             {
-                for (const Look &cl : cue.looks)
-                    r.values.insert(cl.key, ResolvedValue { cl, Origin::CueLook, cue.id });
+                // Cue looks reach the cue's own top layers (D6); a child is
+                // lit by its parent for what it doesn't set. An effect or a
+                // Position set at cue level is ONE across the layers it
+                // reaches (D10, D17): marked with the cue as its span.
+                if (!child)
+                    for (const Look &cl : cue.looks)
+                    {
+                        if (isLineParamKey(cl.key))
+                            continue;                   // below (D18)
+                        ResolvedValue v { cl, Origin::CueLook, cue.id };
+                        if (isEffectKey(cl.key) || cl.key == KeyPosition)
+                            v.span = cue.id;
+                        r.values.insert(cl.key, v);
+                    }
                 for (const Look &ll : layer.looks)
                     r.values.insert(ll.key, ResolvedValue { ll, Origin::Own, cue.id });
+                // D18: the cue's Spread / Grouping / Cross reach only layers
+                // whose Position, as it resolves here, aims at a line.
+                if (!child)
+                {
+                    const auto pos = r.values.constFind(KeyPosition);
+                    const bool line = pos != r.values.constEnd() && !pos.value().look.none
+                                      && isLineAim && isLineAim(pos.value().look);
+                    for (const Look &cl : cue.looks)
+                    {
+                        if (!isLineParamKey(cl.key) || !line || layer.look(cl.key) != nullptr)
+                            continue;
+                        ResolvedValue v { cl, Origin::CueLook, cue.id };
+                        v.span = cue.id;
+                        r.values.insert(cl.key, v);
+                    }
+                }
             }
             own << r;
         }
@@ -677,9 +748,9 @@ QList<quint32> rebakeChain(const CueList &list, quint32 cueId)
     return out;
 }
 
-QList<ResolvedCue> resolve(const CueList &list)
+QList<ResolvedCue> resolve(const CueList &list, const LineAimTest &isLineAim)
 {
-    Resolver r(list);
+    Resolver r(list, isLineAim);
     for (int i = 0; i < list.cues.count(); ++i)
         r.resolveAt(i);
     return QList<ResolvedCue>(r.out.begin(), r.out.end());
@@ -698,12 +769,21 @@ Stage stageOf(const ResolvedCue &cue)
         QStringList units;
         for (quint32 g : l.target.groups)
             units << QStringLiteral("g:%1").arg(g);
+        for (quint32 set : l.target.sets)
+            units << QStringLiteral("s:%1").arg(set);
         for (quint32 f : l.target.fixtures)
             units << QStringLiteral("f:%1").arg(f);
-        for (const Look &look : l.playedLooks())
+        QList<Look> played = l.playedLooks();
+        // A line aim's parameters play too (with no palette of their own).
+        for (const QString &k : { KeySpread, KeyGrouping, KeyCross })
+            if (l.values.contains(k) && !l.values.value(k).look.none)
+                played << l.values.value(k).look;
+        for (const Look &look : played)
         {
-            const QString value = QStringLiteral("%1/%2").arg(idsToString(look.palettes),
-                                                              idsToString(look.own));
+            QString value = QStringLiteral("%1/%2").arg(idsToString(look.palettes),
+                                                        idsToString(look.own));
+            if (!look.value.isEmpty())
+                value += QStringLiteral("=") + look.value;
             for (const QString &u : units)
             {
                 QStringList &have = stage[u][look.key];
@@ -722,10 +802,11 @@ Stage stageOf(const ResolvedCue &cue)
     return stage;
 }
 
-bool stageDiffers(const CueList &before, const CueList &after, quint32 *cueId, QString *unit, QString *key)
+bool stageDiffers(const CueList &before, const CueList &after, quint32 *cueId, QString *unit, QString *key,
+                  const LineAimTest &isLineAim)
 {
-    const QList<ResolvedCue> a = resolve(before);
-    const QList<ResolvedCue> b = resolve(after);
+    const QList<ResolvedCue> a = resolve(before, isLineAim);
+    const QList<ResolvedCue> b = resolve(after, isLineAim);
     for (const ResolvedCue &rb : b)
     {
         Stage sa;
@@ -923,6 +1004,8 @@ static void saveLooks(QXmlStreamWriter *doc, const QList<Look> &looks)
             doc->writeAttribute(QStringLiteral("Own"), idsToString(l.own));
         if (l.none)
             doc->writeAttribute(QStringLiteral("None"), QStringLiteral("1"));
+        if (!l.value.isEmpty())
+            doc->writeAttribute(QStringLiteral("Value"), l.value);
         doc->writeEndElement();
     }
 }
@@ -935,6 +1018,7 @@ static Look loadLook(QXmlStreamReader &root)
     l.palettes = stringToIds(a.value(QStringLiteral("Palettes")).toString());
     l.own = stringToIds(a.value(QStringLiteral("Own")).toString());
     l.none = a.value(QStringLiteral("None")).toString() == QLatin1String("1");
+    l.value = a.value(QStringLiteral("Value")).toString();
     root.skipCurrentElement();
     return l;
 }
@@ -985,6 +1069,8 @@ void saveXML(QXmlStreamWriter *doc, const Production &production)
             doc->writeAttribute(QStringLiteral("Hold"), QString::number(cue.hold));
             if (!cue.includes.isEmpty())
                 doc->writeAttribute(QStringLiteral("Includes"), idsToString(cue.includes));
+            if (cue.mixOverlap)
+                doc->writeAttribute(QStringLiteral("Overlap"), QStringLiteral("Mix"));
             writeId(doc, QStringLiteral("Collection"), cue.collection);
 
             saveLooks(doc, cue.looks);
@@ -998,7 +1084,10 @@ void saveXML(QXmlStreamWriter *doc, const Production &production)
                     doc->writeAttribute(QStringLiteral("Groups"), idsToString(layer.target.groups));
                 if (!layer.target.fixtures.isEmpty())
                     doc->writeAttribute(QStringLiteral("Fixtures"), idsToString(layer.target.fixtures));
+                if (!layer.target.sets.isEmpty())
+                    doc->writeAttribute(QStringLiteral("Sets"), idsToString(layer.target.sets));
                 writeId(doc, QStringLiteral("Function"), layer.target.function);
+                writeId(doc, QStringLiteral("Parent"), layer.parent);
                 if (layer.release)
                     doc->writeAttribute(QStringLiteral("Release"), QStringLiteral("1"));
                 if (!layer.continues.groups.isEmpty())
@@ -1006,6 +1095,8 @@ void saveXML(QXmlStreamWriter *doc, const Production &production)
                 if (!layer.continues.fixtures.isEmpty())
                     doc->writeAttribute(QStringLiteral("ContinuesFixtures"),
                                         idsToString(layer.continues.fixtures));
+                if (!layer.continues.sets.isEmpty())
+                    doc->writeAttribute(QStringLiteral("ContinuesSets"), idsToString(layer.continues.sets));
                 for (const Target &also : layer.continuesAlso)
                 {
                     doc->writeStartElement(KXMLShowTreeContinues);
@@ -1013,6 +1104,8 @@ void saveXML(QXmlStreamWriter *doc, const Production &production)
                         doc->writeAttribute(QStringLiteral("Groups"), idsToString(also.groups));
                     if (!also.fixtures.isEmpty())
                         doc->writeAttribute(QStringLiteral("Fixtures"), idsToString(also.fixtures));
+                    if (!also.sets.isEmpty())
+                        doc->writeAttribute(QStringLiteral("Sets"), idsToString(also.sets));
                     doc->writeEndElement();
                 }
                 saveLooks(doc, layer.looks);
@@ -1023,6 +1116,32 @@ void saveXML(QXmlStreamWriter *doc, const Production &production)
         doc->writeEndElement();
     }
     doc->writeEndElement();
+}
+
+void saveXML(QXmlStreamWriter *doc, const GroupSet &set)
+{
+    doc->writeStartElement(QStringLiteral("GroupSet"));
+    writeId(doc, QStringLiteral("ID"), set.id);
+    doc->writeAttribute(QStringLiteral("Name"), set.name);
+    if (!set.groups.isEmpty())
+        doc->writeAttribute(QStringLiteral("Groups"), idsToString(set.groups));
+    if (!set.fixtures.isEmpty())
+        doc->writeAttribute(QStringLiteral("Fixtures"), idsToString(set.fixtures));
+    doc->writeEndElement();
+}
+
+bool loadXML(QXmlStreamReader &root, GroupSet &set)
+{
+    if (root.name() != QLatin1String("GroupSet"))
+        return false;
+    const QXmlStreamAttributes a = root.attributes();
+    set = GroupSet();
+    set.id = readId(a, QStringLiteral("ID"));
+    set.name = a.value(QStringLiteral("Name")).toString();
+    set.groups = stringToIds(a.value(QStringLiteral("Groups")).toString());
+    set.fixtures = stringToIds(a.value(QStringLiteral("Fixtures")).toString());
+    root.skipCurrentElement();
+    return set.id != invalidId();
 }
 
 bool loadXML(QXmlStreamReader &root, Production &production)
@@ -1070,6 +1189,7 @@ bool loadXML(QXmlStreamReader &root, Production &production)
             if (a.hasAttribute(QStringLiteral("Hold")))
                 cue.hold = a.value(QStringLiteral("Hold")).toString().toUInt();
             cue.includes = stringToIds(a.value(QStringLiteral("Includes")).toString());
+            cue.mixOverlap = a.value(QStringLiteral("Overlap")).toString() == QLatin1String("Mix");
             cue.collection = readId(a, QStringLiteral("Collection"));
 
             while (root.readNextStartElement())
@@ -1086,10 +1206,13 @@ bool loadXML(QXmlStreamReader &root, Production &production)
                     layer.name = a.value(QStringLiteral("Name")).toString();
                     layer.target.groups = stringToIds(a.value(QStringLiteral("Groups")).toString());
                     layer.target.fixtures = stringToIds(a.value(QStringLiteral("Fixtures")).toString());
+                    layer.target.sets = stringToIds(a.value(QStringLiteral("Sets")).toString());
                     layer.target.function = readId(a, QStringLiteral("Function"));
+                    layer.parent = readId(a, QStringLiteral("Parent"));
                     layer.release = a.value(QStringLiteral("Release")).toString() == QLatin1String("1");
                     layer.continues.groups = stringToIds(a.value(QStringLiteral("ContinuesGroups")).toString());
                     layer.continues.fixtures = stringToIds(a.value(QStringLiteral("ContinuesFixtures")).toString());
+                    layer.continues.sets = stringToIds(a.value(QStringLiteral("ContinuesSets")).toString());
                     while (root.readNextStartElement())
                     {
                         if (root.name() == KXMLShowTreeLook)
@@ -1102,6 +1225,7 @@ bool loadXML(QXmlStreamReader &root, Production &production)
                             Target also;
                             also.groups = stringToIds(ca.value(QStringLiteral("Groups")).toString());
                             also.fixtures = stringToIds(ca.value(QStringLiteral("Fixtures")).toString());
+                            also.sets = stringToIds(ca.value(QStringLiteral("Sets")).toString());
                             if (!also.isEmpty())
                                 layer.continuesAlso << also;
                             root.skipCurrentElement();

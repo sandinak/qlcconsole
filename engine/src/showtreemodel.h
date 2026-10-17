@@ -21,6 +21,7 @@
 #define SHOWTREEMODEL_H
 
 #include <QStringList>
+#include <functional>
 #include <QString>
 #include <QList>
 #include <QMap>
@@ -61,6 +62,14 @@ namespace ShowTree
     extern QLC_ENGINE_EXPORT const QString KeyBeam;
     extern QLC_ENGINE_EXPORT const QString KeyShutter;
     extern QLC_ENGINE_EXPORT const QString KeyEffectPrefix;     //!< "Effect."
+    /** A line aim's parameters (§3B, D16): each a key of its own, so each
+     *  is set and inherited on its own. Values, not palettes (Look::value):
+     *  Spread "-5".."5", Grouping "each" / "pairs" / "threes" / "fours" /
+     *  "halves", Cross "swap" / "mirror". */
+    extern QLC_ENGINE_EXPORT const QString KeySpread;       //!< "Position.Spread"
+    extern QLC_ENGINE_EXPORT const QString KeyGrouping;     //!< "Position.Grouping"
+    extern QLC_ENGINE_EXPORT const QString KeyCross;        //!< "Position.Cross"
+    QLC_ENGINE_EXPORT bool isLineParamKey(const QString &key);
 
     /** "Effect.<kind>" for an effect of @a kind ("Color", "Dimmer",
      *  "Position", "Beam", "Other"). */
@@ -92,6 +101,9 @@ namespace ShowTree
         QList<quint32> own;
         /** "Off here": stops an inherited value; no palette. */
         bool none = false;
+        /** A value that is not a palette: a line aim's Spread ("2.5"),
+         *  Grouping ("pairs") or Cross ("mirror"). */
+        QString value;
 
         bool operator==(const Look &other) const;
         bool operator!=(const Look &other) const { return !(*this == other); }
@@ -103,15 +115,30 @@ namespace ShowTree
     {
         QList<quint32> groups;
         QList<quint32> fixtures;
+        /** Group sets (GroupSet ids): one target of all their members,
+         *  each member keeping its own head layout (§1). The set, not its
+         *  members, is the layer's identity: a set whose members change
+         *  stays the same layer. */
+        QList<quint32> sets;
         quint32 function = 0xFFFFFFFF;
 
         bool isOpaque() const { return function != 0xFFFFFFFF; }
-        bool isEmpty() const { return groups.isEmpty() && fixtures.isEmpty() && !isOpaque(); }
+        bool isEmpty() const { return groups.isEmpty() && fixtures.isEmpty() && sets.isEmpty() && !isOpaque(); }
         /** Identity across cues: a layer on the same target in the next
          *  cue is the same layer (it tracks, D5). Order-free. */
         QString signature() const;
 
         bool operator==(const Target &other) const { return signature() == other.signature(); }
+    };
+
+    /** A named set of groups (and fixtures) in the Library, e.g. Towers =
+     *  SL + SR (§1, "Make set"). */
+    struct QLC_ENGINE_EXPORT GroupSet
+    {
+        quint32 id = 0xFFFFFFFF;
+        QString name;
+        QList<quint32> groups;
+        QList<quint32> fixtures;
     };
 
     enum class CueMode { ListDefault, Track, Block, CueOnly };
@@ -139,8 +166,15 @@ namespace ShowTree
          *  what the first one doesn't have. Several own layers in one cue may
          *  carry on from the same layer (a split): each starts from it. */
         QList<Target> continuesAlso;
+        /** A child layer (§3.5): the layer of the same cue whose target this
+         *  one is part of (a member of its set, a sub-group). It sets only
+         *  what it sets, and is lit by its parent for the rest; the parent
+         *  doesn't light what the child sets on the child's fixtures. Cue
+         *  looks reach the parent, not the child. Invalid: a top layer. */
+        quint32 parent = 0xFFFFFFFF;
 
-        /** The pieces a split makes: one per group, and one on the fixtures. */
+        /** The pieces a split makes: one per group, per set, and one on the
+         *  fixtures. */
         QList<Target> pieces() const;
 
         const Look *look(const QString &key) const;
@@ -162,6 +196,12 @@ namespace ShowTree
         QList<Look> looks;              //!< cue looks: reach this cue's own layers (D6)
         QList<Layer> layers;
         QList<quint32> includes;        //!< cues (of the same list) included, in order (D8)
+        /** Layers on fixtures in common: false (the tree's rule, §2) -- the
+         *  lower layer wins what both set, the upper isn't lit there for it
+         *  (Scene::excludedFixtures); true -- they mix as a plain collection
+         *  does (intensity and RGB highest-wins), which an imported cue keeps
+         *  so it plays as its chaser did. Child layers always win. */
+        bool mixOverlap = false;
         /** Generated: the Collection this cue bakes to. */
         quint32 collection = 0xFFFFFFFF;
 
@@ -215,6 +255,12 @@ namespace ShowTree
         Look look;
         Origin origin = Origin::Own;
         quint32 fromCue = 0xFFFFFFFF;   //!< the cue it was set in
+        /** Set at cue level, as ONE across the layers it reaches: the cue
+         *  it was set in (an effect, D10; a line aim and its parameters,
+         *  D17). Kept as it tracks, so the layers carrying the same value
+         *  and span are one effect / one formation until a later cue
+         *  changes some of them. Invalid: the layer's own. */
+        quint32 span = 0xFFFFFFFF;
     };
 
     struct QLC_ENGINE_EXPORT ResolvedLayer
@@ -230,6 +276,10 @@ namespace ShowTree
         /** An own layer that took a carried-in (tracked, included) layer's
          *  place: that layer's target. Empty when it came in fresh. */
         Target tookOver;
+        /** A child layer (§3.5): its parent's target and how deep it is
+         *  (0: a top layer). Kept as it tracks. */
+        Target parent;
+        int depth = 0;
         QMap<QString, ResolvedValue> values;
 
         /** The looks a generated scene plays, in look-stack order: None
@@ -251,8 +301,12 @@ namespace ShowTree
         const ResolvedLayer *layer(const Target &target) const;
     };
 
+    /** Whether a Position look aims at a line (D18): only those take a
+     *  cue's Spread / Grouping / Cross. Without one, none do. */
+    typedef std::function<bool(const Look &)> LineAimTest;
+
     /** Resolve every cue of @a list, in list order. Pure: no Doc. */
-    QLC_ENGINE_EXPORT QList<ResolvedCue> resolve(const CueList &list);
+    QLC_ENGINE_EXPORT QList<ResolvedCue> resolve(const CueList &list, const LineAimTest &isLineAim = LineAimTest());
 
     /** What a cue puts on stage, per unit -- each group, fixture and opaque
      *  function a layer lights ("g:12", "f:3", "x:40") -- and attribute:
@@ -267,7 +321,8 @@ namespace ShowTree
      *  every cue plays the same. */
     QLC_ENGINE_EXPORT bool stageDiffers(const CueList &before, const CueList &after,
                                         quint32 *cueId = nullptr, QString *unit = nullptr,
-                                        QString *key = nullptr);
+                                        QString *key = nullptr,
+                                        const LineAimTest &isLineAim = LineAimTest());
 
     /** The mode @a cue really plays in, in @a list (List default made
      *  Track or Block). */
@@ -321,6 +376,9 @@ namespace ShowTree
      ************************************************************************/
 
     QLC_ENGINE_EXPORT void saveXML(QXmlStreamWriter *doc, const Production &production);
+    QLC_ENGINE_EXPORT void saveXML(QXmlStreamWriter *doc, const GroupSet &set);
+    /** Read a <GroupSet> (the reader on its start element). */
+    QLC_ENGINE_EXPORT bool loadXML(QXmlStreamReader &root, GroupSet &set);
     /** Read a <Production> (the reader on its start element). */
     QLC_ENGINE_EXPORT bool loadXML(QXmlStreamReader &root, Production &production);
 

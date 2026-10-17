@@ -1270,7 +1270,7 @@ void ShowTreeView::buildTree()
             li->setText(1, list.mode == ListMode::Tracking ? tr("Tracking") : tr("Non-tracking"));
             li->setData(0, KindRole, ListNode);
             li->setData(0, IdRole, list.id);
-            const QList<ResolvedCue> resolved = resolve(list);
+            const QList<ResolvedCue> resolved = m_st->resolved(list);
 
             for (int i = 0; i < list.cues.count(); ++i)
             {
@@ -1619,7 +1619,7 @@ void ShowTreeView::updateInspector()
     }
     else
     {
-        const QList<ResolvedCue> resolved = resolve(*list);
+        const QList<ResolvedCue> resolved = m_st->resolved(*list);
         const Cue &cue = list->cues.at(index);
         const Layer *own = kind == LayerNode ? cue.layer(id) : nullptr;
         const ResolvedLayer *rl = nullptr;
@@ -1687,7 +1687,7 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
     rows->clearDropRow();
     rows->clear();
     rows->targets.clear();
-    const QList<ResolvedCue> resolved = resolve(list);
+    const QList<ResolvedCue> resolved = m_st->resolved(list);
     const QColor grey = palette().color(QPalette::Disabled, QPalette::Text);
     for (const ResolvedLayer &rl : resolved.at(index).layers)
     {
@@ -1751,7 +1751,7 @@ QString ShowTreeView::nextCueText() const
     if (effectiveMode(*list, next) == CueMode::Block)
         return tr("nothing: %1 is a Block cue, it starts from nothing").arg(nextLabel);
 
-    const QList<ResolvedCue> resolved = resolve(*list);
+    const QList<ResolvedCue> resolved = m_st->resolved(*list);
     QStringList parts;
     for (const ResolvedLayer &rl : resolved.at(index).passOn)
     {
@@ -2829,7 +2829,7 @@ ShowTree::Target ShowTreeView::carriedTarget(quint32 cueId, const QString &signa
     if (list == nullptr)
         return Target();
     const int index = list->indexOf(cueId);
-    const QList<ResolvedCue> resolved = resolve(*list);
+    const QList<ResolvedCue> resolved = m_st->resolved(*list);
     if (index < 0 || index >= resolved.count())
         return Target();
     for (const ResolvedLayer &rl : resolved.at(index).layers)
@@ -3132,7 +3132,7 @@ bool ShowTreeView::setEffectOwn(quint32 cueId, quint32 layerId, const QString &k
                          ? cue->layer(layerId)->target : target;
         if (t.isEmpty())
             return false;
-        const QList<ResolvedCue> r = resolve(*list);
+        const QList<ResolvedCue> r = m_st->resolved(*list);
         const ResolvedLayer *rl = r.at(list->indexOf(cueId)).layer(t);
         if (rl == nullptr || !rl->values.contains(key))
             return false;

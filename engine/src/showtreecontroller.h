@@ -78,6 +78,81 @@ public:
     /** A new node id (production, list, cue, layer): unique in the show. */
     quint32 newId();
 
+    /** @a list resolved (ShowTree::resolve) with this show's palettes:
+     *  a Position look aims at a line when its Aim palette's target is a
+     *  line (D18). Everything that reads the cascade goes through this. */
+    QList<ShowTree::ResolvedCue> resolved(const ShowTree::CueList &list) const;
+    /** Whether @a look (a Position) aims at a line target. */
+    bool isLineAim(const ShowTree::Look &look) const;
+    ShowTree::LineAimTest lineAimTest() const;
+
+    /************************************************************************
+     * Group sets (the Library's "Make set", §1)
+     ************************************************************************/
+public:
+    const QList<ShowTree::GroupSet> &groupSets() const { return m_groupSets; }
+    const ShowTree::GroupSet *groupSet(quint32 id) const;
+    /** Make set: a named set of groups (and fixtures), e.g. Towers = SL +
+     *  SR. One undo step. A name the show already has gets " (2)". */
+    quint32 addGroupSet(const QString &name, const QList<quint32> &groups,
+                        const QList<quint32> &fixtures = QList<quint32>());
+    /** Its members: every layer on the set follows (it stays the same
+     *  layer, so tracking is kept). One undo step. */
+    bool setGroupSetMembers(quint32 setId, const QList<quint32> &groups,
+                            const QList<quint32> &fixtures = QList<quint32>());
+    bool renameGroupSet(quint32 setId, const QString &name);
+    /** Refused (@a why names the cues) while a layer uses it. */
+    bool removeGroupSet(quint32 setId, QString *why = nullptr);
+    /** @a target with its sets replaced by their members (groups, then
+     *  fixtures), once each, in order: what a generated scene plays. */
+    ShowTree::Target expandTarget(const ShowTree::Target &target) const;
+    /** Every fixture @a target lights (sets and groups expanded), once. */
+    QList<quint32> targetFixtures(const ShowTree::Target &target) const;
+
+    /************************************************************************
+     * Child layers (§3.5)
+     ************************************************************************/
+public:
+    /** A child layer of layer @a parentId on @a target, which must be part
+     *  of the parent's (a member of its set, a sub-group, some of its
+     *  fixtures): put after the parent's other children. It sets only what
+     *  it sets; the parent lights the rest of it, and doesn't light what it
+     *  sets (no show-through). One undo step. Refused (@a why) when the
+     *  target isn't inside the parent's. */
+    quint32 addChildLayer(quint32 cueId, quint32 parentId, const ShowTree::Target &target,
+                          QString *why = nullptr);
+    /** Whether @a inner lights only fixtures @a outer lights. */
+    bool targetContains(const ShowTree::Target &outer, const ShowTree::Target &inner) const;
+    /** The layers of the cue under layer @a layerId, at any depth. */
+    QList<quint32> childLayers(quint32 cueId, quint32 layerId) const;
+
+    /************************************************************************
+     * Line aims (§3B): Position aimed at a line, with Spread / Grouping /
+     * Cross as keys of their own (D16)
+     ************************************************************************/
+public:
+    /** A look setting a line parameter: @a key KeySpread ("-5".."5"),
+     *  KeyGrouping (each, pairs, threes, fours, halves) or KeyCross (swap,
+     *  mirror). Empty look (key only): @a value doesn't read. */
+    static ShowTree::Look lineParamLook(const QString &key, const QString &value);
+    /** "+2.5" -> "2.5"; "pair" -> "pairs"; "mirror" -> "mirror". Empty: no. */
+    static QString lineParamValue(const QString &key, const QString &word);
+    /** What a person reads for a line parameter value: "+2.5", "Pairs",
+     *  "Each group flips (mirror)". */
+    static QString lineParamText(const QString &key, const QString &value);
+    /** The Aim palette pointing at stage target @a targetId (a line, a point,
+     *  an area): a named one already pointing there with nothing else set
+     *  is reused (the palette reuse rule), else one is made, named after the
+     *  target, in the show's Aim palette folder. Invalid: no such target. */
+    quint32 aimPaletteFor(quint32 targetId);
+    /** The generated scene layer @a target plays in cue @a cueId (after the
+     *  last bake; invalid: none), for the order strip. */
+    quint32 layerScene(quint32 cueId, const ShowTree::Target &target) const;
+    /** The layers @a target's @a key is ONE effect / ONE formation with in
+     *  cue @a cueId (itself included; fewer than two: on its own). */
+    QList<ShowTree::Target> spanMembers(quint32 cueId, const ShowTree::Target &target,
+                                        const QString &key) const;
+
     /************************************************************************
      * Editing: each is one undo step, and bakes
      ************************************************************************/
@@ -114,13 +189,17 @@ public:
                         const QString &label = QString());
     /** Add groups / fixtures to a layer's target (dropped onto it). */
     bool addToLayer(quint32 cueId, quint32 layerId, const QList<quint32> &groups,
-                    const QList<quint32> &fixtures);
+                    const QList<quint32> &fixtures, const QList<quint32> &sets = QList<quint32>());
     /** Take a group (or a fixture) out of a layer's target; never its last. */
     bool removeGroupFromLayer(quint32 cueId, quint32 layerId, quint32 groupId);
     bool removeFixtureFromLayer(quint32 cueId, quint32 layerId, quint32 fixtureId);
     bool setListMode(quint32 listId, ShowTree::ListMode mode);
     bool setBaseCue(quint32 listId, quint32 cueId);
     bool setCueMode(quint32 cueId, ShowTree::CueMode mode);
+    /** Layers of the cue on fixtures in common: the lower wins what both
+     *  set (false, the tree's rule), or they mix as a chaser's collection
+     *  does (true, how an import keeps them). One undo step. */
+    bool setCueMixOverlap(quint32 cueId, bool mix);
 
     /** Release (or carry) the layer on @a target in cue @a cueId -- made the
      *  cue's own first if it is only carried in: one undo step. */
@@ -226,6 +305,7 @@ public:
         QHash<quint32, int> groups;
         QHash<quint32, int> fixtures;
         QHash<quint32, int> functions;
+        QHash<quint32, int> sets;
     };
     Usage usageInList(quint32 listId) const;
     bool renameNode(quint32 nodeId, const QString &name);
@@ -366,6 +446,31 @@ public:
                        quint32 *layerId = nullptr) const;
 
 private:
+    /** One generated scene a cue plays: what a resolved layer bakes to,
+     *  with what it leaves out for a lower layer (§3.5) and what it lays out
+     *  over with others (D10, D17). */
+    struct ScenePlan
+    {
+        int layer = -1;                     //!< in the resolved cue's layers
+        ShowTree::Target target;            //!< sets expanded
+        QList<quint32> palettes;
+        QHash<quint32, QList<quint32> > excluded;
+        QHash<quint32, QList<quint32> > spanGroups;
+        QHash<quint32, QList<quint32> > spanFixtures;
+        /** Per attribute key: the layers (indexes) it is one with. */
+        QHash<QString, QList<int> > spanMembers;
+        QString signature() const;
+    };
+    /** The scenes cue @a index of @a list plays, from @a resolved. A line
+     *  aim with its own parameters plays an inline Aim palette made for
+     *  them: made when @a create, else only found. */
+    QList<ScenePlan> planCue(const ShowTree::CueList &list, const QList<ShowTree::ResolvedCue> &resolved,
+                             int index, bool create);
+    QList<ScenePlan> planCue(const ShowTree::CueList &list, const QList<ShowTree::ResolvedCue> &resolved,
+                             int index) const;
+    /** The Aim palette a line aim with @a layer's Spread / Grouping / Cross
+     *  plays (@a basePid itself when they are its own). */
+    quint32 lineAimPalette(quint32 basePid, const ShowTree::ResolvedLayer &layer, bool create);
     QString sceneSignature(const Scene *scene) const;
     static QString sceneSignature(const ShowTree::Target &target, const QList<quint32> &palettes);
     void deleteUnused(const QSet<quint32> &keep, QSet<quint32> &generated);
@@ -390,6 +495,10 @@ private:
     void reusableName(quint32 paletteId, QString *name, QString *path);
     /** What a generated function plays, for describeGenerated(). */
     QHash<quint32, QString> m_generatedLabels;
+    /** After a bake: "cue|target signature" -> its scene; and -> key ->
+     *  the targets it is one span with. */
+    QHash<QString, quint32> m_layerScenes;
+    QHash<QString, QHash<QString, QList<ShowTree::Target> > > m_spanMembers;
 
     /************************************************************************
      * Preview (Design mode): the selected cue on the rig
@@ -506,6 +615,11 @@ private:
     void saveState(QXmlStreamWriter *doc, bool snapshot) const;
 
     ShowTree::Cue *findCue(quint32 cueId, ShowTree::CueList **list = nullptr);
+
+    /** Run @a change on the group sets as one undo step, then bake. */
+    bool editSets(const QString &label, const std::function<bool(QList<ShowTree::GroupSet> &)> &change);
+    QList<ShowTree::GroupSet> m_groupSets;
+    QList<ShowTree::GroupSet> m_batchSets;
 
     /** Named palettes a command made: reusable once it succeeds. */
     QList<quint32> m_batchNamed;

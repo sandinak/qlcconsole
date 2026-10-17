@@ -500,7 +500,7 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
                     keys.clear();
                     // Read afresh: an edit before this one replaced the tree.
                     const CueList *now = m_st->cueList(ctx.list);
-                    const QList<ResolvedCue> rc = now == nullptr ? QList<ResolvedCue>() : resolve(*now);
+                    const QList<ResolvedCue> rc = now == nullptr ? QList<ResolvedCue>() : m_st->resolved(*now);
                     const int at = now == nullptr ? -1 : now->indexOf(ctx.cue);
                     const Cue *c = m_st->cue(ctx.cue);
                     if (at >= 0 && c != nullptr)

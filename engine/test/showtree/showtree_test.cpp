@@ -1594,9 +1594,25 @@ void ShowTree_Test::importARealShow()
         if (list == nullptr)
             continue;
         for (int i = 0; i < list->cues.count(); ++i)
+        {
             qInfo().noquote() << "  cue" << m_doc->showTree()->cueLabel(*list, i)
                               << "layers" << list->cues[i].layers.count()
                               << "includes" << list->cues[i].includes.count();
+            if (qEnvironmentVariableIsSet("QLC_SHOWTREE_IMPORT_VERBOSE"))
+            {
+                const Collection *coll = qobject_cast<const Collection *>(m_doc->function(list->cues[i].collection));
+                for (quint32 fid : coll->functions())
+                {
+                    const Scene *sc = qobject_cast<const Scene *>(m_doc->function(fid));
+                    QStringList pals;
+                    if (sc != nullptr)
+                        for (quint32 pid : sc->palettes())
+                            pals << m_doc->palette(pid)->name() + (sc->excludedFixtures(pid).isEmpty() ? QString()
+                                    : QString(" (minus %1)").arg(sc->excludedFixtures(pid).count()));
+                    qInfo().noquote() << "    plays" << m_doc->function(fid)->name() << pals.join(", ");
+                }
+            }
+        }
 
         // Play both, cue by cue, and compare every channel of every universe
         // (static looks only: effects run on the effect runner's own timer).
@@ -1642,13 +1658,21 @@ void ShowTree_Test::importARealShow()
         for (int i = 0; i < a.count(); ++i)
         {
             int lit = 0, differ = 0;
+            QStringList first;
             for (int k = 0; k < a[i].size(); ++k)
             {
                 if (a[i].at(k) != 0)
                     ++lit;
                 if (k >= b[i].size() || a[i].at(k) != b[i].at(k))
+                {
                     ++differ;
+                    if (first.count() < 8)
+                        first << QString("u%1/%2: %3 vs %4").arg(k / 512 + 1).arg(k % 512 + 1)
+                                 .arg(uchar(a[i].at(k))).arg(k < b[i].size() ? uchar(b[i].at(k)) : -1);
+                }
             }
+            if (differ > 0)
+                qInfo().noquote() << "    first differences (chaser vs list):" << first.join(", ");
             qInfo().noquote() << QString("  play cue %1: %2 channels lit by the chaser, %3 differ in the cue list")
                                  .arg(m_doc->showTree()->cueLabel(*list, i)).arg(lit).arg(differ);
         }
@@ -3271,6 +3295,332 @@ void ShowTree_Test::exclusionIsThreadSafeWithLivePreview()
     QCOMPARE(int(v[1]), 255);
     QCOMPARE(int(v[2]), 0);
     QCOMPARE(int(v[3]), 255);
+}
+
+/****************************************************************************
+ * P3: group sets, child layers and overlap (§1, §3.5)
+ ****************************************************************************/
+
+/* A group set is one target of all its members (one scene, each member a
+   group of its own, so it keeps its head layout); the set is the layer's
+   identity, so changing its members keeps the layer (and what tracks). */
+void ShowTree_Test::groupSetsAreOneTargetAndKeepTracking()
+{
+    FixtureGroup *sl = group("SL", { m_fixtures[0], m_fixtures[1] });
+    FixtureGroup *sr = group("SR", { m_fixtures[2], m_fixtures[3] });
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+
+    const quint32 towers = st->addGroupSet("Towers", { sl->id(), sr->id() });
+    QVERIFY(towers != invalidId());
+    QCOMPARE(st->groupSet(towers)->name, QString("Towers"));
+    QVERIFY(st->canUndo());
+    // A second of that name is told apart.
+    const quint32 twin = st->addGroupSet("towers", { sl->id() });
+    QCOMPARE(st->groupSet(twin)->name, QString("towers (2)"));
+    QVERIFY(st->undo());
+    QVERIFY(st->groupSet(twin) == nullptr);
+
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L");      // Tracking
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    Target t;
+    t.sets << towers;
+    QCOMPARE(st->targetLabel(t), QString("Towers"));
+    QCOMPARE(st->targetFixtures(t), QList<quint32>({ m_fixtures[0], m_fixtures[1], m_fixtures[2], m_fixtures[3] }));
+    const quint32 l1 = st->addLayer(c1, t);
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(full)));
+
+    // One scene, on both member groups.
+    const Cue *one = st->cue(c1);
+    const Collection *coll = qobject_cast<const Collection *>(m_doc->function(one->collection));
+    QCOMPARE(coll->functions().count(), 1);
+    const Scene *scene = qobject_cast<const Scene *>(m_doc->function(coll->functions().first()));
+    QCOMPARE(scene->fixtureGroups(), QList<quint32>({ sl->id(), sr->id() }));
+
+    // Tracked into cue Two as the same layer.
+    const QList<ResolvedCue> r = st->resolved(*st->cueList(listId));
+    QCOMPARE(int(r.at(1).layers.first().origin), int(Origin::Tracked));
+    QVERIFY(r.at(1).layers.first().target == t);
+
+    // Members changed: still the same layer, tracked; the rig follows.
+    st->previewCue(c2);
+    QHash<quint32, uchar> v = settle();
+    QCOMPARE(int(v[2]), 255);
+    QVERIFY(st->setGroupSetMembers(towers, { sl->id() }));
+    v = settle();
+    QCOMPARE(int(v[0]), 255);
+    QCOMPARE(int(v[2]), 0);
+    QCOMPARE(int(st->resolved(*st->cueList(listId)).at(1).layers.first().origin), int(Origin::Tracked));
+    QVERIFY(st->undo());
+    QCOMPARE(int(settle()[2]), 255);
+    st->stopPreview();
+
+    // In use: not deleted, and says where.
+    QString why;
+    QVERIFY(!st->removeGroupSet(towers, &why));
+    QVERIFY2(why.contains("One"), qPrintable(why));
+
+    // Saved with the show (in the tree), read back.
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter w(&buffer);
+    st->saveXML(&w);
+    buffer.close();
+    QVERIFY(buffer.data().contains("<GroupSet"));
+    QVERIFY(buffer.data().contains("Sets=\""));
+    buffer.open(QIODevice::ReadOnly);
+    QXmlStreamReader rd(&buffer);
+    rd.readNextStartElement();
+    QVERIFY(st->loadXML(rd));
+    QCOMPARE(st->groupSets().count(), 1);
+    QCOMPARE(st->groupSet(towers)->groups, QList<quint32>({ sl->id(), sr->id() }));
+    QVERIFY(st->cue(c1)->layers.first().target == t);
+
+    // Unused: deleted, one undo step.
+    QVERIFY(st->removeLayer(c1, l1));
+    QVERIFY(st->removeGroupSet(towers, &why));
+    QVERIFY(st->groupSet(towers) == nullptr);
+    QVERIFY(st->undo());
+    QVERIFY(st->groupSet(towers) != nullptr);
+}
+
+/* §3.5: "Steps: White, Base with a child US: Red. US gets Red and inherits
+   Base." A child sets only what it sets; its parent lights the rest of it
+   and doesn't light what it sets (no HTP show-through). */
+void ShowTree_Test::childLayersExcludeTheirFixturesFromTheParent()
+{
+    FixtureGroup *steps = group("Steps", { m_fixtures[0], m_fixtures[1], m_fixtures[2] });
+    FixtureGroup *us = group("US", { m_fixtures[1] });
+    FixtureGroup *other = group("Other", { m_fixtures[5] });
+    const quint32 full = dimmer(255, "Full");
+    const quint32 half = dimmer(127, "Half");
+    const quint32 d45 = dimmer(115, "45");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L");      // Tracking
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    const quint32 c3 = st->addCue(listId, 1, "Three");
+    const quint32 parent = st->addLayer(c1, groupTarget(steps->id()));
+    st->setLayerLook(c1, parent, st->lookForPalette(full));
+
+    // Not part of the parent: refused, with why.
+    QString why;
+    QCOMPARE(st->addChildLayer(c1, parent, groupTarget(other->id()), &why), invalidId());
+    QVERIFY2(why.contains("isn't part of"), qPrintable(why));
+    QCOMPARE(st->addChildLayer(c1, parent, groupTarget(steps->id()), &why), invalidId());
+
+    const quint32 child = st->addChildLayer(c1, parent, groupTarget(us->id()), &why);
+    QVERIFY2(child != invalidId(), qPrintable(why));
+    QCOMPARE(st->childLayers(c1, parent), QList<quint32>({ child }));
+    QCOMPARE(st->cue(c1)->layers.at(1).parent, parent);
+
+    // With nothing of its own the child changes nothing.
+    st->previewCue(c1);
+    QHash<quint32, uchar> v = settle();
+    QCOMPARE(int(v[0]), 255);
+    QCOMPARE(int(v[1]), 255);
+
+    // Its own level: the parent's full doesn't show through.
+    QVERIFY(st->setLayerLook(c1, child, st->lookForPalette(half)));
+    v = settle();
+    QCOMPARE(int(v[0]), 255);
+    QCOMPARE(int(v[1]), 127);
+    QCOMPARE(int(v[2]), 255);
+    // The parent's scene leaves US out, for its Dimmer only.
+    const Collection *coll = qobject_cast<const Collection *>(m_doc->function(st->cue(c1)->collection));
+    QCOMPARE(coll->functions().count(), 2);
+    const Scene *ps = qobject_cast<const Scene *>(m_doc->function(coll->functions().first()));
+    QCOMPARE(ps->excludedFixtures(full), QList<quint32>({ m_fixtures[1] }));
+
+    // Off in the child: dark there.
+    Look off;
+    off.key = KeyDimmer;
+    off.none = true;
+    QVERIFY(st->setLayerLook(c1, child, off));
+    QCOMPARE(int(settle()[1]), 0);
+    QVERIFY(st->setLayerLook(c1, child, st->lookForPalette(half)));
+
+    // Tracking: cue Two carries both; cue Three sets the parent's level --
+    // this cue beats the earlier child's (D5).
+    st->previewCue(c2);
+    v = settle();
+    QCOMPARE(int(v[1]), 127);
+    QCOMPARE(int(v[0]), 255);
+    const quint32 p3 = st->addLayer(c3, groupTarget(steps->id()));
+    QVERIFY(st->setLayerLook(c3, p3, st->lookForPalette(d45)));
+    st->previewCue(c3);
+    v = settle();
+    QCOMPARE(int(v[0]), 115);
+    QCOMPARE(int(v[1]), 115);
+    // The child, carried in under its parent, still knows its parent.
+    const QList<ResolvedCue> r = st->resolved(*st->cueList(listId));
+    const ResolvedLayer *tracked = r.at(2).layer(groupTarget(us->id()));
+    QVERIFY(tracked != nullptr && !tracked->own);
+    QCOMPARE(tracked->depth, 1);
+    QVERIFY(tracked->parent == groupTarget(steps->id()));
+
+    // A child's own child: deeper still wins.
+    // Removing the parent takes its children with it, one step.
+    QVERIFY(st->removeLayer(c1, parent));
+    QVERIFY(st->cue(c1)->layers.isEmpty());
+    QVERIFY(st->undo());
+    QCOMPARE(st->cue(c1)->layers.count(), 2);
+
+    // The parent can't grow or shrink past its children; split / merge
+    // say why.
+    QVERIFY(!st->setLayerTarget(c1, parent, groupTarget(other->id())));
+    QVERIFY(!st->splitLayer(c1, parent, nullptr, &why));
+    QVERIFY2(why.contains("child"), qPrintable(why));
+
+    // Saved and read back with its parent.
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter w(&buffer);
+    st->saveXML(&w);
+    buffer.close();
+    QVERIFY(buffer.data().contains(QString("Parent=\"%1\"").arg(parent).toUtf8()));
+    st->stopPreview();
+}
+
+/* §2 "Overlap": two layers of one cue on fixtures in common -- the lower
+   wins what both set (no HTP show-through), each keeps what only it sets;
+   a layer set in this cue wins over one tracked in; a layer's own look over
+   a cue look. */
+void ShowTree_Test::overlappingLayersLowerWins()
+{
+    FixtureGroup *all = group("All", { m_fixtures[0], m_fixtures[1], m_fixtures[2], m_fixtures[3] });
+    FixtureGroup *some = group("Some", { m_fixtures[2], m_fixtures[3] });
+    const quint32 full = dimmer(255, "Full");
+    const quint32 half = dimmer(127, "Half");
+    const quint32 d45 = dimmer(115, "45");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L");      // Tracking
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    const quint32 a = st->addLayer(c1, groupTarget(all->id()));
+    const quint32 b = st->addLayer(c1, groupTarget(some->id()));
+    st->setLayerLook(c1, a, st->lookForPalette(full));
+    st->setLayerLook(c1, b, st->lookForPalette(half));
+
+    st->previewCue(c1);
+    QHash<quint32, uchar> v = settle();
+    QCOMPARE(int(v[0]), 255);
+    QCOMPARE(int(v[2]), 127);           // the lower layer, not HTP's 255
+
+    // A cue look reaching the lower layer doesn't beat the upper's own.
+    QVERIFY(st->setLayerLook(c1, b, Look { KeyDimmer, {}, {}, false, QString() }));
+    QVERIFY(st->setCueLook(c1, st->lookForPalette(d45)));
+    v = settle();
+    QCOMPARE(int(v[2]), 255);           // All's own Full over the cue's 45% on Some
+    QCOMPARE(int(v[0]), 255);
+
+    // Tracked: cue Two sets Some's level; All (tracked) keeps the rest.
+    QVERIFY(st->setCueLook(c1, Look { KeyDimmer, {}, {}, false, QString() }));
+    QVERIFY(st->setLayerLook(c2, st->addLayer(c2, groupTarget(some->id())), st->lookForPalette(half)));
+    st->previewCue(c2);
+    v = settle();
+    QCOMPARE(int(v[0]), 255);
+    QCOMPARE(int(v[2]), 127);
+    st->stopPreview();
+}
+
+/* Live preview: edits to a child layer bake new scenes (with exclusions)
+   while the DMX thread is running them -- no race, and the rig ends up as
+   the last edit says. */
+void ShowTree_Test::childLayerEditsWhileTheDmxThreadRuns()
+{
+    FixtureGroup *steps = group("Steps", { m_fixtures[0], m_fixtures[1], m_fixtures[2] });
+    FixtureGroup *us = group("US", { m_fixtures[1] });
+    const quint32 full = dimmer(255, "Full");
+    const quint32 half = dimmer(127, "Half");
+    const quint32 low = dimmer(40, "Low");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 parent = st->addLayer(c1, groupTarget(steps->id()));
+    st->setLayerLook(c1, parent, st->lookForPalette(full));
+    const quint32 child = st->addChildLayer(c1, parent, groupTarget(us->id()));
+    st->previewCue(c1);
+    tick(3);
+
+    std::atomic<bool> stop(false);
+    std::thread dmx([&]() {
+        while (!stop.load())
+        {
+            m_doc->masterTimer()->timerTick();
+            QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+            ua.first()->processFaders();
+            m_doc->inputOutputMap()->releaseUniverses(false);
+            QThread::usleep(200);
+        }
+    });
+    for (int i = 0; i < 60; ++i)
+    {
+        st->setLayerLook(c1, child, st->lookForPalette(i % 3 == 0 ? half : i % 3 == 1 ? low : full));
+        QCoreApplication::processEvents();
+        QThread::usleep(500);
+    }
+    st->setLayerLook(c1, child, st->lookForPalette(low));
+    QCoreApplication::processEvents();
+    QThread::msleep(50);
+    stop.store(true);
+    dmx.join();
+    QCoreApplication::processEvents();
+
+    const QHash<quint32, uchar> v = settle();
+    QCOMPARE(int(v[0]), 255);
+    QCOMPARE(int(v[1]), 40);
+    st->stopPreview();
+}
+
+/* An imported cue whose scenes share fixtures and set the same attribute
+   mixes them as the chaser did (highest wins on intensity); switched to the
+   tree's rule, the lower layer wins. */
+void ShowTree_Test::anImportedOverlapMixesAsTheChaserDid()
+{
+    FixtureGroup *all = group("All", { m_fixtures[0], m_fixtures[1] });
+    FixtureGroup *one = group("One", { m_fixtures[1] });
+    const quint32 full = dimmer(255, "Full");
+    const quint32 half = dimmer(127, "Half");
+    Scene *a = new Scene(m_doc);
+    a->setName("A");
+    a->addFixtureGroup(all->id());
+    a->addPalette(full);
+    m_doc->addFunction(a);
+    Scene *b = new Scene(m_doc);
+    b->setName("B");
+    b->addFixtureGroup(one->id());
+    b->addPalette(half);
+    m_doc->addFunction(b);
+    Collection *coll = new Collection(m_doc);
+    coll->setName("1-Both");
+    coll->addFunction(a->id());
+    coll->addFunction(b->id());
+    m_doc->addFunction(coll);
+    Chaser *chaser = new Chaser(m_doc);
+    chaser->setName("C");
+    chaser->addStep(ChaserStep(coll->id()));
+    m_doc->addFunction(chaser);
+
+    ShowTreeController *st = m_doc->showTree();
+    const ShowTreeController::ImportReport rep = st->importChaser(chaser->id());
+    QVERIFY2(rep.notes.join(" ").contains("mix as the chaser did"), qPrintable(rep.notes.join(" | ")));
+    const quint32 cueId = st->cueList(rep.list)->cues.first().id;
+    QVERIFY(st->cue(cueId)->mixOverlap);
+    // Played for real (the Design preview writes its scenes LTP to win over
+    // a running list, so it can't show a mix).
+    Chaser *list = qobject_cast<Chaser *>(m_doc->function(st->cueList(rep.list)->chaser));
+    go(list);
+    QCOMPARE(int(settle()[1]), 255);        // highest wins, as the chaser
+    stopAll();
+    QVERIFY(st->setCueMixOverlap(cueId, false));
+    go(list);
+    QCOMPARE(int(settle()[1]), 127);        // the lower layer wins
+    QCOMPARE(int(settle()[0]), 255);
+    stopAll();
+    QVERIFY(st->undo());
+    QVERIFY(st->cue(cueId)->mixOverlap);
 }
 
 QTEST_MAIN(ShowTree_Test)

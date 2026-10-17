@@ -29,6 +29,9 @@
 #include <algorithm>
 
 #include "showtreecontroller.h"
+#include "monitorproperties.h"
+#include "stagetarget.h"
+#include "linespread.h"
 #include "effectscriptrunner.h"
 #include "effectscriptcache.h"
 #include "qlcfixturemode.h"
@@ -58,6 +61,24 @@ using namespace ShowTree;
     own folders. */
 static const QString kProductionsFolder = QStringLiteral("Productions");
 static const QString kInlinePaletteFolder = QStringLiteral("Show Tree");
+
+static QList<quint32> fixturesOfTarget(const Doc *doc, const Target &target)
+{
+    QList<quint32> ids;
+    for (quint32 g : target.groups)
+    {
+        const FixtureGroup *grp = doc->fixtureGroup(g);
+        if (grp == nullptr)
+            continue;
+        for (quint32 f : grp->fixtureList())
+            if (!ids.contains(f))
+                ids << f;
+    }
+    for (quint32 f : target.fixtures)
+        if (!ids.contains(f))
+            ids << f;
+    return ids;
+}
 
 ShowTreeController::ShowTreeController(Doc *doc)
     : QObject(doc)
@@ -125,6 +146,28 @@ const Cue *ShowTreeController::cue(quint32 cueId) const
 quint32 ShowTreeController::newId()
 {
     return m_nextId++;
+}
+
+bool ShowTreeController::isLineAim(const Look &look) const
+{
+    if (look.key != KeyPosition || look.none || look.palettes.isEmpty())
+        return false;
+    const QLCPalette *p = m_doc->palette(look.palettes.first());
+    if (p == nullptr || p->type() != QLCPalette::Aim)
+        return false;
+    const MonitorProperties *mp = m_doc->monitorProperties();
+    const StageTarget *t = mp == nullptr ? nullptr : mp->stageTarget(p->stageTargetId());
+    return t != nullptr && t->isLine();
+}
+
+LineAimTest ShowTreeController::lineAimTest() const
+{
+    return [this](const Look &look) { return isLineAim(look); };
+}
+
+QList<ResolvedCue> ShowTreeController::resolved(const CueList &list) const
+{
+    return resolve(list, lineAimTest());
 }
 
 static Cue *cueIn(QList<Production> &productions, quint32 cueId, CueList **listOut = nullptr)
@@ -201,6 +244,7 @@ void ShowTreeController::beginBatch(const QString &label)
     m_batchLabel = label;
     m_batchBefore = snapshotXml();
     m_batchProductions = m_productions;
+    m_batchSets = m_groupSets;
     m_batchChanged = false;
 }
 
@@ -233,6 +277,7 @@ void ShowTreeController::endBatch(bool keep)
     {
         // Back as it was; a bake drops a one-off value made on the way.
         m_productions = m_batchProductions;
+        m_groupSets = m_batchSets;
         bake();
         emit changed();
         return;
@@ -364,19 +409,29 @@ quint32 ShowTreeController::addLayer(quint32 cueId, const Target &target, const 
     return ok ? id : invalidId();
 }
 
+/** Layer @a id of @a cue and every layer under it (its child layers). */
+static QList<quint32> withChildren(const Cue &cue, quint32 id)
+{
+    QList<quint32> out { id };
+    for (int k = 0; k < out.count(); ++k)
+        for (const Layer &l : cue.layers)
+            if (l.parent == out.at(k) && !out.contains(l.id))
+                out << l.id;
+    return out;
+}
+
 bool ShowTreeController::removeLayer(quint32 cueId, quint32 layerId)
 {
     return edit(tr("Remove layer"), [&](QList<Production> &ps) {
         Cue *c = cueIn(ps, cueId);
-        if (c == nullptr)
+        if (c == nullptr || c->layer(layerId) == nullptr)
             return false;
-        for (int i = 0; i < c->layers.count(); ++i)
-            if (c->layers.at(i).id == layerId)
-            {
+        // Its child layers go with it: they are part of it.
+        const QList<quint32> gone = withChildren(*c, layerId);
+        for (int i = c->layers.count() - 1; i >= 0; --i)
+            if (gone.contains(c->layers.at(i).id))
                 c->layers.removeAt(i);
-                return true;
-            }
-        return false;
+        return true;
     });
 }
 
@@ -457,11 +512,26 @@ bool ShowTreeController::setLayerTarget(quint32 cueId, quint32 layerId, const Ta
     for (quint32 g : target.groups)
         if (!to.groups.contains(g))
             to.groups << g;
+    for (quint32 set : target.sets)
+        if (!to.sets.contains(set))
+            to.sets << set;
     for (quint32 f : target.fixtures)
         if (!to.fixtures.contains(f))
             to.fixtures << f;
     if (to.isEmpty())
         return false;
+    // A child layer stays part of its parent, and a parent keeps its
+    // children inside it (§3.5).
+    if (const Cue *have = cue(cueId))
+        if (const Layer *l = have->layer(layerId))
+        {
+            if (const Layer *up = l->parent == invalidId() ? nullptr : have->layer(l->parent))
+                if (!targetContains(up->target, to))
+                    return false;
+            for (const Layer &child : have->layers)
+                if (child.parent == layerId && !targetContains(to, child.target))
+                    return false;
+        }
 
     return edit(label.isEmpty() ? tr("Change layer") : label, [&](QList<Production> &ps) {
         CueList *list = nullptr;
@@ -472,7 +542,7 @@ bool ShowTreeController::setLayerTarget(quint32 cueId, quint32 layerId, const Ta
 
         const Target from = l->target;
         const int at = list->indexOf(cueId);
-        const QList<ResolvedCue> before = resolve(*list);
+        const QList<ResolvedCue> before = resolved(*list);
 
         // In this cue: if it carried on from a layer (tracked, included),
         // it still does, under its new target.
@@ -510,7 +580,7 @@ bool ShowTreeController::setLayerTarget(quint32 cueId, quint32 layerId, const Ta
 }
 
 bool ShowTreeController::addToLayer(quint32 cueId, quint32 layerId, const QList<quint32> &groups,
-                                    const QList<quint32> &fixtures)
+                                    const QList<quint32> &fixtures, const QList<quint32> &sets)
 {
     const Cue *c = cue(cueId);
     const Layer *l = c == nullptr ? nullptr : c->layer(layerId);
@@ -532,6 +602,14 @@ bool ShowTreeController::addToLayer(quint32 cueId, quint32 layerId, const QList<
             t.fixtures << f;
             Target one;
             one.fixtures << f;
+            names << targetLabel(one);
+        }
+    for (quint32 set : sets)
+        if (!t.sets.contains(set))
+        {
+            t.sets << set;
+            Target one;
+            one.sets << set;
             names << targetLabel(one);
         }
     if (names.isEmpty())
@@ -596,6 +674,17 @@ bool ShowTreeController::setCueMode(quint32 cueId, CueMode mode)
         if (c == nullptr || c->mode == mode)
             return false;
         c->mode = mode;
+        return true;
+    });
+}
+
+bool ShowTreeController::setCueMixOverlap(quint32 cueId, bool mix)
+{
+    return edit(mix ? tr("Overlap: mix") : tr("Overlap: lower wins"), [&](QList<Production> &ps) {
+        Cue *c = cueIn(ps, cueId);
+        if (c == nullptr || c->mixOverlap == mix)
+            return false;
+        c->mixOverlap = mix;
         return true;
     });
 }
@@ -820,7 +909,7 @@ QList<Layer> ShowTreeController::recordLayers(quint32 cueId, RecordSource source
     auto cueStage = [&](const CueList &l, quint32 cid) {
         const int at = l.indexOf(cid);
         if (at >= 0)
-            stageLayers(resolve(l).at(at), out, noId);
+            stageLayers(resolved(l).at(at), out, noId);
     };
 
     switch (source)
@@ -952,6 +1041,8 @@ quint32 ShowTreeController::recordCue(quint32 cueId, RecordSource source)
     else
         rec.name = src.name.isEmpty() ? tr("recorded") : tr("%1 (recorded)").arg(src.name);
     rec.mode = CueMode::Block;
+    // What mixed there mixes here, so it plays the same.
+    rec.mixOverlap = src.mixOverlap;
     rec.fadeIn = src.fadeIn;
     rec.fadeOut = src.fadeOut;
     rec.hold = src.hold;
@@ -1035,6 +1126,8 @@ QString ShowTreeController::unitLabel(const QString &unit) const
     Target t;
     if (unit.startsWith(QLatin1String("g:")))
         t.groups << id;
+    else if (unit.startsWith(QLatin1String("s:")))
+        t.sets << id;
     else if (unit.startsWith(QLatin1String("f:")))
         t.fixtures << id;
     else
@@ -1050,6 +1143,12 @@ bool ShowTreeController::splitLayer(quint32 cueId, quint32 layerId, QList<quint3
     {
         if (why != nullptr)
             *why = tr("Only a layer on groups or fixtures can be split.");
+        return false;
+    }
+    if (!childLayers(cueId, layerId).isEmpty())
+    {
+        if (why != nullptr)
+            *why = tr("%1 has child layers: take them out first.").arg(targetLabel(l->target));
         return false;
     }
     const QList<Target> pieces = l->pieces();
@@ -1068,7 +1167,7 @@ bool ShowTreeController::splitLayer(quint32 cueId, quint32 layerId, QList<quint3
         if (cueIn(ps, cueId, &list) == nullptr)
             return false;
         const CueList beforeList = *list;
-        const QList<ResolvedCue> before = resolve(beforeList);
+        const QList<ResolvedCue> before = resolved(beforeList);
         const int at = list->indexOf(cueId);
         const Target from = l->target;
 
@@ -1130,7 +1229,7 @@ bool ShowTreeController::splitLayer(quint32 cueId, quint32 layerId, QList<quint3
 
         quint32 cid = invalidId();
         QString unit, key;
-        if (stageDiffers(beforeList, *list, &cid, &unit, &key))
+        if (stageDiffers(beforeList, *list, &cid, &unit, &key, lineAimTest()))
         {
             refusal = tr("Splitting would change what cue %1 plays on %2 (%3), so it was left as it is.")
                       .arg(cueLabel(beforeList, beforeList.indexOf(cid)), unitLabel(unit), keyLabel(key));
@@ -1163,6 +1262,10 @@ quint32 ShowTreeController::mergeLayers(quint32 cueId, const QList<quint32> &lay
             return refuse(tr("Only layers of the cue itself can be merged."));
         if (l->target.isOpaque())
             return refuse(tr("%1 plays a function as it is: it can't be merged.").arg(targetLabel(l->target)));
+        if (!childLayers(cueId, lid).isEmpty())
+            return refuse(tr("%1 has child layers: take them out first.").arg(targetLabel(l->target)));
+        if (!layers.isEmpty() && l->parent != layers.first()->parent)
+            return refuse(tr("Only layers under the same parent can be merged."));
         if (!layers.contains(l))
             layers << l;
     }
@@ -1195,6 +1298,9 @@ quint32 ShowTreeController::mergeLayers(quint32 cueId, const QList<quint32> &lay
             for (quint32 f : o.target.fixtures)
                 if (!m.target.fixtures.contains(f))
                     m.target.fixtures << f;
+            for (quint32 set : o.target.sets)
+                if (!m.target.sets.contains(set))
+                    m.target.sets << set;
             if (o.release != from.first().release)
             {
                 *conflict = tr("%1 is released and %2 isn't.")
@@ -1248,7 +1354,7 @@ quint32 ShowTreeController::mergeLayers(quint32 cueId, const QList<quint32> &lay
         if (cueIn(ps, cueId, &list) == nullptr)
             return false;
         const CueList beforeList = *list;
-        const QList<ResolvedCue> before = resolve(beforeList);
+        const QList<ResolvedCue> before = resolved(beforeList);
         const int at = list->indexOf(cueId);
 
         // Put @a m in place of layers @a ids of @a cue (at the first one).
@@ -1329,7 +1435,7 @@ quint32 ShowTreeController::mergeLayers(quint32 cueId, const QList<quint32> &lay
 
         quint32 cid = invalidId();
         QString unit, key;
-        if (stageDiffers(beforeList, *list, &cid, &unit, &key))
+        if (stageDiffers(beforeList, *list, &cid, &unit, &key, lineAimTest()))
         {
             refusal = tr("Merging would change what cue %1 plays on %2 (%3), so it was left as it is.")
                       .arg(cueLabel(beforeList, beforeList.indexOf(cid)), unitLabel(unit), keyLabel(key));
@@ -1348,7 +1454,7 @@ bool ShowTreeController::valueSource(quint32 cueId, const Target &target, const 
     const CueList *list = listOfCue(cueId);
     if (list == nullptr || target.isEmpty())
         return false;
-    const QList<ResolvedCue> resolved = resolve(*list);
+    const QList<ResolvedCue> resolved = this->resolved(*list);
 
     quint32 cur = cueId;
     Target t = target;
@@ -1450,6 +1556,8 @@ ShowTreeController::Usage ShowTreeController::usageInList(quint32 listId) const
                 u.groups[g]++;
             for (quint32 f : l.target.fixtures)
                 u.fixtures[f]++;
+            for (quint32 set : l.target.sets)
+                u.sets[set]++;
         }
     }
     return u;
@@ -1516,6 +1624,711 @@ bool ShowTreeController::removeProduction(quint32 productionId)
             }
         return false;
     });
+}
+
+/****************************************************************************
+ * Group sets (§1)
+ ****************************************************************************/
+
+const GroupSet *ShowTreeController::groupSet(quint32 id) const
+{
+    for (const GroupSet &gs : m_groupSets)
+        if (gs.id == id)
+            return &gs;
+    return nullptr;
+}
+
+bool ShowTreeController::editSets(const QString &label, const std::function<bool(QList<GroupSet> &)> &change)
+{
+    if (m_batchDepth > 0)
+    {
+        QList<GroupSet> work = m_groupSets;
+        if (!change(work))
+            return false;
+        m_groupSets = work;
+        m_batchChanged = true;
+        return true;
+    }
+    const QByteArray before = snapshotXml();
+    QList<GroupSet> work = m_groupSets;
+    if (!change(work))
+        return false;
+    m_groupSets = work;
+    pushUndo(label, before);
+    bake();
+    m_doc->setModified();
+    emit changed();
+    return true;
+}
+
+/** @a ids once each, in order. */
+static QList<quint32> unique(const QList<quint32> &ids)
+{
+    QList<quint32> out;
+    for (quint32 id : ids)
+        if (!out.contains(id))
+            out << id;
+    return out;
+}
+
+quint32 ShowTreeController::addGroupSet(const QString &name, const QList<quint32> &groups,
+                                        const QList<quint32> &fixtures)
+{
+    const QList<quint32> g = unique(groups), f = unique(fixtures);
+    if (g.isEmpty() && f.isEmpty())
+        return invalidId();
+    QString n = name.trimmed().isEmpty() ? tr("Set") : name.trimmed();
+    auto taken = [this](const QString &x) {
+        for (const GroupSet &gs : m_groupSets)
+            if (gs.name.compare(x, Qt::CaseInsensitive) == 0)
+                return true;
+        return false;
+    };
+    if (taken(n))
+    {
+        int k = 2;
+        while (taken(QStringLiteral("%1 (%2)").arg(n).arg(k)))
+            ++k;
+        n = QStringLiteral("%1 (%2)").arg(n).arg(k);
+    }
+    const quint32 id = newId();
+    const bool ok = editSets(tr("Make set %1").arg(n), [&](QList<GroupSet> &sets) {
+        GroupSet gs;
+        gs.id = id;
+        gs.name = n;
+        gs.groups = g;
+        gs.fixtures = f;
+        sets << gs;
+        return true;
+    });
+    return ok ? id : invalidId();
+}
+
+bool ShowTreeController::setGroupSetMembers(quint32 setId, const QList<quint32> &groups,
+                                            const QList<quint32> &fixtures)
+{
+    const QList<quint32> g = unique(groups), f = unique(fixtures);
+    if (g.isEmpty() && f.isEmpty())
+        return false;
+    const GroupSet *have = groupSet(setId);
+    if (have == nullptr)
+        return false;
+    // Child layers inside a layer on the set must stay inside it.
+    GroupSet after = *have;
+    after.groups = g;
+    after.fixtures = f;
+    for (const Production &p : m_productions)
+        for (const CueList &l : p.lists)
+            for (const Cue &c : l.cues)
+                for (const Layer &child : c.layers)
+                {
+                    const Layer *up = child.parent == invalidId() ? nullptr : c.layer(child.parent);
+                    if (up == nullptr || !up->target.sets.contains(setId))
+                        continue;
+                    Target outer = expandTarget(up->target);
+                    for (quint32 gid : have->groups)
+                        outer.groups.removeAll(gid);
+                    for (quint32 fid : have->fixtures)
+                        outer.fixtures.removeAll(fid);
+                    outer.groups << g;
+                    outer.fixtures << f;
+                    if (!targetContains(outer, child.target))
+                        return false;
+                }
+    return editSets(tr("Set %1's members").arg(have->name), [&](QList<GroupSet> &sets) {
+        for (GroupSet &gs : sets)
+            if (gs.id == setId)
+            {
+                if (gs.groups == g && gs.fixtures == f)
+                    return false;
+                gs.groups = g;
+                gs.fixtures = f;
+                return true;
+            }
+        return false;
+    });
+}
+
+bool ShowTreeController::renameGroupSet(quint32 setId, const QString &name)
+{
+    if (name.trimmed().isEmpty())
+        return false;
+    return editSets(tr("Rename set"), [&](QList<GroupSet> &sets) {
+        for (GroupSet &gs : sets)
+            if (gs.id == setId)
+            {
+                if (gs.name == name.trimmed())
+                    return false;
+                gs.name = name.trimmed();
+                return true;
+            }
+        return false;
+    });
+}
+
+bool ShowTreeController::removeGroupSet(quint32 setId, QString *why)
+{
+    const GroupSet *have = groupSet(setId);
+    if (have == nullptr)
+        return false;
+    QStringList used;
+    for (const Production &p : m_productions)
+        for (const CueList &l : p.lists)
+            for (int i = 0; i < l.cues.count(); ++i)
+                for (const Layer &layer : l.cues.at(i).layers)
+                    if (layer.target.sets.contains(setId) || layer.continues.sets.contains(setId))
+                    {
+                        const QString label = cueLabel(l, i);
+                        if (!used.contains(label))
+                            used << label;
+                    }
+    if (!used.isEmpty())
+    {
+        if (why != nullptr)
+            *why = tr("%1 is used in cue %2: take it out of those layers first.")
+                   .arg(have->name, used.mid(0, 5).join(QStringLiteral(", ")));
+        return false;
+    }
+    const QString name = have->name;
+    return editSets(tr("Delete set %1").arg(name), [&](QList<GroupSet> &sets) {
+        for (int i = 0; i < sets.count(); ++i)
+            if (sets.at(i).id == setId)
+            {
+                sets.removeAt(i);
+                return true;
+            }
+        return false;
+    });
+}
+
+Target ShowTreeController::expandTarget(const Target &target) const
+{
+    if (target.sets.isEmpty())
+        return target;
+    Target out;
+    out.function = target.function;
+    for (quint32 set : target.sets)
+        if (const GroupSet *gs = groupSet(set))
+        {
+            for (quint32 g : gs->groups)
+                if (!out.groups.contains(g))
+                    out.groups << g;
+            for (quint32 f : gs->fixtures)
+                if (!out.fixtures.contains(f))
+                    out.fixtures << f;
+        }
+    for (quint32 g : target.groups)
+        if (!out.groups.contains(g))
+            out.groups << g;
+    for (quint32 f : target.fixtures)
+        if (!out.fixtures.contains(f))
+            out.fixtures << f;
+    return out;
+}
+
+QList<quint32> ShowTreeController::targetFixtures(const Target &target) const
+{
+    return fixturesOfTarget(m_doc, expandTarget(target));
+}
+
+/****************************************************************************
+ * Child layers (§3.5)
+ ****************************************************************************/
+
+bool ShowTreeController::targetContains(const Target &outer, const Target &inner) const
+{
+    if (outer.isOpaque() || inner.isOpaque())
+        return false;
+    const QList<quint32> out = targetFixtures(outer), in = targetFixtures(inner);
+    if (in.isEmpty())
+        return false;
+    for (quint32 f : in)
+        if (!out.contains(f))
+            return false;
+    return true;
+}
+
+QList<quint32> ShowTreeController::childLayers(quint32 cueId, quint32 layerId) const
+{
+    const Cue *c = cue(cueId);
+    if (c == nullptr || c->layer(layerId) == nullptr)
+        return {};
+    QList<quint32> all = withChildren(*c, layerId);
+    all.removeFirst();
+    return all;
+}
+
+quint32 ShowTreeController::addChildLayer(quint32 cueId, quint32 parentId, const Target &target, QString *why)
+{
+    auto refuse = [why](const QString &text) {
+        if (why != nullptr)
+            *why = text;
+        return invalidId();
+    };
+    const Cue *c = cue(cueId);
+    const Layer *up = c == nullptr ? nullptr : c->layer(parentId);
+    if (up == nullptr || up->target.isOpaque())
+        return refuse(tr("A child layer goes under a layer of groups or fixtures of this cue."));
+    if (target.isEmpty() || target.isOpaque())
+        return refuse(tr("A child layer is on groups or fixtures."));
+    if (target == up->target)
+        return refuse(tr("A child layer is on part of %1, not all of it.").arg(targetLabel(up->target)));
+    if (!targetContains(up->target, target))
+        return refuse(tr("%1 isn't part of %2: a child layer is on part of its parent's fixtures.")
+                      .arg(targetLabel(target), targetLabel(up->target)));
+    for (const Layer &l : c->layers)
+        if (l.parent == parentId && l.target == target)
+            return refuse(tr("%1 already has a child layer on %2.").arg(targetLabel(up->target),
+                                                                         targetLabel(target)));
+    const quint32 id = newId();
+    const bool ok = edit(tr("Add child layer %1").arg(targetLabel(target)), [&](QList<Production> &ps) {
+        Cue *cc = cueIn(ps, cueId);
+        if (cc == nullptr || cc->layer(parentId) == nullptr)
+            return false;
+        // After the parent and its children: lower wins, so a child is under
+        // (after) its parent.
+        const QList<quint32> under = withChildren(*cc, parentId);
+        int at = 0;
+        for (int i = 0; i < cc->layers.count(); ++i)
+            if (under.contains(cc->layers.at(i).id))
+                at = i + 1;
+        Layer l;
+        l.id = id;
+        l.target = target;
+        l.parent = parentId;
+        cc->layers.insert(at, l);
+        return true;
+    });
+    return ok ? id : refuse(tr("Couldn't add the child layer."));
+}
+
+/****************************************************************************
+ * Line aims (§3B)
+ ****************************************************************************/
+
+QString ShowTreeController::lineParamValue(const QString &key, const QString &word)
+{
+    const QString w = word.trimmed().toLower();
+    if (key == KeySpread)
+    {
+        bool ok = false;
+        const double v = QString(w).replace(QLatin1Char(','), QLatin1Char('.')).toDouble(&ok);
+        if (!ok || v < -LineSpread::maxSpread() - 1e-9 || v > LineSpread::maxSpread() + 1e-9)
+            return QString();
+        // One decimal, as the slider steps.
+        return QString::number(qRound(v * 10.0) / 10.0);
+    }
+    if (key == KeyGrouping)
+    {
+        static const QStringList words { "each", "pairs", "threes", "fours", "halves" };
+        for (const QString &x : words)
+            if (w == x || (w.length() >= 3 && x.startsWith(w)) || w + QLatin1Char('s') == x)
+                return x;
+        if (w == QLatin1String("1") || w == QLatin1String("single") || w == QLatin1String("one"))
+            return QStringLiteral("each");
+        if (w == QLatin1String("2"))
+            return QStringLiteral("pairs");
+        if (w == QLatin1String("3"))
+            return QStringLiteral("threes");
+        if (w == QLatin1String("4"))
+            return QStringLiteral("fours");
+        if (w == QLatin1String("half"))
+            return QStringLiteral("halves");
+        return QString();
+    }
+    if (key == KeyCross)
+    {
+        if (w == QLatin1String("swap") || w == QLatin1String("swaps") || w == QLatin1String("sides"))
+            return QStringLiteral("swap");
+        if (w == QLatin1String("mirror") || w == QLatin1String("flip"))
+            return QStringLiteral("mirror");
+    }
+    return QString();
+}
+
+Look ShowTreeController::lineParamLook(const QString &key, const QString &value)
+{
+    Look l;
+    l.key = key;
+    l.value = lineParamValue(key, value);
+    return l;
+}
+
+QString ShowTreeController::lineParamText(const QString &key, const QString &value)
+{
+    if (key == KeySpread)
+    {
+        const double v = value.toDouble();
+        return v > 0 ? QStringLiteral("+%1").arg(value) : value;
+    }
+    if (key == KeyGrouping)
+    {
+        if (value == QLatin1String("each"))
+            return tr("Each light");
+        if (value.isEmpty())
+            return value;
+        return value.left(1).toUpper() + value.mid(1);
+    }
+    if (key == KeyCross)
+        return value == QLatin1String("mirror") ? tr("Each group flips (mirror)") : tr("Groups swap sides");
+    return value;
+}
+
+/** A line parameter look applied to @a s. */
+static void applyLineParam(LineSpread::Settings &s, const QString &key, const QString &value)
+{
+    if (value.isEmpty())
+        return;
+    if (key == KeySpread)
+        s.spread = qBound(-LineSpread::maxSpread(), value.toDouble(), LineSpread::maxSpread());
+    else if (key == KeyGrouping)
+    {
+        if (value == QLatin1String("each"))
+            s.group = 1;
+        else if (value == QLatin1String("pairs"))
+            s.group = 2;
+        else if (value == QLatin1String("threes"))
+            s.group = 3;
+        else if (value == QLatin1String("fours"))
+            s.group = 4;
+        else if (value == QLatin1String("halves"))
+            s.group = LineSpread::Halves;
+    }
+    else if (key == KeyCross)
+        s.cross = value == QLatin1String("mirror") ? LineSpread::Mirror : LineSpread::SwapSides;
+}
+
+quint32 ShowTreeController::lineAimPalette(quint32 basePid, const ResolvedLayer &layer, bool create)
+{
+    QLCPalette *base = m_doc->palette(basePid);
+    const MonitorProperties *mp = m_doc->monitorProperties();
+    const StageTarget *t = (base == nullptr || mp == nullptr || base->type() != QLCPalette::Aim)
+                           ? nullptr : mp->stageTarget(base->stageTargetId());
+    if (t == nullptr || !t->isLine())
+        return basePid;
+    const LineSpread::Settings own = LineSpread::fromParams(base->effectParamValues());
+    LineSpread::Settings want = own;
+    QStringList what;
+    for (const QString &k : { KeySpread, KeyGrouping, KeyCross })
+    {
+        const auto v = layer.values.constFind(k);
+        if (v == layer.values.constEnd() || v.value().look.none || v.value().look.value.isEmpty())
+            continue;
+        applyLineParam(want, k, v.value().look.value);
+    }
+    if (want == own)
+        return basePid;
+    QMap<QString, double> params = base->effectParamValues();
+    LineSpread::toParams(want, params);
+
+    // The same line, the same settings: one palette, found again by them.
+    QList<quint32> inl = m_inlinePalettes.values();
+    std::sort(inl.begin(), inl.end());
+    for (quint32 pid : inl)
+    {
+        const QLCPalette *p = m_doc->palette(pid);
+        if (p != nullptr && p->type() == QLCPalette::Aim && p->stageTargetId() == base->stageTargetId()
+            && p->effectParamValues() == params)
+            return pid;
+    }
+    if (!create)
+        return QLCPalette::invalidId();
+
+    QLCPalette *p = base->createCopy();
+    p->setEffectParamValues(params);
+    QStringList parts { tr("spread %1").arg(lineParamText(KeySpread, QString::number(want.spread))) };
+    if (want.group != 1)
+        parts << (want.group == LineSpread::Halves ? tr("halves")
+                  : want.group == 2 ? tr("pairs") : want.group == 3 ? tr("threes")
+                  : want.group == 4 ? tr("fours") : tr("groups of %1").arg(want.group));
+    if (want.cross == LineSpread::Mirror)
+        parts << tr("mirror");
+    p->setName(QStringLiteral("%1 · %2").arg(base->name(), parts.join(QStringLiteral(", "))));
+    p->setPath(QStringLiteral("Palettes/%1").arg(kInlinePaletteFolder));
+    quint32 id = 0;
+    for (const QLCPalette *other : m_doc->palettes())
+        id = qMax(id, other->id() + 1);
+    m_inlinePalettes.insert(id);
+    if (!m_doc->addPalette(p, id))
+    {
+        m_inlinePalettes.remove(id);
+        delete p;
+        return basePid;
+    }
+    return id;
+}
+
+quint32 ShowTreeController::aimPaletteFor(quint32 targetId)
+{
+    MonitorProperties *mp = m_doc->monitorProperties();
+    const StageTarget *t = mp == nullptr ? nullptr : mp->stageTarget(targetId);
+    if (t == nullptr)
+        return QLCPalette::invalidId();
+    // Reused: a named Aim palette pointing there with nothing of its own
+    // (no spread, group or cross), the lowest id.
+    QList<QLCPalette *> pl = m_doc->palettes();
+    std::sort(pl.begin(), pl.end(), [](const QLCPalette *a, const QLCPalette *b) { return a->id() < b->id(); });
+    for (const QLCPalette *p : pl)
+        if (p->type() == QLCPalette::Aim && p->stageTargetId() == targetId && !isInlinePalette(p->id())
+            && !p->name().isEmpty() && LineSpread::fromParams(p->effectParamValues()) == LineSpread::Settings())
+            return p->id();
+    // Else one named after the target, where the show keeps its Aim looks.
+    QLCPalette *p = new QLCPalette(QLCPalette::Aim, m_doc);
+    p->setStageTargetId(targetId);
+    QString name = tr("Aim %1").arg(t->name());
+    auto taken = [&pl](const QString &n) {
+        for (const QLCPalette *o : pl)
+            if (o->name().compare(n, Qt::CaseInsensitive) == 0)
+                return true;
+        return false;
+    };
+    if (taken(name))
+    {
+        int k = 2;
+        while (taken(QStringLiteral("%1 (%2)").arg(name).arg(k)))
+            ++k;
+        name = QStringLiteral("%1 (%2)").arg(name).arg(k);
+    }
+    p->setName(name);
+    p->setPath(suggestPaletteFolder(QLCPalette::Aim));
+    if (!m_doc->addPalette(p))
+    {
+        delete p;
+        return QLCPalette::invalidId();
+    }
+    return p->id();
+}
+
+static QString layerKey(quint32 cueId, const Target &target)
+{
+    return QStringLiteral("%1|%2").arg(cueId).arg(target.signature());
+}
+
+quint32 ShowTreeController::layerScene(quint32 cueId, const Target &target) const
+{
+    return m_layerScenes.value(layerKey(cueId, target), Function::invalidId());
+}
+
+QList<Target> ShowTreeController::spanMembers(quint32 cueId, const Target &target, const QString &key) const
+{
+    return m_spanMembers.value(layerKey(cueId, target)).value(key);
+}
+
+/****************************************************************************
+ * What a cue plays: a scene per layer, with what it leaves out and what it
+ * lays out over (§3.5, D10, D17)
+ ****************************************************************************/
+
+QString ShowTreeController::ScenePlan::signature() const
+{
+    QString sig = ShowTreeController::sceneSignature(target, palettes);
+    QList<quint32> keys = excluded.keys();
+    std::sort(keys.begin(), keys.end());
+    for (quint32 pid : keys)
+        if (!excluded.value(pid).isEmpty())
+            sig += QStringLiteral("|x%1:%2").arg(pid).arg(idsToString(excluded.value(pid)));
+    keys = spanGroups.keys() + spanFixtures.keys();
+    std::sort(keys.begin(), keys.end());
+    keys.erase(std::unique(keys.begin(), keys.end()), keys.end());
+    for (quint32 pid : keys)
+        sig += QStringLiteral("|w%1:%2/%3").arg(pid).arg(idsToString(spanGroups.value(pid)),
+                                                         idsToString(spanFixtures.value(pid)));
+    return sig;
+}
+
+QList<ShowTreeController::ScenePlan> ShowTreeController::planCue(const CueList &list,
+                                                                 const QList<ResolvedCue> &resolved,
+                                                                 int index) const
+{
+    return const_cast<ShowTreeController *>(this)->planCue(list, resolved, index, false);
+}
+
+QList<ShowTreeController::ScenePlan> ShowTreeController::planCue(const CueList &list,
+                                                                 const QList<ResolvedCue> &resolved,
+                                                                 int index, bool create)
+{
+    QList<ScenePlan> out;
+    if (index < 0 || index >= resolved.count())
+        return out;
+    const ResolvedCue &rc = resolved.at(index);
+    const int n = int(rc.layers.count());
+    // Overlapping layers that mix (an imported cue): only a deeper layer --
+    // a child -- leaves its parent out.
+    const bool mix = index < list.cues.count() && list.cues.at(index).mixOverlap;
+
+    // What each layer lights.
+    QVector<Target> targets(n);
+    QVector<QList<quint32>> fixtures(n);
+    for (int i = 0; i < n; ++i)
+    {
+        const ResolvedLayer &rl = rc.layers.at(i);
+        if (rl.target.isOpaque())
+            continue;
+        targets[i] = expandTarget(rl.target);
+        fixtures[i] = fixturesOfTarget(m_doc, targets.at(i));
+    }
+
+    /* Who sets each attribute on each fixture (§2, "Overlap"; §3.5): this
+       cue beats earlier ones (a layer's own over a cue look; an include
+       over what tracked in; the later cue's tracked value); then the
+       deeper layer (a child over its parent); then the lower layer. */
+    auto rank = [&](int i, const ResolvedValue &v) {
+        int cls = 0, recency = 0;
+        if (v.fromCue == rc.cueId && v.origin == Origin::Own)
+            cls = 3;
+        else if (v.fromCue == rc.cueId && v.origin == Origin::CueLook)
+            cls = 2;
+        else if (v.origin == Origin::Included)
+            cls = 1;
+        else
+            recency = list.indexOf(v.fromCue);
+        return std::make_tuple(cls, recency, rc.layers.at(i).depth, i);
+    };
+    QHash<QString, QHash<quint32, int>> winner;
+    QHash<QString, QHash<quint32, std::tuple<int, int, int, int>>> best;
+    for (int i = 0; i < n; ++i)
+    {
+        const ResolvedLayer &rl = rc.layers.at(i);
+        if (rl.target.isOpaque())
+            continue;
+        for (auto it = rl.values.constBegin(); it != rl.values.constEnd(); ++it)
+        {
+            if (isLineParamKey(it.key()))
+                continue;                       // they go with Position
+            const auto r = rank(i, it.value());
+            QHash<quint32, int> &w = winner[it.key()];
+            QHash<quint32, std::tuple<int, int, int, int>> &b = best[it.key()];
+            for (quint32 f : fixtures.at(i))
+                if (!w.contains(f) || b.value(f) < r)
+                {
+                    w.insert(f, i);
+                    b.insert(f, r);
+                }
+        }
+    }
+
+    /* ONE effect / ONE formation across layers (D10, D17): the layers
+       carrying the same value set at cue level (the same span), a line aim
+       also with the same Spread / Grouping / Cross none of them set itself. */
+    auto spanKey = [&](int i, const QString &key) -> QString {
+        const ResolvedLayer &rl = rc.layers.at(i);
+        const auto v = rl.values.constFind(key);
+        if (v == rl.values.constEnd() || v.value().look.none || v.value().span == invalidId())
+            return QString();
+        QString k = QStringLiteral("%1|%2/%3|%4").arg(key, idsToString(v.value().look.palettes),
+                                                      idsToString(v.value().look.own))
+                    .arg(v.value().span);
+        if (key == KeyPosition)
+        {
+            for (const QString &pk : { KeySpread, KeyGrouping, KeyCross })
+            {
+                const auto p = rl.values.constFind(pk);
+                if (p == rl.values.constEnd())
+                    continue;
+                if (p.value().span == invalidId())
+                    return QString();           // a parameter of its own: on its own
+                k += QStringLiteral("|%1=%2@%3").arg(pk, p.value().look.value).arg(p.value().span);
+            }
+        }
+        return k;
+    };
+
+    for (int i = 0; i < n; ++i)
+    {
+        const ResolvedLayer &rl = rc.layers.at(i);
+        if (rl.target.isOpaque() || rl.isDark())
+            continue;
+        ScenePlan plan;
+        plan.layer = i;
+        plan.target = targets.at(i);
+        plan.target.sets.clear();
+        bool writes = false;
+        for (const Look &look : rl.playedLooks())
+        {
+            QList<quint32> pals;
+            for (quint32 pid : look.palettes)
+            {
+                quint32 use = pid;
+                if (look.key == KeyPosition)
+                    use = lineAimPalette(pid, rl, create);
+                if (use != QLCPalette::invalidId() && m_doc->palette(use) != nullptr)
+                    pals << use;
+            }
+            if (isEffectKey(look.key))
+                for (quint32 pid : look.own)
+                    if (m_doc->palette(pid) != nullptr)
+                        pals << pid;
+            if (pals.isEmpty())
+                continue;
+
+            // Its span: the others it is one with, if any.
+            QList<int> members { i };
+            const QString sk = (isEffectKey(look.key) || look.key == KeyPosition) ? spanKey(i, look.key) : QString();
+            if (!sk.isEmpty())
+                for (int j = 0; j < n; ++j)
+                    if (j != i && !rc.layers.at(j).target.isOpaque() && !rc.layers.at(j).isDark()
+                        && spanKey(j, look.key) == sk)
+                        members << j;
+            std::sort(members.begin(), members.end());
+
+            // Left out: what it would light where it doesn't win -- a lower
+            // layer (or a child) sets that attribute there.
+            const QHash<quint32, int> w = winner.value(look.key);
+            QList<quint32> excluded;
+            QList<quint32> spanG, spanF;
+            if (members.count() > 1)
+            {
+                for (int m : members)
+                {
+                    for (quint32 g : targets.at(m).groups)
+                        if (!spanG.contains(g))
+                            spanG << g;
+                    for (quint32 f : targets.at(m).fixtures)
+                        if (!spanF.contains(f))
+                            spanF << f;
+                    for (quint32 f : fixtures.at(m))
+                    {
+                        const int by = w.value(f, -1);
+                        if (!members.contains(by) && !excluded.contains(f)
+                            && (!mix || (by >= 0 && rc.layers.at(by).depth > rc.layers.at(m).depth)))
+                            excluded << f;
+                    }
+                }
+            }
+            else
+            {
+                for (quint32 f : fixtures.at(i))
+                {
+                    const int by = w.value(f, -1);
+                    if (by != i && (!mix || (by >= 0 && rc.layers.at(by).depth > rl.depth)))
+                        excluded << f;
+                }
+            }
+            std::sort(excluded.begin(), excluded.end());
+            for (quint32 f : fixtures.at(i))
+                if (!excluded.contains(f))
+                    writes = true;
+            for (quint32 pid : pals)
+            {
+                plan.palettes << pid;
+                if (!excluded.isEmpty())
+                    plan.excluded.insert(pid, excluded);
+                if (members.count() > 1)
+                {
+                    plan.spanGroups.insert(pid, spanG);
+                    plan.spanFixtures.insert(pid, spanF);
+                }
+            }
+            if (members.count() > 1)
+                plan.spanMembers.insert(look.key, members);
+        }
+        // Every look left out everywhere (a lower layer sets all of it):
+        // nothing to play.
+        if (plan.palettes.isEmpty() || !writes)
+            continue;
+        out << plan;
+    }
+    return out;
 }
 
 /****************************************************************************
@@ -1936,23 +2749,6 @@ quint32 ShowTreeController::createNamedPalette(QLCPalette::PaletteType type, con
     return pid;
 }
 
-static QList<quint32> targetFixtures(const Doc *doc, const Target &target)
-{
-    QList<quint32> ids;
-    for (quint32 g : target.groups)
-    {
-        const FixtureGroup *grp = doc->fixtureGroup(g);
-        if (grp == nullptr)
-            continue;
-        for (quint32 f : grp->fixtureList())
-            if (!ids.contains(f))
-                ids << f;
-    }
-    for (quint32 f : target.fixtures)
-        if (!ids.contains(f))
-            ids << f;
-    return ids;
-}
 
 static bool fixtureHasGroup(const Fixture *fxi, QLCChannel::Group group)
 {
@@ -1995,7 +2791,7 @@ static bool fixtureReaches(const Fixture *fxi, const QString &key)
 
 void ShowTreeController::lookReach(const Target &target, const QString &key, int *reach, int *total) const
 {
-    const QList<quint32> ids = targetFixtures(m_doc, target);
+    const QList<quint32> ids = targetFixtures(target);
     int n = 0;
     for (quint32 id : ids)
         if (fixtureReaches(m_doc->fixture(id), key))
@@ -2009,7 +2805,7 @@ void ShowTreeController::lookReach(const Target &target, const QString &key, int
 QList<quint32> ShowTreeController::lookMisses(const Target &target, const QString &key) const
 {
     QList<quint32> out;
-    for (quint32 id : targetFixtures(m_doc, target))
+    for (quint32 id : targetFixtures(target))
         if (!fixtureReaches(m_doc->fixture(id), key))
             out << id;
     return out;
@@ -2034,7 +2830,7 @@ static bool lookReachesFixture(const Doc *doc, const Fixture *fxi, const Look &l
 
 void ShowTreeController::lookReach(const Target &target, const Look &look, int *reach, int *total) const
 {
-    const QList<quint32> ids = targetFixtures(m_doc, target);
+    const QList<quint32> ids = targetFixtures(target);
     int n = 0;
     for (quint32 id : ids)
         if (lookReachesFixture(m_doc, m_doc->fixture(id), look))
@@ -2048,7 +2844,7 @@ void ShowTreeController::lookReach(const Target &target, const Look &look, int *
 QList<quint32> ShowTreeController::lookMisses(const Target &target, const Look &look) const
 {
     QList<quint32> out;
-    for (quint32 id : targetFixtures(m_doc, target))
+    for (quint32 id : targetFixtures(target))
         if (!lookReachesFixture(m_doc, m_doc->fixture(id), look))
             out << id;
     return out;
@@ -2060,7 +2856,7 @@ QStringList ShowTreeController::lookAmbiguities(const Target &target, const Look
     if (look.key != KeyGobo || look.none || look.palettes.isEmpty())
         return out;
     QSet<QString> seen;
-    for (quint32 id : targetFixtures(m_doc, target))
+    for (quint32 id : targetFixtures(target))
     {
         const Fixture *fxi = m_doc->fixture(id);
         const QString def = QLCPalette::definitionKey(fxi);
@@ -2091,6 +2887,11 @@ QString ShowTreeController::targetLabel(const Target &target) const
         return f == nullptr ? tr("(missing function)") : f->name();
     }
     QStringList names;
+    for (quint32 set : target.sets)
+    {
+        const GroupSet *gs = groupSet(set);
+        names << (gs == nullptr ? tr("(missing set)") : gs->name);
+    }
     for (quint32 g : target.groups)
     {
         const FixtureGroup *grp = m_doc->fixtureGroup(g);
@@ -2230,10 +3031,18 @@ QString ShowTreeController::sceneSignature(const Target &target, const QList<qui
 
 QString ShowTreeController::sceneSignature(const Scene *scene) const
 {
-    Target t;
-    t.groups = scene->fixtureGroups();
-    t.fixtures = scene->fixtures();
-    return sceneSignature(t, scene->palettes());
+    ScenePlan plan;
+    plan.target.groups = scene->fixtureGroups();
+    plan.target.fixtures = scene->fixtures();
+    plan.palettes = scene->palettes();
+    plan.excluded = scene->excludedFixtures();
+    const QHash<quint32, Scene::LayoutSpan> spans = scene->layoutSpans();
+    for (auto it = spans.constBegin(); it != spans.constEnd(); ++it)
+    {
+        plan.spanGroups.insert(it.key(), it.value().groups);
+        plan.spanFixtures.insert(it.key(), it.value().fixtures);
+    }
+    return plan.signature();
 }
 
 bool ShowTreeController::isGenerated(quint32 functionId) const
@@ -2270,6 +3079,8 @@ void ShowTreeController::bake()
     QSet<quint32> keepScenes, keepCollections, keepChasers;
     m_generatedLabels.clear();
     m_lastChanged.clear();
+    m_layerScenes.clear();
+    m_spanMembers.clear();
 
     // Generated scenes are found again by what they play.
     QHash<QString, quint32> bySignature;
@@ -2287,7 +3098,7 @@ void ShowTreeController::bake()
         for (CueList &list : prod.lists)
         {
             const QString folder = QStringLiteral("%1/%2/%3").arg(kProductionsFolder, prod.name, list.name);
-            const QList<ResolvedCue> resolved = resolve(list);
+            const QList<ResolvedCue> resolved = this->resolved(list);
 
             Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(list.chaser));
             if (chaser == nullptr || !m_generatedChasers.contains(list.chaser))
@@ -2325,39 +3136,48 @@ void ShowTreeController::bake()
                                                                        cue.name);
 
                 QList<quint32> members;
-                for (const ResolvedLayer &rl : resolved.at(i).layers)
+                // Opaque functions as they are, in layer order.
+                QHash<int, quint32> opaqueAt;
+                for (int k = 0; k < resolved.at(i).layers.count(); ++k)
                 {
-                    if (rl.target.isOpaque())
-                    {
-                        const quint32 fid = rl.target.function;
-                        if (m_doc->function(fid) != nullptr && fid != chaser->id()
-                            && !members.contains(fid))
-                            members << fid;
+                    const ResolvedLayer &rl = resolved.at(i).layers.at(k);
+                    if (!rl.target.isOpaque())
                         continue;
-                    }
-                    if (rl.isDark())
-                        continue;
-
-                    QList<quint32> pals;
-                    for (quint32 pid : scenePalettes(rl))
-                        if (m_doc->palette(pid) != nullptr)
-                            pals << pid;
-                    if (pals.isEmpty())
-                        continue;
-
-                    const QString sig = sceneSignature(rl.target, pals);
+                    const quint32 fid = rl.target.function;
+                    if (m_doc->function(fid) != nullptr && fid != chaser->id())
+                        opaqueAt.insert(k, fid);
+                }
+                const QList<ScenePlan> plans = planCue(list, resolved, i, true);
+                QHash<int, quint32> sceneAt;
+                for (const ScenePlan &plan : plans)
+                {
+                    const ResolvedLayer &rl = resolved.at(i).layers.at(plan.layer);
+                    const QString sig = plan.signature();
                     const QString layerName = rl.name.isEmpty() ? targetLabel(rl.target) : rl.name;
                     quint32 sid = bySignature.value(sig, Function::invalidId());
                     Scene *scene = qobject_cast<Scene *>(m_doc->function(sid));
                     if (scene == nullptr)
                     {
                         scene = new Scene(m_doc);
-                        for (quint32 g : rl.target.groups)
+                        for (quint32 g : plan.target.groups)
                             scene->addFixtureGroup(g);
-                        for (quint32 f : rl.target.fixtures)
+                        for (quint32 f : plan.target.fixtures)
                             scene->addFixture(f);
-                        for (quint32 p : pals)
+                        for (quint32 p : plan.palettes)
                             scene->addPalette(p);
+                        // What it leaves out for a lower layer, and what it
+                        // lays out over with others: part of what it plays,
+                        // so set before it runs and never changed after.
+                        for (auto it = plan.excluded.constBegin(); it != plan.excluded.constEnd(); ++it)
+                            scene->setExcludedFixtures(it.key(), it.value());
+                        for (quint32 p : plan.palettes)
+                            if (plan.spanGroups.contains(p) || plan.spanFixtures.contains(p))
+                            {
+                                Scene::LayoutSpan span;
+                                span.groups = plan.spanGroups.value(p);
+                                span.fixtures = plan.spanFixtures.value(p);
+                                scene->setLayoutSpan(p, span);
+                            }
                         scene->setVisible(false);
                         if (!m_doc->addFunction(scene))
                         {
@@ -2380,8 +3200,24 @@ void ShowTreeController::bake()
                         m_generatedLabels.insert(sid, tr("Layer %1 in cue %2 of %3")
                                                       .arg(layerName, label, list.name));
                     }
-                    if (!members.contains(sid))
-                        members << sid;
+                    sceneAt.insert(plan.layer, sid);
+                    const QString lk = layerKey(cue.id, rl.target);
+                    m_layerScenes.insert(lk, sid);
+                    for (auto it = plan.spanMembers.constBegin(); it != plan.spanMembers.constEnd(); ++it)
+                    {
+                        QList<Target> ts;
+                        for (int m : it.value())
+                            ts << resolved.at(i).layers.at(m).target;
+                        m_spanMembers[lk].insert(it.key(), ts);
+                    }
+                }
+                // In layer order, once each.
+                for (int k = 0; k < resolved.at(i).layers.count(); ++k)
+                {
+                    const quint32 fid = opaqueAt.contains(k) ? opaqueAt.value(k)
+                                                             : sceneAt.value(k, Function::invalidId());
+                    if (fid != Function::invalidId() && !members.contains(fid))
+                        members << fid;
                 }
 
                 Collection *coll = qobject_cast<Collection *>(m_doc->function(cue.collection));
@@ -2524,7 +3360,7 @@ quint32 ShowTreeController::detachLayer(quint32 cueId, quint32 layerId)
     if (list == nullptr)
         return Function::invalidId();
     const int index = list->indexOf(cueId);
-    const QList<ResolvedCue> resolved = resolve(*list);
+    const QList<ResolvedCue> resolved = this->resolved(*list);
     const Cue *c = list->cue(cueId);
     const Layer *layer = c == nullptr ? nullptr : c->layer(layerId);
     if (layer == nullptr || layer->target.isOpaque())
@@ -2533,14 +3369,36 @@ quint32 ShowTreeController::detachLayer(quint32 cueId, quint32 layerId)
     if (rl == nullptr)
         return Function::invalidId();
 
+    // A plain copy of what it plays now (its groups, its looks -- and what
+    // it leaves out for a layer under it, so it plays the same).
     Scene *scene = new Scene(m_doc);
-    for (quint32 g : rl->target.groups)
-        scene->addFixtureGroup(g);
-    for (quint32 f : rl->target.fixtures)
-        scene->addFixture(f);
-    for (quint32 p : scenePalettes(*rl))
-        if (m_doc->palette(p) != nullptr)
+    bool planned = false;
+    for (const ScenePlan &plan : planCue(*list, resolved, index))
+    {
+        if (!(resolved.at(index).layers.at(plan.layer).target == layer->target))
+            continue;
+        for (quint32 g : plan.target.groups)
+            scene->addFixtureGroup(g);
+        for (quint32 f : plan.target.fixtures)
+            scene->addFixture(f);
+        for (quint32 p : plan.palettes)
             scene->addPalette(p);
+        for (auto it = plan.excluded.constBegin(); it != plan.excluded.constEnd(); ++it)
+            scene->setExcludedFixtures(it.key(), it.value());
+        planned = true;
+        break;
+    }
+    if (!planned)
+    {
+        const Target t = expandTarget(rl->target);
+        for (quint32 g : t.groups)
+            scene->addFixtureGroup(g);
+        for (quint32 f : t.fixtures)
+            scene->addFixture(f);
+        for (quint32 p : scenePalettes(*rl))
+            if (m_doc->palette(p) != nullptr)
+                scene->addPalette(p);
+    }
     scene->setName(QStringLiteral("%1 · %2").arg(cueLabel(*list, index),
                                                       layer->name.isEmpty() ? targetLabel(layer->target)
                                                                             : layer->name));
@@ -2605,19 +3463,14 @@ bool ShowTreeController::generatedNode(quint32 functionId, quint32 *listId, quin
             if (scene == nullptr)
                 continue;
             // A layer's scene: where it is a layer of the cue's own first.
-            const QList<ResolvedCue> resolved = resolve(l);
+            const QList<ResolvedCue> rcs = resolved(l);
             quint32 firstCue = invalidId();
-            for (int i = 0; i < resolved.count() && i < l.cues.count(); ++i)
-                for (const ResolvedLayer &rl : resolved.at(i).layers)
+            for (int i = 0; i < rcs.count() && i < l.cues.count(); ++i)
+                for (const ScenePlan &plan : planCue(l, rcs, i))
                 {
-                    if (rl.target.isOpaque() || rl.isDark())
+                    if (plan.signature() != sig)
                         continue;
-                    QList<quint32> pals;
-                    for (quint32 pid : scenePalettes(rl))
-                        if (m_doc->palette(pid) != nullptr)
-                            pals << pid;
-                    if (sceneSignature(rl.target, pals) != sig)
-                        continue;
+                    const ResolvedLayer &rl = rcs.at(i).layers.at(plan.layer);
                     if (firstCue == invalidId())
                         firstCue = l.cues.at(i).id;
                     if (rl.own && l.cues.at(i).layer(rl.layerId) != nullptr)
@@ -2912,7 +3765,7 @@ ShowTreeController::ImportReport ShowTreeController::importChaser(quint32 chaser
         for (quint32 inc : cue.includes)
         {
             CueList single = list;
-            const QList<ResolvedCue> r = resolve(single);
+            const QList<ResolvedCue> r = resolved(single);
             const int j = list.indexOf(inc);
             if (j < 0)
                 continue;
@@ -2940,6 +3793,47 @@ ShowTreeController::ImportReport ShowTreeController::importChaser(quint32 chaser
                                           "the last one's value for each attribute.")
                                        .arg(cueLabel(list, i), targetLabel(targets.value(sig)),
                                             sources.value(sig).join(tr(" and ")));
+    }
+
+    // Two scenes on fixtures in common (different targets) setting the same
+    // attribute: the chaser ran both, highest-wins on intensity and RGB.
+    // The tree would let the lower one win (§2); the imported cue mixes
+    // instead, so it plays as it did (the cue page's Overlap says so).
+    {
+        const QList<ResolvedCue> r = resolved(list);
+        for (int i = 0; i < list.cues.count() && i < r.count(); ++i)
+        {
+            const QList<ResolvedLayer> &ls = r.at(i).layers;
+            QStringList clash;
+            for (int a = 0; a < ls.count() && clash.isEmpty(); ++a)
+                for (int b = a + 1; b < ls.count() && clash.isEmpty(); ++b)
+                {
+                    const ResolvedLayer &la = ls.at(a), &lb = ls.at(b);
+                    if (la.target.isOpaque() || lb.target.isOpaque() || la.target == lb.target)
+                        continue;
+                    const QList<quint32> fa = targetFixtures(la.target), fb = targetFixtures(lb.target);
+                    bool common = false;
+                    for (quint32 f : fa)
+                        if (fb.contains(f))
+                            common = true;
+                    if (!common)
+                        continue;
+                    QStringList keys;
+                    for (const Look &l : la.playedLooks())
+                        if (lb.values.contains(l.key) && !lb.values.value(l.key).look.none)
+                            keys << keyLabel(l.key);
+                    if (!keys.isEmpty())
+                        clash << tr("Cue %1: %2 and %3 share fixtures and both set %4; they mix "
+                                    "as the chaser did (Overlap: Mix on the cue page).")
+                                 .arg(cueLabel(list, i), targetLabel(la.target), targetLabel(lb.target),
+                                      keys.join(QStringLiteral(", ")));
+                }
+            if (!clash.isEmpty())
+            {
+                list.cues[i].mixOverlap = true;
+                report.notes << clash;
+            }
+        }
     }
 
     // The generated chaser starts as a copy, so it plays the way the
@@ -2986,6 +3880,8 @@ void ShowTreeController::saveState(QXmlStreamWriter *doc, bool snapshot) const
     doc->writeStartElement(KXMLQLCShowTree);
     doc->writeAttribute(KXMLShowTreeNextId, QString::number(m_nextId));
 
+    for (const GroupSet &gs : m_groupSets)
+        ShowTree::saveXML(doc, gs);
     for (const Production &p : m_productions)
         ShowTree::saveXML(doc, p);
 
@@ -3056,6 +3952,7 @@ void ShowTreeController::saveState(QXmlStreamWriter *doc, bool snapshot) const
 void ShowTreeController::loadState(QXmlStreamReader &root, bool snapshot)
 {
     m_productions.clear();
+    m_groupSets.clear();
     const quint32 next = root.attributes().value(KXMLShowTreeNextId).toString().toUInt();
     if (next > m_nextId || !snapshot)
         m_nextId = qMax<quint32>(next, 1);
@@ -3067,6 +3964,12 @@ void ShowTreeController::loadState(QXmlStreamReader &root, bool snapshot)
             Production p;
             if (ShowTree::loadXML(root, p))
                 m_productions << p;
+        }
+        else if (root.name() == QLatin1String("GroupSet"))
+        {
+            GroupSet gs;
+            if (ShowTree::loadXML(root, gs))
+                m_groupSets << gs;
         }
         else if (root.name() == KXMLShowTreeGenerated && !snapshot)
         {
@@ -3195,6 +4098,8 @@ void ShowTreeController::loadState(QXmlStreamReader &root, bool snapshot)
     }
 
     // Ids above anything in the tree, whatever the file said.
+    for (const GroupSet &gs : m_groupSets)
+        m_nextId = qMax(m_nextId, gs.id + 1);
     for (const Production &p : m_productions)
     {
         m_nextId = qMax(m_nextId, p.id + 1);
@@ -3227,7 +4132,7 @@ bool ShowTreeController::loadXML(QXmlStreamReader &root)
 void ShowTreeController::saveXML(QXmlStreamWriter *doc) const
 {
     if (m_productions.isEmpty() && m_generatedScenes.isEmpty() && m_generatedCollections.isEmpty()
-        && m_generatedChasers.isEmpty() && m_inlinePalettes.isEmpty())
+        && m_generatedChasers.isEmpty() && m_inlinePalettes.isEmpty() && m_groupSets.isEmpty())
         return;     // a show without a tree saves as it always did
     saveState(doc, false);
 }
@@ -3239,10 +4144,13 @@ void ShowTreeController::reset()
     stopPreview();
     m_sweepTimer->stop();     // nothing of the old show is left to sweep
     m_productions.clear();
+    m_groupSets.clear();
     m_generatedScenes.clear();
     m_generatedCollections.clear();
     m_generatedChasers.clear();
     m_inlinePalettes.clear();
+    m_layerScenes.clear();
+    m_spanMembers.clear();
     m_madeReusable.clear();
     m_detached.clear();
     m_generatedLabels.clear();
