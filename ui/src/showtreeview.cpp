@@ -1121,6 +1121,32 @@ void ShowTreeView::attributeMenu(quint32 cueId, quint32 layerId, const QString &
                 setOneOffColour(cueId, layerId, c);
         });
     }
+    if (isEffectKey(key) && key != QLatin1String("Effect."))
+    {
+        // The effect's own Colour/Dimmer (inside that effect only, §2).
+        QMenu *own = menu.addMenu(tr("Its own colour / dimmer"));
+        QList<QLCPalette *> owners;
+        for (QLCPalette *p : m_doc->palettes())
+            if ((p->type() == QLCPalette::Color || p->type() == QLCPalette::Dimmer)
+                && !m_st->isInlinePalette(p->id()))
+                owners << p;
+        std::sort(owners.begin(), owners.end(), [](const QLCPalette *a, const QLCPalette *b) {
+            if (a->type() != b->type())
+                return a->type() == QLCPalette::Color;
+            return a->name().compare(b->name(), Qt::CaseInsensitive) < 0;
+        });
+        for (QLCPalette *p : owners)
+        {
+            const quint32 pid = p->id();
+            own->addAction(p->name(), this, [this, cueId, layerId, key, pid]() {
+                setEffectOwn(cueId, layerId, key, { pid });
+            });
+        }
+        own->addSeparator();
+        own->addAction(tr("None of its own"), this, [this, cueId, layerId, key]() {
+            setEffectOwn(cueId, layerId, key, {});
+        });
+    }
     if (key != QLatin1String("Effect."))
     {
         menu.addSeparator();
@@ -1471,6 +1497,40 @@ bool ShowTreeView::setOneOffColour(quint32 cueId, quint32 layerId, const QColor 
                                   : m_st->setLayerLook(cueId, layerId, m_st->lookForPalette(pid));
 }
 
+bool ShowTreeView::setEffectOwn(quint32 cueId, quint32 layerId, const QString &key,
+                                const QList<quint32> &palettes)
+{
+    const Cue *cue = m_st->cue(cueId);
+    if (cue == nullptr)
+        return false;
+    const Look *have = nullptr;
+    if (layerId == invalidId())
+        have = cue->look(key);
+    else if (const Layer *l = cue->layer(layerId))
+        have = l->look(key);
+    if (have == nullptr || have->none)
+    {
+        // Set where it is inherited from: copy the effect here first.
+        const CueList *list = m_st->listOfCue(cueId);
+        const QList<ResolvedCue> r = resolve(*list);
+        const ResolvedLayer *rl = nullptr;
+        if (layerId != invalidId())
+            rl = r.at(list->indexOf(cueId)).layer(cue->layer(layerId)->target);
+        if (rl == nullptr || !rl->values.contains(key))
+            return false;
+        Look l = rl->values.value(key).look;
+        l.own = palettes;
+        for (quint32 p : palettes)
+            noteRecent(LibPalette, p);
+        return m_st->setLayerLook(cueId, layerId, l);
+    }
+    Look l = *have;
+    l.own = palettes;
+    for (quint32 p : palettes)
+        noteRecent(LibPalette, p);
+    return layerId == invalidId() ? m_st->setCueLook(cueId, l) : m_st->setLayerLook(cueId, layerId, l);
+}
+
 bool ShowTreeView::clearAttribute(quint32 cueId, quint32 layerId, const QString &key)
 {
     Look l;
@@ -1532,6 +1592,22 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
                     });
                 }
             }
+        }
+        if (kind == CueNode)
+        {
+            const quint32 cueId = item->data(0, IdRole).toUInt();
+            const CueList *list = m_st->listOfCue(cueId);
+            const int at = list == nullptr ? -1 : list->indexOf(cueId);
+            QAction *up = menu.addAction(tr("Move up"), this, [this, cueId, at]() {
+                m_st->moveCue(cueId, at - 1);
+                selectNode(cueId);
+            });
+            up->setEnabled(at > 0);
+            QAction *down = menu.addAction(tr("Move down"), this, [this, cueId, at]() {
+                m_st->moveCue(cueId, at + 1);
+                selectNode(cueId);
+            });
+            down->setEnabled(list != nullptr && at + 1 < list->cues.count());
         }
         if (kind == LayerNode)
         {

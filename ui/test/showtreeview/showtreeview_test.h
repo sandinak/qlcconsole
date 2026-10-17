@@ -47,6 +47,7 @@ private slots:
     void importingAChaserSelectsTheNewList();
     void inlinePalettesStayOutOfThePaletteTree();
     void dropsOnTheTreeWidget();
+    void anEffectGetsLooksOfItsOwn();
     void pictureOfARealShow();
 
 private:

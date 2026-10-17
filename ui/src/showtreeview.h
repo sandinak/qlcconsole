@@ -119,6 +119,9 @@ public:
     /** Clear an attribute on the layer/cue (it inherits again), or set it
      *  None (off here). */
     bool clearAttribute(quint32 cueId, quint32 layerId, const QString &key);
+    /** An effect's own Colour/Dimmer looks (they apply inside it only). */
+    bool setEffectOwn(quint32 cueId, quint32 layerId, const QString &effectKey,
+                      const QList<quint32> &palettes);
     bool setAttributeNone(quint32 cueId, quint32 layerId, const QString &key);
 
     /** The attribute rows the inspector shows for the selected layer, as

@@ -508,6 +508,43 @@ void ShowTreeView_Test::dropsOnTheTreeWidget()
     delete mime;
 }
 
+void ShowTreeView_Test::anEffectGetsLooksOfItsOwn()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    const quint32 red = colour(Qt::red, "Red");
+    const quint32 blue = colour(Qt::blue, "Blue");
+    QLCPalette *fx = new QLCPalette(QLCPalette::Effect, m_doc);
+    fx->setName("Confetti");
+    m_doc->addPalette(fx);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(list, -1, "One");
+    Target t;
+    t.groups << towers->id();
+    const quint32 l1 = st->addLayer(c1, t);
+
+    ShowTreeView view(nullptr, m_doc);
+    QVERIFY(view.dropPalettes(c1, l1, { blue, fx->id() }));
+    const QString key = st->keyForPalette(fx->id());
+    QVERIFY(isEffectKey(key));
+    QVERIFY(view.setEffectOwn(c1, l1, key, { red }));
+
+    // The scene plays the base, then the effect with its own Red.
+    const Collection *coll = qobject_cast<Collection *>(m_doc->function(st->cue(c1)->collection));
+    const Scene *scene = qobject_cast<Scene *>(m_doc->function(coll->functions().first()));
+    QCOMPARE(scene->palettes(), QList<quint32>({ blue, fx->id(), red }));
+    QVERIFY(QLCPalette::isEffectScoped(m_doc, scene->palettes(), red));
+    QVERIFY(view.selectNode(l1, c1));
+    QVERIFY(rowFor(view.attributeRows(), keyLabel(key)).contains("Confetti in Red"));
+
+    // Move a cue: the list's order and its chaser follow.
+    const quint32 c2 = st->addCue(list, 0, "Two");
+    QVERIFY(st->moveCue(c2, 0));
+    QCOMPARE(st->cueList(list)->cues.first().id, c2);
+    const Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(list)->chaser));
+    QCOMPARE(chaser->steps().first().fid, st->cue(c2)->collection);
+}
+
 /* QLC_SHOWTREE_SHOW=<a COPY of a show> QLC_SHOWTREE_SHOT=<png>: load it,
    import its first chaser and picture the tab -- a look at the real thing,
    offscreen. Skipped without the variables. */

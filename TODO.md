@@ -40,6 +40,30 @@ On `release/0.1.0`. Universal (Apple silicon + Intel), macOS 12+.
   work), on the office rig with kronk.
 - Then: merge `release/0.1.0` to main, `./release.sh`.
 
+## Show Tree (feat/show-tree, P1 built 2026-10-16 overnight — not merged)
+
+[SHOW_TREE_DESIGN.md](SHOW_TREE_DESIGN.md) (D1–D27 approved; §10 has the
+implementation notes and the questions below). Built: the hand-over fix,
+the engine model / cascade / bake / undo / import, the Show Tree tab and its
+help (DONE.md 2026-10-16). Handoff: SHOW_TREE_OVERNIGHT.md.
+
+- **Open for Branson** (§10): `Generated` mark on `<Function>` too?; an edit
+  to the cue on stage — show it at once or on its next GO (built: next GO)?;
+  undo shared with Programming?; gobo mapping (manual map + name match) and
+  an effect's own Gobo; DanceHysteria's Hold-0 cues 0.0.4–0.0.7 auto-follow —
+  intended?
+- **Left of P1:** gobo palettes by name per fixture definition (§3A, 10.7);
+  the Look Editor docked under the tree (palette values are edited in
+  Programming for now); drag a cue to reorder (Move up/down in its menu
+  for now); redo of an import keeps default chaser settings (10.5).
+- **Try on the rig:** GO through an imported list with effects running (the
+  hand-over keeps a shared scene's effect phase — tested on engine signals,
+  not seen on stage).
+- **P2 next:** the cascade already does tracking, Block/Cue-only, Release
+  to the base cue and includes; P2 is mostly showing them (origin marks are
+  in, "Next cue receives" is in), "Update cue X" for tracked values, Library
+  "In this cue list", the command line (D24).
+
 ## Needs the real rig / hardware
 
 - **Re-check the Oppsk wall-washer readings (2026-10-16)** — the 24 bars in

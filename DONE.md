@@ -6,6 +6,38 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-16 — Show Tree P1: one tree for a show *(on feat/show-tree, not merged)*
+
+[SHOW_TREE_DESIGN.md](SHOW_TREE_DESIGN.md) (§10: implementation notes).
+Production → Cue list → Cue → Layer → looks; the scenes, collections and
+chaser that play it are generated. Handoff: SHOW_TREE_OVERNIGHT.md.
+
+- **Hand-over (engine)** — a Scene two consecutive cues share keeps running
+  on GO / Back / a jump / auto-follow, and a cue that is a collection of the
+  one before no longer re-fades it: `ChaserRunner` stops a leaving
+  Collection a tick later when it shares a member with the new one;
+  `Collection` gives back its intensity override to a member that runs on.
+  Tests: `engine/test/cuehandover`.
+- **Engine** — `ShowTree` model + `resolve()` (the §2 cascade: tracking,
+  Block / Cue-only, Release to the base cue, includes, per-attribute keys
+  incl. Beam's Gobo / Zoom / Focus, effects with their own looks, None),
+  D23 numbering; `ShowTreeController` (`Doc::showTree()`): edits as undo
+  steps, deterministic bake into a Chaser / Collections / shared hidden
+  Scenes, unused ones dropped (never while running), inline palettes, Make
+  reusable, "applies to N of M", Detach, **Import chaser as cue list**.
+  `<ShowTree>` in `<Engine>`, only when there is one. Tests:
+  `engine/test/showtree` (the §3 examples as tables; an imported list plays
+  exactly as its chaser; `QLC_SHOWTREE_IMPORT=` dry-runs a real show — 0
+  channels differ on DanceHysteria-0.5).
+- **UI** — the **Show Tree** tab beside Programming (⇧⌘6): tree with
+  tracked/included layers greyed, cue and layer inspectors (one row per
+  attribute, inherited values with their source), Library (Recent / Pinned
+  / All), drops with hints, one-off values, undo. Help: show-tree.md.
+  Tests: `ui/test/showtreeview` (+ `QLC_SHOWTREE_SHOW`/`_SHOT` pictures a
+  real show offscreen).
+- Not yet: gobo name mapping, the docked Look Editor, drag-to-reorder cues
+  (TODO.md). Not tried on the rig.
+
 ### 2026-10-16 — A look's Speed and Spread survive picking an effect; Speed Masters window closes cleanly *(fix/speedmaster-dblclick-reset)*
 
 Branson: "when I set something on the speed masters .. and then double click
