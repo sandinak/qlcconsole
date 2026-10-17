@@ -767,6 +767,10 @@ the end.
   the bake only renames scenes, edits Collection member lists and Chaser steps
   (in place with `replaceStep`, so a running list keeps its step) under their
   own locks.
+- **The hand-over reads Collection members on the DMX thread**
+  (`ChaserRunner::sharesMembers`), so `Collection::components()` and
+  `contains()` now read the member list under its lock (a copy), as
+  `functions()` already did.
 - **Orphans** (scenes, collections, chasers nothing uses any more) are deleted
   only when not running; a running one is left for a later bake, so an edit
   never pulls a look out from under the show (tested).

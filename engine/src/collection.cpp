@@ -255,7 +255,9 @@ bool Collection::contains(quint32 functionId) const
     Doc* doc = qobject_cast <Doc*> (parent());
     Q_ASSERT(doc != NULL);
 
-    foreach (quint32 fid, m_functions)
+    // Walk a copy taken under the lock (see components()); not holding it
+    // while looking inside the members.
+    foreach (quint32 fid, components())
     {
         Function* function = doc->function(fid);
         // contains() can be called during init, function may be NULL
@@ -273,6 +275,9 @@ bool Collection::contains(quint32 functionId) const
 
 QList<quint32> Collection::components() const
 {
+    // A copy under the lock: the cue-list runner reads it on the DMX thread
+    // (the hand-over) while the Show Tree may be re-baking the members.
+    QMutexLocker locker(&m_functionListMutex);
     return m_functions;
 }
 
