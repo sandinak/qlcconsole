@@ -359,3 +359,61 @@ cp ~/git/qlcconsole/test-workspaces/DanceHysteria-0.5.qlcc /tmp/dh-p2a.qlcc
 
 `Generated` on `<Function>`; undo shared with Programming; an effect's own
 Gobo; DanceHysteria Hold-0; Blind (to discuss).
+
+## Drop on the page (2026-10-17)
+
+Branson's report ("drag to the main window and it adds layers; how do I add
+to the same layer"), two added items (command line always open, Tab for
+every word) and a priority bug (truss bars not blue on the Rig Overview).
+On `feat/show-tree`, pushed, **not merged**.
+
+| Commit | What |
+|---|---|
+| d8664080a | **Rig Overview bug** — see below. `fixturevisualtraits.cpp` + monitor_test and showtreeview_test regressions |
+| f23a1eb6a | **Drop on the page**: the cue page takes every drop the tree does — groups / fixtures on the page = one new layer (⌥ one each, now one undo step), onto a layer's row = added to it, onto a grey carried-in row = brought into the cue with them (one undo step, values kept), palettes = cue look / that row's look, functions = opaque layer. Real rows (click opens the layer), dashed drop area, page / row lights up, the tree's hint text; the cue stays selected. Layer page: hint + multi-group drops; tree: drops on carried-in rows. One `dropMime()` for all three. **Command line** always at the bottom (toggle gone), ClickFocus, **:** in the tree jumps there (⌘L is Show Lock), Esc back. **Tab** completes from a parse of the line: keywords, cue numbers, lists, groups + folder paths, fixtures, attributes, palettes by kind (+ none/off/clear), functions, modes, record choices; shared part + options, Tab again cycles; names with spaces whole, begun quotes closed, `,`/`+` names quoted. Grammar: fixtures and `Movers/Front/Spots` as targets, `function A, B`, `list X` selects an existing list. Help: Adding layers, command line, shortcuts, what's new |
+
+**The truss-bar bug, root cause.** Not the Show Tree: on a copy of
+Branson's own file (`/tmp/dh-showtree.qlcc`, the XL-450 bars loaded from
+its embedded definitions), the cue's layer on TrussC-RGB + T TrussW-RGB with
+Blue + Base (48 = 19%) was previewed (Design) and every head of all 8 bars
+went out (0, 1, 48) in universes 4/6 — blue at 19%, correct: the bars have
+no dimmer channel, so the Dimmer look scales their colour. The **Rig
+Overview** read it as colour (0,1,48) *and*, with no dimmer channel, a level
+of max(R,G,B) = 48, then drew colour × level = 9/255: black. Any dimmed RGB
+fixture without a dimmer channel showed it; at full it looked fine. Fixed in
+`channelSetLiveState()`: with no dimmer channel the colour comes back at full
+hue and the level once. Fixtures with a dimmer channel unchanged; all 287
+monitor tests unchanged. One group or two made no difference; in Operate the
+preview doesn't run and the header says *"Live: editing is blind"*, never
+"On the rig".
+
+- **Tests:** showtreeview_test +3 (`dropsOnTheCuePage`,
+  `dropsOnTheLayerPage`, `aDimmedColourOnPixelBarsReachesTheUniverse`) and
+  the command-line test (bottom, focus, `:`/Esc, cycling); showtree_test
+  `commandLineCompletesEveryWord` (44-row table, every word kind) +
+  `commandLineTabCyclesAndRuns`; monitor_test dimmed pixel-bar check;
+  helpbrowser_test green.
+- **Gate** (`./check-all.sh`, JOBS=6, `git archive` copy of f23a1eb6a in
+  the scratchpad): Qt6 **PASS** (427 s), Qt6-Release **PASS** (420 s),
+  Qt6-Werror **PASS** (407 s); 1254 s; 87 engine + 56 UI test programs.
+- **Crash reports:** none from tests. One new
+  `qlcconsole-2026-10-17-153638.ips` is Branson's own app session (launched
+  15:16, crashed 15:36): a mouse press in the Rig Overview
+  (`StructureStudioView::mousePressEvent` → `setCursor(Qt::ClosedHandCursor)`)
+  died inside Qt's Cocoa cursor code (`QImage::toCGImage` → `CGImageCreate`,
+  bad colour space) — Qt / macOS, not ours; worth watching if it repeats.
+
+### What to try in the app (on a COPY of a show)
+
+```sh
+cp ~/git/qlcconsole/test-workspaces/DanceHysteria-0.5.qlcc /tmp/dh-drop.qlcc
+~/git/qlcconsole-showtree/build/main/qlcconsole -o /tmp/dh-drop.qlcc
+```
+
+1. Select a cue; drag two groups from the Library onto the dashed area in
+   the middle: one layer (⌥: one each). Drag another group onto that
+   layer's row: it joins. Drag one onto a grey ⤳ row: it comes into the cue.
+2. Open the Rig Overview (⇧⌘R), Live on: a layer of RGB bars at Blue with a
+   low Dimmer now shows dim blue (it drew black).
+3. Command line at the bottom: press **:** in the tree, type `Tow`⇥,
+   `col`⇥, `B`⇥⇥⇥ (cycles), `function Ha`⇥, `list 0`⇥.
