@@ -201,6 +201,12 @@ public:
     /** Undo the rig's last change -- a move, a dialog's edit, a patch. */
     void undo();
 
+    /** A new curtain fixture (Generic > Stage Curtain, unpatched until it is
+     *  given an address) to drive the curtain @p sid, linked to it: a main
+     *  drape opens and flies, a traveler opens. Null if it is not a curtain
+     *  or the definition is missing. */
+    Fixture *addCurtainFixture(quint32 sid);
+
 protected:
     /** Create a new MonitorFixture* and append it to the layout */
     void createMonitorFixture(Fixture* fxi);

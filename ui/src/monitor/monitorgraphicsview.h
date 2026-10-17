@@ -33,6 +33,7 @@
 #include <QVector3D>
 
 #include "fixture.h"
+#include "scenery.h"
 #include "function.h"
 
 class MonitorProperties;
@@ -387,6 +388,15 @@ public:
     void updateHangers();
 
     /** Rebuild the platform overlay items from MonitorProperties. */
+    /** Where a piece of scenery is drawn: a curtain driven by a fixture
+     *  where its channels put it, anything else as it stands. */
+    Scenery::Pose sceneryPose(const Scenery *sc) const;
+    /** Redraw one piece of scenery where it now is (its curtain moved). */
+    void refreshScenery(quint32 sceneryId);
+    /** Its outline in the current point of view: one polygon per stretch it
+     *  hangs in; @p flown says whether it is out of sight. */
+    QList<QPolygonF> sceneryParts(const Scenery *sc, const Scenery::Pose &pose, bool *flown) const;
+
     void updatePlatforms();
 
     /** Rebuild the power-source markers from the power-distribution model. */

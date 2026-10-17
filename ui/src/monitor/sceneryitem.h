@@ -19,9 +19,10 @@
 #include <QPolygonF>
 #include <QObject>
 
+#include "scenery.h"
+
 class QGraphicsTextItem;
 class QGraphicsSceneMouseEvent;
-class Scenery;
 class Doc;
 
 /** \addtogroup ui_mon DMX Monitor
@@ -52,6 +53,18 @@ public:
     void setMovable(bool movable);
     void showLabel(bool visible);
 
+    /** Out of sight (flown): drawn dashed where it hangs from. */
+    void setFlown(bool flown) { m_flown = flown; update(); }
+    bool isFlown() const { return m_flown; }
+
+    /** Its outline again, a curtain having moved: @p anchor and @p parts in
+     *  scene coordinates as for the constructor, @p pose where the curtain is. */
+    void setParts(const QPointF &anchor, const QList<QPolygonF> &parts, bool flown,
+                  const Scenery::Pose &pose);
+    QList<QPolygonF> parts() const { return m_parts; }
+    bool hasPose() const { return m_hasPose; }
+    Scenery::Pose pose() const { return m_pose; }
+
     QRectF boundingRect() const override;
     QPainterPath shape() const override;
     void   paint(QPainter *painter, const QStyleOptionGraphicsItem *option,
@@ -72,6 +85,10 @@ private:
     bool               m_elevation;
     QGraphicsTextItem *m_label;
     bool               m_dragMoved = false;
+    bool               m_flown = false;
+    bool               m_hasPose = false;
+    Scenery::Pose      m_pose;
+    void placeLabel();
 };
 
 /** @} */

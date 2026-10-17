@@ -22,6 +22,11 @@
 #include <QXmlStreamWriter>
 
 #include "monitorproperties.h"
+#include "powerdistribution.h"
+#include "qlcfixturedef.h"
+#include "qlcfixturemode.h"
+#include "qlcchannel.h"
+#include "fixture.h"
 #include "scenery.h"
 #include "doc.h"
 
@@ -300,6 +305,216 @@ void Scenery_Test::xmlRoundTripAndStorage()
     props->removeScenery(a->id());
     QCOMPARE(props->sceneries().size(), 1);
     QVERIFY(props->scenery(a->id()) == nullptr);
+}
+
+/* A 10 m main drape across the stage at y = 0.5, opening 8 m. */
+static void drape(Scenery &s)
+{
+    cyc(s);
+    s.setKind(Scenery::MainDrape);
+    s.setOpeningWidth(8.0f);
+}
+
+void Scenery_Test::aDrivenCurtainOpensAsItsChannelMoves()
+{
+    Scenery s(0);
+    drape(s);
+    Scenery::Pose pose;
+    // Closed: one sheet, all the way across -- as the fixed Closed state is.
+    QCOMPARE(s.spans(pose), s.spans());
+    QCOMPARE(s.spans(pose).size(), 1);
+    // Fully open: exactly as the fixed Open state draws it.
+    pose.open = 1.0;
+    s.setState(Scenery::Open);
+    QCOMPARE(s.spans(pose), s.spans());
+    QCOMPARE(s.spans(pose).size(), 2);
+    QVERIFY(near(s.spans(pose).at(1).first, 0.8));          // 8 m of 10 m: the halves at +-0.8
+    s.setState(Scenery::Closed);
+    // On the way: the halves part from the middle, as far as the channel says.
+    double last = -1.0;
+    for (int v = 1; v <= 255; v += 26)
+    {
+        pose.open = v / 255.0;
+        const QList<QPair<double, double> > sp = s.spans(pose);
+        QCOMPARE(sp.size(), 2);
+        QVERIFY(near(sp.at(0).second, -sp.at(1).first));     // centred
+        QVERIFY(near(sp.at(1).first, 0.8 * pose.open));
+        QVERIFY(sp.at(1).first > last);                       // opening as it rises
+        last = sp.at(1).first;
+    }
+    // Half open: a beam through the middle passes, one 3 m off centre is stopped.
+    pose.open = 0.5;
+    double t = 0.0;
+    QVERIFY(!s.rayHit(QVector3D(6.0f, 5.5f, 3.0f), QVector3D(0.0f, -1.0f, 0.0f), t, 1e9, 16, nullptr, &pose));
+    QVERIFY(s.rayHit(QVector3D(9.0f, 5.5f, 3.0f), QVector3D(0.0f, -1.0f, 0.0f), t, 1e9, 16, nullptr, &pose));
+    pose.open = 1.0;
+    QVERIFY(!s.rayHit(QVector3D(9.0f, 5.5f, 3.0f), QVector3D(0.0f, -1.0f, 0.0f), t, 1e9, 16, nullptr, &pose));
+    // Not a curtain: a pose changes nothing.
+    s.setKind(Scenery::Cyclorama);
+    QCOMPARE(s.spans(pose).size(), 1);
+}
+
+void Scenery_Test::flyingTakesItUpAndOut()
+{
+    Scenery s(0);
+    drape(s);
+    Scenery::Pose pose;
+    pose.fly = 0.5;
+    QList<Scenery::Piece> pc = s.pieces(pose);
+    QCOMPARE(pc.size(), 1);
+    QVERIFY(near(pc.first().z0, 3.0) && near(pc.first().z1, 9.0));   // half its 6 m up
+    double t = 0.0;
+    // Under it now: a level beam at 2 m goes through where it hung.
+    QVERIFY(!s.rayHit(QVector3D(6.0f, 5.5f, 2.0f), QVector3D(0.0f, -1.0f, 0.0f), t, 1e9, 16, nullptr, &pose));
+    pose.fly = 1.0;
+    QVERIFY(s.pieces(pose).isEmpty());
+    s.setState(Scenery::Flown);
+    QCOMPARE(s.staticPose().fly, 1.0);
+    QVERIFY(s.pieces().isEmpty());
+}
+
+static QLCFixtureDef *curtainDef()
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    const QString path = QFileInfo(QStringLiteral(__FILE__)).dir().absoluteFilePath(
+        QStringLiteral("../../../resources/fixtures/Generic/Generic-Stage-Curtain.qxf"));
+    if (def->loadXML(path) != QFile::NoError)
+    {
+        delete def;
+        return nullptr;
+    }
+    return def;
+}
+
+void Scenery_Test::theChannelsAreFoundByName()
+{
+    QLCFixtureDef *def = curtainDef();
+    QVERIFY(def != nullptr);
+    QLCFixtureMode *open = def->mode("Open");
+    QLCFixtureMode *fine = def->mode("Open 16-bit + Fly");
+    QLCFixtureMode *fly = def->mode("Open + Fly");
+    QVERIFY(open && fine && fly);
+    QCOMPARE(Scenery::curtainChannel(open, Scenery::OpenChannel), 0);
+    QCOMPARE(Scenery::curtainChannel(open, Scenery::FlyChannel), -1);
+    QCOMPARE(Scenery::curtainChannel(fine, Scenery::OpenFineChannel), 1);
+    QCOMPARE(Scenery::curtainChannel(fine, Scenery::FlyChannel), 2);
+    QCOMPARE(Scenery::curtainChannel(fly, Scenery::FlyChannel), 1);
+
+    QByteArray v(1, char(0));
+    QCOMPARE(Scenery::poseFromValues(open, v).open, 0.0);
+    v[0] = char(255);
+    QCOMPARE(Scenery::poseFromValues(open, v).open, 1.0);
+    v[0] = char(51);
+    QVERIFY(near(Scenery::poseFromValues(open, v).open, 0.2));
+    QByteArray w(3, char(0));
+    w[0] = char(128); w[1] = char(0); w[2] = char(255);
+    const Scenery::Pose p = Scenery::poseFromValues(fine, w);
+    QVERIFY(near(p.open, 32768.0 / 65535.0, 1e-6));
+    QCOMPARE(p.fly, 1.0);
+    // Values that are not there (a fixture not yet written) are closed and in.
+    QCOMPARE(Scenery::poseFromValues(fine, QByteArray()).open, 0.0);
+    delete def;
+}
+
+void Scenery_Test::theBundledCurtainIsNotALight()
+{
+    Doc doc(this);
+    QLCFixtureDef *def = curtainDef();
+    QVERIFY(def != nullptr);
+    QVERIFY(doc.fixtureDefCache()->addFixtureDef(def));
+    QVERIFY(!def->modes().first()->physical().emitsLight());
+    QCOMPARE(def->modes().first()->physical().powerConsumption(), 0);
+
+    Fixture *curtain = new Fixture(&doc);
+    curtain->setFixtureDefinition(def, def->mode("Open + Fly"));
+    curtain->setPatched(false);
+    QVERIFY(doc.addFixture(curtain));
+    QVERIFY(Scenery::isCurtainFixture(curtain));
+
+    // No load, and not a light whose power is unknown either.
+    int fuzzy = -1;
+    QCOMPARE(doc.totalPowerConsumption(fuzzy), 0);
+    QCOMPARE(fuzzy, 0);
+    QCOMPARE(PowerEstimator::fixtureFullWatts(curtain), 0.0);
+    QCOMPARE(PowerEstimator::basis(curtain), PowerEstimator::NoLoad);
+    QVERIFY(PowerEstimator::byType(&doc, QHash<quint32, double>(), QHash<quint32, double>()).isEmpty());
+
+    // A show with a drape linked to it: saved and opened again, still linked.
+    Scenery *sc = doc.monitorProperties()->addScenery();
+    drape(*sc);
+    sc->setDriverFixture(curtain->id());
+    QByteArray ws;
+    {
+        QXmlStreamWriter ww(&ws);
+        ww.writeStartDocument();
+        QVERIFY(doc.saveXML(&ww));
+        ww.writeEndDocument();
+    }
+    Doc other(this);
+    QLCFixtureDef *def2 = curtainDef();
+    QVERIFY(def2 != nullptr && other.fixtureDefCache()->addFixtureDef(def2));
+    QXmlStreamReader rr(ws);
+    while (rr.readNextStartElement() && rr.name() != QStringLiteral("Engine"))
+        ;
+    QVERIFY(other.loadXML(rr));
+    Scenery *back = other.monitorProperties()->scenery(sc->id());
+    QVERIFY(back != nullptr && back->isDriven());
+    QCOMPARE(back->driverFixture(), curtain->id());
+    Fixture *again = other.fixture(back->driverFixture());
+    QVERIFY(again != nullptr && Scenery::isCurtainFixture(again));
+    QVERIFY(!again->isPatched());
+    QCOMPARE(again->fixtureMode()->name(), QString("Open + Fly"));
+
+    // A dimmer is no curtain.
+    Fixture *dim = new Fixture(&doc);
+    dim->setChannels(1);
+    QVERIFY(doc.addFixture(dim));
+    QVERIFY(!Scenery::isCurtainFixture(dim));
+}
+
+void Scenery_Test::theDriverIsSavedAndOldShowsAreUndriven()
+{
+    // A drape from a show saved before curtains could be driven.
+    const QByteArray old("<Scenery ID=\"1\" Name=\"Main drape 2\" Kind=\"2\" OriginX=\"0.000\" "
+                         "OriginY=\"0.000\" Width=\"14.000\" Height=\"6.000\" State=\"Open\" "
+                         "OpeningWidth=\"12.192\" Color=\"#761622\"/>");
+    QXmlStreamReader r(old);
+    r.readNextStartElement();
+    Scenery s(0);
+    QVERIFY(s.loadXML(r));
+    QVERIFY(!s.isDriven());
+    QCOMPARE(s.driverFixture(), Scenery::invalidId());
+    QCOMPARE(s.staticPose().open, 1.0);
+    QCOMPARE(s.spans().size(), 2);
+
+    // Saved again unchanged: still no driver.
+    QByteArray buf;
+    {
+        QXmlStreamWriter w(&buf);
+        QVERIFY(s.saveXML(&w));
+    }
+    QVERIFY(!buf.contains("Fixture="));
+
+    // Driven: saved, and read back.
+    s.setDriverFixture(12);
+    QVERIFY(s.isDriven());
+    buf.clear();
+    {
+        QXmlStreamWriter w(&buf);
+        QVERIFY(s.saveXML(&w));
+    }
+    QVERIFY(buf.contains("Fixture=\"12\""));
+    QXmlStreamReader r2(buf);
+    r2.readNextStartElement();
+    Scenery back(0);
+    QVERIFY(back.loadXML(r2));
+    QCOMPARE(back.driverFixture(), quint32(12));
+    QVERIFY(back.isDriven());
+    QCOMPARE(back.state(), int(Scenery::Open));      // its fixed state is kept too
+
+    // Only a curtain is driven.
+    back.setKind(Scenery::Cyclorama);
+    QVERIFY(!back.isDriven());
 }
 
 QTEST_GUILESS_MAIN(Scenery_Test)

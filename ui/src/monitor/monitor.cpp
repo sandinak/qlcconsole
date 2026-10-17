@@ -6072,6 +6072,36 @@ void Monitor::slotEditScenery(quint32 sid)
     stateCombo->setObjectName("sceneryState");
     stateCombo->setToolTip(tr("Open: split, each half gathered at its end. Flown out: taken up, "
                               "out of the way of the light"));
+    /* Driven by a fixture: a curtain that opens as a channel moves. */
+    QList<quint32> createdCurtains;
+    QComboBox *driveCombo = new QComboBox(&dlg);
+    driveCombo->setObjectName("sceneryDriver");
+    driveCombo->setToolTip(tr("A curtain fixture that moves it: as its Open channel goes from 0 "
+                              "to 255 the curtain opens, as its Fly channel does it flies out. "
+                              "Not driven, it stays as Curtain says"));
+    auto fillDrivers = [&](quint32 select) {
+        const QSignalBlocker block(driveCombo);
+        driveCombo->clear();
+        driveCombo->addItem(tr("Nothing (stays as set)"), uint(Fixture::invalidId()));
+        foreach (Fixture *fx, m_doc->fixtures())
+            if (fx != nullptr && (Scenery::isCurtainFixture(fx) || fx->id() == select))
+                driveCombo->addItem(fx->name(), uint(fx->id()));
+        driveCombo->setCurrentIndex(qMax(0, driveCombo->findData(uint(select))));
+    };
+    fillDrivers(s->driverFixture());
+    QPushButton *newCurtainBtn = new QPushButton(tr("Add curtain fixture"), &dlg);
+    newCurtainBtn->setObjectName("sceneryAddCurtain");
+    newCurtainBtn->setToolTip(tr("Add a Generic > Stage Curtain fixture for it and drive it by that: "
+                                 "use it in scenes, chasers and cues like any fixture -- the fade "
+                                 "time is how long the move takes. Patch it to the curtain's "
+                                 "controller or relay box to move the real one"));
+    QWidget *driveRow = new QWidget(&dlg);
+    {
+        QHBoxLayout *hl = new QHBoxLayout(driveRow);
+        hl->setContentsMargins(0, 0, 0, 0);
+        hl->addWidget(driveCombo, 1);
+        hl->addWidget(newCurtainBtn);
+    }
     depthSpin->setToolTip(tr("From the open back to the front of the curve"));
     thickSpin->setToolTip(tr("How thick it is; 0 for cloth"));
     QDoubleSpinBox *rotSpin = new QDoubleSpinBox(&dlg);
@@ -6095,6 +6125,7 @@ void Monitor::slotEditScenery(quint32 sid)
     form->addRow(tr("Bow:"), bowSpin);
     form->addRow(tr("Facing:"), rotSpin);
     form->addRow(tr("Curtain:"), stateCombo);
+    form->addRow(tr("Driven by:"), driveRow);
     form->addRow(tr("Opening width:"), openWSpin);
     form->addRow(tr("Opening height:"), openHSpin);
     // Each row only where it means something for the kind.
@@ -6113,9 +6144,11 @@ void Monitor::slotEditScenery(quint32 sid)
         showRow(bowSpin, !u && !arch);
         showRow(thickSpin, built);
         const bool curtain = (k == Scenery::MainDrape || k == Scenery::Traveler);
-        showRow(openWSpin, arch || (curtain && stateCombo->currentData().toInt() == Scenery::Open));
+        const bool driven = curtain && driveCombo->currentData().toUInt() != Fixture::invalidId();
+        showRow(openWSpin, arch || (curtain && (driven || stateCombo->currentData().toInt() == Scenery::Open)));
         showRow(openHSpin, arch);
         showRow(stateCombo, k == Scenery::MainDrape || k == Scenery::Traveler);
+        showRow(driveRow, curtain);
         dlg.adjustSize();
     };
     QColor chosen = s->color();
@@ -6144,17 +6177,28 @@ void Monitor::slotEditScenery(quint32 sid)
         s->setDepth(float(depthSpin->value() * fromDisp));
         s->setThickness(built ? float(thickSpin->value() * fromDisp) : 0.0f);
         s->setState(stateCombo->currentData().toInt());
+        s->setDriverFixture(driveCombo->currentData().toUInt());
         s->setColor(chosen);
         m_graphicsView->updatePlatforms();
     };
     for (QDoubleSpinBox *sp : { xSpin, ySpin, wSpin, hSpin, bSpin, bowSpin, rotSpin, depthSpin, thickSpin,
                                 openWSpin, openHSpin })
         connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg, [&apply](double) { apply(); });
-    for (QComboBox *cb : { kindCombo, outlineCombo, stateCombo })
+    for (QComboBox *cb : { kindCombo, outlineCombo, stateCombo, driveCombo })
         connect(cb, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg, [&](int) {
             showRows();
             apply();
         });
+    connect(newCurtainBtn, &QPushButton::clicked, &dlg, [&]() {
+        apply();                // the kind it is now decides the mode
+        if (Fixture *fx = addCurtainFixture(sid))
+        {
+            createdCurtains << fx->id();
+            fillDrivers(fx->id());
+            showRows();
+            apply();
+        }
+    });
     connect(nameEdit, &QLineEdit::textChanged, &dlg, [&apply](const QString &) { apply(); });
     connect(colorBtn, &ColourSwatchButton::colourChanged, &dlg, [&](const QColor &c) {
         chosen = c;
@@ -6171,12 +6215,46 @@ void Monitor::slotEditScenery(quint32 sid)
     if (dlg.exec() != QDialog::Accepted)
     {
         edit.cancel();
+        // A curtain fixture added for it goes too.
+        foreach (quint32 fid, createdCurtains)
+            m_doc->deleteFixture(fid);
         return;
     }
     apply();
     if (m_layersPanel) m_layersPanel->reload();
     m_doc->setModified();
     edit.accept();
+}
+
+Fixture *Monitor::addCurtainFixture(quint32 sid)
+{
+    Scenery *s = m_props->scenery(sid);
+    if (s == nullptr || !s->hasState())
+        return nullptr;
+    QLCFixtureDef *def = m_doc->fixtureDefCache()->fixtureDef(QStringLiteral("Generic"),
+                                                               QStringLiteral("Stage Curtain"));
+    if (def == nullptr || def->modes().isEmpty())
+        return nullptr;
+    // A main drape opens and flies; a traveler runs on its track only.
+    QLCFixtureMode *mode = def->mode(s->kind() == Scenery::MainDrape ? QStringLiteral("Open + Fly")
+                                                                     : QStringLiteral("Open"));
+    if (mode == nullptr)
+        mode = def->modes().first();
+    Fixture *fx = new Fixture(m_doc);
+    fx->setFixtureDefinition(def, mode);
+    fx->setName(tr("%1 curtain").arg(s->name().isEmpty() ? Scenery::kindName(s->kind()) : s->name()));
+    /* Unpatched: it moves in the plot from the looks that hold it; patched to
+       the curtain's controller (or a relay box) it moves the real one. */
+    fx->setPatched(false);
+    if (!m_doc->addFixture(fx))
+    {
+        delete fx;
+        return nullptr;
+    }
+    s->setDriverFixture(fx->id());
+    m_graphicsView->updatePlatforms();
+    m_doc->setModified();
+    return fx;
 }
 
 void Monitor::slotAddTower()

@@ -409,6 +409,8 @@ private slots:
     void rotatingASelectionTurnsItAboutItsMiddle();
     void aTurnedDeckIsDrawnAndLitWhereItIs();
     void aSilkFlameRisesOnlyWhenItsRelayIsOn();
+    void aDrapeDrivenByACurtainFixtureOpensAsItsChannelMoves();
+    void cancellingTheDrapeDialogTakesItsNewCurtainAway();
     void addFountainBuildsItAsOneGroup();
     void beamsLandOnTheCycloramaInTheRigView();
     /** "set a gobo and projected on the cyc .. and it's not visible" /

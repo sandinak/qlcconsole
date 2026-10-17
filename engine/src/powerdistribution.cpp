@@ -520,6 +520,9 @@ QList<PowerEstimator::TypeLoad> PowerEstimator::byType(Doc *doc, const QHash<qui
     {
         if (fx == NULL)
             continue;
+        // Not a light (a curtain): no row in a table of what the rig draws.
+        if (fx->fixtureMode() != NULL && !fx->fixtureMode()->physical().emitsLight())
+            continue;
         const QLCFixtureDef *def = fx->fixtureDef();
         QString name = (def != NULL) ? def->manufacturer() + QLatin1Char(' ') + def->model()
                                      : fx->name();

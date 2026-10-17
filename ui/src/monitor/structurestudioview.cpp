@@ -3122,7 +3122,7 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
             }
             emitPoly(poly, dsum / 4.0, fill, seam, 0.6, p, vz);
         };
-        const QList<Scenery::Piece> pieces = sc->pieces();
+        const QList<Scenery::Piece> pieces = sc->pieces(drapePose(sc));
         const bool gathered = sc->hasState() && (pieces.size() > 1);
         foreach (const Scenery::Piece &pc, pieces)
         {
@@ -3567,6 +3567,11 @@ quint64 StructureStudioView::throwScene() const
           << sc->width() << sc->height() << sc->bottom() << sc->rotation() << sc->bow()
           << float(sc->outline()) << sc->depth() << sc->thickness() << float(sc->state())
           << sc->openingWidth() << sc->openingHeight();
+        if (sc->isDriven())
+        {
+            const Scenery::Pose pose = drapePose(sc);
+            f << float(pose.open) << float(pose.fly);
+        }
     }
     return quint64(qHashBits(f.constData(), size_t(f.size()) * sizeof(float), 0x5eed))
          ^ (quint64(f.size()) << 40);
@@ -3684,7 +3689,8 @@ double StructureStudioView::beamThrowUncached(const QVector3D &apex, const QVect
             continue;
         double t = 0.0;
         QVector3D n;
-        if (sc->rayHit(apex, dir, t, best > 0.0 ? best : MAX_THROW, 16, &n) && t > MIN_THROW)
+        const Scenery::Pose pose = drapePose(sc);
+        if (sc->rayHit(apex, dir, t, best > 0.0 ? best : MAX_THROW, 16, &n, &pose) && t > MIN_THROW)
         {
             best = t;
             normal = n;
@@ -5721,7 +5727,9 @@ QVector<QVector<QVector3D> > StructureStudioView::washOnScenery(const QVector3D 
         for (int i = 0; i < sceneries.size(); ++i)
         {
             double t = 0.0;
-            if (sceneries.at(i) != nullptr && sceneries.at(i)->rayHit(from, d, t, best, 16) && t > 0.05)
+            const Scenery::Pose pose = (sceneries.at(i) != nullptr) ? drapePose(sceneries.at(i)) : Scenery::Pose();
+            if (sceneries.at(i) != nullptr && sceneries.at(i)->rayHit(from, d, t, best, 16, nullptr, &pose)
+                && t > 0.05)
             {
                 best = t;
                 which = i;
@@ -8144,6 +8152,36 @@ QByteArray StructureStudioView::valuesForDrawing(Fixture *fx, bool *complete) co
     return m_sceneValues.value(fx->id());
 }
 
+Scenery::Pose StructureStudioView::computeDrapePose(const Scenery *sc) const
+{
+    if (sc == nullptr)
+        return Scenery::Pose();
+    if (m_liveValues && sc->isDriven() && m_doc != nullptr)
+        if (Fixture *fx = m_doc->fixture(sc->driverFixture()))
+            return Scenery::poseFromValues(fx->fixtureMode(), fx->channelValues());
+    return sc->staticPose();
+}
+
+void StructureStudioView::updateDrapePoses() const
+{
+    m_drapePoses.clear();
+    if (m_doc == nullptr)
+        return;
+    foreach (Scenery *sc, m_doc->monitorProperties()->sceneries())
+        if (sc != nullptr && sc->isDriven())
+            m_drapePoses.insert(sc->id(), computeDrapePose(sc));
+}
+
+Scenery::Pose StructureStudioView::drapePose(const Scenery *sc) const
+{
+    if (sc == nullptr)
+        return Scenery::Pose();
+    if (!sc->isDriven())
+        return sc->staticPose();
+    const auto it = m_drapePoses.constFind(sc->id());
+    return (it != m_drapePoses.constEnd()) ? it.value() : computeDrapePose(sc);
+}
+
 QByteArray StructureStudioView::liveValuesFor(Fixture *fx) const
 {
     if (fx == nullptr)
@@ -8249,6 +8287,7 @@ void StructureStudioView::paintEvent(QPaintEvent *)
     /* Where rays landed last frame still stands if what they land on hasn't
        changed. Rays no longer thrown (a mover that has moved on) are let go
        once they are most of what is kept. */
+    updateDrapePoses();         // before throwScene(): where a curtain is decides what a ray meets
     const quint64 scene = throwScene();
     if (scene != m_throwScene || m_throws.size() > 400000)
     {
