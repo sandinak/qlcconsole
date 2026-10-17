@@ -68,6 +68,7 @@ private slots:
     void severalGroupsOneLayerOrEach();
     void aPickedValueReusesAPalette();
     void pictureOfARealShow();
+    void aDimmedColourOnPixelBarsReachesTheUniverse();
 
 private:
     quint32 dimmer(int level, const QString &name);

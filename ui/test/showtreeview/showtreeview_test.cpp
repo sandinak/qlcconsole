@@ -53,6 +53,9 @@
 #include "fixturegroupsource.h"
 #include "qlcfixturedefcache.h"
 #include "qlcfixturedef.h"
+#include "qlcfixturehead.h"
+#include "qlcchannel.h"
+#include "qlcfixturemode.h"
 #include "showtreeview.h"
 #include "lookeditor.h"
 #include "fixturegroup.h"
@@ -1420,6 +1423,118 @@ void ShowTreeView_Test::theCommandLine()
     QVERIFY(st->cue(c2)->layers.isEmpty());
     Q_UNUSED(towers)
     view.setCommandLineVisible(false);
+}
+
+/* Branson, 2026-10-17: a cue with one layer on two RGB pixel-bar groups,
+   Colour Blue and Dimmer 19%, selected in Design -- "the truss bars aren't
+   blue on the Rig Overview". The engine side, end to end: the preview runs
+   the cue's scene and every head of both groups goes out blue at 19% (the
+   Dimmer look scales the colour of a fixture with no dimmer channel); the
+   Rig Overview's half is in monitor_test (it counted that 19% twice). In
+   Operate nothing reaches the stage and the header doesn't claim it does. */
+void ShowTreeView_Test::aDimmedColourOnPixelBarsReachesTheUniverse()
+{
+    // An RGB pixel bar with no dimmer channel: 4 heads, R G B each.
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel("RGB Bar 4");
+    def->setType(QLCFixtureDef::LEDBarPixels);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("12ch");
+    for (int h = 0; h < 4; ++h)
+    {
+        const QLCChannel::PrimaryColour cols[3] = { QLCChannel::Red, QLCChannel::Green, QLCChannel::Blue };
+        QLCFixtureHead head;
+        for (int k = 0; k < 3; ++k)
+        {
+            QLCChannel *ch = new QLCChannel();
+            ch->setName(QString("%1-%2").arg(h + 1).arg(k));
+            ch->setGroup(QLCChannel::Intensity);
+            ch->setColour(cols[k]);
+            def->addChannel(ch);
+            mode->insertChannel(ch, quint32(h * 3 + k));
+            head.addChannel(quint32(h * 3 + k));
+        }
+        mode->insertHead(-1, head);
+    }
+    def->addMode(mode);
+    QVERIFY(m_doc->fixtureDefCache()->addFixtureDef(def));
+    QList<Fixture *> bars;
+    for (int i = 0; i < 3; ++i)
+    {
+        Fixture *fxi = new Fixture(m_doc);
+        fxi->setName(QString("Bar %1").arg(i + 1));
+        fxi->setFixtureDefinition(def, mode);
+        fxi->setUniverse(0);
+        fxi->setAddress(quint32(100 + i * 12));
+        QVERIFY(m_doc->addFixture(fxi));
+        bars << fxi;
+    }
+    FixtureGroup *trussC = new FixtureGroup(m_doc);
+    trussC->setName("TrussC-RGB");
+    m_doc->addFixtureGroup(trussC);
+    trussC->assignFixture(bars[0]->id());
+    FixtureGroup *trussW = new FixtureGroup(m_doc);
+    trussW->setName("T TrussW-RGB");
+    m_doc->addFixtureGroup(trussW);
+    trussW->assignFixture(bars[1]->id());
+    const quint32 blue = colour(Qt::blue, "Blue");
+    const quint32 base = dimmer(48, "Base");
+
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "00-preshow");
+    const quint32 c1 = st->addCue(list, -1, "Setup");
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1000, 600);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QVERIFY(view.selectNode(c1));
+    // Both groups dropped together: one layer, then its looks.
+    QVERIFY(view.dropTargets(c1, { trussC->id(), trussW->id() }, {}));
+    QCOMPARE(st->cue(c1)->layers.count(), 1);
+    const quint32 layer = st->cue(c1)->layers.first().id;
+    QVERIFY(view.dropPalettes(c1, layer, { blue }));
+    QVERIFY(view.dropPalettes(c1, layer, { base }));
+    QVERIFY(view.selectNode(c1));
+    QVERIFY2(view.previewText().startsWith("▶ On the rig: ") && view.previewText().endsWith("Setup"),
+             qPrintable(view.previewText()));
+
+    auto rgb = [this](Fixture *f, int head) {
+        for (int i = 0; i < 10; ++i)
+        {
+            m_doc->masterTimer()->timerTick();
+            QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+            ua.first()->processFaders();
+            m_doc->inputOutputMap()->releaseUniverses(false);
+        }
+        QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+        const QByteArray v = *ua.first()->postGMValues();
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        const int at = int(f->address()) + head * 3;
+        return QColor(uchar(v.at(at)), uchar(v.at(at + 1)), uchar(v.at(at + 2)));
+    };
+    // Blue at 19% (48/255) on every head of both groups; the third bar dark.
+    for (int b = 0; b < 2; ++b)
+        for (int h = 0; h < 4; ++h)
+        {
+            const QColor c = rgb(bars[b], h);
+            QVERIFY2(c.red() == 0 && c.green() <= 1 && qAbs(c.blue() - 48) <= 1,
+                     qPrintable(QString("bar %1 head %2: %3").arg(b + 1).arg(h).arg(c.name())));
+        }
+    QCOMPARE(rgb(bars[2], 0), QColor(0, 0, 0));
+
+    // An edit shows at once: Dimmer cleared, full blue.
+    QVERIFY(view.clearAttribute(c1, layer, KeyDimmer));
+    QCOMPARE(rgb(bars[1], 3).blue(), 255);
+
+    // Operate: blind. The header says so, and nothing new reaches the stage.
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(view.previewText().startsWith("Live: editing is blind"));
+    QVERIFY(!view.previewText().contains("On the rig"));
+    QCOMPARE(rgb(bars[0], 0), QColor(0, 0, 0));
+    m_doc->setMode(Doc::Design);
+    QCOMPARE(rgb(bars[0], 0).blue(), 255);
+    view.hide();
 }
 
 void ShowTreeView_Test::pictureOfARealShow()
