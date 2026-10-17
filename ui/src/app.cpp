@@ -1106,6 +1106,8 @@ void App::initDoc()
         };
     ShowStatus::instance()->setAction("universes.nooutput", tr("Open Connections"), openConnections);
     ShowStatus::instance()->setAction("outputs.problems", tr("Open Connections"), openConnections);
+    // The Fixture Manager's universe rows: "Show in Connections".
+    ShowStatus::instance()->setAction("connections.universe", tr("Show in Connections"), openConnections);
 #ifdef DEBUG_SPEED
     speedTime.start();
 #endif

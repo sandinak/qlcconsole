@@ -70,7 +70,10 @@ in either view, patched or not — and right-click one of them:
 - **Retarget N selected universes…** re-aims already-patched universes at
   one node on consecutive port addresses, also in clicked order.
 
-Each is one step for **Undo Patch Change**. (The Devices tab keeps all of this
+Each is one step for **Undo Patch Change**. The Fixture Manager's universe
+rows offer the same patching, through the same code — see
+[Patching a universe's output](fixture-manager.md#patching-a-universes-output).
+(The Devices tab keeps all of this
 to one row over the list — **By universe**, **Show unused…**, a one-line
 "Right-click a row for what it can do" whose tooltip has the whole
 explanation, the search status, **Undo Patch Change** and **Rescan** — so
