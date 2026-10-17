@@ -4,6 +4,23 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## October 2026
 
+### Show Tree
+
+- **Write a show as one tree.** A new **Show Tree** tab beside Programming:
+  productions, cue lists, cues, and in each cue the layers — a group and the
+  looks it plays. Drag groups onto a cue for layers and palettes onto a layer
+  (or onto the cue, for every layer in it); values that come from the cue or
+  an earlier cue show grey with where they came from. The scenes, collections
+  and the chaser that play it are made and kept up to date for you, and a
+  layer that stays the same from one cue to the next keeps running through
+  GO (no re-fade, effects keep their place). **Import chaser…** turns a
+  chaser you have into a cue list that plays exactly as it did. See
+  [Show Tree](show-tree.md).
+- **A scene two cues share no longer re-fades on GO.** A cue list stepping
+  from one collection to another that holds the same scene (or the collection
+  before it) now keeps that scene running instead of stopping and starting
+  it.
+
 ### Programming
 
 - **Drag scenes and palettes into folders.** In the Programming tab, a scene

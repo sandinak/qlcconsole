@@ -70,11 +70,12 @@ The tabs follow the order a show is built in:
 | **Fixtures** | The fixtures in the show, the inventory, groups and their head layouts, patching | [Fixture Manager](fixture-manager.md) |
 | **Lighting Studio** | The physical rig: structures, where every fixture hangs, the network, the 3D Rig Overview | [Lighting Studio](lighting-studio.md) |
 | **Programming** | Scenes built from looks, looks built from palettes and effects | [Programming Tab](programming-tab.md) |
+| **Show Tree** | A show as one tree: cue lists, cues and the layers in them; the scenes and chaser are made for you | [Show Tree](show-tree.md) |
 | **Shows** | The timeline: tracks, sequences, cues, timecode | [Shows](shows.md) |
 | **Virtual Console** | The operator's surface | stock QLC+ |
 | **Simple Desk** | Raw channel faders | stock QLC+ |
 
-**Window** lists every view with its shortcut (⇧⌘1 … ⇧⌘8). Double-click
+**Window** lists every view with its shortcut (⇧⌘1 … ⇧⌘9). Double-click
 a tab to break it out into its own window; Window brings it back.
 **Functions** (the classic Function Manager — chasers, EFX, RGB matrices,
 scripts, audio, video) has no tab: **Window → Functions** (⇧⌘4) opens it

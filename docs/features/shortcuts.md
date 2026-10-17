@@ -15,7 +15,7 @@
 | ⌘D | Dump the current DMX values into a function |
 | ⌘↩ / ⌘⇧↩ | **GO** / **Back** on the main cue list ([Show control](show-control.md#whats-next-and-go-from-anywhere)) |
 | ⌥⌘↩ / ⌥⌘⇧↩ | **Sub GO** / **Sub Back**: the next / previous [sub-cue](show-control.md#sub-cues) of the cue playing |
-| ⇧⌘1 … ⇧⌘8 | Bring forward Connections, Fixtures, Lighting Studio, **Functions** (opens in its own window), Programming, Shows, Virtual Console, Simple Desk |
+| ⇧⌘1 … ⇧⌘9 | Bring forward Connections, Fixtures, Lighting Studio, **Functions** (opens in its own window), Programming, Show Tree, Shows, Virtual Console, Simple Desk |
 | ⇧⌘M | Lighting Studio |
 | ⇧⌘R | **Rig Overview** — and again to close it when it's in front |
 | ⌘W | Close the window in front (Rig Overview, a broken-out view…) |

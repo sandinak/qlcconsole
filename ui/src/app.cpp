@@ -41,6 +41,7 @@
 #include "functionselection.h"
 #include "functionmanager.h"
 #include "programmingmanager.h"
+#include "showtreeview.h"
 #include "inputoutputmap.h"
 #include "inputpatch.h"
 #include "virtualconsole.h"
@@ -477,6 +478,7 @@ void App::init()
             { QStringLiteral("Lighting Studio"), QStringLiteral("lighting-studio.md") },
             { QStringLiteral("Functions"),       QStringLiteral("other-improvements.md#window-menu") },
             { QStringLiteral("Programming"),     QStringLiteral("programming-tab.md") },
+            { QStringLiteral("Show Tree"),       QStringLiteral("show-tree.md") },
             { QStringLiteral("Shows"),           QStringLiteral("shows.md") },
             { QStringLiteral("Virtual Console"), QStringLiteral("getting-started.md#running-the-show") },
             { QStringLiteral("Simple Desk"),     QStringLiteral("getting-started.md#running-the-show") } };
@@ -577,6 +579,10 @@ void App::init()
         });
     }
     addTab(w, QIcon(":/scene.png"), tr("Programming"));
+    // The Show Tree beside Programming (SHOW_TREE_DESIGN.md D2): writing a
+    // show as one tree of cue lists, cues and layers.
+    w = new ShowTreeView(m_tab, m_doc);
+    addTab(w, QIcon(":/chaser.png"), tr("Show Tree"));
     w = new ShowManager(m_tab, m_doc);
     addTab(w, QIcon(":/show.png"), tr("Shows"));
     w = new VirtualConsole(m_tab, m_doc);

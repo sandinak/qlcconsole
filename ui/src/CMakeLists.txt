@@ -159,6 +159,7 @@ add_library(${module_name}
     powerdistributionwidget.cpp powerdistributionwidget.h
     universeusagewidget.cpp universeusagewidget.h
     programmingmanager.cpp programmingmanager.h
+    showtreeview.cpp showtreeview.h
     paletteeditdialog.cpp paletteeditdialog.h
     palettemanager.cpp palettemanager.h
     scripteditor.cpp scripteditor.h scripteditor.ui

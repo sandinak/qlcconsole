@@ -235,8 +235,8 @@ try it on your own devices before relying on it for a show.
 ## Window menu
 
 Every view is in **Window**, with its shortcut (⇧⌘1 Connections, ⇧⌘2
-Fixtures, ⇧⌘3 Lighting Studio, ⇧⌘4 Functions, ⇧⌘5 Programming, ⇧⌘6 Shows,
-⇧⌘7 Virtual Console, ⇧⌘8 Simple Desk): choosing one brings it forward — its
+Fixtures, ⇧⌘3 Lighting Studio, ⇧⌘4 Functions, ⇧⌘5 Programming, ⇧⌘6 Show
+Tree, ⇧⌘7 Shows, ⇧⌘8 Virtual Console, ⇧⌘9 Simple Desk): choosing one brings it forward — its
 tab, or its own window when it has been broken out (right-click a tab →
 **Open in Its Own Window**, Shift-click it, or **Move … to Its Own
 Window**),

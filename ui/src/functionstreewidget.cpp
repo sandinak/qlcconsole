@@ -30,6 +30,7 @@
 #include <QTimer>
 
 #include "functionstreewidget.h"
+#include "showtreecontroller.h"
 #include "qlcpalette.h"
 #include "function.h"
 #include "scene.h"
@@ -246,6 +247,9 @@ void FunctionsTreeWidget::updateTree()
         foreach (QLCPalette* palette, m_doc->palettes())
         {
             if (palette == NULL)
+                continue;
+            // A Show Tree one-off value: the tree's own, not a palette to file.
+            if (m_doc->showTree()->isInlinePalette(palette->id()))
                 continue;
             QTreeWidgetItem* parent = paletteParentItem(palette);
             if (parent != NULL)
@@ -507,7 +511,7 @@ void FunctionsTreeWidget::updatePaletteItem(QTreeWidgetItem* item, const QLCPale
 QTreeWidgetItem* FunctionsTreeWidget::addPalette(quint32 pid)
 {
     QLCPalette* palette = m_doc->palette(pid);
-    if (palette == NULL)
+    if (palette == NULL || m_doc->showTree()->isInlinePalette(pid))
         return NULL;
 
     QTreeWidgetItem* item = paletteItem(palette);
