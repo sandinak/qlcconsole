@@ -518,6 +518,26 @@ QList<CreateFixtureGroup::StageBlock> CreateFixtureGroup::headKindBlocks(Doc *do
                                                                          const QString &kind, int *vertical,
                                                                          int view)
 {
+    return headBlocks(doc, fixtureIds, [&kind](const QLCFixtureMode *mode, int h) {
+        return kind.isEmpty() || HeadKinds::kindOf(mode, h) == kind;
+    }, vertical, view);
+}
+
+QList<CreateFixtureGroup::StageBlock> CreateFixtureGroup::headTypeBlocks(Doc *doc,
+                                                                         const QList<quint32> &fixtureIds,
+                                                                         const QString &type, int *vertical,
+                                                                         int view)
+{
+    return headBlocks(doc, fixtureIds, [&type](const QLCFixtureMode *mode, int h) {
+        return type.isEmpty() || HeadKinds::typeOf(mode, h) == type;
+    }, vertical, view);
+}
+
+QList<CreateFixtureGroup::StageBlock> CreateFixtureGroup::headBlocks(Doc *doc,
+                                                                     const QList<quint32> &fixtureIds,
+                                                                     const std::function<bool(const QLCFixtureMode *, int)> &keep,
+                                                                     int *vertical, int view)
+{
     QList<StageBlock> out;
     MonitorProperties *mp = (doc != NULL) ? doc->monitorProperties() : NULL;
     if (mp == NULL)
@@ -556,7 +576,7 @@ QList<CreateFixtureGroup::StageBlock> CreateFixtureGroup::headKindBlocks(Doc *do
         QSet<int> rows, cols;
         for (int h = 0; h < mode->heads().size(); ++h)
         {
-            if (!kind.isEmpty() && HeadKinds::kindOf(mode, h) != kind)
+            if (!keep(mode, h))
                 continue;
             const QPoint c = map.isValid() ? map.cellOf(h) : QPoint(h, 0);
             if (c.x() < 0) continue;

@@ -4,6 +4,16 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## October 2026
 
+### Fixture Manager
+
+- **A group per head type, in one step.** Select fixtures (or groups) →
+  **Group → Create Groups from Selection…**: one group of every head, a
+  group per head type across them ("Bar · RGB" with all 128 RGB pixels of
+  eight bars, "Bar · White" with their 32 whites), or a group per head
+  type for each fixture, in a folder. The groups are listed — names, head
+  counts, layout — before any is made. See
+  [Create Groups from Selection](fixture-manager.md#create-groups-from-selection).
+
 ### Programming
 
 - **Drag scenes and palettes into folders.** In the Programming tab, a scene

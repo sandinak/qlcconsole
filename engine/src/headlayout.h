@@ -90,6 +90,19 @@ namespace HeadKinds
     QStringList kindsOf(const Fixture *fx);
     /** True when @p fx has heads of more than one kind (RGB and W, say). */
     bool isMixed(const Fixture *fx);
+
+    /** A head's TYPE, for making a group per type of head: its kind (above)
+     *  plus "/PT" when it moves -- pan or tilt in the head, or in the
+     *  fixture outside any head (a mover's one body moves all its heads).
+     *  "PT" for a head that only moves; "Other" for one with no colour,
+     *  intensity or movement. Two heads are the same type when these match,
+     *  whatever fixture model they are on. Empty only for no such head. */
+    QString typeOf(const QLCFixtureMode *mode, int head);
+    /** The distinct types of @p fx's heads, in the order they first appear. */
+    QStringList typesOf(const Fixture *fx);
+    /** A type said plainly, for a group's name: "RGB", "White", "Dimmer",
+     *  "RGBW movers", "Movers"... */
+    QString typeName(const QString &type);
 }
 
 namespace HeadLayoutLibrary

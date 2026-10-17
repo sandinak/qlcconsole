@@ -54,6 +54,7 @@
 #include "qlcfile.h"
 
 #include "createfixturegroup.h"
+#include "creategroupsdialog.h"
 #include "powerdistributionwidget.h"
 #include "powerdistribution.h"
 #include "universeusagewidget.h"
@@ -2345,6 +2346,32 @@ void FixtureManager::slotUnGroup()
     }
 }
 
+QList<FixtureGroup *> FixtureManager::createGroupsFromSelection(const QList<quint32> &fixtureIds,
+                                                                const QList<quint32> &groupIds)
+{
+    // A group selected brings its fixtures, every head of each.
+    QList<quint32> ids = fixtureIds;
+    QStringList groupNames;
+    foreach (quint32 gid, groupIds)
+        if (FixtureGroup *g = m_doc->fixtureGroup(gid))
+        {
+            groupNames << g->name();
+            foreach (quint32 fid, g->fixtureList())
+                if (!ids.contains(fid))
+                    ids << fid;
+        }
+    if (ids.isEmpty())
+        return QList<FixtureGroup *>();
+
+    CreateGroupsDialog dlg(m_doc, ids, fixtureIds.isEmpty() ? groupNames.join(QStringLiteral(" + "))
+                                                            : QString(), this);
+    if (dlg.exec() != QDialog::Accepted)
+        return QList<FixtureGroup *>();
+    updateGroupMenu();
+    updateView();
+    return dlg.createdGroups();
+}
+
 void FixtureManager::slotGroupSelected(QAction* action)
 {
     // m_groupMenu (this action's origin) only ever lists real existing
@@ -2819,6 +2846,7 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
     QAction *moveToFolder = NULL;
     QAction *ungroupOnly = NULL;
     QAction *copyToNew = NULL;
+    QAction *groupsByType = NULL;
     QMenu *copyIntoMenu = NULL;
     QAction *rebuildComposite = NULL;
     QMenu *circuitMenu = NULL;
@@ -2828,6 +2856,11 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
         menu.addSeparator();
         QMenu *groupMenu = menu.addMenu(QIcon(":/group.png"), tr("Group"));
         copyToNew = groupMenu->addAction(tr("Create Group from Selection…"));
+        /* One group, a group per head type, or a group per head type for
+           each fixture -- previewed, and named, before any is made. */
+        groupsByType = groupMenu->addAction(tr("Create Groups from Selection…"));
+        groupsByType->setToolTip(tr("One group of every head, a group per head type across "
+                                    "the fixtures, or a group per head type for each fixture."));
         const QList<FixtureGroup*> groups = m_doc->fixtureGroups();
         if (groups.isEmpty() == false)
         {
@@ -3283,6 +3316,10 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
                 updateView();
             }
         }
+    }
+    else if (groupsByType != NULL && chosen == groupsByType)
+    {
+        createGroupsFromSelection(selFixtures, selGroups);
     }
     else if (copyIntoMenu != NULL && copyIntoMenu->actions().contains(chosen))
     {

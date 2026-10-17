@@ -27,9 +27,11 @@
 #include "grouphead.h"
 #include "qlcpoint.h"
 #include <QMap>
+#include <functional>
 
 class Doc;
 class FixtureGroup;
+class QLCFixtureMode;
 
 /** @addtogroup ui_fixtures
  * @{
@@ -107,6 +109,12 @@ public:
                                             const QString &kind, int *vertical = NULL,
                                             int view = -1);
 
+    /** headKindBlocks(), by head TYPE (HeadKinds::typeOf(): the kind, and
+     *  whether it moves) rather than kind; an empty @p type takes every head. */
+    static QList<StageBlock> headTypeBlocks(Doc *doc, const QList<quint32> &fixtureIds,
+                                            const QString &type, int *vertical = NULL,
+                                            int view = -1);
+
     /** Which way a group is laid out: as seen from the front (the audience's
      *  view: across, and up the page is up) or from above (across, and up
      *  the page is upstage). Auto picks whichever the fixtures spread in. */
@@ -151,6 +159,12 @@ public:
     /** Suggest a grid size for @p fixtureIds — a real cols×rows from their 2-D
      *  positions if placed, otherwise a near-square of the total head count. */
     static QSize suggestGrid(Doc *doc, const QList<quint32> &fixtureIds);
+
+private:
+    /** The blocks of headKindBlocks() for the heads @p keep accepts. */
+    static QList<StageBlock> headBlocks(Doc *doc, const QList<quint32> &fixtureIds,
+                                        const std::function<bool(const QLCFixtureMode *, int)> &keep,
+                                        int *vertical, int view);
 };
 
 /** @} */

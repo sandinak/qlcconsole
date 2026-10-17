@@ -339,6 +339,50 @@ group in a sub-folder underneath it — gets its path updated to match.
 
   Selecting existing groups instead copies each one in as a tagged
   sub-group block.
+- **Select fixtures or groups → Group → "Create Groups from Selection…"**
+  — one group, a group per head type, or a group per head type for each
+  fixture, previewed before any is made (below).
+
+### Create Groups from Selection
+
+For when one group of everything is not what you want. Take eight bars,
+each with 16 RGB pixels and 4 white strobe cells. **Group → Create Groups
+from Selection…** offers:
+
+1. **One group with every head** — all 160 heads in one group.
+2. **A group per head type, across all the fixtures** — "Bar · RGB" (128
+   heads) and "Bar · White" (32 heads). On by default when the fixtures
+   have more than one type of head.
+3. **A group per head type for each fixture** — "Bar 1 · RGB", "Bar 1 ·
+   White", "Bar 2 · RGB"… 16 groups, filed in a folder named after the
+   selection.
+
+**What a head type is.** Fixture definitions don't name their heads'
+types, so it is read from each head's channels: its colours ("RGB",
+"RGBW", "White"; "Dimmer" for plain intensity) and whether it moves (pan
+or tilt in the head, or on the fixture's body: "RGBW movers"). Two heads
+are the same type when those match — whatever fixture model they are on,
+so the RGB pixels of a bar and of a strip share "· RGB" in option 2. Tick
+**Keep fixture models apart** to give each model its own group instead.
+A head with no colour, intensity or movement is "Other".
+
+**Names.** Each group is named after what its fixtures' names share, less
+a trailing number ("Bar 1"…"Bar 8" → "Bar"), and its head type; a group
+per fixture takes the fixture's name. Type a **Name** to name them all
+after that instead. Selecting groups names them after the groups. Every
+name in the list can be changed (double-click it) and any group unticked
+before **Create**; a group that already exists with exactly the same heads
+is shown as such and left unticked. **Folder** files them all (empty: no
+folder).
+
+**Layout.** Fixtures placed in the Lighting Studio are laid out where
+they stand — **From the front**, **From above** or **Automatic**, with
+**Close up the gaps** — exactly as [Creating a group](#creating-a-group)
+does, each fixture's heads of that type turned the way it is rigged.
+Fixtures that aren't placed get a row each, one under the other, in their
+order on the 2D plot (a panel keeps its own grid); fixtures of one head
+each fill a near-square instead. Click a group in the list to see its
+layout.
 
 ### Split by Head Type
 
@@ -391,7 +435,7 @@ selected, and only offers what applies:
    several) and Return to Inventory….
 3. **Finding it on the rig** — Test Fixture…, Locate, Reset.
 4. **Organising it** — a **Group** submenu (Create Group from Selection…,
-   Add to Group ▸, Remove from Group; for a group: Move to Folder…, Remove
+   Create Groups from Selection…, Add to Group ▸, Remove from Group; for a group: Move to Folder…, Remove
    Group (Keep Fixtures), Rebuild Composite), a **Power** submenu (Add to
    Circuit ▸, Remove from Circuit), and Channel Behaviour & Modifiers….
 5. **Deleting it** — Delete….
