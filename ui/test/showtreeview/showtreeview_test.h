@@ -72,6 +72,12 @@ private slots:
     // Drop on the page (2026-10-17)
     void dropsOnTheCuePage();
     void dropsOnTheLayerPage();
+    // Documenting gaps closed (2026-10-17)
+    void mergeLayersBySelectingThem();
+    void severalRowsSelectedDeleteAndDrag();
+    void aNewCueListIsTracking();
+    void generatedFunctionsAreLockedElsewhere();
+    void everyActionIsOneUndoStep();
 
 private:
     quint32 dimmer(int level, const QString &name);

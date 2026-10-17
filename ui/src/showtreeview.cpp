@@ -18,6 +18,8 @@
 */
 
 #include <QStackedWidget>
+#include <QTabWidget>
+#include <QFrame>
 #include <QDialog>
 #include <QApplication>
 #include <QRadioButton>
@@ -75,6 +77,13 @@ using namespace ShowTree;
 
 static const int kRecentMax = 10;
 
+static ShowTreeView *s_instance = nullptr;
+
+/* Selecting a row from code: that row alone, whatever keys are held (with
+   ExtendedSelection a held ⌘ -- ⌘Z, say -- would otherwise toggle it). */
+static const QItemSelectionModel::SelectionFlags kSelectOnly =
+    QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows;
+
 /****************************************************************************
  * Mime helpers
  ****************************************************************************/
@@ -117,6 +126,10 @@ public:
         setDragEnabled(true);
         setDragDropMode(QAbstractItemView::DragDrop);
         setDefaultDropAction(Qt::MoveAction);
+        // ⌘-click / ⇧-click select several (Merge layers, Delete); the
+        // page, the preview and every single-item action follow the
+        // current row, the one last clicked.
+        setSelectionMode(QAbstractItemView::ExtendedSelection);
     }
 
     void setHint(QLabel *hint) { m_hint = hint; }
@@ -186,6 +199,14 @@ protected:
         {
             const QList<quint32> cues = idsFromMime(e->mimeData(), ShowTreeView::cueMimeType());
             const bool include = e->modifiers() & Qt::AltModifier;
+            if (cues.count() > 1)
+            {
+                // Several cues have no one place to go: refused, and said.
+                e->ignore();
+                if (m_hint != nullptr)
+                    m_hint->setText(ShowTreeView::tr("Drag one cue at a time to move or include it"));
+                return;
+            }
             const QString hint = cues.isEmpty() || layer != ShowTree::invalidId() ? QString()
                                  : m_view->cueDropHint(cues.first(), cue, include);
             if (!hint.isEmpty())
@@ -243,7 +264,7 @@ protected:
             const QList<quint32> cues = idsFromMime(mime, ShowTreeView::cueMimeType());
             const bool include = e->modifiers() & Qt::AltModifier;
             // Handled here: never let the base class move the rows itself.
-            if (!cues.isEmpty() && layer == ShowTree::invalidId() && carried.isEmpty()
+            if (cues.count() == 1 && layer == ShowTree::invalidId() && carried.isEmpty()
                 && m_view->dropCue(cues.first(), cue, include))
             {
                 e->setDropAction(Qt::CopyAction);
@@ -561,6 +582,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
 {
     setObjectName("ShowTreeView");
     setProperty("helpTopic", QStringLiteral("show-tree.md"));
+    s_instance = this;
 
     QVBoxLayout *main = new QVBoxLayout(this);
     main->setContentsMargins(4, 4, 4, 4);
@@ -577,7 +599,8 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         return b;
     };
     m_newProduction = button(tr("+ Production"), tr("A new production: the top of a show's tree"), "stNewProduction");
-    m_newList = button(tr("+ Cue list"), tr("A new cue list in the selected production"), "stNewList");
+    m_newList = button(tr("+ Cue list"), tr("A new Tracking cue list in the selected production (an imported chaser starts "
+                                         "Non-tracking)"), "stNewList");
     m_newCue = button(tr("+ Cue"), tr("A new cue after the selected one, numbered for you (never renumbers)"), "stNewCue");
     m_addLayer = button(tr("+ Layer"), tr("A layer on the groups or fixtures selected in the Library "
                                           "(or drag them onto a cue). Several selected: ONE layer on all "
@@ -594,7 +617,10 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                                        "after the selected one — the selected cue, the list's running cue "
                                        "or everything lit. When they differ it asks, or does what "
                                        "Settings → Show Tree says."), "stRecord");
-    m_delete = button(tr("Delete"), tr("Delete the selected cue, layer, cue list or production"), "stDelete");
+    m_merge = button(tr("Merge"), tr("Merge the layers selected in the tree (⌘- or ⇧-click two or more "
+                                     "layers of one cue) into one layer on all their groups"), "stMerge");
+    m_delete = button(tr("Delete"), tr("Delete the selected cues and layers, or a cue list or production"),
+                      "stDelete");
     bar->addSpacing(12);
     m_undo = button(tr("Undo"), tr("Undo the last change to the tree (⌘Z)"), "stUndo");
     m_redo = button(tr("Redo"), tr("Redo (⇧⌘Z)"), "stRedo");
@@ -659,6 +685,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     connect(m_newCue, &QToolButton::clicked, this, &ShowTreeView::slotNewCue);
     connect(m_addLayer, &QToolButton::clicked, this, &ShowTreeView::slotAddLayer);
     connect(m_record, &QToolButton::clicked, this, &ShowTreeView::slotRecordCue);
+    connect(m_merge, &QToolButton::clicked, this, &ShowTreeView::slotMergeSelected);
     connect(m_delete, &QToolButton::clicked, this, &ShowTreeView::slotDelete);
     connect(m_undo, &QToolButton::clicked, this, &ShowTreeView::slotUndo);
     connect(m_redo, &QToolButton::clicked, this, &ShowTreeView::slotRedo);
@@ -1007,7 +1034,142 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
 
 ShowTreeView::~ShowTreeView()
 {
+    if (s_instance == this)
+        s_instance = nullptr;
     delete m_commander;
+}
+
+/****************************************************************************
+ * D13: what the tree made is changed in the tree
+ ****************************************************************************/
+
+ShowTreeView *ShowTreeView::instance()
+{
+    return s_instance;
+}
+
+bool ShowTreeView::reveal(quint32 functionId)
+{
+    quint32 listId = invalidId(), cueId = invalidId(), layerId = invalidId();
+    if (!m_st->generatedNode(functionId, &listId, &cueId, &layerId))
+        return false;
+    const bool ok = layerId != invalidId() ? selectNode(layerId, cueId)
+                    : cueId != invalidId() ? selectNode(cueId) : selectNode(listId);
+    // Forward: its tab, and the window it is in.
+    for (QWidget *w = parentWidget(); w != nullptr; w = w->parentWidget())
+        if (QTabWidget *tabs = qobject_cast<QTabWidget *>(w))
+        {
+            for (int i = 0; i < tabs->count(); ++i)
+                if (tabs->widget(i) == this || tabs->widget(i)->isAncestorOf(this))
+                    tabs->setCurrentIndex(i);
+            break;
+        }
+    if (window() != nullptr && window()->isVisible())
+    {
+        window()->raise();
+        window()->activateWindow();
+    }
+    m_tree->setFocus(Qt::OtherFocusReason);
+    return ok;
+}
+
+quint32 ShowTreeView::detachGenerated(Doc *doc, quint32 sceneId)
+{
+    ShowTreeController *st = doc->showTree();
+    if (qobject_cast<Scene *>(doc->function(sceneId)) == nullptr)
+        return Function::invalidId();
+    quint32 listId = invalidId(), cueId = invalidId(), layerId = invalidId();
+    if (!st->generatedNode(sceneId, &listId, &cueId, &layerId) || layerId == invalidId())
+        return Function::invalidId();
+    return st->detachLayer(cueId, layerId);
+}
+
+QWidget *ShowTreeView::lockedBanner(QWidget *parent, Doc *doc, quint32 functionId,
+                                    const std::function<void(quint32)> &detached)
+{
+    ShowTreeController *st = doc->showTree();
+    QFrame *bar = new QFrame(parent);
+    bar->setObjectName(QStringLiteral("stLockedBanner"));
+    bar->setFrameShape(QFrame::StyledPanel);
+    QHBoxLayout *h = new QHBoxLayout(bar);
+    QLabel *text = new QLabel(bar);
+    text->setObjectName(QStringLiteral("stLockedText"));
+    text->setWordWrap(true);
+    const QString what = st->describeGenerated(functionId);
+    QString body = QStringLiteral("<b>%1</b>").arg(ShowTreeController::lockedText().toHtmlEscaped());
+    if (!what.isEmpty())
+        body += QStringLiteral("<br>") + tr("It is %1.").arg(what.toHtmlEscaped());
+    if (qobject_cast<Chaser *>(doc->function(functionId)) != nullptr)
+        body += QStringLiteral("<br>") + tr("Its run order, direction and speed modes are yours to set "
+                                            "here; its steps and name are the tree's.");
+    text->setText(body);
+    h->addWidget(text, 1);
+
+    QPushButton *show = new QPushButton(tr("Show in Show Tree"), bar);
+    show->setObjectName(QStringLiteral("stLockedReveal"));
+    show->setEnabled(instance() != nullptr);
+    QObject::connect(show, &QPushButton::clicked, bar, [functionId]() {
+        if (ShowTreeView *v = instance())
+            v->reveal(functionId);
+    });
+    h->addWidget(show);
+
+    // A layer's scene can be detached (D13): a plain copy the tree then
+    // plays as it is, which is edited like any scene.
+    quint32 listId = invalidId(), cueId = invalidId(), layerId = invalidId();
+    if (detached && qobject_cast<Scene *>(doc->function(functionId)) != nullptr
+        && st->generatedNode(functionId, &listId, &cueId, &layerId) && layerId != invalidId())
+    {
+        QPushButton *detach = new QPushButton(tr("Detach to plain scene"), bar);
+        detach->setObjectName(QStringLiteral("stLockedDetach"));
+        const CueList *list = st->cueList(listId);
+        if (list != nullptr)
+            detach->setToolTip(tr("A plain copy of this layer's scene, which cue %1 then plays as it is: "
+                                  "edit that one. The tree no longer sets this layer's looks. (Undo in "
+                                  "the Show Tree puts it back.)")
+                               .arg(st->cueLabel(*list, list->indexOf(cueId))));
+        QObject::connect(detach, &QPushButton::clicked, bar, [doc, functionId, detached]() {
+            const quint32 sid = detachGenerated(doc, functionId);
+            if (sid != Function::invalidId())
+                detached(sid);
+        });
+        h->addWidget(detach);
+    }
+    return bar;
+}
+
+bool ShowTreeView::refuseGenerated(QWidget *parent, Doc *doc, const QList<quint32> &functionIds,
+                                   const QString &title)
+{
+    ShowTreeController *st = doc->showTree();
+    QList<quint32> made;
+    for (quint32 fid : functionIds)
+        if (st->isGenerated(fid) && !made.contains(fid))
+            made << fid;
+    if (made.isEmpty())
+        return false;
+    QStringList names;
+    for (quint32 fid : made)
+    {
+        const Function *f = doc->function(fid);
+        const QString what = st->describeGenerated(fid);
+        names << (what.isEmpty() ? (f == nullptr ? QString::number(fid) : f->name())
+                                 : QStringLiteral("%1 (%2)").arg(f == nullptr ? QString::number(fid) : f->name(),
+                                                                 what));
+    }
+    QMessageBox box(QMessageBox::Information, title, ShowTreeController::lockedText(), QMessageBox::Close, parent);
+    box.setObjectName(QStringLiteral("stLockedMessage"));
+    box.setInformativeText(names.join(QLatin1Char('\n')));
+    QPushButton *show = nullptr;
+    if (instance() != nullptr)
+    {
+        show = box.addButton(tr("Show in Show Tree"), QMessageBox::AcceptRole);
+        show->setObjectName(QStringLiteral("stLockedReveal"));
+    }
+    box.exec();
+    if (show != nullptr && box.clickedButton() == show && instance() != nullptr)
+        instance()->reveal(made.first());
+    return true;
 }
 
 /****************************************************************************
@@ -1079,6 +1241,11 @@ void ShowTreeView::buildTree()
     // id of its own there); made the cue's own, by its layer there.
     const bool selTracked = currentKind() == TrackedLayerNode;
     const QString selTarget = selTracked ? m_tree->currentItem()->data(0, TargetRole).toString() : QString();
+    // The rest of a multi-selection (own rows: a carried-in row has no id).
+    QList<QPair<quint32, quint32>> alsoSelected;
+    for (QTreeWidgetItem *item : m_tree->selectedItems())
+        if (item != m_tree->currentItem() && item->data(0, KindRole).toInt() != TrackedLayerNode)
+            alsoSelected << qMakePair(item->data(0, IdRole).toUInt(), item->data(0, CueRole).toUInt());
     const bool first = m_tree->topLevelItemCount() == 0;
     if (!first)
         saveExpanded();
@@ -1201,13 +1368,16 @@ void ShowTreeView::buildTree()
         if (found == nullptr)
             found = findItem(selCue, invalidId());
         if (found != nullptr)
-            m_tree->setCurrentItem(found);
+            m_tree->setCurrentItem(found, 0, kSelectOnly);
     }
     else if (selId != invalidId())
     {
         if (QTreeWidgetItem *item = findItem(selId, selCue))
-            m_tree->setCurrentItem(item);
+            m_tree->setCurrentItem(item, 0, kSelectOnly);
     }
+    for (const QPair<quint32, quint32> &sel : alsoSelected)
+        if (QTreeWidgetItem *item = findItem(sel.first, sel.second))
+            item->setSelected(true);
     m_reloading = false;
 }
 
@@ -1218,7 +1388,7 @@ bool ShowTreeView::selectNode(quint32 id, quint32 cueId)
         return false;
     for (QTreeWidgetItem *p = item->parent(); p != nullptr; p = p->parent())
         p->setExpanded(true);
-    m_tree->setCurrentItem(item);
+    m_tree->setCurrentItem(item, 0, kSelectOnly);
     return true;
 }
 
@@ -1341,6 +1511,7 @@ void ShowTreeView::updateButtons()
     m_addLayer->setEnabled(currentCueId() != invalidId());
     m_record->setEnabled(currentCueId() != invalidId());
     m_delete->setEnabled(kind != NoNode && kind != TrackedLayerNode);
+    m_merge->setEnabled(selectedLayers().count() > 1);
     m_undo->setEnabled(m_st->canUndo());
     m_redo->setEnabled(m_st->canRedo());
     m_undo->setToolTip(m_st->canUndo() ? tr("Undo %1 (⌘Z)").arg(m_st->undoText()) : tr("Nothing to undo"));
@@ -1797,8 +1968,7 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
                                        : m_st->suggestPaletteName(m_doc->palette(oneOffs.first())->type(),
                                                                   m_doc->palette(oneOffs.first())->values())));
                 connect(reuse, &QLabel::linkActivated, this, [this, oneOffs]() {
-                    for (quint32 pid : oneOffs)
-                        m_st->makeReusable(pid);
+                    m_st->makeReusable(oneOffs);    // one undo step, however many
                     reloadLibrary();
                 });
                 h->addWidget(reuse);
@@ -2299,7 +2469,9 @@ void ShowTreeView::slotNewCueList()
                                                QLineEdit::Normal, QString(), &ok);
     if (!ok || name.trimmed().isEmpty())
         return;
-    const quint32 id = m_st->addCueList(item->data(0, IdRole).toUInt(), name.trimmed());
+    // A new list is Tracking, as `list "name"` makes it; only an import
+    // starts Non-tracking (D12).
+    const quint32 id = m_st->addCueList(item->data(0, IdRole).toUInt(), name.trimmed(), ListMode::Tracking);
     selectNode(id);
 }
 
@@ -2399,8 +2571,72 @@ QList<quint32> ShowTreeView::selectedLayers(quint32 *cueId) const
     return out;
 }
 
+void ShowTreeView::slotMergeSelected()
+{
+    quint32 cueId = invalidId();
+    const QList<quint32> sel = selectedLayers(&cueId);
+    if (sel.count() < 2)
+    {
+        QMessageBox::information(this, tr("Merge layers"),
+                                 tr("Select two or more layers of one cue in the tree (⌘- or ⇧-click) "
+                                    "to merge them."));
+        return;
+    }
+    QString why;
+    if (mergeLayers(cueId, sel, &why) == invalidId())
+        QMessageBox::information(this, tr("Merge layers"), why);
+}
+
+bool ShowTreeView::deleteSelected()
+{
+    // Several rows selected: the cues and own layers among them go in one
+    // undo step (a layer of a cue going too goes with it). A cue list or a
+    // production is deleted only on its own, as it asks first.
+    QList<quint32> cues;
+    QList<QPair<quint32, quint32>> layers;
+    for (QTreeWidgetItem *item : m_tree->selectedItems())
+    {
+        const int kind = item->data(0, KindRole).toInt();
+        if (kind == CueNode)
+            cues << item->data(0, IdRole).toUInt();
+        else if (kind == LayerNode)
+            layers << qMakePair(item->data(0, CueRole).toUInt(), item->data(0, IdRole).toUInt());
+        else if (kind == ProductionNode || kind == ListNode)
+            return false;
+    }
+    if (cues.count() + layers.count() < 2)
+        return false;
+    m_st->beginBatch(tr("Delete %1 items").arg(cues.count() + layers.count()));
+    bool ok = true;
+    for (const QPair<quint32, quint32> &l : layers)
+        if (!cues.contains(l.first))
+            ok &= m_st->removeLayer(l.first, l.second);
+    for (quint32 c : cues)
+        ok &= m_st->removeCue(c);
+    m_st->endBatch(ok);
+    return ok;
+}
+
 void ShowTreeView::slotDelete()
 {
+    if (m_tree->selectedItems().count() > 1)
+    {
+        bool lists = false;
+        for (QTreeWidgetItem *item : m_tree->selectedItems())
+        {
+            const int kind = item->data(0, KindRole).toInt();
+            lists |= kind == ProductionNode || kind == ListNode;
+        }
+        if (lists)
+        {
+            QMessageBox::information(this, tr("Delete"),
+                                     tr("A cue list or a production is deleted on its own: select just "
+                                        "it. Several cues and layers can go together."));
+            return;
+        }
+        if (deleteSelected())
+            return;
+    }
     const NodeKind kind = currentKind();
     const quint32 id = currentId();
     switch (kind)
@@ -2488,17 +2724,28 @@ bool ShowTreeView::dropTargetsOnLayer(quint32 cueId, quint32 layerId, const QLis
 
 bool ShowTreeView::dropFunctions(quint32 cueId, const QList<quint32> &functions)
 {
-    quint32 last = invalidId();
+    QList<quint32> funcs;
     for (quint32 f : functions)
+        if (!m_st->isGenerated(f) && m_doc->function(f) != nullptr && !funcs.contains(f))
+            funcs << f;
+    if (funcs.isEmpty())
+        return false;
+    // A layer each, in one undo step (D22).
+    m_st->beginBatch(funcs.count() == 1 ? tr("Add %1").arg(m_doc->function(funcs.first())->name())
+                                        : tr("Add %1 functions").arg(funcs.count()));
+    quint32 last = invalidId();
+    bool ok = true;
+    for (quint32 f : funcs)
     {
-        if (m_st->isGenerated(f) || m_doc->function(f) == nullptr)
-            continue;
         Target t;
         t.function = f;
-        last = m_st->addLayer(cueId, t);
+        const quint32 id = m_st->addLayer(cueId, t);
+        ok &= id != invalidId();
+        last = id;
         noteRecent(LibFunction, f);
     }
-    return last != invalidId();
+    m_st->endBatch(ok);
+    return ok && last != invalidId();
 }
 
 bool ShowTreeView::dropPalettes(quint32 cueId, quint32 layerId, const QList<quint32> &palettes,
@@ -2536,9 +2783,19 @@ bool ShowTreeView::dropPalettes(quint32 cueId, quint32 layerId, const QList<quin
     // A colour or dimmer dropped on a layer with an effect of its own and no
     // base look of that kind goes to the effect? No: drops set the layer's
     // base; an effect's own looks come from its ⋯ (kept simple for P1).
+    // Several kinds at once (a colour and a dimmer): one undo step (D22).
+    if (looks.count() > 1)
+    {
+        QStringList names;
+        for (quint32 pid : palettes)
+            names << paletteName(pid);
+        m_st->beginBatch(tr("Set %1").arg(names.join(QStringLiteral(" + "))));
+    }
     bool done = false;
     for (const Look &l : looks)
         done |= applyLook(cueId, layerId, target, l);
+    if (looks.count() > 1)
+        m_st->endBatch(done);
     return done;
 }
 
@@ -2590,7 +2847,7 @@ bool ShowTreeView::selectTracked(quint32 cueId, const QString &signature)
         {
             for (QTreeWidgetItem *p = (*it)->parent(); p != nullptr; p = p->parent())
                 p->setExpanded(true);
-            m_tree->setCurrentItem(*it);
+            m_tree->setCurrentItem(*it, 0, kSelectOnly);
             return true;
         }
     return false;
@@ -2913,7 +3170,7 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
         if (item->isSelected())
             m_tree->setCurrentItem(item, 0, QItemSelectionModel::NoUpdate);
         else
-            m_tree->setCurrentItem(item);
+            m_tree->setCurrentItem(item, 0, kSelectOnly);
         const int kind = item->data(0, KindRole).toInt();
         menu.addAction(tr("+ Cue list…"), this, &ShowTreeView::slotNewCueList);
         if (kind != ProductionNode)

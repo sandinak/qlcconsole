@@ -37,8 +37,11 @@
 #include <QMenu>
 #include <QList>
 #include <QIcon>
+#include <QTimer>
 
 #include "functionstreewidget.h"
+#include "showtreecontroller.h"
+#include "showtreeview.h"
 #include "functionselection.h"
 #include "collectioneditor.h"
 #include "audioplugincache.h"
@@ -821,6 +824,23 @@ void FunctionManager::slotDelete()
     if (it.hasNext() == false)
         return;
 
+    // What the Show Tree made is deleted there (D13): with its cue list.
+    {
+        QList<quint32> fids;
+        QList<QTreeWidgetItem *> items = m_tree->selectedItems();
+        while (!items.isEmpty())
+        {
+            QTreeWidgetItem *item = items.takeFirst();
+            const quint32 fid = m_tree->itemFunctionId(item);
+            if (fid != Function::invalidId())
+                fids << fid;
+            for (int i = 0; i < item->childCount(); ++i)
+                items << item->child(i);
+        }
+        if (ShowTreeView::refuseGenerated(this, m_doc, fids, tr("Delete Functions")))
+            return;
+    }
+
     QString msg;
     QTreeWidgetItem *firstItem = m_tree->selectedItems().first();
 
@@ -1202,6 +1222,38 @@ void FunctionManager::editFunction(Function* function)
 
     if (function == NULL)
         return;
+
+    // Made by the Show Tree (D13): edited there. Its chaser opens with the
+    // steps and name locked (its playback settings stay the user's); a
+    // cue's collection or a layer's scene shows only why, with Show in
+    // Show Tree and, for a scene, Detach to plain scene.
+    if (m_doc->showTree()->isGenerated(function->id()))
+    {
+        const quint32 fid = function->id();
+        if (Chaser *chaser = qobject_cast<Chaser *>(function))
+        {
+            ChaserEditor *ed = new ChaserEditor(m_hsplitter->widget(1), chaser, m_doc);
+            ed->setLocked(ShowTreeView::lockedBanner(ed, m_doc, fid));
+            connect(this, SIGNAL(functionManagerActive(bool)),
+                    ed, SLOT(slotFunctionManagerActive(bool)));
+            m_editor = ed;
+        }
+        else
+        {
+            m_editor = ShowTreeView::lockedBanner(m_hsplitter->widget(1), m_doc, fid, [this](quint32 sid) {
+                // The detached copy is an ordinary scene: edit it.
+                QTimer::singleShot(0, this, [this, sid]() {
+                    selectFunction(sid);
+                    editFunction(m_doc->function(sid));
+                });
+            });
+        }
+        m_hsplitter->widget(1)->show();
+        m_hsplitter->widget(1)->layout()->addWidget(m_editor);
+        m_editor->show();
+        highlightEditedFunction(fid);
+        return;
+    }
 
     // Choose the editor by the selected function's type
     if (function->type() == Function::SceneType)

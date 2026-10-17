@@ -686,7 +686,7 @@ void ShowTree_Test::aBlockCueKeepsItsOwnLayerWhenAGroupIsAdded()
     const quint32 d50 = dimmer(127, "Half");
     ShowTreeController *st = m_doc->showTree();
     // Non-tracking (every cue a Block, as an import): only that cue changes.
-    const quint32 listId = st->addCueList(st->addProduction("P"), "L");
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
     const quint32 c1 = st->addCue(listId, -1, "One");
     const quint32 c2 = st->addCue(listId, 0, "Two");
     const quint32 l1 = st->addLayer(c1, groupTarget(a->id()));
@@ -711,7 +711,7 @@ void ShowTree_Test::bakeMakesAChaserCollectionsAndScenes()
 
     ShowTreeController *st = m_doc->showTree();
     const quint32 prod = st->addProduction("DanceHysteria");
-    const quint32 listId = st->addCueList(prod, "Full Show");
+    const quint32 listId = st->addCueList(prod, "Full Show", ListMode::NonTracking);
     const quint32 c1 = st->addCue(listId, -1, "Preshow");
     const quint32 c2 = st->addCue(listId, 0, "Announcer");
     const quint32 l1 = st->addLayer(c1, groupTarget(a->id()));
@@ -770,7 +770,7 @@ void ShowTree_Test::identicalLayersShareOneScene()
     FixtureGroup *b = group("USTs", { m_fixtures[1] });
     const quint32 d50 = dimmer(127, "Half");
     ShowTreeController *st = m_doc->showTree();
-    const quint32 listId = st->addCueList(st->addProduction("P"), "L");
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
     const quint32 c1 = st->addCue(listId, -1, "One");
     const quint32 c2 = st->addCue(listId, 0, "Two");
     st->setLayerLook(c1, st->addLayer(c1, groupTarget(a->id())), st->lookForPalette(d50));
@@ -813,7 +813,7 @@ void ShowTree_Test::bakeIsDeterministic()
     FixtureGroup *a = group("Towers", { m_fixtures[0] });
     const quint32 d50 = dimmer(127, "Half");
     ShowTreeController *st = m_doc->showTree();
-    const quint32 listId = st->addCueList(st->addProduction("P"), "L");
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
     const quint32 c1 = st->addCue(listId, -1, "One");
     st->setLayerLook(c1, st->addLayer(c1, groupTarget(a->id())), st->lookForPalette(d50));
     st->setCueLook(c1, st->lookForPalette(colour("Blue")));
@@ -832,7 +832,7 @@ void ShowTree_Test::anEditRebakesAndDropsWhatIsUnused()
     const quint32 d50 = dimmer(127, "Half");
     const quint32 d100 = dimmer(255, "Full");
     ShowTreeController *st = m_doc->showTree();
-    const quint32 listId = st->addCueList(st->addProduction("P"), "L");
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
     const quint32 c1 = st->addCue(listId, -1, "One");
     const quint32 c2 = st->addCue(listId, 0, "Two");
     st->setLayerLook(c1, st->addLayer(c1, groupTarget(a->id())), st->lookForPalette(d50));
@@ -870,7 +870,7 @@ void ShowTree_Test::undoAndRedo()
     const quint32 d50 = dimmer(127, "Half");
     const quint32 d100 = dimmer(255, "Full");
     ShowTreeController *st = m_doc->showTree();
-    const quint32 listId = st->addCueList(st->addProduction("P"), "L");
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
     const quint32 c1 = st->addCue(listId, -1, "One");
     const quint32 l1 = st->addLayer(c1, groupTarget(a->id()));
     st->setLayerLook(c1, l1, st->lookForPalette(d50));
@@ -905,7 +905,7 @@ void ShowTree_Test::inlinePalettesComeBackWithUndo()
 {
     FixtureGroup *a = group("Towers", { m_fixtures[0] });
     ShowTreeController *st = m_doc->showTree();
-    const quint32 listId = st->addCueList(st->addProduction("P"), "L");
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
     const quint32 c1 = st->addCue(listId, -1, "One");
     const quint32 l1 = st->addLayer(c1, groupTarget(a->id()));
 
@@ -934,7 +934,7 @@ void ShowTree_Test::aRunningSceneIsNotDeletedUnderTheShow()
     const quint32 d50 = dimmer(127, "Half");
     const quint32 d100 = dimmer(255, "Full");
     ShowTreeController *st = m_doc->showTree();
-    const quint32 listId = st->addCueList(st->addProduction("P"), "L");
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
     const quint32 c1 = st->addCue(listId, -1, "One");
     const quint32 l1 = st->addLayer(c1, groupTarget(a->id()));
     st->setLayerLook(c1, l1, st->lookForPalette(d50));
@@ -1159,7 +1159,7 @@ void ShowTree_Test::previewPlaysTheSelectedCue()
     const quint32 d50 = dimmer(127, "Half");
     const quint32 d100 = dimmer(255, "Full");
     ShowTreeController *st = m_doc->showTree();
-    const quint32 listId = st->addCueList(st->addProduction("P"), "L");
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
     const quint32 c1 = st->addCue(listId, -1, "One");
     const quint32 c2 = st->addCue(listId, 0, "Two");
     st->setLayerLook(c1, st->addLayer(c1, groupTarget(a->id())), st->lookForPalette(d50));
@@ -1203,7 +1203,7 @@ void ShowTree_Test::anEditShowsOnThePreviewAtOnce()
     const quint32 d50 = dimmer(127, "Half");
     const quint32 d100 = dimmer(255, "Full");
     ShowTreeController *st = m_doc->showTree();
-    const quint32 listId = st->addCueList(st->addProduction("P"), "L");
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
     const quint32 c1 = st->addCue(listId, -1, "One");
     const quint32 l1 = st->addLayer(c1, groupTarget(a->id()));
     st->setLayerLook(c1, l1, st->lookForPalette(d50));
@@ -1265,7 +1265,7 @@ void ShowTree_Test::noPreviewInLiveMode()
     FixtureGroup *a = group("Towers", { m_fixtures[0] });
     const quint32 d50 = dimmer(127, "Half");
     ShowTreeController *st = m_doc->showTree();
-    const quint32 listId = st->addCueList(st->addProduction("P"), "L");
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
     const quint32 c1 = st->addCue(listId, -1, "One");
     st->setLayerLook(c1, st->addLayer(c1, groupTarget(a->id())), st->lookForPalette(d50));
 
@@ -1294,7 +1294,7 @@ void ShowTree_Test::inDesignTheEditWinsOverARunningList()
     const quint32 d50 = dimmer(127, "Half");
     const quint32 d100 = dimmer(255, "Full");
     ShowTreeController *st = m_doc->showTree();
-    const quint32 listId = st->addCueList(st->addProduction("P"), "L");
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
     const quint32 c1 = st->addCue(listId, -1, "One");
     const quint32 c2 = st->addCue(listId, 0, "Two");
     const quint32 l1 = st->addLayer(c1, groupTarget(a->id()));
@@ -1971,7 +1971,7 @@ void ShowTree_Test::usageInAList()
     raw->setValue(m_fixtures[5], 0, 90);
     m_doc->addFunction(raw);
     ShowTreeController *st = m_doc->showTree();
-    const quint32 listId = st->addCueList(st->addProduction("P"), "L");
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
     const quint32 c1 = st->addCue(listId, -1, "One");
     const quint32 c2 = st->addCue(listId, 0, "Two");
     QVERIFY(st->setLayerLook(c1, st->addLayer(c1, groupTarget(a->id())), st->lookForPalette(full)));
@@ -2282,7 +2282,7 @@ void ShowTree_Test::commandLineFailsAsAWhole()
     ShowTreeCommand cmd(m_doc, st);
     ShowTreeCommand::Context ctx;
     ctx.production = st->addProduction("P");
-    ctx.list = st->addCueList(ctx.production, "L");
+    ctx.list = st->addCueList(ctx.production, "L", ListMode::NonTracking);
     ctx.cue = st->addCue(ctx.list, -1, "One");
     const QString undo = st->undoText();
     const int palettes = m_doc->palettes().count();
@@ -2325,7 +2325,7 @@ void ShowTree_Test::commandLineCompletes()
     ShowTreeCommand cmd(m_doc, st);
     ShowTreeCommand::Context ctx;
     ctx.production = st->addProduction("P");
-    ctx.list = st->addCueList(ctx.production, "L");
+    ctx.list = st->addCueList(ctx.production, "L", ListMode::NonTracking);
     ctx.cue = st->addCue(ctx.list, -1, "One");
 
     QStringList options;
@@ -2385,8 +2385,8 @@ ShowTreeCommand::Context ShowTree_Test::completionShow()
     ShowTreeController *st = m_doc->showTree();
     ShowTreeCommand::Context ctx;
     ctx.production = st->addProduction("P");
-    ctx.list = st->addCueList(ctx.production, "01-Opener");
-    st->addCueList(ctx.production, "02-Verse Two");
+    ctx.list = st->addCueList(ctx.production, "01-Opener", ListMode::NonTracking);
+    st->addCueList(ctx.production, "02-Verse Two", ListMode::NonTracking);
     ctx.cue = st->addCue(ctx.list, -1, "One");
     st->addCueNumbered(ctx.list, "1.2", "Two");
     st->addCueNumbered(ctx.list, "1.25", "Three");
@@ -2862,7 +2862,7 @@ void ShowTree_Test::aTypedValueReusesAPalette()
     QCOMPARE(st->findPalette(QLCPalette::Dimmer, { 114 }), QLCPalette::invalidId());   // exactly
     QCOMPARE(st->findPalette(QLCPalette::Color, v45), QLCPalette::invalidId());
 
-    const quint32 listId = st->addCueList(st->addProduction("P"), "L");
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
     const quint32 c1 = st->addCue(listId, -1, "One");
     const quint32 c2 = st->addCue(listId, 0, "Two");
     QVERIFY(st->setLayerLook(c1, st->addLayer(c1, groupTarget(a->id())), st->lookForPalette(i45)));
@@ -2976,6 +2976,169 @@ void ShowTree_Test::aNewPaletteIsNamedAsTheShowsAre()
     QCOMPARE(st->findPalette(QLCPalette::Color,
                              { QLCPalette::colorToString(QColor("#0000ff"), QColor(Qt::black)) }), h->id());
     QCOMPARE(st->findPalette(QLCPalette::Color, { QString("#0000ff") }), h->id());
+}
+
+/* One rule for a new list: Tracking, from the controller and the command
+   line alike (+ Cue list in the tab is the view test's); an imported chaser
+   starts Non-tracking so it plays as it did (D12). */
+void ShowTree_Test::aNewListIsTrackingAnImportedOneIsNot()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 made = st->addCueList(prod, "Made");
+    QVERIFY(st->cueList(made)->mode == ListMode::Tracking);
+
+    ShowTreeCommand cmd(m_doc, st);
+    ShowTreeCommand::Context ctx;
+    ctx.production = prod;
+    const ShowTreeCommand::Result r = cmd.run("list \"Typed\"", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    ctx = r.context;
+    QVERIFY(ctx.list != made && st->cueList(ctx.list) != nullptr);
+    QVERIFY(st->cueList(ctx.list)->mode == ListMode::Tracking);
+
+    Scene *sc = new Scene(m_doc);
+    sc->setName("Look");
+    sc->addFixtureGroup(group("Towers", { m_fixtures[0] })->id());
+    sc->addPalette(dimmer(200, "Full"));
+    m_doc->addFunction(sc);
+    Collection *one = new Collection(m_doc);
+    one->setName("0.0.1-One");
+    one->addFunction(sc->id());
+    m_doc->addFunction(one);
+    Chaser *chaser = new Chaser(m_doc);
+    chaser->setName("Old");
+    m_doc->addFunction(chaser);
+    chaser->addStep(ChaserStep(one->id()));
+    const ShowTreeController::ImportReport rep = st->importChaser(chaser->id());
+    QVERIFY(st->cueList(rep.list) != nullptr);
+    QVERIFY(st->cueList(rep.list)->mode == ListMode::NonTracking);
+}
+
+/* Make reusable is an undo step (D22): undo makes the palette the one-off it
+   was (name, folder, hidden), redo names and files it again. Several at once
+   are one step. */
+void ShowTree_Test::makeReusableIsOneUndoStep()
+{
+    FixtureGroup *towers = group("Towers", { m_fixtures[0], m_fixtures[1] });
+    const quint32 named = dimmer(115, "Intensity 45%");
+    m_doc->palette(named)->setPath("Palettes/Dimmer");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 l1 = st->addLayer(c1, groupTarget(towers->id()));
+    const quint32 pid = st->createInlinePalette(QLCPalette::Dimmer, { 79 }, "31% · 1 One Towers");
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(pid)));
+    QVERIFY(st->isInlinePalette(pid));
+    const QString oneOffName = m_doc->palette(pid)->name();
+    const QString oneOffPath = m_doc->palette(pid)->path();
+
+    QVERIFY(st->makeReusable(pid));
+    QVERIFY(!st->isInlinePalette(pid));
+    QCOMPARE(m_doc->palette(pid)->name(), QString("Intensity 31%"));
+    QCOMPARE(m_doc->palette(pid)->path(), QString("Palettes/Dimmer"));
+    QVERIFY(st->undoText().startsWith("Make reusable"));
+
+    QVERIFY(st->undo());
+    QVERIFY(st->isInlinePalette(pid));
+    QCOMPARE(m_doc->palette(pid)->name(), oneOffName);
+    QCOMPARE(m_doc->palette(pid)->path(), oneOffPath);
+    QCOMPARE(st->cue(c1)->layer(l1)->look(KeyDimmer)->palettes, QList<quint32>({ pid }));
+
+    QVERIFY(st->redo());
+    QVERIFY(!st->isInlinePalette(pid));
+    QCOMPARE(m_doc->palette(pid)->name(), QString("Intensity 31%"));
+    QCOMPARE(m_doc->palette(pid)->path(), QString("Palettes/Dimmer"));
+
+    // Named by hand (the Library's Make reusable…): the same.
+    QVERIFY(st->undo());
+    QVERIFY(st->makeReusable(pid, "Mine", "Palettes/Mine"));
+    QCOMPARE(m_doc->palette(pid)->name(), QString("Mine"));
+    QVERIFY(st->undo());
+    QVERIFY(st->isInlinePalette(pid));
+    QCOMPARE(m_doc->palette(pid)->path(), oneOffPath);
+
+    // Two one-offs (colour 1 and 2) at once: one step.
+    const quint32 a = st->createInlinePalette(QLCPalette::Color, { "#ff0000" }, "red one-off");
+    const quint32 b = st->createInlinePalette(QLCPalette::Color, { "#00ff00" }, "green one-off");
+    Look two;
+    two.key = KeyColour;
+    two.palettes = { a, b };
+    QVERIFY(st->setLayerLook(c1, l1, two));
+    const QString before = st->undoText();
+    QVERIFY(st->makeReusable(QList<quint32>({ a, b })));
+    QVERIFY(!st->isInlinePalette(a) && !st->isInlinePalette(b));
+    QVERIFY(st->undo());
+    QVERIFY(st->isInlinePalette(a) && st->isInlinePalette(b));
+    QCOMPARE(st->undoText(), before);
+}
+
+/* Detach (D13) is one undo step: undo puts the layer back and deletes the
+   plain scene it made; redo brings that scene back as it was, edits too. */
+void ShowTree_Test::detachIsOneUndoStep()
+{
+    FixtureGroup *towers = group("Towers", { m_fixtures[0], m_fixtures[1] });
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 l1 = st->addLayer(c1, groupTarget(towers->id()));
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(full)));
+    const int functions = m_doc->functions().count();
+
+    const quint32 sid = st->detachLayer(c1, l1);
+    QVERIFY(sid != Function::invalidId());
+    QVERIFY(!st->isGenerated(sid));
+    QCOMPARE(st->cue(c1)->layer(l1)->target.function, sid);
+    m_doc->function(sid)->setName("Edited by hand");
+
+    QVERIFY(st->undo());
+    QVERIFY(m_doc->function(sid) == nullptr);
+    QCOMPARE(st->cue(c1)->layer(l1)->target.groups, QList<quint32>({ towers->id() }));
+    QCOMPARE(m_doc->functions().count(), functions);
+
+    QVERIFY(st->redo());
+    QVERIFY(m_doc->function(sid) != nullptr);
+    QCOMPARE(m_doc->function(sid)->name(), QString("Edited by hand"));
+    QVERIFY(m_doc->function(sid)->isVisible());
+    QCOMPARE(st->cue(c1)->layer(l1)->target.function, sid);
+}
+
+/* What the tree made says where it is (D13): the list for its chaser, the
+   cue for its collection, the cue and own layer for its scene. */
+void ShowTree_Test::generatedFunctionsAreFoundInTheTree()
+{
+    FixtureGroup *towers = group("Towers", { m_fixtures[0], m_fixtures[1] });
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 c2 = st->addCue(list, 0, "Two");
+    const quint32 l1 = st->addLayer(c1, groupTarget(towers->id()));
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(full)));
+
+    QVERIFY(ShowTreeController::lockedText().contains("Show Tree"));
+    quint32 l = 0, c = 0, layer = 0;
+    const quint32 chaser = st->cueList(list)->chaser;
+    QVERIFY(st->generatedNode(chaser, &l, &c, &layer));
+    QCOMPARE(l, list);
+    QCOMPARE(c, invalidId());
+    const quint32 coll = st->cue(c2)->collection;
+    QVERIFY(st->generatedNode(coll, &l, &c, &layer));
+    QCOMPARE(c, c2);
+    QCOMPARE(layer, invalidId());
+    // The scene c1 sets and c2 plays tracked: found where it is c1's own.
+    const Collection *cc = qobject_cast<const Collection *>(m_doc->function(coll));
+    QVERIFY(cc != nullptr && cc->functions().count() == 1);
+    const quint32 sid = cc->functions().first();
+    QVERIFY(st->isGenerated(sid));
+    QVERIFY(st->generatedNode(sid, &l, &c, &layer));
+    QCOMPARE(c, c1);
+    QCOMPARE(layer, l1);
+    // A function of the show's own is not the tree's.
+    Scene *plain = new Scene(m_doc);
+    m_doc->addFunction(plain);
+    QVERIFY(!st->generatedNode(plain->id(), &l, &c, &layer));
 }
 
 QTEST_MAIN(ShowTree_Test)

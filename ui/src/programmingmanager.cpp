@@ -58,6 +58,8 @@
 #include "efx.h"
 #include "rgbmatrix.h"
 #include "chasereditor.h"
+#include "showtreecontroller.h"
+#include "showtreeview.h"
 #include "collectioneditor.h"
 #include "efxeditor.h"
 #include "rgbmatrixeditor.h"
@@ -1055,12 +1057,22 @@ void ProgrammingManager::loadFunctionEditor(Function *f)
     switch (f->type())
     {
     case Function::CollectionType:
+        if (m_doc->showTree()->isGenerated(f->id()))
+        {
+            // A cue's collection (D13): edited in the Show Tree.
+            ed = ShowTreeView::lockedBanner(this, m_doc, f->id());
+            break;
+        }
         ed = new CollectionEditor(this, qobject_cast<Collection*>(f), m_doc);
         dragIn = true;
         break;
     case Function::ChaserType:
         ed = new ChaserEditor(this, qobject_cast<Chaser*>(f), m_doc);
-        dragIn = true;
+        // A cue list's chaser (D13): its steps and name are the Show Tree's.
+        if (m_doc->showTree()->isGenerated(f->id()))
+            static_cast<ChaserEditor*>(ed)->setLocked(ShowTreeView::lockedBanner(ed, m_doc, f->id()));
+        else
+            dragIn = true;
         break;
     case Function::EFXType:
         ed = new EFXEditor(this, qobject_cast<EFX*>(f), m_doc);
@@ -2497,6 +2509,8 @@ void ProgrammingManager::addFunctionsToCollection(quint32 containerId,
     Collection *col = qobject_cast<Collection*>(m_doc->function(containerId));
     if (col == NULL)
         return;
+    if (ShowTreeView::refuseGenerated(this, m_doc, { containerId }, tr("Add to collection")))
+        return;
 
     int added = 0;
     int skipped = 0;
@@ -2537,6 +2551,9 @@ void ProgrammingManager::addFunctionsToCollection(quint32 containerId,
 void ProgrammingManager::deleteFunctions(const QList<quint32> &fids)
 {
     if (fids.isEmpty())
+        return;
+    // What the Show Tree made goes with its cue list, there (D13).
+    if (ShowTreeView::refuseGenerated(this, m_doc, fids, tr("Delete Functions")))
         return;
 
     const QString msg = deleteFunctionsMessage(fids);
@@ -2756,6 +2773,14 @@ int ProgrammingManager::removeMembers(const QList<MemberRef> &refs, bool confirm
 {
     if (refs.isEmpty())
         return 0;
+    {
+        // A cue list's steps, a cue's members: the Show Tree's (D13).
+        QList<quint32> containers;
+        for (const MemberRef &r : refs)
+            containers << r.container;
+        if (ShowTreeView::refuseGenerated(this, m_doc, containers, tr("Remove from container")))
+            return 0;
+    }
 
     // Chaser steps and show items carry their own timing; say it goes with them.
     bool timed = false;

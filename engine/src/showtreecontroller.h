@@ -87,8 +87,11 @@ public:
     bool edit(const QString &label, const std::function<bool(QList<ShowTree::Production> &)> &change);
 
     quint32 addProduction(const QString &name);
+    /** A new cue list: **Tracking**, the point of the tab -- the same from
+     *  + Cue list and from `list "name"`. Only an imported chaser starts
+     *  Non-tracking (D12, importChaser()), so it plays as it did. */
     quint32 addCueList(quint32 productionId, const QString &name,
-                       ShowTree::ListMode mode = ShowTree::ListMode::NonTracking);
+                       ShowTree::ListMode mode = ShowTree::ListMode::Tracking);
     /** A new cue after @a afterIndex (-1: at the top), numbered per D23. */
     quint32 addCue(quint32 listId, int afterIndex, const QString &name);
     bool removeCue(quint32 cueId);
@@ -246,11 +249,15 @@ public:
     quint32 createInlinePalette(QLCPalette::PaletteType type, const QVariantList &values,
                                 const QString &label);
     bool isInlinePalette(quint32 paletteId) const { return m_inlinePalettes.contains(paletteId); }
-    /** Make an inline palette an ordinary named one (Make reusable). */
+    /** Make an inline palette an ordinary named one (Make reusable): one
+     *  undo step (D22) -- undo makes it a one-off again, as it was. */
     bool makeReusable(quint32 paletteId, const QString &name, const QString &path);
     /** Make reusable in one click: named and filed as the show's own
      *  palettes of that type are (suggestPaletteName/-Folder). */
     bool makeReusable(quint32 paletteId);
+    /** The same for several one-offs at once (a row's colours 1, 2...):
+     *  one undo step. */
+    bool makeReusable(const QList<quint32> &paletteIds);
 
     /** A named palette of @a type that plays exactly @a values (a Dimmer
      *  level 0..255, a Colour string), to reuse instead of making another
@@ -342,8 +349,21 @@ public:
     static QList<quint32> scenePalettes(const ShowTree::ResolvedLayer &layer);
 
     /** Detach a generated scene: a plain copy the tree then plays as an
-     *  opaque function layer in @a cueId in place of @a layerId (D13). */
+     *  opaque function layer in @a cueId in place of @a layerId (D13).
+     *  One undo step: undo puts the layer back and deletes the copy (redo
+     *  brings it back as it was). */
     quint32 detachLayer(quint32 cueId, quint32 layerId);
+
+    /** D13, said wherever a generated function would be edited or deleted
+     *  outside the tree: "Made by the Show Tree — edit it there." */
+    static QString lockedText();
+    /** Where generated function @a functionId is in the tree: its cue list
+     *  (@a listId); for a cue's Collection the cue; for a layer's Scene the
+     *  first cue where it is a layer of the cue's own (@a layerId: that
+     *  layer -- what Detach detaches), else the first cue playing it. False
+     *  when it isn't generated or no longer in the tree. */
+    bool generatedNode(quint32 functionId, quint32 *listId, quint32 *cueId = nullptr,
+                       quint32 *layerId = nullptr) const;
 
 private:
     QString sceneSignature(const Scene *scene) const;
@@ -355,6 +375,19 @@ private:
     QSet<quint32> m_generatedCollections;
     QSet<quint32> m_generatedChasers;
     QSet<quint32> m_inlinePalettes;
+    /** One-offs made reusable here (and palettes a command made): an undo
+     *  snapshot carries them as they are, so redo can name them again. */
+    QSet<quint32> m_madeReusable;
+    /** Scenes Detach made: an undo snapshot carries them as they are, and
+     *  restoring one made before a detach deletes that detach's scene. */
+    QSet<quint32> m_detached;
+    /** The detached scenes the snapshot being restored holds. */
+    QSet<quint32> m_snapshotDetached;
+    /** Put an undo step (@a before: the state before it) on the stack. */
+    void pushUndo(const QString &label, const QByteArray &before);
+    bool applyReusable(quint32 paletteId, const QString &name, const QString &path);
+    /** What a one-off would be named and filed as, made reusable now. */
+    void reusableName(quint32 paletteId, QString *name, QString *path);
     /** What a generated function plays, for describeGenerated(). */
     QHash<quint32, QString> m_generatedLabels;
 

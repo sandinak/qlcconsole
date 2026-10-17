@@ -104,6 +104,12 @@ private slots:
     void aTypedValueReusesAPalette();
     void aNewPaletteIsNamedAsTheShowsAre();
 
+    // Documenting gaps closed (2026-10-17)
+    void aNewListIsTrackingAnImportedOneIsNot();
+    void makeReusableIsOneUndoStep();
+    void detachIsOneUndoStep();
+    void generatedFunctionsAreFoundInTheTree();
+
 private:
     quint32 dimmer(int level, const QString &name);
     quint32 colour(const QString &name);

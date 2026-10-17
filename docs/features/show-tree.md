@@ -25,13 +25,14 @@ groups, and the same Look Editor.
 a **scene**. The tree makes these for you, files them under `Productions/`,
 and rewrites them after every change. The scenes and collections are hidden.
 The chaser is visible, so it plays anywhere a chaser does: a Virtual Console
-Cue List, the footer GO, or show control by cue number. See
+Cue List, the footer GO, or show control by cue number. What the tree makes
+is changed only in the tree: elsewhere it is locked. See
 [Playing it](#playing-it).
 
 ## The tab
 
 - **Header.** It has + Production, + Cue list, + Cue, + Layer, Record,
-  Delete, Undo, Redo and Import chaser…. On the right are two pieces of
+  Merge, Delete, Undo, Redo and Import chaser…. On the right are two pieces of
   status:
   - what the rig shows, such as *"▶ On the rig: 1.0.1 Verse"* (see
     [Seeing it on the rig](#seeing-it-on-the-rig));
@@ -89,21 +90,20 @@ Cue List, the footer GO, or show control by cue number. See
 Use your own group and palette names in place of Towers, USTs, Blue and Red.
 
 1. **+ Production**. Then, with it selected, **+ Cue list** named
-   `01-Opener` (a leading number numbers its cues: the first is 1.0.0).
-2. Select the list and set **Mode** to **Tracking**. **+ Cue list** makes a
-   Non-tracking list.
-3. **+ Cue** → **1.0.0**. Type the name `Preshow`.
-4. Drag **Towers** from the Library (All → Groups) onto the dashed area of
+   `01-Opener` (a leading number numbers its cues: the first is 1.0.0). A
+   new list is **Tracking**.
+2. **+ Cue** → **1.0.0**. Type the name `Preshow`.
+3. Drag **Towers** from the Library (All → Groups) onto the dashed area of
    the cue page: that makes a layer. Drag **Blue** and a dimmer palette onto
    the layer's row.
-5. **+ Cue** → **1.0.1** `Verse`. Towers is there already, grey: *tracked
+4. **+ Cue** → **1.0.1** `Verse`. Towers is there already, grey: *tracked
    from 1.0.0 Preshow*.
    - Drag **USTs** onto the page and **Red** onto its row.
    - Click the grey Towers row. On its Dimmer row, **⋯ → Level…** 100 sets
      it in this cue.
-6. **+ Cue** → **1.0.2** `Out`. Set its **Mode** to **Block**: it starts
+5. **+ Cue** → **1.0.2** `Out`. Set its **Mode** to **Block**: it starts
    from nothing, so with no layers it is dark.
-7. The list plays as the chaser **01-Opener**. GO it from the footer, or pick
+6. The list plays as the chaser **01-Opener**. GO it from the footer, or pick
    it in a Virtual Console Cue List.
 
 ### The same, typed
@@ -121,7 +121,7 @@ cue + "Out" block
 ```
 
 - `list "…"` makes a **Tracking** list in the selected production (or the
-  only one).
+  only one), as **+ Cue list** does.
 - Each `cue +` adds a cue after the selected one and selects it, so the
   lines after it act on that cue.
 - `Towers dimmer 100` in 1.0.1 brings the tracked Towers layer into the cue,
@@ -148,7 +148,8 @@ Preshow (⌥: a layer for each group)"*.
   or the page outside a layer) it is a **cue look**.
 - **A function** (an EFX, an RGB Matrix, a scene with channel values) onto
   a cue plays as it is, as a layer of its own (▣). The tree doesn't set
-  its looks, and it has no Release.
+  its looks, and it has no Release. Several dropped together make a layer
+  each, in one undo step.
 - After a drop on the cue page, the cue stays selected, so you can keep
   dropping.
 - To take a group out, right-click a layer on several groups →
@@ -165,16 +166,21 @@ it is set, the change carries on to the cues it tracks into.
   looks. Nothing on stage changes, and the pieces keep tracking as the layer
   did: where the same layer is set again in a later cue, it is split there
   too.
-- **Merge layers** makes one layer from several layers of one cue. It is
-  **refused, with the reason**, rather than guessed, when:
+- **Merge layers** makes one layer from several layers of one cue:
+  1. In the tree, click one layer, then **⌘-click** the others (or
+     **⇧-click** to take the rows between).
+  2. Click **Merge** in the header, or right-click one of them → **Merge N
+     layers**.
+
+  Both are greyed until two or more layers of **one** cue are selected (a
+  grey ⤳ row or a layer of another cue in the selection greys them). The
+  merged layer is selected, and it is one undo step. Merge is **refused,
+  with the reason**, rather than guessed, when:
   - they set an attribute differently (*"Towers sets Colour to Blue, USTs to
     Red"*);
   - one is released and another isn't;
   - merging would change what a later cue plays (*"Merging would change what
     cue 0.0.5 plays on USTs (Dimmer)"*).
-
-  Merge needs several layers selected, and the tree doesn't take a
-  multi-selection yet (see [Limits](#limits-and-not-yet)).
 
 ## Setting looks
 
@@ -267,8 +273,9 @@ When no palette plays it:
 - **Picked:** you get a **one-off** value, just for this layer. It shows in
   the Library's **Recent**, not in All. **Make reusable** next to it on the
   row turns it into a palette in one click, named as above. To choose the
-  name yourself, right-click it in Recent → **Make reusable…**. A one-off
-  that no cue uses any more is deleted.
+  name yourself, right-click it in Recent → **Make reusable…**. Either is one
+  undo step: undo makes it a one-off again. A one-off that no cue uses any
+  more is deleted.
 
 ### Gobos by name
 
@@ -520,17 +527,21 @@ In the command line, ⌘Z undoes your typing. Type `undo` to undo the tree.
 ## Undo
 
 - **Every change in the tab is one step** of **Undo** (⌘Z) / **Redo** (⇧⌘Z),
-  or the header buttons, whose tooltips name the step. That includes every
-  drop of groups or palettes (an ⌥-drop of several groups too), every ⋯
-  choice, every command, Record, Split, Merge and an import. Several
-  functions dropped at once are one step each. Up to 200 steps.
+  or the header buttons, whose tooltips name the step. One undo gives back
+  exactly what was there before. That includes every drop, however much is
+  dropped at once (several groups, an ⌥-drop, several functions, a colour
+  and a dimmer together), every ⋯ choice, every command, Record, Split,
+  Merge, a Delete of several rows, **Make reusable**, **Detach to plain
+  scene** and an import. Up to 200 steps.
 - Undo puts the tree back and rebuilds the scenes, collections and chaser
   from it, including the chaser's playback settings and any one-off values.
+  Undoing a Detach removes the plain scene it made; Redo brings it back as
+  it was.
 - **What tree undo doesn't cover:**
   - a palette's values changed in the Look Editor (a colour dragged, a
     level moved): those are the palette's, as in the Programming tab;
-  - **Make reusable**;
-  - a palette a command made, which stays after undo.
+  - a palette a command made (`dimmer 30` with none at 30%): undo takes the
+    value off the cue, and the palette stays, as an ordinary palette.
 - **Undo is not shared with the Programming tab.**
 
 ## The Library
@@ -557,6 +568,11 @@ Layer**.
 
 ## Editing the tree
 
+Click a row to select it. **⌘-click** adds or removes a row, **⇧-click**
+takes the rows between. The page in the middle, the Design preview and
+everything that acts on one row follow the row clicked last. Several rows
+selected are for **Merge** and **Delete**.
+
 Right-click in the tree for:
 
 - **+ Production…**, **+ Cue list…**, **+ Cue**;
@@ -569,15 +585,18 @@ Right-click in the tree for:
 
 **Moving cues.** Drag a cue onto another cue of its list to move it there;
 its number stays. With **⌥** held, the drop makes the other cue include it
-instead.
+instead. One cue at a time: several selected cues dragged together are
+refused, and the top right says so.
 
 **Deleting.** **Delete** (or Backspace) in the tree deletes the selected cue
-or layer at once. A cue list or production asks first. Undo brings any of
-them back.
+or layer at once. With several cues and layers selected, they all go, in one
+undo step. A cue list or production asks first, and is deleted only on its
+own: with one in a multi-selection, Delete says so and does nothing. Undo
+brings any of them back.
 
 **Detach to plain scene** turns a layer into an ordinary, visible scene
 named after the cue and layer. The layer then plays that scene as it is, and
-the tree no longer edits its looks.
+the tree no longer edits its looks. It is one undo step.
 
 ## Playing it
 
@@ -590,10 +609,23 @@ the tree no longer edits its looks.
   `Productions/<production>/<list>`. A scene two cues play is the same
   scene, so it keeps running through GO, with no re-fade, and effects keep
   their place.
-- **Change them here, not in the Functions window.** The next change in the
-  tree rewrites the chaser's steps, name and folder, and the hidden
-  functions. The chaser's playback settings are yours to set and are kept:
-  run order, speed modes, GO on the beat.
+- **They are changed here, and locked everywhere else.** Outside the tab,
+  what the tree made says *"Made by the Show Tree — edit it there."*:
+  - **The chaser's editor** (Functions window, Programming tab, Shows, a
+    Virtual Console widget's live edit) opens with its steps and name
+    locked, under a bar that says so and has **Show in Show Tree**. Its
+    playback settings stay yours to set and are kept: run order,
+    direction, speed modes, GO on the beat, its cue-list number. It plays
+    and can be tested as any chaser.
+  - **A cue's collection or a layer's scene**, should one be opened, shows
+    only that bar. A layer's scene's bar also has **Detach to plain
+    scene**, which makes the plain scene that is then edited.
+  - **Deleting** one, **renaming** it in place, **moving** it to another
+    folder or **adding to** or **taking out of** it is refused, with the
+    same words and **Show in Show Tree**. Delete the cue list in the tree
+    instead.
+  - Clicking **Show in Show Tree** brings the tab forward with the list,
+    cue or layer selected.
 - A show saved with a Show Tree still opens and plays in a build without
   one. The chaser and its cues are ordinary functions there; only the tree
   is lost if you save it there.
@@ -607,7 +639,8 @@ the tree no longer edits its looks.
 | **⌥** held as you drop groups | A layer for each group |
 | ⌥-click **+ Layer** | A layer for each group selected in the Library |
 | Drag a cue onto another cue | Move it there; with **⌥**, include it |
-| Delete / Backspace (in the tree) | Delete the selected cue or layer (a list or production asks) |
+| Click / **⌘-click** / **⇧-click** (in the tree) | Select a row / add or remove one / take the rows between |
+| Delete / Backspace (in the tree) | Delete the selected cues and layers, one undo step (a list or production asks) |
 | **:** (in the tree) | To the command line |
 | **Esc** (in the command line) | Back to the tree |
 | **Tab** (in the command line) | Complete the word; again, the next match |
@@ -618,11 +651,8 @@ the tree no longer edits its looks.
 
 ## Limits and not yet
 
-- **Merge layers can't be reached by mouse yet.** The tree selects one row
-  at a time, and Merge needs several layers of one cue selected, so it stays
-  greyed.
-- **+ Cue list makes a Non-tracking list; `list "…"` makes a Tracking one.**
-  Set the mode on the list's page either way.
+- **Detach is for a layer's scene.** A cue list's chaser has no *Detach to
+  plain chaser* yet: to change its steps, change the tree.
 - **Effects in the cue don't take precedence in the Design preview.** The
   cue's looks win over a running list, but an EFX, RGB Matrix or other
   function played as it is mixes with what runs, as it normally would.

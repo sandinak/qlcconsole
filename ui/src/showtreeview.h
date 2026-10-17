@@ -178,6 +178,10 @@ public:
     /** The cue's own layers selected in the tree, when all are of one cue
      *  (@a cueId); empty otherwise. */
     QList<quint32> selectedLayers(quint32 *cueId = nullptr) const;
+    /** Delete the cues and own layers selected in the tree (two or more)
+     *  as one undo step; false (nothing done) when fewer, or a cue list
+     *  or production is among them. */
+    bool deleteSelected();
 
     /************************************************************************
      * Record as new cue: which stage (selected / running / everything lit)
@@ -248,6 +252,32 @@ public:
     /** What the header says about the preview: "▶ On the rig: 1 One". */
     QString previewText() const;
 
+    /************************************************************************
+     * D13: what the tree made is changed in the tree
+     ************************************************************************/
+public:
+    /** The Show Tree tab (null: none). */
+    static ShowTreeView *instance();
+    /** Bring the tab forward with generated function @a functionId's node
+     *  selected (a list's chaser: the list; a cue's collection: the cue; a
+     *  layer's scene: the layer). False: not in the tree. */
+    bool reveal(quint32 functionId);
+    /** A bar saying generated function @a functionId is the tree's
+     *  (ShowTreeController::lockedText() and what it plays), with **Show in
+     *  Show Tree** and, for a layer's scene, **Detach to plain scene**;
+     *  @a detached is told the new scene. Editors of a generated function
+     *  show it in place of (or, a chaser's, above) their controls. */
+    static QWidget *lockedBanner(QWidget *parent, Doc *doc, quint32 functionId,
+                                 const std::function<void(quint32)> &detached = nullptr);
+    /** When any of @a functionIds is generated: says so (a message titled
+     *  @a title naming them, with Show in Show Tree) and returns true -- the
+     *  caller then leaves them alone (deleting, renaming, adding to). */
+    static bool refuseGenerated(QWidget *parent, Doc *doc, const QList<quint32> &functionIds,
+                                const QString &title);
+    /** Detach the layer generated scene @a sceneId is (where it is a layer
+     *  of a cue's own): the new plain scene, invalid when there is none. */
+    static quint32 detachGenerated(Doc *doc, quint32 sceneId);
+
     bool isPinned(int kind, quint32 id) const;
     void setPinned(int kind, quint32 id, bool pinned);
 
@@ -259,6 +289,9 @@ public slots:
     void slotAddLayer();
     void slotRecordCue();
     void slotDelete();
+    /** Merge layers: the layers selected in the tree (two or more, of one
+     *  cue), as the context menu's Merge. */
+    void slotMergeSelected();
     void slotUndo();
     void slotRedo();
     /** Import a chaser as a cue list (§7): shows the report. */
@@ -333,6 +366,7 @@ private:
     QToolButton *m_redo;
     QToolButton *m_import;
     QToolButton *m_record;
+    QToolButton *m_merge;
     QMenu *m_importMenu;
     QLabel *m_hint;
     QLabel *m_previewLabel;

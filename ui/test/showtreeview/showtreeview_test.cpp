@@ -43,8 +43,18 @@
 #define protected public
 #include "mastertimer.h"
 #include "universe.h"
+#include "programmingmanager.h"
 #undef protected
 #undef private
+#include "functionliveeditdialog.h"
+#include "functionmanager.h"
+#include "chasereditor.h"
+#include <QInputDialog>
+#include <QMessageBox>
+#include <QPushButton>
+#include <QBuffer>
+#include <QStackedWidget>
+#include <QRegularExpression>
 
 #include "showtreecontroller.h"
 #include "inputoutputmap.h"
@@ -156,7 +166,7 @@ void ShowTreeView_Test::theTreeShowsProductionsListsCuesAndLayers()
     FixtureGroup *towers = group("Towers", 0, 2);
     ShowTreeController *st = m_doc->showTree();
     const quint32 prod = st->addProduction("DanceHysteria");
-    const quint32 list = st->addCueList(prod, "01-Everybody Scream");
+    const quint32 list = st->addCueList(prod, "01-Everybody Scream", ListMode::NonTracking);
     const quint32 c1 = st->addCue(list, -1, "PreCurtain");
     Target t;
     t.groups << towers->id();
@@ -222,7 +232,7 @@ void ShowTreeView_Test::groupsDroppedOnACueBecomeLayers()
     FixtureGroup *towers = group("Towers", 0, 2);
     FixtureGroup *usts = group("USTs", 2, 2);
     ShowTreeController *st = m_doc->showTree();
-    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
     const quint32 c1 = st->addCue(list, -1, "One");
 
     ShowTreeView view(nullptr, m_doc);
@@ -248,7 +258,7 @@ void ShowTreeView_Test::groupsDroppedOnALayerJoinIt()
     FixtureGroup *spots = group("Spots", 4, 2);
     const quint32 d50 = dimmer(127, "Half");
     ShowTreeController *st = m_doc->showTree();
-    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
     const quint32 c1 = st->addCue(list, -1, "One");
     Target t;
     t.groups << towers->id();
@@ -306,7 +316,7 @@ void ShowTreeView_Test::aPaletteOnTheCueIsACueLookAndTheHintSaysWhatItReaches()
     const quint32 blue = colour(Qt::blue, "Blue");
     const quint32 red = colour(Qt::red, "Red");
     ShowTreeController *st = m_doc->showTree();
-    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
     const quint32 c1 = st->addCue(list, -1, "One");
     Target t1, t2;
     t1.groups << towers->id();
@@ -386,7 +396,7 @@ void ShowTreeView_Test::beamRowsSayWhatTheyApplyTo()
     mixed->assignFixture(spot->id());
 
     ShowTreeController *st = m_doc->showTree();
-    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
     const quint32 c1 = st->addCue(list, -1, "One");
     Target t;
     t.groups << mixed->id();
@@ -430,7 +440,7 @@ void ShowTreeView_Test::goboLooksMatchByNamePerType()
     m_doc->addPalette(gobo);
 
     ShowTreeController *st = m_doc->showTree();
-    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
     const quint32 c1 = st->addCue(list, -1, "One");
     Target t;
     t.groups << mixed->id();
@@ -523,7 +533,7 @@ void ShowTreeView_Test::oneOffValuesGoToRecentNotAll()
 {
     FixtureGroup *towers = group("Towers", 0, 2);
     ShowTreeController *st = m_doc->showTree();
-    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
     const quint32 c1 = st->addCue(list, -1, "One");
     Target t;
     t.groups << towers->id();
@@ -560,7 +570,7 @@ void ShowTreeView_Test::noneAndClear()
     FixtureGroup *towers = group("Towers", 0, 2);
     const quint32 blue = colour(Qt::blue, "Blue");
     ShowTreeController *st = m_doc->showTree();
-    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
     const quint32 c1 = st->addCue(list, -1, "One");
     Target t;
     t.groups << towers->id();
@@ -579,7 +589,7 @@ void ShowTreeView_Test::noneAndClear()
 void ShowTreeView_Test::cueFieldsEditTheCue()
 {
     ShowTreeController *st = m_doc->showTree();
-    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
     const quint32 c1 = st->addCue(list, -1, "One");
 
     ShowTreeView view(nullptr, m_doc);
@@ -603,7 +613,7 @@ void ShowTreeView_Test::cueFieldsEditTheCue()
 void ShowTreeView_Test::undoAndRedoFromTheView()
 {
     ShowTreeController *st = m_doc->showTree();
-    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
     ShowTreeView view(nullptr, m_doc);
     st->addCue(list, -1, "One");
     QCOMPARE(st->cueList(list)->cues.count(), 1);
@@ -753,7 +763,7 @@ void ShowTreeView_Test::dropsOnTheTreeWidget()
 {
     FixtureGroup *towers = group("Towers", 0, 2);
     ShowTreeController *st = m_doc->showTree();
-    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
     const quint32 c1 = st->addCue(list, -1, "One");
 
     ShowTreeView view(nullptr, m_doc);
@@ -842,7 +852,7 @@ void ShowTreeView_Test::anEffectGetsLooksOfItsOwn()
     fx->setName("Confetti");
     m_doc->addPalette(fx);
     ShowTreeController *st = m_doc->showTree();
-    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
     const quint32 c1 = st->addCue(list, -1, "One");
     Target t;
     t.groups << towers->id();
@@ -881,7 +891,7 @@ void ShowTreeView_Test::theLookEditorEditsARowsPalette()
     FixtureGroup *towers = group("Towers", 0, 2);
     const quint32 full = dimmer(255, "Full");
     ShowTreeController *st = m_doc->showTree();
-    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
     const quint32 c1 = st->addCue(list, -1, "One");
     Target t;
     t.groups << towers->id();
@@ -921,7 +931,7 @@ void ShowTreeView_Test::selectingACuePreviewsItOnTheRig()
     FixtureGroup *usts = group("USTs", 2, 2);
     const quint32 d50 = dimmer(127, "Half");
     ShowTreeController *st = m_doc->showTree();
-    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
     const quint32 c1 = st->addCue(list, -1, "One");
     const quint32 c2 = st->addCue(list, 0, "Two");
     Target t1, t2;
@@ -1013,7 +1023,7 @@ void ShowTreeView_Test::inDesignTheEditShowsOverItsRunningList()
     const quint32 d50 = dimmer(127, "Half");
     const quint32 d100 = dimmer(255, "Full");
     ShowTreeController *st = m_doc->showTree();
-    const quint32 list = st->addCueList(st->addProduction("P"), "Full Show");
+    const quint32 list = st->addCueList(st->addProduction("P"), "Full Show", ListMode::NonTracking);
     const quint32 c1 = st->addCue(list, -1, "One");
     Target t;
     t.groups << towers->id();
@@ -1103,7 +1113,7 @@ void ShowTreeView_Test::trackingControlsOnTheListAndCuePages()
     FixtureGroup *towers = group("Towers", 0, 2);
     const quint32 full = dimmer(255, "Full");
     ShowTreeController *st = m_doc->showTree();
-    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
     const quint32 c1 = st->addCue(list, -1, "One");
     const quint32 c2 = st->addCue(list, 0, "Two");
     st->setLayerLook(c1, st->addLayer(c1, groupTarget(towers->id())), st->lookForPalette(full));
@@ -1325,8 +1335,8 @@ void ShowTreeView_Test::theLibraryShowsWhatTheListUses()
     const quint32 half = dimmer(127, "Half");
     ShowTreeController *st = m_doc->showTree();
     const quint32 prod = st->addProduction("P");
-    const quint32 a = st->addCueList(prod, "A");
-    const quint32 b = st->addCueList(prod, "B");
+    const quint32 a = st->addCueList(prod, "A", ListMode::NonTracking);
+    const quint32 b = st->addCueList(prod, "B", ListMode::NonTracking);
     const quint32 a1 = st->addCue(a, -1, "One");
     const quint32 a2 = st->addCue(a, 0, "Two");
     const quint32 b1 = st->addCue(b, -1, "Other");
@@ -1507,7 +1517,7 @@ void ShowTreeView_Test::aDimmedColourOnPixelBarsReachesTheUniverse()
     const quint32 base = dimmer(48, "Base");
 
     ShowTreeController *st = m_doc->showTree();
-    const quint32 list = st->addCueList(st->addProduction("P"), "00-preshow");
+    const quint32 list = st->addCueList(st->addProduction("P"), "00-preshow", ListMode::NonTracking);
     const quint32 c1 = st->addCue(list, -1, "Setup");
     ShowTreeView view(nullptr, m_doc);
     view.resize(1000, 600);
@@ -1985,7 +1995,7 @@ void ShowTreeView_Test::severalGroupsOneLayerOrEach()
     FixtureGroup *towers = group("Towers", 0, 2);
     FixtureGroup *usts = group("USTs", 2, 2);
     ShowTreeController *st = m_doc->showTree();
-    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
     const quint32 c1 = st->addCue(list, -1, "One");
 
     ShowTreeView view(nullptr, m_doc);
@@ -2063,7 +2073,7 @@ void ShowTreeView_Test::aPickedValueReusesAPalette()
     const quint32 i30 = dimmer(77, "Intensity 30%");
     m_doc->palette(i30)->setPath("Palettes/Dimmer");
     ShowTreeController *st = m_doc->showTree();
-    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
     const quint32 c1 = st->addCue(list, -1, "One");
     const quint32 l1 = st->addLayer(c1, groupTarget(towers->id()));
 
@@ -2087,6 +2097,631 @@ void ShowTreeView_Test::aPickedValueReusesAPalette()
     QVERIFY(view.selectNode(l1, c1));
     QVERIFY(view.findChild<QLabel *>("stReuse:Dimmer") == nullptr
             || !view.findChild<QLabel *>("stReuse:Dimmer")->isVisibleTo(&view));
+}
+
+/* Closes every modal box that opens while it lives, noting its object name
+   and text: the tests never wait on a dialog. @a answer may fill one in and
+   accept it instead (return true). */
+class ModalCloser final : public QObject
+{
+public:
+    explicit ModalCloser(std::function<bool(QWidget *)> answer = nullptr)
+        : m_answer(answer)
+    {
+        connect(&m_timer, &QTimer::timeout, this, [this]() {
+            QWidget *w = QApplication::activeModalWidget();
+            if (w == nullptr)
+                w = QApplication::activePopupWidget();
+            if (w == nullptr)
+                return;
+            if (QMessageBox *mb = qobject_cast<QMessageBox *>(w))
+                seen << QStringLiteral("%1|%2|%3").arg(mb->objectName(), mb->text(), mb->informativeText());
+            else
+                seen << w->objectName();
+            if (m_answer && m_answer(w))
+                return;
+            if (QDialog *d = qobject_cast<QDialog *>(w))
+                d->reject();
+            else
+                w->close();
+        });
+        m_timer.start(20);
+    }
+    QStringList seen;
+
+private:
+    QTimer m_timer;
+    std::function<bool(QWidget *)> m_answer;
+};
+
+static QTreeWidgetItem *rowOf(QTreeWidget *tree, int kind, quint32 id, quint32 cueId = invalidId())
+{
+    for (QTreeWidgetItemIterator it(tree); *it; ++it)
+        if ((*it)->data(0, ShowTreeView::KindRole).toInt() == kind
+            && (*it)->data(0, ShowTreeView::IdRole).toUInt() == id
+            && (cueId == invalidId() || (*it)->data(0, ShowTreeView::CueRole).toUInt() == cueId))
+            return *it;
+    return nullptr;
+}
+
+/* A click on a tree row as the mouse does it, with @a mods (⌘ is Control
+   to Qt). */
+static void clickRow(QTreeWidget *tree, QTreeWidgetItem *item, Qt::KeyboardModifiers mods = Qt::NoModifier)
+{
+    QVERIFY(item != nullptr);
+    for (QTreeWidgetItem *p = item->parent(); p != nullptr; p = p->parent())
+        p->setExpanded(true);
+    tree->scrollToItem(item);
+    QTest::mouseClick(tree->viewport(), Qt::LeftButton, mods, tree->visualItemRect(item).center());
+}
+
+/* Merge layers by mouse: ⌘-click and ⇧-click select several layers of one
+   cue; the header's Merge and the context menu's take them. The page, the
+   preview and the rest still follow the row clicked last. */
+void ShowTreeView_Test::mergeLayersBySelectingThem()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    FixtureGroup *usts = group("USTs", 2, 2);
+    const quint32 blue = colour(Qt::blue, "Blue");
+    const quint32 red = colour(Qt::red, "Red");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 c2 = st->addCue(list, 0, "Two");
+    Target both;
+    both.groups = { towers->id(), usts->id() };
+    const quint32 l1 = st->addLayer(c1, both);
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(blue)));
+    QList<quint32> made;
+    QVERIFY(st->splitLayer(c1, l1, &made));
+    QCOMPARE(made.count(), 2);
+    const quint32 c2Layer = st->addLayer(c2, groupTarget(towers->id()));
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 700);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *tree = view.tree();
+    QToolButton *merge = view.findChild<QToolButton *>("stMerge");
+    QVERIFY(merge != nullptr);
+    QVERIFY(tree->selectionMode() == QAbstractItemView::ExtendedSelection);
+
+    // One click: one row; Merge has nothing to take.
+    clickRow(tree, rowOf(tree, ShowTreeView::LayerNode, made[0], c1));
+    QCOMPARE(tree->selectedItems().count(), 1);
+    QCOMPARE(view.currentKind(), ShowTreeView::LayerNode);
+    QVERIFY(!merge->isEnabled());
+
+    // ⌘-click the other: both selected, the page shows the one clicked.
+    clickRow(tree, rowOf(tree, ShowTreeView::LayerNode, made[1], c1), Qt::ControlModifier);
+    QCOMPARE(tree->selectedItems().count(), 2);
+    QCOMPARE(view.currentId(), made[1]);
+    QCOMPARE(view.currentCueId(), c1);
+    QCOMPARE(view.findChild<QStackedWidget *>("stInspector")->currentWidget()->objectName(),
+             QString("stLayerPage"));
+    QVERIFY(merge->isEnabled());
+    QCOMPARE(st->previewedCue(), c1);
+
+    // The context menu offers it too, enabled.
+    {
+        bool sawMerge = false, enabled = false;
+        ModalCloser closer([&](QWidget *w) {
+            if (QMenu *m = qobject_cast<QMenu *>(w))
+                for (QAction *a : m->actions())
+                    if (a->objectName() == QLatin1String("stMergeLayers"))
+                    {
+                        sawMerge = true;
+                        enabled = a->isEnabled();
+                    }
+            return false;
+        });
+        QTreeWidgetItem *row = rowOf(tree, ShowTreeView::LayerNode, made[1], c1);
+        QMetaObject::invokeMethod(&view, "slotTreeContextMenu",
+                                  Q_ARG(QPoint, tree->visualItemRect(row).center()));
+        QVERIFY(sawMerge);
+        QVERIFY(enabled);
+        QCOMPARE(tree->selectedItems().count(), 2);   // the right-click kept the selection
+    }
+
+    // A layer of another cue in it: not mergeable.
+    clickRow(tree, rowOf(tree, ShowTreeView::LayerNode, c2Layer, c2), Qt::ControlModifier);
+    QCOMPARE(tree->selectedItems().count(), 3);
+    QVERIFY(!merge->isEnabled());
+    clickRow(tree, rowOf(tree, ShowTreeView::LayerNode, c2Layer, c2), Qt::ControlModifier);
+    QVERIFY(merge->isEnabled());
+
+    // Merge: one layer again, selected; one undo step.
+    const QString undoBefore = st->undoText();
+    merge->click();
+    QCOMPARE(st->cue(c1)->layers.count(), 1);
+    QCOMPARE(st->cue(c1)->layers.first().target.groups.count(), 2);
+    QCOMPARE(view.currentId(), st->cue(c1)->layers.first().id);
+    QCOMPARE(tree->selectedItems().count(), 1);
+    QVERIFY(st->undo());
+    QCOMPARE(st->cue(c1)->layers.count(), 2);
+    QCOMPARE(st->undoText(), undoBefore);
+
+    // ⇧-click selects the range; a merge that would change a look is
+    // refused with the reason.
+    QVERIFY(st->setLayerLook(c1, made[1], st->lookForPalette(red)));
+    clickRow(tree, rowOf(tree, ShowTreeView::LayerNode, made[0], c1));
+    clickRow(tree, rowOf(tree, ShowTreeView::LayerNode, made[1], c1), Qt::ShiftModifier);
+    QCOMPARE(tree->selectedItems().count(), 2);
+    QVERIFY(merge->isEnabled());
+    {
+        ModalCloser closer;
+        merge->click();
+        QCOMPARE(closer.seen.count(), 1);
+        QVERIFY2(closer.seen.first().contains("Colour"), qPrintable(closer.seen.first()));
+    }
+    QCOMPARE(st->cue(c1)->layers.count(), 2);
+}
+
+/* Several rows selected: Delete takes the cues and layers in one undo step
+   (a list or production only on its own); several cues dragged together
+   are refused, said in the hint. */
+void ShowTreeView_Test::severalRowsSelectedDeleteAndDrag()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    FixtureGroup *usts = group("USTs", 2, 2);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 list = st->addCueList(prod, "L", ListMode::NonTracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 c2 = st->addCue(list, 0, "Two");
+    const quint32 c3 = st->addCue(list, 1, "Three");
+    const quint32 lt = st->addLayer(c1, groupTarget(towers->id()));
+    const quint32 lu = st->addLayer(c1, groupTarget(usts->id()));
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 700);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *tree = view.tree();
+
+    // Two layers and a cue: one step.
+    clickRow(tree, rowOf(tree, ShowTreeView::LayerNode, lt, c1));
+    clickRow(tree, rowOf(tree, ShowTreeView::LayerNode, lu, c1), Qt::ControlModifier);
+    clickRow(tree, rowOf(tree, ShowTreeView::CueNode, c3), Qt::ControlModifier);
+    QCOMPARE(tree->selectedItems().count(), 3);
+    view.findChild<QToolButton *>("stDelete")->click();
+    QVERIFY(st->cue(c1)->layers.isEmpty());
+    QVERIFY(st->cue(c3) == nullptr);
+    QVERIFY(st->undo());
+    QCOMPARE(st->cue(c1)->layers.count(), 2);
+    QVERIFY(st->cue(c3) != nullptr);
+
+    // A list among them: refused, said, nothing gone.
+    clickRow(tree, rowOf(tree, ShowTreeView::CueNode, c2));
+    clickRow(tree, rowOf(tree, ShowTreeView::ListNode, list), Qt::ControlModifier);
+    {
+        ModalCloser closer;
+        view.findChild<QToolButton *>("stDelete")->click();
+        QCOMPARE(closer.seen.count(), 1);
+        QVERIFY(closer.seen.first().contains("on its own"));
+    }
+    QVERIFY(st->cueList(list) != nullptr && st->cue(c2) != nullptr);
+
+    // Two cues dragged onto a third: refused, and the hint says why.
+    QMimeData *mime = new QMimeData();
+    QByteArray data;
+    {
+        QDataStream ds(&data, QIODevice::WriteOnly);
+        ds << c1 << c2;
+    }
+    mime->setData(ShowTreeView::cueMimeType(), data);
+    QTreeWidgetItem *onto = rowOf(tree, ShowTreeView::CueNode, c3);
+    tree->scrollToItem(onto);
+    const QPoint at = tree->visualItemRect(onto).center();
+    QDragEnterEvent enter(at, Qt::MoveAction, mime, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(tree->viewport(), &enter);
+    QDragMoveEvent move(at, Qt::MoveAction, mime, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(tree->viewport(), &move);
+    QVERIFY(!move.isAccepted());
+    QVERIFY(view.findChild<QLabel *>("stDropHint")->text().contains("one cue at a time"));
+    QDropEvent drop(at, Qt::MoveAction, mime, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(tree->viewport(), &drop);
+    QCOMPARE(st->cueList(list)->indexOf(c1), 0);
+    QCOMPARE(st->cueList(list)->indexOf(c2), 1);
+    QCOMPARE(st->cueList(list)->indexOf(c3), 2);
+    delete mime;
+}
+
+/* One rule: a new list is Tracking, by mouse (+ Cue list) and typed; an
+   imported one Non-tracking (D12). */
+void ShowTreeView_Test::aNewCueListIsTracking()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    ShowTreeView view(nullptr, m_doc);
+    QVERIFY(view.selectNode(prod));
+    {
+        ModalCloser closer([](QWidget *w) {
+            QInputDialog *d = qobject_cast<QInputDialog *>(w);
+            if (d == nullptr)
+                return false;
+            d->setTextValue("01-Opener");
+            d->accept();
+            return true;
+        });
+        view.findChild<QToolButton *>("stNewList")->click();
+    }
+    QCOMPARE(view.currentKind(), ShowTreeView::ListNode);
+    const CueList *mouse = st->cueList(view.currentId());
+    QVERIFY(mouse != nullptr);
+    QCOMPARE(mouse->name, QString("01-Opener"));
+    QVERIFY(mouse->mode == ListMode::Tracking);
+    QCOMPARE(view.findChild<QComboBox *>("stListMode")->currentIndex(), 1);
+
+    QVERIFY(view.runCommand("list \"02-Typed\""));
+    QCOMPARE(view.currentKind(), ShowTreeView::ListNode);
+    QVERIFY(st->cueList(view.currentId())->mode == ListMode::Tracking);
+
+    Chaser *chaser = new Chaser(m_doc);
+    chaser->setName("Old");
+    m_doc->addFunction(chaser);
+    view.importChaser(chaser->id(), false);
+    QVERIFY(st->cueList(view.currentId()) != nullptr);
+    QVERIFY(st->cueList(view.currentId())->mode == ListMode::NonTracking);
+}
+
+/* D13: a generated function is edited in the Show Tree. Its chaser opens
+   locked (steps and name; its playback settings and testing stay), with
+   Show in Show Tree; deleting, renaming or adding to it elsewhere is
+   refused with the same words; a layer's scene can be detached. */
+void ShowTreeView_Test::generatedFunctionsAreLockedElsewhere()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 l1 = st->addLayer(c1, groupTarget(towers->id()));
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(full)));
+    const quint32 chaserId = st->cueList(list)->chaser;
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(chaserId));
+    QVERIFY(chaser != nullptr && chaser->isVisible());
+    const quint32 collId = st->cue(c1)->collection;
+    const Collection *coll = qobject_cast<const Collection *>(m_doc->function(collId));
+    QVERIFY(coll != nullptr && coll->functions().count() == 1);
+    const quint32 sceneId = coll->functions().first();
+    Scene *plain = new Scene(m_doc);
+    plain->setName("Plain");
+    m_doc->addFunction(plain);
+    const QString locked = ShowTreeController::lockedText();
+
+    ShowTreeView view(nullptr, m_doc);
+    QCOMPARE(ShowTreeView::instance(), &view);
+
+    // Function Manager: the chaser's row isn't renamed in place; its editor
+    // opens locked; Delete is refused.
+    {
+        FunctionManager fm(nullptr, m_doc);
+        FunctionsTreeWidget *ftree = fm.findChild<FunctionsTreeWidget *>();
+        QVERIFY(ftree != nullptr);
+        QTreeWidgetItem *row = ftree->functionItem(chaser);
+        QVERIFY(row != nullptr);
+        QVERIFY(!(row->flags() & Qt::ItemIsEditable));
+        QVERIFY(row->toolTip(0).contains(locked));
+        QVERIFY(QMetaObject::invokeMethod(&fm, "slotTreeItemDoubleClicked", Q_ARG(QTreeWidgetItem *, row)));
+        ChaserEditor *ed = fm.findChild<ChaserEditor *>();
+        QVERIFY(ed != nullptr);
+        QVERIFY(ed->isLocked());
+        QVERIFY(!ed->m_add->isEnabled());
+        QVERIFY(!ed->m_remove->isEnabled());
+        QVERIFY(!ed->m_raise->isEnabled());
+        QVERIFY(ed->m_nameEdit->isReadOnly());
+        QVERIFY(ed->m_tree->editTriggers() == QAbstractItemView::NoEditTriggers);
+        QVERIFY(ed->m_singleShot->isEnabled() && ed->m_loop->isEnabled());   // run order: the user's
+        QVERIFY(ed->m_testPlayButton->isEnabled());                           // it still plays
+        QLabel *text = ed->findChild<QLabel *>("stLockedText");
+        QVERIFY(text != nullptr && text->text().contains(locked.toHtmlEscaped()));
+        QPushButton *reveal = ed->findChild<QPushButton *>("stLockedReveal");
+        QVERIFY(reveal != nullptr && reveal->isEnabled());
+        reveal->click();
+        QCOMPARE(view.currentKind(), ShowTreeView::ListNode);
+        QCOMPARE(view.currentId(), list);
+
+        ftree->clearSelection();
+        row = ftree->functionItem(chaser);
+        row->setSelected(true);
+        ModalCloser closer;
+        QVERIFY(QMetaObject::invokeMethod(&fm, "slotDelete"));
+        QCOMPARE(closer.seen.count(), 1);
+        QVERIFY(closer.seen.first().startsWith("stLockedMessage|" + locked));
+        QVERIFY(m_doc->function(chaserId) != nullptr);
+    }
+
+    // The Programming tab: the same editor, locked; delete and add-to
+    // refused.
+    {
+        ProgrammingManager pm(nullptr, m_doc);
+        pm.showFunction(chaserId);
+        ChaserEditor *ed = pm.findChild<ChaserEditor *>();
+        QVERIFY(ed != nullptr && ed->isLocked());
+        ModalCloser closer;
+        pm.deleteFunctions({ chaserId });
+        QVERIFY(m_doc->function(chaserId) != nullptr);
+        pm.addFunctionsToCollection(collId, { plain->id() });
+        QVERIFY(!qobject_cast<const Collection *>(m_doc->function(collId))->functions().contains(plain->id()));
+        QCOMPARE(closer.seen.count(), 2);
+        // A plain function is deleted as ever.
+        pm.deleteFunctions({ plain->id() });
+    }
+
+    // A VC widget's live edit: locked too.
+    {
+        FunctionLiveEditDialog dlg(m_doc, chaserId, nullptr);
+        ChaserEditor *ed = dlg.findChild<ChaserEditor *>();
+        QVERIFY(ed != nullptr && ed->isLocked());
+    }
+
+    // A layer's scene: its bar offers Detach, which makes a plain scene the
+    // layer then plays as it is -- one undo step.
+    quint32 detached = Function::invalidId();
+    QWidget *bar = ShowTreeView::lockedBanner(nullptr, m_doc, sceneId, [&](quint32 sid) { detached = sid; });
+    QPushButton *detach = bar->findChild<QPushButton *>("stLockedDetach");
+    QVERIFY(detach != nullptr);
+    detach->click();
+    QVERIFY(detached != Function::invalidId());
+    QVERIFY(!st->isGenerated(detached));
+    QCOMPARE(st->cue(c1)->layer(l1)->target.function, detached);
+    delete bar;
+    QVERIFY(st->undo());
+    QVERIFY(m_doc->function(detached) == nullptr);
+    QCOMPARE(st->cue(c1)->layer(l1)->target.groups, QList<quint32>({ towers->id() }));
+    // A chaser has no Detach.
+    bar = ShowTreeView::lockedBanner(nullptr, m_doc, chaserId, [](quint32) {});
+    QVERIFY(bar->findChild<QPushButton *>("stLockedDetach") == nullptr);
+    delete bar;
+}
+
+/* The tree's state as an undo must give it back: the productions (a
+   remade cue's Collection id aside), every palette and whether it is a
+   one-off, and every function the tree didn't make. */
+static QString treeState(Doc *doc)
+{
+    ShowTreeController *st = doc->showTree();
+    QByteArray xml;
+    QBuffer buffer(&xml);
+    buffer.open(QIODevice::WriteOnly);
+    QXmlStreamWriter w(&buffer);
+    w.writeStartDocument();
+    w.writeStartElement("S");
+    for (const Production &p : st->productions())
+        ShowTree::saveXML(&w, p);
+    w.writeEndElement();
+    w.writeEndDocument();
+    QString out = QString::fromUtf8(xml);
+    out.remove(QRegularExpression(QStringLiteral(" Collection=\"\\d+\"")));
+    QList<quint32> pids;
+    for (const QLCPalette *p : doc->palettes())
+        pids << p->id();
+    std::sort(pids.begin(), pids.end());
+    for (quint32 id : pids)
+    {
+        const QLCPalette *p = doc->palette(id);
+        out += QStringLiteral("\nP %1 %2 %3 %4 %5").arg(id).arg(p->name(), p->path())
+               .arg(st->isInlinePalette(id)).arg(p->values().count() > 0 ? p->values().first().toString() : QString());
+    }
+    QList<quint32> fids;
+    for (const Function *f : doc->functions())
+        if (!st->isGenerated(f->id()))
+            fids << f->id();
+    std::sort(fids.begin(), fids.end());
+    for (quint32 id : fids)
+        out += QStringLiteral("\nF %1 %2 %3").arg(id).arg(doc->function(id)->name(), doc->function(id)->path());
+    return out;
+}
+
+/* D22: every action in the tab is one undo step -- one undo gives back the
+   state before it exactly, and redo the state after. Walked by the mouse
+   (drops, pickers, clicks) and by typed commands. */
+void ShowTreeView_Test::everyActionIsOneUndoStep()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    FixtureGroup *usts = group("USTs", 2, 2);
+    FixtureGroup *pars = group("Pars", 4, 2);
+    const quint32 blue = colour(Qt::blue, "Blue");
+    const quint32 i45 = dimmer(115, "Intensity 45%");
+    m_doc->palette(i45)->setPath("Palettes/Dimmer");
+    Scene *haze = new Scene(m_doc);
+    haze->setName("Haze");
+    haze->setValue(m_fixtures[5], 0, 100);
+    m_doc->addFunction(haze);
+    Scene *smoke = new Scene(m_doc);
+    smoke->setName("Smoke");
+    smoke->setValue(m_fixtures[4], 0, 50);
+    m_doc->addFunction(smoke);
+    // A chaser of a scene of groups to import.
+    Scene *look = new Scene(m_doc);
+    look->setName("Look");
+    look->addFixtureGroup(pars->id());
+    look->addPalette(i45);
+    m_doc->addFunction(look);
+    Collection *step = new Collection(m_doc);
+    step->setName("0.0.1-Step");
+    step->addFunction(look->id());
+    m_doc->addFunction(step);
+    Chaser *old = new Chaser(m_doc);
+    old->setName("Old");
+    m_doc->addFunction(old);
+    old->addStep(ChaserStep(step->id()));
+
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 list = st->addCueList(prod, "L");     // Tracking
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 c2 = st->addCue(list, 0, "Two");
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 700);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    view.setRecordAsker([](const QList<ShowTreeController::RecordSource> &, ShowTreeController::RecordSource *chosen,
+                           bool *) {
+        *chosen = ShowTreeController::RecordSource::Selected;
+        return true;
+    });
+
+    // Nothing here asks; were it to, the test says so rather than waits.
+    ModalCloser closer;
+    int walked = 0;
+    auto oneStep = [&](const char *what, const std::function<bool()> &action) -> bool {
+        const QString before = treeState(m_doc);
+        if (!action())
+        {
+            qWarning() << what << "did nothing";
+            return false;
+        }
+        const QString after = treeState(m_doc);
+        if (after == before)
+        {
+            qWarning() << what << "changed nothing";
+            return false;
+        }
+        if (!st->undo() || treeState(m_doc) != before)
+        {
+            qWarning() << what << ": one undo didn't give back the state before it";
+            return false;
+        }
+        if (!st->redo() || treeState(m_doc) != after)
+        {
+            qWarning() << what << ": redo didn't give back the state after it";
+            return false;
+        }
+        ++walked;
+        return true;
+    };
+    auto layerOn = [&](quint32 cue, quint32 g) -> quint32 {
+        for (const Layer &l : st->cue(cue)->layers)
+            if (l.target.groups.contains(g))
+                return l.id;
+        return invalidId();
+    };
+
+    // Drops
+    QVERIFY(oneStep("a drop of two groups", [&] { return view.dropTargets(c1, { towers->id(), usts->id() }, {}); }));
+    const quint32 both = layerOn(c1, towers->id());
+    QVERIFY(oneStep("a colour and a dimmer dropped together", [&] {
+        return view.dropPalettes(c1, both, { blue, i45 });
+    }));
+    QVERIFY(oneStep("Split", [&] { return view.splitLayer(c1, both); }));
+    QVERIFY(oneStep("Merge, by selecting", [&] {
+        view.tree()->clearSelection();
+        clickRow(view.tree(), rowOf(view.tree(), ShowTreeView::LayerNode, layerOn(c1, towers->id()), c1));
+        clickRow(view.tree(), rowOf(view.tree(), ShowTreeView::LayerNode, layerOn(c1, usts->id()), c1),
+                 Qt::ControlModifier);
+        view.findChild<QToolButton *>("stMerge")->click();
+        return st->cue(c1)->layers.count() == 1;
+    }));
+    const quint32 merged = layerOn(c1, towers->id());
+    QVERIFY(oneStep("an ⌥-drop: a layer each", [&] {
+        return view.dropTargets(c2, { pars->id() }, { m_fixtures[0] }, true);
+    }));
+    QVERIFY(oneStep("two functions dropped together", [&] {
+        return view.dropFunctions(c1, { haze->id(), smoke->id() });
+    }));
+    QVERIFY(oneStep("groups dropped on a layer", [&] {
+        return view.dropTargetsOnLayer(c1, merged, { pars->id() }, {});
+    }));
+    QVERIFY(oneStep("a fixture dropped on a carried-in layer", [&] {
+        const Target carried = st->cue(c1)->layer(merged)->target;
+        return view.dropTargetsOnTracked(c2, carried, {}, { m_fixtures[5] });
+    }));
+    QVERIFY(oneStep("a palette dropped on a cue (a cue look)", [&] {
+        return view.dropPalettes(c2, invalidId(), { blue });
+    }));
+    // The ⋯ pickers
+    QVERIFY(oneStep("Level… to a one-off", [&] { return view.setOneOffDimmer(c1, merged, 31); }));
+    QVERIFY(oneStep("Make reusable, the row's link", [&] {
+        view.selectNode(merged, c1);
+        QLabel *reuse = view.findChild<QLabel *>("stReuse:Dimmer");
+        if (reuse == nullptr)
+            return false;
+        emit reuse->linkActivated("reuse");
+        return true;
+    }));
+    QVERIFY(oneStep("Colour… to a one-off", [&] { return view.setOneOffColour(c1, merged, QColor(1, 2, 3)); }));
+    QVERIFY(oneStep("Make reusable…, named by hand", [&] {
+        const quint32 pid = st->cue(c1)->layer(merged)->look(KeyColour)->palettes.first();
+        return st->makeReusable(pid, "Mine", "Palettes/Mine");
+    }));
+    QVERIFY(oneStep("Level… reusing a palette", [&] { return view.setOneOffDimmer(c1, merged, 45); }));
+    QVERIFY(oneStep("None (off here)", [&] { return view.setAttributeNone(c1, merged, KeyColour); }));
+    QVERIFY(oneStep("Clear (inherit)", [&] { return view.clearAttribute(c1, merged, KeyColour); }));
+    // The pages and the context menu
+    QVERIFY(oneStep("the cue's name", [&] {
+        view.selectNode(c2);
+        QLineEdit *name = view.findChild<QLineEdit *>("stCueName");
+        name->setText("Second");
+        emit name->editingFinished();
+        return st->cue(c2)->name == QLatin1String("Second");
+    }));
+    QVERIFY(oneStep("the cue's mode", [&] { return st->setCueMode(c2, CueMode::Block); }));
+    QVERIFY(oneStep("the list's mode", [&] {
+        view.selectNode(list);
+        QComboBox *mode = view.findChild<QComboBox *>("stListMode");
+        mode->setCurrentIndex(0);
+        emit mode->activated(0);    // as a pick from the list does
+        return st->cueList(list)->mode == ListMode::NonTracking;
+    }));
+    QVERIFY(oneStep("the base cue", [&] { return st->setBaseCue(list, c1); }));
+    QVERIFY(oneStep("Release", [&] {
+        view.selectNode(merged, c1);
+        view.findChild<QCheckBox *>("stLayerRelease")->click();
+        return st->cue(c1)->layer(merged)->release;
+    }));
+    QVERIFY(oneStep("an include", [&] { return st->addInclude(c2, c1); }));
+    QVERIFY(oneStep("a cue dropped on another (moved)", [&] { return view.dropCue(c2, c1, false); }));
+    QVERIFY(oneStep("+ Cue", [&] {
+        view.selectNode(c1);
+        view.findChild<QToolButton *>("stNewCue")->click();
+        return st->cueList(list)->cues.count() == 3;
+    }));
+    QVERIFY(oneStep("Record", [&] { return view.recordFrom(c1) != invalidId(); }));
+    QVERIFY(oneStep("Duplicate cue", [&] { return st->duplicateCue(c1) != invalidId(); }));
+    QVERIFY(oneStep("Rename a layer", [&] { return st->renameNode(merged, "Front"); }));
+    QVERIFY(oneStep("Detach to plain scene", [&] {
+        return st->detachLayer(c2, layerOn(c2, pars->id())) != Function::invalidId();
+    }));
+    QVERIFY(oneStep("Delete a layer", [&] {
+        if (!view.selectNode(merged, c1))
+            return false;
+        view.findChild<QToolButton *>("stDelete")->click();
+        return st->cue(c1)->layer(merged) == nullptr;
+    }));
+    QVERIFY(oneStep("Delete several rows", [&] {
+        view.tree()->clearSelection();
+        clickRow(view.tree(), rowOf(view.tree(), ShowTreeView::CueNode, c1));
+        clickRow(view.tree(), rowOf(view.tree(), ShowTreeView::CueNode, c2), Qt::ControlModifier);
+        view.findChild<QToolButton *>("stDelete")->click();
+        return st->cue(c1) == nullptr && st->cue(c2) == nullptr;
+    }));
+    QVERIFY(oneStep("+ Production", [&] { return st->addProduction("Q") != invalidId(); }));
+    QVERIFY(oneStep("Import chaser", [&] {
+        view.importChaser(old->id(), false);
+        return st->productions().count() == 3;
+    }));
+    // Typed: each command one step.
+    QVERIFY(view.selectNode(list));
+    for (const char *line : { "cue + \"Typed\"", "Towers colour Blue dimmer 45", "Towers USTs dimmer 45",
+                              "Pars, USTs colour Blue", "cue look colour Blue", "block", "base",
+                              "release Towers", "function Haze, Smoke", "Towers dimmer none",
+                              "Towers dimmer clear", "dup", "record selected", "cue + \"Again\"" })
+        QVERIFY2(oneStep(line, [&] {
+                     // Undo and redo leave the selection where they find it:
+                     // back on the list's last cue, as a user would be.
+                     view.selectNode(st->cueList(list)->cues.last().id);
+                     return view.runCommand(QString::fromUtf8(line));
+                 }),
+                 qPrintable(QStringLiteral("%1: %2").arg(QString::fromUtf8(line), view.commandMessage())));
+    const QString include = QStringLiteral("include %1").arg(st->cueList(list)->cues.first().number);
+    QVERIFY2(oneStep("include", [&] {
+                 view.selectNode(st->cueList(list)->cues.last().id);
+                 return view.runCommand(include);
+             }), qPrintable(include + ": " + view.commandMessage()));
+    QVERIFY(walked >= 45);
 }
 
 QTEST_MAIN(ShowTreeView_Test)

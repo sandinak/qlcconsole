@@ -51,6 +51,8 @@ using namespace ShowTree;
 #define KXMLShowTreeGenerated       QStringLiteral("Generated")
 #define KXMLShowTreeInline          QStringLiteral("InlinePalettes")
 #define KXMLShowTreeChasers         QStringLiteral("Chasers")
+#define KXMLShowTreeReusable        QStringLiteral("Reusable")
+#define KXMLShowTreeDetached        QStringLiteral("Detached")
 
 /** Where the tree files what it makes (§4): out of the way of the user's
     own folders. */
@@ -175,15 +177,20 @@ bool ShowTreeController::edit(const QString &label,
         return false;
 
     m_productions = work;
-    m_undo.append(Snapshot { label, before });
-    while (m_undo.count() > kUndoLimit)
-        m_undo.removeFirst();
-    m_redo.clear();
+    pushUndo(label, before);
 
     bake();
     m_doc->setModified();
     emit changed();
     return true;
+}
+
+void ShowTreeController::pushUndo(const QString &label, const QByteArray &before)
+{
+    m_undo.append(Snapshot { label, before });
+    while (m_undo.count() > kUndoLimit)
+        m_undo.removeFirst();
+    m_redo.clear();
 }
 
 void ShowTreeController::beginBatch(const QString &label)
@@ -208,8 +215,11 @@ void ShowTreeController::endBatch(bool keep)
     if (keep)
     {
         for (quint32 pid : named)
+        {
             if (m_inlinePalettes.remove(pid) && !m_batchChanged)
                 m_doc->setModified();
+            m_madeReusable.insert(pid);
+        }
     }
     if (!m_batchChanged)
     {
@@ -227,10 +237,7 @@ void ShowTreeController::endBatch(bool keep)
         emit changed();
         return;
     }
-    m_undo.append(Snapshot { m_batchLabel, m_batchBefore });
-    while (m_undo.count() > kUndoLimit)
-        m_undo.removeFirst();
-    m_redo.clear();
+    pushUndo(m_batchLabel, m_batchBefore);
     bake();
     m_doc->setModified();
     emit changed();
@@ -1584,29 +1591,72 @@ quint32 ShowTreeController::createInlinePalette(QLCPalette::PaletteType type,
     return id;
 }
 
-bool ShowTreeController::makeReusable(quint32 paletteId, const QString &name, const QString &path)
+bool ShowTreeController::applyReusable(quint32 paletteId, const QString &name, const QString &path)
 {
     QLCPalette *p = m_doc->palette(paletteId);
     if (p == nullptr || !m_inlinePalettes.contains(paletteId))
         return false;
     m_inlinePalettes.remove(paletteId);
+    m_madeReusable.insert(paletteId);
     p->setName(name);
     p->setPath(path);
+    return true;
+}
+
+bool ShowTreeController::makeReusable(quint32 paletteId, const QString &name, const QString &path)
+{
+    if (m_doc->palette(paletteId) == nullptr || !m_inlinePalettes.contains(paletteId))
+        return false;
+    // One undo step (D22): the snapshot holds it as the one-off it was.
+    const QByteArray before = snapshotXml();
+    if (!applyReusable(paletteId, name, path))
+        return false;
+    pushUndo(tr("Make reusable %1").arg(name), before);
     m_doc->setModified();
     emit changed();
     return true;
 }
 
-bool ShowTreeController::makeReusable(quint32 paletteId)
+void ShowTreeController::reusableName(quint32 paletteId, QString *name, QString *path)
 {
     const QLCPalette *p = m_doc->palette(paletteId);
-    if (p == nullptr || !m_inlinePalettes.contains(paletteId))
-        return false;
+    if (p == nullptr)
+        return;
     // Named as if it were new: its own one-off name is not "taken".
-    m_inlinePalettes.remove(paletteId);
-    const QString name = suggestPaletteName(p->type(), p->values());
-    m_inlinePalettes.insert(paletteId);
-    return makeReusable(paletteId, name, suggestPaletteFolder(p->type()));
+    const bool wasInline = m_inlinePalettes.remove(paletteId);
+    *name = suggestPaletteName(p->type(), p->values());
+    *path = suggestPaletteFolder(p->type());
+    if (wasInline)
+        m_inlinePalettes.insert(paletteId);
+}
+
+bool ShowTreeController::makeReusable(quint32 paletteId)
+{
+    return makeReusable(QList<quint32>({ paletteId }));
+}
+
+bool ShowTreeController::makeReusable(const QList<quint32> &paletteIds)
+{
+    QList<quint32> ids;
+    for (quint32 pid : paletteIds)
+        if (m_doc->palette(pid) != nullptr && m_inlinePalettes.contains(pid) && !ids.contains(pid))
+            ids << pid;
+    if (ids.isEmpty())
+        return false;
+    const QByteArray before = snapshotXml();
+    QStringList names;
+    for (quint32 pid : ids)
+    {
+        // One at a time: the second of two equal names gets " (2)".
+        QString name, path;
+        reusableName(pid, &name, &path);
+        if (applyReusable(pid, name, path))
+            names << name;
+    }
+    pushUndo(tr("Make reusable %1").arg(names.join(QStringLiteral(", "))), before);
+    m_doc->setModified();
+    emit changed();
+    return true;
 }
 
 /** The level a Dimmer value is, as the picker and "dimmer 45" say it. */
@@ -1880,6 +1930,7 @@ quint32 ShowTreeController::createNamedPalette(QLCPalette::PaletteType type, con
         return pid;
     }
     m_inlinePalettes.remove(pid);
+    m_madeReusable.insert(pid);
     m_doc->setModified();
     emit changed();
     return pid;
@@ -2102,6 +2153,19 @@ void ShowTreeController::clearUndo()
     m_redo.clear();
 }
 
+/** The functions the tree's opaque layers play. */
+static QSet<quint32> opaqueFunctions(const QList<Production> &productions)
+{
+    QSet<quint32> out;
+    for (const Production &p : productions)
+        for (const CueList &l : p.lists)
+            for (const Cue &c : l.cues)
+                for (const Layer &layer : c.layers)
+                    if (layer.target.isOpaque())
+                        out.insert(layer.target.function);
+    return out;
+}
+
 QByteArray ShowTreeController::snapshotXml() const
 {
     QByteArray xml;
@@ -2119,9 +2183,26 @@ void ShowTreeController::restoreSnapshot(const QByteArray &xml)
     QXmlStreamReader r(xml);
     while (!r.atEnd() && !r.isStartElement())
         r.readNext();
+    m_snapshotDetached.clear();
     if (r.name() == KXMLQLCShowTree)
         loadState(r, true);
     bake();
+    // A scene Detach made after this snapshot (the detach is undone) goes,
+    // once the bake has let go of it; the redo snapshot holds it as it was.
+    const QSet<quint32> played = opaqueFunctions(m_productions);
+    QList<quint32> detached = m_detached.values();
+    std::sort(detached.begin(), detached.end());
+    for (quint32 id : detached)
+    {
+        if (m_snapshotDetached.contains(id) || played.contains(id))
+            continue;
+        Function *f = m_doc->function(id);
+        if (f != nullptr && f->isRunning())
+            continue;   // never pulled from under the show
+        m_detached.remove(id);
+        if (f != nullptr && m_doc->getUsage(id).isEmpty())
+            m_doc->deleteFunction(id);
+    }
     m_doc->setModified();
     emit changed();
 }
@@ -2419,15 +2500,18 @@ void ShowTreeController::dropUnusedInlinePalettes()
     {
         if (used.contains(id))
             continue;
+        // A generated scene still waiting to be let go of plays it, or a
+        // scene of the show's own does (one made reusable, used, and then
+        // made a one-off again by an undo): it stays.
         bool running = false;
-        for (quint32 sid : m_generatedScenes)
+        for (Function *f : m_doc->functions())
         {
-            const Scene *s = qobject_cast<const Scene *>(m_doc->function(sid));
+            const Scene *s = qobject_cast<const Scene *>(f);
             if (s != nullptr && s->palettes().contains(id))
                 running = true;
         }
         if (running)
-            continue;   // a scene still waiting to be let go of plays it
+            continue;
         m_inlinePalettes.remove(id);
         if (m_doc->palette(id) != nullptr)
             m_doc->deletePalette(id);
@@ -2481,7 +2565,80 @@ quint32 ShowTreeController::detachLayer(quint32 cueId, quint32 layerId)
         m_doc->deleteFunction(sid);
         return Function::invalidId();
     }
+    // Known as detached after the step's snapshot: undo takes it away.
+    m_detached.insert(sid);
     return sid;
+}
+
+QString ShowTreeController::lockedText()
+{
+    return tr("Made by the Show Tree — edit it there.");
+}
+
+bool ShowTreeController::generatedNode(quint32 functionId, quint32 *listId, quint32 *cueId,
+                                       quint32 *layerId) const
+{
+    if (cueId != nullptr)
+        *cueId = invalidId();
+    if (layerId != nullptr)
+        *layerId = invalidId();
+    if (!isGenerated(functionId))
+        return false;
+    const Scene *scene = qobject_cast<const Scene *>(m_doc->function(functionId));
+    const QString sig = scene == nullptr ? QString() : sceneSignature(scene);
+    for (const Production &p : m_productions)
+        for (const CueList &l : p.lists)
+        {
+            if (l.chaser == functionId)
+            {
+                *listId = l.id;
+                return true;
+            }
+            for (const Cue &c : l.cues)
+                if (c.collection == functionId)
+                {
+                    *listId = l.id;
+                    if (cueId != nullptr)
+                        *cueId = c.id;
+                    return true;
+                }
+            if (scene == nullptr)
+                continue;
+            // A layer's scene: where it is a layer of the cue's own first.
+            const QList<ResolvedCue> resolved = resolve(l);
+            quint32 firstCue = invalidId();
+            for (int i = 0; i < resolved.count() && i < l.cues.count(); ++i)
+                for (const ResolvedLayer &rl : resolved.at(i).layers)
+                {
+                    if (rl.target.isOpaque() || rl.isDark())
+                        continue;
+                    QList<quint32> pals;
+                    for (quint32 pid : scenePalettes(rl))
+                        if (m_doc->palette(pid) != nullptr)
+                            pals << pid;
+                    if (sceneSignature(rl.target, pals) != sig)
+                        continue;
+                    if (firstCue == invalidId())
+                        firstCue = l.cues.at(i).id;
+                    if (rl.own && l.cues.at(i).layer(rl.layerId) != nullptr)
+                    {
+                        *listId = l.id;
+                        if (cueId != nullptr)
+                            *cueId = l.cues.at(i).id;
+                        if (layerId != nullptr)
+                            *layerId = rl.layerId;
+                        return true;
+                    }
+                }
+            if (firstCue != invalidId())
+            {
+                *listId = l.id;
+                if (cueId != nullptr)
+                    *cueId = firstCue;
+                return true;
+            }
+        }
+    return false;
 }
 
 /****************************************************************************
@@ -2870,6 +3027,27 @@ void ShowTreeController::saveState(QXmlStreamWriter *doc, bool snapshot) const
                 if (Function *f = m_doc->function(l.chaser))
                     f->saveXML(doc);
         doc->writeEndElement();
+
+        // ...a one-off made reusable, named as it is (redo of Make
+        // reusable names it again)...
+        QList<quint32> reusable = m_madeReusable.values();
+        std::sort(reusable.begin(), reusable.end());
+        doc->writeStartElement(KXMLShowTreeReusable);
+        for (quint32 id : reusable)
+            if (QLCPalette *p = m_doc->palette(id))
+                if (!m_inlinePalettes.contains(id))
+                    p->saveXML(doc);
+        doc->writeEndElement();
+
+        // ...and the scenes Detach made, as they are now: an undo past a
+        // detach takes its scene away, a redo brings it back.
+        QList<quint32> detached = m_detached.values();
+        std::sort(detached.begin(), detached.end());
+        doc->writeStartElement(KXMLShowTreeDetached);
+        for (quint32 id : detached)
+            if (Function *f = m_doc->function(id))
+                f->saveXML(doc);
+        doc->writeEndElement();
     }
 
     doc->writeEndElement();
@@ -2935,10 +3113,65 @@ void ShowTreeController::loadState(QXmlStreamReader &root, bool snapshot)
                     if (have->type() == saved->type())
                     {
                         have->setName(saved->name());
+                        have->setPath(saved->path());
                         have->setValues(saved->values());
                     }
                     delete saved;
                 }
+            }
+        }
+        else if (root.name() == KXMLShowTreeReusable && snapshot)
+        {
+            while (root.readNextStartElement())
+            {
+                if (root.name() != QLatin1String("Palette"))
+                {
+                    root.skipCurrentElement();
+                    continue;
+                }
+                QLCPalette *saved = new QLCPalette(QLCPalette::Undefined, m_doc);
+                if (!saved->loadXML(root))
+                {
+                    delete saved;
+                    continue;
+                }
+                const quint32 id = saved->id();
+                m_inlinePalettes.remove(id);
+                m_madeReusable.insert(id);
+                QLCPalette *have = m_doc->palette(id);
+                if (have == nullptr)
+                {
+                    if (!m_doc->addPalette(saved, id))
+                        delete saved;
+                }
+                else
+                {
+                    if (have->type() == saved->type())
+                    {
+                        have->setName(saved->name());
+                        have->setPath(saved->path());
+                        have->setValues(saved->values());
+                    }
+                    delete saved;
+                }
+            }
+        }
+        else if (root.name() == KXMLShowTreeDetached && snapshot)
+        {
+            while (root.readNextStartElement())
+            {
+                const quint32 id = root.attributes().value(QStringLiteral("ID")).toString().toUInt();
+                if (root.name() == QLatin1String("Function"))
+                    m_snapshotDetached.insert(id);
+                if (root.name() != QLatin1String("Function") || m_doc->function(id) != nullptr)
+                {
+                    if (root.name() == QLatin1String("Function") && m_doc->function(id) != nullptr)
+                        m_detached.insert(id);
+                    root.skipCurrentElement();
+                    continue;
+                }
+                if (Function::loader(root, m_doc) && m_doc->function(id) != nullptr)
+                    m_detached.insert(id);
             }
         }
         else if (root.name() == KXMLShowTreeChasers && snapshot)
@@ -3010,6 +3243,8 @@ void ShowTreeController::reset()
     m_generatedCollections.clear();
     m_generatedChasers.clear();
     m_inlinePalettes.clear();
+    m_madeReusable.clear();
+    m_detached.clear();
     m_generatedLabels.clear();
     m_undo.clear();
     m_redo.clear();
@@ -3024,11 +3259,13 @@ void ShowTreeController::slotFunctionRemoved(quint32 fid)
     m_generatedCollections.remove(fid);
     m_generatedChasers.remove(fid);
     m_generatedLabels.remove(fid);
+    m_detached.remove(fid);
 }
 
 void ShowTreeController::slotPaletteRemoved(quint32 pid)
 {
     m_inlinePalettes.remove(pid);
+    m_madeReusable.remove(pid);
 }
 
 /****************************************************************************

@@ -1188,6 +1188,74 @@ recordAsksWhenTheChoicesDiffer` (setting, Don't ask again per mode, the
 command line, the dialog), `severalGroupsOneLayerOrEach` (+ Layer, hints,
 split, merge from a tree multi-selection), `aPickedValueReusesAPalette`.
 
+### 10.12 Gaps closed (2026-10-17): multi-select, D13 lock, one list rule, one undo step
+
+Four limits the help listed, found while documenting it.
+
+- **Merge by mouse.** The tree is `ExtendedSelection`: ⌘-click toggles a
+  row, ⇧-click takes a range. Everything that acts on one row (the page,
+  the Design preview, + Cue, Record, the context menu's single-row items)
+  follows the *current* row, the one clicked last; only Merge and Delete
+  read the selection. **Merge** is a header button and the context menu's
+  item, enabled when `selectedLayers()` is 2+ own layers of one cue (a
+  ⤳ row or another cue's layer empties it). Delete with several rows:
+  the cues and own layers in one batch step; a list or production in the
+  selection is refused with a message (they are deleted alone, as they
+  ask first). Several cues dragged together are refused (hint: *"Drag one
+  cue at a time"*); layers never drag. A rebuild keeps the rest of a
+  multi-selection. Rows selected from code use `ClearAndSelect`
+  explicitly: with `ExtendedSelection` and no event Qt reads the held
+  modifiers, so a held ⌘ (⌘Z) would *toggle* the row — found by the test.
+- **D13 enforced.** `ShowTreeController::lockedText()` ("Made by the Show
+  Tree — edit it there.") and `generatedNode(fid)` (list for a chaser, cue
+  for a collection, first cue and own layer for a scene).
+  `ShowTreeView::lockedBanner()` (that text, what it plays, **Show in Show
+  Tree** → `reveal()`: the tab forward, the node selected; for a layer's
+  scene **Detach to plain scene**) and `refuseGenerated()` (a message, the
+  same words, Show in Show Tree). Wired into: the Functions window (the
+  chaser's editor locked; a collection/scene shows only the bar; Delete
+  refused, also of a folder holding one), the functions tree (no in-place
+  rename, not moved to another folder, a folder delete skips them), the
+  Programming tab (editor locked; delete, add to collection, take out of a
+  chaser/collection refused), Shows' chaser editor and a VC widget's live
+  edit (locked). **`ChaserEditor::setLocked(banner)`** locks the steps and
+  the name (add/remove/raise/lower/shuffle/cut/paste, drops, in-place
+  edits, the skip menu, Renumber, the speed dial) and keeps what §10.2 says
+  is the user's: run order, direction, the fade/hold modes, the cue-list
+  number and main cue list, testing. Running and playing are untouched.
+  **Detach to plain chaser** is not built (open): a chaser's steps are the
+  tree's cues.
+- **One list rule.** `addCueList()` defaults to **Tracking**, and + Cue
+  list passes it explicitly, as `list "name"` always did; `importChaser()`
+  makes its list Non-tracking (D12). The existing tests that relied on the
+  old default now say `ListMode::NonTracking`.
+- **One undo step per action (D22), audited.** Every view action and
+  command was walked: gaps were **Make reusable** (no step at all),
+  **several functions dropped** (a step each), **a colour and a dimmer
+  dropped together** (a step each) and **Detach** (undo left the plain
+  scene behind). Now: `makeReusable()` pushes a step (`pushUndo`, shared
+  with `edit()`/`endBatch()`), and a list version makes a row's one-offs
+  reusable in one; the snapshot carries palettes made reusable here
+  (`<Reusable>`, so redo names them again; the inline restore now keeps the
+  path too) and scenes Detach made (`<Detached>`: restoring a snapshot
+  from before a detach deletes its scene once the bake has let go of it;
+  redo reloads it as it was). `dropFunctions()` and a multi-kind
+  `dropPalettes()` run in a batch. A one-off no cue uses is no longer
+  deleted while any scene (not only a generated one) plays it. Still not
+  tree undo, by design: Look Editor value edits, and a palette a command
+  made (it stays, §10.11).
+- Tests: `showtree_test::aNewListIsTrackingAnImportedOneIsNot`,
+  `makeReusableIsOneUndoStep`, `detachIsOneUndoStep`,
+  `generatedFunctionsAreFoundInTheTree`; `showtreeview_test::
+  mergeLayersBySelectingThem` (real ⌘/⇧ clicks, the context menu, a
+  refusal), `severalRowsSelectedDeleteAndDrag`, `aNewCueListIsTracking`,
+  `generatedFunctionsAreLockedElsewhere` (Functions window, Programming
+  tab, live edit, Detach from the bar), **`everyActionIsOneUndoStep`**:
+  47 actions (drops, pickers, page fields, context-menu items, Record,
+  Delete, Detach, import, 15 commands), each checked that one undo gives
+  back the state before (tree, palettes and one-off flags, the show's own
+  functions) and redo the state after.
+
 ### Open for Branson
 
 1. **`Generated` mark on `<Function>`** as well as in `<ShowTree>`? (10.2;

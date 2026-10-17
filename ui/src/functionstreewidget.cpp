@@ -320,6 +320,15 @@ void FunctionsTreeWidget::updateFunctionItem(QTreeWidgetItem* item, const Functi
     // already-selected). NOT drop-enabled (children would be silly).
     item->setFlags((item->flags() | Qt::ItemIsEditable)
                    & ~Qt::ItemIsDropEnabled);
+    // Made by the Show Tree (D13): named and filed by it, so not renamed
+    // here. It still drags out to play (a VC Cue List, a show).
+    if (m_doc->showTree()->isGenerated(function->id()))
+    {
+        item->setFlags(item->flags() & ~Qt::ItemIsEditable);
+        item->setToolTip(COL_NAME, tr("%1 It is %2.")
+                         .arg(ShowTreeController::lockedText(),
+                              m_doc->showTree()->describeGenerated(function->id())));
+    }
 
     // Colour-code scenes by composition: dynamic (look/group-driven), static
     // (baked channel values) or mixed.
@@ -653,6 +662,9 @@ void FunctionsTreeWidget::deleteFolder(QTreeWidgetItem *item)
         quint32 fid = child->data(COL_NAME, Qt::UserRole).toUInt();
         if (fid != Function::invalidId() && itemNodeKind(child) == FunctionNode)
         {
+            // The Show Tree's own goes with its cue list, there (D13).
+            if (m_doc->showTree()->isGenerated(fid))
+                continue;
             m_doc->deleteFunction(fid);
             delete child;
         }
@@ -799,7 +811,12 @@ void FunctionsTreeWidget::slotItemChanged(QTreeWidgetItem *item)
         if (fid != Function::invalidId())
         {
             Function *fn = m_doc->function(fid);
-            if (fn != NULL && !newName.isEmpty() && fn->name() != newName)
+            if (fn != NULL && m_doc->showTree()->isGenerated(fid))
+            {
+                // Named by the Show Tree (D13): the row goes back.
+                item->setText(COL_NAME, fn->name());
+            }
+            else if (fn != NULL && !newName.isEmpty() && fn->name() != newName)
             {
                 fn->setName(newName);
                 m_doc->setModified();
@@ -852,7 +869,8 @@ void FunctionsTreeWidget::slotUpdateChildrenPath(QTreeWidgetItem *root)
             {
                 quint32 fid = child->data(COL_NAME, Qt::UserRole).toUInt();
                 Function *func = m_doc->function(fid);
-                if (func != NULL)
+                // The Show Tree files its own (D13).
+                if (func != NULL && !m_doc->showTree()->isGenerated(fid))
                     func->setPath(root->text(COL_PATH));
             }
         }
@@ -1552,6 +1570,9 @@ void FunctionsTreeWidget::dropEvent(QDropEvent *event)
 
         quint32 dragFID = item->data(COL_NAME, Qt::UserRole).toUInt();
         Function *dragFunc = m_doc->function(dragFID);
+        // The Show Tree files its own (D13): not moved to another folder.
+        if (dragFunc != NULL && m_doc->showTree()->isGenerated(dragFID))
+            continue;
         if (dragFunc != NULL && dragFunc->type() == dropType)
         {
             QTreeWidget::dropEvent(event);

@@ -78,9 +78,14 @@ help (DONE.md 2026-10-16). Handoff: SHOW_TREE_OVERNIGHT.md.
   named one per the show's pattern, the picker's one-off has one-click Make
   reusable. **Try:** Record while a list runs (Perform and Design), merge
   two layers and GO through the cues after.
+- **Gaps from the help done 2026-10-17** (DONE.md, §10.12): Merge by mouse
+  (multi-select), D13 enforced outside the tab, one list rule (new =
+  Tracking), one undo step per action audited. **Open:** Detach to plain
+  *chaser*. **Try:** ⌘-click two layers → Merge; open the list's chaser in
+  the Functions window (locked, Show in Show Tree).
 - **P3 next** (§8): group sets, child layers / overlap
   (`Scene::excludedFixtures`), cue-level effects across layers, line aims.
-  P4: Make reusable / Detach, Convert to tracking.
+  P4: Detach to plain chaser, Convert to tracking.
 
 ## Needs the real rig / hardware
 

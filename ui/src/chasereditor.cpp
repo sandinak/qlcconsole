@@ -578,6 +578,8 @@ void ChaserEditor::slotUpdateCurrentStep(SceneValue sv, bool enabled)
 
 void ChaserEditor::slotAddClicked()
 {
+    if (m_locked)
+        return;   // the Show Tree's steps (D13)
     bool stepAdded = false;
 
     int insertionPoint = m_tree->topLevelItemCount();
@@ -656,6 +658,8 @@ void ChaserEditor::slotRemoveClicked()
 
 void ChaserEditor::slotRaiseClicked()
 {
+    if (m_locked)
+        return;   // the Show Tree's steps (D13)
     QList <QTreeWidgetItem*> items(m_tree->selectedItems());
     QListIterator <QTreeWidgetItem*> it(items);
 
@@ -693,6 +697,8 @@ void ChaserEditor::slotRaiseClicked()
 
 void ChaserEditor::slotLowerClicked()
 {
+    if (m_locked)
+        return;   // the Show Tree's steps (D13)
     QList <QTreeWidgetItem*> items(m_tree->selectedItems());
     QListIterator <QTreeWidgetItem*> it(items);
 
@@ -730,6 +736,8 @@ void ChaserEditor::slotLowerClicked()
 
 void ChaserEditor::slotShuffleClicked()
 {
+    if (m_locked)
+        return;   // the Show Tree's steps (D13)
     int i;
     int selectedCount = m_tree->selectedItems().count();
 
@@ -837,7 +845,7 @@ void ChaserEditor::setCueText(QTreeWidgetItem *item, const ChaserStep &step)
 void ChaserEditor::slotItemChanged(QTreeWidgetItem *item, int column)
 {
     // A sub-cue row is read-only: its chase's own editor changes it.
-    if (item == NULL || item->parent() != NULL)
+    if (item == NULL || item->parent() != NULL || m_locked)
         return;
 
     QString itemText = item->text(column);
@@ -981,6 +989,8 @@ void ChaserEditor::slotItemChanged(QTreeWidgetItem *item, int column)
 
 void ChaserEditor::slotCutClicked()
 {
+    if (m_locked)
+        return;   // the Show Tree's steps (D13)
     QList <ChaserStep> copyList;
     QListIterator <QTreeWidgetItem*> it(m_tree->selectedItems());
     while (it.hasNext() == true)
@@ -1011,6 +1021,8 @@ void ChaserEditor::slotCopyClicked()
 
 void ChaserEditor::slotPasteClicked()
 {
+    if (m_locked)
+        return;   // the Show Tree's steps (D13)
     if (m_doc->clipboard()->hasChaserSteps() == false)
         return;
     QList <ChaserStep> pasteList = m_doc->clipboard()->getChaserSteps();
@@ -1513,7 +1525,17 @@ FunctionParent ChaserEditor::functionParent() const
 
 bool ChaserEditor::eventFilter(QObject *obj, QEvent *event)
 {
-    if (obj == m_tree->viewport())
+    if (obj == m_tree->viewport() && m_locked)
+    {
+        // Locked (D13): no step dropped in.
+        if (event->type() == QEvent::DragEnter || event->type() == QEvent::DragMove
+            || event->type() == QEvent::Drop)
+        {
+            event->ignore();
+            return true;
+        }
+    }
+    else if (obj == m_tree->viewport())
     {
         switch (event->type())
         {
@@ -1857,8 +1879,55 @@ ChaserStep ChaserEditor::stepAtIndex(int index) const
     return m_chaser->steps().at(index);
 }
 
+void ChaserEditor::setLocked(QWidget *banner)
+{
+    m_locked = true;
+    if (banner != NULL)
+    {
+        // On top: every row of the grid moves down one.
+        banner->setParent(this);
+        const int cols = qMax(1, gridLayout->columnCount());
+        struct Placed { QLayoutItem *item; int row, col, rows, cols; };
+        QList<Placed> placed;
+        while (gridLayout->count() > 0)
+        {
+            Placed p;
+            gridLayout->getItemPosition(0, &p.row, &p.col, &p.rows, &p.cols);
+            p.item = gridLayout->takeAt(0);
+            placed << p;
+        }
+        gridLayout->addWidget(banner, 0, 0, 1, cols);
+        for (const Placed &p : placed)
+            gridLayout->addItem(p.item, p.row + 1, p.col, p.rows, p.cols);
+        banner->show();
+    }
+
+    // The steps and the name are the tree's: the next bake rewrites them.
+    m_nameEdit->setReadOnly(true);
+    if (m_speeddial->isChecked())
+        m_speeddial->setChecked(false);
+    for (QWidget *w : { static_cast<QWidget *>(m_add), static_cast<QWidget *>(m_remove),
+                        static_cast<QWidget *>(m_raise), static_cast<QWidget *>(m_lower),
+                        static_cast<QWidget *>(m_shuffle), static_cast<QWidget *>(m_speeddial),
+                        static_cast<QWidget *>(m_cutButton), static_cast<QWidget *>(m_pasteButton) })
+        w->setEnabled(false);
+    if (QWidget *renumber = findChild<QWidget *>(QStringLiteral("chaserRenumberCues")))
+        renumber->setEnabled(false);
+    m_tree->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    m_tree->setContextMenuPolicy(Qt::NoContextMenu);
+    m_tree->setDragDropMode(QAbstractItemView::NoDragDrop);
+    updateClipboardButtons();
+}
+
 void ChaserEditor::updateClipboardButtons()
 {
+    if (m_locked)
+    {
+        m_cutAction->setEnabled(false);
+        m_copyAction->setEnabled(m_tree->selectedItems().size() > 0);
+        m_pasteAction->setEnabled(false);
+        return;
+    }
     if (m_tree->selectedItems().size() > 0)
     {
         m_cutAction->setEnabled(true);

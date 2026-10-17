@@ -58,6 +58,12 @@ public:
      *  and scroll the view to it */
     void selectStepAtTime(quint32 time);
 
+    /** Lock the steps and the name (a chaser the Show Tree made, D13):
+     *  @a banner, which says so, goes at the top; run order, direction,
+     *  the speed modes, the cue-list number and testing stay. */
+    void setLocked(QWidget *banner);
+    bool isLocked() const { return m_locked; }
+
 protected:
     /** Intercept drag/drop events on the step tree's viewport so the
         chaser accepts function-id drops from the Function Manager. */
@@ -205,6 +211,7 @@ private:
 
 private:
     bool m_liveMode;
+    bool m_locked = false;
 };
 
 /** @} */
