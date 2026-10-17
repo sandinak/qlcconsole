@@ -70,6 +70,14 @@ help (DONE.md 2026-10-16). Handoff: SHOW_TREE_OVERNIGHT.md.
   (D24). **Try:** import a show's chaser on a copy, make the list
   Tracking, release / base / remove repeated layers by hand (P4 brings
   Convert to tracking), and GO through it; the command line (Command).
+- **P2 answers done 2026-10-17** (DONE.md, §10.11; open 9–11 resolved):
+  Record asks selected / running / everything lit when they differ, with
+  per-mode defaults in Settings → Show Tree; several groups = one layer
+  everywhere, a layer each with ⌥ or a comma, Split / Merge layers; a typed
+  or picked value reuses the palette playing it, the command line makes a
+  named one per the show's pattern, the picker's one-off has one-click Make
+  reusable. **Try:** Record while a list runs (Perform and Design), merge
+  two layers and GO through the cues after.
 - **P3 next** (§8): group sets, child layers / overlap
   (`Scene::excludedFixtures`), cue-level effects across layers, line aims.
   P4: Make reusable / Detach, Convert to tracking.

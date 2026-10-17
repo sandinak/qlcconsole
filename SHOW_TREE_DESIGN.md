@@ -44,7 +44,7 @@ Each has a recommendation; the rest of the doc is written to it.
 | D8 | **Include + tracking** | — | **Include brings the included cue's resolved output (as if you stood in that cue), live-linked.** Order: tracked state → includes (in order) → this cue's own. Included values track onward like any other. No cycles. The included cue's own Cue-only/Block don't affect the includer. | ok |
 | D9 | **Sub-cues** | Track through sub-cues into the next main cue / sub-cue changes are cue-only | **Cue-only.** Cue 5 tracks from cue 4's own state, not from wherever Sub GO got to (it can't be known at bake time, and SUBCUES_DESIGN.md already drops the sub-cues on GO). Inside the sub-list, 4.2 tracks from 4.1. | ok  |
 | D10 | **An effect at cue level** | Copied into each layer / one effect across all the cue's layers | **One effect across them**, so a Sinelon runs across the stage as one (the multi-group stage layout already does this). Layers that set that effect kind themselves — or set it to **None** — are left out of it. |  ok |
-| D11 | **One-off values** | Must be a named palette / can be inline | **Inline allowed**: an unnamed palette owned by the layer, hidden from the palette tree. **Make reusable** names it and files it. This is what stops `Palettes/Color/01-Everybody Scream`. | ok |
+| D11 | **One-off values** | Must be a named palette / can be inline | **Inline allowed**: an unnamed palette owned by the layer, hidden from the palette tree. **Make reusable** names it and files it. This is what stops `Palettes/Color/01-Everybody Scream`. **Changed 2026-10-17 (Branson: "reuse, so we can adjust globally by updating the palette"):** a value typed or picked first **reuses a named palette playing exactly it** (In this cue list → Recent → any); only when none does is a one-off made (picker) or a **named palette per the show's own pattern** (command line). (§10.11) | ok |
 | D12 | **Import of existing shows** | Convert in place / import as a copy | **Import a chaser as a cue list, as a new production; originals untouched.** Imported list starts **Non-tracking**, so it plays exactly as before; **Convert to tracking…** then offers to strip what repeats. (§7) |  ok |
 | D13 | **Hand-editing a generated scene** | Allowed (overwritten on re-bake) / locked | **Locked**, with **Detach to plain scene** (the tree then points at that scene as an opaque function layer). | ok |
 | D14 | **Cue-list-level looks** | Yes / no | **No.** A base cue + tracking does that job and shows up in the tree as a cue. |ok  |
@@ -54,7 +54,7 @@ Each has a recommendation; the rest of the doc is written to it.
 | D18 | **Cue-level Spread / Grouping / Cross** | Reach every layer / only layers aiming at a line | **Only layers whose resolved Position is a line aim.** "Spread +5" on a cue then means "spread whatever aims at a line here", and a wash layer doesn't silently carry a meaningless Spread forward. |ok  |
 | D19 | **A spread change between cues** | Snap / fade | **Fade over the cue's fade time** (pan/tilt fade, so the beams sweep — straight in pan/tilt space, close to but not exactly along the line, as the line design's Q8). The plan view shows where the beams were in the previous cue. | ok |
 | D20 | **Library panel** | One tree of everything / sections | **Recent · In this cue list · Pinned · All** (with one filter box over all four). What a song uses is in the first two; All is for finding a thing the first time. (§6A) | ok |
-| D21 | **One-off values** (extends D11) | — | Set inline from the picker (a colour swatch, a % slider) → an **unnamed palette owned by the layer**, shown at once in **Recent** as "Green-ish · 1.0.1 Towers". Dropping it on a second layer reuses it and **offers to name it** (Make reusable); unnamed it never appears in All. | ok |
+| D21 | **One-off values** (extends D11) | — | Set inline from the picker (a colour swatch, a % slider) → an **unnamed palette owned by the layer**, shown at once in **Recent** as "Green-ish · 1.0.1 Towers". Dropping it on a second layer reuses it and **offers to name it** (Make reusable); unnamed it never appears in All. **Changed 2026-10-17:** the picker first reuses an exact named palette; a one-off's row has **Make reusable** right by it, one click, named per the show's pattern ("Intensity 31%"). (§10.11) | ok |
 | D22 | **How edits land** | Straight into the selected cue / an Eos-style programmer with Update / Record | **Straight into the selected cue**, one undo step per action. Two explicit extras: in the picker, a **tracked** value offers *Set in this cue* or **Update cue 1.0.0** (where it was set, so the change tracks on from there); and **Record as new cue** freezes everything on stage into a new Block cue. A staged programmer can come later if wanted; it doubles every edit's steps. | ok |
 | D23 | **Numbering an inserted cue** | Renumber / next free / point cue | **Next whole number in the last place if free, else a point cue** (`0.0.4` + `0.0.5` taken → `0.0.4.5`), skipping numbers its sub-cues use (`0.0.4.1`…). **Never renumber automatically**: QLab and show control address cues by number. A new list's first cue takes its number from the list's leading digits (`01-Everybody Scream` → `1.0.0`). |ok  |
 | D24 | **Command line** | No / P1 / later | **Yes, after P1 (with P2), optional.** It calls the same operations as the mouse (one op layer, so it's cheap); tiny grammar, Tab completion from the Library, hint line under it. Not in P1, which must prove the mouse path first. (§6C) | ok |
@@ -558,12 +558,13 @@ the mouse, drag & drop, the command line and the walkthrough:
 | New cue list | + Cue list, type name | `list "01-Everybody Scream"` |
 | New cue (auto-numbered, D23; tracks by default) | + Cue (after the selected), type name in place | `cue 1.0.1 "Verse"` · `cue + "Verse"` |
 | Mode / base | Track · Block · Cue-only; Base cue | `block base` · `cueonly` |
-| Add layers | drag a group/set/target onto a cue; or + Layer → tick several → one layer each, or **Make one set layer** | `Towers AT-Spots Steps` |
-| Set a look | click a value → picker (searchable, **recent first**), or a one-off swatch / % slider; or drag a palette onto a layer or onto the cue's looks (the hint says *"Blue → cue look: reaches 3 of 3 layers"*) | `Towers colour Blue dimmer 45` · `cue look colour Red` · `Steps colour #33aa55` |
+| Add layers | drag a group/set/target onto a cue (several: **one layer**; ⌥: one each); or + Layer with several selected → one layer (⌥-click or its menu: one each). *Changed 2026-10-17: one rule everywhere, §10.11* | `Towers AT-Spots Steps` (one layer) · `Towers, AT-Spots, Steps` (one each) |
+| Set a look | click a value → picker (searchable, **recent first**), or a swatch / % slider (reuses a palette playing exactly that, else a one-off); or drag a palette onto a layer or onto the cue's looks (the hint says *"Blue → cue look: reaches 3 of 3 layers"*) | `Towers colour Blue dimmer 45` · `cue look colour Red` · `Steps colour #33aa55` (reused, or a new named palette) |
 | Effect + its own look | drop the effect on a layer, then a colour/gobo on the effect row | `Steps effect Sinelon colour Red` |
 | Aim along a line | drop a target on a layer/cue; Spread slider, Grouping, Cross | `AT-Spots aim DS-Edge spread 0 group pairs` |
 | Change a tracked value | edit it in this cue (brings the layer in) **or Update cue X** where it was set (D22) | — |
-| Copy / move | Duplicate cue; drag a layer to another cue (⌥ copies); **Record as new cue** | `dup` · `record` |
+| Copy / move | Duplicate cue; drag a layer to another cue (⌥ copies); **Record as new cue** (asks which stage when they differ, §10.11) | `dup` · `record [selected\|running\|lit]` |
+| Split / merge layers | right-click → Split layer (one per group) · select several → Merge layers | — |
 | Sub-cue | + Sub-cue; fade / wait / Auto-follow · Sub GO | `sub + "Hit"` |
 
 **Effort, measured.** The same three cues — 1.0.0 *base* (Block: White, Base,
@@ -603,7 +604,7 @@ auto-increments; multi-select drags; edits are live with no commit step.
 |---|---|
 | "Why is Towers still blue? I didn't set it here." (tracking) | Greyed value with *"tracked from 1.0.1"*; the tree marks it ⤳ tracked; the list's mode and each cue's mode badge say Track/Block; hover help on every badge; Block is one click |
 | Cue look vs layer look | The drop hint says where it lands and **what it reaches** ("reaches 2 of 3 layers (1 sets its own)") before release; values show "from Cue 1.0.1" |
-| Where does a one-off colour go? | Into the layer as an unnamed palette, and into Recent; reuse offers a name. No folder to choose |
+| Where does a one-off colour go? | A palette already playing it is reused; else into the layer as an unnamed palette, and into Recent, with **Make reusable** (one click, named and filed as the show's) on its row. No folder to choose |
 | Changing a tracked value — here or where it came from? | The picker asks: *Set in this cue* / *Update cue 1.0.0* |
 | A gobo that "doesn't work" on half the rig | "applies to 4 of 8 fixtures", with which group lacks it |
 | Spread numbers | Live plan view + order strip while dragging the slider; defaults match "evenly spread" |
@@ -1044,12 +1045,14 @@ the gaps.
   "Make reusable" is offered for). Sorted by count, then groups before
   values, then name; only shown with a list selected.
 - **Command line (D24, §6C).** `engine/src/showtreecommand.{h,cpp}`: a
-  word reader (names with spaces matched longest-first, quoted, `+` joins
-  two into one layer) calling the controller. Grammar per the mockup
+  word reader (names with spaces matched longest-first, quoted; ~~`+`
+  joins two into one layer~~ — names in a row are one layer, `,` starts
+  another since §10.11) calling the controller. Grammar per the mockup
   minus what later phases bring (`sub`, `aim`/`spread`/`group`/`cross`):
   `cue <n> "name"`, `cue + "name"`, `cue look …`, `track|block|cueonly|
   default|base`, `<groups> <attr> <value>…`, `effect X colour Y` (its own),
-  `none`/`clear`, a level `45`/`45%` or `#rrggbb` → one-off value,
+  `none`/`clear`, a level `45`/`45%` or `#rrggbb` → ~~one-off value~~
+  a reused or new named palette (§10.11),
   `release`, `include` (toggles), `record`, `dup`, `undo`, `redo`,
   `list "name"` (a Tracking list, as the mockup's). **One undo step per
   command:** `beginBatch()/endBatch(keep)` — edits inside apply at once
@@ -1072,6 +1075,118 @@ the gaps.
   includes 0.0.3) and §3.3 (0.0.4 Block; the bake changes exactly 0.0.4 →
   0.0.7) on the rig), `commandLine`, `commandLineFailsAsAWhole`,
   `commandLineCompletes`; `showtreeview_test` ×8 for the tab.
+
+### 10.11 P2 answers (2026-10-17): Record which stage, one layer or each, reused values
+
+Branson answered open questions 9–11.
+
+**Record — "subjective; should prompt to ask how to handle it, and/or have
+config options that default this in the settings."**
+
+- `ShowTreeController::RecordSource` **Selected** (the selected cue's
+  resolved stage, as before), **Running** (`runningCue(list)`: the cue the
+  selected cue's list's chaser is on, matched by its step's Collection),
+  **Lit** (every list running for real in tree order, the Design preview on
+  top — later wins attribute by attribute on the same target — then every
+  other running Scene / EFX / RGB Matrix not generated by the tree as an
+  opaque function layer; chasers, collections and shows are skipped, their
+  steps are what is lit). Programmer / Simple Desk values are not captured.
+- `recordChoices(cue)`: the sources that are available, put something on
+  stage, and differ from an earlier one (by targets + played looks). Zero or
+  one → no question. `recordCue(cue, source)` puts the new Block cue after
+  the selected cue in every case, named "<cue> (recorded)" (Running: the
+  running cue's name and timing; Lit: "on stage (recorded)"); one undo step
+  labelled with the source.
+- Settings: `showtree/recordDesign`, `showtree/recordPerform` =
+  `ask|selected|running|lit` (default `ask`), in **Settings → Show Tree**
+  (`AppSettings`, the dialog the app opens). A default naming something
+  that can't be recorded now (running, nothing runs) asks instead. The
+  dialog (radio per choice with its layer count; preselected Selected in
+  Design, Running in Perform) has **Don't ask again in <mode>**, which
+  writes that mode's key. The command line's bare `record` goes through the
+  same chooser (`ShowTreeCommand::setRecordChooser`); `record selected|
+  running|lit` overrides it (refused with a reason when that isn't on stage).
+
+**Several groups — "need both behaviours, and they must be consistent."**
+
+- One rule: **several = one layer by default; one each is explicit.**
+  Drop (⌥ = each, unchanged), **+ Layer** (several selected: one layer;
+  ⌥-click or the button's menu: one each), command line (`Towers USTs` and
+  `Towers+USTs`: one layer; `Towers, USTs`: one each — `release` follows
+  it too). Hint line, Tab completion (after `,`/`+` it completes the next
+  group) and help updated; the drop hint already said which.
+- **Split layer (one per group)** — `splitLayer()`: a piece per group and
+  one on the fixtures (`Layer::pieces()`), each a copy of the looks and
+  release; the first keeps the layer's id. Tracking identity:
+  - a piece **carries on** from what the layer carried on from (the tracked
+    or included layer it took over, its `continues`): each piece whose
+    units overlap it. The resolver now lets **several own layers of one
+    cue carry on from the same carried-in layer** (the first takes it out
+    of the stack, the others start from the same copy);
+  - onwards, as `setLayerTarget()`: where the same layer is set again
+    (own, took over that target) it is split there too; a layer carrying on
+    from it under another target carries on from the pieces.
+- **Merge layers** — `mergeLayers()`: own, non-opaque layers of one cue →
+  one layer on the union, at the first one's place and id. **The safe
+  behaviour: refuse, with the reason, never guess** — when two set an
+  attribute differently ("Towers sets Colour to Blue, USTs to Red"), or one
+  is released and another isn't. The merged layer carries on from
+  everything they carried on from: new **`Layer::continuesAlso`** (XML
+  `<Continues Groups Fixtures/>` children of `<Layer>`; an older build
+  skips them) — the first stays `continues`, the extras fill in values the
+  first doesn't have. Onwards: set again together → merged there too (same
+  conflict rule, "in cue 3 …"); carried on from under another target → from
+  the merge.
+- **The guard for both:** after the edit, `ShowTree::stageDiffers(before,
+  after)` compares every cue's **stage** (`stageOf`: per group / fixture /
+  opaque function and attribute, the winning value — LTP, later layer
+  wins — or for Dimmer the set of levels, HTP). Any difference → the edit
+  is refused (no undo step) with "would change what cue 0.0.5 plays on USTs
+  (Dimmer)". This is what makes "only one of them is set later" (it would
+  light twice, HTP) a refusal rather than a silent change. Units are
+  groups and fixtures as named (no Doc), so a group's fixtures named
+  separately count as another unit.
+
+**`dimmer 45` — "reuse, so we can adjust globally by updating the palette."**
+
+- `findPalette(type, values, list, recent)`: named, non-inline, flat
+  (no fanning) palettes playing exactly the value — Dimmer: the same DMX
+  value (45 % = 115, as the command and picker round); Colour: the same RGB
+  and W/A/UV (missing = black). Order: used in this cue list (most uses,
+  then lowest id) → Recent (newest) → any (name, then id). Dimmer and
+  Colour only (what can be typed / picked).
+- **Command line:** none → `createNamedPalette()`: named by
+  `suggestPaletteName()`, filed by `suggestPaletteFolder()` (the type's
+  most common folder, trailing `/` ignored; tie → shorter path), made as an
+  inline palette in the batch and made reusable only when the command
+  succeeds (a failed command leaves nothing). Undo removes the value from
+  the cue; the palette stays (it is an ordinary palette now). The message
+  says *reused "Intensity 45%"* / *new palette "Intensity 30%" in
+  Palettes/Dimmer*.
+- **Naming pattern:** a sibling (named palette of that type) whose name
+  holds its own value as a whole token — Dimmer its level in %, Colour its
+  hex with or without `#` — gives a template (`Intensity {}%`); the most
+  common template wins, ties to the oldest. None: Dimmer `Dimmer 30%`;
+  Colour the colour's name if it is exactly a named colour ("Red"), else the
+  nearest name and the hex ("Sea Green #33aa55"). A name the type already
+  has gets " (2)". DanceHysteria: `Intensity 45%` (115) in
+  `Palettes/Dimmer` → `dimmer 30` = **Intensity 30%** in Palettes/Dimmer.
+- **Picker** (⋯ → Level… / Colour…, `setOneOffDimmer/Colour`): reuses an
+  exact palette (and notes it in Recent); else the D21 one-off, whose row
+  now has **Make reusable** beside the value: one click,
+  `makeReusable(pid)` names and files it by the same pattern. Library →
+  Make reusable… pre-fills that name and folder.
+- One-offs are never reused by the matcher (they are not in All).
+
+Tests: `showtree_test::recordTheRunningCueOrEverythingLit`,
+`splitALayerKeepsTracking`, `mergeLayersKeepsTracking` (both across four
+tracked cues, a re-set cue, refusals, XML round trip),
+`aTypedValueReusesAPalette` (preference order; editing the reused palette
+changes both cues on the rig), `aNewPaletteIsNamedAsTheShowsAre`, the
+command-line tests updated for the new grammar; `showtreeview_test::
+recordAsksWhenTheChoicesDiffer` (setting, Don't ask again per mode, the
+command line, the dialog), `severalGroupsOneLayerOrEach` (+ Layer, hints,
+split, merge from a tree multi-selection), `aPickedValueReusesAPalette`.
 
 ### Open for Branson
 
@@ -1097,14 +1212,21 @@ the gaps.
    offers the pick (§10.9).
 8. **Blind: to discuss** (Branson, 2026-10-17). Today Blind is the global
    output mute and covers the preview; unchanged.
-9. **Record as new cue — which stage?** Built: the selected cue's resolved
-   state (what Design previews). In Perform, should it record the running
-   list's current cue instead (or everything lit, as an Eos Record does)?
-10. **Command line: several groups.** Built as the mockup: `Towers USTs …`
-    makes a layer each, `Towers+USTs …` one layer on both. The mouse's
-    default since the fix pass is the other way round (a multi-group drop
-    is one layer, ⌥ a layer each). Swap the command line to match?
-11. **Command line: `dimmer 45`** always makes a one-off value; the mockup
-    reused a named dimmer palette at that level when one existed. Built
-    without the reuse (a palette "at 45 %" is ambiguous with 16-bit and
-    fine values); say if you want it.
+9. ~~**Record as new cue — which stage?**~~ — **resolved 2026-10-17:**
+   "subjective; should prompt to ask how to handle it, and/or have config
+   options that default this in the settings." Built (§10.11): it asks
+   (selected cue / running cue / everything lit) only when they differ,
+   "Don't ask again" writes the default; Settings → Show Tree has one
+   default each for Design and Perform (Ask by default); `record
+   selected|running|lit` overrides.
+10. ~~**Command line: several groups.**~~ — **resolved 2026-10-17:** "need
+    both behaviours, and they must be consistent." Built (§10.11): one
+    layer is the default everywhere (drop, + Layer, Library, command line:
+    `Towers USTs` = `Towers+USTs` = one layer), a layer each is explicit
+    (⌥-drop, ⌥-click / menu on + Layer, `Towers, USTs`); Split layer and
+    Merge layers in the tree.
+11. ~~**Command line: `dimmer 45`**~~ — **resolved 2026-10-17:** "reuse, so
+    we can adjust globally by updating the palette." Built (§10.11): an
+    exact palette is reused (In this cue list → Recent → any); the command
+    line otherwise makes a named one per the show's pattern; the picker a
+    one-off with one-click Make reusable. D11/D21 updated.

@@ -6,6 +6,30 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-17 — Show Tree P2 answers: Record which stage, one layer or each, reused values *(on feat/show-tree, not merged)*
+
+Branson's answers to SHOW_TREE_DESIGN.md §10 open 9–11; notes in §10.11.
+
+- **Record as new cue** records the selected cue, the list's **running**
+  cue, or **everything lit** (running lists, the Design preview, other lit
+  scenes/EFX/matrices as they are). Asks only when they differ ("Don't ask
+  again" writes the default); **Settings → Show Tree** has a default each
+  for Design and Perform (Ask by default); `record selected|running|lit`.
+- **Several groups:** one layer by default everywhere — drop, + Layer
+  (⌥-click / its menu for one each), command line (`Towers USTs` =
+  `Towers+USTs` = one layer; `Towers, USTs` = one each). Tree: **Split
+  layer (one per group)** and **Merge layers**, both keeping tracking
+  (re-set cues split/merged too; `Layer::continuesAlso`, several pieces
+  carrying on from one layer) and refused with a reason if anything on
+  stage would change (`ShowTree::stageDiffers`) or looks conflict.
+- **Values reuse palettes** (D11/D21 changed): a typed or picked level /
+  colour reuses a named palette playing exactly it (In this cue list →
+  Recent → any); the command line otherwise makes one named per the show's
+  pattern ("Intensity 30%" beside "Intensity 45%"), the picker a one-off
+  with one-click **Make reusable** on its row.
+- Tests: `showtree_test` +5, `showtreeview_test` +3, command-line tests
+  updated for the new grammar; `helpbrowser_test` green.
+
 ### 2026-10-17 — Show Tree P2: tracking in the tab, Update cue / Record, the command line *(on feat/show-tree, not merged)*
 
 SHOW_TREE_DESIGN.md §8 P2; notes in §10.10.

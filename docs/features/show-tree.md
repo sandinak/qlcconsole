@@ -27,7 +27,8 @@ palettes and groups.
     **✎** opens the value's palette in the **Look Editor** under the tree
     (the Programming tab's; a named palette is shared, so the editor says
     so before you change it everywhere). **⋯** on a row sets it here (any palette of that kind, recent ones first,
-    or a one-off level or colour), turns it **off here** (None), or clears it
+    or a level or colour you pick — see [Values you pick or type](#values-you-pick-or-type)),
+    turns it **off here** (None), or clears it
     so it inherits again. *"applies to 4 of 8"* means only 4 of the layer's
     fixtures have that attribute (for a gobo by name: that gobo); the rest
     ignore it.
@@ -52,7 +53,10 @@ palettes and groups.
    number.
 3. Drag **groups** from the Library onto the cue. Groups (and fixtures)
    dragged together make **one layer** on all of them; hold **⌥** as you drop
-   for a layer per group. Or select them and **+ Layer**.
+   for a layer per group — the line at the top right says which before you
+   let go. Or select them and **+ Layer**: one layer on all of them,
+   **⌥-click** (or the arrow beside it → *A layer for each*) for one each.
+   The command line follows the same rule (see below).
    Drop a group on a **layer** to add it to that layer. Right-click a layer
    on several groups → **Remove &lt;group&gt; from layer** takes one out.
 4. Drag **palettes** onto a layer to set them, or onto the **cue** to set a
@@ -69,6 +73,22 @@ Every change is one step of **Undo** (⌘Z) / **Redo** (⇧⌘Z) in this tab.
 A layer stays one layer when its groups change: added to in a cue it
 tracked into, it takes the tracked layer's place and keeps its values;
 added to where it is set, the change carries on to the cues it tracks into.
+
+### Split and merge layers
+
+- Right-click a layer on several groups → **Split layer (one per group)**:
+  a layer per group (and one on its fixtures), each with the same looks.
+  Nothing on stage changes. The pieces keep tracking as the layer did:
+  where the same layer is set again in a later cue it is split there too,
+  and each piece carries on the values the layer carried in.
+- Select several layers of one cue (⌘- or ⇧-click), right-click →
+  **Merge layers**: one layer on all their groups. It is **refused, with
+  the reason**, rather than guessed, when they set an attribute differently
+  (*"Towers sets Colour to Blue, USTs to Red"* — make them the same first),
+  when one is released and another isn't, or when merging would change what
+  a later cue plays (a later cue sets only one of them: *"Merging would
+  change what cue 0.0.5 plays on USTs (Dimmer)"*). Where they are set again
+  together in later cues, they are merged there too.
 
 ## Seeing it on the rig
 
@@ -151,9 +171,26 @@ A grey value came from an earlier cue. Its **⋯** offers two things:
 
 ### Record and duplicate
 
-**Record** (top, or right-click a cue → Record as new cue) freezes what the
-selected cue puts on stage — its own layers, what tracked in, what it
-includes — into a new **Block** cue right after it, every layer its own.
+**Record** (top, or right-click a cue → Record as new cue) freezes what is
+on stage into a new **Block** cue right after the selected cue, every layer
+its own. What is "on stage" can mean three things:
+
+- **The selected cue** — what it puts on stage: its own layers, what
+  tracked in, what it includes (what Design previews);
+- **The running cue** — the cue its cue list is playing for real (footer
+  GO, a Virtual Console Cue List);
+- **Everything lit** — every cue list running, the Design preview on top,
+  and any other scene, EFX or RGB Matrix that is on (each as a layer that
+  plays it as it is).
+
+When they would record the same thing, or only one has anything (nothing
+running), Record just records it. When they differ it **asks**; tick
+**Don't ask again** to make your answer the default. The defaults —
+separate for **Design** and **Perform (Operate)** — are in **Settings →
+Show Tree** (Ask, or one of the three); one that names something not on
+stage (the running cue, with nothing running) asks instead. In Design the
+dialog starts on the selected cue, in Perform on the running cue.
+
 **Duplicate cue** copies a cue's own content (not what tracks into it).
 Both are numbered like + Cue.
 
@@ -195,25 +232,41 @@ the words:
 | `cue + "Verse"` | a new cue after the selected one |
 | `track` · `block` · `cueonly` · `default` · `base` | the selected cue's mode, or makes it the base (can follow `cue …`) |
 | `Towers colour Blue dimmer 45` | a layer on Towers (or the one there), then its looks |
-| `Towers USTs dimmer Full` | a layer each |
-| `Towers+USTs dimmer Full` | one layer on both |
+| `Towers USTs dimmer Full` | **one** layer on both (as a drop of both) |
+| `Towers+USTs dimmer Full` | the same |
+| `Towers, USTs dimmer Full` | a layer **each** (as an ⌥-drop) |
 | `cue look colour Red` | a cue look |
 | `Steps effect Sinelon colour Red` | an effect, and its own colour |
 | `Towers gobo none` · `Towers gobo clear` | off here · inherit again |
-| `Steps colour #33aa55` · `dimmer 45` | a one-off value |
+| `Steps colour #33aa55` · `dimmer 45` | the palette that plays exactly that, else a new one named as yours are |
 | `release Towers` | Release on (or off) |
 | `include 0.0.3` | include a cue (again: take it out) |
-| `record` · `dup` · `undo` · `redo` | as the buttons |
+| `record` · `record selected` · `record running` · `record lit` | Record as new cue: as the button (your setting, or it asks), or what the word says |
+| `dup` · `undo` · `redo` | as the buttons |
 | `list "01-Opener"` | a new (tracking) cue list in the production |
 
 Names match whole words and ignore case; quote a name with spaces if Tab
 doesn't finish it (`"AT W ALL" dimmer Full`).
 
-## One-off values
+## Values you pick or type
 
-⋯ → **One-off level…** or **One-off colour…** sets a value without making a
-palette for it. It shows in **Recent**; right-click it there → **Make
-reusable…** to name it and file it with your palettes.
+A level or colour you pick (⋯ → **Level…** / **Colour…**) or type
+(`dimmer 45`, `colour #33aa55`) **reuses a palette that plays exactly that
+value** — so you can later adjust it everywhere at once by changing that
+palette. If several do, the one this cue list already uses wins, then the
+one you used most recently, then the first by name.
+
+- **Typed** and no palette has it: a **new palette** is made, named the way
+  your palettes of that kind are and filed with them — with
+  `Intensity 45%` in `Palettes/Dimmer`, `dimmer 30` makes `Intensity 30%`
+  there; colours are named by colour (`Red`, `Sea Green #33aa55`) or by hex,
+  as yours are. The line under the command says *reused "Intensity 45%"* or
+  *new palette "Intensity 30%"*. Undo takes the value off the cue; the new
+  palette stays (delete it in Palettes if you don't want it).
+- **Picked** and no palette has it: a **one-off** value, just for this
+  layer. It shows in **Recent**, and **Make reusable** beside it on the
+  layer's row turns it into a palette in one click, named as above
+  (right-click it in Recent → **Make reusable…** to choose the name).
 
 ## Gobos by name
 

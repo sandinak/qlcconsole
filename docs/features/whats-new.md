@@ -22,6 +22,16 @@ The latest changes, newest first. Each links to the guide with the detail.
   a layer each), a group dropped on a layer joins it, and the Library shows
   groups in the Fixture Manager's folders. See
   [Seeing it on the rig](show-tree.md#seeing-it-on-the-rig).
+- **Show Tree: Record which stage, split / merge, values that reuse
+  palettes.** Record asks whether to record the selected cue, the running
+  cue or everything lit when they differ (or does what Settings → Show Tree
+  says). Several groups make one layer everywhere — drop, + Layer, command
+  line — and a layer each with ⌥ or a comma (`Towers, USTs`); right-click
+  to **Split** a layer per group or **Merge** layers. A level or colour you
+  type or pick reuses the palette that already plays it; a typed one that
+  doesn't exist yet becomes a palette named like yours. See
+  [Record and duplicate](show-tree.md#record-and-duplicate) and
+  [Values you pick or type](show-tree.md#values-you-pick-or-type).
 - **Gobo looks by name.** A gobo look picked on one fixture type's wheel
   plays the gobo of the same name on every other type's own wheel; types
   without it ignore it. See [Gobos by name](show-tree.md#gobos-by-name).
