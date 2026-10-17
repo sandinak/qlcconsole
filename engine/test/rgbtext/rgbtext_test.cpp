@@ -254,6 +254,7 @@ void RGBText_Test::load()
     // comma-separated text without failing); an empty string remains the
     // one reliably-invalid case that still exercises the "ignored" path.
     bData.replace(fn.toString().toUtf8(), "");
+    bData.replace(fn.toString().toUtf8(), "a,b,c");
     buffer.setData(bData);
     buffer.open(QIODevice::ReadWrite | QIODevice::Text);
     buffer.seek(0);
