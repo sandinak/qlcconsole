@@ -29,6 +29,7 @@ class GradientDirectionWidget;
 class QSlider;
 class QCheckBox;
 class QDoubleSpinBox;
+class LineSpreadPreview;
 class QComboBox;
 class QPushButton;
 class QLabel;
@@ -100,6 +101,8 @@ private slots:
     void slotDimmerChanged(int v);
     void slotPanTiltChanged(const QPointF &p);
     void slotAimTargetChanged(int index);
+    /** A line target's Spread (and grouping) changed in the Aim page. */
+    void slotLineSettingsChanged();
     void slotSingleValueChanged(int v);
     void slotSingleCapabilityPicked(int index);
     /** "Wheel of" changed: list that fixture type's gobos/shutter states. */
@@ -213,6 +216,18 @@ private:
     QLabel *m_dimmerCap;       //!< capability name at current intensity (strobe etc.)
     VCXYPadArea *m_xyPad;
     QComboBox   *m_aimTargetCombo;  //!< stage target for Aim palettes
+    /* A line target's controls (LINE_TARGET_DESIGN.md), shown only when
+       the look aims at a line. */
+    QWidget *m_lineBox = nullptr;
+    QSlider *m_lineSpreadSlider = nullptr;       //!< -50..50 = -5..+5
+    QDoubleSpinBox *m_lineSpreadSpin = nullptr;
+    QComboBox *m_lineGroupCombo = nullptr;       //!< data: LineSpread group
+    QComboBox *m_lineCrossCombo = nullptr;       //!< data: LineSpread::Cross
+    QCheckBox *m_lineShareCheck = nullptr;
+    QComboBox *m_lineOrderCombo = nullptr;       //!< data: LineSpread::Order
+    LineSpreadPreview *m_linePreview = nullptr;
+    /** Show the line controls for the look's target, filled from the look. */
+    void syncLineControls();
     QSlider *m_beamFocusSlider, *m_beamFrostSlider, *m_beamIrisSlider;
     QLabel *m_beamFocusValue, *m_beamFrostValue, *m_beamIrisValue;
     QSlider *m_singleSlider;

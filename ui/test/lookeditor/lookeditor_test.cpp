@@ -57,6 +57,9 @@
 
 #include "speedmasters.h"
 #include "spreadpreview.h"
+#include "linespreadpreview.h"
+#include "linespread.h"
+#include "stagetarget.h"
 #include "lookeditor_test.h"
 
 void LookEditor_Test::aColourDarkerThanAFifthIsCalledOut()
@@ -900,6 +903,110 @@ void LookEditor_Test::theBrowsersListsAreAToZ()
             QVERIFY2(collator.compare(keys.at(i - 1), keys.at(i)) <= 0,
                      qPrintable(QString("%1: \"%2\" before \"%3\"").arg(tabs.at(t), keys.at(i - 1), keys.at(i))));
     }
+}
+
+void LookEditor_Test::aLineLooksSpreadIsSetOnTheAimPage()
+{
+    Doc doc(this);
+    MonitorProperties *props = doc.monitorProperties();
+    StageTarget *line = props->addStageTarget();
+    line->setName("Edge");
+    line->makeLine();
+    StageTarget *mark = props->addStageTarget();
+    mark->setName("Mark");
+
+    QLCPalette *look = new QLCPalette(QLCPalette::Aim, &doc);
+    look->setName("Along the edge");
+    look->setStageTargetId(line->id());
+    QVERIFY(doc.addPalette(look));
+
+    LookEditor ed(&doc);
+    ed.resize(800, 500);
+    ed.show();
+    ed.setPalette(look->id());
+    QApplication::processEvents();
+
+    QVERIFY2(ed.m_lineBox->isVisible(), "a look on a line shows no Spread");
+    QCOMPARE(ed.m_lineSpreadSpin->value(), 5.0);
+    QCOMPARE(ed.m_lineSpreadSlider->value(), 50);
+    // No scene to say which lights: six stand in, evenly end to end.
+    QCOMPARE(ed.m_linePreview->dots().size(), 6);
+    QCOMPARE(ed.m_linePreview->dots().first().fraction, 0.0);
+
+    ed.m_lineSpreadSlider->setValue(-25);
+    QCOMPARE(ed.m_lineSpreadSpin->value(), -2.5);
+    QCOMPARE(look->effectParamValues().value("__lineSpread"), -2.5);
+    QVERIFY(qAbs(ed.m_linePreview->dots().first().fraction - 0.75) < 1e-9);
+    ed.m_linePreview->grab();                           // it paints
+
+    ed.m_lineSpreadSpin->setValue(0.0);
+    QCOMPARE(ed.m_lineSpreadSlider->value(), 0);
+    QCOMPARE(look->effectParamValues().value("__lineSpread"), 0.0);
+
+    // Back to the default: the look no longer carries it.
+    ed.m_lineSpreadSpin->setValue(5.0);
+    QVERIFY(!look->effectParamValues().contains("__lineSpread"));
+
+    // Re-opened, it shows what the look has.
+    look->setEffectParamValue("__lineSpread", -1.0);
+    ed.setPalette(look->id());
+    QCOMPARE(ed.m_lineSpreadSpin->value(), -1.0);
+
+    // A point target has no spread.
+    ed.m_aimTargetCombo->setCurrentIndex(ed.m_aimTargetCombo->findData(mark->id()));
+    QCOMPARE(look->stageTargetId(), mark->id());
+    QVERIFY(!ed.m_lineBox->isVisible());
+    // And the picker says which targets are lines.
+    QVERIFY(ed.m_aimTargetCombo->itemText(ed.m_aimTargetCombo->findData(line->id())).startsWith("Line:"));
+}
+
+void LookEditor_Test::aLineLooksGroupingIsSetOnTheAimPage()
+{
+    Doc doc(this);
+    StageTarget *line = doc.monitorProperties()->addStageTarget();
+    line->makeLine();
+    QLCPalette *look = new QLCPalette(QLCPalette::Aim, &doc);
+    look->setStageTargetId(line->id());
+    QVERIFY(doc.addPalette(look));
+
+    LookEditor ed(&doc);
+    ed.resize(800, 500);
+    ed.show();
+    ed.setPalette(look->id());
+    QApplication::processEvents();
+    QVERIFY(!ed.m_lineCrossCombo->isEnabled());         // each light: nothing to choose
+
+    ed.m_lineGroupCombo->setCurrentIndex(ed.m_lineGroupCombo->findData(LineSpread::Halves));
+    QVERIFY(ed.m_lineCrossCombo->isEnabled());
+    QCOMPARE(look->effectParamValues().value("__lineGroup"), double(LineSpread::Halves));
+    ed.m_lineSpreadSpin->setValue(-5.0);
+
+    // "1 2 3 cross 4 5 6": the halves swap sides.
+    auto at = [&ed](int number) {
+        foreach (const LineSpreadPreview::Dot &d, ed.m_linePreview->dots())
+            if (d.number == number)
+                return d.fraction;
+        return -1.0;
+    };
+    QVERIFY(qAbs(at(1) - 0.6) < 1e-9 && qAbs(at(4) - 0.0) < 1e-9);
+
+    ed.m_lineCrossCombo->setCurrentIndex(ed.m_lineCrossCombo->findData(int(LineSpread::Mirror)));
+    QCOMPARE(look->effectParamValues().value("__lineCross"), double(LineSpread::Mirror));
+    QVERIFY(qAbs(at(1) - 0.4) < 1e-9 && qAbs(at(3) - 0.0) < 1e-9);
+
+    ed.m_lineShareCheck->setChecked(true);
+    QCOMPARE(look->effectParamValues().value("__lineShare"), 1.0);
+    QVERIFY(!ed.m_lineCrossCombo->isEnabled());
+
+    ed.m_lineOrderCombo->setCurrentIndex(ed.m_lineOrderCombo->findData(int(LineSpread::LookOrder)));
+    QCOMPARE(look->effectParamValues().value("__lineOrder"), double(LineSpread::LookOrder));
+
+    // Re-opened, every control shows the look.
+    ed.setPalette(look->id());
+    QCOMPARE(ed.m_lineGroupCombo->currentData().toInt(), int(LineSpread::Halves));
+    QCOMPARE(ed.m_lineCrossCombo->currentData().toInt(), int(LineSpread::Mirror));
+    QVERIFY(ed.m_lineShareCheck->isChecked());
+    QCOMPARE(ed.m_lineOrderCombo->currentData().toInt(), int(LineSpread::LookOrder));
 }
 
 QTEST_MAIN(LookEditor_Test)

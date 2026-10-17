@@ -57,6 +57,7 @@
 #include "zraster.h"
 #include "rhiraster.h"
 #include "aimsolver.h"
+#include "linecurve.h"
 #include <QScopedValueRollback>
 #include <array>
 #include <QVarLengthArray>
@@ -1078,6 +1079,27 @@ void StructureStudioView::drawStageFigures(QPainter &p) const
     {
         if (t == nullptr || !layerShown(t->layerId()))
             continue;
+
+        /* A line: the curve at its real heights, with a small cross at each
+           handle -- the beams aimed at it land along it. */
+        if (t->isLine())
+        {
+            const QColor mark = t->color().isValid() ? t->color() : QColor(255, 180, 0);
+            const QVector<QVector3D> world = props->targetLinePoints(t);
+            const LineCurve curve(world);
+            const QVector<QVector3D> &sm = curve.samples();
+            for (int k = 0; k + 1 < sm.size(); ++k)
+                emitLine(w2s(sm.at(k)), w2s(sm.at(k + 1)), viewDepth(sm.at(k)), viewDepth(sm.at(k + 1)),
+                         mark, 2.0, p);
+            const float arm = 0.08f;
+            foreach (const QVector3D &h, world)
+            {
+                const QVector3D ax[3] = { QVector3D(arm, 0, 0), QVector3D(0, arm, 0), QVector3D(0, 0, arm) };
+                for (const QVector3D &a : ax)
+                    emitLine(w2s(h - a), w2s(h + a), viewDepth(h - a), viewDepth(h + a), mark, 1.5, p);
+            }
+            continue;
+        }
 
         /* An Area or a drum kit: its outline on the deck, in its colour, at
            its real size -- where a beam lands relative to it is the point. */
@@ -3776,6 +3798,7 @@ void StructureStudioView::rebuildAimTargets()
     // Where the scene is aiming. More than one Aim palette is legal; the first
     // that resolves wins, which is what a single head can actually do.
     quint32 aimTargetId = 0xFFFFFFFF;
+    QLCPalette *aimPal = nullptr;
     QColor aimColour(255, 180, 0);
     bool haveAim = false;
 
@@ -3812,6 +3835,7 @@ void StructureStudioView::rebuildAimTargets()
         if (t == nullptr)
             continue;
         aimTargetId = t->id();
+        aimPal = pal;
         if (t->color().isValid())
             aimColour = t->color();
         haveAim = true;
@@ -3880,6 +3904,15 @@ void StructureStudioView::rebuildAimTargets()
     if (haveAim == false)
         return;
 
+    /* On a line each head has its own place along it, fixed by the look's
+       spread and the heads' order -- worked out here, once; the point itself
+       is read fresh per frame, so a dragged line is followed. */
+    QHash<quint32, double> lineFraction;
+    if (StageTarget *lt = props->stageTarget(aimTargetId))
+        if (lt->isLine() && aimPal != nullptr)
+            lineFraction = AimSolver::lineFractions(m_doc, lt, AimSolver::aimHeads(m_doc, scene),
+                                                    LineSpread::fromParams(aimPal->effectParamValues()));
+
     // Everything the scene touches, directly or through a group.
     QSet<quint32> candidates;
     foreach (quint32 fid, scene->fixtures())
@@ -3910,6 +3943,7 @@ void StructureStudioView::rebuildAimTargets()
             spec.targetId = aimTargetId;
             spec.colour = aimColour;
             spec.subjectHeight = subjectMode;
+            spec.lineFraction = lineFraction.value(fid, -1.0);
             m_aimTarget.insert(fid, spec);
         }
     }
@@ -3957,7 +3991,12 @@ bool StructureStudioView::aimPointFor(quint32 fid, QVector3D &out) const
     /* The shared rule -- binding, kind, height and this head's beam all
        resolved in one place, so this view and QLCPalette cannot drift apart
        again. */
-    out = AimSolver::aimPointFor(m_doc, fid, t, it.value().subjectHeight);
+    if (t->isLine())
+        out = it.value().lineFraction >= 0.0
+                ? AimSolver::linePoint(m_doc, t, it.value().lineFraction)
+                : props->targetAimPoint(t);
+    else
+        out = AimSolver::aimPointFor(m_doc, fid, t, it.value().subjectHeight);
     return true;
 }
 

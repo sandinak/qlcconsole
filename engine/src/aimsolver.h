@@ -22,10 +22,14 @@
 
 #include <QVector3D>
 #include <QList>
+#include <QHash>
+
+#include "linespread.h"
 
 class Doc;
 class Scene;
 class StageTarget;
+class QLCPalette;
 
 /** @addtogroup engine Engine
  * @{
@@ -109,6 +113,39 @@ namespace AimSolver
      *  following a person aims lower, so it covers them without top wash. */
     QVector3D aimPointFor(Doc *doc, quint32 fixtureId, const StageTarget *target,
                           bool subjectMode);
+
+    /** The heads an Aim look in @p scene points, in LOOK ORDER: each of the
+     *  scene's groups' members in the group's head order, then the scene's
+     *  own fixtures; once each; only heads that can point (pan or tilt) and
+     *  are placed on the plot. */
+    QList<quint32> aimHeads(Doc *doc, const Scene *scene);
+
+    /** @p fixtures (in their order, once each) less any that cannot point or
+     *  are not placed on the plot. */
+    QList<quint32> aimable(Doc *doc, const QList<quint32> &fixtures);
+
+    /** A line target: how far along it (0..1) each of @p heads lands, by
+     *  @p settings. @p heads is any ordered list -- one look's heads, or the
+     *  union of several -- in look order; Order "along the line" re-sorts it
+     *  by where the heads hang. Empty if @p target is not a line. */
+    QHash<quint32, double> lineFractions(Doc *doc, const StageTarget *target,
+                                         const QList<quint32> &heads,
+                                         const LineSpread::Settings &settings);
+
+    /** @p heads in the order they take places on line @p target: as given
+     *  (LookOrder), or by where they hang measured from the line's first end
+     *  towards its last (AlongLine). */
+    QList<quint32> orderedLineHeads(Doc *doc, const StageTarget *target,
+                                    const QList<quint32> &heads, LineSpread::Order order);
+
+    /** The world point @p fraction of the way along line target @p target. */
+    QVector3D linePoint(Doc *doc, const StageTarget *target, double fraction);
+
+    /** Each head's aim point for Aim look @p look on line @p target, over
+     *  @p heads (as lineFractions()). */
+    QHash<quint32, QVector3D> linePoints(Doc *doc, const QLCPalette *look,
+                                         const StageTarget *target,
+                                         const QList<quint32> &heads);
 
     /** True if @p scene carries a follow-spot effect, which is what makes an
      *  Aim look in it track a SUBJECT (chest height above the deck) rather

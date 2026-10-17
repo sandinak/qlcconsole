@@ -418,6 +418,10 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
             }
         });
 
+    // Aim at a line target: each head's point, worked out on first use.
+    bool lineReady = false;
+    QHash<quint32, QVector3D> linePts;
+
     foreach (quint32 id, fixtures)
     {
         Fixture *fixture = doc->fixture(id);
@@ -747,7 +751,28 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                    This used to be written out here AND again in the renderer,
                    and the two disagreed: a follow-spot aimed at chest height in
                    Edit while the rig view pointed at the target's own Z. */
-                const QVector3D tgtPos = AimSolver::aimPointFor(doc, id, tgt, subjectMode);
+                QVector3D tgtPos;
+                if (tgt->isLine())
+                {
+                    /* A line gives each head its own point, so where THIS head
+                       goes depends on every head the look aims: the owning
+                       scene's (groups and fixtures together, which this
+                       palette is expanded for in two calls), else the list
+                       this call was given. Worked out once per call. */
+                    if (!lineReady)
+                    {
+                        const QList<quint32> heads = (owner != nullptr)
+                                ? AimSolver::aimHeads(doc, owner)
+                                : AimSolver::aimable(doc, fixtures);
+                        linePts = AimSolver::linePoints(doc, this, tgt, heads);
+                        lineReady = true;
+                    }
+                    tgtPos = linePts.value(id, mProps->targetAimPoint(tgt));
+                }
+                else
+                {
+                    tgtPos = AimSolver::aimPointFor(doc, id, tgt, subjectMode);
+                }
 
                 // Shared aim geometry — identical to the follow-spot effect's, so
                 // a fixture points the same way in Edit and Run.
@@ -1585,6 +1610,20 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
             doc.skipCurrentElement();
         }
     }
+    else if (m_type == Aim)
+    {
+        // A line's spread, group and cross (see saveXML()).
+        while (doc.readNextStartElement())
+        {
+            if (doc.name() == QLatin1String("EffectParam"))
+            {
+                const QString name = doc.attributes().value("name").toString();
+                if (!name.isEmpty())
+                    m_effectParamValues[name] = doc.attributes().value("value").toDouble();
+            }
+            doc.skipCurrentElement();
+        }
+    }
     else
     {
         // No children: skip from <Palette> StartElement to </Palette> EndElement.
@@ -1767,6 +1806,20 @@ bool QLCPalette::saveXML(QXmlStreamWriter *doc)
             doc->writeStartElement("EffectStringParam");
             doc->writeAttribute("name",  it.key());
             doc->writeAttribute("value", it.value());
+            doc->writeEndElement();
+        }
+    }
+    /* An Aim look on a line carries its spread (LineSpread's "__line*"
+       params), one element each so each can be inherited on its own. A build
+       that predates lines skips an Aim palette's children. */
+    else if (m_type == Aim)
+    {
+        for (auto it = m_effectParamValues.constBegin();
+             it != m_effectParamValues.constEnd(); ++it)
+        {
+            doc->writeStartElement("EffectParam");
+            doc->writeAttribute("name",  it.key());
+            doc->writeAttribute("value", QString::number(it.value()));
             doc->writeEndElement();
         }
     }

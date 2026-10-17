@@ -50,6 +50,8 @@ add_library(${module_name} SHARED
     showtreecontroller.cpp showtreecontroller.h
     showtreemodel.cpp showtreemodel.h
     spreadlayer.cpp spreadlayer.h
+    linecurve.cpp linecurve.h
+    linespread.cpp linespread.h
     networktopology.cpp networktopology.h
     powerdistribution.cpp powerdistribution.h
     venue.cpp venue.h

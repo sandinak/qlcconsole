@@ -454,6 +454,8 @@ public:
         { return m_effectParamValues; }
     void setEffectParamValue(const QString &name, double value)
         { m_effectParamValues[name] = value; }
+    void removeEffectParamValue(const QString &name)
+        { m_effectParamValues.remove(name); }
     /** Replace ALL numeric param overrides at once (used when stamping a
      *  preset). String/path params are cleared too so nothing stale lingers. */
     void setEffectParamValues(const QMap<QString, double> &values)

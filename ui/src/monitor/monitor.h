@@ -514,6 +514,10 @@ protected slots:
     /** Add a new stage target and open its editor. */
     void slotAddTarget();
 
+    /** Add a line target (LINE_TARGET_DESIGN.md): straight across the stage,
+     *  4 m long, centred where the click was; then its editor. */
+    void slotAddTargetLine();
+
     /** Stand a person where the click was: a Person target, named and placed
      *  in one step, with no dialog in the way. Whoever it is, its height comes
      *  from the follow-spot subject height, so the views draw it at the size
@@ -522,6 +526,12 @@ protected slots:
 
     /** Open the target edit dialog for the given target ID. */
     void slotEditTarget(quint32 tid);
+
+private:
+    /** slotAddTarget() and slotAddTargetLine(): place, edit, link an Aim. */
+    void addTarget(bool line);
+
+protected slots:
 
     /** Open target edit on double-click. */
     void slotTargetDoubleClicked(quint32 tid);
@@ -650,6 +660,8 @@ private:
         QString name;
         float   x, y, z;            ///< metres
         QColor  color;
+        int     kind = 0;           ///< StageTarget::Kind
+        QVector<QVector3D> linePoints;   ///< a line's points, relative
     };
 
     QList<TrussClip>    m_trussClipboard;

@@ -37,6 +37,7 @@
 #include <QSizeF>
 #include <QString>
 #include <QMutex>
+#include <QVector>
 #include <climits>
 
 class QXmlStreamReader;
@@ -104,7 +105,8 @@ public:
         Person,      ///< a standing subject
         DrumKit,     ///< a kit: lower, and wide enough that a point lies
         Structure,   ///< bound to a truss/platform/tower -- follows it
-        Area         ///< a region of deck, not a point
+        Area,        ///< a region of deck, not a point
+        Line         ///< a curve in space: each light gets its own point on it
     };
 
     static QString kindToString(Kind k);
@@ -150,6 +152,36 @@ public:
     float effectiveAimHeight() const
     { return hasAimHeightOverride() ? m_aimHeightOverride : defaultAimHeight(m_kind); }
 
+
+    /********************************************************************
+     * Line (Kind::Line) -- LINE_TARGET_DESIGN.md
+     ********************************************************************/
+public:
+    bool isLine() const { return m_kind == Kind::Line; }
+
+    /** The line's control points -- two ends and any mid points between --
+     *  RELATIVE to position(), in metres. The position is the line's centre
+     *  (half-way along it), so everything that moves a target (a drag, the
+     *  design joystick, a binding) moves the whole line, and everything that
+     *  reads a target's single point gets the centre. Guarded by the same
+     *  mutex as the position: the DMX thread reads both. */
+    QVector<QVector3D> linePoints() const { QMutexLocker l(&m_positionMutex); return m_linePoints; }
+    void setLinePoints(const QVector<QVector3D> &pts) { QMutexLocker l(&m_positionMutex); m_linePoints = pts; }
+
+    /** The points in world space (metres), around @p origin -- the target's
+     *  point as MonitorProperties::targetAimPoint() resolves it. */
+    QVector<QVector3D> linePointsAround(const QVector3D &origin) const;
+
+    /** Shift the points so position() is again half-way along the curve,
+     *  moving the position by the same amount: the line does not move. Done
+     *  after every edit of the points. */
+    void recentreLine();
+
+    /** A new line: straight across the stage, 4 m long, centred. */
+    static QVector<QVector3D> defaultLinePoints();
+
+    /** Make this a line, giving it the default points if it has none. */
+    void makeLine();
 
     /********************************************************************
      * Structure binding (Kind::Structure)
@@ -212,6 +244,7 @@ private:
     QString   m_boundType;                   ///< "platform" | "truss" | "tower"
     quint32   m_boundId = UINT_MAX;
     QSizeF    m_footprint;                   ///< metres; empty = a point
+    QVector<QVector3D> m_linePoints;         ///< Line: relative to m_position
     bool      m_locked = false;
     quint32   m_layerId = 0;   ///< 2D-map organizational layer (0 = Default)
     quint32   m_groupId = 0;   ///< 2D-map group (0 = ungrouped)

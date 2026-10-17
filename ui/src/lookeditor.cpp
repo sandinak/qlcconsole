@@ -37,6 +37,9 @@
 #include <QShortcut>
 #include <QTextBrowser>
 #include <QDialog>
+#include <QGridLayout>
+#include <QSignalBlocker>
+#include <cmath>
 #include "lookeditor.h"
 #include "programmercontroller.h"
 #include "fadetimespin.h"
@@ -51,6 +54,8 @@
 #include "monitorproperties.h"
 #include "gobolibrary.h"
 #include "stagetarget.h"
+#include "linespread.h"
+#include "linespreadpreview.h"
 #include "qlccapability.h"
 #include "qlcchannel.h"
 #include "fixturegroup.h"
@@ -508,6 +513,103 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     m_aimTargetCombo->setToolTip(tr("Stage target this palette aims at (rig geometry computes per-fixture pan/tilt)"));
     aimRow->addWidget(m_aimTargetCombo, 1);
     av->addLayout(aimRow);
+
+    /* On a line: how far the lights spread along it. 0 puts them all on the
+       centre, +5 evenly end to end, and below 0 across the centre -- the
+       beams cross, fully at -5. */
+    m_lineBox = new QWidget(aim);
+    m_lineBox->setObjectName(QStringLiteral("lineControls"));
+    QGridLayout *lg = new QGridLayout(m_lineBox);
+    lg->setContentsMargins(0, 0, 0, 0);
+    lg->setHorizontalSpacing(6);
+    QLabel *spreadLbl = new QLabel(tr("Spread:"), m_lineBox);
+    spreadLbl->setMinimumWidth(60);
+    lg->addWidget(spreadLbl, 0, 0);
+    QLabel *crossLbl = new QLabel(tr("cross"), m_lineBox);
+    crossLbl->setStyleSheet("color: palette(mid);");
+    lg->addWidget(crossLbl, 0, 1);
+    m_lineSpreadSlider = new QSlider(Qt::Horizontal, m_lineBox);
+    m_lineSpreadSlider->setObjectName(QStringLiteral("lineSpreadSlider"));
+    m_lineSpreadSlider->setRange(-50, 50);
+    m_lineSpreadSlider->setTickPosition(QSlider::TicksBelow);
+    m_lineSpreadSlider->setTickInterval(10);
+    m_lineSpreadSlider->setToolTip(tr("Right: the lights move out from the centre, to evenly "
+                                      "end to end at +5. Left: they cross over the centre, "
+                                      "fully crossed at -5. 0: all on the centre."));
+    lg->addWidget(m_lineSpreadSlider, 0, 2);
+    QLabel *outLbl = new QLabel(tr("spread"), m_lineBox);
+    outLbl->setStyleSheet("color: palette(mid);");
+    lg->addWidget(outLbl, 0, 3);
+    m_lineSpreadSpin = new QDoubleSpinBox(m_lineBox);
+    m_lineSpreadSpin->setObjectName(QStringLiteral("lineSpread"));
+    m_lineSpreadSpin->setRange(-LineSpread::maxSpread(), LineSpread::maxSpread());
+    m_lineSpreadSpin->setSingleStep(0.1);
+    m_lineSpreadSpin->setDecimals(1);
+    lg->addWidget(m_lineSpreadSpin, 0, 4);
+    /* Grouping: which lights move together. "1 2 3 cross 4 5 6" is halves
+       whose groups swap sides; "1 and 2, then 3 and 4" is pairs, each pair
+       a block. */
+    QWidget *grow = new QWidget(m_lineBox);
+    QHBoxLayout *gl = new QHBoxLayout(grow);
+    gl->setContentsMargins(0, 0, 0, 0);
+    m_lineGroupCombo = new QComboBox(grow);
+    m_lineGroupCombo->setObjectName(QStringLiteral("lineGroup"));
+    m_lineGroupCombo->addItem(tr("Each light"), 1);
+    m_lineGroupCombo->addItem(tr("Pairs"), 2);
+    m_lineGroupCombo->addItem(tr("Threes"), 3);
+    m_lineGroupCombo->addItem(tr("Fours"), 4);
+    m_lineGroupCombo->addItem(tr("Halves"), LineSpread::Halves);
+    m_lineGroupCombo->setToolTip(tr("Lights that move together, in order along the line. "
+                                    "Halves: the first half and the second (an odd middle "
+                                    "light stays on the centre)."));
+    gl->addWidget(m_lineGroupCombo);
+    QLabel *crossWhat = new QLabel(tr("Cross:"), grow);
+    gl->addWidget(crossWhat);
+    m_lineCrossCombo = new QComboBox(grow);
+    m_lineCrossCombo->setObjectName(QStringLiteral("lineCross"));
+    m_lineCrossCombo->addItem(tr("Groups swap sides"), int(LineSpread::SwapSides));
+    m_lineCrossCombo->addItem(tr("Each group flips (mirror)"), int(LineSpread::Mirror));
+    m_lineCrossCombo->setToolTip(tr("Below 0, what crosses: whole groups swap sides of the "
+                                    "centre keeping their order (1 2 3 | 4 5 6 becomes "
+                                    "4 5 6 | 1 2 3), or each group flips where it is "
+                                    "(3 2 1 | 6 5 4)."));
+    gl->addWidget(m_lineCrossCombo, 1);
+    m_lineShareCheck = new QCheckBox(tr("Share a point"), grow);
+    m_lineShareCheck->setObjectName(QStringLiteral("lineShare"));
+    m_lineShareCheck->setToolTip(tr("A group's lights all land on one point, the groups "
+                                    "spread end to end."));
+    gl->addWidget(m_lineShareCheck);
+    QLabel *groupLbl = new QLabel(tr("Group:"), m_lineBox);
+    lg->addWidget(groupLbl, 1, 0);
+    lg->addWidget(grow, 1, 1, 1, 4);
+    m_lineOrderCombo = new QComboBox(m_lineBox);
+    m_lineOrderCombo->setObjectName(QStringLiteral("lineOrder"));
+    m_lineOrderCombo->addItem(tr("Along the line, as they hang"), int(LineSpread::AlongLine));
+    m_lineOrderCombo->addItem(tr("Look order"), int(LineSpread::LookOrder));
+    m_lineOrderCombo->setToolTip(tr("Which light goes where: the one hanging nearest the "
+                                    "line's start takes the start, or the order the look "
+                                    "lists them in (its groups' head order, then its "
+                                    "fixtures)."));
+    lg->addWidget(new QLabel(tr("Order:"), m_lineBox), 3, 0);
+    lg->addWidget(m_lineOrderCombo, 3, 1, 1, 4);
+    for (QComboBox *cb : { m_lineGroupCombo, m_lineCrossCombo, m_lineOrderCombo })
+        connect(cb, QOverload<int>::of(&QComboBox::currentIndexChanged),
+                this, [this](int) { slotLineSettingsChanged(); });
+    connect(m_lineShareCheck, &QCheckBox::toggled, this, [this](bool) { slotLineSettingsChanged(); });
+    m_linePreview = new LineSpreadPreview(m_doc, m_lineBox);
+    lg->addWidget(m_linePreview, 2, 0, 1, 5);
+    av->addWidget(m_lineBox);
+    m_lineBox->hide();
+    connect(m_lineSpreadSlider, &QSlider::valueChanged, this, [this](int v) {
+        const QSignalBlocker b(m_lineSpreadSpin);
+        m_lineSpreadSpin->setValue(v / 10.0);
+        slotLineSettingsChanged();
+    });
+    connect(m_lineSpreadSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double v) {
+        const QSignalBlocker b(m_lineSpreadSlider);
+        m_lineSpreadSlider->setValue(int(std::lround(v * 10.0)));
+        slotLineSettingsChanged();
+    });
     av->addStretch(1);
     m_pageAim = m_stack->addWidget(aim);
     connect(m_aimTargetCombo, SIGNAL(currentIndexChanged(int)),
@@ -1144,7 +1246,8 @@ void LookEditor::setPalette(quint32 paletteId)
         if (m_doc->monitorProperties())
         {
             for (StageTarget *t : m_doc->monitorProperties()->stageTargets())
-                m_aimTargetCombo->addItem(t->name(), QVariant(t->id()));
+                m_aimTargetCombo->addItem(t->isLine() ? tr("Line: %1").arg(t->name()) : t->name(),
+                                          QVariant(t->id()));
         }
         // Pre-select the palette's linked target
         int sel = 0;
@@ -1155,6 +1258,7 @@ void LookEditor::setPalette(quint32 paletteId)
         }
         m_aimTargetCombo->setCurrentIndex(sel);
         m_aimTargetCombo->blockSignals(false);
+        syncLineControls();
         m_stack->setCurrentIndex(m_pageAim);
         setMaximumHeight(340);
         break;
@@ -1659,7 +1763,89 @@ void LookEditor::slotAimTargetChanged(int index)
         return;
     p->setStageTargetId(m_aimTargetCombo->itemData(index).toUInt());
     m_doc->setModified();
+    syncLineControls();
     emit paletteChanged(m_paletteId);
+}
+
+void LookEditor::syncLineControls()
+{
+    QLCPalette *p = m_doc->palette(m_paletteId);
+    MonitorProperties *props = m_doc->monitorProperties();
+    const StageTarget *t = (p != nullptr && p->type() == QLCPalette::Aim && props != nullptr)
+            ? props->stageTarget(p->stageTargetId()) : nullptr;
+    const bool line = (t != nullptr && t->isLine());
+    m_lineBox->setVisible(line);
+    if (!line)
+        return;
+    const LineSpread::Settings s = LineSpread::fromParams(p->effectParamValues());
+    {
+        const QSignalBlocker b1(m_lineSpreadSlider), b2(m_lineSpreadSpin);
+        m_lineSpreadSlider->setValue(int(std::lround(s.spread * 10.0)));
+        m_lineSpreadSpin->setValue(s.spread);
+        const QSignalBlocker b3(m_lineGroupCombo), b4(m_lineCrossCombo),
+                             b5(m_lineShareCheck), b6(m_lineOrderCombo);
+        int gi = m_lineGroupCombo->findData(s.group);
+        if (gi < 0)
+        {
+            // A group size the list does not offer (set elsewhere): show it.
+            m_lineGroupCombo->addItem(tr("Groups of %1").arg(s.group), s.group);
+            gi = m_lineGroupCombo->count() - 1;
+        }
+        m_lineGroupCombo->setCurrentIndex(gi);
+        m_lineCrossCombo->setCurrentIndex(qMax(0, m_lineCrossCombo->findData(int(s.cross))));
+        m_lineShareCheck->setChecked(s.share);
+        m_lineOrderCombo->setCurrentIndex(qMax(0, m_lineOrderCombo->findData(int(s.order))));
+    }
+    // Each light on its own has nothing to choose between: both cross it all.
+    m_lineCrossCombo->setEnabled(s.group != 1 && !s.share);
+    m_linePreview->setLook(m_contextScene, p);
+}
+
+void LookEditor::slotLineSettingsChanged()
+{
+    if (m_loading)
+        return;
+    QLCPalette *p = m_doc->palette(m_paletteId);
+    if (p == NULL || p->type() != QLCPalette::Aim)
+        return;
+
+    LineSpread::Settings s = LineSpread::fromParams(p->effectParamValues());
+    s.spread = m_lineSpreadSpin->value();
+    s.group = m_lineGroupCombo->currentData().toInt();
+    s.cross = LineSpread::Cross(m_lineCrossCombo->currentData().toInt());
+    s.share = m_lineShareCheck->isChecked();
+    s.order = LineSpread::Order(m_lineOrderCombo->currentData().toInt());
+    m_lineCrossCombo->setEnabled(s.group != 1 && !s.share);
+
+    /* Each setting is its own param, and one at its default is taken out,
+       so the look carries only what it changes. */
+    QMap<QString, double> params = p->effectParamValues();
+    LineSpread::toParams(s, params);
+    for (const char *what : { "Spread", "Group", "Cross", "Share", "Order" })
+    {
+        const QString key = LineSpread::paramName(what);
+        if (params.contains(key))
+            p->setEffectParamValue(key, params.value(key));
+        else
+            p->removeEffectParamValue(key);
+    }
+    m_linePreview->setLook(m_contextScene, p);
+    m_doc->setModified();
+
+    /* Live: the Programming tab's preview re-resolves (paletteValueChanged,
+       which leaves the look list alone, so the slider is not rebuilt under
+       the mouse), running scenes using the look re-aim, and the studio and
+       rig view are told their scene changed. */
+    emit paletteValueChanged(m_paletteId);
+    foreach (Function *f, m_doc->functions())
+    {
+        Scene *sc = qobject_cast<Scene *>(f);
+        if (sc == nullptr || !(sc->palettes().contains(m_paletteId) || sc->trialPalette() == m_paletteId))
+            continue;
+        if (sc->isRunning())
+            sc->requestReaim();
+        m_doc->notifyFunctionChanged(sc->id());
+    }
 }
 
 void LookEditor::slotSingleValueChanged(int v)

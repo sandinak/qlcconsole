@@ -51,6 +51,16 @@ The latest changes, newest first. Each links to the guide with the detail.
   before it) now keeps that scene running instead of stopping and starting
   it.
 
+### Stage targets
+
+- **Line targets.** A new kind of aim target: a curve in space that spreads
+  the lights aimed at it evenly along it, stage-left light to the stage-left
+  end. Drag its ends to stretch or swing it, double-click it to add a point
+  and drag that to bend it, drag the line to move it all. An Aim look on
+  a line has a **Spread** slider (-5 crossed .. 0 all on the centre .. +5
+  end to end) and **Group / Cross** for halves or pairs that swap sides or
+  mirror. See [Line targets](stage-targets.md#line-targets).
+
 ### Programming
 
 - **Drag scenes and palettes into folders.** In the Programming tab, a scene
