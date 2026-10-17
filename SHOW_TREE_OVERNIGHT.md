@@ -300,3 +300,62 @@ cp ~/git/qlcconsole/test-workspaces/DanceHysteria-0.5.qlcc /tmp/dh-p2.qlcc
 - 11. `dimmer 45` always makes a one-off (no reuse of a palette at 45 %).
 - Unchanged: `Generated` on `<Function>`; undo shared with Programming;
   effect's own Gobo; DanceHysteria Hold-0; Blind (to discuss).
+
+## P2 answers (2026-10-17)
+
+Branson's answers to open 9–11, built on `feat/show-tree`, pushed, **not
+merged**. Notes: SHOW_TREE_DESIGN.md **§10.11** (D11/D21 changed; open 9–11
+marked resolved).
+
+| Commit | What |
+|---|---|
+| 3310a9f59 | **Record** selected / running / everything lit (asks only when they differ; Settings → Show Tree default per Design / Perform, Ask by default; `record selected\|running\|lit`). **One layer or each**, one rule: several = one layer (drop, + Layer, `Towers USTs` = `Towers+USTs`), each = ⌥-drop, ⌥-click / + Layer menu, `Towers, USTs`. **Split layer / Merge layers** keeping tracking (`Layer::continuesAlso`, re-set cues split/merged too), refused with a reason on conflicting looks or if any cue's stage would change (`ShowTree::stageDiffers`). **Values reuse palettes**: exact named palette (In this cue list → Recent → any); command line otherwise makes one named per the show's pattern (`Intensity 30%` beside `Intensity 45%`); picker one-off gets one-click **Make reusable** on its row. Tests |
+| 5034675ed | Help `show-tree.md` (+ What's new), design §10.11, TODO/DONE |
+| d631f35ca | Unused helper removed (the first gate's Werror leg caught it) |
+
+- **Gate** (`./check-all.sh`, JOBS=6, `git archive` copy in the scratchpad):
+  on 5034675ed Qt6 PASS, Qt6-Release PASS, **Qt6-Werror FAIL** (build:
+  unused `layerText` in showtreecommand.cpp) → fixed in d631f35ca; on
+  **d631f35ca**: Qt6 **PASS** (780 s), Qt6-Release **PASS** (427 s),
+  Qt6-Werror **PASS** (439 s); 1646 s.
+- **Tests:** `showtree_test` 52 + 1 opt-in skip (+5: record sources,
+  split and merge across tracked cues with refusals and XML round trip,
+  palette reuse order + editing the palette changes both cues on the rig,
+  naming patterns); `showtreeview_test` 34 + 1 skip (+3: the Record
+  setting / Don't ask again / dialog / command line, one-or-each + split +
+  merge from a tree selection, picked value reuse + Make reusable);
+  `helpbrowser_test` green.
+- **DanceHysteria-0.5 import dry run** (a copy, unchanged after): passes
+  (0 channels differ).
+- **Crash reports:** one new, `showtreeview_test-2026-10-17-090513.ips`
+  (SIGABRT): mine, the QTest watchdog on a first draft of
+  `severalGroupsOneLayerOrEach` that sat in the "select groups first"
+  message box (a Library rebuild had cleared its selection). Fixed before
+  commit; none from the gates.
+
+### What to try in the app (on a COPY of a show)
+
+```sh
+cp ~/git/qlcconsole/test-workspaces/DanceHysteria-0.5.qlcc /tmp/dh-p2a.qlcc
+~/git/qlcconsole-showtree/build/main/qlcconsole -o /tmp/dh-p2a.qlcc
+```
+
+1. Import chaser… → Full Show; make it Tracking. GO it from the footer,
+   then select another cue and press **Record**: it asks *selected / running*
+   (and *everything lit* if something else is on). Tick **Don't ask again**;
+   Settings → **Show Tree** shows the default per mode. Try it in Operate.
+2. Select two groups in the Library → **+ Layer**: one layer; ⌥-click (or
+   the arrow) for one each. Right-click a two-group layer → **Split layer**;
+   ⌘-click two layers of a cue → right-click → **Merge 2 layers** (set one's
+   colour differently first to see the refusal). GO through the cues after.
+3. **Command**: `StepTops dimmer 45` (says *reused "Intensity 45%"*),
+   `StepTops dimmer 30` (*new palette "Intensity 30%" in Palettes/Dimmer*),
+   `Towers AT-Spots dimmer Full` (one layer) vs `Towers, AT-Spots …` (each),
+   `record running`.
+4. ⋯ → **Level…** 45 on a row: uses Intensity 45%. 31: a one-off with
+   **Make reusable** beside it.
+
+### Still open (§10)
+
+`Generated` on `<Function>`; undo shared with Programming; an effect's own
+Gobo; DanceHysteria Hold-0; Blind (to discuss).
