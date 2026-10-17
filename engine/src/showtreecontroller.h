@@ -129,6 +129,8 @@ public:
     /** How many of @a target's fixtures a look of @a key can reach ("applies
      *  to 4 of 8 fixtures", §3A): @a reach of @a total. */
     void lookReach(const ShowTree::Target &target, const QString &key, int *reach, int *total) const;
+    /** The target's fixtures a look of @a key can't reach (they ignore it). */
+    QList<quint32> lookMisses(const ShowTree::Target &target, const QString &key) const;
 
     /** What a person reads for @a target: its groups' and fixtures' names,
      *  or the function's. */

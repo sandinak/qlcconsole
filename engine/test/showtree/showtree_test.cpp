@@ -874,6 +874,8 @@ void ShowTree_Test::lookReachCountsFixturesThatHaveIt()
     QCOMPARE(reach, 1);
     m_doc->showTree()->lookReach(t, KeyDimmer, &reach, &total);
     QCOMPARE(reach, 3);
+    QCOMPARE(m_doc->showTree()->lookMisses(t, KeyGobo), QList<quint32>({ m_fixtures[0], m_fixtures[1] }));
+    QVERIFY(m_doc->showTree()->lookMisses(t, KeyDimmer).isEmpty());
 }
 
 /****************************************************************************

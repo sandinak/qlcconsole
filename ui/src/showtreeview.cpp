@@ -1127,7 +1127,13 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
             if (total > 0 && n < total)
             {
                 reach->setText(tr("applies to %1 of %2").arg(n).arg(total));
-                reach->setToolTip(tr("Fixtures without it ignore this look."));
+                QStringList names;
+                for (quint32 fid : m_st->lookMisses(rl->target, key))
+                    if (const Fixture *f = m_doc->fixture(fid))
+                        names << f->name();
+                if (names.count() > 12)
+                    names = names.mid(0, 12) << tr("…and %1 more").arg(names.count() - 12);
+                reach->setToolTip(tr("Without it (they ignore this look):\n%1").arg(names.join(QLatin1Char('\n'))));
             }
         }
 

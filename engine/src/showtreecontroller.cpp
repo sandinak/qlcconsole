@@ -600,6 +600,15 @@ void ShowTreeController::lookReach(const Target &target, const QString &key, int
         *total = int(ids.count());
 }
 
+QList<quint32> ShowTreeController::lookMisses(const Target &target, const QString &key) const
+{
+    QList<quint32> out;
+    for (quint32 id : targetFixtures(m_doc, target))
+        if (!fixtureReaches(m_doc->fixture(id), key))
+            out << id;
+    return out;
+}
+
 QString ShowTreeController::targetLabel(const Target &target) const
 {
     if (target.isOpaque())
