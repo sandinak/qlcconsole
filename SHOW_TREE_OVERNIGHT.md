@@ -208,3 +208,29 @@ network. Use Blind if you only want the 2D view.)
 Also worth knowing: editing a gobo palette in the Look Editor (either tab)
 now makes it a by-name look; a type with no gobo of that name then ignores
 it rather than getting the old raw value.
+
+---
+
+## Follow-up (2026-10-17)
+
+Branson answered §10 questions 6 and 7; built on `feat/show-tree`, pushed,
+**not merged**. Notes: SHOW_TREE_DESIGN.md §10.9.
+
+| Commit | What |
+|---|---|
+| 4973a8d43 | **In Design, whatever is in edit is visible.** The selected cue previews also over its own list or any other running for real (header "…, over Full Show running"). Stopping the preview leaves the stage to what really runs, which kept going underneath. Perform: the list owns the stage, as before. The preview's scenes take precedence through `Scene::setEditOverride()` (Override-priority faders, LTP on every channel, switched in place on the DMX thread, cleared before a stop so the fade-out is HTP into what runs). Engine fixes: `Universe::requestFaderPriority()` couldn't lower a priority; a 16-bit `FadeChannel::Override` write sent one byte. **Gobo names in tiers:** per-type pick → exact → singular/plural ("gobo" and numbers ignored) → unique prefix/contains; ambiguous → not guessed, the row says "ambiguous: pick per type…" and links to the Look Editor. |
+| bd8f64a2e | Help (show-tree.md), design §10.9 (+ 6 and 7 resolved, 8 "Blind: to discuss"), TODO/DONE. |
+
+- **Gate** (`./check-all.sh`, JOBS=5, `git archive` copy of bd8f64a2e):
+  Qt6 **PASS** (413 s), Qt6-Release **PASS** (377 s), Qt6-Werror **PASS**
+  (406 s); whole gate 1196 s.
+- New tests: `showtree_test::inDesignTheEditWinsOverARunningList`,
+  `showtreeview_test::inDesignTheEditShowsOverItsRunningList`, gobo
+  ambiguity in `goboLooksMatchByNamePerType`,
+  `qlcpalette_test::goboNamesMatchInTiers` (table),
+  `universe_test::faderPriorityMovesBothWays`. No new crash reports.
+- **To try on the rig:** GO a list, then in Design select its running cue
+  and pull a dimmer down: the rig should show the lower level; click the
+  list row: back to the running cue. Gobos: name a look "Dot" on a mixed
+  group and read each type's line in the Look Editor.
+- **Open:** Blind and the preview (to discuss); the others in §10 unchanged.
