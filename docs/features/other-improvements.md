@@ -49,6 +49,21 @@ protocol; right-click a universe to rename it, set its feedback line or
 input profile, unpatch it, or delete it. Those act on the one row you
 right-clicked.
 
+**Choosing where it goes.** Patching a universe asks the protocol, then the
+interface (with more than one), then, for a protocol that sends to a
+device (Art-Net, WLED), the **port**: a
+list of every port of every device under that interface, whether heard on
+the network, added by hand or only named by an existing patch, **free ones
+first**, then the ones another universe holds, saying which. Pick one, type
+one with **Another address…**, or choose **Broadcast (no target)**. A port
+another universe already sends to is refused with its name (one port, one
+universe). Nothing changes until you've answered, so cancelling leaves the
+universe as it was. **Change interface / target…** on a patched universe asks the
+interface again with the current one preselected, so it can move to
+another network card. In the lists, **port** is the socket on the node
+(port 1, 2…) and **universe** its Art-Net address (net:subnet:universe,
+e.g. 0:0:1).
+
 **Several universes at once.** Ctrl-click (⌘-click on a Mac) universes —
 in either view, patched or not — and right-click one of them:
 
@@ -422,8 +437,12 @@ it has been measured, else its definition's power. A definition that gives
 none is guessed at per fixture — 150 W a mover, 50 W anything else, 40 W a
 channel for a dimmer pack — never per channel for LED gear, where a 40-pixel
 bar's 120 colour channels once read 4.8 kW. Hover the footer's figure for
-the biggest draws, where each comes from, and which definitions have no
-power to go on.
+the breakdown: the biggest draws by fixture type, each marked **measured**
+(its readings), **rated** (its definition) or **guessed** (no power in its
+definition), a warning when a measured full draw is over twice what the
+definition says (check the readings), which definitions have no power to go
+on, and what the figure assumes (before the Grand Master, at the default
+voltage where no circuit gives one). Click it to open the circuits editor.
 
 ### A fixture's maximum draw
 

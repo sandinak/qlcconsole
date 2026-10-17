@@ -413,7 +413,7 @@ rules and undo as the Connections tab (see
 [Connections &amp; patch](other-improvements.md#connections--patch)):
 
 - **Patch output…** — on a universe that goes nowhere yet: the protocol,
-  then the interface, then (Art-Net, sACN) the node port — the visible
+  then the interface, then (Art-Net, WLED) the node port — the visible
   devices' ports, free ones first, with **Another address…** and
   **Broadcast**. A port another universe already uses is refused.
 - On a patched universe the menu says where it goes now, e.g. **Output:

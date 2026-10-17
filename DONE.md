@@ -326,8 +326,21 @@ coredumpctl on a crash. Its first runs found (`be5eefa5d`) a GCC -O3
 the tree failed), and the Programming tab's first-run guide holding up the
 web API on a scripted run (it now honours `QLC_NO_RECOVERY_PROMPT`).
 
-**Second soak started 2026-10-16 on 4 hosts**, with all of the above in.
-Results not in yet.
+**Second soak, 2026-10-16 → 17, on 4 hosts**, with all of the above in:
+DanceHysteria-0.3, three 8 h phases (real / scaled / rough), outputs
+stripped. RSS is start → peak → end.
+
+| Host | Real | Scaled | Rough |
+|---|---|---|---|
+| Linux build host (Debian 13, Qt 6.8.2, x86_64) | 0 crashes/hangs/restarts; RSS 234 → 291 → 277 MB; worst tick 44 ms | 0; 281 → 400 → 394 MB; 101 ms | 0; 295 → 404 → 375 MB; 57 ms; 7 reloads |
+| Podman container (Linux arm64) | 0 crashes/hangs/restarts; 231 → 281 → 271 MB | 0; 269 → 385 → 378 MB | 0; 289 → 408 → 378 MB |
+| kronk (macOS, `--heap-track`) | 0 crashes/hangs; 312 → 492 → 486 MB | 0; 547 → 758 → 749 MB | 0; 360 → 639 → 608 MB |
+| Windows 10 VM | 0 crashes/hangs/restarts; 204 → 248 → 233 MB; handles 1612 → 1628 → 1595; worst tick 97.8 ms | cut after 15 min by a Windows Update reboot (event 1074, planned) -- not an app fault | not run |
+
+Linux fds stayed flat (~100-119). The first soak's scaled-phase crashes
+did not recur: 0 on the three hosts that ran that phase in full. Still open: a short Windows
+re-soak (scaled and rough phases), and reading kronk's heap snapshots for
+what the on-screen app's memory is (TODO.md).
 
 ### 2026-10-15 — WLED: the rest of the 1D effects, 160 in all *(feat/wled-effects-2, merged into release/0.1.0)*
 

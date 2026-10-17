@@ -35,8 +35,11 @@ installer and Linux AppImage from CI. CHANGELOG.md's 0.1.0 section is
 written, known issues included.
 
 - **First 24-hour soak (kronk) — reviewed, fixes merged** (DONE.md
-  2026-10-16). **Second soak running on 4 hosts** with the fixes in
-  (macOS with `--heap-track`). Review it before releasing.
+  2026-10-16). **Second soak done** (2026-10-16 → 17, 4 hosts, DONE.md):
+  0 crashes or hangs on Linux x86_64, Linux arm64 (podman) and macOS in all
+  three phases; Windows 10 VM clean in the real phase, the scaled phase cut
+  after 15 min by a Windows Update reboot. Left: a short Windows re-soak
+  (scaled + rough), and diff kronk's `--heap-track` snapshots.
 - **Rig test pass** — `RIG_TEST_PLAN.md`, section K first (the 0.1.0
   work), on the office rig with kronk.
 - Then: merge `release/0.1.0` to main, `./release.sh`, attach the Windows
@@ -70,7 +73,7 @@ written, known issues included.
   once a few more runs stay green. The failures were QSettings with no
   organization name (every UI test now gets its own INI file,
   ui/test/common/testsettings.cpp), USERPROFILE not set alongside HOME, mixed
-  '\\' separators in system fixture paths, and a read-only folder Windows
+  '\' separators in system fixture paths, and a read-only folder Windows
   ignores. lookeditor's segfault (exit 139) went away with the settings
   change; its exact cause was not pinned down.
 - **Windows leftovers** — not code-signed (SmartScreen warns); ~95 MB
@@ -182,7 +185,7 @@ before building):
   new show instead of copying a .qlcc and stripping it.
 - **Stress test across Mac / Linux / Windows 11** — the 24-hour soak
   runner (`stresstest/soak24/`) now runs on all three (DONE.md 2026-10-16)
-  and the second soak is on 4 hosts. Still missing from the matrix: a real
+  and the second soak ran on 4 hosts (DONE.md). Still missing from the matrix: a real
   Windows 11 machine (only the Windows 10 VM so far), and the new paths at
   full rig (WLED/JSON output, effect runner) with outputs live rather than
   stripped.

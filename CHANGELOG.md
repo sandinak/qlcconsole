@@ -23,6 +23,13 @@ console-first programmer-mode workflow.
   yet, so SmartScreen asks before it runs.
 - **Linux** — an x86_64 AppImage.
 
+**Soak-tested** (2026-10-16 → 17, the DanceHysteria show, three 8-hour
+phases — the real show, a scaled-up show, rough handling with reloads —
+with DMX output stripped): no crashes or hangs on Linux x86_64 (Debian 13),
+Linux arm64 or macOS in any phase. On Windows 10 (a VM) the real-show phase
+ran clean; the scaled phase was cut short by a Windows Update reboot, and
+a shorter Windows re-soak is planned.
+
 ### Added
 - **QLab and show control.** Chase steps carry cue numbers (a Cue column in
   the chaser editor, with Renumber); a chase can be the main cue list or
@@ -369,11 +376,13 @@ console-first programmer-mode workflow.
 
 ### Known issues
 - **Windows:** on heavy shows (around 90 universes with thousands of
-  pixel fixtures) the engine can't keep its tick rate; a fix is in
-  progress. Moderate shows run normally.
-- **macOS:** over a long run the on-screen app's memory grows (about
-  50 MB an hour in the 24-hour soak) with no crash or slowdown; being
-  tracked down.
+  pixel fixtures) the engine couldn't keep its tick rate. A fix is in
+  (the test VM now ticks that show at about 8 ms on average) but it hasn't
+  had a long soak on a heavy show yet. Moderate shows run normally.
+- **macOS:** over a long run the on-screen app's memory grows with no crash
+  or slowdown — about 50 MB an hour in the first 24-hour soak; in the
+  second, 312 → 492 MB over the 8-hour real-show phase. Being tracked
+  down.
 - **Linux:** DMX output timing runs at normal priority unless the system
   grants real-time priority (CAP_SYS_NICE or an rtprio limit).
 - The universal Mac app has no OLA plugin.
