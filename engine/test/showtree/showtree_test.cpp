@@ -922,6 +922,7 @@ void ShowTree_Test::importReadsScenesIncludesAndOpaqueFunctions()
     Chaser *chaser = new Chaser(m_doc);
     chaser->setName("Full Show");
     chaser->setDurationMode(Chaser::PerStep);   // each step holds until GO
+    chaser->setGoQuantize(Chaser::GoOnBeat);
     m_doc->addFunction(chaser);
     ChaserStep s1(one->id(), 1000, Function::infiniteSpeed(), 500);
     s1.note = "After setup";
@@ -968,9 +969,23 @@ void ShowTree_Test::importReadsScenesIncludesAndOpaqueFunctions()
     QVERIFY(st->isGenerated(list->chaser));
 
     // One undo step takes the whole import back.
+    const quint32 generatedChaser = list->chaser;
     QVERIFY(st->undo());
     QVERIFY(st->productions().isEmpty());
     QCOMPARE(functionsXml(m_doc), originals);
+
+    // Redo brings it back with the chaser's own settings, not a plain one.
+    QVERIFY(st->redo());
+    const CueList *again = st->cueList(rep.list);
+    QVERIFY(again != nullptr);
+    QCOMPARE(again->chaser, generatedChaser);
+    const Chaser *c = qobject_cast<const Chaser *>(m_doc->function(generatedChaser));
+    QVERIFY(c != nullptr);
+    QCOMPARE(c->durationMode(), Chaser::PerStep);
+    QCOMPARE(c->runOrder(), chaser->runOrder());
+    QCOMPARE(c->goQuantize(), Chaser::GoOnBeat);
+    QCOMPARE(c->stepsCount(), 3);
+    QVERIFY(st->isGenerated(generatedChaser));
 }
 
 void ShowTree_Test::importedListPlaysAsTheChaserDid()

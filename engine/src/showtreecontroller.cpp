@@ -42,6 +42,7 @@ using namespace ShowTree;
 #define KXMLShowTreeNextId          QStringLiteral("NextId")
 #define KXMLShowTreeGenerated       QStringLiteral("Generated")
 #define KXMLShowTreeInline          QStringLiteral("InlinePalettes")
+#define KXMLShowTreeChasers         QStringLiteral("Chasers")
 
 /** Where the tree files what it makes (§4): out of the way of the user's
     own folders. */
@@ -1393,6 +1394,15 @@ void ShowTreeController::saveState(QXmlStreamWriter *doc, bool snapshot) const
             if (QLCPalette *p = m_doc->palette(id))
                 p->saveXML(doc);
         doc->writeEndElement();
+
+        // ...and a cue list's chaser with its playback settings (run order,
+        // speed modes, GO on the beat): a bake would make a plain new one.
+        doc->writeStartElement(KXMLShowTreeChasers);
+        for (const Production &p : m_productions)
+            for (const CueList &l : p.lists)
+                if (Function *f = m_doc->function(l.chaser))
+                    f->saveXML(doc);
+        doc->writeEndElement();
     }
 
     doc->writeEndElement();
@@ -1462,6 +1472,20 @@ void ShowTreeController::loadState(QXmlStreamReader &root, bool snapshot)
                     }
                     delete saved;
                 }
+            }
+        }
+        else if (root.name() == KXMLShowTreeChasers && snapshot)
+        {
+            while (root.readNextStartElement())
+            {
+                const quint32 id = root.attributes().value(QStringLiteral("ID")).toString().toUInt();
+                if (root.name() != QLatin1String("Function") || m_doc->function(id) != nullptr)
+                {
+                    root.skipCurrentElement();
+                    continue;
+                }
+                if (Function::loader(root, m_doc) && m_doc->function(id) != nullptr)
+                    m_generatedChasers.insert(id);
             }
         }
         else

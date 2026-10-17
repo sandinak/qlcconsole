@@ -55,7 +55,7 @@ help (DONE.md 2026-10-16). Handoff: SHOW_TREE_OVERNIGHT.md.
 - **Left of P1:** gobo palettes by name per fixture definition (§3A, 10.7);
   the Look Editor docked under the tree (palette values are edited in
   Programming for now); drag a cue to reorder (Move up/down in its menu
-  for now); redo of an import keeps default chaser settings (10.5).
+  for now).
 - **Try on the rig:** GO through an imported list with effects running (the
   hand-over keeps a shared scene's effect phase — tested on engine signals,
   not seen on stage).

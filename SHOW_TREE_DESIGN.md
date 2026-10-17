@@ -780,7 +780,10 @@ the end.
   tree's XML plus every inline palette's full XML), apply, bake. Undo/redo
   restore a snapshot and bake (200 steps). Every operation the UI offers is
   one step; an import is one step.
-- Inline palettes come back with undo/redo exactly as they were (tested).
+- Inline palettes come back with undo/redo exactly as they were, and so
+  does a cue list's chaser with its playback settings (run order, speed
+  modes, GO on the beat) — an undo snapshot carries both (tested: redo of an
+  import).
 - **Not shared with Programming** in P1: the Programming tab has its own
   Revert snapshots and edits functions, not the tree.
 - **Palette value edits are not tree edits**, so tree undo doesn't undo a
@@ -855,6 +858,3 @@ one sequence and back to 0.0.2 (Loop) — the import keeps that.
    built? And an effect's own Gobo (engine rule change)?
 5. **Hold 0 in imported lists:** DanceHysteria's 0.0.4–0.0.7 auto-follow
    (Hold 0). Intended? The import keeps it either way.
-6. **Redo of an import after undoing it** recreates the list's chaser with
-   default playback settings (the copy was deleted on undo). Minor; fix is to
-   keep the playback settings on the cue list. Not done tonight.
