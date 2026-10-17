@@ -1017,7 +1017,7 @@ the existing theme/tab-label-mode pattern would be the obvious fit). Pick
 up with a real audit of every `setIconSize()`/fixed-pixel QSS rule before
 estimating effort for real.
 
-### Show lifecycle: Construction / Test-Validate / Production *(2026-08-15, design doc written)*
+### Show lifecycle: Construction / Test-Validate / Run *(2026-08-15, design doc written; "Production" renamed Run 2026-10-16, D1)*
 See `SHOW_LIFECYCLE_DESIGN.md` — names the three phases a show moves through
 (building off-rig → matching Lighting Studio to the real rig → running on the
 road) and settles that this is **not** a third `Doc::mode()`; it's the
