@@ -6,6 +6,28 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-17 — Engine: fader priority moves both ways; an Override 16-bit channel writes both bytes *(fix/fader-priority-16bit)*
+
+Backported from `feat/show-tree` (4973a8d43), the two engine fixes only.
+
+- **`Universe::requestFaderPriority()`** searched for a slot with the fader
+  still in the list, so a priority lower than its own never found one: the
+  fader stayed put and kept its old priority. It now takes the fader out,
+  sets the priority and puts it back where `requestFader()` would place a
+  new fader of that priority (after the last one at or below it).
+- **`GenericFader::write()`, `FadeChannel::Override`**: a fader handling
+  secondary channels holds a 16-bit channel (coarse + fine) in one
+  FadeChannel; Override wrote one byte -- the low one, at the coarse
+  address. It now writes every byte, MSB first, like the Flashing branch.
+- **User-visible on 0.1.0: nothing.** No code on the release branch calls
+  `requestFaderPriority()`, and the Override flag is only set on faders
+  without secondary handling (Simple Desk, VC slider override, power
+  measuring, effect-script `replace`), whose channels are always one byte.
+  Both were latent; Show Tree's edit override is the first user of either.
+- **Tests**: `Universe_Test::faderPriorityMovesBothWays`,
+  `GenericFader_Test::anOverride16BitChannelWritesBothBytes` -- each fails
+  on the unfixed code and passes with the fix.
+
 ### 2026-10-16 — A look's Speed and Spread survive picking an effect; Speed Masters window closes cleanly *(fix/speedmaster-dblclick-reset)*
 
 Branson: "when I set something on the speed masters .. and then double click

@@ -26,6 +26,7 @@
 #include "universe.h"
 #undef protected
 
+#include "genericfader.h"
 #include "grandmaster.h"
 
 void Universe_Test::init()
@@ -676,6 +677,35 @@ void Universe_Test::setGMValueEfficiency()
 
     for (i = 0; i < 512; i++)
         QCOMPARE(int(m_uni->postGMValues()->at(i)), int(100));
+}
+
+void Universe_Test::faderPriorityMovesBothWays()
+{
+    QSharedPointer<GenericFader> a = m_uni->requestFader();
+    QSharedPointer<GenericFader> b = m_uni->requestFader();
+    QSharedPointer<GenericFader> p = m_uni->requestFader();
+    QCOMPARE(m_uni->faders().indexOf(p), 2);
+
+    // Up: after every Auto fader.
+    m_uni->requestFaderPriority(p, Universe::Override);
+    QSharedPointer<GenericFader> c = m_uni->requestFader();
+    QCOMPARE(m_uni->faders().last(), p);
+    QCOMPARE(p->priority(), int(Universe::Override));
+
+    // Down again: among the Auto ones, and its priority does change (it
+    // used to stay Override when nothing below it was found).
+    m_uni->requestFaderPriority(p, Universe::Auto);
+    QCOMPARE(p->priority(), int(Universe::Auto));
+    QCOMPARE(m_uni->faders().indexOf(p), 3);
+    QCOMPARE(m_uni->faders().count(), 4);
+
+    // The only fader, lowered: still set.
+    for (const QSharedPointer<GenericFader> &f : { a, b, c })
+        m_uni->dismissFader(f);
+    m_uni->requestFaderPriority(p, Universe::Override);
+    m_uni->requestFaderPriority(p, Universe::Background);
+    QCOMPARE(p->priority(), int(Universe::Background));
+    m_uni->dismissFader(p);
 }
 
 void Universe_Test::writeEfficiency()
