@@ -2275,13 +2275,22 @@ void ShowTree_Test::commandLineFailsAsAWhole()
     QCOMPARE(st->undoText(), undo);
     QCOMPARE(m_doc->palettes().count(), palettes);      // the one-off went too
 
+    // A one-off made on the way goes too when a later word fails.
+    const quint32 layer = st->addLayer(ctx.cue, groupTarget(m_doc->fixtureGroups().first()->id()));
+    const int withLayer = m_doc->palettes().count();
+    r = cmd.run("cue look dimmer 30 colour Nope", ctx);
+    QVERIFY(!r.ok);
+    QCOMPARE(m_doc->palettes().count(), withLayer);
+    QVERIFY(st->removeLayer(ctx.cue, layer));
+    const QString undoNow = st->undoText();
+
     r = cmd.run("Nobody colour Blue", ctx);
     QVERIFY(!r.ok);
     QVERIFY(r.message.contains("Nobody"));
     r = cmd.run("cue 2 \"Two\" sideways", ctx);
     QVERIFY(!r.ok);
     QCOMPARE(st->cueList(ctx.list)->cues.count(), 1);
-    QCOMPARE(st->undoText(), undo);
+    QCOMPARE(st->undoText(), undoNow);
 }
 
 void ShowTree_Test::commandLineCompletes()

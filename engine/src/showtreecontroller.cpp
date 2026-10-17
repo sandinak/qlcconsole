@@ -198,7 +198,13 @@ void ShowTreeController::endBatch(bool keep)
     if (m_batchDepth == 0 || --m_batchDepth > 0)
         return;
     if (!m_batchChanged)
+    {
+        // Nothing in the tree changed, but a failed command may have made
+        // a one-off value on the way.
+        if (!keep)
+            dropUnusedInlinePalettes();
         return;
+    }
     if (!keep)
     {
         // Back as it was; a bake drops a one-off value made on the way.
