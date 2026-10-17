@@ -24,7 +24,9 @@ palettes and groups.
     Zoom, Focus / Frost / Iris, Shutter, and its effects. A value set here is
     plain; one coming from the cue or an earlier cue is grey and says where:
     *"Blue — from cue 1 Preshow"*, *"45% — tracked from 0.0.3 Announcer"*.
-    **⋯** on a row sets it here (any palette of that kind, recent ones first,
+    **✎** opens the value's palette in the **Look Editor** under the tree
+    (the Programming tab's; a named palette is shared, so the editor says
+    so before you change it everywhere). **⋯** on a row sets it here (any palette of that kind, recent ones first,
     or a one-off level or colour), turns it **off here** (None), or clears it
     so it inherits again. *"applies to 4 of 8"* means only 4 of the layer's
     fixtures have that attribute; the rest ignore it.

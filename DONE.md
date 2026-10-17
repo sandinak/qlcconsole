@@ -32,11 +32,11 @@ chaser that play it are generated. Handoff: SHOW_TREE_OVERNIGHT.md.
 - **UI** — the **Show Tree** tab beside Programming (⇧⌘6): tree with
   tracked/included layers greyed, cue and layer inspectors (one row per
   attribute, inherited values with their source), Library (Recent / Pinned
-  / All), drops with hints, one-off values, undo. Help: show-tree.md.
+  / All), drops with hints, one-off values, undo, the Look Editor docked
+  under it (✎ on a row). Help: show-tree.md.
   Tests: `ui/test/showtreeview` (+ `QLC_SHOWTREE_SHOW`/`_SHOT` pictures a
   real show offscreen).
-- Not yet: gobo name mapping, the docked Look Editor (TODO.md). Not tried
-  on the rig.
+- Not yet: gobo name mapping (TODO.md). Not tried on the rig.
 
 ### 2026-10-16 — A look's Speed and Spread survive picking an effect; Speed Masters window closes cleanly *(fix/speedmaster-dblclick-reset)*
 

@@ -48,6 +48,9 @@
 #include "fixturegroupsource.h"
 #include "functionstreewidget.h"
 #include "showtreeview.h"
+#include "effectscriptrunner.h"
+#include "lookeditor.h"
+#include "scene.h"
 #include "fixturegroup.h"
 #include "qlcpalette.h"
 #include "function.h"
@@ -402,9 +405,26 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     connect(m_undo, &QToolButton::clicked, this, &ShowTreeView::slotUndo);
     connect(m_redo, &QToolButton::clicked, this, &ShowTreeView::slotRedo);
 
-    QSplitter *split = new QSplitter(Qt::Horizontal, this);
+    // The tree, inspector and Library above; the Look Editor (Programming's)
+    // under them, for the palette of the row being edited (§6, "Bottom").
+    QSplitter *vsplit = new QSplitter(Qt::Vertical, this);
+    vsplit->setObjectName("stVSplitter");
+    main->addWidget(vsplit, 1);
+    QSplitter *split = new QSplitter(Qt::Horizontal, vsplit);
     split->setObjectName("stSplitter");
-    main->addWidget(split, 1);
+    vsplit->addWidget(split);
+    m_lookEditor = new LookEditor(m_doc, vsplit);
+    m_lookEditor->setObjectName("stLookEditor");
+    vsplit->addWidget(m_lookEditor);
+    vsplit->setStretchFactor(0, 3);
+    vsplit->setStretchFactor(1, 2);
+    m_lookEditor->hide();
+    connect(m_lookEditor, &LookEditor::paletteChanged, this, [this](quint32 pid) {
+        paletteEdited(pid, true);
+    });
+    connect(m_lookEditor, &LookEditor::paletteValueChanged, this, [this](quint32 pid) {
+        paletteEdited(pid, false);
+    });
 
     // Left: the tree
     ShowTreeWidget *tree = new ShowTreeWidget(this, split);
@@ -1048,7 +1068,7 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
         QLabel *l = new QLabel(tr("Plays the function \"%1\" as it is.").arg(m_st->targetLabel(rl->target)),
                                m_rowsHost);
         l->setWordWrap(true);
-        m_rows->addWidget(l, 0, 0, 1, 4);
+        m_rows->addWidget(l, 0, 0, 1, 5);
         m_rowText << l->text();
         m_pages->setCurrentWidget(m_layerPage);
         return;
@@ -1111,6 +1131,16 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
             }
         }
 
+        // ✎ opens the value's palette in the Look Editor below.
+        QToolButton *editBtn = new QToolButton(m_rowsHost);
+        editBtn->setText(QStringLiteral("✎"));
+        quint32 editPid = QLCPalette::invalidId();
+        if (!addEffect && rl->values.contains(key) && !rl->values.value(key).look.palettes.isEmpty())
+            editPid = rl->values.value(key).look.palettes.first();
+        editBtn->setEnabled(editPid != QLCPalette::invalidId());
+        editBtn->setToolTip(tr("Edit this value in the Look Editor"));
+        connect(editBtn, &QToolButton::clicked, this, [this, editPid]() { editPalette(editPid); });
+
         QToolButton *more = new QToolButton(m_rowsHost);
         more->setText(QStringLiteral("⋯"));
         more->setToolTip(tr("Set, clear or turn off %1 here").arg(label->text().trimmed()));
@@ -1127,7 +1157,8 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
         m_rows->addWidget(label, row, 0);
         m_rows->addWidget(value, row, 1);
         m_rows->addWidget(reach, row, 2);
-        m_rows->addWidget(more, row, 3);
+        m_rows->addWidget(editBtn, row, 3);
+        m_rows->addWidget(more, row, 4);
         m_rowText << QStringLiteral("%1 | %2 | %3").arg(label->text().trimmed(), text, origin);
         ++row;
     }
@@ -1571,6 +1602,52 @@ QString ShowTreeView::dropHint(quint32 cueId, quint32 layerId, const QMimeData *
     if (!idsFromMime(mime, FunctionsTreeWidget::functionDragMimeType()).isEmpty())
         return tr("played as it is in %1").arg(cueText);
     return QString();
+}
+
+void ShowTreeView::editPalette(quint32 paletteId)
+{
+    if (m_doc->palette(paletteId) == nullptr)
+    {
+        m_lookEditor->setPalette(QLCPalette::invalidId());
+        m_lookEditor->hide();
+        return;
+    }
+    m_lookEditor->setPalette(paletteId);
+    // A named palette is shared: say so before it is changed everywhere.
+    m_lookEditor->setTrialNote(m_st->isInlinePalette(paletteId)
+                               ? tr("A one-off value of this cue")
+                               : tr("A shared palette: changing it changes every cue and scene that uses it"));
+    m_lookEditor->show();
+}
+
+quint32 ShowTreeView::editedPalette() const
+{
+    return m_lookEditor->isVisible() ? m_lookEditor->paletteId() : QLCPalette::invalidId();
+}
+
+void ShowTreeView::paletteEdited(quint32 paletteId, bool full)
+{
+    // Scenes reference palettes, so nothing re-bakes (§4): the running ones
+    // re-read it, and anything showing it is told.
+    if (m_doc->effectScriptRunner() != nullptr)
+        m_doc->effectScriptRunner()->updateEffectParams(paletteId);
+    for (Function *f : m_doc->functions())
+    {
+        Scene *sc = qobject_cast<Scene *>(f);
+        if (sc == nullptr || !sc->palettes().contains(paletteId))
+            continue;
+        if (sc->isRunning())
+            sc->requestPaletteRefresh();
+        if (full)
+            m_doc->notifyFunctionChanged(sc->id());
+    }
+    m_doc->setModified();
+    if (full)
+    {
+        // Names may have changed: the rows and the Library say them.
+        updateInspector();
+        m_libraryTimer->start();
+    }
 }
 
 const char *ShowTreeView::cueMimeType()

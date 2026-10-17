@@ -48,6 +48,7 @@ private slots:
     void inlinePalettesStayOutOfThePaletteTree();
     void dropsOnTheTreeWidget();
     void anEffectGetsLooksOfItsOwn();
+    void theLookEditorEditsARowsPalette();
     void pictureOfARealShow();
 
 private:

@@ -31,6 +31,7 @@ class QStackedWidget;
 class QDoubleSpinBox;
 class QTreeWidgetItem;
 class ShowTreeController;
+class LookEditor;
 class QTreeWidget;
 class QPushButton;
 class QToolButton;
@@ -142,6 +143,12 @@ public:
     /** The Library's Recent items, newest first, as text. */
     QStringList recentItems() const;
 
+    /** Open @a paletteId in the Look Editor under the tree. */
+    void editPalette(quint32 paletteId);
+    /** The palette the Look Editor shows (invalid: none). */
+    quint32 editedPalette() const;
+    LookEditor *lookEditor() const { return m_lookEditor; }
+
     bool isPinned(int kind, quint32 id) const;
     void setPinned(int kind, quint32 id, bool pinned);
 
@@ -186,6 +193,8 @@ private:
     QString lookText(const ShowTree::Look &look) const;
     QString originText(const ShowTree::CueList &list, const ShowTree::ResolvedValue &value) const;
     QString paletteName(quint32 id) const;
+    /** The Look Editor changed @a paletteId (@a full: its name/icon too). */
+    void paletteEdited(quint32 paletteId, bool full);
     void noteRecent(int kind, quint32 id, const QString &label = QString());
     QTreeWidgetItem *findItem(quint32 id, quint32 cueId) const;
     void saveExpanded();
@@ -230,6 +239,8 @@ private:
     QGridLayout *m_rows;
     QWidget *m_rowsHost;
     QStringList m_rowText;
+
+    LookEditor *m_lookEditor = nullptr;
 
     // Library
     QLineEdit *m_filter;

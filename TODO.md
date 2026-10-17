@@ -52,9 +52,7 @@ help (DONE.md 2026-10-16). Handoff: SHOW_TREE_OVERNIGHT.md.
   undo shared with Programming?; gobo mapping (manual map + name match) and
   an effect's own Gobo; DanceHysteria's Hold-0 cues 0.0.4–0.0.7 auto-follow —
   intended?
-- **Left of P1:** gobo palettes by name per fixture definition (§3A, 10.7);
-  the Look Editor docked under the tree (palette values are edited in
-  Programming for now).
+- **Left of P1:** gobo palettes by name per fixture definition (§3A, 10.7).
 - **Try on the rig:** GO through an imported list with effects running (the
   hand-over keeps a shared scene's effect phase — tested on engine signals,
   not seen on stage).

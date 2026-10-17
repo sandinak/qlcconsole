@@ -22,6 +22,7 @@
 #include <QDataStream>
 #include <QTreeWidget>
 #include <QDropEvent>
+#include <QSignalSpy>
 #include <QComboBox>
 #include <QLineEdit>
 #include <QLabel>
@@ -35,6 +36,7 @@
 #include "qlcfixturedefcache.h"
 #include "qlcfixturedef.h"
 #include "showtreeview.h"
+#include "lookeditor.h"
 #include "fixturegroup.h"
 #include "qlcpalette.h"
 #include "collection.h"
@@ -561,6 +563,42 @@ void ShowTreeView_Test::anEffectGetsLooksOfItsOwn()
     QVERIFY(!view.dropCue(c2, c2, false));
 }
 
+void ShowTreeView_Test::theLookEditorEditsARowsPalette()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(list, -1, "One");
+    Target t;
+    t.groups << towers->id();
+    const quint32 l1 = st->addLayer(c1, t);
+    st->setLayerLook(c1, l1, st->lookForPalette(full));
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QCOMPARE(view.editedPalette(), QLCPalette::invalidId());   // hidden until asked
+    QVERIFY(view.selectNode(l1, c1));
+    view.editPalette(full);
+    QCOMPARE(view.editedPalette(), full);
+
+    // An edit there tells every scene playing that palette; nothing re-bakes.
+    const quint32 scene = qobject_cast<Collection *>(m_doc->function(st->cue(c1)->collection))->functions().first();
+    QSignalSpy changed(m_doc, SIGNAL(functionChanged(quint32)));
+    const int functions = m_doc->functions().count();
+    m_doc->palette(full)->setValue(128);
+    emit view.lookEditor()->paletteChanged(full);
+    bool told = false;
+    for (const QList<QVariant> &args : changed)
+        if (args.first().toUInt() == scene)
+            told = true;
+    QVERIFY(told);
+    QCOMPARE(m_doc->functions().count(), functions);
+    QVERIFY(!st->canRedo());
+}
+
 /* QLC_SHOWTREE_SHOW=<a COPY of a show> QLC_SHOWTREE_SHOT=<png>: load it,
    import its first chaser and picture the tab -- a look at the real thing,
    offscreen. Skipped without the variables. */
@@ -598,7 +636,11 @@ void ShowTreeView_Test::pictureOfARealShow()
     const int index = qMin(2, int(list->cues.count()) - 1);
     const Cue &cue = list->cues.at(index);
     if (!cue.layers.isEmpty())
+    {
         view.selectNode(cue.layers.first().id, cue.id);
+        if (!cue.layers.first().looks.isEmpty())
+            view.editPalette(cue.layers.first().looks.first().palettes.value(0));
+    }
     else
         view.selectNode(cue.id);
     QTest::qWait(50);
