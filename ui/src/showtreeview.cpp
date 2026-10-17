@@ -3583,6 +3583,13 @@ void ShowTreeView::paletteEdited(quint32 paletteId, bool full)
             m_doc->notifyFunctionChanged(sc->id());
     }
     m_doc->setModified();
+    // An Aim look re-pointed or given other line settings: the inline Aim
+    // palettes made from it for a layer's own Spread / Grouping / Cross
+    // follow at the next bake (no tree change, so no undo step).
+    if (full)
+        if (const QLCPalette *p = m_doc->palette(paletteId))
+            if (p->type() == QLCPalette::Aim && !m_st->isInlinePalette(paletteId))
+                m_st->bake();
     if (full)
     {
         // Names may have changed: the rows and the Library say them.

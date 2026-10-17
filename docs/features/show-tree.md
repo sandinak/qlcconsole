@@ -5,10 +5,10 @@ as cues. Everything is in one tree:
 
 **Production → Cue list → Cue → Layer**
 
-- A **layer** is a group (or several groups, or some fixtures) and the
-  looks it plays in that cue, one per attribute: Colour, Dimmer, Position,
-  Gobo, Zoom, Focus / Frost / Iris, Shutter and effects. Each look is a
-  palette.
+- A **layer** is a group (or several groups, a group set, or some
+  fixtures) and the looks it plays in that cue, one per attribute: Colour,
+  Dimmer, Position, Gobo, Zoom, Focus / Frost / Iris, Shutter and effects.
+  Each look is a palette. A layer can have **child layers** on part of it.
 - A **cue list** can be **Tracking**, where a cue carries on whatever it
   doesn't change, as on an Eos or MA. It can also be **Non-tracking**, where
   each cue plays only what it holds, as a chaser does.
@@ -182,6 +182,74 @@ it is set, the change carries on to the cues it tracks into.
   - merging would change what a later cue plays (*"Merging would change what
     cue 0.0.5 plays on USTs (Dimmer)"*).
 
+### Group sets
+
+A **group set** is one name for several groups, made once and used in any
+cue, list or production: *Towers* = *SL* + *SR*.
+
+- **Make one:** in the Library, select the groups (⌘-click), right-click →
+  **Make set…**, and name it. Or type `set "Towers" SL SR`. It shows under
+  **All → Group sets**, as *"Towers (SL + SR)"*.
+- **Use it** as a group: drag it onto a cue for one layer on the whole set,
+  or type its name (`Towers dimmer 45`). With **⌥**, you get a layer per
+  member instead. Onto a layer, it joins it.
+- **Change it:** right-click the set → **Members: the selected groups**
+  (select them first), **Rename set…** or **Delete set** (refused while a
+  cue uses it, naming the cues). Typing `set "Towers" …` again gives it new
+  members. Each is one undo step.
+- **It stays the same layer.** The set, not its members, is what the layer
+  is, so changing the set's members changes every cue that uses it and
+  keeps their tracking.
+- **Spread by where they stand.** Each member keeps its own head layout, and
+  whatever is laid out across the set goes by the fixtures' places on stage,
+  not by group or patch order. An effect lays out over the rig as it hangs.
+  A line aim numbers the lights along the line by where they hang, so the
+  towers on both sides and the spots between them interleave (see
+  [Line aims](#line-aims)).
+
+### Child layers
+
+A **child layer** is on part of its parent: one member of its set, a group
+inside it, or some of its fixtures. *Steps: White, Base* with a child *US:
+Red* — US is Red and still at Base; the rest of Steps stays White.
+
+- **Make one:** hold **⇧** as you drop groups onto a layer (on its row in
+  the tree, its row on the cue page, or its page). With **⌥⇧**, a child
+  each. Or right-click the layer → **Add child layer** (the groups inside
+  it, or the Library's selection), or type `US in Steps colour Red`.
+- A child must be **inside** its parent. If it isn't, the hint says so:
+  *"Floor isn't part of Steps: a child layer is on part of its parent"*.
+- **It sets only what it sets.** The parent lights the rest of it, and its
+  page shows those values grey: *"Base — from Steps (parent)"*. Cue looks
+  reach the parent, not the child.
+- **No show-through.** Where the child sets something, the parent doesn't
+  light it there at all. A child at 20% under a parent at full is at 20%,
+  not full.
+- In the tree a child sits under its parent's row. Deleting the parent
+  deletes its children (one undo step). A parent can't lose fixtures its
+  children need. Split and Merge refuse a layer with children.
+- Carried into later cues, a child keeps its parent (*"⤳ US (in Steps)"*).
+  A later cue that sets the parent's colour sets it on the child too — this
+  cue beats earlier ones.
+
+### Where layers overlap
+
+Two layers of one cue on fixtures in common (*All* and *Some* inside it)
+don't fight:
+
+- on each fixture, for each attribute, **the value set nearest wins**: this
+  cue over earlier cues (a layer's own over a cue look, over an include,
+  over what tracked in); then the **child** over its parent; then the
+  **lower** layer;
+- the other layer isn't lit there for that attribute, so a lower intensity
+  is never overridden by a higher one (no highest-wins show-through);
+- what only one of them sets, it plays.
+
+A cue made by **Import chaser** whose scenes overlap like this keeps
+playing as the chaser did, both at once with the highest intensity
+winning. Its page has **Overlapping layers mix (as a chaser)** ticked, and
+the import report says which cues. Untick it for the tree's rule.
+
 ## Setting looks
 
 A layer's page has one row per attribute:
@@ -190,7 +258,7 @@ A layer's page has one row per attribute:
 |---|---|
 | Colour | Colours dropped together are colour 1, 2, 3 |
 | Dimmer | |
-| Position | |
+| Position | Spread, Grouping and Cross under it when it aims at a line ([Line aims](#line-aims)) |
 | Gobo, Zoom, Focus / Frost / Iris | The **Beam** family, indented; each resolves on its own |
 | Shutter | Shutter and strobe |
 | *kind* effect | One row per effect kind (Colour effect, Position effect…), plus an **Effect** row to add one |
@@ -321,6 +389,66 @@ dimmer** gives it a colour or dimmer that applies inside the effect only
 (*"Sinelon in Red"*). On the command line, a colour or dimmer right after an
 effect is its own: `Steps effect Sinelon colour Red`.
 
+**An effect on the cue is one effect across its layers.** Drop it on the
+cue (or `cue look effect Sinelon`): a Sinelon runs across the stage as one,
+over every layer of the cue's own, laid out by where the fixtures stand.
+Each layer still keeps its own level and colour under it. A layer that sets
+that kind of effect itself, or sets it to **None**, is left out. The rows
+say *"one effect with Towers + USTs"*. It carries on as one into the cues
+it tracks into, until a later cue changes some of those layers.
+
+## Line aims
+
+A **line target** (drawn in the Lighting Studio, see
+[Line targets](stage-targets.md#line-targets)) spreads the lights aimed at
+it along it. In the Show Tree a Position can aim at one, with three settings
+of its own.
+
+- **Aim:** the Library's **All → Targets** lists the stage targets (a line
+  says *"(line)"*). Drop one on a layer or a cue. The Aim palette that
+  already points there is used, else one is made (*"Aim DS-Edge"*). Typed:
+  `Towers aim DS-Edge`.
+- **Spread, Grouping, Cross** are rows under Position, each set and carried
+  on by itself:
+
+  | Row | Values | Not set |
+  |---|---|---|
+  | **Spread** | −5 … +5: +5 end to end, 0 all on the centre, below 0 crossed | the Aim look's own (+5) |
+  | **Grouping** | each light, pairs, threes, fours, halves | each light |
+  | **Cross** | groups swap sides, or each group flips (mirror) | swap sides |
+
+  Set them from the row's **⋯** (values, or **Spread…** for any), or type
+  `Towers spread 0 group pairs cross mirror`. A row says where its value
+  came from, as any row does: *"0 — from cue 1.0.1"*.
+- **On the cue: one formation.** An aim at a line set on the cue spreads the
+  lights of all the cue's own layers along it **as one row**, numbered by
+  where they hang along the line across all of them. Towers and the spots
+  between them interleave. The cue page's **Line ⋯** (or `cue look spread
+  +5`) sets Spread, Grouping or Cross for the cue. These reach only the
+  layers whose Position aims at a line, so a wash layer doesn't carry a
+  meaningless Spread on.
+- A layer that sets **its own** Position, Spread, Grouping or Cross leaves
+  the formation and spreads on its own. A formation carries on as one until
+  a later cue changes some of its layers.
+- **The order strip** under Position shows where each light lands: numbered
+  dots along the line, 1 nearest its start, across the whole formation.
+- **Between cues** a Spread change fades over the cue's fade time, so the
+  beams sweep.
+
+## Renaming
+
+A layer's **name** is its own, separate from its groups (until you name it,
+it is called after them).
+
+- **In place, as in the Programming tab:** select the row in the tree and
+  press **Return** (or **F2**). Type, then **Return** to keep it or **Esc**
+  to leave it as it was. An empty name goes back to the groups' name.
+- It works the same on a cue (its name; its number stays), a cue list and
+  a production.
+- Typed: `name "Hero"` names the selected layer (or else the cue); `name ""`
+  goes back to the automatic name. Right-click → **Rename…** still works.
+- One undo step. A renamed layer is the same layer: it tracks as before.
+
 ## Tracking
 
 Select a cue list to set its **Mode**:
@@ -404,8 +532,19 @@ A default that names something not on stage (the running cue, with nothing
 running) asks instead. Typing `record selected`, `record running` or
 `record lit` skips the question.
 
-**Duplicate cue** (right-click a cue, or `dup`) copies the cue's own content,
-not what tracks into it. It is never the base cue.
+**Duplicate cue** (right-click a cue, ⌘D, or `dup`) copies the cue's own
+content, not what tracks into it. It is never the base cue.
+
+**Copy and paste.** In the tree, **⌘C** copies the selected cues (several:
+⌘-click them), **⌘V** pastes them right after the selected cue, in their
+order, each numbered in turn. This works into another cue list too. Copied
+**layers** paste into the selected cue (a layer on a group the cue already
+has sets its looks there). Also in the tree's right-click menu, and typed:
+`copy`, `copy cue 1.0.2 1.0.3`, `copy layer Towers`, then `paste`. The
+copies are the cue's own layers on the same groups, so they track as any
+cue's own do; includes come only within the same list. One undo step per
+paste. In the command line and the page's fields, ⌘C and ⌘V copy text as
+usual.
 
 Record and Duplicate number the new cue as + Cue does. + Cue goes after the
 selected cue and counts up its last number when that is free (1.0.0 →
@@ -482,7 +621,15 @@ is always there and calls the same operations as the mouse.
 | `include 0.0.3` | Includes that cue; again, takes it out |
 | `record` | Record as new cue, as the button does (your setting, or it asks) |
 | `record selected` · `record running` · `record lit` | Records what the word says |
+| `US in Steps colour Red` | A **child layer** on US under the cue's Steps layer |
+| `set "Towers" SL SR` | Makes a **group set** (again: new members) |
+| `Towers dimmer 45` | A set by name works as a group does |
+| `Towers aim DS-Edge spread 0 group pairs cross mirror` | A line aim and its settings |
+| `cue look spread +5` | The cue's Spread: reaches the layers aiming at a line |
+| `name "Hero"` · `name ""` | Names the selected layer (else the cue); "" = automatic |
+| `copy` · `copy cue 1.0.2` · `copy layer Towers` · `paste` | Copy and paste, as ⌘C / ⌘V |
 | `dup` · `undo` · `redo` | As Duplicate cue, Undo and Redo |
+| `help` · `help spread` · `?` | The language, with examples (see below) |
 
 **Names** are the Library's (groups, fixtures, palettes, functions), matched
 whole and ignoring case; the longest name that fits wins. A name with spaces
@@ -494,7 +641,21 @@ with another name or holds a `,` or `+`.
 
 **Other words it takes:** `color`; `dim` and `level`; `pos`; `focus`,
 `frost` and `iris` (all Focus / Frost / Iris); `strobe` (Shutter); `fx`
-(effect); `fn` (function); `cue-only`; `cue new`; and `layer` before a group.
+(effect); `fn` (function); `grouping`; `cue-only`; `cue new`; and `layer`
+before a group.
+
+### Help
+
+**`help`** (or **`?`**) lists every word, grouped: navigate, build, looks,
+tracking, record and copy, undo. **`help <word>`** (`help record`, `help
+spread`) shows its syntax (optional parts in [ ], alternatives with |),
+what it does, examples and related words. The help shows in a small pane
+above the line: **Esc** closes it, and a click on an example puts it in the
+line for you to run or change. A word the line doesn't know, or an attribute
+misspelt, says what you probably meant: *"Did you mean “record”?"*.
+
+**The app's `help` is the reference:** it is made from the same table the
+command line reads, so it is always right. The table above is a summary.
 
 ### Tab completion
 
@@ -512,6 +673,12 @@ with another name or holds a `,` or `+`.
 | `function` | the functions |
 | `release` | groups and fixtures |
 | `record` | `selected`, `running`, `lit` |
+| `set "name"` | groups |
+| `aim` | stage targets and Aim palettes |
+| `spread` · `group` · `cross` | their values (−5…+5; each, pairs…; swap, mirror) |
+| groups, then `in` | the parent's groups |
+| `copy` | `cue`, `layer`, then cue numbers or groups |
+| `help` | every word |
 
 - **One match:** Tab puts it in, with a space after it.
 - **Several matches:** Tab completes the part they share and shows them
@@ -558,6 +725,8 @@ again what it opened.
 - **Pinned**: right-click anything → **Pin** (★). This is kept on this
   computer.
 - **All**:
+  - **Targets**: the stage's points, areas and lines ([Line aims](#line-aims));
+  - **Group sets** ([Group sets](#group-sets)): right-click groups → **Make set…**;
   - **Groups**, in the Fixture Manager's folders;
   - **Palettes**, by kind;
   - **Functions (played as they are)**: not chasers, and not what the tree
@@ -578,8 +747,10 @@ Right-click in the tree for:
 - **+ Production…**, **+ Cue list…**, **+ Cue**;
 - on a cue: **Make the base cue**, **Include cue**, **Mode**, **Record as new
   cue**, **Duplicate cue**, **Move up** / **Move down**;
-- on a layer: **Rename…**, **Detach to plain scene**, **Split layer**,
-  **Merge layers**, **Remove &lt;group&gt; from layer**;
+- on a layer: **Rename…**, **Detach to plain scene**, **Add child layer**,
+  **Split layer**, **Merge layers**, **Remove &lt;group&gt; from layer**;
+- on a cue or layer: **Copy**, **Paste after this cue** / **Paste into this
+  cue**, **Duplicate**;
 - **Rename…** on a production or cue list, and **Delete** on anything but a
   grey row.
 
@@ -636,13 +807,16 @@ the tree no longer edits its looks. It is one undo step.
 |---|---|
 | ⇧⌘6 | Bring the Show Tree forward |
 | Drag from the Library onto a cue, a layer, or the page | One layer on everything dropped; onto a layer, added to it |
-| **⌥** held as you drop groups | A layer for each group |
+| **⌥** held as you drop groups | A layer for each group (a set: each member) |
+| **⇧** held as you drop groups on a layer | A child layer on them (⌥⇧: one each) |
+| **Return** / **F2** (in the tree) | Rename the row in place; Return keeps, Esc leaves it |
+| **⌘C** / **⌘V** / **⌘D** (in the tree) | Copy cues or layers / paste after (into) the selected cue / duplicate |
 | ⌥-click **+ Layer** | A layer for each group selected in the Library |
 | Drag a cue onto another cue | Move it there; with **⌥**, include it |
 | Click / **⌘-click** / **⇧-click** (in the tree) | Select a row / add or remove one / take the rows between |
 | Delete / Backspace (in the tree) | Delete the selected cues and layers, one undo step (a list or production asks) |
 | **:** (in the tree) | To the command line |
-| **Esc** (in the command line) | Back to the tree |
+| **Esc** (in the command line) | Close the help, then back to the tree |
 | **Tab** (in the command line) | Complete the word; again, the next match |
 | ↑ / ↓ (in the command line) | Earlier / later commands |
 | Enter (in the command line) | Run it |
@@ -668,9 +842,20 @@ the tree no longer edits its looks. It is one undo step.
 - **Edits in Operate are blind** and reach the stage on the cue's next GO.
 - **Import** doesn't carry a step's skip flag, its own speed master or Sub GO
   steps.
+- **A cue whose layers mix** (*Overlapping layers mix*, an imported cue)
+  shows the lower layer's level where they overlap in the Design preview:
+  the preview's edit wins by writing its own values on top. Played for real
+  (GO), they mix as the chaser did.
+- **A child layer's Dimmer on fixtures with no dimmer channel** (RGB bars,
+  pixel heads) doesn't dim the colour its parent gives them. Set the colour
+  on the child too.
+- **An effect laid out over several layers** writes each layer's part from
+  its own scene. A script that looks at its neighbours' base colour sees
+  only its own layer's.
+- **The plan view** of a line aim (a top view with beams, the previous
+  cue's points as rings) isn't there yet: the order strip is.
 - **Later:**
   - sub-cues in the tree;
   - the cue runner (a Run tab and a VC widget);
-  - group sets and child layers;
-  - line aims in the tree;
-  - a production switcher for show control.
+  - a production switcher for show control;
+  - a plain-language command line ("make the towers blue at half").

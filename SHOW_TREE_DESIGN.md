@@ -349,10 +349,10 @@ numbered 4.1 wins). Each sub-cue has its own layers and cue looks, and its own
 | Layer (resolved) | generated **Scene**: targets + palette refs in canonical stack order | one per distinct resolved layer, **shared** by every cue whose resolved layer is identical |
 | Inline look | QLCPalette with no name in the production's hidden palette folder | |
 | Effect + child looks | Effect palette followed by its child palettes in the scene's list | exactly today's "what belongs to an effect" rule |
-| Cue-level effect (D10) | one extra generated scene over the union of the cue's layer targets | |
+| Cue-level effect (D10) | one extra generated scene over the union of the cue's layer targets | *as built (§10.13): each member's own scene plays it, with a layout span over the union* |
 | Beam sub-attribute | its palette (gobo, zoom, …) in the layer's scene | gobo palettes map per fixture definition; fixtures without it skip it |
 | Line aim + Spread/Grouping/Cross | an inline Aim palette per distinct (target, spread, grouping, cross) | the params are the line design's `AimParam`s |
-| Cue-level line formation (D17) | one extra generated scene: one Aim look over the union of the formation's fixtures | same as a cue-level effect |
+| Cue-level line formation (D17) | one extra generated scene: one Aim look over the union of the formation's fixtures | same as a cue-level effect *(as built: a layout span, §10.13)* |
 | Sub-cues | the cue's step function is a Chaser of sub-cue Collections, `SubCues="SubGo"` | per SUBCUES_DESIGN.md |
 | Opaque function layer | the function itself, in the cue's Collection | |
 | Cue number | `ChaserStep::cueNumber` | so show control fires it (SHOW_CONTROL_DESIGN.md) |
@@ -637,12 +637,13 @@ Originals stay; VC buttons are offered a switch to the new list.
 |---|---|---|
 | **P1** | **Show Tree tab, one production, Non-tracking lists.** Cue list = Chaser, cue = Collection, layer = generated Scene. Cue looks cascade to layers; layer attribute rows with inherited values greyed — **including the Beam family with gobo palettes per fixture definition and "applies to N of M"** (§3A); inline looks; effects with child looks (colour, gobo); opaque function layers; **Import chaser as cue list**; authoring by mouse (+ Cue / + Layer, picker, drag & drop with drop hints, undo); Library panel Recent / Pinned / All. Spike: shared-scene hand-over across a step change. | none, or the hand-over fix |
 | P2 *(built 2026-10-17, §10.10)* | **Tracking**: list mode, cue Track/Block/Cue-only, layer Release, base cue, **includes**, origin marks, "Next cue receives", re-bake chain; "Update cue X" for tracked values; Library "In this cue list"; **optional command line** (D24). | none |
-| P3 | **Group sets** (+ Make set in the Library), child layers, overlap; cue-level effects across layers; **line aims in the tree** (§3B: aim params per key, cue-level formations, plan view) once the line-target P1–P3 have shipped. | `Scene::excludedFixtures` |
+| P3 *(built 2026-10-17, §10.13)* | **Group sets** (+ Make set in the Library), child layers, overlap; cue-level effects across layers; **line aims in the tree** (§3B: aim params per key, cue-level formations, plan view) once the line-target P1–P3 have shipped. | `Scene::excludedFixtures` (+ a per-look layout span) |
 | P4 | **Make reusable / Detach** for layers and cues; Reusable panel; Convert-to-tracking. | none |
 | P5 | **Multiple productions**: switcher, current production for VC / footer GO / show control, per-production timecode. | small: "current production" in Doc |
 | P6 | Sub-cues in the tree (§3C); tracking sheet with sub-cue columns and the attribute switch. | none (SUBCUES) |
 | P7 | **Cue runner** (§6B): Run tab, then the Cue Runner VC widget (compact / list) with Swap widget; "what changes" line. | none (drives ChaserRunner as the footer does) |
 | later | Engine-resolved cue lists, move fades (§5) — only if baking hits a wall. | large |
+| later | **Plain-language command line** (Branson, 2026-10-17): an offline phrase layer first (synonyms and filler words onto the existing grammar — "make the towers blue at half"; deterministic, always there at a show), then an optional online layer (the prompt and the show's names to Claude, which returns ordinary command lines, shown for confirmation, one undo step each; API key in Settings; not for show time). TODO.md. | none |
 
 P1 alone removes the triple filing: a song is one branch of one tree, and the
 scenes and collections file themselves.
@@ -1256,6 +1257,121 @@ Four limits the help listed, found while documenting it.
   back the state before (tree, palettes and one-off flags, the show's own
   functions) and redo the state after.
 
+### 10.13 P3 (2026-10-17): group sets, child layers and overlap, cue-level effects, line aims
+
+Merged `feat/line-targets` (P1–P3: LineCurve, LineSpread, the `__line*`
+Aim params, the look editor's Spread row and dot strip) first.
+
+**Engine: what a look leaves out, and what it lays out over.**
+
+- `Scene::setExcludedFixtures(palette, fixtures)`: the fixtures a look
+  doesn't write. Honoured where the fader map is built (`write()`, under
+  `m_valueListMutex`; the exclusions are read under `m_bindingsMutex`, the
+  documented lock order), in the re-aim/re-palette path, the fade-out map,
+  `CueOutput`, `AimSolver::aimHeads(scene, palette)` and `EffectInstance`.
+- `Scene::setLayoutSpan(palette, groups, fixtures)`: what a look lays out
+  over when it is one with other scenes — a line numbers its heads over the
+  span, an effect lays its cells over it (the multi-group stage layout, by
+  where heads stand); the scene still writes only its own.
+- Both per look, not per scene (the design said `Scene::excludedFixtures`):
+  a child that sets only Colour must leave its parent's Dimmer and effect
+  running on its fixtures. Saved as `<Exclude Palette Fixtures>` / `<Span
+  Palette Groups Fixtures>` (an older build skips them), copied, part of a
+  generated scene's identity (its signature). A generated scene never
+  changes after it is made, so the DMX thread never sees one change under
+  it; the setters still lock (tested from two threads).
+- An effect still reads the scene's own looks as its base (level, colour,
+  the look's aim) on fixtures it leaves out of a static look.
+
+**The bake (§2 overlap, §3.5).** Per cue, attribute and fixture, the layer
+whose value wins: **this cue over earlier ones** (a layer's own, then a cue
+look, then an include, then tracked — a later cue's tracked value over an
+earlier's), then the **deeper** layer (a child over its parent), then the
+**lower** one. Every other layer covering that fixture leaves it out of that
+attribute's palettes. None counts (it wins and lights nothing). A layer left
+out everywhere plays no scene. Note "lower wins on what both set" is read as
+*set*: a layer's own look beats a cue look reaching a lower layer (D5's
+nearer scope), so a cue look never overrides a layer's own on an overlap.
+
+**Overlap in imports.** The DanceHysteria-0.5 dry run found it: New Chaser
+8's cue 1 runs two StepTops scenes (White and Red) whose RGB mixed
+highest-wins — the tree's rule made it Red (1056 channels). So
+`Cue::mixOverlap` (`Overlap="Mix"`): its layers mix as a collection does
+(only a child leaves its parent out); the importer sets it where overlapping
+scenes set the same attribute and says so in the report; the cue page's
+check box turns it off. Dry run: 0 channels differ in all 8 cues.
+
+**Group sets (§1).** `ShowTree::GroupSet` in `<ShowTree>` (`<GroupSet ID
+Name Groups Fixtures>`), in the undo snapshot and rolled back with a failed
+command. `Target::sets`: the set is the layer's identity (signature
+`…|s:<ids>`, written only when there are sets, so old signatures are
+unchanged); the bake expands it to its member groups as separate targets of
+one scene. Deleting a set in use is refused (the cues named). ⌥-drop of a
+set: a layer per member. Command: `set "Towers" SL SR`; a set by name as a
+target. **Position, not group order (Branson):** a line formation is ordered
+by `AimSolver::orderedLineHeads` (along the line, by where heads hang) over
+the whole union; an effect over a span uses the multi-group stage grid (rig
+positions). Test: two towers and the spots between them interleave by X.
+
+**Child layers (§3.5).** `Layer::parent` (`Parent=`), `addChildLayer()`
+only inside the parent (by fixtures; refusal says why), placed after the
+parent's children. The resolver gives a child only its own looks (no cue
+looks: they reach the parent, which lights the child's fixtures anyway),
+`ResolvedLayer::depth` and `parent` (kept as it tracks). The tab shows what
+the parent lights grey, "from Steps (parent)". Removing a parent removes its
+children; a parent can't be retargeted past them; split/merge refuse.
+
+**Cue-level effects (D10) — built as a shared layout span, not one extra
+scene.** A cue look on an `Effect.*` key carries `ResolvedValue::span` (the
+cue), kept as it tracks. The layers in a cue with the same look and span
+are one effect: each member's own scene plays it with a layout span over
+all their targets, so one Sinelon crosses them, and each keeps its own level
+and colour under it. One extra scene (§4) would have lost that: an effect
+reads its base from its own scene. They start in the same tick (one
+Collection) so the layout's phase is shared; a later cue changing a member
+re-makes the others' scenes (a new span), and their effect restarts.
+
+**Line aims (§3B, D16–D19).** `Look::value` and keys `Position.Spread /
+.Grouping / .Cross` (values `"-5".."5"`, `each|pairs|threes|fours|halves`,
+`swap|mirror`), each cascading and tracking on its own. D18 in the resolver:
+a `LineAimTest` (the controller's `resolved()`: the Aim palette's target is a
+line) lets the cue's values reach only line aims. D17: a cue-level Position
+is a span like an effect; the layers with the same aim, span and cue-level
+parameters are one formation (any parameter of its own → on its own). A
+layer whose parameters differ from its Aim palette's plays an **inline Aim
+palette made for them** (copy of the base with the `__line*` params; found
+again by target + params; hidden; dropped when unused; edits to the base
+re-bake). D19 needs nothing: pan/tilt fade (tested mid-fade). Library →
+Targets (`aimPaletteFor()`: a named Aim palette pointing there with nothing
+of its own is reused, else "Aim <target>" is made — like a typed value, it
+stays after undo). The order strip (`LineSpreadPreview` over the layer's
+scene) numbers the whole formation. **Not built:** the top-view plan with
+the previous cue's points as rings (D19's second half).
+
+**Also (Branson, during P3).** *Rename in place* as Programming does it:
+Return/F2 in the tree, Return commits, Esc cancels, empty = the automatic
+name; cues (name, not number), lists, productions; `name "…"`;
+`renameNode()` makes no step for the same name. *Copy/paste*: ⌘C/⌘V/⌘D on
+the tree only (`Qt::WidgetShortcut`, so text fields keep theirs),
+`pasteCues()` (a run after the selected cue, numbered by D23 in turn,
+includes only within the list, child parents remapped) and `pasteLayers()`;
+`copy` / `paste` typed. *`help`*: `ShowTreeCommand::words()` is the one
+table — syntax, what, examples, related — that `keywords()` and
+`attributeWords()` come from; `help`, `help <word>`, `?`, did-you-mean;
+shown in a pane over the command line. A test reads every example through
+the parser.
+
+Tests: showtree_test `sceneExcludedFixturesAreNotWritten`,
+`exclusionIsThreadSafeWithLivePreview`, `groupSetsAreOneTargetAndKeepTracking`,
+`childLayersExcludeTheirFixturesFromTheParent`, `overlappingLayersLowerWins`,
+`childLayerEditsWhileTheDmxThreadRuns`, `anImportedOverlapMixesAsTheChaserDid`,
+`aCueEffectIsOneAcrossItsLayers`, `cueSpreadReachesOnlyLineAims`,
+`aCueAimIsOneFormationByPosition`, `aSpreadChangeFadesOverTheCueFade`,
+`everyCommandWordHasHelpAndItsExamplesParse`, `copyAndPasteCues`;
+showtreeview_test `groupSetsInTheLibrary`, `childLayersByMouse`,
+`renameInPlace`, `lineAimsInTheTab`, `copyPasteAndHelp`, and
+`everyActionIsOneUndoStep` (+13 actions).
+
 ### Open for Branson
 
 1. **`Generated` mark on `<Function>`** as well as in `<ShowTree>`? (10.2;
@@ -1298,3 +1414,19 @@ Four limits the help listed, found while documenting it.
     exact palette is reused (In this cue list → Recent → any); the command
     line otherwise makes a named one per the show's pattern; the picker a
     one-off with one-click Make reusable. D11/D21 updated.
+12. **D10/D17 as a shared layout span** rather than one extra scene over the
+    union (§10.13: the effect keeps each layer's own base under it). OK?
+13. **Overlap rule:** a layer's own value beats a cue look reaching a lower
+    layer on the fixtures they share (D5's "nearer scope"), rather than
+    "the lower layer wins" whatever the source. OK? And imported cues keep
+    mixing (Overlap: Mix) — fine, or should Convert to tracking (P4) clear
+    it?
+14. **The plan view** (top view, beams, the previous cue's points as rings)
+    is not built; the order strip is. Wanted for P3, or later?
+15. **A Mix cue in the Design preview** shows the lower layer where they
+    overlap (the preview writes on top to win over a running list). Accept,
+    or preview such cues without the edit override?
+16. **A child's Dimmer on fixtures without a dimmer channel** doesn't dim
+    the colour its parent gives them (the parent's scene scales by its own
+    look dimmer). Fill the parent's colour into the child there (more
+    scenes), or leave it as a known limit?

@@ -48,7 +48,7 @@ On `release/0.1.0`. Universal (Apple silicon + Intel), macOS 12+.
   work), on the office rig with kronk.
 - Then: merge `release/0.1.0` to main, `./release.sh`.
 
-## Show Tree (feat/show-tree, P1 built 2026-10-16 overnight, P2 2026-10-17 — not merged)
+## Show Tree (feat/show-tree, P1 built 2026-10-16 overnight, P2 and P3 2026-10-17 — not merged)
 
 [SHOW_TREE_DESIGN.md](SHOW_TREE_DESIGN.md) (D1–D27 approved; §10 has the
 implementation notes and the questions below). Built: the hand-over fix,
@@ -91,9 +91,32 @@ help (DONE.md 2026-10-16). Handoff: SHOW_TREE_OVERNIGHT.md.
   Tracking), one undo step per action audited. **Open:** Detach to plain
   *chaser*. **Try:** ⌘-click two layers → Merge; open the list's chaser in
   the Functions window (locked, Show in Show Tree).
-- **P3 next** (§8): group sets, child layers / overlap
-  (`Scene::excludedFixtures`), cue-level effects across layers, line aims.
-  P4: Detach to plain chaser, Convert to tracking.
+- **P3 done 2026-10-17** (DONE.md, §10.13): group sets (Make set, by
+  name everywhere, laid out by position), child layers and overlap with
+  `Scene::excludedFixtures` (no HTP show-through; an import keeps mixing),
+  cue-level effects as one across layers (D10), line aims in the tree with
+  Spread / Grouping / Cross rows, one formation by hang position (D16–D19);
+  plus rename in place (Return/F2), ⌘C/⌘V/⌘D cues and layers, `help` in the
+  command line. **Open (§10 "Open for Branson" 12–16):** D10/D17 built as a
+  shared layout span rather than one extra scene; the plan view (top view
+  with the previous cue's rings) not built — the order strip is; a Mix
+  cue's overlap in the Design preview; a child's Dimmer on no-dimmer RGB
+  fixtures; sub-cue numbering for paste waits for P6. **Try:** make Towers
+  from two groups, drop it with ⌥; ⇧-drop a group on a layer, set its
+  dimmer down; drop a line target on a cue with two layers and slide Spread
+  from the cue's Line ⋯; type `help`.
+- **Show Tree command line: plain-language prompts** (Branson, 2026-10-17;
+  not built). Two layers, phrase layer first. (1) Offline phrase layer
+  (~2–3 days): synonyms/filler words mapped onto the existing grammar —
+  'make the towers blue at half', 'all the movers', colour names, 'at
+  half'→50 — always available at a show, deterministic. (2) Optional AI
+  layer when online (~3–5 days): prompt + the show's names (groups,
+  palettes, cues) sent to Claude, which returns ordinary command lines;
+  shown for confirmation, Return runs them through the same op layer, one
+  undo step each; API key in Settings; handles 'warmer', 'like cue 3
+  but…'. Not show-time (needs internet).
+- **P4 next:** Detach to plain chaser, Convert to tracking, Make reusable
+  layers/cues.
 
 ## Needs the real rig / hardware
 

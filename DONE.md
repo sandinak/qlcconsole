@@ -6,6 +6,28 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-17 — Show Tree P3: group sets, child layers and overlap, cue-wide effects, line aims; rename in place, copy/paste, `help` *(on feat/show-tree, not merged)*
+
+- **Engine:** `Scene::setExcludedFixtures` / `setLayoutSpan` per look (fader
+  map under `m_valueListMutex`, effects, line aims, CueOutput; saved as
+  `<Exclude>` / `<Span>`). The bake works out, per cue, attribute and
+  fixture, which layer sets it (this cue over earlier, then the child, then
+  the lower layer) and leaves the others out there — no HTP show-through.
+- **Group sets** in the tree's Library (Make set, members, rename, delete;
+  `set "Towers" SL SR`), a layer's identity; spread by position on stage.
+- **Child layers** (⇧-drop, Add child layer, `US in Steps …`), nested in the
+  tree, inherited values grey "from Steps (parent)".
+- **Overlap:** the tree's rule, or *mix as a chaser* (an import's, so the
+  DanceHysteria-0.5 dry run stays at 0 channels different).
+- **D10:** an effect on the cue is one effect across its layers (a shared
+  layout span; each layer keeps its own base). **Line aims:** Library →
+  Targets, Spread / Grouping / Cross rows (keys of their own), one formation
+  by hang position across the union (D17), cue values only reach line aims
+  (D18), spread changes fade (D19), the order strip.
+- **Rename in place** (Return/F2, `name`), **copy/paste** (⌘C/⌘V/⌘D,
+  `copy`/`paste`), **`help`** from the command table, with did-you-mean.
+- Tests: showtree_test +17, showtreeview_test +6 (and the undo walk +13).
+
 ### 2026-10-17 — Show Tree: the four limits from the help closed — Merge by mouse, D13 lock, new lists Tracking, one undo step per action *(on feat/show-tree, not merged)*
 
 - **Multi-select** in the tree (⌘/⇧-click). The page, the preview and single-row

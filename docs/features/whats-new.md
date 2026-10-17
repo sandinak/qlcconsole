@@ -6,6 +6,17 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Show Tree
 
+- **Show Tree P3: group sets, child layers, cue-wide effects, line aims.**
+  Make a **group set** (Towers = SL + SR) once in the Library and use it by
+  name anywhere; **⇧-drop** a group onto a layer for a **child layer** that
+  sets only what it sets — the parent never shows through it. An effect on
+  the cue runs as **one effect across** its layers; a line target on the cue
+  aims them all as **one formation**, numbered by where the lights hang, with
+  **Spread, Grouping and Cross** rows of their own. Rename a row in place
+  with **Return**, copy and paste cues with **⌘C / ⌘V**, and type **`help`**
+  in the command line for every word with examples. See
+  [Group sets](show-tree.md#group-sets), [Child layers](show-tree.md#child-layers),
+  [Line aims](show-tree.md#line-aims) and [Help](show-tree.md#help).
 - **Write a show as one tree.** A new **Show Tree** tab beside Programming:
   productions, cue lists, cues, and in each cue the layers — a group and the
   looks it plays. Drag groups onto a cue for layers and palettes onto a layer
