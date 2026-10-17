@@ -35,8 +35,8 @@ chaser that play it are generated. Handoff: SHOW_TREE_OVERNIGHT.md.
   / All), drops with hints, one-off values, undo. Help: show-tree.md.
   Tests: `ui/test/showtreeview` (+ `QLC_SHOWTREE_SHOW`/`_SHOT` pictures a
   real show offscreen).
-- Not yet: gobo name mapping, the docked Look Editor, drag-to-reorder cues
-  (TODO.md). Not tried on the rig.
+- Not yet: gobo name mapping, the docked Look Editor (TODO.md). Not tried
+  on the rig.
 
 ### 2026-10-16 — A look's Speed and Spread survive picking an effect; Speed Masters window closes cleanly *(fix/speedmaster-dblclick-reset)*
 

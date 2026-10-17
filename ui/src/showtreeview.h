@@ -113,6 +113,13 @@ public:
     QString dropHint(quint32 cueId, quint32 layerId, const QMimeData *mime) const;
     bool acceptsDrop(quint32 cueId, quint32 layerId, const QMimeData *mime) const;
 
+    /** MIME type of cues dragged within the tree (a stream of cue ids). */
+    static const char *cueMimeType();
+    /** A cue dropped on another of its list: moved to its place, or (with
+        @a include, Alt held) included by it. */
+    bool dropCue(quint32 cueId, quint32 onCueId, bool include);
+    QString cueDropHint(quint32 cueId, quint32 onCueId, bool include) const;
+
     /** A one-off value (D21): an inline palette on the layer (or cue). */
     bool setOneOffDimmer(quint32 cueId, quint32 layerId, int percent);
     bool setOneOffColour(quint32 cueId, quint32 layerId, const QColor &colour);

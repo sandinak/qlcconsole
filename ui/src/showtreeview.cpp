@@ -99,7 +99,11 @@ public:
     {
         setAcceptDrops(true);
         setDropIndicatorShown(true);
-        setDragDropMode(QAbstractItemView::DropOnly);
+        // Cues drag within the tree: onto another cue to move there, with
+        // Alt to include it instead.
+        setDragEnabled(true);
+        setDragDropMode(QAbstractItemView::DragDrop);
+        setDefaultDropAction(Qt::MoveAction);
     }
 
     void setHint(QLabel *hint) { m_hint = hint; }
@@ -122,6 +126,30 @@ protected:
         }
     }
 
+    QMimeData *mimeData(const QList<QTreeWidgetItem *> &items) const override
+    {
+        QByteArray data;
+        QDataStream stream(&data, QIODevice::WriteOnly);
+        int n = 0;
+        for (QTreeWidgetItem *item : items)
+        {
+            if (item->data(0, ShowTreeView::KindRole).toInt() != ShowTreeView::CueNode)
+                continue;
+            stream << item->data(0, ShowTreeView::IdRole).toUInt();
+            ++n;
+        }
+        if (n == 0)
+            return nullptr;
+        QMimeData *mime = new QMimeData();
+        mime->setData(QLatin1String(ShowTreeView::cueMimeType()), data);
+        return mime;
+    }
+
+    Qt::DropActions supportedDropActions() const override
+    {
+        return Qt::MoveAction | Qt::CopyAction | Qt::LinkAction;
+    }
+
     void dragEnterEvent(QDragEnterEvent *e) override
     {
         e->acceptProposedAction();
@@ -131,6 +159,25 @@ protected:
     {
         quint32 cue, layer;
         target(e->position().toPoint(), &cue, &layer);
+        if (e->mimeData()->hasFormat(QLatin1String(ShowTreeView::cueMimeType())))
+        {
+            const QList<quint32> cues = idsFromMime(e->mimeData(), ShowTreeView::cueMimeType());
+            const bool include = e->modifiers() & Qt::AltModifier;
+            const QString hint = cues.isEmpty() || layer != ShowTree::invalidId() ? QString()
+                                 : m_view->cueDropHint(cues.first(), cue, include);
+            if (!hint.isEmpty())
+            {
+                e->setDropAction(Qt::MoveAction);
+                e->accept();
+            }
+            else
+            {
+                e->ignore();
+            }
+            if (m_hint != nullptr)
+                m_hint->setText(hint);
+            return;
+        }
         if (cue != ShowTree::invalidId() && m_view->acceptsDrop(cue, layer, e->mimeData()))
         {
             e->acceptProposedAction();
@@ -164,6 +211,23 @@ protected:
             return;
         }
         const QMimeData *mime = e->mimeData();
+        if (mime->hasFormat(QLatin1String(ShowTreeView::cueMimeType())))
+        {
+            const QList<quint32> cues = idsFromMime(mime, ShowTreeView::cueMimeType());
+            const bool include = e->modifiers() & Qt::AltModifier;
+            // Handled here: never let the base class move the rows itself.
+            if (!cues.isEmpty() && layer == ShowTree::invalidId()
+                && m_view->dropCue(cues.first(), cue, include))
+            {
+                e->setDropAction(Qt::CopyAction);
+                e->accept();
+            }
+            else
+            {
+                e->ignore();
+            }
+            return;
+        }
         const QList<quint32> pals = idsFromMime(mime, FunctionsTreeWidget::paletteDragMimeType());
         const QList<quint32> groups = idsFromMime(mime, FixtureGroupSource::fixtureGroupMimeType());
         const QList<quint32> fixtures = idsFromMime(mime, FixtureGroupSource::fixtureMimeType());
@@ -1453,6 +1517,45 @@ QString ShowTreeView::dropHint(quint32 cueId, quint32 layerId, const QMimeData *
     if (!idsFromMime(mime, FunctionsTreeWidget::functionDragMimeType()).isEmpty())
         return tr("played as it is in %1").arg(cueText);
     return QString();
+}
+
+const char *ShowTreeView::cueMimeType()
+{
+    return "application/x-qlcconsole-showtree-cues";
+}
+
+QString ShowTreeView::cueDropHint(quint32 cueId, quint32 onCueId, bool include) const
+{
+    if (cueId == onCueId || onCueId == invalidId())
+        return QString();
+    const CueList *list = m_st->listOfCue(cueId);
+    if (list == nullptr || list->indexOf(onCueId) < 0)
+        return QString();           // cues move within their own list
+    const QString what = m_st->cueLabel(*list, list->indexOf(cueId));
+    const QString onto = m_st->cueLabel(*list, list->indexOf(onCueId));
+    if (include)
+        return tr("%1 includes %2").arg(onto, what);
+    return tr("Move %1 to %2's place").arg(what, onto);
+}
+
+bool ShowTreeView::dropCue(quint32 cueId, quint32 onCueId, bool include)
+{
+    if (cueDropHint(cueId, onCueId, include).isEmpty())
+        return false;
+    if (include)
+    {
+        const Cue *on = m_st->cue(onCueId);
+        if (on->includes.contains(cueId))
+            return false;
+        Cue copy = *on;
+        copy.includes << cueId;
+        return m_st->setCue(copy);
+    }
+    const CueList *list = m_st->listOfCue(cueId);
+    const bool ok = m_st->moveCue(cueId, list->indexOf(onCueId));
+    if (ok)
+        selectNode(cueId);
+    return ok;
 }
 
 bool ShowTreeView::setOneOffDimmer(quint32 cueId, quint32 layerId, int percent)

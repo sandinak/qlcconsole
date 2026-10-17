@@ -48,6 +48,8 @@ palettes and groups.
    the drop will do: *"Blue → cue look on 1 Preshow: reaches 2 of 3 layers"*.
 5. A **function** (an EFX, an RGB Matrix, a scene with channel values) dropped
    on a cue plays as it is, as a layer of its own (▣).
+6. Drag a **cue** onto another cue of its list to move it there (its number
+   stays); hold **⌥** as you drop to make the other cue **include** it.
 
 Every change is one step of **Undo** (⌘Z) / **Redo** (⇧⌘Z) in this tab.
 

@@ -537,12 +537,18 @@ void ShowTreeView_Test::anEffectGetsLooksOfItsOwn()
     QVERIFY(view.selectNode(l1, c1));
     QVERIFY(rowFor(view.attributeRows(), keyLabel(key)).contains("Confetti in Red"));
 
-    // Move a cue: the list's order and its chaser follow.
+    // Move a cue (dragged onto another): the list's order and its chaser follow.
     const quint32 c2 = st->addCue(list, 0, "Two");
-    QVERIFY(st->moveCue(c2, 0));
+    QCOMPARE(view.cueDropHint(c2, c1, false), QString("Move 2 Two to 1 One's place"));
+    QVERIFY(view.dropCue(c2, c1, false));
     QCOMPARE(st->cueList(list)->cues.first().id, c2);
     const Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(list)->chaser));
     QCOMPARE(chaser->steps().first().fid, st->cue(c2)->collection);
+    // With Alt: an include.
+    QCOMPARE(view.cueDropHint(c2, c1, true), QString("1 One includes 2 Two"));
+    QVERIFY(view.dropCue(c2, c1, true));
+    QCOMPARE(st->cue(c1)->includes, QList<quint32>({ c2 }));
+    QVERIFY(!view.dropCue(c2, c2, false));
 }
 
 /* QLC_SHOWTREE_SHOW=<a COPY of a show> QLC_SHOWTREE_SHOT=<png>: load it,
