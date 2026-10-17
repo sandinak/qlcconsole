@@ -54,6 +54,15 @@ private slots:
     void theLookEditorEditsARowsPalette();
     void selectingACuePreviewsItOnTheRig();
     void inDesignTheEditShowsOverItsRunningList();
+    // P2: tracking in the tab
+    void trackingControlsOnTheListAndCuePages();
+    void includesAddMoveRemoveAndNoLoops();
+    void nextCueReceivesSaysWhatPassesOn();
+    void aCarriedInLayerCanBeReleased();
+    void updateCueWhereATrackedValueWasSet();
+    void recordAsNewCueFromTheHeader();
+    void theLibraryShowsWhatTheListUses();
+    void theCommandLine();
     void pictureOfARealShow();
 
 private:

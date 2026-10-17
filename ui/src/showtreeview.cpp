@@ -38,6 +38,8 @@
 #include <QCheckBox>
 #include <QSplitter>
 #include <QShortcut>
+#include <QListWidget>
+#include <QKeyEvent>
 #include <QSettings>
 #include <QMimeData>
 #include <QLabel>
@@ -47,6 +49,7 @@
 #include <algorithm>
 
 #include "showtreecontroller.h"
+#include "showtreecommand.h"
 #include "fixturegroupsource.h"
 #include "functionstreewidget.h"
 #include "showtreeview.h"
@@ -64,6 +67,7 @@ using namespace ShowTree;
 
 #define SETTINGS_PINNED QStringLiteral("showtree/pinned")
 #define SETTINGS_SPLITTER QStringLiteral("showtree/splitter")
+#define SETTINGS_COMMANDLINE QStringLiteral("showtree/commandline")
 
 static const int kRecentMax = 10;
 
@@ -393,6 +397,8 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     m_newCue = button(tr("+ Cue"), tr("A new cue after the selected one, numbered for you (never renumbers)"), "stNewCue");
     m_addLayer = button(tr("+ Layer"), tr("A layer on the groups or fixtures selected in the Library "
                                           "(or drag them onto a cue)"), "stAddLayer");
+    m_record = button(tr("Record"), tr("Record as new cue: what the selected cue puts on stage (tracked, "
+                                       "included and its own) frozen into a new Block cue after it"), "stRecord");
     m_delete = button(tr("Delete"), tr("Delete the selected cue, layer, cue list or production"), "stDelete");
     bar->addSpacing(12);
     m_undo = button(tr("Undo"), tr("Undo the last change to the tree (⌘Z)"), "stUndo");
@@ -404,6 +410,10 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     m_import->setMenu(m_importMenu);
     m_import->setPopupMode(QToolButton::InstantPopup);
     connect(m_importMenu, &QMenu::aboutToShow, this, &ShowTreeView::slotImportMenuAboutToShow);
+    m_commandToggle = button(tr("Command"), tr("Show or hide the command line: type what you'd say "
+                                               "(Towers colour Blue dimmer 45). Optional; the mouse does it all too."),
+                             "stCommandToggle");
+    m_commandToggle->setCheckable(true);
     bar->addStretch(1);
     // What the rig shows: the selected cue (Design), or nothing (Live).
     m_previewLabel = new QLabel(this);
@@ -415,10 +425,52 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     bar->addWidget(m_hint);
     main->addLayout(bar);
 
+    // The command line (§6C): optional, hidden until asked for.
+    m_commander = new ShowTreeCommand(m_doc, m_st);
+    m_commandBar = new QWidget(this);
+    {
+        QVBoxLayout *v = new QVBoxLayout(m_commandBar);
+        v->setContentsMargins(0, 0, 0, 0);
+        v->setSpacing(2);
+        QHBoxLayout *h = new QHBoxLayout();
+        QLabel *lbl = new QLabel(tr("Command"), m_commandBar);
+        h->addWidget(lbl);
+        m_command = new QLineEdit(m_commandBar);
+        m_command->setObjectName("stCommand");
+        m_command->setPlaceholderText(tr("e.g. Towers colour Blue dimmer 45"));
+        m_command->setToolTip(tr("Type what you'd say. Tab completes names from the Library, Enter runs, "
+                                 "↑ recalls. Every command is one undo step."));
+        QFont mono(QStringLiteral("Menlo"));
+        mono.setStyleHint(QFont::Monospace);
+        m_command->setFont(mono);
+        m_command->installEventFilter(this);
+        h->addWidget(m_command, 1);
+        m_commandMsg = new QLabel(m_commandBar);
+        m_commandMsg->setObjectName("stCommandMessage");
+        h->addWidget(m_commandMsg);
+        v->addLayout(h);
+        QLabel *hint = new QLabel(ShowTreeCommand::grammar(), m_commandBar);
+        hint->setObjectName("stCommandHint");
+        hint->setWordWrap(true);
+        hint->setEnabled(false);
+        v->addWidget(hint);
+    }
+    main->addWidget(m_commandBar);
+    connect(m_command, &QLineEdit::returnPressed, this, &ShowTreeView::slotCommandEntered);
+    connect(m_commandToggle, &QToolButton::toggled, this, &ShowTreeView::setCommandLineVisible);
+    {
+        QSettings settings;
+        const bool on = settings.value(SETTINGS_COMMANDLINE, false).toBool();
+        m_commandBar->setVisible(on);
+        QSignalBlocker block(m_commandToggle);
+        m_commandToggle->setChecked(on);
+    }
+
     connect(m_newProduction, &QToolButton::clicked, this, &ShowTreeView::slotNewProduction);
     connect(m_newList, &QToolButton::clicked, this, &ShowTreeView::slotNewCueList);
     connect(m_newCue, &QToolButton::clicked, this, &ShowTreeView::slotNewCue);
     connect(m_addLayer, &QToolButton::clicked, this, &ShowTreeView::slotAddLayer);
+    connect(m_record, &QToolButton::clicked, this, &ShowTreeView::slotRecordCue);
     connect(m_delete, &QToolButton::clicked, this, &ShowTreeView::slotDelete);
     connect(m_undo, &QToolButton::clicked, this, &ShowTreeView::slotUndo);
     connect(m_redo, &QToolButton::clicked, this, &ShowTreeView::slotRedo);
@@ -481,6 +533,11 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_listMode->addItem(tr("Non-tracking: each cue plays on its own"));
         m_listMode->addItem(tr("Tracking: a cue carries on what it doesn't change"));
         f->addRow(tr("Mode"), m_listMode);
+        m_listBase = new QComboBox(m_listPage);
+        m_listBase->setObjectName("stListBase");
+        m_listBase->setToolTip(tr("The base cue: what a released layer goes back to (else dark)"));
+        f->addRow(tr("Base cue"), m_listBase);
+        connect(m_listBase, QOverload<int>::of(&QComboBox::activated), this, &ShowTreeView::slotListBaseChanged);
         m_listInfo = new QLabel(m_listPage);
         m_listInfo->setWordWrap(true);
         f->addRow(m_listInfo);
@@ -519,6 +576,66 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         f->addRow(tr("Name"), m_cueName);
         f->addRow(tr("Note"), m_cueNote);
         f->addRow(tr("Mode"), m_cueMode);
+        m_cueBase = new QCheckBox(tr("The list's base cue (released layers go back to it)"), m_cuePage);
+        m_cueBase->setObjectName("stCueBase");
+        f->addRow(QString(), m_cueBase);
+        connect(m_cueBase, &QCheckBox::toggled, this, &ShowTreeView::slotCueBaseToggled);
+        {
+            // Includes (D8): this cue plays their output under its own,
+            // in order -- the later wins.
+            QWidget *inc = new QWidget(m_cuePage);
+            QHBoxLayout *h = new QHBoxLayout(inc);
+            h->setContentsMargins(0, 0, 0, 0);
+            m_cueIncludes = new QListWidget(inc);
+            m_cueIncludes->setObjectName("stCueIncludes");
+            m_cueIncludes->setMaximumHeight(72);
+            m_cueIncludes->setToolTip(tr("Cues this cue includes: their output, as if you stood in them, "
+                                         "under this cue's own. The later in the list wins."));
+            h->addWidget(m_cueIncludes, 1);
+            QVBoxLayout *b = new QVBoxLayout();
+            b->setSpacing(0);
+            auto small = [inc, b](const QString &text, const QString &tip, const char *name) {
+                QToolButton *t = new QToolButton(inc);
+                t->setText(text);
+                t->setToolTip(tip);
+                t->setObjectName(QLatin1String(name));
+                b->addWidget(t);
+                return t;
+            };
+            m_includeAdd = small(tr("+"), tr("Include another cue of this list"), "stIncludeAdd");
+            m_includeAdd->setPopupMode(QToolButton::InstantPopup);
+            QMenu *addMenu = new QMenu(m_includeAdd);
+            m_includeAdd->setMenu(addMenu);
+            connect(addMenu, &QMenu::aboutToShow, this, [this, addMenu]() {
+                addMenu->clear();
+                includesMenu(addMenu, m_pageCue);
+            });
+            m_includeRemove = small(tr("−"), tr("Stop including the selected cue"), "stIncludeRemove");
+            m_includeUp = small(tr("↑"), tr("Earlier: the cues after it win over it"), "stIncludeUp");
+            m_includeDown = small(tr("↓"), tr("Later: it wins over the cues before it"), "stIncludeDown");
+            b->addStretch(1);
+            h->addLayout(b);
+            f->addRow(tr("Includes"), inc);
+            auto selected = [this]() {
+                QListWidgetItem *it = m_cueIncludes->currentItem();
+                return it == nullptr ? invalidId() : it->data(Qt::UserRole).toUInt();
+            };
+            connect(m_includeRemove, &QToolButton::clicked, this, [this, selected]() {
+                if (selected() != invalidId())
+                    m_st->removeInclude(m_pageCue, selected());
+            });
+            connect(m_includeUp, &QToolButton::clicked, this, [this, selected]() {
+                const quint32 inc = selected();
+                if (inc != invalidId())
+                    m_st->moveInclude(m_pageCue, inc, m_cueIncludes->currentRow() - 1);
+            });
+            connect(m_includeDown, &QToolButton::clicked, this, [this, selected]() {
+                const quint32 inc = selected();
+                if (inc != invalidId())
+                    m_st->moveInclude(m_pageCue, inc, m_cueIncludes->currentRow() + 1);
+            });
+            connect(m_cueIncludes, &QListWidget::currentRowChanged, this, &ShowTreeView::updateIncludeButtons);
+        }
         f->addRow(tr("Fade in"), m_cueFadeIn);
         f->addRow(tr("Fade out"), m_cueFadeOut);
         f->addRow(tr("Hold"), m_cueHold);
@@ -647,6 +764,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
 
 ShowTreeView::~ShowTreeView()
 {
+    delete m_commander;
 }
 
 /****************************************************************************
@@ -660,6 +778,20 @@ void ShowTreeView::slotTreeChanged()
     buildTree();
     updateInspector();
     updateButtons();
+    // "In this cue list" counts what the list uses.
+    m_libraryTimer->start();
+
+    // The re-bake chain as it came out: which cues play something else now.
+    QStringList cues;
+    for (quint32 id : m_st->lastBakeChanged())
+        if (const CueList *l = m_st->listOfCue(id))
+            cues << m_st->cueLabel(*l, l->indexOf(id));
+    if (cues.count() > 6)
+        cues = cues.mid(0, 6) << tr("+%1 more").arg(cues.count() - 6);
+    m_hint->setText(cues.isEmpty() ? QString() : tr("Changed: %1").arg(cues.join(QStringLiteral(", "))));
+    m_hint->setToolTip(cues.isEmpty() ? QString()
+                       : tr("The cues the last change re-baked: that cue, the ones after it that track "
+                            "from it (up to a Block cue), and every cue that includes one of them."));
 }
 
 void ShowTreeView::reload()
@@ -700,6 +832,10 @@ void ShowTreeView::buildTree()
     m_reloading = true;
     const quint32 selId = currentId();
     const quint32 selCue = currentCueId();
+    // A carried-in layer is found again by its cue and target (it has no
+    // id of its own there); made the cue's own, by its layer there.
+    const bool selTracked = currentKind() == TrackedLayerNode;
+    const QString selTarget = selTracked ? m_tree->currentItem()->data(0, TargetRole).toString() : QString();
     const bool first = m_tree->topLevelItemCount() == 0;
     if (!first)
         saveExpanded();
@@ -803,9 +939,32 @@ void ShowTreeView::buildTree()
                               && kind != TrackedLayerNode);
     }
 
-    if (selId != invalidId())
+    if (selTracked)
+    {
+        QTreeWidgetItem *found = nullptr;
+        for (QTreeWidgetItemIterator it(m_tree); *it && found == nullptr; ++it)
+        {
+            const int kind = (*it)->data(0, KindRole).toInt();
+            if ((kind != TrackedLayerNode && kind != LayerNode) || (*it)->data(0, CueRole).toUInt() != selCue)
+                continue;
+            if (kind == TrackedLayerNode && (*it)->data(0, TargetRole).toString() == selTarget)
+                found = *it;
+            if (kind == LayerNode)
+                if (const Cue *c = m_st->cue(selCue))
+                    if (const Layer *l = c->layer((*it)->data(0, IdRole).toUInt()))
+                        if (l->target.signature() == selTarget)
+                            found = *it;
+        }
+        if (found == nullptr)
+            found = findItem(selCue, invalidId());
+        if (found != nullptr)
+            m_tree->setCurrentItem(found);
+    }
+    else if (selId != invalidId())
+    {
         if (QTreeWidgetItem *item = findItem(selId, selCue))
             m_tree->setCurrentItem(item);
+    }
     m_reloading = false;
 }
 
@@ -852,6 +1011,17 @@ void ShowTreeView::slotTreeSelectionChanged()
     updateInspector();
     updateButtons();
     syncPreview();
+    if (currentListId() != m_libraryList)
+        m_libraryTimer->start();
+}
+
+quint32 ShowTreeView::currentListId() const
+{
+    if (currentKind() == ListNode)
+        return currentId();
+    const quint32 cueId = currentCueId();
+    const CueList *list = cueId == invalidId() ? nullptr : m_st->listOfCue(cueId);
+    return list == nullptr ? invalidId() : list->id;
 }
 
 /****************************************************************************
@@ -926,6 +1096,7 @@ void ShowTreeView::updateButtons()
     m_newCue->setEnabled(kind == ListNode || kind == CueNode || kind == LayerNode
                          || kind == TrackedLayerNode);
     m_addLayer->setEnabled(currentCueId() != invalidId());
+    m_record->setEnabled(currentCueId() != invalidId());
     m_delete->setEnabled(kind != NoNode && kind != TrackedLayerNode);
     m_undo->setEnabled(m_st->canUndo());
     m_redo->setEnabled(m_st->canRedo());
@@ -996,10 +1167,22 @@ void ShowTreeView::updateInspector()
         {
             m_listTitle->setText(list->name);
             m_listMode->setCurrentIndex(list->mode == ListMode::Tracking ? 1 : 0);
+            m_listBase->clear();
+            m_listBase->addItem(tr("None: released layers go dark"), invalidId());
+            for (int i = 0; i < list->cues.count(); ++i)
+                m_listBase->addItem(m_st->cueLabel(*list, i), list->cues.at(i).id);
+            m_listBase->setCurrentIndex(qMax(0, m_listBase->findData(list->baseCue)));
             const Chaser *c = qobject_cast<const Chaser *>(m_doc->function(list->chaser));
             m_listInfo->setText(tr("%1 cues. Plays as the chaser \"%2\": pick it in a VC Cue List, "
-                                   "or GO it from the footer.")
-                                .arg(list->cues.count()).arg(c == nullptr ? QString() : c->name()));
+                                   "or GO it from the footer.").arg(list->cues.count())
+                                .arg(c == nullptr ? QString() : c->name())
+                                + QStringLiteral("\n\n")
+                                + (list->mode == ListMode::Tracking
+                                   ? tr("Tracking: a cue starts from the one before and changes only what it "
+                                        "sets; values carried on show grey with where they came from. Block "
+                                        "starts a cue from nothing, Cue-only keeps its changes to itself.")
+                                   : tr("Non-tracking: every cue plays only its own layers and includes, as "
+                                        "a chaser does. Make it Tracking to carry values on.")));
             m_pages->setCurrentWidget(m_listPage);
             m_inspectorUpdating = false;
             return;
@@ -1054,6 +1237,29 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
     m_cueFadeIn->setValue(cue.fadeIn / 1000.0);
     m_cueFadeOut->setValue(cue.fadeOut / 1000.0);
     m_cueHold->setValue(int(cue.hold) < 0 ? -1 : cue.hold / 1000.0);
+    {
+        QSignalBlocker block(m_cueBase);
+        m_cueBase->setChecked(list.baseCue == cue.id);
+    }
+
+    // Includes, in order (the later wins); the selected one kept.
+    {
+        QListWidgetItem *was = m_cueIncludes->currentItem();
+        const quint32 keep = was == nullptr ? invalidId() : was->data(Qt::UserRole).toUInt();
+        QSignalBlocker block(m_cueIncludes);
+        m_cueIncludes->clear();
+        for (quint32 inc : cue.includes)
+        {
+            const int at = list.indexOf(inc);
+            if (at < 0)
+                continue;
+            QListWidgetItem *it = new QListWidgetItem(m_st->cueLabel(list, at), m_cueIncludes);
+            it->setData(Qt::UserRole, inc);
+            if (inc == keep)
+                m_cueIncludes->setCurrentItem(it);
+        }
+    }
+    updateIncludeButtons();
 
     QStringList looks;
     for (const Look &l : cue.looks)
@@ -1070,7 +1276,7 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
             vals << lookText(l).toHtmlEscaped();
         const QString line = QStringLiteral("%1 &nbsp;%2").arg(name, vals.join(QStringLiteral(", ")));
         if (rl.own)
-            layers << line;
+            layers << line + (rl.release ? tr(" · <i>release</i>") : QString());
         else
         {
             const int from = list.indexOf(rl.fromCue);
@@ -1082,21 +1288,104 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
         }
     }
     m_cueLayers->setText(layers.isEmpty() ? tr("— (drag groups onto the cue)") : layers.join(QStringLiteral("<br>")));
-
-    QStringList next;
-    if (index + 1 < list.cues.count()
-        && effectiveMode(list, list.cues.at(index + 1)) != CueMode::Block)
-    {
-        for (const ResolvedLayer &rl : resolved.at(index).passOn)
-            next << (rl.name.isEmpty() ? m_st->targetLabel(rl.target) : rl.name);
-        m_cueNext->setText(next.isEmpty() ? tr("nothing") : next.join(QStringLiteral(", ")));
-    }
-    else
-    {
-        m_cueNext->setText(index + 1 < list.cues.count() ? tr("nothing (the next cue starts from nothing)")
-                                                         : tr("— (the last cue)"));
-    }
+    m_cueNext->setText(nextCueText());
     m_pages->setCurrentWidget(m_cuePage);
+}
+
+QString ShowTreeView::nextCueText() const
+{
+    const CueList *list = m_pageCue == invalidId() ? nullptr : m_st->listOfCue(m_pageCue);
+    if (list == nullptr)
+        return QString();
+    const int index = list->indexOf(m_pageCue);
+    if (index + 1 >= list->cues.count())
+        return tr("— (the last cue)");
+    const Cue &next = list->cues.at(index + 1);
+    const QString nextLabel = m_st->cueLabel(*list, index + 1);
+    if (effectiveMode(*list, next) == CueMode::Block)
+        return tr("nothing: %1 is a Block cue, it starts from nothing").arg(nextLabel);
+
+    const QList<ResolvedCue> resolved = resolve(*list);
+    QStringList parts;
+    for (const ResolvedLayer &rl : resolved.at(index).passOn)
+    {
+        const QString name = rl.name.isEmpty() ? m_st->targetLabel(rl.target) : rl.name;
+        QStringList vals;
+        for (const Look &l : rl.playedLooks())
+            vals << lookText(l);
+        QString part = vals.isEmpty() ? name : tr("%1 (%2)").arg(name, vals.join(QStringLiteral(", ")));
+        if (rl.origin == Origin::Base)
+            part = tr("%1 — back to the base").arg(part);
+        parts << part;
+    }
+    // Released here and not covered by the base: dark.
+    const Cue &cue = list->cues.at(index);
+    if (effectiveMode(*list, cue) != CueMode::CueOnly)
+        for (const Layer &l : cue.layers)
+        {
+            if (!l.release)
+                continue;
+            bool back = false;
+            for (const ResolvedLayer &rl : resolved.at(index).passOn)
+                if (rl.target == l.target)
+                    back = true;
+            if (!back)
+                parts << tr("%1 — released, dark").arg(l.name.isEmpty() ? m_st->targetLabel(l.target) : l.name);
+        }
+    QString text = parts.isEmpty() ? tr("nothing") : parts.join(QStringLiteral("; "));
+    if (effectiveMode(*list, cue) == CueMode::CueOnly)
+        text = tr("what this cue started from (it is cue-only): %1").arg(text);
+    return text;
+}
+
+QStringList ShowTreeView::includeItems() const
+{
+    QStringList out;
+    for (int i = 0; i < m_cueIncludes->count(); ++i)
+        out << m_cueIncludes->item(i)->text();
+    return out;
+}
+
+void ShowTreeView::updateIncludeButtons()
+{
+    const int row = m_cueIncludes->currentRow();
+    m_includeRemove->setEnabled(row >= 0);
+    m_includeUp->setEnabled(row > 0);
+    m_includeDown->setEnabled(row >= 0 && row + 1 < m_cueIncludes->count());
+}
+
+void ShowTreeView::includesMenu(QMenu *menu, quint32 cueId)
+{
+    // Every other cue of the list: ticked if included; one that would loop
+    // is there but greyed, and says why.
+    const CueList *list = m_st->listOfCue(cueId);
+    const Cue *cue = list == nullptr ? nullptr : list->cue(cueId);
+    if (cue == nullptr)
+        return;
+    for (int i = 0; i < list->cues.count(); ++i)
+    {
+        const quint32 other = list->cues.at(i).id;
+        if (other == cueId)
+            continue;
+        QAction *a = menu->addAction(m_st->cueLabel(*list, i));
+        a->setCheckable(true);
+        const bool on = cue->includes.contains(other);
+        a->setChecked(on);
+        QString why;
+        if (!on && !canInclude(*list, cueId, other, &why))
+        {
+            a->setEnabled(false);
+            a->setToolTip(why);
+            a->setText(tr("%1 — would loop").arg(a->text()));
+        }
+        connect(a, &QAction::toggled, this, [this, cueId, other](bool checked) {
+            if (checked)
+                m_st->addInclude(cueId, other);
+            else
+                m_st->removeInclude(cueId, other);
+        });
+    }
+    menu->setToolTipsVisible(true);
 }
 
 void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *own, const ResolvedLayer *rl)
@@ -1142,7 +1431,10 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
     {
         m_layerTitle->setText(tr("%1 in cue %2").arg(name, m_st->cueLabel(list, index)));
     }
-    m_layerRelease->setVisible(own != nullptr && !rl->target.isOpaque());
+    // Release: on the cue's own layer, or on a carried-in one (which then
+    // becomes the cue's own, in the same undo step).
+    m_layerRelease->setVisible(!rl->target.isOpaque());
+    m_layerReleaseTarget = own == nullptr ? rl->target : Target();
     {
         QSignalBlocker block(m_layerRelease);
         m_layerRelease->setChecked(own != nullptr && own->release);
@@ -1267,7 +1559,7 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
             // A carried-in layer (no layer id) becomes the cue's own when a
             // value is set on it, in the same undo step.
             const QPoint at = more->mapToGlobal(QPoint(0, more->height()));
-            attributeMenu(cueId, layerId, layerId == invalidId() ? target : Target(), key, at);
+            attributeMenu(cueId, layerId, layerId == invalidId() ? target : Target(), target, key, at);
         });
 
         m_rows->addWidget(label, row, 0);
@@ -1287,12 +1579,25 @@ QStringList ShowTreeView::attributeRows() const
     return m_rowText;
 }
 
+QString ShowTreeView::updateSourceLabel(quint32 cueId, const Target &target, const QString &key) const
+{
+    quint32 src = invalidId();
+    if (!m_st->valueSource(cueId, target, key, &src))
+        return QString();
+    const CueList *list = m_st->listOfCue(src);
+    return list == nullptr ? QString() : m_st->cueLabel(*list, list->indexOf(src));
+}
+
 void ShowTreeView::attributeMenu(quint32 cueId, quint32 layerId, const Target &target,
-                                 const QString &key, const QPoint &globalPos)
+                                 const Target &rowTarget, const QString &key, const QPoint &globalPos)
 {
     QMenu menu(this);
+    // A value set in an earlier cue (tracked, included, the base): D22 --
+    // set it here, or update it where it was set so the change tracks on.
+    const QString source = (key == QLatin1String("Effect.") || rowTarget.isEmpty())
+                           ? QString() : updateSourceLabel(cueId, rowTarget, key);
     // Set to: the palettes of this kind, recent ones first.
-    QMenu *set = menu.addMenu(tr("Set to"));
+    QMenu *set = menu.addMenu(source.isEmpty() ? tr("Set to") : tr("Set in this cue"));
     QList<QLCPalette *> pals;
     for (QLCPalette *p : m_doc->palettes())
     {
@@ -1319,6 +1624,28 @@ void ShowTreeView::attributeMenu(quint32 cueId, quint32 layerId, const Target &t
         });
     }
     set->setEnabled(!pals.isEmpty());
+    if (!source.isEmpty())
+    {
+        QMenu *upd = menu.addMenu(tr("Update cue %1").arg(source));
+        upd->setObjectName("stUpdateSource");
+        upd->setToolTipsVisible(true);
+        for (QLCPalette *p : pals)
+        {
+            const quint32 pid = p->id();
+            upd->addAction(p->name(), this, [this, cueId, rowTarget, pid]() {
+                noteRecent(LibPalette, pid);
+                m_st->updateSource(cueId, rowTarget, m_st->lookForPalette(pid));
+            });
+        }
+        upd->addSeparator();
+        upd->addAction(tr("None (off from there on)"), this, [this, cueId, rowTarget, key]() {
+            Look l;
+            l.key = key;
+            l.none = true;
+            m_st->updateSource(cueId, rowTarget, l);
+        });
+        upd->setEnabled(true);
+    }
 
     if (key == KeyDimmer)
     {
@@ -1459,9 +1786,49 @@ void ShowTreeView::slotListModeChanged(int index)
 
 void ShowTreeView::slotLayerReleaseToggled(bool on)
 {
-    if (m_inspectorUpdating || currentKind() != LayerNode)
+    if (m_inspectorUpdating)
         return;
-    m_st->setLayerRelease(currentCueId(), currentId(), on);
+    const quint32 cueId = currentCueId();
+    if (currentKind() == LayerNode)
+    {
+        m_st->setLayerRelease(cueId, currentId(), on);
+        return;
+    }
+    if (currentKind() != TrackedLayerNode || m_layerReleaseTarget.isEmpty())
+        return;
+    // A carried-in layer becomes the cue's own: select it there.
+    const Target t = m_layerReleaseTarget;
+    if (m_st->setTargetRelease(cueId, t, on))
+        if (const Cue *c = m_st->cue(cueId))
+            for (const Layer &l : c->layers)
+                if (l.target == t)
+                    selectNode(l.id, cueId);
+}
+
+void ShowTreeView::slotListBaseChanged(int index)
+{
+    if (m_inspectorUpdating || currentKind() != ListNode)
+        return;
+    m_st->setBaseCue(currentId(), m_listBase->itemData(index).toUInt());
+}
+
+void ShowTreeView::slotCueBaseToggled(bool on)
+{
+    if (m_inspectorUpdating || m_pageCue == invalidId())
+        return;
+    const CueList *list = m_st->listOfCue(m_pageCue);
+    if (list != nullptr)
+        m_st->setBaseCue(list->id, on ? m_pageCue : invalidId());
+}
+
+void ShowTreeView::slotRecordCue()
+{
+    const quint32 cueId = currentCueId();
+    if (cueId == invalidId())
+        return;
+    const quint32 id = m_st->recordCue(cueId);
+    if (id != invalidId())
+        selectNode(id);
 }
 
 /****************************************************************************
@@ -1830,7 +2197,12 @@ QString ShowTreeView::cueDropHint(quint32 cueId, quint32 onCueId, bool include) 
     const QString what = m_st->cueLabel(*list, list->indexOf(cueId));
     const QString onto = m_st->cueLabel(*list, list->indexOf(onCueId));
     if (include)
+    {
+        // Only an include that can be made: none twice, no loop (D8).
+        if (!canInclude(*list, onCueId, cueId))
+            return QString();
         return tr("%1 includes %2").arg(onto, what);
+    }
     return tr("Move %1 to %2's place").arg(what, onto);
 }
 
@@ -1839,14 +2211,7 @@ bool ShowTreeView::dropCue(quint32 cueId, quint32 onCueId, bool include)
     if (cueDropHint(cueId, onCueId, include).isEmpty())
         return false;
     if (include)
-    {
-        const Cue *on = m_st->cue(onCueId);
-        if (on->includes.contains(cueId))
-            return false;
-        Cue copy = *on;
-        copy.includes << cueId;
-        return m_st->setCue(copy);
-    }
+        return m_st->addInclude(onCueId, cueId);
     const CueList *list = m_st->listOfCue(cueId);
     const bool ok = m_st->moveCue(cueId, list->indexOf(onCueId));
     if (ok)
@@ -1951,26 +2316,33 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
                     m_st->setBaseCue(listId, isBase ? invalidId() : cueId);
                 });
                 QMenu *inc = menu.addMenu(tr("Include cue"));
-                const Cue *cue = list->cue(cueId);
-                for (int i = 0; i < list->cues.count(); ++i)
+                includesMenu(inc, cueId);
+                // Mode: List default / Track / Block / Cue-only.
+                QMenu *mode = menu.addMenu(tr("Mode"));
+                const CueMode now = list->cue(cueId)->mode;
+                for (CueMode m : { CueMode::ListDefault, CueMode::Track, CueMode::Block, CueMode::CueOnly })
                 {
-                    const quint32 other = list->cues.at(i).id;
-                    if (other == cueId)
-                        continue;
-                    QAction *a = inc->addAction(m_st->cueLabel(*list, i));
-                    a->setCheckable(true);
-                    a->setChecked(cue->includes.contains(other));
-                    connect(a, &QAction::toggled, this, [this, cueId, other](bool on) {
-                        const Cue *c = m_st->cue(cueId);
-                        if (c == nullptr)
-                            return;
-                        Cue copy = *c;
-                        copy.includes.removeAll(other);
-                        if (on)
-                            copy.includes << other;
-                        m_st->setCue(copy);
+                    QString text = cueModeLabel(m);
+                    if (m == CueMode::ListDefault)
+                        text = tr("List default (%1)").arg(list->mode == ListMode::Tracking ? tr("Track")
+                                                                                            : tr("Block"));
+                    QAction *a = mode->addAction(text, this, [this, cueId, m]() {
+                        m_st->setCueMode(cueId, m);
                     });
+                    a->setCheckable(true);
+                    a->setChecked(now == m);
                 }
+                menu.addSeparator();
+                menu.addAction(tr("Record as new cue"), this, [this, cueId]() {
+                    const quint32 id = m_st->recordCue(cueId);
+                    if (id != invalidId())
+                        selectNode(id);
+                });
+                menu.addAction(tr("Duplicate cue"), this, [this, cueId]() {
+                    const quint32 id = m_st->duplicateCue(cueId);
+                    if (id != invalidId())
+                        selectNode(id);
+                });
             }
         }
         if (kind == CueNode)
@@ -2120,6 +2492,21 @@ QStringList ShowTreeView::recentItems() const
     return out;
 }
 
+QStringList ShowTreeView::inListItems() const
+{
+    QStringList out;
+    for (int i = 0; i < m_library->topLevelItemCount(); ++i)
+    {
+        QTreeWidgetItem *section = m_library->topLevelItem(i);
+        if (section->data(0, IdRole).toUInt() != 3)
+            continue;
+        for (int k = 0; k < section->childCount(); ++k)
+            if (section->child(k)->data(0, KindRole).toInt() != LibFolder)
+                out << section->child(k)->text(0);
+    }
+    return out;
+}
+
 bool ShowTreeView::isPinned(int kind, quint32 id) const
 {
     return m_pinned.contains(qMakePair(kind, id));
@@ -2224,6 +2611,52 @@ void ShowTreeView::reloadLibrary()
     QTreeWidgetItem *recent = section(tr("Recent"), 0);
     for (const auto &r : m_recent)
         add(recent, r.first, r.second);
+
+    // In this cue list (D20): what the selected list already uses, most
+    // used first -- a song mostly reuses its own vocabulary.
+    m_libraryList = currentListId();
+    if (m_libraryList != invalidId())
+    {
+        QTreeWidgetItem *inList = section(tr("In this cue list"), 3);
+        const ShowTreeController::Usage u = m_st->usageInList(m_libraryList);
+        struct Entry { int kind; quint32 id; int count; };
+        QList<Entry> entries;
+        for (auto it = u.groups.constBegin(); it != u.groups.constEnd(); ++it)
+            entries << Entry { LibGroup, it.key(), it.value() };
+        for (auto it = u.fixtures.constBegin(); it != u.fixtures.constEnd(); ++it)
+            entries << Entry { LibFixture, it.key(), it.value() };
+        for (auto it = u.palettes.constBegin(); it != u.palettes.constEnd(); ++it)
+            entries << Entry { LibPalette, it.key(), it.value() };
+        for (auto it = u.functions.constBegin(); it != u.functions.constEnd(); ++it)
+            entries << Entry { LibFunction, it.key(), it.value() };
+        QList<QPair<Entry, QTreeWidgetItem *>> made;
+        for (const Entry &e : entries)
+            if (QTreeWidgetItem *item = add(inList, e.kind, e.id))
+            {
+                item->setText(0, tr("%1 ×%2").arg(item->text(0)).arg(e.count));
+                made << qMakePair(e, item);
+            }
+        // Most used first, then by kind (groups, then values) and name.
+        std::sort(made.begin(), made.end(), [](const QPair<Entry, QTreeWidgetItem *> &a,
+                                               const QPair<Entry, QTreeWidgetItem *> &b) {
+            if (a.first.count != b.first.count)
+                return a.first.count > b.first.count;
+            if (a.first.kind != b.first.kind)
+                return a.first.kind < b.first.kind;
+            return a.second->text(0).compare(b.second->text(0), Qt::CaseInsensitive) < 0;
+        });
+        for (const auto &m : made)
+            inList->removeChild(m.second);
+        for (const auto &m : made)
+            inList->addChild(m.second);
+        if (made.isEmpty())
+        {
+            QTreeWidgetItem *none = new QTreeWidgetItem(inList);
+            none->setText(0, tr("(nothing yet)"));
+            none->setFlags(Qt::ItemIsEnabled);
+            none->setData(0, KindRole, LibFolder);
+        }
+    }
     QTreeWidgetItem *pinned = section(tr("Pinned"), 1);
     for (const auto &p : m_pinned)
         add(pinned, p.first, p.second);
@@ -2412,4 +2845,98 @@ void ShowTreeView::slotLibraryContextMenu(const QPoint &pos)
         });
     }
     menu.exec(m_library->viewport()->mapToGlobal(pos));
+}
+
+/****************************************************************************
+ * Command line (§6C)
+ ****************************************************************************/
+
+void ShowTreeView::setCommandLineVisible(bool visible)
+{
+    m_commandBar->setVisible(visible);
+    {
+        QSignalBlocker block(m_commandToggle);
+        m_commandToggle->setChecked(visible);
+    }
+    QSettings settings;
+    settings.setValue(SETTINGS_COMMANDLINE, visible);
+    if (visible)
+        m_command->setFocus();
+}
+
+bool ShowTreeView::isCommandLineVisible() const
+{
+    return !m_commandBar->isHidden();
+}
+
+QString ShowTreeView::commandMessage() const
+{
+    return m_commandMsg->text();
+}
+
+bool ShowTreeView::runCommand(const QString &line)
+{
+    ShowTreeCommand::Context ctx;
+    for (QTreeWidgetItem *item = m_tree->currentItem(); item != nullptr; item = item->parent())
+        if (item->data(0, KindRole).toInt() == ProductionNode)
+            ctx.production = item->data(0, IdRole).toUInt();
+    if (ctx.production == invalidId() && m_st->productions().count() == 1)
+        ctx.production = m_st->productions().first().id;
+    ctx.list = currentListId();
+    ctx.cue = currentCueId();
+
+    const ShowTreeCommand::Result r = m_commander->run(line, ctx);
+    m_commandMsg->setText(r.message);
+    QPalette pal = m_commandMsg->palette();
+    pal.setColor(QPalette::WindowText, r.ok ? palette().color(QPalette::WindowText) : QColor(Qt::red));
+    m_commandMsg->setPalette(pal);
+    if (!r.ok)
+        return false;
+
+    if (m_commandHistory.isEmpty() || m_commandHistory.last() != line)
+        m_commandHistory << line;
+    m_historyAt = -1;
+    // Where the command leaves the selection: its layer, cue or list.
+    if (r.layer != invalidId() && r.context.cue != invalidId())
+        selectNode(r.layer, r.context.cue);
+    else if (r.context.cue != invalidId())
+        selectNode(r.context.cue);
+    else if (r.context.list != invalidId())
+        selectNode(r.context.list);
+    return true;
+}
+
+void ShowTreeView::slotCommandEntered()
+{
+    if (runCommand(m_command->text()))
+        m_command->clear();
+}
+
+bool ShowTreeView::eventFilter(QObject *obj, QEvent *ev)
+{
+    if (obj == m_command && ev->type() == QEvent::KeyPress)
+    {
+        QKeyEvent *ke = static_cast<QKeyEvent *>(ev);
+        if (ke->key() == Qt::Key_Tab)
+        {
+            // Tab completes from the Library instead of moving focus.
+            ShowTreeCommand::Context ctx;
+            ctx.list = currentListId();
+            ctx.cue = currentCueId();
+            QStringList options;
+            m_command->setText(m_commander->complete(m_command->text(), ctx, &options));
+            m_commandMsg->setText(options.count() > 1 ? options.join(QStringLiteral(" · ")) : QString());
+            return true;
+        }
+        if ((ke->key() == Qt::Key_Up || ke->key() == Qt::Key_Down) && !m_commandHistory.isEmpty())
+        {
+            if (ke->key() == Qt::Key_Up)
+                m_historyAt = m_historyAt < 0 ? int(m_commandHistory.count()) - 1 : qMax(0, m_historyAt - 1);
+            else if (m_historyAt >= 0)
+                m_historyAt = m_historyAt + 1 < m_commandHistory.count() ? m_historyAt + 1 : -1;
+            m_command->setText(m_historyAt < 0 ? QString() : m_commandHistory.at(m_historyAt));
+            return true;
+        }
+    }
+    return QWidget::eventFilter(obj, ev);
 }

@@ -26,6 +26,9 @@
 #include <QComboBox>
 #include <QLineEdit>
 #include <QLabel>
+#include <QCheckBox>
+#include <QListWidget>
+#include <QToolButton>
 #include <QMimeData>
 #include <QXmlStreamReader>
 #include <QtTest>
@@ -1061,6 +1064,353 @@ void ShowTreeView_Test::inDesignTheEditShowsOverItsRunningList()
     QVERIFY(view.previewText().startsWith("Live: editing is blind"));
     m_doc->setMode(Doc::Design);
     view.hide();
+}
+
+/****************************************************************************
+ * P2: tracking in the tab
+ ****************************************************************************/
+
+namespace
+{
+Target groupTarget(quint32 g)
+{
+    Target t;
+    t.groups << g;
+    return t;
+}
+
+QTreeWidgetItem *trackedRow(QTreeWidget *tree, quint32 cueId, const QString &text)
+{
+    for (QTreeWidgetItemIterator it(tree); *it; ++it)
+        if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::TrackedLayerNode
+            && (*it)->data(0, ShowTreeView::CueRole).toUInt() == cueId && (*it)->text(0).contains(text))
+            return *it;
+    return nullptr;
+}
+}
+
+void ShowTreeView_Test::trackingControlsOnTheListAndCuePages()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 c2 = st->addCue(list, 0, "Two");
+    st->setLayerLook(c1, st->addLayer(c1, groupTarget(towers->id())), st->lookForPalette(full));
+
+    ShowTreeView view(nullptr, m_doc);
+    QVERIFY(view.selectNode(list));
+    QComboBox *mode = view.findChild<QComboBox *>("stListMode");
+    QComboBox *base = view.findChild<QComboBox *>("stListBase");
+    QVERIFY(mode != nullptr && base != nullptr);
+    QCOMPARE(base->count(), 3);                     // none + two cues
+    QCOMPARE(base->currentIndex(), 0);
+
+    // Tracking: cue 2 now carries Towers on, greyed in the tree.
+    mode->setCurrentIndex(1);
+    emit mode->activated(1);
+    QCOMPARE(st->cueList(list)->mode, ListMode::Tracking);
+    QVERIFY(trackedRow(view.tree(), c2, "Towers") != nullptr);
+    QVERIFY(treeText(view.tree()).contains("  L [Tracking]"));
+
+    // The base from the list page...
+    base->setCurrentIndex(1);
+    emit base->activated(1);
+    QCOMPARE(st->cueList(list)->baseCue, c1);
+    QVERIFY(treeText(view.tree()).contains("    1 One [■ base]"));
+    // ...and from the cue page's check box.
+    QVERIFY(view.selectNode(c2));
+    QCheckBox *isBase = view.findChild<QCheckBox *>("stCueBase");
+    QVERIFY(!isBase->isChecked());
+    isBase->setChecked(true);
+    QCOMPARE(st->cueList(list)->baseCue, c2);
+    QVERIFY(view.selectNode(c2));
+    QVERIFY(view.findChild<QCheckBox *>("stCueBase")->isChecked());
+    view.findChild<QCheckBox *>("stCueBase")->setChecked(false);
+    QCOMPARE(st->cueList(list)->baseCue, invalidId());
+
+    // Cue mode: Block -- nothing tracked into it; the tree says so.
+    QVERIFY(view.selectNode(c2));
+    QComboBox *cueMode = view.findChild<QComboBox *>("stCueMode");
+    cueMode->setCurrentIndex(cueMode->findData(int(CueMode::Block)));
+    emit cueMode->activated(cueMode->currentIndex());
+    QCOMPARE(st->cue(c2)->mode, CueMode::Block);
+    QVERIFY(trackedRow(view.tree(), c2, "Towers") == nullptr);
+    QVERIFY(treeText(view.tree()).contains("    2 Two [⊘ block]"));
+}
+
+void ShowTreeView_Test::includesAddMoveRemoveAndNoLoops()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    FixtureGroup *usts = group("USTs", 2, 2);
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 c2 = st->addCue(list, 0, "Two");
+    const quint32 c3 = st->addCue(list, 1, "Three");
+    st->setLayerLook(c1, st->addLayer(c1, groupTarget(towers->id())), st->lookForPalette(full));
+    st->setLayerLook(c2, st->addLayer(c2, groupTarget(usts->id())), st->lookForPalette(full));
+    QVERIFY(st->setCueMode(c3, CueMode::Block));
+
+    ShowTreeView view(nullptr, m_doc);
+    // ⌥-drag of a cue onto another includes it -- not when it would loop.
+    QCOMPARE(view.cueDropHint(c1, c3, true), QString("3 Three includes 1 One"));
+    QVERIFY(view.dropCue(c1, c3, true));
+    QVERIFY(view.cueDropHint(c1, c3, true).isEmpty());      // already
+    QVERIFY(view.cueDropHint(c3, c1, true).isEmpty());      // 3 plays 1: a loop
+    QVERIFY(!view.dropCue(c3, c1, true));
+    QVERIFY(view.cueDropHint(c2, c1, true).isEmpty());      // 2 tracks from 1
+    QVERIFY(st->addInclude(c3, c2));
+
+    QVERIFY(view.selectNode(c3));
+    QCOMPARE(view.includeItems(), QStringList({ "1 One", "2 Two" }));
+    QListWidget *incs = view.findChild<QListWidget *>("stCueIncludes");
+    QToolButton *up = view.findChild<QToolButton *>("stIncludeUp");
+    QToolButton *down = view.findChild<QToolButton *>("stIncludeDown");
+    QToolButton *remove = view.findChild<QToolButton *>("stIncludeRemove");
+    QVERIFY(!remove->isEnabled());
+    incs->setCurrentRow(1);
+    QVERIFY(up->isEnabled());
+    QVERIFY(!down->isEnabled());
+    up->click();
+    QCOMPARE(st->cue(c3)->includes, QList<quint32>({ c2, c1 }));
+    QCOMPARE(view.includeItems(), QStringList({ "2 Two", "1 One" }));
+    QCOMPARE(incs->currentRow(), 0);                        // the moved one stays selected
+    remove->click();
+    QCOMPARE(st->cue(c3)->includes, QList<quint32>({ c1 }));
+    QCOMPARE(view.includeItems(), QStringList({ "1 One" }));
+    // The included cue's layer shows in it, greyed with where it came from.
+    QVERIFY(trackedRow(view.tree(), c3, "Towers") != nullptr);
+    QCOMPARE(trackedRow(view.tree(), c3, "Towers")->text(1), QString("included from 1 One"));
+}
+
+void ShowTreeView_Test::nextCueReceivesSaysWhatPassesOn()
+{
+    FixtureGroup *at = group("AT-Spots", 0, 1);
+    FixtureGroup *bs = group("BackStage", 1, 2);
+    FixtureGroup *fx = group("Wash", 3, 1);
+    const quint32 base = dimmer(60, "Base");
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c0 = st->addCue(list, -1, "base");
+    const quint32 c1 = st->addCue(list, 0, "One");
+    const quint32 c2 = st->addCue(list, 1, "Two");
+    const quint32 c3 = st->addCue(list, 2, "Three");
+    st->setLayerLook(c0, st->addLayer(c0, groupTarget(at->id())), st->lookForPalette(base));
+    const quint32 al = st->addLayer(c1, groupTarget(at->id()));
+    st->setLayerLook(c1, al, st->lookForPalette(full));
+    st->setLayerRelease(c1, al, true);
+    const quint32 bl = st->addLayer(c1, groupTarget(bs->id()));
+    st->setLayerLook(c1, bl, st->lookForPalette(full));
+    const quint32 wl = st->addLayer(c1, groupTarget(fx->id()));
+    st->setLayerLook(c1, wl, st->lookForPalette(full));
+    st->setLayerRelease(c1, wl, true);
+    QVERIFY(st->setBaseCue(list, c0));
+
+    ShowTreeView view(nullptr, m_doc);
+    QVERIFY(view.selectNode(c1));
+    const QString next = view.nextCueText();
+    QVERIFY2(next.contains("AT-Spots (Base) — back to the base"), qPrintable(next));
+    QVERIFY2(next.contains("BackStage (Full)"), qPrintable(next));
+    QVERIFY2(next.contains("Wash — released, dark"), qPrintable(next));
+
+    QVERIFY(st->setCueMode(c2, CueMode::CueOnly));
+    QVERIFY(view.selectNode(c2));
+    QVERIFY(view.nextCueText().startsWith("what this cue started from (it is cue-only)"));
+    QVERIFY(st->setCueMode(c3, CueMode::Block));
+    QVERIFY(view.selectNode(c2));
+    QCOMPARE(view.nextCueText(), QString("nothing: 4 Three is a Block cue, it starts from nothing"));
+    QVERIFY(view.selectNode(c3));
+    QCOMPARE(view.nextCueText(), QString("— (the last cue)"));
+}
+
+void ShowTreeView_Test::aCarriedInLayerCanBeReleased()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 c2 = st->addCue(list, 0, "Two");
+    const quint32 c3 = st->addCue(list, 1, "Three");
+    st->setLayerLook(c1, st->addLayer(c1, groupTarget(towers->id())), st->lookForPalette(full));
+
+    ShowTreeView view(nullptr, m_doc);
+    view.tree()->setCurrentItem(trackedRow(view.tree(), c2, "Towers"));
+    QCheckBox *release = view.findChild<QCheckBox *>("stLayerRelease");
+    QVERIFY(!release->isHidden());
+    release->setChecked(true);
+    // Cue 2's own now, released; the selection moved onto it; cue 3 dark.
+    QCOMPARE(st->cue(c2)->layers.count(), 1);
+    QVERIFY(st->cue(c2)->layers.first().release);
+    QCOMPARE(view.currentKind(), ShowTreeView::LayerNode);
+    QCOMPARE(view.currentId(), st->cue(c2)->layers.first().id);
+    QCOMPARE(rowFor(view.attributeRows(), "Dimmer"), QString("Dimmer | Full | tracked from 1 One"));
+    QVERIFY(trackedRow(view.tree(), c3, "Towers") == nullptr);
+    QCOMPARE(st->undoText(), QString("Release layer"));
+}
+
+void ShowTreeView_Test::updateCueWhereATrackedValueWasSet()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    const quint32 full = dimmer(255, "Full");
+    const quint32 half = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 c2 = st->addCue(list, 0, "Two");
+    st->setLayerLook(c1, st->addLayer(c1, groupTarget(towers->id())), st->lookForPalette(full));
+
+    ShowTreeView view(nullptr, m_doc);
+    // The picker of a tracked value names where it was set (D22).
+    QCOMPARE(view.updateSourceLabel(c2, groupTarget(towers->id()), KeyDimmer), QString("1 One"));
+    QVERIFY(view.updateSourceLabel(c1, groupTarget(towers->id()), KeyDimmer).isEmpty());
+    QVERIFY(view.updateSourceLabel(c2, groupTarget(towers->id()), KeyColour).isEmpty());
+
+    // Updating there: cue 2 still tracks it, with the new value.
+    view.tree()->setCurrentItem(trackedRow(view.tree(), c2, "Towers"));
+    QVERIFY(st->updateSource(c2, groupTarget(towers->id()), st->lookForPalette(half)));
+    QCOMPARE(rowFor(view.attributeRows(), "Dimmer"), QString("Dimmer | Half | tracked from 1 One"));
+    QVERIFY(st->cue(c2)->layers.isEmpty());
+}
+
+void ShowTreeView_Test::recordAsNewCueFromTheHeader()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    FixtureGroup *usts = group("USTs", 2, 2);
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 c2 = st->addCue(list, 0, "Two");
+    st->setLayerLook(c1, st->addLayer(c1, groupTarget(towers->id())), st->lookForPalette(full));
+    st->setLayerLook(c2, st->addLayer(c2, groupTarget(usts->id())), st->lookForPalette(full));
+
+    ShowTreeView view(nullptr, m_doc);
+    QToolButton *record = view.findChild<QToolButton *>("stRecord");
+    QVERIFY(view.selectNode(list));
+    QVERIFY(!record->isEnabled());
+    QVERIFY(view.selectNode(c2));
+    QVERIFY(record->isEnabled());
+    record->click();
+    const CueList *l = st->cueList(list);
+    QCOMPARE(l->cues.count(), 3);
+    const Cue &rec = l->cues.at(2);
+    QCOMPARE(view.currentId(), rec.id);
+    QCOMPARE(rec.number, QString("3"));
+    QCOMPARE(rec.mode, CueMode::Block);
+    QCOMPARE(rec.layers.count(), 2);                 // Towers (tracked) and USTs, now its own
+    QVERIFY(treeText(view.tree()).contains("    3 Two (recorded) [⊘ block]"));
+    // What changed on stage: only the new cue.
+    QCOMPARE(view.findChild<QLabel *>("stDropHint")->text(), QString("Changed: 3 Two (recorded)"));
+}
+
+void ShowTreeView_Test::theLibraryShowsWhatTheListUses()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    FixtureGroup *usts = group("USTs", 2, 2);
+    const quint32 full = dimmer(255, "Full");
+    const quint32 half = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 a = st->addCueList(prod, "A");
+    const quint32 b = st->addCueList(prod, "B");
+    const quint32 a1 = st->addCue(a, -1, "One");
+    const quint32 a2 = st->addCue(a, 0, "Two");
+    const quint32 b1 = st->addCue(b, -1, "Other");
+    st->setLayerLook(a1, st->addLayer(a1, groupTarget(towers->id())), st->lookForPalette(full));
+    st->setLayerLook(a2, st->addLayer(a2, groupTarget(towers->id())), st->lookForPalette(half));
+    st->setLayerLook(a2, st->addLayer(a2, groupTarget(usts->id())), st->lookForPalette(full));
+    st->setLayerLook(b1, st->addLayer(b1, groupTarget(usts->id())), st->lookForPalette(half));
+
+    ShowTreeView view(nullptr, m_doc);
+    QVERIFY(view.inListItems().isEmpty());          // no list selected: no section
+    QVERIFY(view.selectNode(a2));
+    QTest::qWait(0);
+    QCoreApplication::processEvents();
+    QCOMPARE(view.inListItems(), QStringList({ "Towers (2) ×2", "Full ×2", "USTs (2) ×1", "Half ×1" }));
+    QVERIFY(view.selectNode(b1));
+    QCoreApplication::processEvents();
+    QCOMPARE(view.inListItems(), QStringList({ "USTs (2) ×1", "Half ×1" }));
+    // An edit counts at once.
+    st->setLayerLook(b1, st->addLayer(b1, groupTarget(towers->id())), st->lookForPalette(half));
+    QCoreApplication::processEvents();
+    QCOMPARE(view.inListItems(), QStringList({ "Half ×2", "Towers (2) ×1", "USTs (2) ×1" }));
+    // The filter narrows it too.
+    view.findChild<QLineEdit *>("stLibraryFilter")->setText("Tow");
+    bool shown = false;
+    for (QTreeWidgetItemIterator it(view.library()); *it; ++it)
+        if ((*it)->text(0) == "Towers (2) ×1" && !(*it)->isHidden() && (*it)->parent()->data(0, ShowTreeView::IdRole).toUInt() == 3)
+            shown = true;
+    QVERIFY(shown);
+}
+
+void ShowTreeView_Test::theCommandLine()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    colour(Qt::blue, "Blue");
+    dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+
+    ShowTreeView view(nullptr, m_doc);
+    view.setCommandLineVisible(false);
+    QVERIFY(!view.isCommandLineVisible());
+    QVERIFY(view.commandLine()->isHidden() || !view.commandLine()->isVisibleTo(&view));
+    view.findChild<QToolButton *>("stCommandToggle")->click();
+    QVERIFY(view.isCommandLineVisible());
+
+    QVERIFY(view.selectNode(prod));
+    QVERIFY(view.runCommand("list \"01-Opener\""));
+    QCOMPARE(view.currentKind(), ShowTreeView::ListNode);
+    QVERIFY(view.runCommand("cue + \"base\" block"));
+    QCOMPARE(view.currentKind(), ShowTreeView::CueNode);
+    const quint32 c1 = view.currentId();
+    QCOMPARE(st->cue(c1)->number, QString("1.0.0"));
+    QCOMPARE(st->cue(c1)->mode, CueMode::Block);
+
+    // Groups and looks: the layer it set is selected.
+    QVERIFY(view.runCommand("Towers colour Blue dimmer Full"));
+    QCOMPARE(view.currentKind(), ShowTreeView::LayerNode);
+    QCOMPARE(rowFor(view.attributeRows(), "Colour"), QString("Colour | Blue | "));
+    QVERIFY(view.commandMessage().startsWith("✓"));
+
+    // A mistake says so and changes nothing.
+    QVERIFY(!view.runCommand("Towers colour Mauve"));
+    QVERIFY(view.commandMessage().contains("Mauve"));
+
+    // Typed, with Tab and Enter, in the line itself.
+    QLineEdit *line = view.commandLine();
+    line->setText("cue + \"Verse\"");
+    QTest::keyClick(line, Qt::Key_Return);
+    QVERIFY(line->text().isEmpty());
+    const quint32 c2 = view.currentCueId();
+    QVERIFY(c2 != c1);
+    line->setText("Tow");
+    QTest::keyClick(line, Qt::Key_Tab);
+    QCOMPARE(line->text(), QString("Towers "));
+    QVERIFY(line->hasFocus() || !view.isActiveWindow());       // Tab didn't move on
+    QTest::keyClicks(line, "dimmer 40");
+    QTest::keyClick(line, Qt::Key_Return);
+    QCOMPARE(st->cue(c2)->layers.count(), 1);
+    QVERIFY(st->isInlinePalette(st->cue(c2)->layers.first().look(KeyDimmer)->palettes.first()));
+    // ↑ recalls.
+    QTest::keyClick(line, Qt::Key_Up);
+    QCOMPARE(line->text(), QString("Towers dimmer 40"));
+    QTest::keyClick(line, Qt::Key_Up);
+    QCOMPARE(line->text(), QString("cue + \"Verse\""));
+    QTest::keyClick(line, Qt::Key_Down);
+    QTest::keyClick(line, Qt::Key_Down);
+    QVERIFY(line->text().isEmpty());
+
+    // undo: the whole last command.
+    QVERIFY(view.runCommand("undo"));
+    QVERIFY(st->cue(c2)->layers.isEmpty());
+    Q_UNUSED(towers)
+    view.setCommandLineVisible(false);
 }
 
 void ShowTreeView_Test::pictureOfARealShow()

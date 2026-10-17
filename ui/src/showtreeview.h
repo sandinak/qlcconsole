@@ -29,6 +29,8 @@
 #include "qlcpalette.h"
 
 class QStackedWidget;
+class QListWidget;
+class ShowTreeCommand;
 class QDoubleSpinBox;
 class QTreeWidgetItem;
 class ShowTreeController;
@@ -150,6 +152,30 @@ public:
     QStringList attributeRows() const;
     /** The Library's Recent items, newest first, as text. */
     QStringList recentItems() const;
+    /** The Library's "In this cue list" items, most used first, as text
+     *  ("Towers ×6"). */
+    QStringList inListItems() const;
+
+    /** "Next cue receives", as the cue page shows it. */
+    QString nextCueText() const;
+    /** The cue page's includes, as text, in order. */
+    QStringList includeItems() const;
+
+    /** D22: a tracked value's picker -- where it was set, as a cue label
+     *  ("1.0.0 base"); empty when the value is this cue's own. */
+    QString updateSourceLabel(quint32 cueId, const ShowTree::Target &target, const QString &key) const;
+
+    /************************************************************************
+     * Command line (§6C, optional)
+     ************************************************************************/
+public:
+    void setCommandLineVisible(bool visible);
+    bool isCommandLineVisible() const;
+    /** Run a command as if typed and Enter pressed: true when it ran. */
+    bool runCommand(const QString &line);
+    /** What the line under the command line says now. */
+    QString commandMessage() const;
+    QLineEdit *commandLine() const { return m_command; }
 
     /** Open @a paletteId in the Look Editor under the tree. */
     void editPalette(quint32 paletteId);
@@ -169,6 +195,7 @@ public slots:
     void slotNewCueList();
     void slotNewCue();
     void slotAddLayer();
+    void slotRecordCue();
     void slotDelete();
     void slotUndo();
     void slotRedo();
@@ -187,7 +214,10 @@ private slots:
     void slotImportMenuAboutToShow();
     void slotCueEdited();
     void slotListModeChanged(int index);
+    void slotListBaseChanged(int index);
+    void slotCueBaseToggled(bool on);
     void slotLayerReleaseToggled(bool on);
+    void slotCommandEntered();
     void slotFilterChanged(const QString &text);
     void slotTreeChanged();
     void reloadLibrary();
@@ -199,8 +229,15 @@ private:
     void showCuePage(const ShowTree::CueList &list, int index);
     void showLayerPage(const ShowTree::CueList &list, int index, const ShowTree::Layer *own,
                        const ShowTree::ResolvedLayer *resolved);
+    /** @a target: a carried-in layer's (set on it makes it the cue's own);
+     *  @a rowTarget: the row's layer, own or not (for "Update cue X"). */
     void attributeMenu(quint32 cueId, quint32 layerId, const ShowTree::Target &target,
-                       const QString &key, const QPoint &globalPos);
+                       const ShowTree::Target &rowTarget, const QString &key, const QPoint &globalPos);
+    void includesMenu(QMenu *menu, quint32 cueId);
+    void updateIncludeButtons();
+    /** The cue list the selection is in (invalid: none). */
+    quint32 currentListId() const;
+    bool eventFilter(QObject *obj, QEvent *ev) override;
     /** Set @a look on the layer, on the carried-in @a target, or the cue. */
     bool applyLook(quint32 cueId, quint32 layerId, const ShowTree::Target &target,
                    const ShowTree::Look &look);
@@ -228,6 +265,8 @@ private:
     QToolButton *m_undo;
     QToolButton *m_redo;
     QToolButton *m_import;
+    QToolButton *m_record;
+    QToolButton *m_commandToggle;
     QMenu *m_importMenu;
     QLabel *m_hint;
     QLabel *m_previewLabel;
@@ -240,12 +279,19 @@ private:
     QWidget *m_listPage;
     QLabel *m_listTitle;
     QComboBox *m_listMode;
+    QComboBox *m_listBase;
     QLabel *m_listInfo;
     QWidget *m_cuePage;
     QLineEdit *m_cueNumber;
     QLineEdit *m_cueName;
     QLineEdit *m_cueNote;
     QComboBox *m_cueMode;
+    QCheckBox *m_cueBase;
+    QListWidget *m_cueIncludes;
+    QToolButton *m_includeAdd;
+    QToolButton *m_includeRemove;
+    QToolButton *m_includeUp;
+    QToolButton *m_includeDown;
     QDoubleSpinBox *m_cueFadeIn;
     QDoubleSpinBox *m_cueFadeOut;
     QDoubleSpinBox *m_cueHold;
@@ -255,6 +301,7 @@ private:
     QWidget *m_layerPage;
     QLabel *m_layerTitle;
     QCheckBox *m_layerRelease;
+    ShowTree::Target m_layerReleaseTarget;     //!< a carried-in layer's, for Release
     QGridLayout *m_rows;
     QWidget *m_rowsHost;
     QStringList m_rowText;
@@ -271,6 +318,15 @@ private:
     bool m_filtering = false;
 
     QTimer *m_libraryTimer = nullptr;
+    quint32 m_libraryList = 0xFFFFFFFF;    //!< the list "In this cue list" shows
+
+    // Command line
+    QWidget *m_commandBar = nullptr;
+    QLineEdit *m_command = nullptr;
+    QLabel *m_commandMsg = nullptr;
+    ShowTreeCommand *m_commander = nullptr;
+    QStringList m_commandHistory;
+    int m_historyAt = -1;
     QList<quint32> m_expanded;
     quint32 m_pageCue = 0xFFFFFFFF;      //!< the cue the cue page shows
     bool m_reloading = false;
