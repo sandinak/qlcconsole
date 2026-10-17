@@ -531,6 +531,50 @@ installer size, VM checks) is in TODO.md, "Platforms and soak findings".
      the rig view on D3D11 (WARP): GPU-vs-CPU matches as on Metal/GL, and the
      pictures are kept (rig-shots-windows artifact).
 
+### 2026-10-16 — Fixture sizes and weights in your own units *(feat/unit-aware-dimensions)*
+
+- **One preference: Settings → Units** (`units/length` in qlcconsole's
+  settings: mm / cm / m / in / ft; weight follows, kg for the metric ones,
+  lb for in/ft). The fixture editor reads the same key from qlcconsole's
+  settings (as it does the toolbar style) and re-reads it each time the
+  Physical page is shown; its page has a note saying where to change it.
+- **Parse/format in one place**, `engine/src/measurementunits.*`
+  (`MeasurementUnits`): `7.5"`, `7.5 in`, `0.625'`, `6' 3"`, `6 ft 3 in`,
+  `190.5mm`, `19.05 cm`, `0.19 m`, `1 m 20 cm`, `7,5 in`; `12 kg`,
+  `26.5 lb(s)`, `400 g`, `5 lb 4 oz`. A bare number is the preferred unit;
+  after feet (pounds) a trailing bare number is inches (ounces). Refused:
+  negatives, `1,200` (thousands or decimal?), unknown units, two bare
+  numbers, a weight unit in a length and vice versa.
+- **Field** `ui/src/measurementedit.*` (a QLineEdit): holds the exact
+  typed mm/kg; red + tooltip on nonsense, value unchanged; commits on
+  Return/leaving and before the page is read. Used for width/height/depth/
+  weight on the editor's Physical page (fixture-wide and per-mode); the
+  Fixture Manager info panel shows sizes/weight in the same unit.
+- **Storage unchanged** (stock-QLC+ compatible): whole mm, halves up
+  (`toStoredMm`: 7.5" = 190.5 mm → 191), weight as kg double. A stored
+  whole mm is shown with the fewest decimals that mean that same mm
+  (191 → 7.5 in, 190 → 7.48 in, 300 → 11.8 in). Weight is no longer cut to
+  the old spin box's 2 decimals. Limits as before: 9999 mm, 999.99 kg.
+- Tests: `engine/test/measurementunits` (all forms, invalid, every mm
+  0..9999 round-trips in every unit, preference), `ui/test/editphysical`
+  (offscreen: `7.5"` with inches → 7.5 in / 191 mm, with mm → 190.5 mm,
+  invalid, uncommitted text, follows the preference), appviews
+  `settingsChoosesTheUnits`.
+- **The grid follows it too** (Branson, 2026-10-16). Metres for mm/cm/m,
+  feet for in/ft (`MonitorProperties::gridUnitsFor`); the Grid menu's
+  Meters/Feet combo is now a label pointing at Settings. `App::
+  applyUnitPreference()` after every load, on New and when Settings
+  changes it: the show's saved `Units` only says what its grid size is in;
+  `convertGridUnits()` re-expresses the stage exactly (positions are mm).
+  Seed: the first show ever opened, with no unit chosen, sets ft if it was
+  in feet (`units/seededFromShow`, once). Saved: `Units` from the
+  preference; Width/Height/Depth whole (older readers use toInt -- a
+  "32.8084" was read as 0, a bug this fork already had after a units
+  toggle), `ExactWidth/Height/Depth` beside them when not whole.
+  Tests: monitorproperties (`gridUnitsConvertExactly`,
+  `gridSizeSavedWholeAndExact`), measurementunits (`seedFromFirstShow`),
+  appviews (`theGridFollowsTheUnitPreference`).
+
 ### 2026-10-15 — Linux: a test gate that can't skip quietly, and the app icon *(feat/linux-gate-icon)*
 
 - **Test gate counts what it ran** (`platforms/linux/unittest.sh`). The

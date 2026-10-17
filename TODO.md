@@ -10,6 +10,13 @@ under `~/.claude/.../memory/`.
 
 ## Small fixes and leftovers
 
+- **MasterTimer stop/start race (2026-10-16)** — `MasterTimerPrivate::run()`
+  sets `m_run = true` inside the thread, so a `stop()` that comes right after
+  `start()` (before the thread runs) is undone and `wait()` never returns:
+  two `App::clearDocument()` in a row hung appviews_test. `m_run` is a plain
+  bool too. Fix: set it in `start()` before `QThread::start()`, make it
+  atomic. Found on feat/unit-aware-dimensions; worked round in the test.
+
 - **Layers panel: a row the plot can't select loses its selection on any
   rebuild (2026-10-15)** — clicking a fixture the plot can't select (stacked
   inside a tower in plan view) now keeps its row selected, but the next

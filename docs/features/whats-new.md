@@ -27,6 +27,20 @@ The latest changes, newest first. Each links to the guide with the detail.
   [Speed masters](effects.md#speed-masters). Closing the app with a speed
   master's name still being typed no longer crashes.
 
+### Fixture definitions
+
+- **Sizes and weights in your own units.** **Settings → Units** picks mm,
+  cm, m, inches or feet (weight in kg or lb to match); the fixture
+  editor's Physical tab shows width, height, depth and weight in it, and
+  takes any unit typed with the number — `7.5"`, `6' 3"`, `19.05 cm`,
+  `26.5 lbs`. Files still keep millimetres and kilograms. See
+  [The fixture editor](fixture-manager.md#the-fixture-editor).
+- **The Studio's grid follows it too** — rulers, readouts, labels and
+  length fields in metres (mm/cm/m) or feet (in/ft); the grid's own
+  Meters/Feet choice is gone. Shows open in your units and are saved in
+  them; if you'd never chosen, the first show you open in feet makes it
+  feet. See [Selecting and undo on the plot](lighting-studio.md#selecting-and-undo-on-the-plot).
+
 ### Sub-cues
 
 - **Cues inside a cue.** A chase used as a step of a cue list lists its

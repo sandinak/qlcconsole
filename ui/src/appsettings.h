@@ -52,6 +52,9 @@ private:
     // Tab label mode
     QComboBox *m_tabLabelModeCombo;
     QComboBox *m_scriptEditorCombo;
+
+    // Measurement units (MeasurementUnits::preferredLength)
+    QComboBox *m_unitsCombo;
 };
 
 /** @} */

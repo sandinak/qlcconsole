@@ -24,6 +24,7 @@
 
 #include "ui_editphysical.h"
 #include "qlcphysical.h"
+#include "measurementunits.h"
 
 class EditPhysical final : public QWidget, public Ui_EditPhysical
 {
@@ -37,6 +38,11 @@ public:
 
     QLCPhysical physical();
 
+    /** Show the dimensions and weight in @a unit (weight in kg or lb to
+     *  match). Normally the Settings -> Units preference, re-read each time
+     *  the page is shown. */
+    void setUnit(MeasurementUnits::LengthUnit unit);
+
 signals:
     void copyToClipboard(QLCPhysical physical);
     void requestPasteFromClipboard();
@@ -46,7 +52,10 @@ private slots:
     void slotPasteFromClipboard();
 
 protected:
+    void showEvent(QShowEvent *event) override;
+
     QLCPhysical m_physical;
+    class QLabel *m_unitsNote = nullptr;         ///< "in inches and pounds: ..."
     class QComboBox *m_bodyCombo = nullptr;      ///< Box / Lantern
     class QComboBox *m_emissionCombo = nullptr;  ///< Beam / All round
     class QSpinBox *m_ledsSpin = nullptr;        ///< 0 = one point, else LEDs

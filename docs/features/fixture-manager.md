@@ -473,6 +473,24 @@ editor on its definition. On top of stock QLC+'s editor:
   angle, no pan/tilt range, a pixel layout that doesn't hold the heads,
   values no capability covers. Double-click one to jump to it. Saving with
   errors asks first.
+- **Physical tab → Dimensions in your own units.** Width, height, depth
+  and weight show in the unit chosen in qlcconsole's **Settings → Units**
+  (millimetres, centimetres, metres, inches, or feet and inches; weight in
+  kg with the metric ones, lb with inches and feet). Type a bare number in
+  that unit, or any unit with the number and it's converted: `7.5"`,
+  `7.5 in`, `0.625'`, `0.625 ft`, `6' 3"`, `190.5 mm`, `19.05 cm`,
+  `0.19 m`; `12 kg`, `26.5 lb` (or `lbs`), `400 g`, `5 lb 4 oz`. With
+  inches set, `7.5"` stays **7.5 in**; with millimetres it becomes
+  **190.5 mm**. Something it can't read turns the field red, with a
+  tooltip saying what it accepts, and the value stays as it was.
+
+  The file is unchanged and still opens in stock QLC+: it keeps **whole
+  millimetres** (halves round up, so 7.5" = 190.5 mm is saved as
+  **191 mm**) and kilograms. The field's tooltip says what will be saved.
+  A saved size shows with the fewest decimals that mean the same
+  millimetre, so 191 mm reads 7.5 in again, not 7.52. The Fixture
+  Manager's information panel shows sizes and weight in the same unit, and
+  the Lighting Studio's grid follows it (metres or feet).
 - **Physical tab → "Look in the Lighting Studio"** — how the Lighting Studio and
   the Rig Overview draw it:
   - **Body**: Box, or Lantern (a cage glowing all round).

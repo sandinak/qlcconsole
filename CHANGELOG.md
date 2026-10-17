@@ -79,6 +79,10 @@ a shorter Windows re-soak is planned.
   **Labels…** prints a label per fixture (all, or the selected rows) on
   Avery 5160 sheets or a 62 mm roll: name, universe and address, mode,
   and a network fixture's name (its IP on mouseover in the list).
+- **Units** — Settings → Units picks mm, cm, m, inches or feet (kg or lb
+  to match); fixture sizes and weights show in it and take any unit typed
+  with the number (`7.5"`, `6' 3"`, `26.5 lb`), and the Studio's grid
+  follows it. Files still store millimetres and kilograms.
 - **In-app pictures** — the guides show the main window, footer,
   Programming tab, effect browser, Patch dialog and more with numbered
   marks; click one for full size.

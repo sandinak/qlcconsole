@@ -31,6 +31,7 @@
 #include <QMap>
 
 #include "truss.h"
+#include "measurementunits.h"
 #include "headlayout.h"
 #include "stageplatform.h"
 #include "pipe.h"
@@ -150,8 +151,16 @@ public:
         return QVector3D(m_gridSize.x() * mpu / 2.0f, m_gridSize.z() * mpu / 2.0f, 0.0f);
     }
 
-    /** Get/Set the grid measurement units to use in 2D display mode */
+    /** Get/Set the grid measurement units to use in 2D display mode.
+     *  The unit is the person's (Settings -> Units, which App applies with
+     *  convertGridUnits() on load); a show's saved Units only says what its
+     *  saved grid size is in. setGridUnits() relabels without converting. */
     inline void setGridUnits(GridUnits units) { m_gridUnits = units; }
+    /** Change unit, keeping the stage the same physical size (the grid size
+     *  is converted exactly, positions are mm and untouched) */
+    void convertGridUnits(GridUnits units);
+    /** The grid unit for a preference: metres for mm/cm/m, feet for in/ft */
+    static GridUnits gridUnitsFor(MeasurementUnits::LengthUnit unit);
     inline GridUnits gridUnits() const { return m_gridUnits; }
 
     /** Get/Set the point of view to render the 2D preview */

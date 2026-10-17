@@ -215,6 +215,12 @@ private:
 public:
     void clearDocument();
 
+    /** Show the stage in the person's unit (Settings -> Units): metres for
+     *  mm/cm/m, feet for in/ft. After a show loads (@a fromShow: the first
+     *  show ever opened may seed an unset preference from its own grid unit),
+     *  after New, and when the preference changes. */
+    void applyUnitPreference(bool fromShow);
+
     Doc *doc();
     /** Show control's OSC listener and settings (QLab). */
     class ShowControlListener *showControlListener() const { return m_showControlListener; }
