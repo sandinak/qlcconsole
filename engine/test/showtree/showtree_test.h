@@ -23,6 +23,8 @@
 #include <QObject>
 #include <QHash>
 
+#include "showtreecommand.h"
+
 class FixtureGroup;
 class Chaser;
 class Doc;
@@ -91,6 +93,9 @@ private slots:
     void commandLine();
     void commandLineFailsAsAWhole();
     void commandLineCompletes();
+    void commandLineCompletesEveryWord_data();
+    void commandLineCompletesEveryWord();
+    void commandLineTabCyclesAndRuns();
 
     // P2 answers (2026-10-17)
     void recordTheRunningCueOrEverythingLit();
@@ -103,6 +108,8 @@ private:
     quint32 dimmer(int level, const QString &name);
     quint32 colour(const QString &name);
     FixtureGroup *group(const QString &name, const QList<quint32> &fixtures);
+    /** A show with one of every kind of word the command line takes. */
+    ShowTreeCommand::Context completionShow();
     QHash<quint32, uchar> settle(int ticks = 10);
     void tick(int n = 1);
     void go(Chaser *c);

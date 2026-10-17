@@ -64,6 +64,17 @@ to zoom, ⇧⌘R or ⌘W to close.
 | ⌘Z | Undo the last change to the open scene (else the last bundle stamped) |
 | Double-click a scene / function | Open it on the canvas |
 
+## Show Tree
+
+| Keys / mouse | Does |
+|---|---|
+| Drag from the Library onto a cue, a layer, or the page | One layer on everything dropped; onto a layer, added to it ([Adding layers](show-tree.md#adding-layers)) |
+| **⌥ held as you drop** | A layer for each group |
+| **:** (in the tree) | To the command line at the bottom; **Esc** goes back |
+| **Tab** (in the command line) | Complete the word; again, the next match |
+| ↑ / ↓ (in the command line) | Earlier / later commands |
+| ⌘Z / ⇧⌘Z | Undo / Redo in the tree |
+
 ## Connections
 
 | Keys | Does |

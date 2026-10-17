@@ -1366,11 +1366,24 @@ void ShowTreeView_Test::theCommandLine()
     const quint32 prod = st->addProduction("P");
 
     ShowTreeView view(nullptr, m_doc);
-    view.setCommandLineVisible(false);
-    QVERIFY(!view.isCommandLineVisible());
-    QVERIFY(view.commandLine()->isHidden() || !view.commandLine()->isVisibleTo(&view));
-    view.findChild<QToolButton *>("stCommandToggle")->click();
+    // Always there, at the bottom; no toggle. It never takes the keyboard on
+    // its own: : in the tree does, Esc goes back.
     QVERIFY(view.isCommandLineVisible());
+    QVERIFY(view.findChild<QToolButton *>("stCommandToggle") == nullptr);
+    QCOMPARE(view.commandLine()->focusPolicy(), Qt::ClickFocus);
+    QVERIFY(view.commandLine()->placeholderText().contains(": from the tree"));
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    // Below the tree and the pages.
+    QVERIFY(view.commandLine()->mapTo(&view, QPoint(0, 0)).y()
+            >= view.tree()->mapTo(&view, QPoint(0, 0)).y() + view.tree()->height());
+    view.activateWindow();
+    view.tree()->setFocus();
+    QVERIFY(!view.commandLine()->hasFocus());
+    QTest::keyClick(view.tree(), Qt::Key_Colon, Qt::ShiftModifier);
+    QVERIFY(view.commandLine()->hasFocus() || !view.isActiveWindow());
+    QTest::keyClick(view.commandLine(), Qt::Key_Escape);
+    QVERIFY(view.tree()->hasFocus() || !view.isActiveWindow());
 
     QVERIFY(view.selectNode(prod));
     QVERIFY(view.runCommand("list \"01-Opener\""));
@@ -1393,6 +1406,7 @@ void ShowTreeView_Test::theCommandLine()
 
     // Typed, with Tab and Enter, in the line itself.
     QLineEdit *line = view.commandLine();
+    view.focusCommandLine();                    // as a click (or :) does
     line->setText("cue + \"Verse\"");
     QTest::keyClick(line, Qt::Key_Return);
     QVERIFY(line->text().isEmpty());
@@ -1418,11 +1432,22 @@ void ShowTreeView_Test::theCommandLine()
     QTest::keyClick(line, Qt::Key_Down);
     QVERIFY(line->text().isEmpty());
 
+    // Tab again: the next match, the one shown in [ ].
+    line->setText("record ");
+    QTest::keyClick(line, Qt::Key_Tab);
+    QCOMPARE(view.commandMessage(), QString("lit · running · selected"));
+    QTest::keyClick(line, Qt::Key_Tab);
+    QCOMPARE(line->text(), QString("record lit"));
+    QCOMPARE(view.commandMessage(), QString("[lit] · running · selected"));
+    QTest::keyClick(line, Qt::Key_Tab);
+    QCOMPARE(line->text(), QString("record running"));
+    line->clear();
+
     // undo: the whole last command.
     QVERIFY(view.runCommand("undo"));
     QVERIFY(st->cue(c2)->layers.isEmpty());
     Q_UNUSED(towers)
-    view.setCommandLineVisible(false);
+    view.hide();
 }
 
 /* Branson, 2026-10-17: a cue with one layer on two RGB pixel-bar groups,
@@ -1537,6 +1562,231 @@ void ShowTreeView_Test::aDimmedColourOnPixelBarsReachesTheUniverse()
     view.hide();
 }
 
+static QMimeData *idsMime(const char *type, const QList<quint32> &ids)
+{
+    QMimeData *mime = new QMimeData();
+    QByteArray data;
+    QDataStream ds(&data, QIODevice::WriteOnly);
+    for (quint32 id : ids)
+        ds << id;
+    mime->setData(QLatin1String(type), data);
+    return mime;
+}
+
+/* Drag over @a w at @a at, then let go: the hint while over it, and whether
+   the move was taken. */
+static QString dragAndDrop(QWidget *w, const QPoint &at, QMimeData *mime, QLabel *hint,
+                           Qt::KeyboardModifiers mods = Qt::NoModifier, bool *accepted = nullptr)
+{
+    QDragEnterEvent enter(at, Qt::CopyAction, mime, Qt::LeftButton, mods);
+    QCoreApplication::sendEvent(w, &enter);
+    QDragMoveEvent move(at, Qt::CopyAction, mime, Qt::LeftButton, mods);
+    QCoreApplication::sendEvent(w, &move);
+    if (accepted != nullptr)
+        *accepted = move.isAccepted();
+    const QString said = hint->text();
+    QDropEvent drop(at, Qt::CopyAction, mime, Qt::LeftButton, mods);
+    QCoreApplication::sendEvent(w, &drop);
+    delete mime;
+    return said;
+}
+
+/* Branson, 2026-10-17: "When I have a cue loaded I should be able to just
+   drag to the main window and it adds layers -- and onto a layer to add to
+   it." The cue page takes every drop the tree does: groups on the page are
+   one new layer (⌥: one each), on a layer's row join it (a carried-in
+   layer is brought into the cue), palettes are cue looks or the row's
+   layer's, functions play as they are. The cue stays selected. */
+void ShowTreeView_Test::dropsOnTheCuePage()
+{
+    FixtureGroup *towers = group("Towers", 0, 1);
+    FixtureGroup *usts = group("USTs", 1, 1);
+    FixtureGroup *spots = group("Spots", 2, 1);
+    FixtureGroup *floor = group("Floor", 3, 1);
+    FixtureGroup *side = group("Side", 4, 1);
+    const quint32 blue = colour(Qt::blue, "Blue");
+    const quint32 red = colour(Qt::red, "Red");
+    Scene *fn = new Scene(m_doc);
+    fn->setName("Haze look");
+    m_doc->addFunction(fn);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 c2 = st->addCue(list, 0, "Two");
+    const quint32 c3 = st->addCue(list, 1, "Three");
+    Target tt;
+    tt.groups << towers->id();
+    st->setLayerLook(c1, st->addLayer(c1, tt), st->lookForPalette(blue));
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QLabel *hint = view.findChild<QLabel *>("stDropHint");
+    QWidget *page = view.findChild<QWidget *>("stCuePage");
+    QLabel *zone = view.findChild<QLabel *>("stCueDropZone");
+    QVERIFY(page != nullptr && zone != nullptr);
+
+    // An empty cue: the drop area says what to do.
+    QVERIFY(view.selectNode(c3));
+    QVERIFY(zone->isVisible());
+    QCOMPARE(zone->text(), QString("Drag groups or fixtures here to add a layer — onto a layer to add to it"));
+    QVERIFY(zone->styleSheet().contains("dashed"));
+
+    // Cue Two: Towers carried in, a grey row of its own.
+    QVERIFY(view.selectNode(c2));
+    QCOMPARE(view.cueLayerItems(), QStringList({ "⤳ Towers   Blue · tracked from 1 One" }));
+
+    // Two groups on the page: ONE layer, the hint says so, the cue stays.
+    const QPoint onZone = zone->mapTo(page, zone->rect().center());
+    bool taken = false;
+    QCOMPARE(dragAndDrop(page, onZone, idsMime(FixtureGroupSource::fixtureGroupMimeType(),
+                                               { usts->id(), spots->id() }), hint, Qt::NoModifier, &taken),
+             QString("one layer on USTs + Spots in 2 Two (⌥: a layer for each group)"));
+    QVERIFY(taken);
+    QCOMPARE(st->cue(c2)->layers.count(), 1);
+    QCOMPARE(st->cue(c2)->layers.first().target.groups.count(), 2);
+    QCOMPARE(view.currentKind(), ShowTreeView::CueNode);
+    QCOMPARE(view.currentId(), c2);
+    QCOMPARE(st->previewedCue(), c2);           // Design: the rig shows it
+    QVERIFY(hint->text().startsWith("Changed:") || hint->text().isEmpty());
+    QVERIFY(zone->styleSheet().contains("dashed"));     // lit only while over it
+
+    // ⌥: one layer each.
+    QCOMPARE(dragAndDrop(page, onZone, idsMime(FixtureGroupSource::fixtureGroupMimeType(),
+                                               { floor->id(), side->id() }), hint, Qt::AltModifier),
+             QString("2 new layers in 2 Two, one for each group"));
+    QCOMPARE(st->cue(c2)->layers.count(), 3);
+    st->undo();
+    QCOMPARE(st->cue(c2)->layers.count(), 1);
+
+    // Onto the USTs + Spots row: added to that layer.
+    QListWidget *rows = view.cueLayerList();
+    QCOMPARE(rows->count(), 2);
+    auto rowAt = [rows](const QString &start) {
+        for (int i = 0; i < rows->count(); ++i)
+            if (rows->item(i)->text().startsWith(start))
+                return rows->visualItemRect(rows->item(i)).center();
+        return QPoint(-1, -1);
+    };
+    const quint32 both = st->cue(c2)->layers.first().id;
+    QCOMPARE(dragAndDrop(rows->viewport(), rowAt("USTs + Spots"),
+                         idsMime(FixtureGroupSource::fixtureGroupMimeType(), { floor->id() }), hint),
+             QString("add Floor to layer USTs + Spots in 2 Two"));
+    QCOMPARE(st->cue(c2)->layers.count(), 1);
+    QCOMPARE(st->cue(c2)->layer(both)->target.groups.count(), 3);
+    QCOMPARE(view.currentId(), c2);
+
+    // A palette on the row: that layer's look.
+    QVERIFY(dragAndDrop(rows->viewport(), rowAt("USTs + Spots + Floor"),
+                        idsMime(FunctionsTreeWidget::paletteDragMimeType(), { red }), hint)
+            .startsWith("Red → layer USTs + Spots + Floor in 2 Two"));
+    QVERIFY(st->cue(c2)->layer(both)->look(KeyColour) != nullptr);
+
+    // Onto the carried-in Towers row: brought into the cue with Side added,
+    // its Blue kept -- one undo step.
+    QCOMPARE(dragAndDrop(rows->viewport(), rowAt("⤳ Towers"),
+                         idsMime(FixtureGroupSource::fixtureGroupMimeType(), { side->id() }), hint),
+             QString("add Side to layer Towers in 2 Two (brings it into this cue)"));
+    QCOMPARE(st->cue(c2)->layers.count(), 2);
+    Target ts;
+    ts.groups << towers->id() << side->id();
+    {
+        const CueList *l = st->cueList(list);
+        const QList<ResolvedCue> rc = resolve(*l);
+        const ResolvedLayer *rl = rc.at(1).layer(ts);
+        QVERIFY(rl != nullptr && rl->own);
+        QVERIFY(rl->values.contains(KeyColour));
+        QCOMPARE(rl->values.value(KeyColour).look.palettes, QList<quint32>({ blue }));
+    }
+    QVERIFY(st->undo());
+    QCOMPARE(st->cue(c2)->layers.count(), 1);
+    QVERIFY(view.cueLayerItems().contains("⤳ Towers   Blue · tracked from 1 One"));
+
+    // A palette on the page: a cue look.
+    QVERIFY(dragAndDrop(page, onZone, idsMime(FunctionsTreeWidget::paletteDragMimeType(), { red }), hint)
+            .startsWith("Red → cue look on 2 Two"));
+    QVERIFY(st->cue(c2)->look(KeyColour) != nullptr);
+
+    // A function on the page: played as it is.
+    QCOMPARE(dragAndDrop(page, onZone, idsMime(FunctionsTreeWidget::functionDragMimeType(), { fn->id() }), hint),
+             QString("played as it is in 2 Two"));
+    QCOMPARE(st->cue(c2)->layers.count(), 2);
+    QVERIFY(st->cue(c2)->layers.last().target.isOpaque());
+
+    // A click on a row opens that layer.
+    QTest::mouseClick(rows->viewport(), Qt::LeftButton, Qt::NoModifier, rowAt("USTs + Spots"));
+    QCOMPARE(view.currentKind(), ShowTreeView::LayerNode);
+    QCOMPARE(view.currentId(), both);
+    view.hide();
+}
+
+/* The layer page: several groups dropped on it all join the layer; on a
+   carried-in layer's page they bring it into the cue. The tree takes the
+   same on a carried-in row. */
+void ShowTreeView_Test::dropsOnTheLayerPage()
+{
+    FixtureGroup *towers = group("Towers", 0, 1);
+    FixtureGroup *usts = group("USTs", 1, 1);
+    FixtureGroup *spots = group("Spots", 2, 1);
+    FixtureGroup *floor = group("Floor", 3, 1);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 c2 = st->addCue(list, 0, "Two");
+    const quint32 c3 = st->addCue(list, 1, "Three");
+    Target tt;
+    tt.groups << towers->id();
+    const quint32 l1 = st->addLayer(c1, tt);
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QLabel *hint = view.findChild<QLabel *>("stDropHint");
+    QWidget *page = view.findChild<QWidget *>("stLayerPage");
+
+    // Own layer: both groups join it.
+    QVERIFY(view.selectNode(l1, c1));
+    QCOMPARE(dragAndDrop(page, QPoint(20, 20), idsMime(FixtureGroupSource::fixtureGroupMimeType(),
+                                                        { usts->id(), spots->id() }), hint),
+             QString("add USTs + Spots to layer Towers in 1 One"));
+    QCOMPARE(st->cue(c1)->layer(l1)->target.groups.count(), 3);
+
+    // Carried into Two: the drop brings it in, with Floor.
+    Target all3;
+    all3.groups << towers->id() << usts->id() << spots->id();
+    QVERIFY(view.selectTracked(c2, all3.signature()));
+    QCOMPARE(view.currentKind(), ShowTreeView::TrackedLayerNode);
+    QCOMPARE(dragAndDrop(page, QPoint(20, 20), idsMime(FixtureGroupSource::fixtureGroupMimeType(),
+                                                        { floor->id() }), hint),
+             QString("add Floor to layer Towers + USTs + Spots in 2 Two (brings it into this cue)"));
+    QCOMPARE(st->cue(c2)->layers.count(), 1);
+    QCOMPARE(st->cue(c2)->layers.first().target.groups.count(), 4);
+    QCOMPARE(view.currentKind(), ShowTreeView::LayerNode);
+
+    // The tree: a carried-in row in Three takes groups too.
+    QTreeWidget *tree = view.tree();
+    QTreeWidgetItem *carried = nullptr;
+    for (QTreeWidgetItemIterator it(tree); *it; ++it)
+        if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::TrackedLayerNode
+            && (*it)->data(0, ShowTreeView::CueRole).toUInt() == c3)
+            carried = *it;
+    QVERIFY(carried != nullptr);
+    tree->scrollToItem(carried);
+    const QPoint at = tree->visualItemRect(carried).center();
+    const Target was = view.carriedTarget(c3, carried->data(0, ShowTreeView::TargetRole).toString());
+    QVERIFY(!was.isEmpty());
+    FixtureGroup *side = group("Side", 4, 1);
+    bool taken = false;
+    QVERIFY(dragAndDrop(tree->viewport(), at, idsMime(FixtureGroupSource::fixtureGroupMimeType(), { side->id() }),
+                        hint, Qt::NoModifier, &taken).endsWith("(brings it into this cue)"));
+    QVERIFY(taken);
+    QCOMPARE(st->cue(c3)->layers.count(), 1);
+    QCOMPARE(st->cue(c3)->layers.first().target.groups.count(), 5);
+    view.hide();
+}
+
 void ShowTreeView_Test::pictureOfARealShow()
 {
     const QString path = qEnvironmentVariable("QLC_SHOWTREE_SHOW");
@@ -1574,7 +1824,6 @@ void ShowTreeView_Test::pictureOfARealShow()
     if (tracking)
     {
         m_doc->showTree()->setListMode(list->id, ListMode::Tracking);
-        view.setCommandLineVisible(true);
         // An edit replaces the tree: read the list again.
         for (const Production &p : m_doc->showTree()->productions())
             for (const CueList &l : p.lists)
@@ -1595,8 +1844,6 @@ void ShowTreeView_Test::pictureOfARealShow()
     view.selectNode(cue.id);
     QTest::qWait(50);
     QVERIFY(view.grab().save(QString(shot).replace(".png", "-cue.png")));
-    if (tracking)
-        view.setCommandLineVisible(false);
 }
 
 /****************************************************************************
@@ -1674,7 +1921,6 @@ void ShowTreeView_Test::recordAsksWhenTheChoicesDiffer()
     QVERIFY(st->undo());
 
     // The command line uses the same setting; a word overrides it.
-    view.setCommandLineVisible(true);
     QVERIFY(view.selectNode(c2));
     QVERIFY(view.runCommand("record"));
     QCOMPARE(asked.count(), 2);
@@ -1722,7 +1968,6 @@ void ShowTreeView_Test::recordAsksWhenTheChoicesDiffer()
 
     chaser->stop(FunctionParent::master());
     m_doc->setMode(Doc::Design);
-    view.setCommandLineVisible(false);
     for (bool perform : { false, true })
     {
         const QVariant was = perform ? wasPerform : wasDesign;

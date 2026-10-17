@@ -69,6 +69,9 @@ private slots:
     void aPickedValueReusesAPalette();
     void pictureOfARealShow();
     void aDimmedColourOnPixelBarsReachesTheUniverse();
+    // Drop on the page (2026-10-17)
+    void dropsOnTheCuePage();
+    void dropsOnTheLayerPage();
 
 private:
     quint32 dimmer(int level, const QString &name);

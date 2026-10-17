@@ -6,6 +6,29 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-17 — Show Tree: drop on the page, command line always open, Tab for every word; dimmed RGB bars on the Rig Overview *(on feat/show-tree, not merged)*
+
+- **Cue page takes drops** as the tree does: groups/fixtures on the page =
+  one new layer (⌥ one each, now one undo step), onto a layer row = added to
+  it, onto a grey carried-in row = brought into the cue with them (one undo
+  step), palettes = cue look / that layer's look, functions = opaque layer.
+  Rows are real (click opens the layer); dashed drop area; page / row light
+  up; the tree's hint wording. The tree also takes drops on carried-in rows;
+  the layer page shows the hint and takes multi-group drops.
+- **Command line** always at the bottom (no toggle), ClickFocus, **:** from
+  the tree, Esc back. **Tab** completes from a parse of the line: keywords,
+  cue numbers, lists, groups (+ folder paths), fixtures, attributes,
+  palettes by kind, none/off/clear, functions, modes, record choices;
+  common prefix + options, Tab again cycles. Grammar: fixtures and group
+  paths as targets, `function <name>, …`, `list X` selects an existing list.
+- **Rig Overview bug** (Branson's truss bars): an RGB fixture with no dimmer
+  channel had its level counted twice (colour × max(colour)): 19% blue drew
+  as 9/255. Fixed in `channelSetLiveState()`; the engine side was right.
+- Tests: showtreeview_test +3 (`dropsOnTheCuePage`, `dropsOnTheLayerPage`,
+  `aDimmedColourOnPixelBarsReachesTheUniverse`), showtree_test
+  `commandLineCompletesEveryWord` (44-row table) + `commandLineTabCyclesAndRuns`,
+  monitor_test pixel-bar regression.
+
 ### 2026-10-17 — Show Tree P2 answers: Record which stage, one layer or each, reused values *(on feat/show-tree, not merged)*
 
 Branson's answers to SHOW_TREE_DESIGN.md §10 open 9–11; notes in §10.11.

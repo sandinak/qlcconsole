@@ -25,6 +25,8 @@
 #include "showtreecontroller.h"
 #include "showtreecommand.h"
 #include "fixturegroup.h"
+#include "function.h"
+#include "fixture.h"
 #include "qlcpalette.h"
 #include "doc.h"
 
@@ -46,7 +48,8 @@ QString ShowTreeCommand::grammar()
     return tr("cue 1.0.1 \"name\" · cue + \"name\" · track | block | cueonly | base · "
               "Towers colour Blue dimmer 45 · Towers USTs … = one layer · Towers, USTs … = a layer each · "
               "cue look colour Red · Steps effect Sinelon colour Red · gobo none · release Towers · "
-              "include 0.0.3 · record [selected|running|lit] · dup · undo — Tab completes, ↑ recalls");
+              "T1-CW … (a fixture) · function Haze · include 0.0.3 · record [selected|running|lit] · "
+              "list \"name\" · dup · undo — Tab completes every word (again: the next), ↑ recalls");
 }
 
 QStringList ShowTreeCommand::keywords()
@@ -55,7 +58,8 @@ QStringList ShowTreeCommand::keywords()
              QStringLiteral("block"), QStringLiteral("cueonly"), QStringLiteral("default"),
              QStringLiteral("base"), QStringLiteral("release"), QStringLiteral("include"),
              QStringLiteral("record"), QStringLiteral("dup"), QStringLiteral("undo"),
-             QStringLiteral("redo"), QStringLiteral("list"), QStringLiteral("layer") };
+             QStringLiteral("redo"), QStringLiteral("list"), QStringLiteral("layer"),
+             QStringLiteral("function") };
 }
 
 QStringList ShowTreeCommand::attributeWords()
@@ -96,6 +100,53 @@ QStringList ShowTreeCommand::groupNames() const
     for (const FixtureGroup *g : m_doc->fixtureGroups())
         if (!g->name().isEmpty() && !out.contains(g->name(), Qt::CaseInsensitive))
             out << g->name();
+    return out;
+}
+
+QStringList ShowTreeCommand::targetNames() const
+{
+    QStringList out = groupNames();
+    for (const FixtureGroup *g : m_doc->fixtureGroups())
+    {
+        const QString path = g->path();
+        if (g->name().isEmpty() || path.isEmpty())
+            continue;
+        QString full = path;
+        if (!full.endsWith(QLatin1Char('/')))
+            full += QLatin1Char('/');
+        full += g->name();
+        if (!out.contains(full, Qt::CaseInsensitive))
+            out << full;
+    }
+    for (const Fixture *f : m_doc->fixtures())
+        if (!f->name().isEmpty() && !out.contains(f->name(), Qt::CaseInsensitive))
+            out << f->name();
+    return out;
+}
+
+QStringList ShowTreeCommand::functionNames() const
+{
+    // What the Library lists under Functions: never the tree's own.
+    QStringList out;
+    for (const Function *f : m_doc->functions())
+        if (!f->name().isEmpty() && !m_st->isGenerated(f->id()) && !out.contains(f->name(), Qt::CaseInsensitive))
+            out << f->name();
+    return out;
+}
+
+QStringList ShowTreeCommand::listNames(const Context &context) const
+{
+    // The selected production's lists first.
+    QStringList out;
+    for (const Production &p : m_st->productions())
+        if (p.id == context.production)
+            for (const CueList &l : p.lists)
+                if (!l.name.isEmpty() && !out.contains(l.name, Qt::CaseInsensitive))
+                    out << l.name;
+    for (const Production &p : m_st->productions())
+        for (const CueList &l : p.lists)
+            if (!l.name.isEmpty() && !out.contains(l.name, Qt::CaseInsensitive))
+                out << l.name;
     return out;
 }
 
@@ -350,16 +401,38 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
     // makes one per group.
     auto targets = [&]() {
         QList<Target> out;
-        const QStringList names = groupNames();
+        const QStringList names = targetNames();
         Target t;
         auto addName = [&](const QString &n) {
-            // The first group of that name (by id, as Doc lists them).
+            // The first group of that name (by id, as Doc lists them), then
+            // one by its folder path, then a fixture.
             for (const FixtureGroup *g : m_doc->fixtureGroups())
                 if (g->name().compare(n, Qt::CaseInsensitive) == 0)
                 {
                     if (!t.groups.contains(g->id()))
                         t.groups << g->id();
-                    break;
+                    return;
+                }
+            for (const FixtureGroup *g : m_doc->fixtureGroups())
+            {
+                QString full = g->path();
+                if (full.isEmpty())
+                    continue;
+                if (!full.endsWith(QLatin1Char('/')))
+                    full += QLatin1Char('/');
+                if ((full + g->name()).compare(n, Qt::CaseInsensitive) == 0)
+                {
+                    if (!t.groups.contains(g->id()))
+                        t.groups << g->id();
+                    return;
+                }
+            }
+            for (const Fixture *f : m_doc->fixtures())
+                if (f->name().compare(n, Qt::CaseInsensitive) == 0)
+                {
+                    if (!t.fixtures.contains(f->id()))
+                        t.fixtures << f->id();
+                    return;
                 }
         };
         for (;;)
@@ -573,8 +646,26 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
         QString nm = r.quoted();
         if (nm.isNull())
             nm = r.src.mid(r.i).trimmed();
+        quint32 have = invalidId();
+        for (const Production &p : m_st->productions())
+            for (const CueList &l : p.lists)
+                if (l.name.compare(nm, Qt::CaseInsensitive) == 0
+                    && (have == invalidId() || p.id == ctx.production))
+                {
+                    if (have == invalidId() || p.id == ctx.production)
+                        have = l.id;
+                }
         if (nm.isEmpty())
             error = tr("list \"name\"");
+        else if (have != invalidId())
+        {
+            // There already: select it.
+            quint32 prod = invalidId();
+            m_st->cueList(have, &prod);
+            ctx.production = prod;
+            ctx.list = have;
+            ctx.cue = invalidId();
+        }
         else if (m_st->production(ctx.production) == nullptr)
             error = tr("Select a production first (+ Production).");
         else
@@ -660,6 +751,40 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
                 error = tr("Can't include %1: %2").arg(num, why);
         }
     }
+    else if (w0 == QLatin1String("function") || w0 == QLatin1String("fn"))
+    {
+        // Functions played as they are: an opaque layer each.
+        r.word();
+        const QStringList names = functionNames();
+        int n = 0;
+        for (;;)
+        {
+            const int save = r.i;
+            if (!r.comma())
+                r.plus();
+            const QString nm = r.name(names);
+            if (nm.isEmpty())
+            {
+                r.i = save;
+                break;
+            }
+            for (const Function *f : m_doc->functions())
+                if (f->name().compare(nm, Qt::CaseInsensitive) == 0 && !m_st->isGenerated(f->id()))
+                {
+                    Target t;
+                    t.function = f->id();
+                    const quint32 lid = layerOn(t);
+                    if (lid != invalidId())
+                        res.layer = lid;
+                    ++n;
+                    break;
+                }
+        }
+        if (n == 0)
+            error = tr("function <name>: no function “%1”. Tab lists them.").arg(r.peek());
+        else if (!r.atEnd())
+            error = tr("function <name>, <name>… -- then nothing more (“%1”)").arg(r.peek());
+    }
     else if (w0 == QLatin1String("release"))
     {
         r.word();
@@ -683,8 +808,8 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
         const QList<Target> ts = targets();
         if (ts.isEmpty())
         {
-            error = tr("Don't know “%1”. Start with cue, a group, track/block/cueonly, base, release, "
-                       "include, record, dup, undo.").arg(r.peek());
+            error = tr("Don't know “%1”. Start with cue, a group or fixture, track/block/cueonly, base, "
+                       "release, include, function, record, list, dup, undo.").arg(r.peek());
         }
         else
         {
@@ -726,85 +851,258 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
  * Tab completion
  ****************************************************************************/
 
-QString ShowTreeCommand::complete(const QString &line, const Context &context, QStringList *options) const
+bool ShowTreeCommand::candidates(const QString &head, const Context &context, QStringList *out) const
 {
-    const QStringList words = line.split(QLatin1Char(' '));
-    const QString first = words.first().toLower();
-    for (int n = qMin(3, int(words.count())); n >= 1; --n)
-    {
-        const QString pre = words.mid(words.count() - n).join(QLatin1Char(' '));
-        const QString prev = words.count() - n - 1 >= 0 ? words.at(words.count() - n - 1).toLower() : QString();
-        const QString key = attributeKey(prev);
+    // Read @a head as run() would, word by word, and say what may come next.
+    // A head that doesn't read (a misspelt name) offers nothing.
+    out->clear();
+    Reader r;
+    r.src = head;
+    const QStringList modes({ "track", "block", "cueonly", "default", "base" });
+    const QStringList none({ "none", "off", "clear" });
+    const QStringList targets = targetNames();
 
-        QStringList cands;
-        if (prev == QLatin1String("record") && words.count() - n == 1)
-            cands = QStringList({ QStringLiteral("selected"), QStringLiteral("running"), QStringLiteral("lit") });
-        else if (prev == QLatin1String("cue") && words.count() - n == 1)
-            cands = QStringList({ QStringLiteral("look"), QStringLiteral("+") }) + cueNumbers(context);
-        else if (prev == QLatin1String("include"))
-            cands = cueNumbers(context);
-        else if (!key.isEmpty())
-            cands = paletteNames(key) << QStringLiteral("none");
-        else if (words.count() - n == 0)
-            cands = keywords() + groupNames();
-        else if (first == QLatin1String("release"))
-            cands = groupNames();
-        else
-            cands = groupNames() + attributeWords() + QStringList({ "track", "block", "cueonly", "base" });
-
-        if (pre.isEmpty())
+    // attribute value, attribute value… to the end.
+    auto assigns = [&]() -> bool {
+        for (;;)
         {
-            if (n > 1)
-                continue;
-            if (options != nullptr)
-                *options = cands.mid(0, 10);
-            return line;
-        }
-        // "Towers,US" / "Towers+US": complete the name after the ',' or '+'.
-        QString lead;
-        QString part = pre;
-        if (n == 1)
-        {
-            const int cut = qMax(pre.lastIndexOf(QLatin1Char(',')), pre.lastIndexOf(QLatin1Char('+')));
-            if (cut >= 0)
+            if (r.atEnd())
             {
-                lead = pre.left(cut + 1);
-                part = pre.mid(cut + 1);
-                if (part.isEmpty())
-                    continue;
-                cands = groupNames();
+                *out = attributeWords();
+                return true;
             }
+            const QString key = attributeKey(r.word());
+            if (key.isEmpty())
+                return false;
+            if (r.atEnd())
+            {
+                *out = paletteNames(key) + none;
+                return true;
+            }
+            const QString next = r.peek().toLower();
+            if (none.contains(next))
+            {
+                r.word();
+                continue;
+            }
+            if (!r.name(paletteNames(key)).isEmpty())
+                continue;
+            static const QRegularExpression value(QStringLiteral("^(\\d{1,3}%?|#[0-9a-fA-F]{6})$"));
+            if (key == KeyEffectPrefix || !value.match(next).hasMatch())
+                return false;
+            r.word();
         }
-        QStringList match;
-        for (const QString &c : cands)
-            if (c.startsWith(part, Qt::CaseInsensitive) && !match.contains(c))
-                match << c;
-        if (match.isEmpty())
-            continue;
-        std::sort(match.begin(), match.end(), [](const QString &a, const QString &b) {
+    };
+    // Names one after another (or joined by '+', or ',' for another layer).
+    auto names = [&](const QStringList &all, bool thenAssign) -> bool {
+        bool joined = false;
+        int n = 0;
+        for (;;)
+        {
+            if (r.atEnd())
+            {
+                *out = all;
+                if (thenAssign && !joined && n > 0)
+                    *out += attributeWords();
+                return true;
+            }
+            const int save = r.i;
+            joined = r.comma() || r.plus();
+            if (joined && r.atEnd())
+                continue;
+            if (r.name(all).isEmpty())
+            {
+                r.i = save;
+                break;
+            }
+            joined = false;
+            ++n;
+        }
+        return n > 0 && thenAssign && assigns();
+    };
+    auto modeWords = [&]() -> bool {
+        while (!r.atEnd())
+        {
+            const QString w = r.word().toLower();
+            if (!modes.contains(w) && w != QLatin1String("cue-only"))
+                return false;
+        }
+        *out = modes;
+        return true;
+    };
+
+    if (r.atEnd())
+    {
+        *out = keywords() + targets;
+        return true;
+    }
+    const QString w0 = r.peek().toLower();
+    if (w0 == QLatin1String("record"))
+    {
+        r.word();
+        if (!r.atEnd())
+            return r.word(), r.atEnd();       // one word, then nothing
+        *out = QStringList({ "selected", "running", "lit" });
+        return true;
+    }
+    if (w0 == QLatin1String("undo") || w0 == QLatin1String("redo") || w0 == QLatin1String("dup"))
+        return true;
+    if (w0 == QLatin1String("list"))
+    {
+        r.word();
+        if (r.atEnd())
+            *out = listNames(context);
+        return true;
+    }
+    if (w0 == QLatin1String("include"))
+    {
+        r.word();
+        if (r.atEnd())
+            *out = cueNumbers(context);
+        return true;
+    }
+    if (w0 == QLatin1String("function") || w0 == QLatin1String("fn"))
+    {
+        r.word();
+        return names(functionNames(), false);
+    }
+    if (w0 == QLatin1String("release"))
+    {
+        r.word();
+        return names(targets, false);
+    }
+    if (w0 == QLatin1String("cue"))
+    {
+        r.word();
+        if (r.atEnd())
+        {
+            *out = QStringList({ "look", "+" }) + cueNumbers(context);
+            return true;
+        }
+        const QString w1 = r.word().toLower();
+        if (w1 == QLatin1String("look"))
+            return assigns();
+        static const QRegularExpression number(QStringLiteral("^\\d+(\\.\\d+)*$"));
+        if (w1 != QLatin1String("+") && w1 != QLatin1String("new") && !number.match(w1).hasMatch())
+            return false;
+        if (r.src.mid(r.i).trimmed().startsWith(QLatin1Char('"')))
+            r.quoted();
+        return modeWords();
+    }
+    if (modes.contains(w0) || w0 == QLatin1String("cue-only"))
+        return modeWords();
+    if (w0 == QLatin1String("layer"))
+        r.word();
+    return names(targets, true);
+}
+
+QString ShowTreeCommand::typed(const QString &name, bool quoted)
+{
+    // As the reader takes it: whole, unless a ',' or '+' in it would split it.
+    if (quoted || name.contains(QLatin1Char(',')) || name.contains(QLatin1Char('+')))
+        return QStringLiteral("\"%1\"").arg(name);
+    return name;
+}
+
+ShowTreeCommand::Completion ShowTreeCommand::completion(const QString &line, const Context &context) const
+{
+    Completion c;
+    auto matching = [&](const QString &head, const QString &part, QStringList *out) -> bool {
+        QStringList cands;
+        if (!candidates(head, context, &cands))
+            return false;
+        out->clear();
+        for (const QString &n : cands)
+            if (n.startsWith(part, Qt::CaseInsensitive) && !out->contains(n, Qt::CaseInsensitive))
+                *out << n;
+        std::sort(out->begin(), out->end(), [](const QString &a, const QString &b) {
             return a.compare(b, Qt::CaseInsensitive) < 0;
         });
-        if (options != nullptr)
-            *options = match.mid(0, 10);
-        QString rep;
-        if (match.count() == 1)
-        {
-            rep = match.first() + QLatin1Char(' ');
-        }
-        else
-        {
-            rep = match.first();
-            for (const QString &m : match)
-                while (!m.startsWith(rep, Qt::CaseInsensitive))
-                    rep.chop(1);
-            if (rep.length() < part.length())
-                rep = part;
-        }
-        rep = lead + rep;
-        const QString base = words.mid(0, words.count() - n).join(QLatin1Char(' '));
-        return base.isEmpty() ? rep : base + QLatin1Char(' ') + rep;
+        return true;
+    };
+
+    // A name begun with a quote: everything after it is the word.
+    if (line.count(QLatin1Char('"')) % 2 == 1)
+    {
+        const int q = line.lastIndexOf(QLatin1Char('"'));
+        c.head = line.left(q);
+        c.partial = line.mid(q + 1);
+        c.quoted = true;
+        matching(c.head, c.partial, &c.matches);
+        return c;
     }
+
+    // The word may hold spaces ("AT W" of "AT W ALL"): try it from each
+    // word start back from the end, the longest first; the first whose
+    // head reads and that something matches wins.
+    QList<int> starts;
+    for (int i = line.length(); i >= 0 && starts.count() < 6; --i)
+    {
+        if (i == 0 || line.at(i - 1) == QLatin1Char(' ') || line.at(i - 1) == QLatin1Char(',')
+            || line.at(i - 1) == QLatin1Char('+'))
+            starts.prepend(i);
+    }
+    for (int start : starts)
+    {
+        const QString part = line.mid(start);
+        if (part.contains(QLatin1Char('"')) || part.startsWith(QLatin1Char(' ')))
+            continue;
+        QStringList m;
+        if (!matching(line.left(start), part, &m) || m.isEmpty())
+            continue;
+        if (part.isEmpty() && start != line.length())
+            continue;
+        c.head = line.left(start);
+        c.partial = part;
+        c.matches = m;
+        return c;
+    }
+    c.head = line;
+    return c;
+}
+
+QString ShowTreeCommand::complete(const QString &line, const Context &context, QStringList *options) const
+{
+    const Completion c = completion(line, context);
     if (options != nullptr)
-        options->clear();
-    return line;
+        *options = c.matches.mid(0, 10);
+    if (c.matches.isEmpty() || c.partial.isEmpty())
+        return line;                // nothing, or nothing typed yet: listed only
+    if (c.matches.count() == 1)
+        return c.head + typed(c.matches.first(), c.quoted) + QLatin1Char(' ');
+    // The part every match shares (spelt as the first has it).
+    QString common = c.matches.first();
+    for (const QString &m : c.matches)
+        while (!m.startsWith(common, Qt::CaseInsensitive))
+            common.chop(1);
+    if (common.length() <= c.partial.length())
+        return line;
+    return c.head + (c.quoted ? QStringLiteral("\"") : QString()) + common;
+}
+
+QString ShowTreeCommand::tab(const QString &line, const Context &context, QStringList *options, int *current)
+{
+    if (line == m_tabLast && m_tabMatches.count() > 1)
+    {
+        // Again on what Tab gave: the next match, round and round.
+        m_tabIndex = (m_tabIndex + 1) % int(m_tabMatches.count());
+        m_tabLast = m_tabHead + typed(m_tabMatches.at(m_tabIndex), m_tabQuoted);
+        if (options != nullptr)
+            *options = m_tabMatches;
+        if (current != nullptr)
+            *current = m_tabIndex;
+        return m_tabLast;
+    }
+    const Completion c = completion(line, context);
+    QString out = complete(line, context);
+    m_tabHead = c.head;
+    m_tabQuoted = c.quoted;
+    m_tabMatches = c.matches.count() > 1 ? c.matches : QStringList();
+    m_tabIndex = -1;
+    m_tabLast = out;
+    if (options != nullptr)
+        *options = c.matches;
+    if (current != nullptr)
+        *current = -1;
+    return out;
 }

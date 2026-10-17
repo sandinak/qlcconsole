@@ -2349,6 +2349,185 @@ void ShowTree_Test::commandLineCompletes()
     QVERIFY(!ShowTreeCommand::grammar().isEmpty());
 }
 
+/* Tab for every kind of word the grammar takes (2026-10-17): a show set up
+   with one of each, then a table -- what is typed, what Tab makes of it,
+   and a word the options must hold. */
+ShowTreeCommand::Context ShowTree_Test::completionShow()
+{
+    group("Towers", { m_fixtures[0] });
+    group("Tops", { m_fixtures[1] });
+    group("AT W ALL", { m_fixtures[2] });
+    group("AT W Floor", { m_fixtures[3] });
+    group("Front, Left", { m_fixtures[4] });
+    group("Spots", { m_fixtures[5] })->setPath("Movers/Front");
+    m_doc->fixture(m_fixtures[6])->setName("T1-CW");
+    colour("Blue");
+    colour("Blush");
+    colour("Deep Blue");
+    dimmer(48, "Base");
+    dimmer(255, "Full");
+    QLCPalette *pos = new QLCPalette(QLCPalette::PanTilt, m_doc);
+    pos->setName("Drummer");
+    m_doc->addPalette(pos);
+    QLCPalette *zoom = new QLCPalette(QLCPalette::Zoom, m_doc);
+    zoom->setName("Narrow");
+    m_doc->addPalette(zoom);
+    QLCPalette *fx = new QLCPalette(QLCPalette::Effect, m_doc);
+    fx->setName("Sinelon");
+    m_doc->addPalette(fx);
+    Scene *haze = new Scene(m_doc);
+    haze->setName("Haze look");
+    m_doc->addFunction(haze);
+    Scene *hall = new Scene(m_doc);
+    hall->setName("House lights");
+    m_doc->addFunction(hall);
+
+    ShowTreeController *st = m_doc->showTree();
+    ShowTreeCommand::Context ctx;
+    ctx.production = st->addProduction("P");
+    ctx.list = st->addCueList(ctx.production, "01-Opener");
+    st->addCueList(ctx.production, "02-Verse Two");
+    ctx.cue = st->addCue(ctx.list, -1, "One");
+    st->addCueNumbered(ctx.list, "1.2", "Two");
+    st->addCueNumbered(ctx.list, "1.25", "Three");
+    return ctx;
+}
+
+void ShowTree_Test::commandLineCompletesEveryWord_data()
+{
+    QTest::addColumn<QString>("typed");
+    QTest::addColumn<QString>("completed");
+    QTest::addColumn<QString>("offered");      // one of the options (or empty)
+
+    // Command words.
+    QTest::newRow("keyword") << "rec" << "record " << "record";
+    QTest::newRow("keyword function") << "func" << "function " << "function";
+    QTest::newRow("keyword include") << "inc" << "include " << "include";
+    // Cue numbers: after cue, after include; several = the common part.
+    QTest::newRow("cue number") << "cue 1.2" << "cue 1.2" << "1.25";
+    QTest::newRow("cue look") << "cue lo" << "cue look " << "look";
+    QTest::newRow("include number") << "include 1.25" << "include 1.25 " << "1.25";
+    // Cue lists.
+    QTest::newRow("list") << "list 02" << "list 02-Verse Two " << "02-Verse Two";
+    QTest::newRow("list several") << "list 0" << "list 0" << "01-Opener";
+    // Groups, with spaces, by folder path; a ',' in a name is quoted.
+    QTest::newRow("group") << "Tow" << "Towers " << "Towers";
+    QTest::newRow("group common") << "To" << "To" << "Tops";
+    QTest::newRow("group spaces") << "AT W" << "AT W " << "AT W Floor";
+    QTest::newRow("group spaces unique") << "AT W F" << "AT W Floor " << "AT W Floor";
+    QTest::newRow("group path") << "Movers/F" << "Movers/Front/Spots " << "Movers/Front/Spots";
+    QTest::newRow("group comma quoted") << "Front" << "\"Front, Left\" " << "Front, Left";
+    QTest::newRow("group after +") << "Towers+Top" << "Towers+Tops " << "Tops";
+    QTest::newRow("group after ,") << "Towers, AT W A" << "Towers, AT W ALL " << "AT W ALL";
+    // Fixtures.
+    QTest::newRow("fixture") << "T1" << "T1-CW " << "T1-CW";
+    // Attributes after a target, palettes by attribute.
+    QTest::newRow("attribute") << "Towers col" << "Towers colour " << "colour";
+    QTest::newRow("attribute after fixture") << "T1-CW sh" << "T1-CW shutter " << "shutter";
+    QTest::newRow("fixture or attribute") << "T1-CW dim" << "T1-CW dim" << "Dim 8";
+    QTest::newRow("colour") << "Towers colour Bl" << "Towers colour Blu" << "Blush";
+    QTest::newRow("colour spaces") << "Towers colour Deep" << "Towers colour Deep Blue " << "Deep Blue";
+    QTest::newRow("colour quoted") << "Towers colour \"Deep B" << "Towers colour \"Deep Blue\" " << "Deep Blue";
+    QTest::newRow("dimmer") << "Towers dimmer Ba" << "Towers dimmer Base " << "Base";
+    QTest::newRow("dimmer only dimmers") << "Towers dimmer B" << "Towers dimmer Base " << "Base";
+    QTest::newRow("position") << "Towers position Dr" << "Towers position Drummer " << "Drummer";
+    QTest::newRow("zoom") << "Towers zoom Na" << "Towers zoom Narrow " << "Narrow";
+    QTest::newRow("zoom or none") << "Towers zoom N" << "Towers zoom N" << "none";
+    QTest::newRow("effect") << "Towers effect Si" << "Towers effect Sinelon " << "Sinelon";
+    QTest::newRow("none") << "Towers gobo no" << "Towers gobo none " << "none";
+    QTest::newRow("after a value") << "Towers colour Blue dim" << "Towers colour Blue dimmer " << "dimmer";
+    QTest::newRow("after a level") << "Towers dimmer 45 col" << "Towers dimmer 45 colour " << "colour";
+    QTest::newRow("cue look palette") << "cue look colour Deep" << "cue look colour Deep Blue " << "Deep Blue";
+    // Functions.
+    QTest::newRow("function") << "function Ha" << "function Haze look " << "Haze look";
+    QTest::newRow("function second") << "function Haze look, Hou" << "function Haze look, House lights "
+                                     << "House lights";
+    // Modes.
+    QTest::newRow("mode") << "tr" << "track " << "track";
+    QTest::newRow("mode after cue") << "cue 1.2 bl" << "cue 1.2 block " << "block";
+    QTest::newRow("mode after new cue") << "cue + \"Verse\" cue" << "cue + \"Verse\" cueonly " << "cueonly";
+    QTest::newRow("mode after mode") << "block ba" << "block base " << "base";
+    // Record choices.
+    QTest::newRow("record") << "record ru" << "record running " << "running";
+    QTest::newRow("record list") << "record " << "record " << "lit";
+    // Release takes targets only.
+    QTest::newRow("release") << "release Tow" << "release Towers " << "Towers";
+    // Nothing: a name that isn't, after a word that doesn't read.
+    QTest::newRow("unknown") << "zzz" << "zzz" << "";
+    QTest::newRow("after unknown") << "Nobody col" << "Nobody col" << "";
+}
+
+void ShowTree_Test::commandLineCompletesEveryWord()
+{
+    QFETCH(QString, typed);
+    QFETCH(QString, completed);
+    QFETCH(QString, offered);
+    const ShowTreeCommand::Context ctx = completionShow();
+    ShowTreeCommand cmd(m_doc, m_doc->showTree());
+    QStringList options;
+    QCOMPARE(cmd.complete(typed, ctx, &options), completed);
+    if (offered.isEmpty())
+        QVERIFY2(options.isEmpty(), qPrintable(options.join(" · ")));
+    else
+        QVERIFY2(options.contains(offered), qPrintable(options.join(" · ")));
+}
+
+/* Tab again on what Tab gave: the next match, round and round; anything
+   typed starts afresh. And what Tab completes, the command runs. */
+void ShowTree_Test::commandLineTabCyclesAndRuns()
+{
+    ShowTreeCommand::Context ctx = completionShow();
+    ShowTreeController *st = m_doc->showTree();
+    ShowTreeCommand cmd(m_doc, st);
+    QStringList options;
+    int current = -2;
+    QString line = cmd.tab("Towers colour Bl", ctx, &options, &current);
+    QCOMPARE(line, QString("Towers colour Blu"));
+    QCOMPARE(options, QStringList({ "Blue", "Blush" }));
+    QCOMPARE(current, -1);
+    line = cmd.tab(line, ctx, &options, &current);
+    QCOMPARE(line, QString("Towers colour Blue"));
+    QCOMPARE(current, 0);
+    line = cmd.tab(line, ctx, &options, &current);
+    QCOMPARE(line, QString("Towers colour Blush"));
+    QCOMPARE(current, 1);
+    line = cmd.tab(line, ctx, &options, &current);
+    QCOMPARE(line, QString("Towers colour Blue"));
+    // Nothing typed yet: the list, then each in turn.
+    QCOMPARE(cmd.tab("record ", ctx, &options), QString("record "));
+    QCOMPARE(options, QStringList({ "lit", "running", "selected" }));
+    QCOMPARE(cmd.tab("record ", ctx), QString("record lit"));
+    QCOMPARE(cmd.tab("record lit", ctx), QString("record running"));
+    // Typed on: starts afresh.
+    QCOMPARE(cmd.tab("Tow", ctx), QString("Towers "));
+
+    // What it completes, runs: a fixture, a group by its folder path, a
+    // name with a ',' quoted, functions, an existing list selected.
+    ShowTreeCommand::Result r = cmd.run("T1-CW colour Blue", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(st->cue(ctx.cue)->layers.last().target.fixtures, QList<quint32>({ m_fixtures[6] }));
+    r = cmd.run("Movers/Front/Spots dimmer Base", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(st->cue(ctx.cue)->layers.last().target.groups.count(), 1);
+    QCOMPARE(m_doc->fixtureGroup(st->cue(ctx.cue)->layers.last().target.groups.first())->name(),
+             QString("Spots"));
+    r = cmd.run(cmd.complete("Front", ctx) + "colour Blush", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    r = cmd.run(cmd.complete("Towers colour \"Deep B", ctx), ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    const int before = st->cue(ctx.cue)->layers.count();
+    r = cmd.run("function Haze look, House lights", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(st->cue(ctx.cue)->layers.count(), before + 2);
+    QVERIFY(st->cue(ctx.cue)->layers.last().target.isOpaque());
+    QVERIFY(!cmd.run("function Nope", ctx).ok);
+    const int lists = st->productions().first().lists.count();
+    r = cmd.run("list 02-Verse Two", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(st->productions().first().lists.count(), lists);       // selected, not made
+    QCOMPARE(st->cueList(r.context.list)->name, QString("02-Verse Two"));
+}
+
 /****************************************************************************
  * P2 answers (2026-10-17): Record which stage, split/merge, reused values
  ****************************************************************************/

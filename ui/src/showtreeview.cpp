@@ -50,6 +50,7 @@
 #include <QTimer>
 #include <QMenu>
 #include <QDrag>
+#include <QPainter>
 #include <algorithm>
 
 #include "showtreecontroller.h"
@@ -71,7 +72,6 @@ using namespace ShowTree;
 
 #define SETTINGS_PINNED QStringLiteral("showtree/pinned")
 #define SETTINGS_SPLITTER QStringLiteral("showtree/splitter")
-#define SETTINGS_COMMANDLINE QStringLiteral("showtree/commandline")
 
 static const int kRecentMax = 10;
 
@@ -122,10 +122,12 @@ public:
     void setHint(QLabel *hint) { m_hint = hint; }
 
 protected:
-    void target(const QPoint &pos, quint32 *cue, quint32 *layer) const
+    void target(const QPoint &pos, quint32 *cue, quint32 *layer, ShowTree::Target *carried = nullptr) const
     {
         *cue = ShowTree::invalidId();
         *layer = ShowTree::invalidId();
+        if (carried != nullptr)
+            *carried = ShowTree::Target();
         QTreeWidgetItem *item = itemAt(pos);
         if (item == nullptr)
             return;
@@ -136,6 +138,14 @@ protected:
         {
             *cue = item->data(0, ShowTreeView::CueRole).toUInt();
             *layer = item->data(0, ShowTreeView::IdRole).toUInt();
+        }
+        else if (kind == ShowTreeView::TrackedLayerNode && carried != nullptr)
+        {
+            // A layer carried in: a drop sets it in this cue, as on its page.
+            *cue = item->data(0, ShowTreeView::CueRole).toUInt();
+            *carried = m_view->carriedTarget(*cue, item->data(0, ShowTreeView::TargetRole).toString());
+            if (carried->isEmpty())
+                *cue = ShowTree::invalidId();
         }
     }
 
@@ -191,12 +201,14 @@ protected:
                 m_hint->setText(hint);
             return;
         }
-        if (cue != ShowTree::invalidId() && m_view->acceptsDrop(cue, layer, e->mimeData()))
+        ShowTree::Target carried;
+        target(e->position().toPoint(), &cue, &layer, &carried);
+        if (cue != ShowTree::invalidId() && m_view->acceptsDrop(cue, layer, e->mimeData(), carried))
         {
             e->acceptProposedAction();
             if (m_hint != nullptr)
                 m_hint->setText(m_view->dropHint(cue, layer, e->mimeData(),
-                                                 e->modifiers() & Qt::AltModifier));
+                                                 e->modifiers() & Qt::AltModifier, carried));
         }
         else
         {
@@ -216,7 +228,8 @@ protected:
     void dropEvent(QDropEvent *e) override
     {
         quint32 cue, layer;
-        target(e->position().toPoint(), &cue, &layer);
+        ShowTree::Target carried;
+        target(e->position().toPoint(), &cue, &layer, &carried);
         if (m_hint != nullptr)
             m_hint->setText(QString());
         if (cue == ShowTree::invalidId())
@@ -230,7 +243,7 @@ protected:
             const QList<quint32> cues = idsFromMime(mime, ShowTreeView::cueMimeType());
             const bool include = e->modifiers() & Qt::AltModifier;
             // Handled here: never let the base class move the rows itself.
-            if (!cues.isEmpty() && layer == ShowTree::invalidId()
+            if (!cues.isEmpty() && layer == ShowTree::invalidId() && carried.isEmpty()
                 && m_view->dropCue(cues.first(), cue, include))
             {
                 e->setDropAction(Qt::CopyAction);
@@ -242,20 +255,8 @@ protected:
             }
             return;
         }
-        const QList<quint32> pals = idsFromMime(mime, FunctionsTreeWidget::paletteDragMimeType());
-        const QList<quint32> groups = idsFromMime(mime, FixtureGroupSource::fixtureGroupMimeType());
-        const QList<quint32> fixtures = idsFromMime(mime, FixtureGroupSource::fixtureMimeType());
-        const QList<quint32> funcs = idsFromMime(mime, FunctionsTreeWidget::functionDragMimeType());
-        bool done = false;
-        if (!pals.isEmpty())
-            done = m_view->dropPalettes(cue, layer, pals);
-        else if ((!groups.isEmpty() || !fixtures.isEmpty()) && layer != ShowTree::invalidId())
-            done = m_view->dropTargetsOnLayer(cue, layer, groups, fixtures);
-        else if (!groups.isEmpty() || !fixtures.isEmpty())
-            done = m_view->dropTargets(cue, groups, fixtures, e->modifiers() & Qt::AltModifier);
-        else if (!funcs.isEmpty())
-            done = m_view->dropFunctions(cue, funcs);
-        if (done)
+        if (m_view->acceptsDrop(cue, layer, mime, carried)
+            && m_view->dropMime(cue, layer, mime, e->modifiers() & Qt::AltModifier, carried))
             e->acceptProposedAction();
         else
             e->ignore();
@@ -312,7 +313,11 @@ protected:
     }
 };
 
-/* The layer page takes palettes dropped anywhere on it. */
+/* A page that takes drops (2026-10-17): the layer page (palettes set its
+   looks, groups join it -- a carried-in layer is brought into the cue) and
+   the cue page (palettes are cue looks, groups a new layer, ⌥ one each,
+   functions an opaque layer). While a drag is over it, it lights up and the
+   header says what the drop would do, in the tree's words. */
 class DropPage final : public QWidget
 {
 public:
@@ -320,33 +325,208 @@ public:
     {
         setAcceptDrops(true);
     }
+    void setHint(QLabel *hint) { m_hint = hint; }
+    /** Told when the page lights up for a drop, or goes back. */
+    std::function<void(bool)> onActive;
+
     quint32 cue = ShowTree::invalidId();
     quint32 layer = ShowTree::invalidId();
     ShowTree::Target target;            //!< a carried-in layer's
+    /** A drop leaves the cue selected (the cue page). */
+    bool stayOnCue = false;
+
+    void setDropActive(bool on)
+    {
+        if (m_active == on)
+            return;
+        m_active = on;
+        if (onActive)
+            onActive(on);
+        update();
+    }
+    bool isDropActive() const { return m_active; }
+    void say(const QString &text)
+    {
+        if (m_hint != nullptr)
+            m_hint->setText(text);
+    }
 
 protected:
+    bool takes(const QMimeData *mime) const
+    {
+        return cue != ShowTree::invalidId() && m_view->acceptsDrop(cue, layer, mime, target);
+    }
     void dragEnterEvent(QDragEnterEvent *e) override
     {
-        // Palettes anywhere; groups only onto a layer of the cue's own.
-        const bool palettes = e->mimeData()->hasFormat(QLatin1String(FunctionsTreeWidget::paletteDragMimeType()));
-        if (cue != ShowTree::invalidId() && (palettes || layer != ShowTree::invalidId())
-            && m_view->acceptsDrop(cue, layer, e->mimeData()))
-            e->acceptProposedAction();
+        if (!takes(e->mimeData()))
+            return;
+        e->acceptProposedAction();
+        setDropActive(true);
+        say(m_view->dropHint(cue, layer, e->mimeData(), e->modifiers() & Qt::AltModifier, target));
+    }
+    void dragMoveEvent(QDragMoveEvent *e) override
+    {
+        if (!takes(e->mimeData()))
+        {
+            e->ignore();
+            return;
+        }
+        e->acceptProposedAction();
+        setDropActive(true);
+        say(m_view->dropHint(cue, layer, e->mimeData(), e->modifiers() & Qt::AltModifier, target));
+    }
+    void dragLeaveEvent(QDragLeaveEvent *) override
+    {
+        setDropActive(false);
+        say(QString());
     }
     void dropEvent(QDropEvent *e) override
     {
-        const QList<quint32> pals = idsFromMime(e->mimeData(), FunctionsTreeWidget::paletteDragMimeType());
-        const QList<quint32> groups = idsFromMime(e->mimeData(), FixtureGroupSource::fixtureGroupMimeType());
-        const QList<quint32> fixtures = idsFromMime(e->mimeData(), FixtureGroupSource::fixtureMimeType());
-        if (!pals.isEmpty() && m_view->dropPalettes(cue, layer, pals, target))
+        setDropActive(false);
+        say(QString());
+        if (takes(e->mimeData())
+            && m_view->dropMime(cue, layer, e->mimeData(), e->modifiers() & Qt::AltModifier, target, stayOnCue))
             e->acceptProposedAction();
-        else if (pals.isEmpty() && (!groups.isEmpty() || !fixtures.isEmpty())
-                 && m_view->dropTargetsOnLayer(cue, layer, groups, fixtures))
-            e->acceptProposedAction();
+        else
+            e->ignore();
+    }
+    void paintEvent(QPaintEvent *e) override
+    {
+        QWidget::paintEvent(e);
+        if (!m_active)
+            return;
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing);
+        QColor hl = palette().color(QPalette::Highlight);
+        p.setPen(QPen(hl, 2));
+        hl.setAlpha(28);
+        p.setBrush(hl);
+        p.drawRoundedRect(QRectF(rect()).adjusted(1, 1, -1, -1), 6, 6);
     }
 
 private:
     ShowTreeView *m_view;
+    QLabel *m_hint = nullptr;
+    bool m_active = false;
+};
+
+/* The cue page's layers, one row each -- the cue's own and (grey) the ones
+   carried in. A drop on a row goes to that layer, as on its row in the tree;
+   anywhere else in the list, to the cue (a new layer). A click selects it. */
+class CueLayerList final : public QListWidget
+{
+public:
+    CueLayerList(ShowTreeView *view, DropPage *page, QWidget *parent)
+        : QListWidget(parent), m_view(view), m_page(page)
+    {
+        setAcceptDrops(true);
+        setDragDropMode(QAbstractItemView::DropOnly);
+        setDropIndicatorShown(false);
+        setSelectionMode(QAbstractItemView::NoSelection);
+        setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    }
+    /** Per row: a carried-in layer's target (empty: the cue's own layer). */
+    QList<ShowTree::Target> targets;
+
+    /** Where a drop at @a pos goes: the row's layer if it takes it, else the
+     *  cue. False: neither takes it. */
+    bool where(const QPoint &pos, const QMimeData *mime, quint32 *layer, ShowTree::Target *target, int *row) const
+    {
+        *layer = ShowTree::invalidId();
+        *target = ShowTree::Target();
+        *row = -1;
+        const quint32 cue = m_page->cue;
+        if (cue == ShowTree::invalidId())
+            return false;
+        QListWidgetItem *item = itemAt(pos);
+        if (item != nullptr)
+        {
+            const int r = QListWidget::row(item);
+            quint32 l = ShowTree::invalidId();
+            ShowTree::Target t;
+            if (item->data(ShowTreeView::KindRole).toInt() == ShowTreeView::LayerNode)
+                l = item->data(ShowTreeView::IdRole).toUInt();
+            else if (r < targets.count())
+                t = targets.at(r);
+            if (m_view->acceptsDrop(cue, l, mime, t))
+            {
+                *layer = l;
+                *target = t;
+                *row = r;
+                return true;
+            }
+        }
+        return m_view->acceptsDrop(cue, ShowTree::invalidId(), mime);
+    }
+    void clearDropRow()
+    {
+        if (m_dropRow >= 0 && m_dropRow < count())
+            item(m_dropRow)->setData(Qt::BackgroundRole, QVariant());
+        m_dropRow = -1;
+    }
+
+protected:
+    void showRow(int row)
+    {
+        if (row == m_dropRow)
+            return;
+        clearDropRow();
+        m_dropRow = row;
+        if (row >= 0 && row < count())
+        {
+            QColor hl = palette().color(QPalette::Highlight);
+            hl.setAlpha(90);
+            item(row)->setBackground(hl);
+        }
+    }
+    void hover(QDropEvent *e)
+    {
+        quint32 l;
+        ShowTree::Target t;
+        int r;
+        const bool alt = e->modifiers() & Qt::AltModifier;
+        if (!where(e->position().toPoint(), e->mimeData(), &l, &t, &r))
+        {
+            e->ignore();
+            showRow(-1);
+            m_page->setDropActive(false);
+            m_page->say(QString());
+            return;
+        }
+        e->acceptProposedAction();
+        showRow(r);
+        // Onto a row: that row lights up; else the whole page (a new layer).
+        m_page->setDropActive(r < 0);
+        m_page->say(m_view->dropHint(m_page->cue, l, e->mimeData(), alt, t));
+    }
+    void dragEnterEvent(QDragEnterEvent *e) override { hover(e); }
+    void dragMoveEvent(QDragMoveEvent *e) override { hover(e); }
+    void dragLeaveEvent(QDragLeaveEvent *) override
+    {
+        showRow(-1);
+        m_page->setDropActive(false);
+        m_page->say(QString());
+    }
+    void dropEvent(QDropEvent *e) override
+    {
+        quint32 l;
+        ShowTree::Target t;
+        int r;
+        const bool ok = where(e->position().toPoint(), e->mimeData(), &l, &t, &r);
+        showRow(-1);
+        m_page->setDropActive(false);
+        m_page->say(QString());
+        if (ok && m_view->dropMime(m_page->cue, l, e->mimeData(), e->modifiers() & Qt::AltModifier, t, true))
+            e->acceptProposedAction();
+        else
+            e->ignore();
+    }
+
+private:
+    ShowTreeView *m_view;
+    DropPage *m_page;
+    int m_dropRow = -1;
 };
 
 const QStringList &attributeKeys()
@@ -425,10 +605,6 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     m_import->setMenu(m_importMenu);
     m_import->setPopupMode(QToolButton::InstantPopup);
     connect(m_importMenu, &QMenu::aboutToShow, this, &ShowTreeView::slotImportMenuAboutToShow);
-    m_commandToggle = button(tr("Command"), tr("Show or hide the command line: type what you'd say "
-                                               "(Towers colour Blue dimmer 45). Optional; the mouse does it all too."),
-                             "stCommandToggle");
-    m_commandToggle->setCheckable(true);
     bar->addStretch(1);
     // What the rig shows: the selected cue (Design), or nothing (Live).
     m_previewLabel = new QLabel(this);
@@ -455,9 +631,12 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         h->addWidget(lbl);
         m_command = new QLineEdit(m_commandBar);
         m_command->setObjectName("stCommand");
-        m_command->setPlaceholderText(tr("e.g. Towers colour Blue dimmer 45"));
-        m_command->setToolTip(tr("Type what you'd say. Tab completes names from the Library, Enter runs, "
-                                 "↑ recalls. Every command is one undo step."));
+        m_command->setPlaceholderText(tr("Type a command (: from the tree) — e.g. Towers colour Blue dimmer 45"));
+        m_command->setToolTip(tr("Type what you'd say. Tab completes every word (again: the next match), "
+                                 "Enter runs, ↑ recalls, Esc goes back to the tree. Every command is one "
+                                 "undo step. From the tree, : jumps here."));
+        // Never takes the keyboard on its own: a click, or : in the tree.
+        m_command->setFocusPolicy(Qt::ClickFocus);
         QFont mono(QStringLiteral("Menlo"));
         mono.setStyleHint(QFont::Monospace);
         m_command->setFont(mono);
@@ -473,16 +652,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         hint->setEnabled(false);
         v->addWidget(hint);
     }
-    main->addWidget(m_commandBar);
     connect(m_command, &QLineEdit::returnPressed, this, &ShowTreeView::slotCommandEntered);
-    connect(m_commandToggle, &QToolButton::toggled, this, &ShowTreeView::setCommandLineVisible);
-    {
-        QSettings settings;
-        const bool on = settings.value(SETTINGS_COMMANDLINE, false).toBool();
-        m_commandBar->setVisible(on);
-        QSignalBlocker block(m_commandToggle);
-        m_commandToggle->setChecked(on);
-    }
 
     connect(m_newProduction, &QToolButton::clicked, this, &ShowTreeView::slotNewProduction);
     connect(m_newList, &QToolButton::clicked, this, &ShowTreeView::slotNewCueList);
@@ -498,6 +668,8 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     QSplitter *vsplit = new QSplitter(Qt::Vertical, this);
     vsplit->setObjectName("stVSplitter");
     main->addWidget(vsplit, 1);
+    // The command line: always there, at the bottom (2026-10-17).
+    main->addWidget(m_commandBar);
     QSplitter *split = new QSplitter(Qt::Horizontal, vsplit);
     split->setObjectName("stSplitter");
     vsplit->addWidget(split);
@@ -518,6 +690,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     ShowTreeWidget *tree = new ShowTreeWidget(this, split);
     tree->setHint(m_hint);
     m_tree = tree;
+    m_tree->installEventFilter(this);
     m_tree->setObjectName("stTree");
     m_tree->setHeaderLabels({ tr("Show"), tr("") });
     m_tree->header()->setStretchLastSection(false);
@@ -569,7 +742,11 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     cueScroll->setFrameShape(QFrame::NoFrame);
     m_cuePage = cueScroll;
     {
-        QWidget *inner = new QWidget(cueScroll);
+        // The whole page takes drops: groups a new layer, palettes cue looks.
+        DropPage *inner = new DropPage(this, cueScroll);
+        inner->setObjectName("stCuePage");
+        inner->setHint(m_hint);
+        inner->stayOnCue = true;
         QFormLayout *f = new QFormLayout(inner);
         cueScroll->setWidget(inner);
         m_cueNumber = new QLineEdit(inner);
@@ -638,6 +815,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
             m_includeDown = small(tr("↓"), tr("Later: it wins over the cues before it"), "stIncludeDown");
             b->addStretch(1);
             h->addLayout(b);
+            inc->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
             f->addRow(tr("Includes"), inc);
             auto selected = [this]() {
                 QListWidgetItem *it = m_cueIncludes->currentItem();
@@ -666,15 +844,56 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_cueLooks->setWordWrap(true);
         m_cueLooks->setObjectName("stCueLooks");
         f->addRow(tr("Cue looks"), m_cueLooks);
-        m_cueLayers = new QLabel(inner);
-        m_cueLayers->setWordWrap(true);
-        m_cueLayers->setTextFormat(Qt::RichText);
-        f->addRow(tr("Layers"), m_cueLayers);
+        {
+            // One row per layer (onto a row: added to that layer), and under
+            // them the drop area for a new one.
+            QWidget *box = new QWidget(inner);
+            QVBoxLayout *v = new QVBoxLayout(box);
+            v->setContentsMargins(0, 0, 0, 0);
+            v->setSpacing(4);
+            CueLayerList *rows = new CueLayerList(this, inner, box);
+            rows->setObjectName("stCueLayers");
+            rows->setToolTip(tr("Drop groups or fixtures on a layer to add them to it, a palette to set "
+                                "it there. Click a layer to open it."));
+            m_cueLayers = rows;
+            v->addWidget(m_cueLayers);
+            m_cueDropZone = new QLabel(tr("Drag groups or fixtures here to add a layer — onto a layer to add to it"),
+                                       box);
+            m_cueDropZone->setObjectName("stCueDropZone");
+            m_cueDropZone->setAlignment(Qt::AlignCenter);
+            m_cueDropZone->setWordWrap(true);
+            // The spare height of the page is the drop area.
+            m_cueDropZone->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
+            m_cueDropZone->setToolTip(tr("Several groups dropped together make ONE layer on all of them; "
+                                         "hold ⌥ for a layer each. A palette dropped here is a cue look; "
+                                         "a function plays as it is."));
+            v->addWidget(m_cueDropZone);
+            auto zoneStyle = [this](bool active) {
+                m_cueDropZone->setStyleSheet(active
+                    ? QStringLiteral("QLabel { border: 2px solid palette(highlight); border-radius: 6px;"
+                                     " padding: 12px; color: palette(highlight); }")
+                    : QStringLiteral("QLabel { border: 2px dashed palette(mid); border-radius: 6px;"
+                                     " padding: 12px; color: palette(mid); }"));
+            };
+            zoneStyle(false);
+            inner->onActive = zoneStyle;
+            f->addRow(tr("Layers"), box);
+            connect(m_cueLayers, &QListWidget::itemClicked, this, [this](QListWidgetItem *item) {
+                if (item->data(KindRole).toInt() == LayerNode)
+                    selectNode(item->data(IdRole).toUInt(), m_pageCue);
+                else
+                    selectTracked(m_pageCue, item->data(TargetRole).toString());
+            });
+        }
         m_cueNext = new QLabel(inner);
         m_cueNext->setWordWrap(true);
         f->addRow(tr("Next cue receives"), m_cueNext);
         for (QLineEdit *e : { m_cueNumber, m_cueName, m_cueNote })
             connect(e, &QLineEdit::editingFinished, this, &ShowTreeView::slotCueEdited);
+        // Text fields don't swallow a group dragged over them: the page takes it.
+        for (QWidget *w : inner->findChildren<QWidget *>())
+            if (w != m_cueLayers && w->acceptDrops() && w->parentWidget() != m_cueLayers)
+                w->setAcceptDrops(false);
         for (QDoubleSpinBox *s : { m_cueFadeIn, m_cueFadeOut, m_cueHold })
             connect(s, &QDoubleSpinBox::editingFinished, this, &ShowTreeView::slotCueEdited);
         connect(m_cueMode, QOverload<int>::of(&QComboBox::activated), this, &ShowTreeView::slotCueEdited);
@@ -683,6 +902,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
 
     // A layer: one row per attribute
     DropPage *layerPage = new DropPage(this, m_pages);
+    layerPage->setHint(m_hint);
     m_layerPage = layerPage;
     m_layerPage->setObjectName("stLayerPage");
     {
@@ -706,7 +926,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_rows->setColumnStretch(1, 1);
         scroll->setWidget(m_rowsHost);
         v->addWidget(scroll, 1);
-        QLabel *tip = new QLabel(tr("Drop a palette here (or on the layer in the tree) to set it, a group to add it to the layer. "
+        QLabel *tip = new QLabel(tr("Drop a palette here (or on the layer in the tree) to set it, groups or fixtures to add them to the layer. "
                                     "Grey values come from the cue or an earlier cue; ⋯ sets one here."),
                                  m_layerPage);
         tip->setWordWrap(true);
@@ -1287,30 +1507,62 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
     QStringList looks;
     for (const Look &l : cue.looks)
         looks << QStringLiteral("%1: %2").arg(keyLabel(l.key), lookText(l));
-    m_cueLooks->setText(looks.isEmpty() ? tr("— (drop a palette on the cue)") : looks.join(QStringLiteral("\n")));
+    m_cueLooks->setText(looks.isEmpty() ? tr("— (drop a palette here or on the cue)") : looks.join(QStringLiteral("\n")));
 
+    // The layers, one row each: the cue's own, then (grey) the carried-in.
+    // Each takes drops; the page's cue is where the rest go.
+    static_cast<DropPage *>(static_cast<QScrollArea *>(m_cuePage)->widget())->cue = cue.id;
+    CueLayerList *rows = static_cast<CueLayerList *>(m_cueLayers);
+    rows->clearDropRow();
+    rows->clear();
+    rows->targets.clear();
     const QList<ResolvedCue> resolved = resolve(list);
-    QStringList layers;
+    const QColor grey = palette().color(QPalette::Disabled, QPalette::Text);
     for (const ResolvedLayer &rl : resolved.at(index).layers)
     {
-        const QString name = (rl.name.isEmpty() ? m_st->targetLabel(rl.target) : rl.name).toHtmlEscaped();
+        const QString name = rl.name.isEmpty() ? m_st->targetLabel(rl.target) : rl.name;
         QStringList vals;
         for (const Look &l : rl.playedLooks())
-            vals << lookText(l).toHtmlEscaped();
-        const QString line = QStringLiteral("%1 &nbsp;%2").arg(name, vals.join(QStringLiteral(", ")));
+            vals << lookText(l);
+        QString line = vals.isEmpty() ? name : QStringLiteral("%1   %2").arg(name, vals.join(QStringLiteral(", ")));
+        QListWidgetItem *it = new QListWidgetItem(rows);
         if (rl.own)
-            layers << line + (rl.release ? tr(" · <i>release</i>") : QString());
+        {
+            if (rl.release)
+                line += tr(" · release");
+            it->setData(KindRole, LayerNode);
+            it->setData(IdRole, rl.layerId);
+            rows->targets << Target();
+        }
         else
         {
             const int from = list.indexOf(rl.fromCue);
-            layers << QStringLiteral("<span style='color:gray'>%1 · %2</span>")
-                      .arg(line, (rl.origin == Origin::Included ? tr("included from %1")
-                                  : rl.origin == Origin::Base ? tr("base, from %1")
-                                  : tr("tracked from %1"))
-                                 .arg(from < 0 ? QString() : m_st->cueLabel(list, from)).toHtmlEscaped());
+            const QString src = from < 0 ? QString() : m_st->cueLabel(list, from);
+            line = QStringLiteral("⤳ %1 · %2").arg(line, rl.origin == Origin::Included ? tr("included from %1").arg(src)
+                                                        : rl.origin == Origin::Base ? tr("base, from %1").arg(src)
+                                                        : tr("tracked from %1").arg(src));
+            it->setForeground(grey);
+            it->setData(KindRole, TrackedLayerNode);
+            it->setData(IdRole, rl.layerId);
+            rows->targets << rl.target;
         }
+        it->setData(TargetRole, rl.target.signature());
+        it->setText(line);
+        it->setToolTip(rl.own ? tr("Drop groups here to add them to %1, a palette to set it").arg(name)
+                              : tr("Carried into this cue: a drop here sets it in this cue"));
     }
-    m_cueLayers->setText(layers.isEmpty() ? tr("— (drag groups onto the cue)") : layers.join(QStringLiteral("<br>")));
+    if (rows->count() == 0)
+    {
+        rows->hide();
+        m_cueDropZone->setMinimumHeight(90);
+    }
+    else
+    {
+        const int rowH = qMax(rows->sizeHintForRow(0), fontMetrics().height() + 6);
+        rows->setFixedHeight(rows->count() * rowH + 2 * rows->frameWidth() + 2);
+        rows->show();
+        m_cueDropZone->setMinimumHeight(0);
+    }
     m_cueNext->setText(nextCueText());
     m_pages->setCurrentWidget(m_cuePage);
 }
@@ -1415,9 +1667,10 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
 {
     const Cue &cue = list.cues.at(index);
     DropPage *page = static_cast<DropPage *>(m_layerPage);
-    page->cue = cue.id;
+    // Nothing to drop on when the layer isn't on stage here.
+    page->cue = rl == nullptr ? invalidId() : cue.id;
     page->layer = own == nullptr ? invalidId() : own->id;
-    page->target = rl == nullptr ? Target() : rl->target;
+    page->target = rl == nullptr || own != nullptr ? Target() : rl->target;
 
     // Clear the rows. Later, not now: a row's own ⋯ may be what is being
     // clicked (its menu's action edits the tree, which rebuilds this page).
@@ -2191,7 +2444,8 @@ bool ShowTreeView::dropTargets(quint32 cueId, const QList<quint32> &groups, cons
     quint32 last = invalidId();
     if (separate)
     {
-        // ⌥: one layer per group, as before (and one on the fixtures).
+        // ⌥: one layer per group (and one on the fixtures), one undo step.
+        m_st->beginBatch(tr("Add %1 layers").arg(groups.count() + (fixtures.isEmpty() ? 0 : 1)));
         for (quint32 g : groups)
         {
             Target t;
@@ -2204,6 +2458,7 @@ bool ShowTreeView::dropTargets(quint32 cueId, const QList<quint32> &groups, cons
             t.fixtures = fixtures;
             last = m_st->addLayer(cueId, t);
         }
+        m_st->endBatch(last != invalidId());
     }
     else if (!groups.isEmpty() || !fixtures.isEmpty())
     {
@@ -2287,27 +2542,131 @@ bool ShowTreeView::dropPalettes(quint32 cueId, quint32 layerId, const QList<quin
     return done;
 }
 
-bool ShowTreeView::acceptsDrop(quint32 cueId, quint32 layerId, const QMimeData *mime) const
+bool ShowTreeView::acceptsDrop(quint32 cueId, quint32 layerId, const QMimeData *mime, const Target &target) const
 {
     if (cueId == invalidId() || mime == nullptr)
         return false;
-    if (mime->hasFormat(QLatin1String(FunctionsTreeWidget::paletteDragMimeType())))
+    const bool targets = mime->hasFormat(QLatin1String(FixtureGroupSource::fixtureGroupMimeType()))
+                         || mime->hasFormat(QLatin1String(FixtureGroupSource::fixtureMimeType()));
+    const bool palettes = mime->hasFormat(QLatin1String(FunctionsTreeWidget::paletteDragMimeType()));
+    if (layerId == invalidId() && !target.isEmpty())
+    {
+        // A layer carried in: looks and groups make it the cue's own.
+        return !target.isOpaque() && (palettes || targets);
+    }
+    if (palettes)
         return true;
     if (layerId != invalidId())
     {
         // Groups and fixtures join a layer's target; functions go on a cue.
         const Cue *cue = m_st->cue(cueId);
         const Layer *l = cue == nullptr ? nullptr : cue->layer(layerId);
-        return l != nullptr && !l->target.isOpaque()
-               && (mime->hasFormat(QLatin1String(FixtureGroupSource::fixtureGroupMimeType()))
-                   || mime->hasFormat(QLatin1String(FixtureGroupSource::fixtureMimeType())));
+        return l != nullptr && !l->target.isOpaque() && targets;
     }
-    return mime->hasFormat(QLatin1String(FixtureGroupSource::fixtureGroupMimeType()))
-           || mime->hasFormat(QLatin1String(FixtureGroupSource::fixtureMimeType()))
-           || mime->hasFormat(QLatin1String(FunctionsTreeWidget::functionDragMimeType()));
+    return targets || mime->hasFormat(QLatin1String(FunctionsTreeWidget::functionDragMimeType()));
 }
 
-QString ShowTreeView::dropHint(quint32 cueId, quint32 layerId, const QMimeData *mime, bool separate) const
+ShowTree::Target ShowTreeView::carriedTarget(quint32 cueId, const QString &signature) const
+{
+    const CueList *list = m_st->listOfCue(cueId);
+    if (list == nullptr)
+        return Target();
+    const int index = list->indexOf(cueId);
+    const QList<ResolvedCue> resolved = resolve(*list);
+    if (index < 0 || index >= resolved.count())
+        return Target();
+    for (const ResolvedLayer &rl : resolved.at(index).layers)
+        if (!rl.own && rl.target.signature() == signature)
+            return rl.target;
+    return Target();
+}
+
+bool ShowTreeView::selectTracked(quint32 cueId, const QString &signature)
+{
+    for (QTreeWidgetItemIterator it(m_tree); *it; ++it)
+        if ((*it)->data(0, KindRole).toInt() == TrackedLayerNode
+            && (*it)->data(0, CueRole).toUInt() == cueId
+            && (*it)->data(0, TargetRole).toString() == signature)
+        {
+            for (QTreeWidgetItem *p = (*it)->parent(); p != nullptr; p = p->parent())
+                p->setExpanded(true);
+            m_tree->setCurrentItem(*it);
+            return true;
+        }
+    return false;
+}
+
+QStringList ShowTreeView::cueLayerItems() const
+{
+    QStringList out;
+    for (int i = 0; i < m_cueLayers->count(); ++i)
+        out << m_cueLayers->item(i)->text();
+    return out;
+}
+
+bool ShowTreeView::dropMime(quint32 cueId, quint32 layerId, const QMimeData *mime, bool separate,
+                            const Target &target, bool stayOnCue)
+{
+    if (!acceptsDrop(cueId, layerId, mime, target))
+        return false;
+    const QList<quint32> pals = idsFromMime(mime, FunctionsTreeWidget::paletteDragMimeType());
+    const QList<quint32> groups = idsFromMime(mime, FixtureGroupSource::fixtureGroupMimeType());
+    const QList<quint32> fixtures = idsFromMime(mime, FixtureGroupSource::fixtureMimeType());
+    const QList<quint32> funcs = idsFromMime(mime, FunctionsTreeWidget::functionDragMimeType());
+    bool done = false;
+    if (!pals.isEmpty())
+        done = dropPalettes(cueId, layerId, pals, layerId == invalidId() ? target : Target());
+    else if ((!groups.isEmpty() || !fixtures.isEmpty()) && layerId != invalidId())
+        done = dropTargetsOnLayer(cueId, layerId, groups, fixtures);
+    else if ((!groups.isEmpty() || !fixtures.isEmpty()) && !target.isEmpty())
+        done = dropTargetsOnTracked(cueId, target, groups, fixtures);
+    else if (!groups.isEmpty() || !fixtures.isEmpty())
+        done = dropTargets(cueId, groups, fixtures, separate);
+    else if (!funcs.isEmpty() && layerId == invalidId() && target.isEmpty())
+        done = dropFunctions(cueId, funcs);
+    // From the cue page the cue stays up, ready for the next drop.
+    if (done && stayOnCue && !(currentKind() == CueNode && currentId() == cueId))
+        selectNode(cueId);
+    return done;
+}
+
+bool ShowTreeView::dropTargetsOnTracked(quint32 cueId, const Target &target, const QList<quint32> &groups,
+                                        const QList<quint32> &fixtures)
+{
+    const Cue *cue = m_st->cue(cueId);
+    if (cue == nullptr || target.isEmpty() || target.isOpaque())
+        return false;
+    // The cue's own already (a row a moment old): add to that.
+    for (const Layer &l : cue->layers)
+        if (l.target == target)
+            return dropTargetsOnLayer(cueId, l.id, groups, fixtures);
+    bool adds = false;
+    for (quint32 g : groups)
+        adds |= !target.groups.contains(g);
+    for (quint32 f : fixtures)
+        adds |= !target.fixtures.contains(f);
+    if (!adds)
+        return false;
+
+    // Brought into the cue (it takes the carried one's place and values),
+    // then the groups added -- one undo step.
+    Target added;
+    added.groups = groups;
+    added.fixtures = fixtures;
+    m_st->beginBatch(tr("Add %1 to layer %2").arg(m_st->targetLabel(added), m_st->targetLabel(target)));
+    const quint32 lid = m_st->addLayer(cueId, target);
+    const bool ok = lid != invalidId() && m_st->addToLayer(cueId, lid, groups, fixtures);
+    m_st->endBatch(ok);
+    if (!ok)
+        return false;
+    for (quint32 g : groups)
+        noteRecent(LibGroup, g);
+    selectNode(lid, cueId);
+    return true;
+}
+
+QString ShowTreeView::dropHint(quint32 cueId, quint32 layerId, const QMimeData *mime, bool separate,
+                               const Target &target) const
 {
     const CueList *list = m_st->listOfCue(cueId);
     const Cue *cue = m_st->cue(cueId);
@@ -2315,6 +2674,26 @@ QString ShowTreeView::dropHint(quint32 cueId, quint32 layerId, const QMimeData *
         return QString();
     const QString cueText = m_st->cueLabel(*list, list->indexOf(cueId));
     const QList<quint32> pals = idsFromMime(mime, FunctionsTreeWidget::paletteDragMimeType());
+    if (layerId == invalidId() && !target.isEmpty())
+    {
+        // Onto a layer carried in: it becomes this cue's own.
+        if (!acceptsDrop(cueId, layerId, mime, target))
+            return QString();
+        const QString layerName = m_st->targetLabel(target);
+        if (!pals.isEmpty())
+        {
+            QStringList names;
+            for (quint32 p : pals)
+                names << paletteName(p);
+            return tr("%1 → layer %2 in %3 (sets it in this cue)")
+                   .arg(names.join(QStringLiteral(" + ")), layerName, cueText);
+        }
+        Target t;
+        t.groups = idsFromMime(mime, FixtureGroupSource::fixtureGroupMimeType());
+        t.fixtures = idsFromMime(mime, FixtureGroupSource::fixtureMimeType());
+        const QString what = t.groups.isEmpty() ? tr("these fixtures") : m_st->targetLabel(t);
+        return tr("add %1 to layer %2 in %3 (brings it into this cue)").arg(what, layerName, cueText);
+    }
     if (!pals.isEmpty())
     {
         QStringList names;
@@ -3112,17 +3491,9 @@ void ShowTreeView::slotLibraryContextMenu(const QPoint &pos)
  * Command line (§6C)
  ****************************************************************************/
 
-void ShowTreeView::setCommandLineVisible(bool visible)
+void ShowTreeView::focusCommandLine()
 {
-    m_commandBar->setVisible(visible);
-    {
-        QSignalBlocker block(m_commandToggle);
-        m_commandToggle->setChecked(visible);
-    }
-    QSettings settings;
-    settings.setValue(SETTINGS_COMMANDLINE, visible);
-    if (visible)
-        m_command->setFocus();
+    m_command->setFocus(Qt::ShortcutFocusReason);
 }
 
 bool ShowTreeView::isCommandLineVisible() const
@@ -3181,13 +3552,32 @@ bool ShowTreeView::eventFilter(QObject *obj, QEvent *ev)
         QKeyEvent *ke = static_cast<QKeyEvent *>(ev);
         if (ke->key() == Qt::Key_Tab)
         {
-            // Tab completes from the Library instead of moving focus.
+            // Tab completes the word instead of moving focus; again, the
+            // next of several matches.
             ShowTreeCommand::Context ctx;
+            for (QTreeWidgetItem *item = m_tree->currentItem(); item != nullptr; item = item->parent())
+                if (item->data(0, KindRole).toInt() == ProductionNode)
+                    ctx.production = item->data(0, IdRole).toUInt();
             ctx.list = currentListId();
             ctx.cue = currentCueId();
             QStringList options;
-            m_command->setText(m_commander->complete(m_command->text(), ctx, &options));
-            m_commandMsg->setText(options.count() > 1 ? options.join(QStringLiteral(" · ")) : QString());
+            int current = -1;
+            m_command->setText(m_commander->tab(m_command->text(), ctx, &options, &current));
+            QStringList shown;
+            const int from = current < 10 ? 0 : current - 9;
+            for (int i = from; i < options.count() && shown.count() < 10; ++i)
+                shown << (i == current ? QStringLiteral("[%1]").arg(options.at(i)) : options.at(i));
+            if (options.count() > from + shown.count())
+                shown << tr("+%1 more").arg(options.count() - from - shown.count());
+            m_commandMsg->setText(options.count() > 1 ? shown.join(QStringLiteral(" · ")) : QString());
+            QPalette pal = m_commandMsg->palette();
+            pal.setColor(QPalette::WindowText, palette().color(QPalette::WindowText));
+            m_commandMsg->setPalette(pal);
+            return true;
+        }
+        if (ke->key() == Qt::Key_Escape)
+        {
+            m_tree->setFocus(Qt::ShortcutFocusReason);
             return true;
         }
         if ((ke->key() == Qt::Key_Up || ke->key() == Qt::Key_Down) && !m_commandHistory.isEmpty())
@@ -3199,6 +3589,13 @@ bool ShowTreeView::eventFilter(QObject *obj, QEvent *ev)
             m_command->setText(m_historyAt < 0 ? QString() : m_commandHistory.at(m_historyAt));
             return true;
         }
+    }
+    if (obj == m_tree && ev->type() == QEvent::KeyPress
+        && static_cast<QKeyEvent *>(ev)->text() == QLatin1String(":"))
+    {
+        // : in the tree: to the command line (⌘L is Show Lock).
+        focusCommandLine();
+        return true;
     }
     return QWidget::eventFilter(obj, ev);
 }

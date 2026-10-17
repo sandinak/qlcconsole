@@ -123,11 +123,34 @@ public:
      *  which then becomes the cue's own). */
     bool dropPalettes(quint32 cueId, quint32 layerId, const QList<quint32> &palettes,
                       const ShowTree::Target &target = ShowTree::Target());
+    /** Groups / fixtures dropped on a layer only carried into the cue
+     *  (tracked, included, base): it becomes the cue's own with them added,
+     *  keeping what it carried -- one undo step. */
+    bool dropTargetsOnTracked(quint32 cueId, const ShowTree::Target &target, const QList<quint32> &groups,
+                              const QList<quint32> &fixtures);
     /** What a drop of @a mime on (@a cueId, @a layerId) would do, before it
-     *  is let go of: "Blue → cue look: reaches 2 of 3 layers". */
+     *  is let go of: "Blue → cue look: reaches 2 of 3 layers". With no layer
+     *  but a @a target: onto a layer carried into the cue. */
     QString dropHint(quint32 cueId, quint32 layerId, const QMimeData *mime,
-                     bool separate = false) const;
-    bool acceptsDrop(quint32 cueId, quint32 layerId, const QMimeData *mime) const;
+                     bool separate = false, const ShowTree::Target &target = ShowTree::Target()) const;
+    bool acceptsDrop(quint32 cueId, quint32 layerId, const QMimeData *mime,
+                     const ShowTree::Target &target = ShowTree::Target()) const;
+    /** Any drop on (@a cueId, @a layerId or carried-in @a target), as the
+     *  tree, the cue page and the layer page take it: palettes set looks,
+     *  groups / fixtures make a layer (⌥ @a separate: one each) or join
+     *  one, functions play as they are. @a stayOnCue: the cue stays
+     *  selected (a drop on the cue page), else the new layer is. */
+    bool dropMime(quint32 cueId, quint32 layerId, const QMimeData *mime, bool separate = false,
+                  const ShowTree::Target &target = ShowTree::Target(), bool stayOnCue = false);
+    /** The cue page's layer rows, as text ("⤳ Towers  Blue · tracked from 1
+     *  One"), and the list itself (it takes drops). */
+    QStringList cueLayerItems() const;
+    QListWidget *cueLayerList() const { return m_cueLayers; }
+    /** The target of the layer carried into cue @a cueId with @a signature
+     *  (empty: none such). */
+    ShowTree::Target carriedTarget(quint32 cueId, const QString &signature) const;
+    /** Select a layer carried into cue @a cueId, by its target signature. */
+    bool selectTracked(quint32 cueId, const QString &signature);
 
     /** MIME type of cues dragged within the tree (a stream of cue ids). */
     static const char *cueMimeType();
@@ -206,7 +229,9 @@ public:
      * Command line (§6C, optional)
      ************************************************************************/
 public:
-    void setCommandLineVisible(bool visible);
+    /** The command line is always there (bottom of the tab); this gives it
+     *  the keyboard, as : in the tree does. */
+    void focusCommandLine();
     bool isCommandLineVisible() const;
     /** Run a command as if typed and Enter pressed: true when it ran. */
     bool runCommand(const QString &line);
@@ -308,7 +333,6 @@ private:
     QToolButton *m_redo;
     QToolButton *m_import;
     QToolButton *m_record;
-    QToolButton *m_commandToggle;
     QMenu *m_importMenu;
     QLabel *m_hint;
     QLabel *m_previewLabel;
@@ -338,7 +362,8 @@ private:
     QDoubleSpinBox *m_cueFadeOut;
     QDoubleSpinBox *m_cueHold;
     QLabel *m_cueLooks;
-    QLabel *m_cueLayers;
+    QListWidget *m_cueLayers;
+    QLabel *m_cueDropZone;
     QLabel *m_cueNext;
     QWidget *m_layerPage;
     QLabel *m_layerTitle;

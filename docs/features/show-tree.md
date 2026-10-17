@@ -18,8 +18,9 @@ palettes and groups.
   back to the base cue.
 - **Middle — the selected cue or layer.**
   - A **cue**: number, name, note, mode, fade in, fade out and hold, its cue
-    looks, every layer on stage in it (grey ones with where they come from),
-    and what the **next cue receives**.
+    looks, every layer on stage in it, one row each (grey ones with where
+    they come from; click one to open it), a dashed drop area for a new
+    layer, and what the **next cue receives**.
   - A **layer**: one row per attribute — Colour, Dimmer, Position, Gobo,
     Zoom, Focus / Frost / Iris, Shutter, and its effects. A value set here is
     plain; one coming from the cue or an earlier cue is grey and says where:
@@ -74,6 +75,27 @@ A layer stays one layer when its groups change: added to in a cue it
 tracked into, it takes the tracked layer's place and keeps its values;
 added to where it is set, the change carries on to the cues it tracks into.
 
+### Adding layers
+
+Drag from the Library to the **tree** or to the **page** in the middle —
+they take the same drops, and the line at the top right says what a drop
+will do before you let go (*"one layer on Towers + USTs in 1 One (⌥: a
+layer for each group)"*).
+
+- **Several groups (or fixtures) at once make one layer** on all of them.
+  Hold **⌥** as you drop for a layer each.
+- **Onto a layer** — its row in the tree, its row on the cue page, or
+  anywhere on its own page — adds them to that layer (*"add USTs to layer
+  Towers"*). On a grey (carried-in) layer it brings the layer into this
+  cue with them added, keeping what it carried.
+- On the cue page's empty area (*"Drag groups or fixtures here to add a
+  layer — onto a layer to add to it"*): groups make a new layer, a palette
+  is a cue look, a function plays as it is. The cue stays selected, so you
+  can keep dropping.
+- A palette onto a layer's row sets that layer's look.
+- Changed your mind? **Split layer** and **Merge layers** (below) turn one
+  into the other, and every drop is one step of Undo.
+
 ### Split and merge layers
 
 - Right-click a layer on several groups → **Split layer (one per group)**:
@@ -112,6 +134,11 @@ what runs as it normally would.
 
 In **Live** (Operate) mode the running cue list owns the stage: selecting a
 cue doesn't touch it, and your changes reach it when the cue plays (on GO).
+The top right then says *"Live: editing is blind"* instead of *"On the rig"*.
+
+A **Dimmer** look on fixtures with no dimmer channel (RGB bars, pixel
+heads) dims their colour itself: Blue at 19% goes out as a dim blue, and the
+Rig Overview shows it as that — blue, at that level.
 
 ## What wins
 
@@ -220,11 +247,24 @@ production; the chaser itself is not touched.
 
 ## The command line
 
-**Command** (top) shows a line for typing what you would say; it calls the
-same operations as the mouse, and every command is **one undo step** (a
-command that fails part way changes nothing). **Tab** completes names from
-the Library, **↑ ↓** recall earlier commands, and the line under it lists
-the words:
+The line at the **bottom** of the tab is for typing what you would say; it
+is always there, and it calls the same operations as the mouse. Every
+command is **one undo step** (a command that fails part way changes
+nothing). It never takes the keyboard by itself: click it, or press **:**
+in the tree; **Esc** goes back to the tree. **↑ ↓** recall earlier
+commands, and the line under it lists the words.
+
+**Tab** completes every word the line takes where you are: the command
+words, cue numbers of the list (after `cue` and `include`), cue lists
+(after `list`), groups (also by folder path, `Movers/Front/Spots`) and
+fixtures, attributes after them, the palettes of the attribute before
+(dimmer, colour, position, gobo, zoom, beam, shutter, effect — and `none`,
+`off`, `clear`), functions (after `function`), cue modes and the record
+choices. When several fit it completes the part they share and shows them
+beside the line; **Tab again** puts in the next one, round and round. A
+name with spaces completes as one word (`AT W` → `AT W ALL`); one begun
+with a quote is closed for you, and a name with a `,` or `+` in it is
+quoted.
 
 | Type | Does |
 |---|---|
@@ -238,12 +278,14 @@ the words:
 | `cue look colour Red` | a cue look |
 | `Steps effect Sinelon colour Red` | an effect, and its own colour |
 | `Towers gobo none` · `Towers gobo clear` | off here · inherit again |
+| `T1-CW colour Red` · `Movers/Front/Spots …` | a fixture by name, a group by its folder path |
+| `function Haze look, House lights` | functions played as they are, a layer each |
 | `Steps colour #33aa55` · `dimmer 45` | the palette that plays exactly that, else a new one named as yours are |
 | `release Towers` | Release on (or off) |
 | `include 0.0.3` | include a cue (again: take it out) |
 | `record` · `record selected` · `record running` · `record lit` | Record as new cue: as the button (your setting, or it asks), or what the word says |
 | `dup` · `undo` · `redo` | as the buttons |
-| `list "01-Opener"` | a new (tracking) cue list in the production |
+| `list "01-Opener"` | selects that cue list, or makes a new (tracking) one in the production |
 
 Names match whole words and ignore case; quote a name with spaces if Tab
 doesn't finish it (`"AT W ALL" dimmer Full`).

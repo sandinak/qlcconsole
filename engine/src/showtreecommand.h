@@ -52,14 +52,19 @@ class Doc;
  *   cue look colour Red          a cue look
  *   Steps effect Sinelon colour Red              an effect with its own colour
  *   Towers gobo none             None: off here
+ *   T1-CW colour Red             a fixture by name works as a group does;
+ *   Movers/Front/Spots …         a group also by its folder path
+ *   function Haze look           a function played as it is (opaque layer)
  *   release Towers               toggle Release on the cue's Towers layer
  *   include 0.0.3                include a cue (again: take it out)
  *   record [selected|running|lit]   Record as new cue: the setting says
  *                                which when the choices differ (or asks)
- *   dup · undo · redo            list "01-Opener"
+ *   list "01-Opener"             select that cue list, or make it
+ *   dup · undo · redo
  *
- * Names are the Library's (groups, palettes), matched whole and ignoring
- * case; quote one with spaces ("AT W ALL") or let Tab complete it.
+ * Names are the Library's (groups, fixtures, palettes, functions), matched
+ * whole and ignoring case; quote one with spaces ("AT W ALL") or let Tab
+ * complete it -- Tab completes every word the grammar takes there.
  */
 class QLC_ENGINE_EXPORT ShowTreeCommand
 {
@@ -90,9 +95,21 @@ public:
     Result run(const QString &line, const Context &context);
 
     /** Tab: @a line with its last word completed as far as it is the same
-     *  in every name that fits there; @a options lists those names (up to
-     *  ten). */
+     *  in every word that fits there (keywords, cue numbers, cue lists,
+     *  groups and their folder paths, fixtures, palettes of the attribute
+     *  before, functions, cue modes, record choices); @a options lists them
+     *  (up to ten). A name with spaces completes as it can be typed; one
+     *  begun with a quote is closed. */
     QString complete(const QString &line, const Context &context, QStringList *options = nullptr) const;
+    /** Tab pressed in the command line: complete() the first time; pressed
+     *  again on what it gave, the next of several matches in turn (and
+     *  round). @a options: every match; @a current: the one shown (-1: the
+     *  common part). */
+    QString tab(const QString &line, const Context &context, QStringList *options = nullptr,
+                int *current = nullptr);
+    /** The words that may come after @a head (a whole number of words) --
+     *  for the tests; false when @a head doesn't parse. */
+    bool candidates(const QString &head, const Context &context, QStringList *out) const;
 
     /** The one-line grammar for the hint under the command line. */
     static QString grammar();
@@ -106,7 +123,25 @@ public:
     void setRecordChooser(const RecordChooser &chooser) { m_recordChooser = chooser; }
 
 private:
+    /** What Tab would do with @a line: the text before the word, the
+     *  matches (sorted), and whether the word was begun with a quote. */
+    struct Completion
+    {
+        QString head;
+        QString partial;
+        QStringList matches;
+        bool quoted = false;
+    };
+    Completion completion(const QString &line, const Context &context) const;
+    /** A match as it goes in the line: quoted when it must be. */
+    static QString typed(const QString &name, bool quoted);
+
     QStringList groupNames() const;
+    /** Groups (and, for those in a folder, "Movers/Front/Spots"), then
+     *  fixtures: every name a layer can be made on. */
+    QStringList targetNames() const;
+    QStringList functionNames() const;
+    QStringList listNames(const Context &context) const;
     QStringList paletteNames(const QString &key) const;
     QStringList cueNumbers(const Context &context) const;
     static QStringList keywords();
@@ -117,6 +152,13 @@ private:
     Doc *m_doc;
     ShowTreeController *m_st;
     RecordChooser m_recordChooser;
+
+    // Tab pressed again: the next match.
+    QString m_tabLast;
+    QString m_tabHead;
+    QStringList m_tabMatches;
+    bool m_tabQuoted = false;
+    int m_tabIndex = -1;
 };
 
 /** @} */

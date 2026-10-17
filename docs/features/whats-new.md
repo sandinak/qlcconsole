@@ -32,6 +32,17 @@ The latest changes, newest first. Each links to the guide with the detail.
   doesn't exist yet becomes a palette named like yours. See
   [Record and duplicate](show-tree.md#record-and-duplicate) and
   [Values you pick or type](show-tree.md#values-you-pick-or-type).
+- **Show Tree: drop on the page, a command line that's always there.**
+  The cue page takes drops as the tree does — groups on it make a layer
+  (several at once: one layer, ⌥ for one each), onto a layer's row join it,
+  even a grey carried-in one — and the drop area and the line at the top
+  say what will happen. The command line now sits at the bottom of the tab
+  (**:** from the tree), and **Tab** completes every word it takes —
+  fixtures, folder paths, functions, cue lists, cue numbers, palettes by
+  kind — Tab again for the next. A dimmed RGB bar now shows its colour on
+  the Rig Overview (it drew black). See
+  [Adding layers](show-tree.md#adding-layers) and
+  [The command line](show-tree.md#the-command-line).
 - **Gobo looks by name.** A gobo look picked on one fixture type's wheel
   plays the gobo of the same name on every other type's own wheel; types
   without it ignore it. See [Gobos by name](show-tree.md#gobos-by-name).
