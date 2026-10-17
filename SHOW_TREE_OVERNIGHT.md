@@ -234,3 +234,69 @@ Branson answered §10 questions 6 and 7; built on `feat/show-tree`, pushed,
   list row: back to the running cue. Gobos: name a look "Dot" on a mixed
   group and read each type's line in the Look Editor.
 - **Open:** Blind and the preview (to discuss); the others in §10 unchanged.
+
+---
+
+## P2 (2026-10-17)
+
+Tracking in the tab, Update cue / Record, Library "In this cue list" and
+the optional command line (§8 P2). Built on `feat/show-tree`, pushed,
+**not merged**. Notes: SHOW_TREE_DESIGN.md **§10.10**; open questions 9–11
+added to §10.
+
+| Commit | What |
+|---|---|
+| bab2b58a0 | **Engine:** `dependsOn/canInclude` (includes can't loop; the resolver leaves a looping include/base out instead of reading a half-resolved cue: a latent P1 bug); `addInclude/removeInclude/moveInclude`; `rebakeChain()` + `lastBakeChanged()` (what a bake really changed); D22 `valueSource/updateSource`; `recordCue` (Block, D23 number), `duplicateCue`, `setCueMode`, `setTargetRelease`, `addCueNumbered`; `usageInList`; `ShowTreeCommand` with `beginBatch/endBatch` (one undo per command); tests |
+| 4ddb1a102 | **Tab:** list page base cue; cue page base check box, includes (+ menu greys loops with why, −, ↑↓), "Next cue receives" with values / back to base / released dark; Release on a carried-in layer; tree menu Mode / Record / Duplicate; header Record + "Changed: …"; ⋯ "Set in this cue" / "Update cue X"; Library "In this cue list"; command line (Command toggle, Tab, ↑↓, hint line); tests |
+| fe1f9b68c | Cue page scrolls; the real-show picture test can show tracking |
+| 62f9e9b91 | Help `show-tree.md`, design §10.10, TODO/DONE |
+| d36c7ffc8 | A failed command also drops a one-off value made before any tree change |
+
+- **Gate** (`./check-all.sh`, JOBS=4, `git archive` copies in the scratchpad):
+  - after item 1, on **4ddb1a102** (all P2 code): Qt6 **PASS** (478 s),
+    Qt6-Release **PASS** (417 s), Qt6-Werror **PASS** (455 s); 1350 s.
+  - final, on **d36c7ffc8**: Qt6 **PASS** (447 s), Qt6-Release **PASS**
+    (448 s), Qt6-Werror **PASS** (458 s); 1353 s.
+- **Tests:** `showtree_test` 47 + 1 opt-in skip (+12: re-bake chain on the
+  model and as baked, includes, D22, record, dup, usage, tracked preview,
+  **`convertAnImportToTracking`** — a DanceHysteria-shaped chaser imported,
+  converted by hand, plays §3.2 / §3.3 / §3.4 on the rig — command line ×3);
+  `showtreeview_test` 31 + 1 opt-in skip (+8); `helpbrowser_test` green.
+- **DanceHysteria-0.5 import dry run** (a copy in the scratchpad, unchanged
+  after): **0 channels differ** in all 8 cues (Full Show 6, New Chaser 8 2).
+- **Crash reports:** six `showtreeview_test-2026-10-17-0748..0749*.ips`
+  — mine, from the picture test I extended (it held a `CueList *` across an
+  edit; fixed in fe1f9b68c before commit-time runs). None from the gates.
+- **CI** run 39030378130 (d36c7ffc8): macOS, Linux, Windows **green**;
+  Linux coverage still running when this was written.
+
+### What to try in the app (on a COPY of a show)
+
+```sh
+cp ~/git/qlcconsole/test-workspaces/DanceHysteria-0.5.qlcc /tmp/dh-p2.qlcc
+~/git/qlcconsole-showtree/build/main/qlcconsole -o /tmp/dh-p2.qlcc
+```
+
+(It patches the show's outputs as usual; use Blind for the 2D view only.)
+
+1. Show Tree → Import chaser… → Full Show. Select the list: set **Tracking**
+   and a **Base cue**. Watch the grey ⤳ rows appear and "Changed: …" top right.
+2. Convert by hand: on 0.0.3 tick **Release** on AT-Spots; delete layers in
+   0.0.4 that only repeat 0.0.3; on 0.0.5–0.0.7 remove the include of the
+   cue before (cue page, Includes, −). Read **Next cue receives** on each.
+3. On a grey value, **⋯ → Update cue 0.0.3 …**: the change shows in every
+   cue it tracks into. Try **Set in this cue** for the difference.
+4. **Record** on 0.0.5: a Block cue 0.0.5.5 with everything on stage.
+5. **Command**: `cue + "Test" block`, `StepTops dimmer 45`, Tab on `Ste`,
+   `include 0.0.3`, `undo`.
+6. Library → **In this cue list** while a cue of the list is selected.
+
+### Open for Branson (also §10)
+
+- 9. Record as new cue in Perform: the selected cue (built) or the running
+  list's current cue / everything lit?
+- 10. Command line `Towers USTs …` = a layer each (mockup), `Towers+USTs` =
+  one; the mouse defaults the other way. Swap?
+- 11. `dimmer 45` always makes a one-off (no reuse of a palette at 45 %).
+- Unchanged: `Generated` on `<Function>`; undo shared with Programming;
+  effect's own Gobo; DanceHysteria Hold-0; Blind (to discuss).
