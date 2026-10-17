@@ -55,7 +55,25 @@ layers, 2 opaque (scenes with no looks). Details in §10.6.
 
 ## Test / gate status
 
-GATE_STATUS_PLACEHOLDER
+- **`./check-all.sh`** (Qt6 / Qt6-Release / Qt6-Werror, run with JOBS=5 on
+  a `git archive` of the commit in the scratchpad so the worktree could keep
+  moving):
+  - on **ea8c14e0b** (spike + engine a–c): **all three legs PASS**
+    (396 s / 412 s / 428 s).
+  - on **e9567719c** (everything through the docked Look Editor and the
+    reach hover; only this file changed since): **all three legs PASS**
+    (whole gate 1295 s).
+- New tests: `cuehandover_test` 11/11, `showtree_test` 26 + 1 opt-in skip,
+  `showtreeview_test` 18 + 1 opt-in skip; chaser, chaserrunner, collection,
+  sub-cues, show control, programmingmanager, appviews, helpbrowser all green.
+- **No crash reports** (`~/Library/Logs/DiagnosticReports`, nothing new
+  since the run began). One environmental stall: `qlcfixturedefcache_test
+  storeDef()` sat in `sync()` for minutes while Time Machine was backing up
+  over SMB; it finished on its own.
+- **CI** (sandinak/qlcconsole, push builds): spike commit **all green**;
+  engine and later commits — macOS, Linux and Linux-coverage **green**,
+  Windows still queued/running when this was written (check
+  `gh run list -R sandinak/qlcconsole --branch feat/show-tree`).
 
 ## What's left of P1
 
