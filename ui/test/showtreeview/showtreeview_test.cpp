@@ -67,6 +67,10 @@
 #include "qlcchannel.h"
 #include "qlcfixturemode.h"
 #include "showtreeview.h"
+#include "linespreadpreview.h"
+#include "monitorproperties.h"
+#include "stagetarget.h"
+#include "qlcphysical.h"
 #include "lookeditor.h"
 #include "fixturegroup.h"
 #include "qlcpalette.h"
@@ -2995,6 +2999,129 @@ void ShowTreeView_Test::renameInPlace()
     QCOMPARE(st->cue(c1)->layer(layer)->name, QString("Lead"));
     QVERIFY2(view.runCommand("name \"\""), qPrintable(view.commandMessage()));
     QVERIFY(st->cue(c1)->layer(layer)->name.isEmpty());
+}
+
+namespace
+{
+Fixture *placedSpot(Doc *doc, const QString &name, double x)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel("Spot " + name);
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("2ch");
+    const QLCChannel::Group groups[] = { QLCChannel::Pan, QLCChannel::Tilt };
+    for (int k = 0; k < 2; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(k == 0 ? "Pan" : "Tilt");
+        ch->setGroup(groups[k]);
+        ch->setControlByte(QLCChannel::MSB);
+        def->addChannel(ch);
+        mode->insertChannel(ch, k);
+    }
+    QLCPhysical ph;
+    ph.setFocusPanMax(540);
+    ph.setFocusTiltMax(270);
+    mode->setPhysical(ph);
+    QLCFixtureHead head;
+    head.addChannel(0);
+    head.addChannel(1);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+    Fixture *fxi = new Fixture(doc);
+    fxi->setName(name);
+    fxi->setFixtureDefinition(def, mode);
+    fxi->setUniverse(0);
+    fxi->setAddress(quint32(100 + doc->fixtures().size() * 2));
+    if (!doc->addFixture(fxi))
+        return nullptr;
+    doc->monitorProperties()->setFixturePosition(fxi->id(), 0, 0, QVector3D(float(x * 1000.0), 0, 6));
+    return fxi;
+}
+}
+
+/* §3B in the tab: Library → Targets; a line dropped on the cue is one
+   formation over its layers (the rows say so, the order strip numbers the
+   lights across both by where they hang); Spread / Grouping / Cross rows
+   under Position, set from ⋯, the cue's Line ⋯ and the command line. */
+void ShowTreeView_Test::lineAimsInTheTab()
+{
+    Fixture *l1 = placedSpot(m_doc, "L1", -4), *l2 = placedSpot(m_doc, "L2", -1);
+    Fixture *r1 = placedSpot(m_doc, "R1", 2), *r2 = placedSpot(m_doc, "R2", 4);
+    FixtureGroup *left = new FixtureGroup(m_doc);
+    left->setName("Left");
+    m_doc->addFixtureGroup(left);
+    left->assignFixture(l1->id());
+    left->assignFixture(l2->id());
+    FixtureGroup *right = new FixtureGroup(m_doc);
+    right->setName("Right");
+    m_doc->addFixtureGroup(right);
+    right->assignFixture(r1->id());
+    right->assignFixture(r2->id());
+    StageTarget *edge = m_doc->monitorProperties()->addStageTarget();
+    edge->setName("DS-Edge");
+    edge->setPosition(QVector3D(0, 3, 0));
+    edge->setLinePoints({ QVector3D(-5, 0, 0), QVector3D(5, 0, 0) });
+    edge->makeLine();
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(list, -1, "One");
+    Target tl, tr;
+    tl.groups << left->id();
+    tr.groups << right->id();
+    const quint32 ll = st->addLayer(c1, tl);
+    st->addLayer(c1, tr);
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTRY_VERIFY(libraryItem(view.library(), "DS-Edge (line)") != nullptr);
+    QVERIFY(view.selectNode(c1));
+    QLabel *hint = view.findChild<QLabel *>("stDropHint");
+    QWidget *page = view.findChild<QWidget *>("stCuePage");
+    QLabel *zone = view.findChild<QLabel *>("stCueDropZone");
+    const QPoint onZone = zone->mapTo(page, zone->rect().center());
+    QCOMPARE(dragAndDrop(page, onZone, idsMime(ShowTreeView::targetMimeType(), { edge->id() }), hint),
+             QString("Aim at DS-Edge → cue look on 1 One: one formation over its layers"));
+    QVERIFY(st->cue(c1)->look(KeyPosition) != nullptr);
+
+    QVERIFY(view.selectNode(ll, c1));
+    QCOMPARE(rowFor(view.attributeRows(), "Position"),
+             QString("Position | Aim DS-Edge | from cue 1 One · one formation with Right"));
+    QCOMPARE(rowFor(view.attributeRows(), "Spread"), QString("Spread | +5 | the Aim look's"));
+    QCOMPARE(rowFor(view.attributeRows(), "Grouping"), QString("Grouping | Each light | the Aim look's"));
+    LineSpreadPreview *strip = qobject_cast<LineSpreadPreview *>(view.lineStrip());
+    QVERIFY(strip != nullptr);
+    QStringList names;
+    for (const LineSpreadPreview::Dot &d : strip->dots())
+        names << d.name;
+    QCOMPARE(names, QStringList({ "L1", "L2", "R1", "R2" }));
+
+    // The cue's Spread (Line ⋯): reaches both, as one.
+    QVERIFY(view.setLineParam(c1, invalidId(), KeySpread, "0"));
+    QVERIFY(view.selectNode(ll, c1));
+    QCOMPARE(rowFor(view.attributeRows(), "Spread"), QString("Spread | 0 | from cue 1 One"));
+    // Its own Grouping: it leaves the formation.
+    QVERIFY(view.setLineParam(c1, ll, KeyGrouping, "pairs"));
+    QCOMPARE(rowFor(view.attributeRows(), "Grouping"), QString("Grouping | Pairs | "));
+    QVERIFY(!rowFor(view.attributeRows(), "Position").contains("one formation"));
+    QVERIFY(st->undo());
+    // Typed.
+    QVERIFY2(view.runCommand("Right spread -5 group pairs cross mirror"), qPrintable(view.commandMessage()));
+    const Layer *rl = nullptr;
+    for (const Layer &l : st->cue(c1)->layers)
+        if (l.target == tr)
+            rl = &l;
+    QVERIFY(rl != nullptr);
+    QCOMPARE(rl->look(KeySpread)->value, QString("-5"));
+    QCOMPARE(rl->look(KeyGrouping)->value, QString("pairs"));
+    QCOMPARE(rl->look(KeyCross)->value, QString("mirror"));
+    QVERIFY2(view.runCommand("Left aim DS-Edge"), qPrintable(view.commandMessage()));
+    QVERIFY(!view.runCommand("Left spread 9"));
+    QVERIFY(view.commandMessage().contains("spread -5"));
 }
 
 QTEST_MAIN(ShowTreeView_Test)

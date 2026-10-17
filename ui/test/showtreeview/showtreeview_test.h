@@ -83,6 +83,7 @@ private slots:
     void groupSetsInTheLibrary();
     void childLayersByMouse();
     void renameInPlace();
+    void lineAimsInTheTab();
 
 private:
     quint32 dimmer(int level, const QString &name);

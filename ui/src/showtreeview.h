@@ -94,7 +94,7 @@ public:
     };
 
     /** Library item kinds. */
-    enum LibraryKind { LibSection = 100, LibFolder, LibGroup, LibFixture, LibPalette, LibFunction, LibSet };
+    enum LibraryKind { LibSection = 100, LibFolder, LibGroup, LibFixture, LibPalette, LibFunction, LibSet, LibTarget };
 
     QTreeWidget *tree() const { return m_tree; }
     QTreeWidget *library() const { return m_library; }
@@ -128,6 +128,9 @@ public:
     quint32 makeSetFromLibrary(const QString &name);
     /** MIME type of group sets dragged from the Library (a stream of ids). */
     static const char *setMimeType();
+    /** MIME type of stage targets (points, areas, lines) dragged from the
+     *  Library: dropped, a Position "Aim at" that target (§3B). */
+    static const char *targetMimeType();
     /** Functions dropped on a cue: opaque function layers. */
     bool dropFunctions(quint32 cueId, const QList<quint32> &functions);
     /** Palettes dropped on a layer (or, with no layer, on the cue's looks;
@@ -225,6 +228,13 @@ public:
                       const ShowTree::Target &target = ShowTree::Target());
     bool setAttributeNone(quint32 cueId, quint32 layerId, const QString &key);
 
+    /** Set a line parameter look (@a key KeySpread / KeyGrouping /
+     *  KeyCross, @a value as typed; empty clears it) on the layer, the
+     *  carried-in @a target, or (no layer) the cue. */
+    bool setLineParam(quint32 cueId, quint32 layerId, const QString &key, const QString &value,
+                      const ShowTree::Target &target = ShowTree::Target());
+    /** The order strip under a line aim's Position row (null: none). */
+    QWidget *lineStrip() const;
     /** The attribute rows the inspector shows for the selected layer, as
      *  text: "Colour | Blue | from cue 1" -- for the tests. */
     QStringList attributeRows() const;
@@ -351,6 +361,10 @@ private:
     void attributeMenu(quint32 cueId, quint32 layerId, const ShowTree::Target &target,
                        const ShowTree::Target &rowTarget, const QString &key, const QPoint &globalPos);
     void includesMenu(QMenu *menu, quint32 cueId);
+    /** A line's Spread / Grouping / Cross (D16): submenus that set them on
+     *  the layer (or the carried-in @a target, or the cue). */
+    void lineParamMenu(QMenu *menu, quint32 cueId, quint32 layerId, const ShowTree::Target &target,
+                       const QString &onlyKey = QString());
     void updateIncludeButtons();
     /** The cue list the selection is in (invalid: none). */
     quint32 currentListId() const;

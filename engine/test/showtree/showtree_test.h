@@ -121,6 +121,12 @@ private slots:
     void childLayerEditsWhileTheDmxThreadRuns();
     void anImportedOverlapMixesAsTheChaserDid();
 
+    // P3: cue-level effects (D10), line aims (D16-D19)
+    void aCueEffectIsOneAcrossItsLayers();
+    void cueSpreadReachesOnlyLineAims();
+    void aCueAimIsOneFormationByPosition();
+    void aSpreadChangeFadesOverTheCueFade();
+
 private:
     quint32 dimmer(int level, const QString &name);
     quint32 colour(const QString &name);

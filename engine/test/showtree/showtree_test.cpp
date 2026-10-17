@@ -49,6 +49,16 @@
 #include "scene.h"
 #include "doc.h"
 
+#include "monitorproperties.h"
+#include "effectinstance.h"
+#include "qlcfixturemode.h"
+#include "qlcfixturehead.h"
+#include "qlcphysical.h"
+#include "qlcchannel.h"
+#include "stagetarget.h"
+#include "aimsolver.h"
+#include <QTemporaryDir>
+
 #include "showtree_test.h"
 
 using namespace ShowTree;
@@ -3621,6 +3631,334 @@ void ShowTree_Test::anImportedOverlapMixesAsTheChaserDid()
     stopAll();
     QVERIFY(st->undo());
     QVERIFY(st->cue(cueId)->mixOverlap);
+}
+
+/****************************************************************************
+ * P3: cue-level effects (D10) and line aims (§3B, D16-D19)
+ ****************************************************************************/
+
+namespace
+{
+/* A two-channel spot (pan, tilt), placed at @a x metres across the stage,
+   6 m up. */
+Fixture *placedSpot(Doc *doc, const QString &name, double x)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel("Spot " + name);
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("2ch");
+    const QLCChannel::Group groups[] = { QLCChannel::Pan, QLCChannel::Tilt };
+    for (int k = 0; k < 2; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(k == 0 ? "Pan" : "Tilt");
+        ch->setGroup(groups[k]);
+        ch->setControlByte(QLCChannel::MSB);
+        def->addChannel(ch);
+        mode->insertChannel(ch, k);
+    }
+    QLCPhysical ph;
+    ph.setFocusPanMax(540);
+    ph.setFocusTiltMax(270);
+    mode->setPhysical(ph);
+    QLCFixtureHead head;
+    head.addChannel(0);
+    head.addChannel(1);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+    Fixture *fxi = new Fixture(doc);
+    fxi->setName(name);
+    fxi->setFixtureDefinition(def, mode);
+    fxi->setUniverse(0);
+    fxi->setAddress(quint32(100 + doc->fixtures().size() * 2));
+    if (!doc->addFixture(fxi))
+        return nullptr;
+    doc->monitorProperties()->setFixturePosition(fxi->id(), 0, 0, QVector3D(float(x * 1000.0), 0, 6));
+    return fxi;
+}
+
+/* The point a scene aims @a fid at (its own Aim look), or a null vector. */
+QVector3D aimedAt(Doc *doc, const Scene *scene, quint32 fid)
+{
+    for (const AimSolver::SceneAim &a : AimSolver::sceneAims(doc, scene))
+        if (a.fixtureId == fid)
+            return a.point;
+    return QVector3D(-99, -99, -99);
+}
+
+/* The generated scene a cue plays for the layer on @a target. */
+const Scene *sceneOf(ShowTreeController *st, Doc *doc, quint32 cueId, const Target &target)
+{
+    return qobject_cast<const Scene *>(doc->function(st->layerScene(cueId, target)));
+}
+}
+
+/* D10: an effect set on the cue is ONE effect across the cue's own layers
+   that don't set that effect kind (or None) themselves: each of their
+   scenes plays it with a layout over all of them and writes its own; it
+   tracks as one until a later cue changes some of them. */
+void ShowTree_Test::aCueEffectIsOneAcrossItsLayers()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0], m_fixtures[1] });
+    FixtureGroup *b = group("B", { m_fixtures[2], m_fixtures[3] });
+    FixtureGroup *c = group("C", { m_fixtures[4] });
+    FixtureGroup *d = group("D", { m_fixtures[5] });
+    // A script that lights each cell by its place in the layout: 1/n, 2/n…
+    QTemporaryDir dir;
+    QFile js(dir.filePath("ramp.js"));
+    QVERIFY(js.open(QIODevice::WriteOnly));
+    js.write("(function() { var e = {}; e.apiVersion = 1; e.name = 'Ramp';"
+             " e.tick = function(fixtures) { var out = [];"
+             " for (var i = 0; i < fixtures.length; i++) out.push({ dimmer: (i + 1) / fixtures.length });"
+             " return out; }; return e; })()");
+    js.close();
+    QLCPalette *ramp = new QLCPalette(QLCPalette::Effect, m_doc);
+    ramp->setName("Ramp");
+    ramp->setScriptPath(js.fileName());
+    m_doc->addPalette(ramp);
+    QLCPalette *other = new QLCPalette(QLCPalette::Effect, m_doc);
+    other->setName("Other");
+    other->setScriptPath(js.fileName());
+    m_doc->addPalette(other);
+    const quint32 full = dimmer(255, "Full");
+
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L");      // Tracking
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    const quint32 c3 = st->addCue(listId, 1, "Three");
+    for (FixtureGroup *g : { a, b, c, d })
+        st->setLayerLook(c1, st->addLayer(c1, groupTarget(g->id())), st->lookForPalette(full));
+    const Look fx = st->lookForPalette(ramp->id());
+    QVERIFY(st->setCueLook(c1, fx));
+    // C sets that effect kind itself; D turns it off: both left out.
+    const Look own = st->lookForPalette(other->id());
+    QCOMPARE(own.key, fx.key);
+    QVERIFY(st->setLayerLook(c1, st->cue(c1)->layers.at(2).id, own));
+    Look none;
+    none.key = fx.key;
+    none.none = true;
+    QVERIFY(st->setLayerLook(c1, st->cue(c1)->layers.at(3).id, none));
+
+    const Scene *sa = sceneOf(st, m_doc, c1, groupTarget(a->id()));
+    const Scene *sb = sceneOf(st, m_doc, c1, groupTarget(b->id()));
+    const Scene *sc = sceneOf(st, m_doc, c1, groupTarget(c->id()));
+    const Scene *sd = sceneOf(st, m_doc, c1, groupTarget(d->id()));
+    QVERIFY(sa && sb && sc && sd);
+    QVERIFY(sa != sb);
+    // A and B: one effect, laid out over both; C its own, D none.
+    QCOMPARE(sa->layoutSpan(ramp->id()).groups, QList<quint32>({ a->id(), b->id() }));
+    QCOMPARE(sb->layoutSpan(ramp->id()).groups, QList<quint32>({ a->id(), b->id() }));
+    QVERIFY(sc->palettes().contains(other->id()) && sc->layoutSpan(other->id()).isEmpty());
+    QVERIFY(!sd->palettes().contains(ramp->id()));
+    QCOMPARE(st->spanMembers(c1, groupTarget(a->id()), fx.key).count(), 2);
+
+    // The effect runs as one: each scene lays it out over all four heads,
+    // in one order, and writes only its own.
+    EffectInstance ia(m_doc, sa->id(), ramp->id()), ib(m_doc, sb->id(), ramp->id());
+    QVERIFY(ia.isValid() && ib.isValid());
+    int cols = 0, rows = 0;
+    const QList<EffectInstance::EffectCell> ca = ia.effectiveCells(cols, rows);
+    const QList<EffectInstance::EffectCell> cb = ib.effectiveCells(cols, rows);
+    QCOMPARE(ca.count(), 4);
+    QVERIFY(ca == cb);
+    QList<quint32> order;
+    for (const EffectInstance::EffectCell &cell : ca)
+        order << cell.fixtureId;
+    QCOMPARE(order, QList<quint32>({ m_fixtures[0], m_fixtures[1], m_fixtures[2], m_fixtures[3] }));
+    QCOMPARE(ia.effectiveFixtureIds(), QList<quint32>({ m_fixtures[0], m_fixtures[1] }));
+    ib.runTick();
+    QVERIFY(!ib.dmxWrites().isEmpty());
+    for (const EffectInstance::DmxWrite &w : ib.dmxWrites())
+        QVERIFY(w.fixtureId == m_fixtures[2] || w.fixtureId == m_fixtures[3]);
+
+    // Tracked into Two: still one (the same scenes play on).
+    QCOMPARE(sceneOf(st, m_doc, c2, groupTarget(a->id())), sa);
+    // Three sets B's effect itself: A is on its own now.
+    st->setLayerLook(c3, st->addLayer(c3, groupTarget(b->id())), own);
+    const Scene *a3 = sceneOf(st, m_doc, c3, groupTarget(a->id()));
+    QVERIFY(a3 != nullptr && a3->palettes().contains(ramp->id()));
+    QVERIFY(a3->layoutSpan(ramp->id()).isEmpty());
+    QVERIFY(st->spanMembers(c3, groupTarget(a->id()), fx.key).isEmpty());
+}
+
+/* D18: a cue's Spread / Grouping / Cross reach only layers whose resolved
+   Position aims at a line; D16: each is a key of its own, inherited on its
+   own. */
+void ShowTree_Test::cueSpreadReachesOnlyLineAims()
+{
+    enum : quint32 { Line = 301, Point = 302 };
+    CueList list;
+    list.mode = ListMode::Tracking;
+    list.cues << cue(1, "1", CueMode::ListDefault,
+                     { layer(11, Towers, { look(KeyPosition, { Line }) }),
+                       layer(12, USTs, { look(KeyPosition, { Point }) }),
+                       layer(13, ATSpots, {}) },
+                     { [] { Look l; l.key = KeySpread; l.value = "0"; return l; }(),
+                       [] { Look l; l.key = KeyGrouping; l.value = "pairs"; return l; }() });
+    list.cues << cue(2, "2", CueMode::ListDefault, { layer(21, Towers, { [] { Look l; l.key = KeyCross; l.value = "mirror"; return l; }() }) });
+    const LineAimTest isLine = [](const Look &l) { return l.palettes.value(0) == Line; };
+    const QList<ResolvedCue> r = resolve(list, isLine);
+    const ResolvedLayer *towers = r.at(0).layer(groupTarget(Towers));
+    QCOMPARE(towers->values.value(KeySpread).look.value, QString("0"));
+    QCOMPARE(int(towers->values.value(KeySpread).origin), int(Origin::CueLook));
+    QCOMPARE(towers->values.value(KeySpread).span, quint32(1));
+    QVERIFY(!r.at(0).layer(groupTarget(USTs))->values.contains(KeySpread));
+    QVERIFY(!r.at(0).layer(groupTarget(ATSpots))->values.contains(KeyGrouping));
+    // Without a line test: none.
+    QVERIFY(!resolve(list).at(0).layer(groupTarget(Towers))->values.contains(KeySpread));
+    // Cue 2: Cross set on its own; Spread and Grouping tracked, one by one.
+    const ResolvedLayer *t2 = r.at(1).layer(groupTarget(Towers));
+    QCOMPARE(t2->values.value(KeyCross).look.value, QString("mirror"));
+    QCOMPARE(int(t2->values.value(KeyCross).origin), int(Origin::Own));
+    QCOMPARE(int(t2->values.value(KeySpread).origin), int(Origin::Tracked));
+    QCOMPARE(t2->values.value(KeySpread).fromCue, quint32(1));
+    QCOMPARE(t2->values.value(KeyGrouping).look.value, QString("pairs"));
+    // The values read as typed.
+    QCOMPARE(ShowTreeController::lineParamValue(KeySpread, "+2.53"), QString("2.5"));
+    QCOMPARE(ShowTreeController::lineParamValue(KeySpread, "7"), QString());
+    QCOMPARE(ShowTreeController::lineParamValue(KeyGrouping, "pair"), QString("pairs"));
+    QCOMPARE(ShowTreeController::lineParamValue(KeyCross, "flip"), QString("mirror"));
+}
+
+/* D17: an aim at a line set on the cue is ONE formation over the union of
+   the cue's own layers, numbered by where the heads hang along the line
+   across the whole union -- a group set's towers and the spots between
+   them interleave by position on stage, not by group. A layer that sets
+   its own Spread leaves and spreads on its own; the formation tracks. */
+void ShowTree_Test::aCueAimIsOneFormationByPosition()
+{
+    Fixture *sl1 = placedSpot(m_doc, "SL1", -4), *sl2 = placedSpot(m_doc, "SL2", -2);
+    Fixture *sr1 = placedSpot(m_doc, "SR1", 2), *sr2 = placedSpot(m_doc, "SR2", 4);
+    Fixture *at1 = placedSpot(m_doc, "AT1", -3), *at2 = placedSpot(m_doc, "AT2", 3);
+    QVERIFY(sl1 && sl2 && sr1 && sr2 && at1 && at2);
+    FixtureGroup *sl = group("SL", { sl1->id(), sl2->id() });
+    FixtureGroup *sr = group("SR", { sr1->id(), sr2->id() });
+    // AT-Spots listed right to left: the order must come from the stage.
+    FixtureGroup *at = group("AT-Spots", { at2->id(), at1->id() });
+    MonitorProperties *props = m_doc->monitorProperties();
+    StageTarget *edge = props->addStageTarget();
+    edge->setName("DS-Edge");
+    edge->setPosition(QVector3D(0, 3, 0));
+    edge->setLinePoints({ QVector3D(-5, 0, 0), QVector3D(5, 0, 0) });
+    edge->makeLine();
+    QVERIFY(edge->isLine());
+
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 towers = st->addGroupSet("Towers", { sl->id(), sr->id() });
+    const quint32 aim = st->aimPaletteFor(edge->id());
+    QCOMPARE(m_doc->palette(aim)->name(), QString("Aim DS-Edge"));
+    QCOMPARE(st->aimPaletteFor(edge->id()), aim);          // reused
+    QVERIFY(st->isLineAim(st->lookForPalette(aim)));
+
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L");      // Tracking
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    const quint32 c3 = st->addCue(listId, 1, "Three");
+    Target tt;
+    tt.sets << towers;
+    st->addLayer(c1, tt);
+    st->addLayer(c1, groupTarget(at->id()));
+    QVERIFY(st->setCueLook(c1, st->lookForPalette(aim)));
+
+    // One formation of six, by X: SL1 AT1 SL2 SR1 AT2 SR2, end to end.
+    const Scene *ts = sceneOf(st, m_doc, c1, tt);
+    const Scene *as = sceneOf(st, m_doc, c1, groupTarget(at->id()));
+    QVERIFY(ts && as);
+    const QList<QPair<Fixture *, float>> want = { { sl1, -5.f }, { at1, -3.f }, { sl2, -1.f },
+                                                  { sr1, 1.f }, { at2, 3.f }, { sr2, 5.f } };
+    for (const auto &w : want)
+    {
+        const Scene *sc = (w.first == at1 || w.first == at2) ? as : ts;
+        const QVector3D p = aimedAt(m_doc, sc, w.first->id());
+        QVERIFY2(qAbs(p.x() - w.second) < 0.05f,
+                 qPrintable(QString("%1 aims at x=%2, not %3").arg(w.first->name()).arg(p.x()).arg(w.second)));
+    }
+    QCOMPARE(st->spanMembers(c1, tt, KeyPosition).count(), 2);
+
+    // Cue Two: a cue Spread 0 -- the formation, all on the centre.
+    Look spread0 = ShowTreeController::lineParamLook(KeySpread, "0");
+    QVERIFY(st->setCueLook(c2, spread0));
+    // (A cue look reaches the cue's own layers: bring them in.)
+    st->addLayer(c2, tt);
+    st->addLayer(c2, groupTarget(at->id()));
+    const Scene *ts2 = sceneOf(st, m_doc, c2, tt);
+    QVERIFY(ts2 != nullptr);
+    QVERIFY(qAbs(aimedAt(m_doc, ts2, sl1->id()).x()) < 0.05f);
+
+    // Cue Three: AT-Spots sets its own Spread +2.5: it leaves and spreads
+    // on its own (its two at a quarter and three quarters).
+    const quint32 atLayer = st->addLayer(c3, groupTarget(at->id()));
+    QVERIFY(st->setLayerLook(c3, atLayer, ShowTreeController::lineParamLook(KeySpread, "2.5")));
+    const Scene *as3 = sceneOf(st, m_doc, c3, groupTarget(at->id()));
+    QVERIFY(as3 != nullptr);
+    QVERIFY2(qAbs(aimedAt(m_doc, as3, at1->id()).x() + 2.5f) < 0.05f,
+             qPrintable(QString::number(aimedAt(m_doc, as3, at1->id()).x())));
+    QVERIFY(qAbs(aimedAt(m_doc, as3, at2->id()).x() - 2.5f) < 0.05f);
+    // The Towers, still one formation at the tracked spread 0: the centre.
+    const Scene *ts3 = sceneOf(st, m_doc, c3, tt);
+    QVERIFY(ts3 != nullptr);
+    QVERIFY(qAbs(aimedAt(m_doc, ts3, sr2->id()).x()) < 0.05f);
+    QVERIFY(st->spanMembers(c3, groupTarget(at->id()), KeyPosition).isEmpty());
+    // Its own Spread plays an inline Aim palette made for it, hidden.
+    quint32 derived = QLCPalette::invalidId();
+    for (quint32 pid : as3->palettes())
+        if (m_doc->palette(pid)->type() == QLCPalette::Aim)
+            derived = pid;
+    QVERIFY(derived != aim && st->isInlinePalette(derived));
+    QCOMPARE(m_doc->palette(derived)->stageTargetId(), edge->id());
+    // Undo: gone with it.
+    QVERIFY(st->undo());
+    QVERIFY(m_doc->palette(derived) == nullptr);
+}
+
+/* D19: a Spread change between cues fades over the cue's fade time (pan
+   and tilt fade, so the beams sweep). */
+void ShowTree_Test::aSpreadChangeFadesOverTheCueFade()
+{
+    Fixture *left = placedSpot(m_doc, "Left", -4), *right = placedSpot(m_doc, "Right", 4);
+    FixtureGroup *pair = group("Pair", { left->id(), right->id() });
+    StageTarget *edge = m_doc->monitorProperties()->addStageTarget();
+    edge->setName("Edge");
+    edge->setPosition(QVector3D(0, 3, 0));
+    edge->setLinePoints({ QVector3D(-5, 0, 0), QVector3D(5, 0, 0) });
+    edge->makeLine();
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 aim = st->aimPaletteFor(edge->id());
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    const quint32 l1 = st->addLayer(c1, groupTarget(pair->id()));
+    st->setLayerLook(c1, l1, st->lookForPalette(aim));
+    st->setLayerLook(c1, l1, ShowTreeController::lineParamLook(KeySpread, "0"));
+    const quint32 l2 = st->addLayer(c2, groupTarget(pair->id()));
+    st->setLayerLook(c2, l2, ShowTreeController::lineParamLook(KeySpread, "5"));
+    ShowTree::Cue two = *st->cue(c2);
+    two.fadeIn = 2000;
+    QVERIFY(st->setCue(two));
+
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    const quint32 pan = left->universeAddress();
+    auto panNow = [&]() {
+        QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+        const int v = uchar(ua.first()->preGMValues().at(int(pan)));
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        return v;
+    };
+    go(chaser);
+    tick(20);
+    const int from = panNow();
+    go(chaser);
+    tick(50);                              // a second into a two-second fade
+    const int mid = panNow();
+    tick(100);
+    const int to = panNow();
+    QVERIFY2(from != to, qPrintable(QString("%1 -> %2").arg(from).arg(to)));
+    QVERIFY2((mid > qMin(from, to) && mid < qMax(from, to)),
+             qPrintable(QString("pan %1 -> %2 -> %3: no sweep").arg(from).arg(mid).arg(to)));
+    stopAll();
 }
 
 QTEST_MAIN(ShowTree_Test)

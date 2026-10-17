@@ -59,6 +59,10 @@
 #include "showtreecommand.h"
 #include "fixturegroupsource.h"
 #include "functionstreewidget.h"
+#include "linespreadpreview.h"
+#include "monitorproperties.h"
+#include "stagetarget.h"
+#include "linespread.h"
 #include "showtreeview.h"
 #include "effectscriptrunner.h"
 #include "lookeditor.h"
@@ -305,11 +309,11 @@ public:
 protected:
     QMimeData *mimeData(const QList<QTreeWidgetItem *> &items) const override
     {
-        QByteArray grp, fx, pal, fn, set;
+        QByteArray grp, fx, pal, fn, set, tgt;
         QDataStream gs(&grp, QIODevice::WriteOnly), xs(&fx, QIODevice::WriteOnly),
                     ps(&pal, QIODevice::WriteOnly), fs(&fn, QIODevice::WriteOnly),
-                    ss(&set, QIODevice::WriteOnly);
-        int g = 0, x = 0, p = 0, f = 0, t = 0;
+                    ss(&set, QIODevice::WriteOnly), ts(&tgt, QIODevice::WriteOnly);
+        int g = 0, x = 0, p = 0, f = 0, t = 0, a = 0;
         for (QTreeWidgetItem *item : items)
         {
             const quint32 id = item->data(0, ShowTreeView::IdRole).toUInt();
@@ -320,10 +324,11 @@ protected:
                 case ShowTreeView::LibPalette: ps << id; ++p; break;
                 case ShowTreeView::LibFunction: fs << id; ++f; break;
                 case ShowTreeView::LibSet: ss << id; ++t; break;
+                case ShowTreeView::LibTarget: ts << id; ++a; break;
                 default: break;
             }
         }
-        if (g + x + p + f + t == 0)
+        if (g + x + p + f + t + a == 0)
             return nullptr;
         QMimeData *mime = new QMimeData();
         if (g > 0)
@@ -336,6 +341,8 @@ protected:
             mime->setData(QLatin1String(FunctionsTreeWidget::functionDragMimeType()), fn);
         if (t > 0)
             mime->setData(QLatin1String(ShowTreeView::setMimeType()), set);
+        if (a > 0)
+            mime->setData(QLatin1String(ShowTreeView::targetMimeType()), tgt);
         return mime;
     }
 };
@@ -899,7 +906,28 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_cueLooks = new QLabel(inner);
         m_cueLooks->setWordWrap(true);
         m_cueLooks->setObjectName("stCueLooks");
-        f->addRow(tr("Cue looks"), m_cueLooks);
+        {
+            QWidget *row = new QWidget(inner);
+            QHBoxLayout *h = new QHBoxLayout(row);
+            h->setContentsMargins(0, 0, 0, 0);
+            h->addWidget(m_cueLooks, 1);
+            // A line's Spread / Grouping / Cross for the whole cue (D18:
+            // they reach the layers aiming at a line).
+            QToolButton *line = new QToolButton(row);
+            line->setObjectName("stCueLineParams");
+            line->setText(tr("Line ⋯"));
+            line->setToolTip(tr("Spread, Grouping and Cross for the cue: they reach the layers whose "
+                                "Position aims at a line, as one formation"));
+            connect(line, &QToolButton::clicked, this, [this, line]() {
+                if (m_pageCue == invalidId())
+                    return;
+                QMenu menu(this);
+                lineParamMenu(&menu, m_pageCue, invalidId(), Target());
+                menu.exec(line->mapToGlobal(QPoint(0, line->height())));
+            });
+            h->addWidget(line, 0, Qt::AlignTop);
+            f->addRow(tr("Cue looks"), row);
+        }
         {
             // One row per layer (onto a row: added to that layer), and under
             // them the drop area for a new one.
@@ -1639,6 +1667,10 @@ QString ShowTreeView::lookText(const Look &look) const
 {
     if (look.none)
         return tr("%1 none").arg(keyLabel(look.key));
+    if (!look.value.isEmpty())
+        return isLineParamKey(look.key) ? tr("%1 %2").arg(keyLabel(look.key),
+                                                         ShowTreeController::lineParamText(look.key, look.value))
+                                        : look.value;
     QStringList names;
     for (quint32 p : look.palettes)
         names << paletteName(p);
@@ -2030,6 +2062,11 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
     }
 
     QStringList keys = attributeKeys();
+    // A line aim's Spread / Grouping / Cross (§3B, D16): rows of their own
+    // under Position, when it aims at a line (or they are set anyway).
+    const bool lineAim = rl->values.contains(KeyPosition) && m_st->isLineAim(rl->values.value(KeyPosition).look);
+    if (lineAim)
+        keys << KeySpread << KeyGrouping << KeyCross;
     for (const QString &k : rl->values.keys())
         if (!keys.contains(k))
             keys << k;
@@ -2050,15 +2087,16 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
     {
         const bool addEffect = key == QLatin1String("Effect.");
         QLabel *label = new QLabel(addEffect ? tr("Effect") : keyLabel(key), m_rowsHost);
-        if (key.startsWith(QLatin1String("Beam.")))
-            label->setText(QStringLiteral("   ") + label->text());     // Beam's children
+        if (key.startsWith(QLatin1String("Beam.")) || isLineParamKey(key))
+            label->setText(QStringLiteral("   ") + label->text());     // Beam's / a line aim's children
         QLabel *value = new QLabel(m_rowsHost);
         value->setObjectName(QStringLiteral("stRow:%1").arg(key));
         QString text, origin;
         if (!addEffect && rl->values.contains(key))
         {
             const ResolvedValue &v = rl->values.value(key);
-            text = lookText(v.look);
+            text = isLineParamKey(key) && !v.look.none ? ShowTreeController::lineParamText(key, v.look.value)
+                                                       : lookText(v.look);
             origin = originText(list, v);
             if (v.origin != Origin::Own)
             {
@@ -2069,6 +2107,24 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
                 f.setItalic(true);
                 value->setFont(f);
             }
+        }
+        else if (isLineParamKey(key) && lineAim)
+        {
+            // Not set: the Aim look's own (its default +5, each light, swap).
+            const QLCPalette *aimPal = m_doc->palette(rl->values.value(KeyPosition).look.palettes.value(0));
+            const LineSpread::Settings ls = aimPal == nullptr ? LineSpread::Settings()
+                                                              : LineSpread::fromParams(aimPal->effectParamValues());
+            const QString v = key == KeySpread ? QString::number(ls.spread)
+                              : key == KeyCross ? (ls.cross == LineSpread::Mirror ? QStringLiteral("mirror")
+                                                                                   : QStringLiteral("swap"))
+                              : ls.group == LineSpread::Halves ? QStringLiteral("halves")
+                              : ls.group == 2 ? QStringLiteral("pairs") : ls.group == 3 ? QStringLiteral("threes")
+                              : ls.group == 4 ? QStringLiteral("fours") : QStringLiteral("each");
+            text = ShowTreeController::lineParamText(key, v);
+            origin = tr("the Aim look's");
+            QPalette pal = value->palette();
+            pal.setBrush(QPalette::WindowText, grey);
+            value->setPalette(pal);
         }
         else if (!addEffect && inherited.contains(key))
         {
@@ -2085,6 +2141,20 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
         else
         {
             text = QStringLiteral("—");
+        }
+        // ONE effect / ONE formation with other layers (D10, D17).
+        if (!addEffect && (key == KeyPosition || isEffectKey(key)))
+        {
+            QStringList others;
+            for (const Target &t : m_st->spanMembers(cue.id, rl->target, key))
+                if (!(t == rl->target))
+                    others << m_st->targetLabel(t);
+            if (!others.isEmpty())
+            {
+                const QString with = key == KeyPosition ? tr("one formation with %1").arg(others.join(QStringLiteral(" + ")))
+                                                        : tr("one effect with %1").arg(others.join(QStringLiteral(" + ")));
+                origin = origin.isEmpty() ? with : QStringLiteral("%1 · %2").arg(origin, with);
+            }
         }
         value->setText(origin.isEmpty() ? text : QStringLiteral("%1 — %2").arg(text, origin));
         value->setWordWrap(true);
@@ -2184,6 +2254,13 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
             // A carried-in layer (no layer id) becomes the cue's own when a
             // value is set on it, in the same undo step.
             const QPoint at = more->mapToGlobal(QPoint(0, more->height()));
+            if (isLineParamKey(key))
+            {
+                QMenu menu(this);
+                lineParamMenu(&menu, cueId, layerId, layerId == invalidId() ? target : Target(), key);
+                menu.exec(at);
+                return;
+            }
             attributeMenu(cueId, layerId, layerId == invalidId() ? target : Target(), target, key, at);
         });
 
@@ -2194,6 +2271,25 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
         m_rows->addWidget(more, row, 4);
         m_rowText << QStringLiteral("%1 | %2 | %3").arg(label->text().trimmed(), text, origin);
         ++row;
+        // Under a line aim's Position: where each light lands, numbered by
+        // where they hang along the line (the formation's, if one).
+        if (key == KeyPosition && lineAim)
+        {
+            const Scene *sc = qobject_cast<const Scene *>(m_doc->function(m_st->layerScene(cue.id, rl->target)));
+            const QLCPalette *aimPal = nullptr;
+            if (sc != nullptr)
+                for (quint32 pid : sc->palettes())
+                    if (const QLCPalette *p = m_doc->palette(pid))
+                        if (p->type() == QLCPalette::Aim)
+                            aimPal = p;
+            if (aimPal == nullptr)
+                aimPal = m_doc->palette(rl->values.value(KeyPosition).look.palettes.value(0));
+            LineSpreadPreview *strip = new LineSpreadPreview(m_doc, m_rowsHost);
+            strip->setObjectName("stLineStrip");
+            strip->setLook(sc, aimPal);
+            m_rows->addWidget(strip, row, 1, 1, 4);
+            ++row;
+        }
     }
     m_rows->setRowStretch(row, 1);
     m_pages->setCurrentWidget(m_layerPage);
@@ -2202,6 +2298,61 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
 QStringList ShowTreeView::attributeRows() const
 {
     return m_rowText;
+}
+
+QWidget *ShowTreeView::lineStrip() const
+{
+    return m_rowsHost == nullptr ? nullptr : m_rowsHost->findChild<QWidget *>("stLineStrip");
+}
+
+bool ShowTreeView::setLineParam(quint32 cueId, quint32 layerId, const QString &key, const QString &value,
+                                const Target &target)
+{
+    Look l;
+    l.key = key;
+    if (!value.isEmpty())
+    {
+        l = ShowTreeController::lineParamLook(key, value);
+        if (l.value.isEmpty())
+            return false;
+    }
+    if (value.isEmpty() && layerId == invalidId() && !target.isEmpty())
+        return false;                       // nothing to clear on a carried-in layer
+    return applyLook(cueId, layerId, target, l);
+}
+
+void ShowTreeView::lineParamMenu(QMenu *menu, quint32 cueId, quint32 layerId, const Target &target,
+                                 const QString &onlyKey)
+{
+    auto add = [&](QMenu *m, const QString &key, const QStringList &values) {
+        for (const QString &v : values)
+            m->addAction(ShowTreeController::lineParamText(key, v), this, [this, cueId, layerId, key, v, target]() {
+                setLineParam(cueId, layerId, key, v, target);
+            });
+        if (key == KeySpread)
+            m->addAction(tr("Spread…"), this, [this, cueId, layerId, target]() {
+                bool ok = false;
+                const double d = QInputDialog::getDouble(this, tr("Spread"),
+                                                         tr("-5 crossed … 0 all on the centre … +5 end to end"),
+                                                         5.0, -5.0, 5.0, 1, &ok, Qt::WindowFlags(), 0.1);
+                if (ok)
+                    setLineParam(cueId, layerId, KeySpread, QString::number(d), target);
+            });
+        m->addSeparator();
+        m->addAction(tr("Clear (inherit)"), this, [this, cueId, layerId, key, target]() {
+            setLineParam(cueId, layerId, key, QString(), target);
+        });
+    };
+    const QList<QPair<QString, QStringList>> all = {
+        { KeySpread, { "5", "2.5", "0", "-2.5", "-5" } },
+        { KeyGrouping, { "each", "pairs", "threes", "fours", "halves" } },
+        { KeyCross, { "swap", "mirror" } } };
+    for (const auto &k : all)
+    {
+        if (!onlyKey.isEmpty() && k.first != onlyKey)
+            continue;
+        add(onlyKey.isEmpty() ? menu->addMenu(keyLabel(k.first)) : menu, k.first, k.second);
+    }
 }
 
 QString ShowTreeView::updateSourceLabel(quint32 cueId, const Target &target, const QString &key) const
@@ -2719,6 +2870,11 @@ quint32 ShowTreeView::makeSetFromLibrary(const QString &name)
     return id;
 }
 
+const char *ShowTreeView::targetMimeType()
+{
+    return "application/x-qlcconsole-showtree-stagetargets";
+}
+
 const char *ShowTreeView::setMimeType()
 {
     return "application/x-qlcconsole-showtree-groupsets";
@@ -3074,7 +3230,8 @@ bool ShowTreeView::acceptsDrop(quint32 cueId, quint32 layerId, const QMimeData *
     const bool targets = mime->hasFormat(QLatin1String(FixtureGroupSource::fixtureGroupMimeType()))
                          || mime->hasFormat(QLatin1String(FixtureGroupSource::fixtureMimeType()))
                          || mime->hasFormat(QLatin1String(setMimeType()));
-    const bool palettes = mime->hasFormat(QLatin1String(FunctionsTreeWidget::paletteDragMimeType()));
+    const bool palettes = mime->hasFormat(QLatin1String(FunctionsTreeWidget::paletteDragMimeType()))
+                          || mime->hasFormat(QLatin1String(targetMimeType()));
     if (child)
     {
         // ⇧: a child layer, under a layer of the cue's own.
@@ -3142,7 +3299,14 @@ bool ShowTreeView::dropMime(quint32 cueId, quint32 layerId, const QMimeData *mim
 {
     if (!acceptsDrop(cueId, layerId, mime, target, child))
         return false;
-    const QList<quint32> pals = idsFromMime(mime, FunctionsTreeWidget::paletteDragMimeType());
+    QList<quint32> pals = idsFromMime(mime, FunctionsTreeWidget::paletteDragMimeType());
+    // A target dropped: the Aim palette pointing at it (reused, or made).
+    for (quint32 tid : idsFromMime(mime, targetMimeType()))
+    {
+        const quint32 pid = m_st->aimPaletteFor(tid);
+        if (pid != QLCPalette::invalidId() && !pals.contains(pid))
+            pals << pid;
+    }
     const QList<quint32> groups = idsFromMime(mime, FixtureGroupSource::fixtureGroupMimeType());
     const QList<quint32> fixtures = idsFromMime(mime, FixtureGroupSource::fixtureMimeType());
     const QList<quint32> sets = idsFromMime(mime, setMimeType());
@@ -3219,6 +3383,33 @@ QString ShowTreeView::dropHint(quint32 cueId, quint32 layerId, const QMimeData *
         return QString();
     const QString cueText = m_st->cueLabel(*list, list->indexOf(cueId));
     const QList<quint32> pals = idsFromMime(mime, FunctionsTreeWidget::paletteDragMimeType());
+    const QList<quint32> stageTargets = idsFromMime(mime, targetMimeType());
+    if (!stageTargets.isEmpty() && !child)
+    {
+        const MonitorProperties *mp = m_doc->monitorProperties();
+        QStringList names;
+        bool line = false;
+        for (quint32 tid : stageTargets)
+            if (const StageTarget *t = mp == nullptr ? nullptr : mp->stageTarget(tid))
+            {
+                names << t->name();
+                line |= t->isLine();
+            }
+        const QString what = tr("Aim at %1").arg(names.join(QStringLiteral(", ")));
+        QString where;
+        if (layerId != invalidId())
+        {
+            const Layer *l = cue->layer(layerId);
+            where = tr("layer %1 in %2").arg(l == nullptr ? QString()
+                                                : (l->name.isEmpty() ? m_st->targetLabel(l->target) : l->name), cueText);
+        }
+        else if (!target.isEmpty())
+            where = tr("layer %1 in %2 (sets it in this cue)").arg(m_st->targetLabel(target), cueText);
+        else
+            where = line ? tr("cue look on %1: one formation over its layers").arg(cueText)
+                         : tr("cue look on %1").arg(cueText);
+        return tr("%1 → %2").arg(what, where);
+    }
     if (child)
     {
         // ⇧: a child layer -- said only where it can go.
@@ -3858,6 +4049,15 @@ void ShowTreeView::reloadLibrary()
             text = f->name();
             icon = f->getIcon();
         }
+        else if (kind == LibTarget)
+        {
+            const MonitorProperties *mp = m_doc->monitorProperties();
+            const StageTarget *t = mp == nullptr ? nullptr : mp->stageTarget(id);
+            if (t == nullptr)
+                return nullptr;
+            text = t->isLine() ? tr("%1 (line)").arg(t->name()) : t->name();
+            icon = QIcon(":/target.png");
+        }
         else if (kind == LibSet)
         {
             const GroupSet *gs = m_st->groupSet(id);
@@ -3947,6 +4147,25 @@ void ShowTreeView::reloadLibrary()
         f->setFlags(Qt::ItemIsEnabled);
         return f;
     };
+
+    // Targets (§3B): points, areas and lines from the Lighting Studio;
+    // dropped, a Position that aims at them.
+    {
+        const MonitorProperties *mp = m_doc->monitorProperties();
+        QList<StageTarget *> tl = mp == nullptr ? QList<StageTarget *>() : mp->stageTargets();
+        std::sort(tl.begin(), tl.end(), [](const StageTarget *a, const StageTarget *b) {
+            return a->name().compare(b->name(), Qt::CaseInsensitive) < 0;
+        });
+        if (!tl.isEmpty())
+        {
+            QTreeWidgetItem *targetsFolder = folder(all, tr("Targets"));
+            targetsFolder->setData(0, PathRole, QStringLiteral("Targets"));
+            targetsFolder->setToolTip(0, tr("Drop on a layer or a cue: Position aims at it. A line "
+                                            "spreads the lights along it (Spread, Grouping, Cross)."));
+            for (const StageTarget *t : tl)
+                add(targetsFolder, LibTarget, t->id());
+        }
+    }
 
     // Group sets (§1): named sets of groups, made here (Make set).
     QTreeWidgetItem *setsFolder = folder(all, tr("Group sets"));
