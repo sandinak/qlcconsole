@@ -32,12 +32,15 @@ palettes and groups.
     fixtures have that attribute (for a gobo by name: that gobo); the rest
     ignore it.
 - **Right — the Library.** **Recent** (what you just used, one-off values
-  included), **Pinned** (right-click → Pin), and **All**: groups in the
+  included), **In this cue list** (the groups, palettes and functions the
+  selected list already uses, most used first: *"Towers ×6"*), **Pinned**
+  (right-click → Pin), and **All**: groups in the
   Fixture Manager's folders, palettes by kind, and functions to play as they
   are. One filter box narrows them all — a group at any depth, or a folder by
   its name; clearing it closes again what it opened.
 - **Top right** says what is on the rig: *"▶ On the rig: 0.0.4 SHOUT"* (see
-  [Seeing it on the rig](#seeing-it-on-the-rig)).
+  [Seeing it on the rig](#seeing-it-on-the-rig)), and after a change which
+  cues it changed: *"Changed: 0.0.4 SHOUT, 0.0.5 WHO ARE WE"*.
 
 ## Building a cue list
 
@@ -114,10 +117,45 @@ tracking list each cue's **mode** says what it starts from:
 | **Block** | nothing | everything on stage |
 | **Cue-only** | the cue before | what it started from — its changes don't pass on |
 
-A layer marked **Release** leaves when its cue is left: back to what the
-**base cue** gives it (right-click a cue → Make the base cue), else dark.
-**Include cue** (right-click a cue) brings another cue's whole look into it,
-and follows that cue when it changes.
+Set the cue's mode on its page or with right-click → **Mode**. The tree
+marks a Block cue ⊘ and a Cue-only cue ◐.
+
+- **Release.** A layer marked **Release** (the check box on its page) leaves
+  when its cue is left: back to what the **base cue** gives it, else dark.
+  On a grey (carried-in) layer, ticking it makes the layer this cue's own
+  first. Released layers drop out even of a list that keeps everything else.
+- **Base cue.** Pick it on the list's page, or tick *"The list's base cue"*
+  on a cue (or right-click a cue → Make the base cue). Marked ■ base.
+- **Includes.** The cue page lists the cues a cue includes: **+** adds one
+  (one that would make a loop — a cue that already plays from this one — is
+  greyed and says why), **−** takes one out, **↑ ↓** reorder them (the
+  later one wins). Or drag a cue onto another with **⌥**, or right-click →
+  Include cue. An included cue's output comes in as if you stood in it,
+  and follows it when it changes.
+- **Next cue receives** on a cue's page says what the cue after it starts
+  from: each layer with its values, what goes back to the base, what a
+  release leaves dark — or *"nothing"* when the next cue is a Block cue.
+
+A change re-plays the cue, the cues after it that track from it up to a
+Block cue, and every cue that includes one of them; the top right names
+them.
+
+### Changing a tracked value
+
+A grey value came from an earlier cue. Its **⋯** offers two things:
+
+- **Set in this cue** — the value changes here (the layer becomes this
+  cue's own) and from here on;
+- **Update cue 0.0.3 Announcer** — the value changes *where it was set*, so
+  every cue it tracks into follows.
+
+### Record and duplicate
+
+**Record** (top, or right-click a cue → Record as new cue) freezes what the
+selected cue puts on stage — its own layers, what tracked in, what it
+includes — into a new **Block** cue right after it, every layer its own.
+**Duplicate cue** copies a cue's own content (not what tracks into it).
+Both are numbered like + Cue.
 
 ## Playing it
 
@@ -142,6 +180,34 @@ production; the chaser itself is not touched.
 - The list is Non-tracking, so it plays exactly as the chaser did. Where two
   scenes in one cue set the same group (the chaser ran both and the brighter
   intensity won), the import says so: the cue list keeps the later one.
+
+## The command line
+
+**Command** (top) shows a line for typing what you would say; it calls the
+same operations as the mouse, and every command is **one undo step** (a
+command that fails part way changes nothing). **Tab** completes names from
+the Library, **↑ ↓** recall earlier commands, and the line under it lists
+the words:
+
+| Type | Does |
+|---|---|
+| `cue 1.0.1 "Verse"` | selects cue 1.0.1, or makes it |
+| `cue + "Verse"` | a new cue after the selected one |
+| `track` · `block` · `cueonly` · `default` · `base` | the selected cue's mode, or makes it the base (can follow `cue …`) |
+| `Towers colour Blue dimmer 45` | a layer on Towers (or the one there), then its looks |
+| `Towers USTs dimmer Full` | a layer each |
+| `Towers+USTs dimmer Full` | one layer on both |
+| `cue look colour Red` | a cue look |
+| `Steps effect Sinelon colour Red` | an effect, and its own colour |
+| `Towers gobo none` · `Towers gobo clear` | off here · inherit again |
+| `Steps colour #33aa55` · `dimmer 45` | a one-off value |
+| `release Towers` | Release on (or off) |
+| `include 0.0.3` | include a cue (again: take it out) |
+| `record` · `dup` · `undo` · `redo` | as the buttons |
+| `list "01-Opener"` | a new (tracking) cue list in the production |
+
+Names match whole words and ignore case; quote a name with spaces if Tab
+doesn't finish it (`"AT W ALL" dimmer Full`).
 
 ## One-off values
 

@@ -635,7 +635,7 @@ Originals stay; VC buttons are offered a switch to the new list.
 | Phase | Slice | Engine change |
 |---|---|---|
 | **P1** | **Show Tree tab, one production, Non-tracking lists.** Cue list = Chaser, cue = Collection, layer = generated Scene. Cue looks cascade to layers; layer attribute rows with inherited values greyed — **including the Beam family with gobo palettes per fixture definition and "applies to N of M"** (§3A); inline looks; effects with child looks (colour, gobo); opaque function layers; **Import chaser as cue list**; authoring by mouse (+ Cue / + Layer, picker, drag & drop with drop hints, undo); Library panel Recent / Pinned / All. Spike: shared-scene hand-over across a step change. | none, or the hand-over fix |
-| P2 | **Tracking**: list mode, cue Track/Block/Cue-only, layer Release, base cue, **includes**, origin marks, "Next cue receives", re-bake chain; "Update cue X" for tracked values; Library "In this cue list"; **optional command line** (D24). | none |
+| P2 *(built 2026-10-17, §10.10)* | **Tracking**: list mode, cue Track/Block/Cue-only, layer Release, base cue, **includes**, origin marks, "Next cue receives", re-bake chain; "Update cue X" for tracked values; Library "In this cue list"; **optional command line** (D24). | none |
 | P3 | **Group sets** (+ Make set in the Library), child layers, overlap; cue-level effects across layers; **line aims in the tree** (§3B: aim params per key, cue-level formations, plan view) once the line-target P1–P3 have shipped. | `Scene::excludedFixtures` |
 | P4 | **Make reusable / Detach** for layers and cues; Reusable panel; Convert-to-tracking. | none |
 | P5 | **Multiple productions**: switcher, current production for VC / footer GO / show control, per-production timecode. | small: "current production" in Doc |
@@ -995,6 +995,84 @@ edge: step 3 ignores numbers, so "Gobo 3 Shake" can find a wheel's only
 `qlcpalette_test::goboNamesMatchInTiers`; Look Editor and row in
 `showtreeview_test::goboLooksMatchByNamePerType`.
 
+### 10.10 P2 (2026-10-17): tracking in the tab, D22/D23, the command line
+
+Most of the cascade was in P1's resolver (10.3); P2 exposes it and fills
+the gaps.
+
+- **Dependencies and loops (D8).** `ShowTree::dependsOn(list, a, b)`: cue
+  *a* needs *b* at any depth — it tracks from the cue before (Track,
+  Cue-only), includes, or releases a layer to the base (not from a
+  Cue-only cue). `canInclude()` refuses self, twice and any include whose
+  cue already depends on the includer; `addInclude/removeInclude/
+  moveInclude` use it and `setCue()` drops such includes. The resolver
+  also leaves out a looping include or base (base → dark) **before**
+  resolving it: P1 only caught a cue still on the stack, so an include of
+  a later cue that tracks from this one gave that later cue an empty start
+  and kept it (a latent bug; the UI could make it). A loop in a file is now
+  left out on both sides, whichever cue resolves first (it was: the first
+  one read won).
+- **Re-bake chain.** `ShowTree::rebakeChain(list, cue)`: the cue; the
+  following cues while they start from it (up to a Block; a Cue-only cue
+  passes on only what it started from, so a change *in* it stops there,
+  one *before* it goes through); every includer; and when one of them is
+  the base, the cue after each release to it — to a fixed point. The bake
+  itself stays whole and deterministic (cheap, 10.4); it now records the
+  cues whose Collection it changed (`lastBakeChanged()`), and the tests
+  check the two agree on §3 edits (the chain is a superset: a cue in it
+  whose layer sets the value itself doesn't change). The tab shows
+  "Changed: …" after each edit.
+- **Update cue X (D22).** `valueSource()` walks a value back — Tracked and
+  Base by `fromCue`, Included into the included cue, and on through
+  that cue's own origin — to the cue whose layer (or cue look) sets it;
+  `updateSource()` sets it there, one step. A cue look there is changed as
+  a cue look (it reaches that cue's own layers that don't set it), as the
+  mockup's `opUpdateSource`. The ⋯ menu then says **Set in this cue** /
+  **Update cue 1.0.0 base**.
+- **Record as new cue (D22, D23).** The selected cue's resolved stage
+  (tracked, included, own; layers playing nothing left out) as a **Block**
+  cue after it, every layer its own with its played looks, timing copied,
+  "<name> (recorded)", numbered per D23. It plays the same generated
+  scenes (same target + palettes). "What's on stage" is the selected cue
+  — what Design previews — not a mix of lists running for real (open, 9).
+  **Duplicate** copies a cue's own content, never the base flag.
+- **Release on a carried-in layer** (`setTargetRelease`) makes it the cue's
+  own first, as setting a value does.
+- **Library "In this cue list" (D20):** `usageInList()` counts per layer
+  (groups, fixtures, opaque functions) and per look (palettes, an effect's
+  own); one-off values included (reusing one on a second layer is what
+  "Make reusable" is offered for). Sorted by count, then groups before
+  values, then name; only shown with a list selected.
+- **Command line (D24, §6C).** `engine/src/showtreecommand.{h,cpp}`: a
+  word reader (names with spaces matched longest-first, quoted, `+` joins
+  two into one layer) calling the controller. Grammar per the mockup
+  minus what later phases bring (`sub`, `aim`/`spread`/`group`/`cross`):
+  `cue <n> "name"`, `cue + "name"`, `cue look …`, `track|block|cueonly|
+  default|base`, `<groups> <attr> <value>…`, `effect X colour Y` (its own),
+  `none`/`clear`, a level `45`/`45%` or `#rrggbb` → one-off value,
+  `release`, `include` (toggles), `record`, `dup`, `undo`, `redo`,
+  `list "name"` (a Tracking list, as the mockup's). **One undo step per
+  command:** `beginBatch()/endBatch(keep)` — edits inside apply at once
+  (later words see earlier ones) but bake and snapshot once; a failure
+  puts the tree back and the bake drops a one-off value made on the way.
+  Tab completes the last 1–3 words from what fits there (keywords and
+  groups first; palettes of the attribute just typed; cue numbers after
+  `cue`/`include`). Hidden by default; **Command** shows it (kept in the
+  settings).
+- **Tracked preview:** unchanged mechanism — a cue's Collection is its full
+  tracked state, so previewing cue 5 plays everything tracked into it, and
+  an Update cue X re-takes it (tested).
+- Tests: `showtree_test::theRebakeChain`, `aBakeChangesOnlyTheChain`,
+  `includesAreCycleProof`, `updateCueWhereATrackedValueWasSet`,
+  `recordAsNewCueFreezesTheStage`, `duplicateACue`, `usageInAList`,
+  `previewShowsTheTrackedState`, **`convertAnImportToTracking`** (a
+  DanceHysteria-shaped chaser imported, then converted by hand — Tracking,
+  base, Release, repeated layers and includes removed — plays §3.2 (going
+  *darker* works), §3.4 (cue-only flash gone in the next cue; 0.0.9
+  includes 0.0.3) and §3.3 (0.0.4 Block; the bake changes exactly 0.0.4 →
+  0.0.7) on the rig), `commandLine`, `commandLineFailsAsAWhole`,
+  `commandLineCompletes`; `showtreeview_test` ×8 for the tab.
+
 ### Open for Branson
 
 1. **`Generated` mark on `<Function>`** as well as in `<ShowTree>`? (10.2;
@@ -1019,3 +1097,14 @@ edge: step 3 ignores numbers, so "Gobo 3 Shake" can find a wheel's only
    offers the pick (§10.9).
 8. **Blind: to discuss** (Branson, 2026-10-17). Today Blind is the global
    output mute and covers the preview; unchanged.
+9. **Record as new cue — which stage?** Built: the selected cue's resolved
+   state (what Design previews). In Perform, should it record the running
+   list's current cue instead (or everything lit, as an Eos Record does)?
+10. **Command line: several groups.** Built as the mockup: `Towers USTs …`
+    makes a layer each, `Towers+USTs …` one layer on both. The mouse's
+    default since the fix pass is the other way round (a multi-group drop
+    is one layer, ⌥ a layer each). Swap the command line to match?
+11. **Command line: `dimmer 45`** always makes a one-off value; the mockup
+    reused a named dimmer palette at that level when one existed. Built
+    without the reuse (a palette "at 45 %" is ambiguous with 16-bit and
+    fine values); say if you want it.

@@ -6,6 +6,39 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-17 — Show Tree P2: tracking in the tab, Update cue / Record, the command line *(on feat/show-tree, not merged)*
+
+SHOW_TREE_DESIGN.md §8 P2; notes in §10.10.
+
+- **Tracking in the tab.** List page: Tracking / Non-tracking and the base
+  cue. Cue page: mode, "the list's base cue", includes (add — a loop is
+  greyed with why —, remove, reorder; later wins), "Next cue receives" with
+  values, back-to-base and released-dark layers. Release on a carried-in
+  layer makes it the cue's own. Tree menu: Mode, Record, Duplicate.
+- **Engine:** `ShowTree::dependsOn/canInclude` (a cue's dependencies:
+  tracking, includes, the base through a release) — the resolver leaves a
+  looping include or base out instead of reading a half-resolved cue (a
+  latent bug: an include of a later cue that tracks from this one gave
+  that cue an empty start); `addInclude/removeInclude/moveInclude`.
+  `rebakeChain()` (this cue → following until a Block, Cue-only passing on
+  only its start → every includer → the base's releases); the bake reports
+  what it really changed (`lastBakeChanged`), shown as "Changed: …".
+- **D22/D23:** "Update cue X" on a tracked value's ⋯ (`valueSource/
+  updateSource`, follows tracking, includes and the base back to where it
+  was set); Record as new cue (`recordCue`: a Block cue of the resolved
+  stage, numbered per D23; it plays the same scenes); Duplicate.
+- **Library "In this cue list"** (D20): groups, palettes, functions the
+  list uses, most used first, with counts.
+- **Command line** (D24, §6C): `ShowTreeCommand` (engine) over the same
+  operations, one undo step per command (`beginBatch/endBatch`; a failure
+  restores everything, one-off values included), Tab completion from the
+  Library, history, the hint line. Hidden by default (Command).
+- Tests: `showtree_test` +12 (re-bake chain on the model and baked, includes,
+  D22, record, dup, usage, tracked preview, an import converted to
+  tracking by hand playing §3.2/§3.3/§3.4 on the rig, command line ×3);
+  `showtreeview_test` +8. DanceHysteria-0.5 import dry run (a copy): 0
+  channels differ in all 8 cues. Not tried on the rig.
+
 ### 2026-10-17 — Show Tree follow-up: the edit wins in Design; looser gobo names *(on feat/show-tree, not merged)*
 
 Branson's answers to §10 questions 6 and 7 (SHOW_TREE_DESIGN.md §10.9).

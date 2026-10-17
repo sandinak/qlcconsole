@@ -40,7 +40,7 @@ On `release/0.1.0`. Universal (Apple silicon + Intel), macOS 12+.
   work), on the office rig with kronk.
 - Then: merge `release/0.1.0` to main, `./release.sh`.
 
-## Show Tree (feat/show-tree, P1 built 2026-10-16 overnight — not merged)
+## Show Tree (feat/show-tree, P1 built 2026-10-16 overnight, P2 2026-10-17 — not merged)
 
 [SHOW_TREE_DESIGN.md](SHOW_TREE_DESIGN.md) (D1–D27 approved; §10 has the
 implementation notes and the questions below). Built: the hand-over fix,
@@ -62,10 +62,17 @@ help (DONE.md 2026-10-16). Handoff: SHOW_TREE_OVERNIGHT.md.
   running cue at full; stop the preview: the cue comes back); GO through an imported list with effects running (the
   hand-over keeps a shared scene's effect phase — tested on engine signals,
   not seen on stage).
-- **P2 next:** the cascade already does tracking, Block/Cue-only, Release
-  to the base cue and includes; P2 is mostly showing them (origin marks are
-  in, "Next cue receives" is in), "Update cue X" for tracked values, Library
-  "In this cue list", the command line (D24).
+- **P2 done 2026-10-17** (DONE.md, §10.10): tracking controls in the tab
+  (list mode, base cue, cue modes, Release on any layer, includes with loop
+  refusal, "Next cue receives" with values), the re-bake chain (tested
+  against what a bake really changes), "Update cue X" and Record as new cue
+  (D22/D23), Library "In this cue list" (D20), the optional command line
+  (D24). **Try:** import a show's chaser on a copy, make the list
+  Tracking, release / base / remove repeated layers by hand (P4 brings
+  Convert to tracking), and GO through it; the command line (Command).
+- **P3 next** (§8): group sets, child layers / overlap
+  (`Scene::excludedFixtures`), cue-level effects across layers, line aims.
+  P4: Make reusable / Detach, Convert to tracking.
 
 ## Needs the real rig / hardware
 
