@@ -143,6 +143,35 @@ void GenericFader_Test::writeZeroFade()
     QCOMPARE(ua[0]->preGMValues()[15], (char) 255);
 }
 
+void GenericFader_Test::anOverride16BitChannelWritesBothBytes()
+{
+    // A fader handling secondary channels holds a 16-bit channel (coarse +
+    // fine) in one FadeChannel. With the Override flag both bytes must reach
+    // the universe, MSB at the first address and LSB at the next -- not only
+    // the low byte at the coarse address.
+    QList<Universe*> ua = m_doc->inputOutputMap()->universes();
+    QSharedPointer<GenericFader> fader = ua[0]->requestFader();
+
+    FadeChannel fc(m_doc, 0, 5);
+    fc.addChannel(6);
+    QCOMPARE(fc.channelCount(), 2);
+    fc.setStart(0x1234);
+    fc.setCurrent(0x1234);
+    fc.setTarget(0x1234);
+    fc.setFadeTime(0);
+    fc.addFlag(FadeChannel::Override);
+    fader->add(fc);
+
+    // Something lower in the universe that Override has to replace.
+    ua[0]->write(15, 0xff);
+    ua[0]->write(16, 0xff);
+
+    fader->write(ua[0]);
+    QCOMPARE(uchar(ua[0]->preGMValues()[15]), uchar(0x12));
+    QCOMPARE(uchar(ua[0]->preGMValues()[16]), uchar(0x34));
+    ua[0]->dismissFader(fader);
+}
+
 void GenericFader_Test::writeLoop()
 {
     QList<Universe*> ua = m_doc->inputOutputMap()->universes();
