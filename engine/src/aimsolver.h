@@ -120,6 +120,12 @@ namespace AimSolver
      *  are placed on the plot. */
     QList<quint32> aimHeads(Doc *doc, const Scene *scene);
 
+    /** The heads Aim look @p paletteId in @p scene lays out over: as
+     *  above, but over the look's layout span when it is one formation with
+     *  other scenes (a cue-level aim across layers), and less the heads the
+     *  scene leaves out for it (Scene::layoutFixtures()). */
+    QList<quint32> aimHeads(Doc *doc, const Scene *scene, quint32 paletteId);
+
     /** @p fixtures (in their order, once each) less any that cannot point or
      *  are not placed on the plot. */
     QList<quint32> aimable(Doc *doc, const QList<quint32> &fixtures);

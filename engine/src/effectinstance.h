@@ -217,8 +217,15 @@ private:
      *  -1 when it has none. */
     void ownLook(QList<QColor> &colours, double &dimmer) const;
     void lookColours(QList<QColor> &colours, double &dimmer, bool *haveDimmer = nullptr) const;
-    /** The fixtures and groups the look is on, before any type filter. */
+    /** The fixtures and groups the look is on, before any type filter:
+     *  what this scene writes (less any it leaves out for this effect). */
     QList<quint32> lookFixtureIds() const;
+    /** What the effect lays out over: lookFixtureIds(), or ONE effect's
+     *  fixtures across several scenes (Scene::layoutSpan()). */
+    QList<quint32> layoutFixtureIds() const;
+    /** @p fxIds less WLED fixtures that run it themselves, filtered by the
+     *  script's fixtureTypes. */
+    QList<quint32> typeFiltered(QList<quint32> fxIds) const;
     /** A WLED look (QLCPalette::wledEffect()): what WLED fixtures in it are
      *  sent -- the effect, its controls and the look's colours, on their own
      *  channels. They run it; the script never sees them. */

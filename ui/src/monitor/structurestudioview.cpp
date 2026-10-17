@@ -3910,7 +3910,7 @@ void StructureStudioView::rebuildAimTargets()
     QHash<quint32, double> lineFraction;
     if (StageTarget *lt = props->stageTarget(aimTargetId))
         if (lt->isLine() && aimPal != nullptr)
-            lineFraction = AimSolver::lineFractions(m_doc, lt, AimSolver::aimHeads(m_doc, scene),
+            lineFraction = AimSolver::lineFractions(m_doc, lt, AimSolver::aimHeads(m_doc, scene, aimPal->id()),
                                                     LineSpread::fromParams(aimPal->effectParamValues()));
 
     // Everything the scene touches, directly or through a group.

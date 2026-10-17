@@ -246,6 +246,17 @@ QList<quint32> AimSolver::aimable(Doc *doc, const QList<quint32> &fixtures)
     return heads;
 }
 
+QList<quint32> AimSolver::aimHeads(Doc *doc, const Scene *scene, quint32 paletteId)
+{
+    if (doc == NULL || scene == NULL)
+        return QList<quint32>();
+    if (paletteId == UINT_MAX)
+        return aimHeads(doc, scene);
+    /* What the look lays out over: a formation's span when it is one with
+       other scenes, less the heads a lower layer aims itself. */
+    return aimable(doc, scene->layoutFixtures(paletteId));
+}
+
 QList<quint32> AimSolver::aimHeads(Doc *doc, const Scene *scene)
 {
     if (doc == NULL || scene == NULL)
@@ -334,9 +345,6 @@ QList<AimSolver::SceneAim> AimSolver::sceneAims(Doc *doc, const Scene *scene)
     if (mProps == NULL)
         return out;
 
-    // The heads: the scene's groups' members and its fixtures, once each.
-    const QList<quint32> heads = aimHeads(doc, scene);
-
     const bool subject = sceneFollowsSubject(doc, scene);
     foreach (quint32 pid, scene->runtimePalettes())   // a tried-on Aim draws too
     {
@@ -346,9 +354,14 @@ QList<AimSolver::SceneAim> AimSolver::sceneAims(Doc *doc, const Scene *scene)
         StageTarget *tgt = mProps->stageTarget(pal->stageTargetId());
         if (tgt == NULL)
             continue;
+        // The heads it lays out over (a formation across several scenes:
+        // all of them) and the ones this scene writes (the scene's groups'
+        // members and its fixtures, less any it leaves out), once each.
+        const QList<quint32> heads = aimHeads(doc, scene, pid);
+        const QList<quint32> written = aimable(doc, scene->writtenFixtures(pid));
         // A line gives each head its own point on it.
         const QHash<quint32, QVector3D> onLine = linePoints(doc, pal, tgt, heads);
-        foreach (quint32 fid, heads)
+        foreach (quint32 fid, written)
         {
             const QVector3D point = tgt->isLine() ? onLine.value(fid, mProps->targetAimPoint(tgt))
                                                   : aimPointFor(doc, fid, tgt, subject);

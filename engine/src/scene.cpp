@@ -21,6 +21,8 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QDebug>
+#include <algorithm>
+#include <QSet>
 #include <cmath>
 #include <QList>
 #include <QFile>
@@ -44,6 +46,10 @@
 // Declared look scope (see Scene::LookScope) — attributes on <Function>
 // itself; absent = ScopeUnset, so old workspaces round-trip unchanged.
 #define KXMLQLCSceneLookScope       QStringLiteral("LookScope")
+#define KXMLQLCSceneExclude         QStringLiteral("Exclude")
+#define KXMLQLCSceneSpan            QStringLiteral("Span")
+#define KXMLQLCSceneFixtures        QStringLiteral("Fixtures")
+#define KXMLQLCSceneGroups          QStringLiteral("Groups")
 #define KXMLQLCSceneLookScopeGroup  QStringLiteral("LookScopeGroup")
 #define KXMLQLCSceneLookScopeWholeStage QStringLiteral("WholeStage")
 #define KXMLQLCSceneLookScopeGroupVal   QStringLiteral("Group")
@@ -112,6 +118,8 @@ bool Scene::copyFrom(const Function* function)
     const QList<quint32> srcGroups = scene->fixtureGroups();
     const QList<quint32> srcPalettes = scene->palettes();
     const QHash<quint32, PaletteFade> srcPaletteFades = scene->paletteFades();
+    const QHash<quint32, QList<quint32> > srcExcluded = scene->excludedFixtures();
+    const QHash<quint32, LayoutSpan> srcSpans = scene->layoutSpans();
     const LookScope srcScope = scene->lookScope();
     m_transitionIn = scene->m_transitionIn;
     m_transitionOut = scene->m_transitionOut;
@@ -134,6 +142,8 @@ bool Scene::copyFrom(const Function* function)
         // spawning clones.
         m_palettes = srcPalettes;
         m_paletteFade = srcPaletteFades;
+        m_excluded = srcExcluded;
+        m_layoutSpans = srcSpans;
     }
 
     m_lookScope = srcScope;
@@ -699,6 +709,123 @@ QHash<quint32, Scene::PaletteFade> Scene::paletteFades() const
 }
 
 /*****************************************************************************
+ * What a look leaves out, and what it lays out over
+ *****************************************************************************/
+
+void Scene::setExcludedFixtures(quint32 paletteId, const QList<quint32> &fixtures)
+{
+    bool changedIt = false;
+    {
+        QMutexLocker locker(&m_bindingsMutex);
+        if (fixtures.isEmpty())
+            changedIt = m_excluded.remove(paletteId) > 0;
+        else if (m_excluded.value(paletteId) != fixtures)
+        {
+            m_excluded.insert(paletteId, fixtures);
+            changedIt = true;
+        }
+    }
+    if (changedIt)
+        emit changed(this->id());
+}
+
+QList<quint32> Scene::excludedFixtures(quint32 paletteId) const
+{
+    QMutexLocker locker(&m_bindingsMutex);
+    return m_excluded.value(paletteId);
+}
+
+QHash<quint32, QList<quint32> > Scene::excludedFixtures() const
+{
+    QMutexLocker locker(&m_bindingsMutex);
+    return m_excluded;
+}
+
+void Scene::setLayoutSpan(quint32 paletteId, const LayoutSpan &span)
+{
+    bool changedIt = false;
+    {
+        QMutexLocker locker(&m_bindingsMutex);
+        if (span.isEmpty())
+            changedIt = m_layoutSpans.remove(paletteId) > 0;
+        else if (!(m_layoutSpans.value(paletteId) == span))
+        {
+            m_layoutSpans.insert(paletteId, span);
+            changedIt = true;
+        }
+    }
+    if (changedIt)
+        emit changed(this->id());
+}
+
+Scene::LayoutSpan Scene::layoutSpan(quint32 paletteId) const
+{
+    QMutexLocker locker(&m_bindingsMutex);
+    return m_layoutSpans.value(paletteId);
+}
+
+QHash<quint32, Scene::LayoutSpan> Scene::layoutSpans() const
+{
+    QMutexLocker locker(&m_bindingsMutex);
+    return m_layoutSpans;
+}
+
+/* Groups' members in their head order, then loose fixtures, once each, less
+   @a out. */
+static QList<quint32> fixturesOf(const Doc *doc, const QList<quint32> &groups,
+                                 const QList<quint32> &fixtures, const QList<quint32> &out)
+{
+    QList<quint32> all;
+    if (doc == NULL)
+        return all;
+    for (quint32 gid : groups)
+    {
+        const FixtureGroup *g = doc->fixtureGroup(gid);
+        if (g == NULL)
+            continue;
+        for (quint32 fid : g->fixtureList())
+            if (!all.contains(fid) && !out.contains(fid))
+                all << fid;
+    }
+    for (quint32 fid : fixtures)
+        if (!all.contains(fid) && !out.contains(fid))
+            all << fid;
+    return all;
+}
+
+QList<quint32> Scene::layoutGroups(quint32 paletteId) const
+{
+    QMutexLocker locker(&m_bindingsMutex);
+    const LayoutSpan span = m_layoutSpans.value(paletteId);
+    return span.isEmpty() ? m_fixtureGroups : span.groups;
+}
+
+QList<quint32> Scene::layoutFixtures(quint32 paletteId) const
+{
+    QList<quint32> groups, fixtures, out;
+    {
+        QMutexLocker locker(&m_bindingsMutex);
+        const LayoutSpan span = m_layoutSpans.value(paletteId);
+        groups = span.isEmpty() ? m_fixtureGroups : span.groups;
+        fixtures = span.isEmpty() ? m_fixtures : span.fixtures;
+        out = m_excluded.value(paletteId);
+    }
+    return fixturesOf(doc(), groups, fixtures, out);
+}
+
+QList<quint32> Scene::writtenFixtures(quint32 paletteId) const
+{
+    QList<quint32> groups, fixtures, out;
+    {
+        QMutexLocker locker(&m_bindingsMutex);
+        groups = m_fixtureGroups;
+        fixtures = m_fixtures;
+        out = m_excluded.value(paletteId);
+    }
+    return fixturesOf(doc(), groups, fixtures, out);
+}
+
+/*****************************************************************************
  * Load & Save
  *****************************************************************************/
 
@@ -811,6 +938,40 @@ bool Scene::saveXML(QXmlStreamWriter *doc) const
             doc->writeAttribute(KXMLQLCScenePaletteFadeIn, QString::number(pf.fadeInMs));
         if (pf.fadeOutMs >= 0)
             doc->writeAttribute(KXMLQLCScenePaletteFadeOut, QString::number(pf.fadeOutMs));
+        doc->writeEndElement();
+    }
+
+    /* What a look leaves out and lays out over (generated by the Show
+       Tree; an older build skips them). Sorted, so a save is stable. */
+    const QHash<quint32, QList<quint32> > excl = excludedFixtures();
+    QList<quint32> exclIds = excl.keys();
+    std::sort(exclIds.begin(), exclIds.end());
+    foreach (quint32 pId, exclIds)
+    {
+        QStringList ids;
+        foreach (quint32 fid, excl.value(pId))
+            ids << QString::number(fid);
+        doc->writeStartElement(KXMLQLCSceneExclude);
+        doc->writeAttribute(KXMLQLCPalette, QString::number(pId));
+        doc->writeAttribute(KXMLQLCSceneFixtures, ids.join(","));
+        doc->writeEndElement();
+    }
+    const QHash<quint32, LayoutSpan> spans = layoutSpans();
+    QList<quint32> spanIds = spans.keys();
+    std::sort(spanIds.begin(), spanIds.end());
+    foreach (quint32 pId, spanIds)
+    {
+        QStringList groups, fixtures;
+        foreach (quint32 gid, spans.value(pId).groups)
+            groups << QString::number(gid);
+        foreach (quint32 fid, spans.value(pId).fixtures)
+            fixtures << QString::number(fid);
+        doc->writeStartElement(KXMLQLCSceneSpan);
+        doc->writeAttribute(KXMLQLCPalette, QString::number(pId));
+        if (!groups.isEmpty())
+            doc->writeAttribute(KXMLQLCSceneGroups, groups.join(","));
+        if (!fixtures.isEmpty())
+            doc->writeAttribute(KXMLQLCSceneFixtures, fixtures.join(","));
         doc->writeEndElement();
     }
 
@@ -948,6 +1109,27 @@ bool Scene::loadXML(QXmlStreamReader &root)
                 fadeOut = attrs.value(KXMLQLCScenePaletteFadeOut).toString().toInt();
             if (fadeIn >= 0 || fadeOut >= 0)
                 setPaletteFade(id, fadeIn, fadeOut);
+            root.skipCurrentElement();
+        }
+        else if (root.name() == KXMLQLCSceneExclude || root.name() == KXMLQLCSceneSpan)
+        {
+            const QXmlStreamAttributes attrs = root.attributes();
+            const quint32 pId = attrs.value(KXMLQLCPalette).toString().toUInt();
+            auto ids = [&attrs](const QString &name) {
+                QList<quint32> out;
+                foreach (const QString &part, attrs.value(name).toString().split(",", Qt::SkipEmptyParts))
+                    out << part.trimmed().toUInt();
+                return out;
+            };
+            if (root.name() == KXMLQLCSceneExclude)
+                setExcludedFixtures(pId, ids(KXMLQLCSceneFixtures));
+            else
+            {
+                LayoutSpan span;
+                span.groups = ids(KXMLQLCSceneGroups);
+                span.fixtures = ids(KXMLQLCSceneFixtures);
+                setLayoutSpan(pId, span);
+            }
             root.skipCurrentElement();
         }
         else if (root.name() == QLatin1String("Transition"))
@@ -1219,8 +1401,10 @@ void Scene::handleFadersEnd(MasterTimer *timer)
         const int cOff = QLCPalette::colorSetOffset(doc(), palettes(), pit.key());
         QList<SceneValue> vals = palette->valuesFromFixtureGroups(doc(), fixtureGroups(), this, cOff);
         vals += palette->valuesFromFixtures(doc(), fixtures(), this, cOff);
+        const QList<quint32> out = excludedFixtures(pit.key());
         foreach (const SceneValue &scv, vals)
-            channelFadeOut.insert(GenericFader::channelHash(scv.fxi, scv.channel), t);
+            if (!out.contains(scv.fxi))
+                channelFadeOut.insert(GenericFader::channelHash(scv.fxi, scv.channel), t);
     }
 
     /* If no fade out is needed at all, dismiss all the requested faders.
@@ -1365,6 +1549,9 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
             const QHash<quint32, PaletteFade> paletteFadeMap = paletteFades();
             // The look's palettes plus one being tried on (setTrialPalette).
             const QList<quint32> pals = runtimePalettes();
+            // Fixtures a look leaves out (a lower layer sets it there):
+            // read once, under m_bindingsMutex (m_valueListMutex -> it).
+            const QHash<quint32, QList<quint32> > excluded = excludedFixtures();
 
             foreach (quint32 paletteID, pals)
             {
@@ -1383,11 +1570,15 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
                 const uint pFade = inOverride >= 0 ? uint(inOverride) : fadeIn;
                 const int cOff = QLCPalette::colorSetOffset(doc(), pals, paletteID);
 
+                const QList<quint32> outList = excluded.value(paletteID);
+                const QSet<quint32> out(outList.constBegin(), outList.constEnd());
                 foreach (SceneValue scv, palette->valuesFromFixtureGroups(doc(), fixtureGroups(), this, cOff))
-                    put(scv, pFade);
+                    if (!out.contains(scv.fxi))
+                        put(scv, pFade);
 
                 foreach (SceneValue scv, palette->valuesFromFixtures(doc(), fixtures(), this, cOff))
-                    put(scv, pFade);
+                    if (!out.contains(scv.fxi))
+                        put(scv, pFade);
             }
             // A fixture with no dimmer of its own: the look's Dimmer dims its
             // colour (as it does an effect's colour on it).
@@ -1440,6 +1631,7 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
             };
 
             const QList<quint32> pals = runtimePalettes();
+            const QHash<quint32, QList<quint32> > excluded = excludedFixtures();
             foreach (quint32 paletteID, pals)
             {
                 QLCPalette *palette = doc()->palette(paletteID);
@@ -1453,10 +1645,14 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
                     palette->type() != QLCPalette::PanTilt) continue;
 
                 const int cOff = QLCPalette::colorSetOffset(doc(), pals, paletteID);
+                const QList<quint32> outList = excluded.value(paletteID);
+                const QSet<quint32> out(outList.constBegin(), outList.constEnd());
                 foreach (SceneValue scv, palette->valuesFromFixtureGroups(doc(), fixtureGroups(), this, cOff))
-                    replaceOne(scv);
+                    if (!out.contains(scv.fxi))
+                        replaceOne(scv);
                 foreach (SceneValue scv, palette->valuesFromFixtures(doc(), fixtures(), this, cOff))
-                    replaceOne(scv);
+                    if (!out.contains(scv.fxi))
+                        replaceOne(scv);
             }
         }
     }

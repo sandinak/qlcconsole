@@ -110,6 +110,10 @@ private slots:
     void detachIsOneUndoStep();
     void generatedFunctionsAreFoundInTheTree();
 
+    // P3: Scene::excludedFixtures, layout spans
+    void sceneExcludedFixturesAreNotWritten();
+    void exclusionIsThreadSafeWithLivePreview();
+
 private:
     quint32 dimmer(int level, const QString &name);
     quint32 colour(const QString &name);

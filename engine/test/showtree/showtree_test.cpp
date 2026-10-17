@@ -21,6 +21,8 @@
 #include <QXmlStreamWriter>
 #include <QBuffer>
 #include <QtTest>
+#include <atomic>
+#include <thread>
 
 #define private public
 #define protected public
@@ -3139,6 +3141,136 @@ void ShowTree_Test::generatedFunctionsAreFoundInTheTree()
     Scene *plain = new Scene(m_doc);
     m_doc->addFunction(plain);
     QVERIFY(!st->generatedNode(plain->id(), &l, &c, &layer));
+}
+
+/****************************************************************************
+ * P3: a look that leaves fixtures out, and lays out over other scenes
+ ****************************************************************************/
+
+/* Scene::excludedFixtures: a parent's level must not show through where a
+   lower layer sets it (HTP would keep the higher), and the exclusion is part
+   of the scene -- saved, loaded and copied. */
+void ShowTree_Test::sceneExcludedFixturesAreNotWritten()
+{
+    FixtureGroup *steps = group("Steps", { m_fixtures[0], m_fixtures[1], m_fixtures[2] });
+    const quint32 full = dimmer(255, "Full");
+    const quint32 half = dimmer(127, "Half");
+
+    Scene *parent = new Scene(m_doc);
+    parent->addFixtureGroup(steps->id());
+    parent->addPalette(full);
+    parent->setExcludedFixtures(full, { m_fixtures[1] });
+    m_doc->addFunction(parent);
+    Scene *child = new Scene(m_doc);
+    child->addFixture(m_fixtures[1]);
+    child->addPalette(half);
+    m_doc->addFunction(child);
+
+    QCOMPARE(parent->excludedFixtures(full), QList<quint32>({ m_fixtures[1] }));
+    QCOMPARE(parent->writtenFixtures(full), QList<quint32>({ m_fixtures[0], m_fixtures[2] }));
+    QCOMPARE(parent->layoutFixtures(full), QList<quint32>({ m_fixtures[0], m_fixtures[2] }));
+    QCOMPARE(parent->writtenFixtures(half), QList<quint32>({ m_fixtures[0], m_fixtures[1], m_fixtures[2] }));
+
+    parent->start(m_doc->masterTimer(), FunctionParent::master());
+    child->start(m_doc->masterTimer(), FunctionParent::master());
+    QHash<quint32, uchar> v = settle();
+    QCOMPARE(int(v[0]), 255);
+    QCOMPARE(int(v[1]), 127);       // the lower layer's level, not HTP's 255
+    QCOMPARE(int(v[2]), 255);
+
+    // Saved and read back; copied.
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter w(&buffer);
+    QVERIFY(parent->saveXML(&w));
+    buffer.close();
+    QVERIFY(buffer.data().contains("<Exclude"));
+    buffer.open(QIODevice::ReadOnly);
+    QXmlStreamReader r(&buffer);
+    r.readNextStartElement();
+    Scene loaded(m_doc);
+    QVERIFY(loaded.loadXML(r));
+    QCOMPARE(loaded.excludedFixtures(), parent->excludedFixtures());
+    Scene copy(m_doc);
+    QVERIFY(copy.copyFrom(parent));
+    QCOMPARE(copy.excludedFixtures(), parent->excludedFixtures());
+
+    // Spans: laid out over more than it writes.
+    Scene::LayoutSpan span;
+    span.groups << steps->id();
+    span.fixtures << m_fixtures[5];
+    child->setLayoutSpan(half, span);
+    QCOMPARE(child->layoutFixtures(half),
+             QList<quint32>({ m_fixtures[0], m_fixtures[1], m_fixtures[2], m_fixtures[5] }));
+    QCOMPARE(child->writtenFixtures(half), QList<quint32>({ m_fixtures[1] }));
+    Scene copy2(m_doc);
+    QVERIFY(copy2.copyFrom(child));
+    QVERIFY(copy2.layoutSpan(half) == span);
+
+    // Cleared: back to every fixture (a new fader map, as a re-take).
+    parent->setExcludedFixtures(full, {});
+    parent->resetRuntime();
+    v = settle();
+    QCOMPARE(int(v[1]), 255);
+}
+
+/* The DMX thread builds a scene's fader map while the GUI thread changes
+   what it leaves out, re-takes it (resetRuntime, as the Design preview
+   does on a bake) and moves it on top (setEditOverride): no race, and it
+   ends up writing what was asked last. */
+void ShowTree_Test::exclusionIsThreadSafeWithLivePreview()
+{
+    FixtureGroup *steps = group("Steps", { m_fixtures[0], m_fixtures[1], m_fixtures[2], m_fixtures[3] });
+    const quint32 full = dimmer(255, "Full");
+    Scene *s = new Scene(m_doc);
+    s->addFixtureGroup(steps->id());
+    s->addPalette(full);
+    m_doc->addFunction(s);
+    s->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(3);
+
+    std::atomic<bool> stop(false);
+    std::atomic<int> ticks(0);
+    std::thread dmx([&]() {
+        while (!stop.load())
+        {
+            m_doc->masterTimer()->timerTick();
+            QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+            ua.first()->processFaders();
+            m_doc->inputOutputMap()->releaseUniverses(false);
+            ++ticks;
+        }
+    });
+    for (int i = 0; i < 3000; ++i)
+    {
+        QList<quint32> out;
+        for (int k = 0; k < 4; ++k)
+            if ((i >> k) & 1)
+                out << m_fixtures[k];
+        s->setExcludedFixtures(full, out);
+        if (i % 3 == 0)
+            s->resetRuntime();
+        if (i % 7 == 0)
+            s->requestPaletteRefresh();
+        if (i % 11 == 0)
+            s->setEditOverride(i % 22 == 0);
+        (void)s->layoutFixtures(full);
+        (void)s->writtenFixtures(full);
+    }
+    // Let the DMX thread see the last change before it stops.
+    while (ticks.load() < 20)
+        QThread::yieldCurrentThread();
+    stop.store(true);
+    dmx.join();
+
+    s->setEditOverride(false);
+    s->setExcludedFixtures(full, { m_fixtures[2] });
+    s->resetRuntime();
+    const QHash<quint32, uchar> v = settle();
+    QCOMPARE(int(v[0]), 255);
+    QCOMPARE(int(v[1]), 255);
+    QCOMPARE(int(v[2]), 0);
+    QCOMPARE(int(v[3]), 255);
 }
 
 QTEST_MAIN(ShowTree_Test)

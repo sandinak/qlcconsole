@@ -54,10 +54,14 @@ static void computeInto(Doc *doc, quint32 functionId,
             if (QLCPalette::isEffectScoped(doc, ordered, pid))
                 continue;
             const int cOff = QLCPalette::colorSetOffset(doc, ordered, pid);
+            // Fixtures a lower layer sets this on itself (the Show Tree).
+            const QList<quint32> left = sc->excludedFixtures(pid);
             for (const SceneValue &sv : p->valuesFromFixtureGroups(doc, groups, sc, cOff))
-                out[sv.fxi][sv.channel] = sv.value;
+                if (!left.contains(sv.fxi))
+                    out[sv.fxi][sv.channel] = sv.value;
             for (const SceneValue &sv : p->valuesFromFixtures(doc, fixtures, sc, cOff))
-                out[sv.fxi][sv.channel] = sv.value;
+                if (!left.contains(sv.fxi))
+                    out[sv.fxi][sv.channel] = sv.value;
         }
     }
     else if (f->type() == Function::CollectionType)

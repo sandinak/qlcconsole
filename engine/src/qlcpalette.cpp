@@ -762,7 +762,7 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                     if (!lineReady)
                     {
                         const QList<quint32> heads = (owner != nullptr)
-                                ? AimSolver::aimHeads(doc, owner)
+                                ? AimSolver::aimHeads(doc, owner, m_id)
                                 : AimSolver::aimable(doc, fixtures);
                         linePts = AimSolver::linePoints(doc, this, tgt, heads);
                         lineReady = true;

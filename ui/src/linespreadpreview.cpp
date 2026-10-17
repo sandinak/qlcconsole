@@ -53,7 +53,7 @@ void LineSpreadPreview::setLook(const Scene *scene, const QLCPalette *look)
         QList<quint32> heads;
         if (scene != nullptr && target != nullptr)
             heads = AimSolver::orderedLineHeads(m_doc, target,
-                                                AimSolver::aimHeads(m_doc, scene),
+                                                AimSolver::aimHeads(m_doc, scene, look->id()),
                                                 s.order);
         const int n = heads.isEmpty() ? 6 : heads.size();
         const QVector<double> fr = LineSpread::fractions(n, s);

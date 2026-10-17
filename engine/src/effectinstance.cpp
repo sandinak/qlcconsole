@@ -284,6 +284,19 @@ void EffectInstance::runTick()
     }
 
     QList<DmxWrite> writes = parseIntents(result, cells);
+    // Laid out over other scenes' fixtures too (one effect across layers):
+    // this scene writes its own only.
+    if (Scene *sc = qobject_cast<Scene *>(m_doc->function(m_sceneId)))
+    {
+        if (!sc->layoutSpan(m_effectPaletteId).isEmpty())
+        {
+            const QList<quint32> own = sc->writtenFixtures(m_effectPaletteId);
+            const QSet<quint32> mine(own.constBegin(), own.constEnd());
+            writes.erase(std::remove_if(writes.begin(), writes.end(), [&mine](const DmxWrite &w) {
+                return !mine.contains(w.fixtureId);
+            }), writes.end());
+        }
+    }
     // Where this effect sits in its look: two effects on one channel, the
     // lower in the list wins (EffectScriptRunner::composeWrites()).
     if (Scene *sc = qobject_cast<Scene *>(m_doc->function(m_sceneId)))
@@ -568,23 +581,29 @@ QList<quint32> EffectInstance::lookFixtureIds() const
     Scene *scene = qobject_cast<Scene*>(m_doc->function(m_sceneId));
     if (!scene)
         return {};
+    /* The scene's groups' members and its fixtures, less any a lower layer
+       sets this effect's kind on itself (Scene::excludedFixtures). */
+    return scene->writtenFixtures(m_effectPaletteId);
+}
 
-    QList<quint32> fxIds;
-    for (quint32 gid : scene->fixtureGroups())
-    {
-        FixtureGroup *grp = m_doc->fixtureGroup(gid);
-        if (grp)
-            fxIds.append(grp->fixtureList());
-    }
-    for (quint32 fid : scene->fixtures())
-        if (!fxIds.contains(fid))
-            fxIds.append(fid);
-    return fxIds;
+QList<quint32> EffectInstance::layoutFixtureIds() const
+{
+    Scene *scene = qobject_cast<Scene*>(m_doc->function(m_sceneId));
+    if (!scene)
+        return {};
+    /* ONE effect across several scenes (a cue-level effect over layers,
+       SHOW_TREE_DESIGN.md D10): it lays out over all of them; this scene
+       writes only its own (runTick()). Otherwise the same as above. */
+    return scene->layoutFixtures(m_effectPaletteId);
 }
 
 QList<quint32> EffectInstance::effectiveFixtureIds() const
 {
-    QList<quint32> fxIds = lookFixtureIds();
+    return typeFiltered(lookFixtureIds());
+}
+
+QList<quint32> EffectInstance::typeFiltered(QList<quint32> fxIds) const
+{
     // A WLED look's WLED fixtures run it themselves (wledDeviceWrites()).
     if (!m_wledEffect.isEmpty())
         fxIds.erase(std::remove_if(fxIds.begin(), fxIds.end(), [this](quint32 fid) {
@@ -687,13 +706,15 @@ EffectInstance::effectiveCells(int &gridCols, int &gridRows) const
     gridCols = 1;
     gridRows = 1;
 
-    const QList<quint32> fxIds = effectiveFixtureIds();   // type-filtered fixtures
+    // What it lays out over (type-filtered): its own fixtures, or all of
+    // ONE effect's across several scenes.
+    const QList<quint32> fxIds = typeFiltered(layoutFixtureIds());
     if (fxIds.isEmpty())
         return cells;
     const QSet<quint32> allowed(fxIds.constBegin(), fxIds.constEnd());
 
     Scene *scene = qobject_cast<Scene*>(m_doc->function(m_sceneId));
-    const QList<quint32> grpIds = scene ? scene->fixtureGroups() : QList<quint32>();
+    const QList<quint32> grpIds = scene ? scene->layoutGroups(m_effectPaletteId) : QList<quint32>();
 
     // A multi-group look's stage grid, while it is fresh (see below).
     QList<quint32> stageKey;
