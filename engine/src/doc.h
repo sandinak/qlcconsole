@@ -193,6 +193,7 @@ private:
     PowerDistribution *m_powerDist;
     SpeedMasters *m_speedMasters;
     class ShowControl *m_showControl;
+    class ShowTreeController *m_showTree = nullptr;
     class PowerLimiter *m_powerLimiter = nullptr;
     NetworkTopology *m_networkTopology;
     TimecodeSource *m_timecodeSource;
@@ -1137,6 +1138,9 @@ public:
     SpeedMasters *speedMasters() const { return m_speedMasters; }
     /** Cues fired from outside: MSC, OSC (ShowControl). Never null. */
     class ShowControl *showControl() const { return m_showControl; }
+    /** The Show Tree: productions and what they bake to
+     *  (ShowTreeController). Never null. */
+    class ShowTreeController *showTree() const { return m_showTree; }
     /** Holds fixtures to their maximum draw (PowerLimiter) */
     class PowerLimiter *powerLimiter() const { return m_powerLimiter; }
 

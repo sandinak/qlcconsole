@@ -1,0 +1,802 @@
+/*
+  Q Light Controller Plus
+  showtreemodel.cpp
+
+  Copyright (C) Branson Matheson
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0.txt
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+*/
+
+#include <QRegularExpression>
+#include <QXmlStreamReader>
+#include <QXmlStreamWriter>
+#include <QVector>
+#include <QDebug>
+#include <algorithm>
+
+#include "showtreemodel.h"
+
+#define KXMLShowTreeProduction  QStringLiteral("Production")
+#define KXMLShowTreeCueList     QStringLiteral("CueList")
+#define KXMLShowTreeCue         QStringLiteral("Cue")
+#define KXMLShowTreeLayer       QStringLiteral("Layer")
+#define KXMLShowTreeLook        QStringLiteral("Look")
+
+namespace ShowTree
+{
+
+quint32 invalidId()
+{
+    return 0xFFFFFFFF;
+}
+
+const QString KeyColour = QStringLiteral("Colour");
+const QString KeyDimmer = QStringLiteral("Dimmer");
+const QString KeyPosition = QStringLiteral("Position");
+const QString KeyGobo = QStringLiteral("Beam.Gobo");
+const QString KeyZoom = QStringLiteral("Beam.Zoom");
+const QString KeyBeam = QStringLiteral("Beam.Beam");
+const QString KeyShutter = QStringLiteral("Shutter");
+const QString KeyEffectPrefix = QStringLiteral("Effect.");
+
+QString effectKey(const QString &kind)
+{
+    return KeyEffectPrefix + (kind.isEmpty() ? QStringLiteral("Other") : kind);
+}
+
+bool isEffectKey(const QString &key)
+{
+    return key.startsWith(KeyEffectPrefix);
+}
+
+/* The look-stack order (docs/features/effects.md, "How a look stacks"):
+   the static looks paint the base, then the effects play over it. Colour
+   first, as a scene's colour looks are numbered in list order; an effect's
+   own Colour/Dimmer follow it, which is what makes them its own. */
+static int keyRank(const QString &key)
+{
+    static const QStringList base = { KeyColour, KeyDimmer, KeyPosition, KeyGobo,
+                                      KeyZoom, KeyBeam, KeyShutter };
+    static const QStringList effects = { QStringLiteral("Color"), QStringLiteral("Dimmer"),
+                                         QStringLiteral("Position"), QStringLiteral("Beam"),
+                                         QStringLiteral("Other") };
+    if (isEffectKey(key))
+    {
+        const int i = effects.indexOf(key.mid(KeyEffectPrefix.length()));
+        return 100 + (i < 0 ? effects.count() : i);
+    }
+    const int i = base.indexOf(key);
+    return i < 0 ? base.count() : i;
+}
+
+bool keyLessThan(const QString &a, const QString &b)
+{
+    const int ra = keyRank(a), rb = keyRank(b);
+    if (ra != rb)
+        return ra < rb;
+    return a < b;
+}
+
+QString keyLabel(const QString &key)
+{
+    if (key == KeyGobo)
+        return QStringLiteral("Gobo");
+    if (key == KeyZoom)
+        return QStringLiteral("Zoom");
+    if (key == KeyBeam)
+        return QStringLiteral("Focus / Frost / Iris");
+    if (isEffectKey(key))
+    {
+        const QString kind = key.mid(KeyEffectPrefix.length());
+        if (kind == QLatin1String("Color"))
+            return QStringLiteral("Colour effect");
+        if (kind == QLatin1String("Other"))
+            return QStringLiteral("Effect");
+        return kind + QStringLiteral(" effect");
+    }
+    return key;
+}
+
+/****************************************************************************
+ * The tree
+ ****************************************************************************/
+
+bool Look::operator==(const Look &other) const
+{
+    return key == other.key && palettes == other.palettes && own == other.own
+           && none == other.none;
+}
+
+static QList<quint32> sortedIds(QList<quint32> ids)
+{
+    std::sort(ids.begin(), ids.end());
+    ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
+    return ids;
+}
+
+QString Target::signature() const
+{
+    if (isOpaque())
+        return QStringLiteral("x:%1").arg(function);
+    return QStringLiteral("g:%1|f:%2").arg(idsToString(sortedIds(groups)),
+                                           idsToString(sortedIds(fixtures)));
+}
+
+QString cueModeToString(CueMode mode)
+{
+    switch (mode)
+    {
+        case CueMode::Track: return QStringLiteral("Track");
+        case CueMode::Block: return QStringLiteral("Block");
+        case CueMode::CueOnly: return QStringLiteral("CueOnly");
+        case CueMode::ListDefault: break;
+    }
+    return QString();
+}
+
+CueMode stringToCueMode(const QString &str)
+{
+    if (str == QLatin1String("Track"))
+        return CueMode::Track;
+    if (str == QLatin1String("Block"))
+        return CueMode::Block;
+    if (str == QLatin1String("CueOnly"))
+        return CueMode::CueOnly;
+    return CueMode::ListDefault;
+}
+
+template <typename L>
+static const Look *findLook(const L &looks, const QString &key)
+{
+    for (const Look &l : looks)
+        if (l.key == key)
+            return &l;
+    return nullptr;
+}
+
+static void setLookIn(QList<Look> &looks, const Look &look)
+{
+    for (int i = 0; i < looks.count(); ++i)
+    {
+        if (looks.at(i).key != look.key)
+            continue;
+        if (look.palettes.isEmpty() && !look.none)
+            looks.removeAt(i);
+        else
+            looks[i] = look;
+        return;
+    }
+    if (!look.palettes.isEmpty() || look.none)
+        looks.append(look);
+}
+
+const Look *Layer::look(const QString &key) const
+{
+    return findLook(looks, key);
+}
+
+void Layer::setLook(const Look &look)
+{
+    setLookIn(looks, look);
+}
+
+const Look *Cue::look(const QString &key) const
+{
+    return findLook(looks, key);
+}
+
+void Cue::setLook(const Look &look)
+{
+    setLookIn(looks, look);
+}
+
+Layer *Cue::layer(quint32 lid)
+{
+    for (Layer &l : layers)
+        if (l.id == lid)
+            return &l;
+    return nullptr;
+}
+
+const Layer *Cue::layer(quint32 lid) const
+{
+    for (const Layer &l : layers)
+        if (l.id == lid)
+            return &l;
+    return nullptr;
+}
+
+int CueList::indexOf(quint32 cueId) const
+{
+    for (int i = 0; i < cues.count(); ++i)
+        if (cues.at(i).id == cueId)
+            return i;
+    return -1;
+}
+
+Cue *CueList::cue(quint32 cid)
+{
+    const int i = indexOf(cid);
+    return i < 0 ? nullptr : &cues[i];
+}
+
+const Cue *CueList::cue(quint32 cid) const
+{
+    const int i = indexOf(cid);
+    return i < 0 ? nullptr : &cues.at(i);
+}
+
+CueList *Production::list(quint32 lid)
+{
+    for (CueList &l : lists)
+        if (l.id == lid)
+            return &l;
+    return nullptr;
+}
+
+const CueList *Production::list(quint32 lid) const
+{
+    for (const CueList &l : lists)
+        if (l.id == lid)
+            return &l;
+    return nullptr;
+}
+
+/****************************************************************************
+ * Resolution
+ ****************************************************************************/
+
+QList<Look> ResolvedLayer::playedLooks() const
+{
+    QStringList keys = values.keys();
+    std::sort(keys.begin(), keys.end(), keyLessThan);
+    QList<Look> out;
+    for (const QString &k : keys)
+    {
+        const Look &l = values.value(k).look;
+        if (!l.none && !l.palettes.isEmpty())
+            out << l;
+    }
+    return out;
+}
+
+bool ResolvedLayer::isDark() const
+{
+    return !target.isOpaque() && playedLooks().isEmpty();
+}
+
+const ResolvedLayer *ResolvedCue::layer(const Target &target) const
+{
+    const QString sig = target.signature();
+    for (const ResolvedLayer &l : layers)
+        if (l.target.signature() == sig)
+            return &l;
+    return nullptr;
+}
+
+CueMode effectiveMode(const CueList &list, const Cue &cue)
+{
+    if (cue.mode != CueMode::ListDefault)
+        return cue.mode;
+    return list.mode == ListMode::Tracking ? CueMode::Track : CueMode::Block;
+}
+
+namespace
+{
+
+int indexOfTarget(const QList<ResolvedLayer> &layers, const QString &sig)
+{
+    for (int i = 0; i < layers.count(); ++i)
+        if (layers.at(i).target.signature() == sig)
+            return i;
+    return -1;
+}
+
+/** Carried into the next cue: everything becomes "tracked", but a layer just
+    released to the base says so for the one cue it lands in. */
+QList<ResolvedLayer> carried(const QList<ResolvedLayer> &from)
+{
+    QList<ResolvedLayer> out = from;
+    for (ResolvedLayer &l : out)
+    {
+        l.own = false;
+        if (l.origin == Origin::Base)
+            continue;
+        l.origin = Origin::Tracked;
+        for (ResolvedValue &v : l.values)
+            v.origin = Origin::Tracked;
+    }
+    return out;
+}
+
+/** passOn as it leaves a cue: a layer that was Base in it is plain tracked
+    from then on. */
+QList<ResolvedLayer> settled(const QList<ResolvedLayer> &from)
+{
+    QList<ResolvedLayer> out = from;
+    for (ResolvedLayer &l : out)
+    {
+        if (l.origin != Origin::Base)
+            continue;
+        l.origin = Origin::Tracked;
+        for (ResolvedValue &v : l.values)
+            v.origin = Origin::Tracked;
+    }
+    return out;
+}
+
+struct Resolver
+{
+    const CueList &list;
+    QVector<ResolvedCue> out;
+    QVector<int> state;     // 0 not yet, 1 in progress, 2 done
+
+    explicit Resolver(const CueList &l)
+        : list(l), out(l.cues.count()), state(l.cues.count(), 0)
+    {
+    }
+
+    void resolveAt(int i)
+    {
+        if (state.at(i) != 0)
+            return;
+        state[i] = 1;
+
+        const Cue &cue = list.cues.at(i);
+        ResolvedCue &rc = out[i];
+        rc.cueId = cue.id;
+
+        const CueMode mode = effectiveMode(list, cue);
+        QList<ResolvedLayer> start;
+        if (i > 0 && (mode == CueMode::Track || mode == CueMode::CueOnly))
+        {
+            resolveAt(i - 1);
+            start = carried(out.at(i - 1).passOn);
+        }
+
+        QList<ResolvedLayer> layers = start;
+
+        // Includes: the included cue's output, as if standing in it (D8).
+        for (quint32 inc : cue.includes)
+        {
+            const int j = list.indexOf(inc);
+            if (j < 0 || j == i || state.at(j) == 1)
+            {
+                rc.skippedIncludes << inc;
+                continue;
+            }
+            resolveAt(j);
+            for (const ResolvedLayer &il : out.at(j).layers)
+            {
+                const QString sig = il.target.signature();
+                int k = indexOfTarget(layers, sig);
+                if (k < 0)
+                {
+                    ResolvedLayer copy = il;
+                    copy.own = false;
+                    copy.release = false;
+                    copy.origin = Origin::Included;
+                    copy.fromCue = inc;
+                    copy.values.clear();
+                    layers << copy;
+                    k = layers.count() - 1;
+                }
+                for (auto it = il.values.constBegin(); it != il.values.constEnd(); ++it)
+                {
+                    ResolvedValue v = it.value();
+                    v.origin = Origin::Included;
+                    v.fromCue = inc;
+                    layers[k].values.insert(it.key(), v);
+                }
+            }
+        }
+
+        // This cue's own layers: the layer's looks, else the cue's (D5, D6).
+        QList<ResolvedLayer> own;
+        for (const Layer &layer : cue.layers)
+        {
+            if (layer.target.isEmpty())
+                continue;
+            const QString sig = layer.target.signature();
+            ResolvedLayer r;
+            const int k = indexOfTarget(layers, sig);
+            if (k >= 0)
+                r = layers.takeAt(k);
+            else
+            {
+                const int ko = indexOfTarget(own, sig);
+                if (ko >= 0)
+                    r = own.takeAt(ko);     // twice in one cue: the lower wins
+            }
+            r.target = layer.target;
+            r.name = layer.name;
+            r.layerId = layer.id;
+            r.own = true;
+            r.release = layer.release;
+            r.origin = Origin::Own;
+            r.fromCue = cue.id;
+
+            if (!layer.target.isOpaque())
+            {
+                for (const Look &cl : cue.looks)
+                    r.values.insert(cl.key, ResolvedValue { cl, Origin::CueLook, cue.id });
+                for (const Look &ll : layer.looks)
+                    r.values.insert(ll.key, ResolvedValue { ll, Origin::Own, cue.id });
+            }
+            own << r;
+        }
+        // Carried-in layers sit under the cue's own (§2, overlap).
+        layers << own;
+        rc.layers = layers;
+
+        // What the next cue starts from. A layer that came back to the base
+        // in this cue is plain tracked from here on.
+        QList<ResolvedLayer> pass = settled((mode == CueMode::CueOnly) ? start : layers);
+        if (mode != CueMode::CueOnly)
+        {
+            const int baseIdx = list.indexOf(list.baseCue);
+            for (int k = pass.count() - 1; k >= 0; --k)
+            {
+                if (!(pass.at(k).own && pass.at(k).release))
+                    continue;
+                const Target t = pass.at(k).target;
+                pass.removeAt(k);
+                if (baseIdx < 0 || baseIdx == i || state.at(baseIdx) == 1)
+                    continue;                       // dark
+                resolveAt(baseIdx);
+                const ResolvedLayer *b = out.at(baseIdx).layer(t);
+                if (b == nullptr)
+                    continue;                       // not the base's: dark
+                ResolvedLayer back = *b;
+                back.own = false;
+                back.release = false;
+                back.origin = Origin::Base;
+                back.fromCue = list.baseCue;
+                for (ResolvedValue &v : back.values)
+                {
+                    v.origin = Origin::Base;
+                    v.fromCue = list.baseCue;
+                }
+                pass.insert(k, back);
+            }
+        }
+        rc.passOn = pass;
+        state[i] = 2;
+    }
+};
+
+} // namespace
+
+QList<ResolvedCue> resolve(const CueList &list)
+{
+    Resolver r(list);
+    for (int i = 0; i < list.cues.count(); ++i)
+        r.resolveAt(i);
+    return QList<ResolvedCue>(r.out.begin(), r.out.end());
+}
+
+/****************************************************************************
+ * Numbering
+ ****************************************************************************/
+
+static QList<double> numberParts(const QString &number)
+{
+    QList<double> parts;
+    for (const QString &p : number.split(QLatin1Char('.')))
+    {
+        bool ok = false;
+        const double d = p.toDouble(&ok);
+        parts << (ok ? d : 0.0);
+    }
+    return parts;
+}
+
+/** As numbers, part by part: "0.0.4" < "0.0.4.5" < "0.0.5". */
+static int compareNumbers(const QString &a, const QString &b)
+{
+    const QList<double> pa = numberParts(a), pb = numberParts(b);
+    for (int i = 0; i < qMax(pa.count(), pb.count()); ++i)
+    {
+        const double x = i < pa.count() ? pa.at(i) : 0.0;
+        const double y = i < pb.count() ? pb.at(i) : 0.0;
+        if (x != y)
+            return x < y ? -1 : 1;
+    }
+    return 0;
+}
+
+static QString numberAt(const CueList &list, int index)
+{
+    const QString n = list.cues.at(index).number;
+    return n.isEmpty() ? QString::number(index + 1) : n;
+}
+
+static bool numberUsed(const CueList &list, const QString &number)
+{
+    for (int i = 0; i < list.cues.count(); ++i)
+        if (compareNumbers(numberAt(list, i), number) == 0)
+            return true;
+    return false;
+}
+
+QString numberForInsert(const CueList &list, int afterIndex)
+{
+    if (list.cues.isEmpty())
+    {
+        // A new list's first cue: from the list's leading digits (D23):
+        // "01-Everybody Scream" -> 1.0.0.
+        QRegularExpression lead(QStringLiteral("^(\\d+)"));
+        QRegularExpressionMatch m = lead.match(list.name);
+        if (m.hasMatch())
+            return QStringLiteral("%1.0.0").arg(m.captured(1).toInt());
+        return QStringLiteral("1");
+    }
+
+    if (afterIndex < 0)
+    {
+        // Above the first: a point below it.
+        const QString first = numberAt(list, 0);
+        for (const QString &c : { QStringLiteral("0.5"), QStringLiteral("0.1") })
+            if (compareNumbers(c, first) < 0 && !numberUsed(list, c))
+                return c;
+        return QString();
+    }
+
+    afterIndex = qMin(afterIndex, int(list.cues.count()) - 1);
+    const QString prev = numberAt(list, afterIndex);
+    const QString next = afterIndex + 1 < list.cues.count() ? numberAt(list, afterIndex + 1) : QString();
+
+    QStringList parts = prev.split(QLatin1Char('.'));
+    bool ok = false;
+    const int last = parts.last().toInt(&ok);
+    if (ok)
+    {
+        parts.last() = QString::number(last + 1);
+        const QString candidate = parts.join(QLatin1Char('.'));
+        if (!numberUsed(list, candidate) && (next.isEmpty() || compareNumbers(candidate, next) < 0))
+            return candidate;
+    }
+
+    // A point cue: 0.0.4 and 0.0.5 taken -> 0.0.4.5.
+    for (int k : { 5, 6, 7, 8, 9, 1, 2, 3, 4 })
+    {
+        const QString candidate = QStringLiteral("%1.%2").arg(prev).arg(k);
+        if (!numberUsed(list, candidate) && (next.isEmpty() || compareNumbers(candidate, next) < 0))
+            return candidate;
+    }
+    return QStringLiteral("%1.5.5").arg(prev);
+}
+
+bool splitNumberedName(const QString &text, QString *number, QString *name)
+{
+    static const QRegularExpression re(QStringLiteral("^\\s*(\\d+(?:\\.\\d+)*)\\s*(?:[-–—:]\\s*|\\s+|$)(.*)$"));
+    QRegularExpressionMatch m = re.match(text);
+    if (!m.hasMatch())
+        return false;
+    if (number != nullptr)
+        *number = m.captured(1);
+    if (name != nullptr)
+        *name = m.captured(2).trimmed();
+    return true;
+}
+
+/****************************************************************************
+ * XML
+ ****************************************************************************/
+
+QString idsToString(const QList<quint32> &ids)
+{
+    QStringList parts;
+    for (quint32 id : ids)
+        parts << QString::number(id);
+    return parts.join(QLatin1Char(','));
+}
+
+QList<quint32> stringToIds(const QString &str)
+{
+    QList<quint32> ids;
+    for (const QString &p : str.split(QLatin1Char(','), Qt::SkipEmptyParts))
+    {
+        bool ok = false;
+        const quint32 id = p.trimmed().toUInt(&ok);
+        if (ok)
+            ids << id;
+    }
+    return ids;
+}
+
+static void saveLooks(QXmlStreamWriter *doc, const QList<Look> &looks)
+{
+    for (const Look &l : looks)
+    {
+        doc->writeStartElement(KXMLShowTreeLook);
+        doc->writeAttribute(QStringLiteral("Key"), l.key);
+        if (!l.palettes.isEmpty())
+            doc->writeAttribute(QStringLiteral("Palettes"), idsToString(l.palettes));
+        if (!l.own.isEmpty())
+            doc->writeAttribute(QStringLiteral("Own"), idsToString(l.own));
+        if (l.none)
+            doc->writeAttribute(QStringLiteral("None"), QStringLiteral("1"));
+        doc->writeEndElement();
+    }
+}
+
+static Look loadLook(QXmlStreamReader &root)
+{
+    const QXmlStreamAttributes a = root.attributes();
+    Look l;
+    l.key = a.value(QStringLiteral("Key")).toString();
+    l.palettes = stringToIds(a.value(QStringLiteral("Palettes")).toString());
+    l.own = stringToIds(a.value(QStringLiteral("Own")).toString());
+    l.none = a.value(QStringLiteral("None")).toString() == QLatin1String("1");
+    root.skipCurrentElement();
+    return l;
+}
+
+static void writeId(QXmlStreamWriter *doc, const QString &name, quint32 id)
+{
+    if (id != invalidId())
+        doc->writeAttribute(name, QString::number(id));
+}
+
+static quint32 readId(const QXmlStreamAttributes &a, const QString &name)
+{
+    bool ok = false;
+    const quint32 id = a.value(name).toString().toUInt(&ok);
+    return ok ? id : invalidId();
+}
+
+void saveXML(QXmlStreamWriter *doc, const Production &production)
+{
+    doc->writeStartElement(KXMLShowTreeProduction);
+    writeId(doc, QStringLiteral("ID"), production.id);
+    doc->writeAttribute(QStringLiteral("Name"), production.name);
+
+    for (const CueList &list : production.lists)
+    {
+        doc->writeStartElement(KXMLShowTreeCueList);
+        writeId(doc, QStringLiteral("ID"), list.id);
+        doc->writeAttribute(QStringLiteral("Name"), list.name);
+        doc->writeAttribute(QStringLiteral("Mode"), list.mode == ListMode::Tracking
+                                                    ? QStringLiteral("Tracking")
+                                                    : QStringLiteral("NonTracking"));
+        writeId(doc, QStringLiteral("Base"), list.baseCue);
+        writeId(doc, QStringLiteral("Chaser"), list.chaser);
+
+        for (const Cue &cue : list.cues)
+        {
+            doc->writeStartElement(KXMLShowTreeCue);
+            writeId(doc, QStringLiteral("ID"), cue.id);
+            if (!cue.number.isEmpty())
+                doc->writeAttribute(QStringLiteral("Number"), cue.number);
+            doc->writeAttribute(QStringLiteral("Name"), cue.name);
+            if (!cue.note.isEmpty())
+                doc->writeAttribute(QStringLiteral("Note"), cue.note);
+            if (cue.mode != CueMode::ListDefault)
+                doc->writeAttribute(QStringLiteral("Mode"), cueModeToString(cue.mode));
+            doc->writeAttribute(QStringLiteral("FadeIn"), QString::number(cue.fadeIn));
+            doc->writeAttribute(QStringLiteral("FadeOut"), QString::number(cue.fadeOut));
+            doc->writeAttribute(QStringLiteral("Hold"), QString::number(cue.hold));
+            if (!cue.includes.isEmpty())
+                doc->writeAttribute(QStringLiteral("Includes"), idsToString(cue.includes));
+            writeId(doc, QStringLiteral("Collection"), cue.collection);
+
+            saveLooks(doc, cue.looks);
+            for (const Layer &layer : cue.layers)
+            {
+                doc->writeStartElement(KXMLShowTreeLayer);
+                writeId(doc, QStringLiteral("ID"), layer.id);
+                if (!layer.name.isEmpty())
+                    doc->writeAttribute(QStringLiteral("Name"), layer.name);
+                if (!layer.target.groups.isEmpty())
+                    doc->writeAttribute(QStringLiteral("Groups"), idsToString(layer.target.groups));
+                if (!layer.target.fixtures.isEmpty())
+                    doc->writeAttribute(QStringLiteral("Fixtures"), idsToString(layer.target.fixtures));
+                writeId(doc, QStringLiteral("Function"), layer.target.function);
+                if (layer.release)
+                    doc->writeAttribute(QStringLiteral("Release"), QStringLiteral("1"));
+                saveLooks(doc, layer.looks);
+                doc->writeEndElement();
+            }
+            doc->writeEndElement();
+        }
+        doc->writeEndElement();
+    }
+    doc->writeEndElement();
+}
+
+bool loadXML(QXmlStreamReader &root, Production &production)
+{
+    if (root.name() != KXMLShowTreeProduction)
+        return false;
+
+    QXmlStreamAttributes a = root.attributes();
+    production = Production();
+    production.id = readId(a, QStringLiteral("ID"));
+    production.name = a.value(QStringLiteral("Name")).toString();
+
+    while (root.readNextStartElement())
+    {
+        if (root.name() != KXMLShowTreeCueList)
+        {
+            root.skipCurrentElement();
+            continue;
+        }
+        a = root.attributes();
+        CueList list;
+        list.id = readId(a, QStringLiteral("ID"));
+        list.name = a.value(QStringLiteral("Name")).toString();
+        list.mode = a.value(QStringLiteral("Mode")).toString() == QLatin1String("Tracking")
+                    ? ListMode::Tracking : ListMode::NonTracking;
+        list.baseCue = readId(a, QStringLiteral("Base"));
+        list.chaser = readId(a, QStringLiteral("Chaser"));
+
+        while (root.readNextStartElement())
+        {
+            if (root.name() != KXMLShowTreeCue)
+            {
+                root.skipCurrentElement();
+                continue;
+            }
+            a = root.attributes();
+            Cue cue;
+            cue.id = readId(a, QStringLiteral("ID"));
+            cue.number = a.value(QStringLiteral("Number")).toString();
+            cue.name = a.value(QStringLiteral("Name")).toString();
+            cue.note = a.value(QStringLiteral("Note")).toString();
+            cue.mode = stringToCueMode(a.value(QStringLiteral("Mode")).toString());
+            cue.fadeIn = a.value(QStringLiteral("FadeIn")).toString().toUInt();
+            cue.fadeOut = a.value(QStringLiteral("FadeOut")).toString().toUInt();
+            if (a.hasAttribute(QStringLiteral("Hold")))
+                cue.hold = a.value(QStringLiteral("Hold")).toString().toUInt();
+            cue.includes = stringToIds(a.value(QStringLiteral("Includes")).toString());
+            cue.collection = readId(a, QStringLiteral("Collection"));
+
+            while (root.readNextStartElement())
+            {
+                if (root.name() == KXMLShowTreeLook)
+                {
+                    cue.looks << loadLook(root);
+                }
+                else if (root.name() == KXMLShowTreeLayer)
+                {
+                    a = root.attributes();
+                    Layer layer;
+                    layer.id = readId(a, QStringLiteral("ID"));
+                    layer.name = a.value(QStringLiteral("Name")).toString();
+                    layer.target.groups = stringToIds(a.value(QStringLiteral("Groups")).toString());
+                    layer.target.fixtures = stringToIds(a.value(QStringLiteral("Fixtures")).toString());
+                    layer.target.function = readId(a, QStringLiteral("Function"));
+                    layer.release = a.value(QStringLiteral("Release")).toString() == QLatin1String("1");
+                    while (root.readNextStartElement())
+                    {
+                        if (root.name() == KXMLShowTreeLook)
+                            layer.looks << loadLook(root);
+                        else
+                            root.skipCurrentElement();
+                    }
+                    cue.layers << layer;
+                }
+                else
+                {
+                    root.skipCurrentElement();
+                }
+            }
+            list.cues << cue;
+        }
+        production.lists << list;
+    }
+    return true;
+}
+
+} // namespace ShowTree

@@ -651,3 +651,210 @@ scenes and collections file themselves.
 Replacing the Programming tab; channel-level tracking in P1–P6; a separate
 palette scope per production (palettes are shared; inline looks cover
 one-offs); cue-list-level looks (D14).
+
+---
+
+## 10. Implementation notes (P1 build, 2026-10-16 overnight)
+
+Decisions taken to build P1. Where the choice was not obvious the
+conservative option was taken and is listed under **Open for Branson** at
+the end.
+
+### 10.1 Where the code lives
+
+| Piece | File | |
+|---|---|---|
+| Tree model, cascade, numbering, XML | `engine/src/showtreemodel.{h,cpp}` (namespace `ShowTree`) | pure values, no Doc: the §3 tables run on it directly |
+| Bake, edits, undo, import, inline palettes | `engine/src/showtreecontroller.{h,cpp}` (`ShowTreeController`) | owned by Doc; `Doc::showTree()` + load/save/clear forwarders only |
+| Hand-over | `ChaserRunner`, `Collection` (§4 spike) | |
+| Tests | `engine/test/cuehandover`, `engine/test/showtree` | offscreen, no DMX out |
+
+### 10.2 File format
+
+```xml
+<Engine>
+  … fixtures, groups, palettes, functions as today …
+  <ShowTree NextId="42">
+    <Production ID="1" Name="DanceHysteria">
+      <CueList ID="2" Name="Full Show" Mode="NonTracking" Base="5" Chaser="120">
+        <Cue ID="3" Number="0.0.3" Name="Announcer" Note="…" Mode="Block"
+             FadeIn="1260" FadeOut="0" Hold="4294967294" Includes="7" Collection="121">
+          <Look Key="Colour" Palettes="4"/>                      <!-- a cue look -->
+          <Layer ID="4" Groups="19" Release="1">
+            <Look Key="Dimmer" Palettes="2"/>
+            <Look Key="Effect.Position" Palettes="50" Own="1"/>  <!-- an effect and its own looks -->
+            <Look Key="Beam.Gobo" None="1"/>                     <!-- off here -->
+          </Layer>
+          <Layer ID="6" Function="33"/>                          <!-- an opaque function layer -->
+        </Cue>
+      </CueList>
+    </Production>
+    <Generated Scenes="122,123" Collections="121" Chasers="120"/>
+    <InlinePalettes IDs="88"/>
+  </ShowTree>
+</Engine>
+```
+
+- **Where:** one `<ShowTree>` element in `<Engine>`, after the functions;
+  written only when the show has a tree, so a show without one saves
+  byte-for-byte as before (tested).
+- **Node ids:** one counter per show (`NextId`) for productions, lists, cues
+  and layers — unique across the whole tree, stable across saves, separate
+  from function and palette ids. On load the counter is raised above every
+  id found, whatever the file says.
+- **Attribute keys** (`Look Key`): `Colour` (an ordered list: colour 1, 2…),
+  `Dimmer`, `Position` (Pan/Tilt/PanTilt/Aim), `Beam.Gobo`, `Beam.Zoom`,
+  `Beam.Beam` (today's Beam palette: focus/frost/iris together), `Shutter`
+  (Shutter and Strobe), `Effect.<kind>` with kind `Color`/`Dimmer`/
+  `Position`/`Beam`/`Other` from the script's fixture types
+  (`EffectScriptCache::categoryForTypes`). Prism and Gobo rotation have no
+  palette type yet, so they are not keys yet.
+- **`Generated` mark — a deviation from §4.** The design put
+  `Generated="ShowTree"` and the node id on each `<Function>`. Built instead:
+  the tree lists what it generated (`<Generated …/>`) and
+  `ShowTreeController::isGenerated()` / `describeGenerated()` answer for any
+  function ("Cue 0.0.4 SHOUT in Full Show"). Reason: no change to
+  `function.cpp`'s common XML (an upstream file every function type goes
+  through), and an older build drops the whole `<ShowTree>` either way.
+  Generated scenes are found again by *what they play* (target + palette
+  list), so they need no node id.
+- **`Productions/` folder:** generated scenes and collections get the stock
+  `Hidden="True"` flag (the Function Manager and the Programming trees already
+  skip hidden functions) and the path `Productions/<production>/<list>`; the
+  cue list's Chaser is **visible**, at `Productions/<production>`, so a VC Cue
+  List, the footer GO and show control can pick it as they pick any chaser.
+- **Inline (unnamed) palettes** (D11, D21) are ordinary `<Palette>` elements,
+  named for where they were made ("30% · 1.0.1 Towers"), path
+  `Palettes/Show Tree`, and listed in `<InlinePalettes>`; the palette trees
+  must hide them (UI step). One no cue uses any more is deleted at the next
+  bake. **Make reusable** names and files it and drops it from the list.
+- **An older build** (or upstream QLC+) logs "Unknown engine tag: ShowTree",
+  skips it, and plays the generated Chaser / Collections / Scenes as
+  ordinary functions — the show runs. Saving there loses the tree; the
+  generated functions stay (hidden scenes and collections, a visible chaser),
+  and inline palettes show as normal palettes in a "Show Tree" folder.
+- **No bake on load:** the saved functions are what plays; the next edit
+  bakes. A bake straight after load changes nothing (tested).
+
+### 10.3 Baking
+
+- `resolve(list)` gives each cue's resolved layers (§2: tracked → includes →
+  cue looks → layer looks; Release to the base cue, else dark; Cue-only
+  passes on what it started from). Tracking, Block, Cue-only, Release, base
+  and includes are all in the resolver already — P1's UI only has to expose
+  them; P2 is mostly UI now.
+- A resolved layer bakes to a Scene: its groups/fixtures + palettes in the
+  look-stack order (Colour, Dimmer, Position, Gobo, Zoom, Beam, Shutter, then
+  each effect followed by its own Colours/Dimmers). Identical (target,
+  palettes) = **the same Scene** in every cue (shared; hand-over keeps it
+  running). A layer that resolves to nothing (only None) bakes to no scene.
+- Cue → Collection (`<number>-<name>`, the DanceHysteria pattern), list →
+  Chaser (PerStep fades/holds, SingleShot; step = fade in/out, hold, note,
+  `cueNumber`). An infinite hold stays the duration (as
+  `ChaserStep::loadXML`).
+- Deterministic: baking twice changes nothing (tested on the function XML).
+
+### 10.4 Re-bake safety
+
+- **Synchronous, on the GUI thread, once per edit.** No debounce: palette
+  value edits (the Look Editor's sliders) never re-bake — scenes reference
+  palettes — so a bake only follows a discrete tree edit, and it is look lists
+  only (no DMX).
+- **A generated scene's content never changes:** an edit that changes a
+  layer bakes a *different* scene (a new signature) and the cue's Collection
+  is pointed at it. Nothing the DMX thread reads in a running scene's fader
+  map is mutated by a bake, so there is no new `m_valueListMutex` exposure;
+  the bake only renames scenes, edits Collection member lists and Chaser steps
+  (in place with `replaceStep`, so a running list keeps its step) under their
+  own locks.
+- **Orphans** (scenes, collections, chasers nothing uses any more) are deleted
+  only when not running; a running one is left for a later bake, so an edit
+  never pulls a look out from under the show (tested).
+- **Limitation:** an edit to the cue that is *on stage* shows the next time
+  that cue plays — the running Collection keeps the members it started with.
+  Safe; whether to re-take the cue live is open (below).
+
+### 10.5 Undo
+
+- `ShowTreeController::edit(label, change)` is the one door: snapshot (the
+  tree's XML plus every inline palette's full XML), apply, bake. Undo/redo
+  restore a snapshot and bake (200 steps). Every operation the UI offers is
+  one step; an import is one step.
+- Inline palettes come back with undo/redo exactly as they were (tested).
+- **Not shared with Programming** in P1: the Programming tab has its own
+  Revert snapshots and edits functions, not the tree.
+- **Palette value edits are not tree edits**, so tree undo doesn't undo a
+  colour dragged in the Look Editor (as today in Programming).
+
+### 10.6 Import (§7)
+
+- New production named after the chaser; Non-tracking list; every step a
+  cue: number from the step's `cueNumber`, else parsed from the function's
+  name (`0.0.4-SHOUT` → `0.0.4` "SHOUT"), else its position; note, fades and
+  hold kept.
+- In a step's Collection: a Scene of groups/fixtures + palettes → a **layer**;
+  a Collection that is another step's → an **include**; anything else (raw
+  channel values, own fade times, per-look fades, a transition, a blend mode,
+  a speed master, a group-scoped look, two effects of one kind, effects in an
+  order the tree doesn't keep, EFX, RGB Matrix, a Show, a Chaser…) → an
+  **opaque function layer** playing the original, with the reason in the
+  report. A scene's static looks may be reordered (each is the only one of
+  its kind; an Aim/Gobo is the look's wherever it sits), but colours keep
+  their numbering and effects their order with their own looks
+  (`playsTheSame()`).
+- The generated chaser starts as a **copy** of the original (run order, speed
+  modes, tempo, GO on the beat), its steps replaced by the bake.
+- **HTP conflicts:** a cue where the same target is set by two sources (an
+  include and its own scene, or two scenes) — the chaser ran both (HTP
+  intensity, LTP the rest), the list keeps the later one's values per
+  attribute. Listed in the report.
+- Not carried yet (noted in the report): a step's skip flag, its own speed
+  master, Sub GO steps (P6).
+
+**DanceHysteria-0.5 dry run** (a copy in the scratchpad, in memory only;
+`QLC_SHOWTREE_IMPORT=<copy> showtree_test importARealShow`):
+
+| Chaser | Cues | Layers | Opaque | Includes | Generated scenes | HTP conflicts |
+|---|---|---|---|---|---|---|
+| Full Show | 6 | 9 | 0 | 3 (0.0.5 ⊃ 0.0.4, 0.0.6 ⊃ 0.0.5, 0.0.7 ⊃ 0.0.6) | 7 | 1: 0.0.5 WHO ARE WE — StepTops set by 0.0.4's StepTops-Dim and its own StepTops-Bright (Bright is the brighter, so nothing changes on stage) |
+| New Chaser 8 | 2 | 3 | 2 (Wash-Red, Show: scenes with no looks) | 0 | 2 | 0 |
+
+Played side by side, cue by cue, every channel of every universe (static
+looks; effects run on their own timer and were not compared): **0 channels
+differ** in all 8 cues (6 146 lit in 0.0.2, 282 in 0.0.3, 1 696 in 0.0.4/0.0.5,
+6 152 in 0.0.6/0.0.7). Note 0.0.4–0.0.7 have Hold 0, so they auto-follow as
+one sequence and back to 0.0.2 (Loop) — the import keeps that.
+
+### 10.7 Gobo mapping (§3A)
+
+- **P1 as built:** today's Gobo palette is used unchanged (one DMX value on
+  every fixture's gobo channel), and **"applies to N of M"** counts the
+  target's fixtures that have the attribute's channels
+  (`ShowTreeController::lookReach`, tested on a Sharpy + dimmers).
+- **Approach for the per-definition mapping (both, manual wins):** a gobo
+  palette stores a *name* ("Breakup"); per fixture definition it resolves by
+  (1) a manual map kept in the palette (manufacturer/model → wheel value, set
+  once in the palette editor for a new type), else (2) a name match against
+  the definition's Gobo capabilities (capability name or gobo resource file
+  name, case- and space-insensitive). No match: not applied, and counted out
+  of "applies to". Not built tonight.
+- **An effect's own Gobo:** today's stack rule says a Gobo is never an
+  effect's, wherever it sits. P1 supports an effect's own Colour/Dimmer only;
+  a Gobo of its own needs the engine rule changed (open).
+
+### Open for Branson
+
+1. **`Generated` mark on `<Function>`** as well as in `<ShowTree>`? (10.2;
+   built without, to leave function.cpp alone.)
+2. **Editing the cue on stage:** show the change at once (re-take the cue
+   through the hand-over, or teach Collection to sync its running members) or
+   on its next GO (built: next GO)?
+3. **Undo shared with Programming?** (built: the tree's own.) And should tree
+   undo cover palette value edits made from the tree's Look Editor?
+4. **Gobo mapping:** manual map + name match as in 10.7 — agree before it is
+   built? And an effect's own Gobo (engine rule change)?
+5. **Hold 0 in imported lists:** DanceHysteria's 0.0.4–0.0.7 auto-follow
+   (Hold 0). Intended? The import keeps it either way.
+6. **Redo of an import after undoing it** recreates the list's chaser with
+   default playback settings (the copy was deleted on undo). Minor; fix is to
+   keep the playback settings on the cue list. Not done tonight.

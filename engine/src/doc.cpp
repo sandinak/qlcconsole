@@ -61,6 +61,7 @@
 #include "show.h"
 #include "speedmasters.h"
 #include "showcontrol.h"
+#include "showtreecontroller.h"
 #include "doc.h"
 #include "powerlimiter.h"
 #include "bus.h"
@@ -128,6 +129,7 @@ Doc::Doc(QObject* parent, int universes)
     // Cues fired from outside (QLab): MSC arrives as SysEx on a patched
     // MIDI input, as MTC does.
     m_showControl = new ShowControl(this, this);
+    m_showTree = new ShowTreeController(this);
     connect(m_ioMap, &InputOutputMap::inputSysExReceived,
             m_showControl, &ShowControl::handleSysEx);
     // Which masters are used changes only with an edit: let them know.
@@ -286,6 +288,7 @@ void Doc::clearContents()
 
     m_speedMasters->reset();
     m_showControl->reset();
+    m_showTree->reset();
     // The timecode source is the show's (a universe of its patch).
     if (m_timecodeSource != NULL)
         m_timecodeSource->setSourceUniverse(-1);
@@ -2340,6 +2343,10 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
         {
             m_showControl->loadXML(doc);
         }
+        else if (doc.name() == KXMLQLCShowTree)
+        {
+            m_showTree->loadXML(doc);
+        }
         else if (doc.name() == KXMLQLCTimecode)
         {
             timecodeSource()->loadXML(doc);
@@ -2469,6 +2476,7 @@ bool Doc::saveXML(QXmlStreamWriter *doc)
 
     m_speedMasters->saveXML(doc);
     m_showControl->saveXML(doc);
+    m_showTree->saveXML(doc);
     if (m_timecodeSource != NULL)
         m_timecodeSource->saveXML(doc);
 
