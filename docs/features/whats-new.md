@@ -21,6 +21,11 @@ The latest changes, newest first. Each links to the guide with the detail.
   Programming tab (menu or ⌫) lists every scene look, effect-look slot,
   collection, chaser step and show track using it before you confirm. See
   [Deleting palettes and functions](programming-tab.md#deleting-palettes-and-functions).
+- **A look keeps its Speed and Spread when you try another effect.**
+  Clicking or double-clicking another effect's tile in the look editor put
+  the look back on *As the look* with no spread; now both stay. See
+  [Speed masters](effects.md#speed-masters). Closing the app with a speed
+  master's name still being typed no longer crashes.
 
 ### Sub-cues
 
@@ -47,6 +52,18 @@ The latest changes, newest first. Each links to the guide with the detail.
   the rest are named and left alone), and **Unpatch N selected universes**
   removes them all in one go — each one undo step. See
   [Connections &amp; patch](other-improvements.md#connections--patch).
+- **Pick the port from a list.** Patching a universe to Art-Net (or WLED)
+  lists every port of every device on that interface, free ones first and
+  held ones saying by whom; a held port is refused. **Change interface /
+  target…** asks the interface again, so a universe on the wrong network
+  card can move without unpatching. "Port" is now the node's socket and
+  "universe" its Art-Net address. See
+  [Connections &amp; patch](other-improvements.md#connections--patch).
+- **The power estimate is believable.** A fixture whose definition gives no
+  power is guessed at 150 W for a mover and 50 W for anything else (it was
+  40 W per channel, so a pixel bar read kilowatts), and hovering the footer
+  figure explains it: the biggest draws, each measured, rated or guessed.
+  See [Power distribution](other-improvements.md#power-distribution).
 
 - **New Art-Net nodes can be found and given an address.** A node still on
   its factory address (2.x.x.x and the like) shows in Connections in amber
@@ -132,6 +149,9 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Lighting Studio
 
+- **A mover hung on a truss sits where the truss editor shows it** in the
+  Rig Overview and the Angled view — just under the bar — instead of half
+  a body lower.
 - **Washes look like washes.** A pool now fades out past its beam angle
   for a wash (pars, pixel bars, wash movers) and stays crisp for a profile
   (a gobo, focus or iris channel, or a beam bar); PC and Fresnel lenses
