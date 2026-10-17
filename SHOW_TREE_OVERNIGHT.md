@@ -120,3 +120,91 @@ cp ~/git/qlcconsole/test-workspaces/DanceHysteria-0.5.qlcc /tmp/dh-showtree.qlcc
 
 Then **Show Tree** tab (⇧⌘6) → **Import chaser… → Full Show**, open
 0.0.4 SHOUT, click a layer; ✎ on a row opens the Look Editor, ⋯ sets values.
+
+---
+
+## Fix pass (2026-10-17)
+
+Branson tried P1 and asked for four fixes, all approved. Same branch
+(`feat/show-tree`), pushed, **not merged**. Notes: SHOW_TREE_DESIGN.md
+§10.8; §10 "Open for Branson" updated (2 resolved, 2 new).
+
+| Commit | What |
+|---|---|
+| 4327af954 | **Selecting a cue plays it on the rig** (Design mode): preview of the selected cue (or a layer in it), re-taken after every bake so edits show at once; switches with the selection; stops on leaving the tab / selecting a list or nothing / going Live. Live (Operate) is blind until GO. Not previewed while its own list runs for real; gives way when the list starts, comes back when it stops. Header label says what's on the rig. |
+| 102afcb19 | **Several groups in one layer**: a multi-group drop is one layer (⌥ = a layer each), groups dropped on a layer join it, "Remove X from layer"; hints say which. A layer stays one layer when its groups change (`Layer.continues`, XML `ContinuesGroups/ContinuesFixtures`). |
+| a1ee9581d | **Library groups in the Fixture Manager's folders**, nested; open folders kept by path; filter works at any depth and on folder names. |
+| f13f79ff4 | **Gobo palettes by name per fixture type** (§10.7): `GoboName` + per-type picked slots; Look Editor names the look from a pick and lists what each type plays; "applies to N of M" counts it. Unnamed gobo looks play as before. |
+| 253bc2632 | Help (show-tree.md, what's new), TODO/DONE, design §10. |
+
+How the preview is built (the part to read): it runs the cue Collection's
+*members* under its own FunctionParent, not the Collection, so a scene two
+cues share keeps running as the selection moves (no re-fade), a re-bake is
+a start/stop diff (no restart), and stopping it never stops what a chaser
+or VC widget started. The power chip already reads what's lit in Design on
+any tab, so it covers the preview with no change; Blind mutes it.
+
+### Gate and CI
+
+- **`./check-all.sh`** (JOBS=5, on a `git archive` copy in the scratchpad):
+  - on **4327af954** (fix 1): Qt6 **PASS** (402 s), Qt6-Release **PASS**
+    (369 s), Qt6-Werror **PASS** (399 s); whole gate 1170 s.
+  - on **253bc2632** (all four fixes + docs): Qt6 **PASS** (384 s),
+    Qt6-Release **PASS** (351 s), Qt6-Werror **PASS** (392 s); whole gate
+    1127 s.
+- New/changed tests: `showtree_test` 35 + 1 opt-in skip (preview ×5, layer
+  targets ×3, gobo by name), `showtreeview_test` 22 + 1 opt-in skip (preview,
+  drops on a layer and ⌥, Library folders, gobo in the Look Editor);
+  qlcpalette, programmercontroller, scene, lookeditor, programmingmanager,
+  helpbrowser green. DanceHysteria-0.5 import dry run (a copy): still **0
+  channels differ** in all 8 cues.
+- **No crash reports** in `~/Library/Logs/DiagnosticReports` from these runs.
+- **CI** run 39024589457 (253bc2632): macOS and Linux **green**; Linux
+  coverage and Windows were still running when this was written — check
+  `gh run list -R sandinak/qlcconsole --branch feat/show-tree`.
+
+### What to try in the app (on a COPY of a show)
+
+```sh
+cp ~/git/qlcconsole/test-workspaces/DanceHysteria-0.5.qlcc /tmp/dh-fix.qlcc
+~/git/qlcconsole-showtree/build/main/qlcconsole -o /tmp/dh-fix.qlcc
+```
+
+(It patches the show's outputs as usual: DMX goes out if the rig is on the
+network. Use Blind if you only want the 2D view.)
+
+1. **Preview:** Show Tree tab (⇧⌘6) → Import chaser… → Full Show. In
+   Design mode click 0.0.3, then 0.0.4: the rig (or the 2D monitor) follows,
+   the header says "▶ On the rig: 0.0.4 SHOUT". Drop a palette on a layer:
+   it shows at once. Click the list row: preview stops. Switch to another
+   tab: stops. Go to Operate and click cues: nothing changes on stage, the
+   header says Live is blind. GO the list from the footer in Design and
+   click its cues: "Full Show is running: not previewed".
+2. **Several groups:** select two groups in the Library and drag them onto
+   a cue (one layer "A + B"); again with ⌥ (one layer each); drag a group
+   onto a layer row (it joins); right-click that layer → Remove … from layer.
+   Watch the drop hint top right before letting go.
+3. **Folders:** Library → All → Groups now mirrors the Fixture Manager's
+   folders; type in the filter (a group name, or a folder name), clear it.
+4. **Gobos by name:** on a layer whose group mixes fixture types, ✎ on the
+   Gobo row (or set a gobo palette first via ⋯) → in the Look Editor pick a
+   gobo on one type's wheel ("Wheel of" chooses the type): the look takes
+   its name, the list under it says what each type plays, and the row's
+   "applies to N of M" counts only the types that have it.
+
+### Open for Branson (also §10)
+
+1. `Generated` mark on `<Function>` too? (unchanged)
+2. ~~Editing the cue on stage~~ — resolved: Design shows it at once, Live on GO.
+3. Undo shared with Programming? (unchanged)
+4. ~~Gobo mapping~~ — resolved and built; an effect's own Gobo still open
+   (out of scope).
+5. DanceHysteria Hold-0 auto-follow — intended? (unchanged)
+6. New: a preview *on top of a different* list running for real is allowed
+   (as Programming's preview is); or block the preview while any list runs?
+7. New: gobo names match exactly (ignoring case/space/-/_): "Dot" ≠ "Dots";
+   a per-type pick covers differences. Fuzzier would risk "Dots Shake".
+
+Also worth knowing: editing a gobo palette in the Look Editor (either tab)
+now makes it a by-name look; a type with no gobo of that name then ignores
+it rather than getting the old raw value.
