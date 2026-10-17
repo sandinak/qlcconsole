@@ -264,6 +264,29 @@ QList<quint32> AimSolver::aimHeads(Doc *doc, const Scene *scene)
     return aimable(doc, all);
 }
 
+QList<quint32> AimSolver::orderedLineHeads(Doc *doc, const StageTarget *target,
+                                          const QList<quint32> &heads, LineSpread::Order order)
+{
+    if (doc == NULL || target == NULL || order != LineSpread::AlongLine)
+        return heads;
+    /* By where the heads hang, measured from the line's first end towards
+       its last: the stage-left head takes the stage-left end, so a full
+       spread never crosses beams by accident. */
+    const QVector<QVector3D> pts = target->linePoints();
+    if (pts.size() < 2)
+        return heads;
+    QVector<QVector3D> where;
+    foreach (quint32 fid, heads)
+    {
+        Frame f;
+        where << (frameFor(doc, fid, f) ? f.position : QVector3D());
+    }
+    QList<quint32> ordered;
+    foreach (int i, LineSpread::orderAlong(where, pts.first(), pts.last()))
+        ordered << heads.at(i);
+    return ordered;
+}
+
 QHash<quint32, double> AimSolver::lineFractions(Doc *doc, const StageTarget *target,
                                                 const QList<quint32> &heads,
                                                 const LineSpread::Settings &settings)
@@ -271,29 +294,7 @@ QHash<quint32, double> AimSolver::lineFractions(Doc *doc, const StageTarget *tar
     QHash<quint32, double> out;
     if (doc == NULL || target == NULL || !target->isLine() || heads.isEmpty())
         return out;
-
-    QList<quint32> ordered = heads;
-    if (settings.order == LineSpread::AlongLine)
-    {
-        /* By where the heads hang, measured from the line's first end
-           towards its last: the stage-left head takes the stage-left end, so
-           a full spread never crosses beams by accident. */
-        const QVector<QVector3D> pts = target->linePoints();
-        QVector<QVector3D> where;
-        foreach (quint32 fid, heads)
-        {
-            Frame f;
-            where << (frameFor(doc, fid, f) ? f.position : QVector3D());
-        }
-        if (pts.size() >= 2)
-        {
-            const QVector<int> order = LineSpread::orderAlong(where, pts.first(), pts.last());
-            ordered.clear();
-            foreach (int i, order)
-                ordered << heads.at(i);
-        }
-    }
-
+    const QList<quint32> ordered = orderedLineHeads(doc, target, heads, settings.order);
     const QVector<double> fr = LineSpread::fractions(ordered.size(), settings);
     for (int i = 0; i < ordered.size(); ++i)
         out.insert(ordered.at(i), fr.at(i));

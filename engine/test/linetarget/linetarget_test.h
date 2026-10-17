@@ -62,6 +62,18 @@ private slots:
     void thePaletteAimsEachHeadAtItsOwnPoint();
     /** Moving the target moves the whole line. */
     void movingTheTargetMovesTheLine();
+
+    /** Spread: +2.5 squeezes the even spread into the middle half, 0 puts
+     *  every light on the centre, below 0 they cross it. */
+    void theSpreadSqueezesAndCrosses();
+    /** Each setting is its own param, written only when it is not the
+     *  default; out-of-range values are brought in. */
+    void lineSettingsAreParamsOfTheirOwn();
+    /** An Aim look's spread is saved with it and loads back; an Aim look
+     *  without one loads as before. */
+    void anAimLooksSpreadIsSavedWithIt();
+    /** At spread 0 every head aims at the centre; at -5 they swap ends. */
+    void theSpreadMovesTheHeads();
 };
 
 #endif

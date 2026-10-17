@@ -27,6 +27,10 @@ class LookEditor_Test final : public QObject
     Q_OBJECT
 
 private slots:
+    /** An Aim look on a line shows the line's Spread; the slider and the
+     *  box move together, write the look's param, and the strip shows where
+     *  the lights land. A point target hides them. */
+    void aLineLooksSpreadIsSetOnTheAimPage();
     void aColourDarkerThanAFifthIsCalledOut();
     void aDarkRedLookWarnsUntilItIsBrightened();
     /** "if I create a gobo it doesn't give me a gobo selector?" A gobo made

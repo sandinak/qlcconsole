@@ -132,6 +132,12 @@ namespace AimSolver
                                          const QList<quint32> &heads,
                                          const LineSpread::Settings &settings);
 
+    /** @p heads in the order they take places on line @p target: as given
+     *  (LookOrder), or by where they hang measured from the line's first end
+     *  towards its last (AlongLine). */
+    QList<quint32> orderedLineHeads(Doc *doc, const StageTarget *target,
+                                    const QList<quint32> &heads, LineSpread::Order order);
+
     /** The world point @p fraction of the way along line target @p target. */
     QVector3D linePoint(Doc *doc, const StageTarget *target, double fraction);
 

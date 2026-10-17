@@ -6,6 +6,30 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-17 — Line targets, P2: the Spread slider *(feat/line-targets)*
+
+"The effect should have a horizontal spread slider to move the lights away
+from center 0->5 and across center 0 -> -5."
+
+- **Mapping** (LINE_TARGET_DESIGN.md Q2): linear in distance along the line
+  from its centre: 0 = all on the centre, +5 = evenly end to end, -5 = each
+  light the same distance on the other side (crossed). Clamped to the line.
+- **Storage**: the Aim look's param `__lineSpread` (only when not +5), saved
+  as an `EffectParam` child of an Aim `<Palette>` -- QLCPalette now writes and
+  reads those for Aim too (`removeEffectParamValue()` added); an older build
+  skips an Aim palette's children.
+- **Look editor** (Aim page, shown only for a line): slider -50..50 and a
+  -5.0..5.0 box kept together, and `LineSpreadPreview` (new,
+  `ui/src/linespreadpreview.*`) -- numbered dots along the line, from the
+  context scene's heads (six stand in without one). A change emits
+  `paletteValueChanged` (live preview, no look-list rebuild under the mouse),
+  re-aims running scenes using the look and notifies them changed so the
+  Studio and Rig Overview follow. `AimSolver::orderedLineHeads()` split out of
+  `lineFractions()` for the strip.
+- Tests: linetarget_test (spread values, params of their own, XML round trip
+  with the next palette still read, heads at 0 and -5), lookeditor_test
+  `aLineLooksSpreadIsSetOnTheAimPage`. Help: stage-targets.md "Spread".
+
 ### 2026-10-16 — Line targets, P1: a curve in space that spreads lights along it *(feat/line-targets)*
 
 Branson: "we have point, area, we need line.. and the line can be in space ..

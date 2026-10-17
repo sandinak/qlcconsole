@@ -1588,6 +1588,20 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
         }
         // readNextStartElement() has consumed </Palette> — reader is at EndElement.
     }
+    else if (m_type == Aim)
+    {
+        // A line's spread, group and cross (see saveXML()).
+        while (doc.readNextStartElement())
+        {
+            if (doc.name() == QLatin1String("EffectParam"))
+            {
+                const QString name = doc.attributes().value("name").toString();
+                if (!name.isEmpty())
+                    m_effectParamValues[name] = doc.attributes().value("value").toDouble();
+            }
+            doc.skipCurrentElement();
+        }
+    }
     else
     {
         // No children: skip from <Palette> StartElement to </Palette> EndElement.
@@ -1754,6 +1768,20 @@ bool QLCPalette::saveXML(QXmlStreamWriter *doc)
             doc->writeStartElement("EffectStringParam");
             doc->writeAttribute("name",  it.key());
             doc->writeAttribute("value", it.value());
+            doc->writeEndElement();
+        }
+    }
+    /* An Aim look on a line carries its spread (LineSpread's "__line*"
+       params), one element each so each can be inherited on its own. A build
+       that predates lines skips an Aim palette's children. */
+    else if (m_type == Aim)
+    {
+        for (auto it = m_effectParamValues.constBegin();
+             it != m_effectParamValues.constEnd(); ++it)
+        {
+            doc->writeStartElement("EffectParam");
+            doc->writeAttribute("name",  it.key());
+            doc->writeAttribute("value", QString::number(it.value()));
             doc->writeEndElement();
         }
     }

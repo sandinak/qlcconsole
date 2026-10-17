@@ -33,7 +33,7 @@ under `~/.claude/.../memory/`.
 On `feat/line-targets` (post-release); design in `LINE_TARGET_DESIGN.md`.
 
 - **P1 — line target, editing, even distribution**: done (see DONE.md).
-- **P2 — Spread slider** (-5..+5) in the look editor.
+- **P2 — Spread slider**: done (see DONE.md).
 - **P3 — Grouping**: Group / Cross (swap sides, mirror) / Share a point.
 - Later, if wanted: spread on a control-surface fader, a "breathe" effect on
   a speed master, editing handles in the Rig Overview.

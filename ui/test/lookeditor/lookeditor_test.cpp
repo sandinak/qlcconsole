@@ -57,6 +57,8 @@
 
 #include "speedmasters.h"
 #include "spreadpreview.h"
+#include "linespreadpreview.h"
+#include "stagetarget.h"
 #include "lookeditor_test.h"
 
 void LookEditor_Test::aColourDarkerThanAFifthIsCalledOut()
@@ -900,6 +902,61 @@ void LookEditor_Test::theBrowsersListsAreAToZ()
             QVERIFY2(collator.compare(keys.at(i - 1), keys.at(i)) <= 0,
                      qPrintable(QString("%1: \"%2\" before \"%3\"").arg(tabs.at(t), keys.at(i - 1), keys.at(i))));
     }
+}
+
+void LookEditor_Test::aLineLooksSpreadIsSetOnTheAimPage()
+{
+    Doc doc(this);
+    MonitorProperties *props = doc.monitorProperties();
+    StageTarget *line = props->addStageTarget();
+    line->setName("Edge");
+    line->makeLine();
+    StageTarget *mark = props->addStageTarget();
+    mark->setName("Mark");
+
+    QLCPalette *look = new QLCPalette(QLCPalette::Aim, &doc);
+    look->setName("Along the edge");
+    look->setStageTargetId(line->id());
+    QVERIFY(doc.addPalette(look));
+
+    LookEditor ed(&doc);
+    ed.resize(800, 500);
+    ed.show();
+    ed.setPalette(look->id());
+    QApplication::processEvents();
+
+    QVERIFY2(ed.m_lineBox->isVisible(), "a look on a line shows no Spread");
+    QCOMPARE(ed.m_lineSpreadSpin->value(), 5.0);
+    QCOMPARE(ed.m_lineSpreadSlider->value(), 50);
+    // No scene to say which lights: six stand in, evenly end to end.
+    QCOMPARE(ed.m_linePreview->dots().size(), 6);
+    QCOMPARE(ed.m_linePreview->dots().first().fraction, 0.0);
+
+    ed.m_lineSpreadSlider->setValue(-25);
+    QCOMPARE(ed.m_lineSpreadSpin->value(), -2.5);
+    QCOMPARE(look->effectParamValues().value("__lineSpread"), -2.5);
+    QVERIFY(qAbs(ed.m_linePreview->dots().first().fraction - 0.75) < 1e-9);
+    ed.m_linePreview->grab();                           // it paints
+
+    ed.m_lineSpreadSpin->setValue(0.0);
+    QCOMPARE(ed.m_lineSpreadSlider->value(), 0);
+    QCOMPARE(look->effectParamValues().value("__lineSpread"), 0.0);
+
+    // Back to the default: the look no longer carries it.
+    ed.m_lineSpreadSpin->setValue(5.0);
+    QVERIFY(!look->effectParamValues().contains("__lineSpread"));
+
+    // Re-opened, it shows what the look has.
+    look->setEffectParamValue("__lineSpread", -1.0);
+    ed.setPalette(look->id());
+    QCOMPARE(ed.m_lineSpreadSpin->value(), -1.0);
+
+    // A point target has no spread.
+    ed.m_aimTargetCombo->setCurrentIndex(ed.m_aimTargetCombo->findData(mark->id()));
+    QCOMPARE(look->stageTargetId(), mark->id());
+    QVERIFY(!ed.m_lineBox->isVisible());
+    // And the picker says which targets are lines.
+    QVERIFY(ed.m_aimTargetCombo->itemText(ed.m_aimTargetCombo->findData(line->id())).startsWith("Line:"));
 }
 
 QTEST_MAIN(LookEditor_Test)

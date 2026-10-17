@@ -93,6 +93,25 @@ beams each go to their own point.
 The target's own point — what a follow spot, an effect pointed at the
 target, or an older qlcconsole build sees — is the line's **centre**.
 
+### Spread
+
+An Aim look on a line has a **Spread** slider in the
+[Look Editor](programming-tab.md#the-inline-look-editor), from **-5** to
+**+5**, under the target picker:
+
+- **+5** — evenly end to end (the default).
+- **+2.5** — the same pattern squeezed into the middle half of the line.
+- **0** — every light on the centre point.
+- **below 0** — across the centre: each light the same distance on the
+  *other* side, so the beams cross; fully crossed at **-5**.
+
+The strip under it shows where each light lands, numbered from the light
+nearest the line's start. Moving the slider moves the beams live, in the
+Lighting Studio and the Rig Overview. The spread belongs to the look, not
+the line: duplicate the look for a second spread on the same line. A cue
+fading from one spread to another fades pan and tilt, so the beams travel
+close to, but not exactly along, the line.
+
 ### Steps as aim surfaces
 
 A flight of **Steps** (Lighting Studio: Add > Add Steps, or a platform

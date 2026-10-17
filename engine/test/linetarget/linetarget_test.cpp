@@ -372,4 +372,131 @@ void LineTarget_Test::movingTheTargetMovesTheLine()
     delete rig.doc;
 }
 
+static bool sameFractions(const QVector<double> &got, const QVector<double> &want)
+{
+    if (got.size() != want.size())
+        return false;
+    for (int i = 0; i < got.size(); ++i)
+        if (qAbs(got.at(i) - want.at(i)) > 1e-9)
+            return false;
+    return true;
+}
+
+static QString list(const QVector<double> &v)
+{
+    QStringList s;
+    foreach (double d, v)
+        s << QString::number(d, 'f', 3);
+    return s.join(", ");
+}
+
+void LineTarget_Test::theSpreadSqueezesAndCrosses()
+{
+    LineSpread::Settings s;
+    s.spread = 2.5;
+    QVector<double> f = LineSpread::fractions(6, s);
+    QVERIFY2(sameFractions(f, { 0.25, 0.35, 0.45, 0.55, 0.65, 0.75 }), qPrintable(list(f)));
+    s.spread = 0.0;
+    f = LineSpread::fractions(6, s);
+    QVERIFY2(sameFractions(f, { 0.5, 0.5, 0.5, 0.5, 0.5, 0.5 }), qPrintable(list(f)));
+    s.spread = -2.5;
+    f = LineSpread::fractions(6, s);
+    QVERIFY2(sameFractions(f, { 0.75, 0.65, 0.55, 0.45, 0.35, 0.25 }), qPrintable(list(f)));
+    s.spread = -5.0;
+    f = LineSpread::fractions(6, s);
+    QVERIFY2(sameFractions(f, { 1.0, 0.8, 0.6, 0.4, 0.2, 0.0 }), qPrintable(list(f)));
+    // Nothing goes past the ends.
+    s.spread = 9.0;
+    f = LineSpread::fractions(6, s);
+    QVERIFY2(sameFractions(f, { 0.0, 0.2, 0.4, 0.6, 0.8, 1.0 }), qPrintable(list(f)));
+}
+
+void LineTarget_Test::lineSettingsAreParamsOfTheirOwn()
+{
+    QMap<QString, double> params;
+    params.insert("__speedMaster", 2);          // not ours: left alone
+    LineSpread::toParams(LineSpread::Settings(), params);
+    QCOMPARE(params.size(), 1);
+
+    LineSpread::Settings s;
+    s.spread = -2.0;
+    LineSpread::toParams(s, params);
+    QCOMPARE(params.value("__lineSpread"), -2.0);
+    QCOMPARE(params.size(), 2);
+    QCOMPARE(LineSpread::fromParams(params).spread, -2.0);
+
+    s.spread = 5.0;                             // back to the default: gone
+    LineSpread::toParams(s, params);
+    QVERIFY(!params.contains("__lineSpread"));
+
+    params.insert("__lineSpread", 12.0);
+    QCOMPARE(LineSpread::fromParams(params).spread, 5.0);
+    params.insert("__lineSpread", -12.0);
+    QCOMPARE(LineSpread::fromParams(params).spread, -5.0);
+}
+
+void LineTarget_Test::anAimLooksSpreadIsSavedWithIt()
+{
+    Doc doc(this);
+    QLCPalette aim(QLCPalette::Aim, &doc);
+    aim.setName("Across");
+    aim.setStageTargetId(3);
+    aim.setEffectParamValue("__lineSpread", -3.5);
+
+    QByteArray xml;
+    {
+        QXmlStreamWriter w(&xml);
+        w.writeStartElement("Palettes");
+        QVERIFY(aim.saveXML(&w));
+        QLCPalette plain(QLCPalette::Aim, &doc);
+        plain.setStageTargetId(4);
+        QVERIFY(plain.saveXML(&w));
+        w.writeEndElement();
+    }
+    QCOMPARE(xml.count("<EffectParam"), 1);
+
+    QXmlStreamReader r(xml);
+    QVERIFY(r.readNextStartElement());          // <Palettes>
+    QVERIFY(r.readNextStartElement());
+    QLCPalette back(QLCPalette::Aim, &doc);
+    QVERIFY(back.loadXML(r));
+    QCOMPARE(back.type(), QLCPalette::Aim);
+    QCOMPARE(back.stageTargetId(), quint32(3));
+    QCOMPARE(back.effectParamValues().value("__lineSpread"), -3.5);
+
+    // The next palette is still read: the first left the reader at its end.
+    QVERIFY(r.readNextStartElement());
+    QLCPalette second(QLCPalette::Aim, &doc);
+    QVERIFY(second.loadXML(r));
+    QCOMPARE(second.stageTargetId(), quint32(4));
+    QVERIFY(second.effectParamValues().isEmpty());
+
+    // A copy keeps it.
+    QLCPalette *copy = back.createCopy();
+    QCOMPARE(copy->effectParamValues().value("__lineSpread"), -3.5);
+    delete copy;
+}
+
+void LineTarget_Test::theSpreadMovesTheHeads()
+{
+    Rig rig = makeRig(this);
+    auto points = [&rig]() {
+        QHash<quint32, QVector3D> at;
+        foreach (const AimSolver::SceneAim &a, AimSolver::sceneAims(rig.doc, rig.scene))
+            at.insert(a.fixtureId, a.point);
+        return at;
+    };
+    rig.aim->setEffectParamValue("__lineSpread", 0.0);
+    QHash<quint32, QVector3D> at = points();
+    foreach (const QVector3D &p, at)
+        QVERIFY2(near3(p, QVector3D(0, 3, 0)), qPrintable(str(p)));
+
+    rig.aim->setEffectParamValue("__lineSpread", -5.0);
+    at = points();
+    QVERIFY2(near3(at.value(rig.left->id()), QVector3D(2, 3, 0)), qPrintable(str(at.value(rig.left->id()))));
+    QVERIFY(near3(at.value(rig.right->id()), QVector3D(-2, 3, 0)));
+    QVERIFY(near3(at.value(rig.mid->id()), QVector3D(0, 3, 0)));
+    delete rig.doc;
+}
+
 QTEST_MAIN(LineTarget_Test)
