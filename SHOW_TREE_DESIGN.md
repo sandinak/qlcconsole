@@ -777,9 +777,10 @@ the end.
   never pulls a look out from under the show (tested).
 - **An edit to the cue on stage** (resolved 2026-10-17, §10.8): in
   **Design** mode the selected cue plays as a preview and every bake re-takes
-  it, so an edit shows at once. In **Live** (Operate), and while the list
-  runs for real, it shows the next time the cue plays (GO): the running
-  Collection keeps the members it started with — editing live is blind.
+  it, so an edit shows at once — also while its list runs for real (the
+  preview takes precedence, §10.9). In **Live** (Operate) it shows the next
+  time the cue plays (GO): the running Collection keeps the members it
+  started with — editing live is blind.
 
 ### 10.5 Undo
 
@@ -847,7 +848,8 @@ one sequence and back to 0.0.2 (Loop) — the import keeps that.
   once in the palette editor for a new type), else (2) a name match against
   the definition's Gobo capabilities (capability name or gobo resource file
   name, case- and space-insensitive). No match: not applied, and counted out
-  of "applies to". **Built 2026-10-17** (§10.8).
+  of "applies to". **Built 2026-10-17** (§10.8); the name match made
+  looser, in tiers, the same day (§10.9).
 - **An effect's own Gobo:** today's stack rule says a Gobo is never an
   effect's, wherever it sits. P1 supports an effect's own Colour/Dimmer only;
   a Gobo of its own needs the engine rule changed (open).
@@ -874,12 +876,9 @@ Branson tried P1; four fixes, all approved.
     them all).
   Scenes the preview let go of are still running for a tick, so a bake 250 ms
   later sweeps them (a QTimer, stopped on reset/load).
-  **Safe behaviour while the list runs for real:** a cue whose own list's
-  chaser is running is *not* previewed (state `ListRunning`; the header says
-  so), and a preview gives way when its list starts (MasterTimer
-  `functionStarted`, queued) and comes back when it stops. A preview *on top
-  of a different* list running for real is allowed, as Programming's preview
-  is (open below). **Live (Operate):** state `NotDesign`, nothing plays;
+  ~~Not previewed while its own list runs for real (`ListRunning`)~~ —
+  **changed 2026-10-17 (§10.9): in Design the edit wins**, over its own list
+  or any other. **Live (Operate):** state `NotDesign`, nothing plays;
   into Design, the app has stopped everything, so the preview starts afresh.
   Blind is the global output mute and covers the preview; the status-bar
   power estimate reads what is lit in Design mode on any tab, so it covers
@@ -906,7 +905,8 @@ Branson tried P1; four fixes, all approved.
   a picture counts as `Folder/file` (`ClayPaky/gobo00006`: Chauvet's own
   `gobo00006` is other glass, so the file name alone is not enough) → else
   not applied. Names compare ignoring case, spaces, `-` and `_`; exact
-  otherwise (so "Dots" never picks "Dots Shake"). **An unnamed gobo look
+  otherwise (so "Dots" never picked "Dots Shake"; made looser, in tiers,
+  by the follow-up, §10.9). **An unnamed gobo look
   plays its one value everywhere, as before** — existing shows unchanged
   until the look is edited. The Look Editor names the look from the first
   pick (or from a change of the same type's pick), keeps every pick per type,
@@ -916,6 +916,84 @@ Branson tried P1; four fixes, all approved.
   Not done: matching a swapped glass (MonitorProperties `goboSwap`, a
   per-unit property not safe to read on the DMX path), a second gobo wheel,
   and an effect's own Gobo (out of scope).
+
+### 10.9 Follow-up (2026-10-17): Branson's answers to 6 and 7
+
+**Preview rule — "In Design, whatever is in edit should be visible. In
+Perform, the cue list overrides. Blind we talk about later."**
+
+- **Design:** the cue being edited (selected cue, or a layer in it) is
+  always on the rig, also while its own list or any other runs for real.
+  `ListRunning` is gone; the header adds "over <list> running"
+  (`ShowTreeController::listsRunning()`). The real list keeps going
+  underneath; stopping the preview (deselect, select a list, leave the tab,
+  switch mode) leaves the stage to it — its current cue as it started
+  (Live edits land on GO). Nothing a chaser or VC widget started is stopped
+  (the preview still only removes its own parent).
+- **Precedence — the mechanism.** Plain stacking can't do it: a dimmer is
+  HTP, so a running cue at full hides an edit down (Programming's preview,
+  checked, is plain stacking too and has the same limit). So the preview's
+  **scenes** are marked `Scene::setEditOverride(true)`:
+  - their faders go to `Universe::Override` priority (after every Auto
+    fader in `processFaders`), and every channel carries
+    `FadeChannel::Override`, which writes LTP (`Universe::write(…, forceLTP)`):
+    the edited value is what goes out on the channels the cue sets; the
+    others stay what runs underneath;
+  - the flag is atomic; the DMX thread applies it at the next `Scene::write`
+    (`applyEditOverride`: `requestFaderPriority` + `GenericFader::
+    setChannelsFlag`, under `m_valueListMutex`), so a scene the running cue
+    and the preview share is moved in place, never restarted. A re-aim /
+    repalette keeps the flag on the channels it replaces;
+  - let go of, the flag is cleared *before* the stop: a scene the real list
+    still holds goes back to Auto/HTP in place; one that stops fades out
+    HTP (`handleFadersEnd` drops `Override` first), so an intensity fades
+    into what runs underneath instead of being forced to 0, and LTP
+    channels fade to the value under them (`SetTarget`; the fader keeps its
+    Override place for the fade);
+  - opaque functions in the cue (EFX, RGB matrix, scripts) mix as usual
+    (Effect palettes already run at Override in `EffectScriptRunner`).
+  - Engine fixes on the way: `Universe::requestFaderPriority()` never
+    lowered a fader's priority (it searched with the fader still in the
+    list and only set the priority when it found a place) — now re-inserted
+    as `requestFader()` would (`universe_test::faderPriorityMovesBothWays`);
+    `GenericFader::write()`'s `Override` path wrote only one byte of a
+    16-bit channel — now every byte, MSB first (no existing user had
+    16-bit Override channels).
+- **Perform (Live):** unchanged — the running list owns the stage, no
+  preview (`NotDesign`), edits on GO.
+- **Blind:** unchanged (global output mute, covers the preview) — **to
+  discuss**.
+- Tests: `showtree_test::inDesignTheEditWinsOverARunningList` (edit down
+  under a running cue at full → 127 not 255; stop → 255; another cue on
+  top; the list starting mid-preview keeps it), `showtreeview_test::
+  inDesignTheEditShowsOverItsRunningList` (Design + own list running → edit
+  visible, header; stop by selecting the list / leaving the tab → running
+  cue back; Perform → no preview, blind until GO).
+
+**Gobo name matching — looser, in tiers** (`QLCPalette::matchGoboName`;
+`resolveGobo()` gives value + how + candidates; `goboValueFor()` is its
+value):
+
+1. the slot **picked** for the type (unchanged, first);
+2. **exact**, ignoring case, spaces, `-`, `_` (a slot's name, or its picture
+   `Folder/file`);
+3. **singular/plural**, the word "gobo" and numbers ignored ("Dot" = "Dots"
+   = "Gobo 3 Dots"; a trailing plural `s` dropped, not `ss`);
+4. a **unique prefix or contains** (3+ letters; slot names only).
+
+The first step that finds anything decides. Several *different* names in it
+→ **ambiguous**: not guessed, that type ignores the look; the row reads
+"applies to N of M — ambiguous: pick per type…" (link → Look Editor;
+tooltip lists "Model: A / B" per type, `lookAmbiguities()`), and the Look
+Editor's per-type list says "ambiguous (A / B)". The same name on several
+slots of one wheel (an "Open", a glass repeated in its shake range — 206 of
+968 gobo channels in the bundled definitions do this) is one gobo, its
+first slot, so exact matching behaves as before. Pictures match exactly
+only, and a wanted picture name (with a `/`) tries nothing looser. Known
+edge: step 3 ignores numbers, so "Gobo 3 Shake" can find a wheel's only
+"Gobo 2 Shake" (with several, ambiguous). Table test:
+`qlcpalette_test::goboNamesMatchInTiers`; Look Editor and row in
+`showtreeview_test::goboLooksMatchByNamePerType`.
 
 ### Open for Branson
 
@@ -931,9 +1009,13 @@ Branson tried P1; four fixes, all approved.
    out of scope of the fix pass).
 5. **Hold 0 in imported lists:** DanceHysteria's 0.0.4–0.0.7 auto-follow
    (Hold 0). Intended? The import keeps it either way.
-6. **A preview on top of another list running for real** (new, 10.8): built
-   like Programming's preview — allowed, the two mix (HTP intensity, LTP the
-   rest). Alternative: no preview while *any* Show Tree list runs.
-7. **Gobo names that differ only by suffix** (new): matching is exact after
-   ignoring case/space/-/_, so "Dot" ≠ "Dots"; the per-type pick covers it.
-   Fuzzier matching would risk "Dots" picking "Dots Shake".
+6. ~~**A preview on top of a list running for real**~~ — **resolved
+   2026-10-17:** "In Design, whatever is in edit should be visible. In
+   Perform, the cue list overrides." Built (§10.9): in Design the preview
+   takes precedence over any running list; in Perform there is none.
+7. ~~**Gobo names that differ only by suffix**~~ — **resolved 2026-10-17:**
+   looser, in tiers after the per-type pick (exact → singular/plural →
+   unique prefix/contains); ambiguous → not guessed, the row says so and
+   offers the pick (§10.9).
+8. **Blind: to discuss** (Branson, 2026-10-17). Today Blind is the global
+   output mute and covers the preview; unchanged.

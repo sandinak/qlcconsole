@@ -6,6 +6,31 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-17 — Show Tree follow-up: the edit wins in Design; looser gobo names *(on feat/show-tree, not merged)*
+
+Branson's answers to §10 questions 6 and 7 (SHOW_TREE_DESIGN.md §10.9).
+
+- **Preview rule:** "In Design, whatever is in edit should be visible. In
+  Perform, the cue list overrides." The selected cue previews also over its
+  own list or any other running for real (header: "…, over Full Show
+  running"); stopping the preview leaves what really runs. It takes
+  precedence via `Scene::setEditOverride()`: Override-priority faders and
+  LTP on every channel, applied in place on the DMX thread, cleared before
+  a stop so the fade-out is HTP into what runs underneath. Engine fixes:
+  `Universe::requestFaderPriority()` couldn't lower a priority; the
+  `FadeChannel::Override` write handled one byte of a 16-bit channel.
+  Perform unchanged; Blind to discuss.
+- **Gobo names, in tiers:** per-type pick → exact (case/space/-/_) →
+  singular/plural ignoring "gobo" and numbers → unique prefix/contains.
+  Several different names in a tier: ambiguous, not guessed; the row says
+  "ambiguous: pick per type…" (link to the Look Editor), the editor's list
+  says which. `QLCPalette::matchGoboName()/resolveGobo()`.
+- Tests: `qlcpalette_test::goboNamesMatchInTiers` (table),
+  `universe_test::faderPriorityMovesBothWays`,
+  `showtree_test::inDesignTheEditWinsOverARunningList`,
+  `showtreeview_test::inDesignTheEditShowsOverItsRunningList`, gobo
+  ambiguity in `goboLooksMatchByNamePerType`. Not tried on the rig.
+
 ### 2026-10-17 — Show Tree fix pass: see the cue, layers on several groups, folders, gobos by name *(on feat/show-tree, not merged)*
 
 Branson tried P1 and asked for four fixes (SHOW_TREE_OVERNIGHT.md, "Fix

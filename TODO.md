@@ -50,13 +50,16 @@ help (DONE.md 2026-10-16). Handoff: SHOW_TREE_OVERNIGHT.md.
 - **Fix pass 2026-10-17 done** (DONE.md): preview of the selected cue in
   Design mode, several groups in one layer, Library group folders, gobos by
   name per fixture type.
+- **Follow-up 2026-10-17 done** (DONE.md, §10.9): in Design the edited cue
+  wins over any list running for real (Perform: the list owns the stage);
+  gobo names match in tiers, ambiguous → not guessed, pick offered.
 - **Open for Branson** (§10): `Generated` mark on `<Function>` too?; undo
   shared with Programming?; an effect's own Gobo (out of scope so far);
-  DanceHysteria's Hold-0 cues 0.0.4–0.0.7 auto-follow — intended?; a
-  preview on top of a *different* list running for real (built: allowed, as
-  Programming's preview is).
+  DanceHysteria's Hold-0 cues 0.0.4–0.0.7 auto-follow — intended?; **Blind
+  and the preview — to discuss**.
 - **Try on the rig:** the Design-mode preview while editing (and that Blind
-  mutes it); GO through an imported list with effects running (the
+  mutes it), also over a list running for real (edit a dimmer down under a
+  running cue at full; stop the preview: the cue comes back); GO through an imported list with effects running (the
   hand-over keeps a shared scene's effect phase — tested on engine signals,
   not seen on stage).
 - **P2 next:** the cascade already does tracking, Block/Cue-only, Release

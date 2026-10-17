@@ -76,12 +76,19 @@ both cues share keeps running: no re-fade). Selecting the list, nothing, or
 leaving the tab stops it. **Blind** mutes it like anything else, and the
 status-bar power estimate counts it.
 
-In **Live** (Operate) mode, editing is blind: selecting a cue doesn't touch
-the stage, and your changes reach it when the cue plays (on GO).
+In Design, **what you are editing is what shows** — also while a cue list
+is **running for real** (footer GO, a Virtual Console Cue List), its own or
+another. The cue you are on takes precedence on every channel it sets: a
+dimmer you edit down shows even over a running cue at full. The running
+list keeps going underneath, and the top right says so (*"▶ On the rig:
+1 One, over Full Show running"*). Stop the preview (select the list, or
+nothing, or leave the tab) and the stage is what really runs again: the
+running list's current cue, as it started. Nothing a chaser or the Virtual
+Console started is stopped. An effect (EFX, matrix) in the cue mixes with
+what runs as it normally would.
 
-While a cue list is **running for real** (footer GO, a Virtual Console Cue
-List), its cues aren't previewed — the show wins; a change shows the next
-time that cue plays. The preview comes back when the list stops.
+In **Live** (Operate) mode the running cue list owns the stage: selecting a
+cue doesn't touch it, and your changes reach it when the cue plays (on GO).
 
 ## What wins
 
@@ -153,7 +160,20 @@ the ones that have it. The editor lists, per type, what it plays.
 
 - Pick a slot on another type's wheel and it is kept for that type — useful
   when the name differs ("Dot Ring" on one, "Dots" on the other).
-- **Gobo name** changes the name. Case, spaces, `-` and `_` don't matter. A
-  gobo's picture names it too, with its folder: `ClayPaky/gobo00006`.
+- **Gobo name** changes the name. A type finds its gobo by, in order:
+  1. a slot **picked** for that type;
+  2. the **same name** — case, spaces, `-` and `_` don't matter. A gobo's
+     picture names it too, with its folder: `ClayPaky/gobo00006` (a picture
+     name only ever matches that picture);
+  3. **singular or plural**, without the word "gobo" or numbers: "Dot",
+     "Dots" and "Gobo 3 Dots" are the same;
+  4. the **one** slot whose name starts with or contains it ("Breakup"
+     finds "Breakup Rotating").
+
+  If a step finds **more than one** gobo on a type ("Dots" with only "Dots
+  Shake" and "Dots Rotating"), it isn't guessed: that type ignores the
+  look, the row says *"ambiguous: pick per type…"* (hover for which), and
+  the link opens the Look Editor to pick it on that type's wheel. The same
+  name twice on one wheel (an "Open", say) counts as one gobo.
 - A gobo look that was never edited this way plays one DMX value on every
   fixture, as before.
