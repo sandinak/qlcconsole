@@ -25,4 +25,9 @@ cp test-workspaces/help-demo.qxw "$WORK/help-demo.qxw"
 QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=2 \
 QLC_HELP_SHOTS="$PWD/docs/images" QLC_HELP_SHOTS_ONLY="$ONLY" \
     "$APP" -o "$WORK/help-demo.qxw" -platform offscreen 2>&1 | grep '^\[HELPSHOT\]'
-exit "${PIPESTATUS[0]}"
+RESULT=${PIPESTATUS[0]}
+
+# Qt writes no colour profile into these, but a picture with one would put the
+# QTBUG-147602 crash back in reach (see tools/png-colour-chunks.py) -- fail loudly.
+python3 tools/png-colour-chunks.py docs/images || exit 1
+exit "$RESULT"

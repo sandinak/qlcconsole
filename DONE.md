@@ -9,6 +9,44 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 ### 2026-10-17 — Rig Overview: dimmed RGB without a dimmer channel drew black
 
 `channelSetLiveState()` (`ui/src/monitor/fixturevisualtraits.cpp`) handed back the raw, already-dimmed colour *and* a level of max(R,G,B) for fixtures with no dimmer channel; every reader draws colour × level, so Blue at 19% (0,1,48) drew at 9/255. It now returns the hue at full and the level once. Fixtures with a dimmer channel are unchanged. Found from a Show Tree preview (feat/show-tree d8664080a); backported with its `monitor_test` case.
+### 2026-10-17 — No colour profiles in the bundled PNGs (QTBUG-147602 guard) *(fix/png-colour-profiles)*
+
+Follow-up to the cursor crash below. QTBUG-147602 (Qt 6.11.x, macOS;
+upstream fix qtbase a481ede673, not in Homebrew's 6.11.1):
+`qt_mac_cgImageFormatForImage()` releases a QImage's `CGColorSpace` before
+`CGImageCreate` reads it, so **any** QImage carrying a colour space can crash
+in `QImage::toCGImage()` -- cursors, drag pixmaps, icons/NSImages. 508 of the
+repo's 660 PNGs carried one.
+
+- **Which chunks matter** (measured with an offscreen Qt 6.11.1 probe, one
+  chunk spliced into a clean icon at a time): `iCCP` (here Display P3) and
+  `sRGB` each give a valid `QColorSpace`; `gAMA` alone or with `cHRM` does
+  too; `cHRM` alone and `cICP` alone (libpng 1.6.4x) do not. Qt applies no
+  gamma/colour conversion on load (the reader's gamma is 0): the decoded
+  pixels are byte-identical with and without each chunk.
+- **`tools/png-colour-chunks.py`** -- dependency-free chunk rewriter. Lists
+  PNGs with `iCCP`/`sRGB`/`gAMA`/`cHRM`/`cICP` (exit 1), or `--strip`s exactly
+  those chunks, copying every other chunk (IDAT included) byte for byte.
+  `cICP` is stripped too although Qt 6.11.1 ignores it: in the 9 macOS
+  screenshots it said "Display P3" next to the iCCP, and a later Qt that reads
+  it would put them back on the crash path.
+- **Stripped:** 660 PNGs scanned, 508 changed, 35 777 bytes saved (429
+  gobos/icons sRGB+gAMA+cHRM, 65 icons sRGB, 9 `docs/images` screenshots
+  iCCP+cICP, 5 gAMA[+cHRM]).
+- **No visual change:** for all 508, Qt's decode (RGBA8888, same format and
+  size) and Pillow's decode are identical before/after, and IHDR/PLTE/tRNS/
+  IDAT are byte-identical. Qt reports a valid colour space on 508 files
+  before, 0 after. In-app drawing (QPainter) never colour-managed these, so
+  nothing the app paints changes. Only where an image goes to AppKit (native
+  menu icons, drag pixmaps) is it now read as sRGB instead of its tag: the same
+  for the 494 sRGB files and close for the gamma-0.45 icons (effect, fontcolor,
+  function, grid); the help screenshots (P3) are only ever painted by Qt, and
+  Robe gobo00004 (gamma 1.0) only in Qt views.
+- **Guard:** the root `unittest.sh` (so `make check`, check-all, CI) runs the
+  checker over the tree first and stops on any hit; `help-shots.sh` checks
+  `docs/images` after a run (its QImages carry no colour space, so it never
+  wrote one). CONTRIBUTING.md says why and how to strip a new picture.
+
 ### 2026-10-17 — macOS: no image-based cursors (crash orbiting the Angled view) *(fix/macos-native-cursors)*
 
 Crash report 2026-10-17 15:36 (macOS 27.0, Homebrew Qt 6.11.1): pressing the

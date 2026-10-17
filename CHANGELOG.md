@@ -381,6 +381,11 @@ a shorter Windows re-soak is planned.
   from a colour-profiled picture that it frees too early (QTBUG-147602); the
   move cursor is now the open hand (closed while dragging) on macOS, and
   wait/busy the arrow. Linux and Windows are unchanged.
+- macOS: the same Qt 6.11 fault (QTBUG-147602) could crash the app wherever
+  one of its own pictures -- an icon, a gobo, a help picture -- was handed to
+  AppKit, since 508 of the 660 bundled PNGs carried a colour profile. The
+  profiles are removed (the pixels are unchanged, and the app never used
+  them), and the test gate now fails if one comes back.
 
 ### Known issues
 - **Windows:** on heavy shows (around 90 universes with thousands of
