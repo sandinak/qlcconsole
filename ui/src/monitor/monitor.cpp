@@ -543,6 +543,7 @@ void Monitor::initGraphicsView()
         m_pendingAddScenePos = scenePos;
         if (what == QLatin1String("fixture"))     slotAddFixture();
         else if (what == QLatin1String("target")) slotAddTarget();
+        else if (what == QLatin1String("targetline")) slotAddTargetLine();
         else if (what == QLatin1String("person")) slotAddPerson();
     });
     connect(m_graphicsView, &MonitorGraphicsView::contextMenuRequested,
@@ -1717,6 +1718,8 @@ void Monitor::initGraphicsToolbar()
         addMenu->addSeparator();
         addMenu->addAction(tr("Add Target Position"),
                            this, SLOT(slotAddTarget()));
+        addMenu->addAction(tr("Add Target Line"),
+                           this, SLOT(slotAddTargetLine()));
         addMenu->addAction(tr("Add Person"),
                            this, SLOT(slotAddPerson()));
         addBtn->setMenu(addMenu);
@@ -2862,6 +2865,8 @@ void Monitor::slotCopySelected()
             c.name = t->name();
             c.x = t->x(); c.y = t->y(); c.z = t->z();
             c.color = t->color();
+            c.kind = int(t->kind());
+            c.linePoints = t->linePoints();
             targets.append(c);
         }
     }
@@ -2924,6 +2929,12 @@ void Monitor::pasteClipboard(float dxM, float dyM)
         t->setY(c.y + dyM);
         t->setZ(c.z);
         t->setColor(c.color);
+        // A pasted line is the same line, not a point at its centre.
+        if (StageTarget::Kind(c.kind) == StageTarget::Kind::Line)
+        {
+            t->setLinePoints(c.linePoints);
+            t->makeLine();
+        }
         newTargetIds.append(t->id());
 
         // Mirror slotAddTarget: give the copy its own linked PanTilt palette so
@@ -5353,8 +5364,30 @@ void Monitor::slotTargetDoubleClicked(quint32 tid)
 
 void Monitor::slotAddTarget()
 {
+    addTarget(false);
+}
+
+void Monitor::slotAddTargetLine()
+{
+    addTarget(true);
+}
+
+void Monitor::addTarget(bool line)
+{
     StageTarget *t = m_props->addStageTarget();
-    t->setName(tr("Target %1").arg(t->id() + 1));
+    if (line)
+    {
+        t->makeLine();
+        int n = 0;
+        foreach (StageTarget *other, m_props->stageTargets())
+            if (other != nullptr && other->isLine())
+                n++;
+        t->setName(tr("Line %1").arg(n));
+    }
+    else
+    {
+        t->setName(tr("Target %1").arg(t->id() + 1));
+    }
 
     QPointF mm = m_graphicsView->pixelsToRealPosition(
         m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
@@ -5492,6 +5525,8 @@ void Monitor::slotEditTarget(quint32 tid)
     kindCombo->addItem(tr("Bound to a structure"),
                        int(StageTarget::Kind::Structure));
     kindCombo->addItem(tr("Area"),          int(StageTarget::Kind::Area));
+    kindCombo->addItem(tr("Line — lights spread along it"),
+                       int(StageTarget::Kind::Line));
     kindCombo->setCurrentIndex(kindCombo->findData(int(t->kind())));
     kindCombo->setToolTip(tr("What is standing here. Decides the height light "
                              "is aimed at and what is drawn in the rig view."));
@@ -5577,6 +5612,9 @@ void Monitor::slotEditTarget(quint32 tid)
         wSpin->setEnabled(sized);
         dSpin->setEnabled(sized);
         personSpin->setEnabled(k == StageTarget::Kind::Person);
+        // A line's points carry their own heights.
+        ovrChk->setEnabled(k != StageTarget::Kind::Line);
+        ovrSpin->setEnabled(k != StageTarget::Kind::Line && ovrChk->isChecked());
         /* Unticked, show what the Subject gives -- which for a Person is the
            chest of its height, or the follow-spot subject height above. */
         if (ovrChk->isChecked() == false)
@@ -5620,6 +5658,8 @@ void Monitor::slotEditTarget(quint32 tid)
         m_props->notifyStageTargetsChanged();
 
         t->setKind(StageTarget::Kind(kindCombo->currentData().toInt()));
+        if (t->isLine())
+            t->makeLine();          // a point turned into a line gets a 4 m one
         if (t->kind() == StageTarget::Kind::Person)
             t->setPersonHeight(float(personSpin->value() * fromDisp_t));
         const QString bound = boundCombo->currentData().toString();
@@ -7122,6 +7162,8 @@ void Monitor::slotCanvasContextMenu(QPointF scenePos)
     addMenu->addSeparator();
     addMenu->addAction(tr("Target Position"),
                        this, SLOT(slotAddTarget()));
+    addMenu->addAction(tr("Target Line"),
+                       this, SLOT(slotAddTargetLine()));
     addMenu->addAction(tr("Person"),
                        this, SLOT(slotAddPerson()));
     addMenu->addSeparator();

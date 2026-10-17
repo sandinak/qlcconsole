@@ -21,6 +21,7 @@ look that aims at it re-solves automatically.
 | **Drum Kit** | A low, wide subject | Crosshair over a footprint rectangle, aimed lower by default |
 | **Area** | A region of deck, not a point | A dashed-outline footprint rectangle |
 | **Structure** | Bound to a truss/platform/steps/tower — its position *follows* whatever it's bound to | Crosshair, position always live |
+| **Line** | A curve in space — every light aimed at it gets its **own** point on it, evenly spaced | The curve, square handles at its ends, round ones at its mid points, and a crosshair at its centre |
 
 A target being **aimed at** by the currently-open scene shows fading
 concentric rings around its crosshair — that's a separate, temporary fact
@@ -53,6 +54,44 @@ Deleting a target doesn't touch the palettes that reference it — any Aim
 look using a deleted target just stops resolving, and the fixtures hold
 their last position. The delete confirmation names every scene that would
 be affected before you commit.
+
+## Line targets
+
+A **Line** spreads lights out instead of converging them: every head an Aim
+look points at a line gets its own point on it, the first light on one end,
+the last on the other and the rest evenly between — evenly *along the
+curve*, however it bends.
+
+**Making one:** right-click the floor → **Target Line Here** (or the
+Lighting Studio's **Add > Add Target Line**): a straight 4 m line across
+the stage, centred where you clicked. An existing target becomes one by
+choosing **Line** as its Subject in the Edit Target dialog.
+
+**Shaping it** (Lighting Studio, Top, Front or Side view, in Design mode):
+
+| Do this | And |
+|---|---|
+| Drag an **end** (square handle) | Moves that end: extend, shorten, swing it round |
+| **⌥-drag** an end | Extends or shortens it along the line's own direction only |
+| **Double-click the line** | Adds a point there, on the curve, so nothing jumps |
+| Drag a **mid point** (round handle) | Bends the line through it |
+| **Double-click a mid point** | Takes it out (right-click > **Remove Point** too) |
+| Drag the **line itself** or its centre | Moves the whole line, its shape with it |
+| **⇧-drag** a handle | Keeps the drag level or upright on screen |
+| ⌘Z | Undoes the last of any of these |
+
+From above, a handle keeps its height above whatever is under it; the
+**Front** and **Side** views drag it up and down — so between the views a
+line can curve in any direction. Double-click the centre crosshair (or
+right-click > Edit) for the target's dialog.
+
+**Which light goes where:** by where the lights hang, measured along the
+line — the stage-left head takes the stage-left end — so a full spread never
+crosses beams by accident. The 2D plot's aim traces and the Rig Overview's
+beams each go to their own point.
+
+The target's own point — what a follow spot, an effect pointed at the
+target, or an older qlcconsole build sees — is the line's **centre**.
 
 ### Steps as aim surfaces
 
@@ -140,7 +179,8 @@ doesn't stop just because that's where you pointed it.
 | Term | Meaning |
 |---|---|
 | **Stage Target** | A named 3D point with a kind, optional structure binding, optional footprint, and color. |
-| **Kind** | What a target represents — None, Person, Drum Kit, Structure, or Area — governing its default aim height and how it's drawn. |
+| **Kind** | What a target represents — None, Person, Drum Kit, Structure, Area or Line — governing its default aim height and how it's drawn. |
+| **Line** | A target that is a curve: each light aimed at it gets its own, evenly spaced point along it. |
 | **Aim palette** | A palette that names a target instead of carrying fixed DMX values; resolved per-fixture through the Aim Solver. |
 | **Height** (Person) | How tall a person is, standing on whatever is under them: the figure is drawn that tall and light is aimed at 80% of it. A person without one is 5'9". |
 | **Follow-spot aim height (chest)** | Where a follow spot aims above the deck — a chest, not how tall anyone is — overriding a target's stored Z in follow-spot mode. It never sizes a person: a Person is aimed at 80% of its own Height. (Called "subject height" before.) |

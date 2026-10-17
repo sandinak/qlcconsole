@@ -47,6 +47,8 @@ add_library(${module_name} SHARED
     speedmasters.cpp speedmasters.h
     showcontrol.cpp showcontrol.h
     spreadlayer.cpp spreadlayer.h
+    linecurve.cpp linecurve.h
+    linespread.cpp linespread.h
     networktopology.cpp networktopology.h
     powerdistribution.cpp powerdistribution.h
     venue.cpp venue.h

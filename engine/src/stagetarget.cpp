@@ -13,6 +13,7 @@
 #include <QXmlStreamWriter>
 
 #include "stagetarget.h"
+#include "linecurve.h"
 
 #define KXMLStageTarget        QStringLiteral("StageTarget")
 #define KXMLStageTargetID      QStringLiteral("ID")
@@ -31,6 +32,7 @@
 #define KXMLStageTargetBoundId   QStringLiteral("BoundId")
 #define KXMLStageTargetW         QStringLiteral("W")
 #define KXMLStageTargetD         QStringLiteral("D")
+#define KXMLStageTargetLinePoint QStringLiteral("LinePoint")
 
 StageTarget::StageTarget(quint32 id, QObject *parent)
     : QObject(parent)
@@ -74,7 +76,23 @@ bool StageTarget::loadXML(QXmlStreamReader &root)
         m_footprint = QSizeF(a.value(KXMLStageTargetW).toDouble(),
                              a.value(KXMLStageTargetD).toDouble());
 
-    root.skipCurrentElement();
+    /* A line's points are child elements, relative to X/Y/Z. A build that
+       predates lines skips them (and reads Kind="line" as a plain mark), so
+       it sees a point at the line's centre. */
+    QVector<QVector3D> pts;
+    while (root.readNextStartElement())
+    {
+        if (root.name() == KXMLStageTargetLinePoint)
+        {
+            const QXmlStreamAttributes pa = root.attributes();
+            pts << QVector3D(pa.value(KXMLStageTargetX).toFloat(),
+                             pa.value(KXMLStageTargetY).toFloat(),
+                             pa.value(KXMLStageTargetZ).toFloat());
+        }
+        root.skipCurrentElement();
+    }
+    if (m_kind == Kind::Line)
+        m_linePoints = pts.size() >= 2 ? pts : defaultLinePoints();
     return true;
 }
 
@@ -86,6 +104,7 @@ QString StageTarget::kindToString(Kind k)
     case Kind::DrumKit:   return QStringLiteral("drumkit");
     case Kind::Structure: return QStringLiteral("structure");
     case Kind::Area:      return QStringLiteral("area");
+    case Kind::Line:      return QStringLiteral("line");
     case Kind::None:
     default:              return QStringLiteral("none");
     }
@@ -98,6 +117,7 @@ StageTarget::Kind StageTarget::stringToKind(const QString &s, Kind fallback)
     if (k == QLatin1String("drumkit"))   return Kind::DrumKit;
     if (k == QLatin1String("structure")) return Kind::Structure;
     if (k == QLatin1String("area"))      return Kind::Area;
+    if (k == QLatin1String("line"))      return Kind::Line;
     if (k == QLatin1String("none"))      return Kind::None;
     /* Anything else came from a newer file than this build. Degrade to the
        fallback rather than guessing -- the whole reason these are names and not
@@ -114,6 +134,7 @@ float StageTarget::defaultAimHeight(Kind k)
     case Kind::None:
     case Kind::Structure:
     case Kind::Area:
+    case Kind::Line:                    ///< its points carry their own heights
     default:            return 0.0f;    ///< the surface itself
     }
 }
@@ -157,6 +178,48 @@ bool StageTarget::saveXML(QXmlStreamWriter *doc) const
         doc->writeAttribute(KXMLStageTargetD,
                             QString::number(m_footprint.height(), 'f', 3));
     }
+    if (m_kind == Kind::Line)
+    {
+        foreach (const QVector3D &p, linePoints())
+        {
+            doc->writeStartElement(KXMLStageTargetLinePoint);
+            doc->writeAttribute(KXMLStageTargetX, QString::number(double(p.x()), 'f', 3));
+            doc->writeAttribute(KXMLStageTargetY, QString::number(double(p.y()), 'f', 3));
+            doc->writeAttribute(KXMLStageTargetZ, QString::number(double(p.z()), 'f', 3));
+            doc->writeEndElement();
+        }
+    }
     doc->writeEndElement();
     return true;
+}
+
+QVector<QVector3D> StageTarget::linePointsAround(const QVector3D &origin) const
+{
+    QVector<QVector3D> pts = linePoints();
+    for (QVector3D &p : pts)
+        p += origin;
+    return pts;
+}
+
+void StageTarget::recentreLine()
+{
+    QMutexLocker l(&m_positionMutex);
+    if (m_linePoints.size() < 2)
+        return;
+    QVector3D shift;
+    m_linePoints = LineCurve::recentred(m_linePoints, &shift);
+    m_position += shift;
+}
+
+QVector<QVector3D> StageTarget::defaultLinePoints()
+{
+    return { QVector3D(-2.0f, 0.0f, 0.0f), QVector3D(2.0f, 0.0f, 0.0f) };
+}
+
+void StageTarget::makeLine()
+{
+    m_kind = Kind::Line;
+    QMutexLocker l(&m_positionMutex);
+    if (m_linePoints.size() < 2)
+        m_linePoints = defaultLinePoints();
 }

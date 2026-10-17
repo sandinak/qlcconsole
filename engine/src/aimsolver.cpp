@@ -21,6 +21,7 @@
 #include <QDebug>
 
 #include "aimsolver.h"
+#include "linecurve.h"
 #include "righeads.h"
 #include "monitorproperties.h"
 #include "fixturegroup.h"
@@ -224,6 +225,105 @@ bool AimSolver::sceneFollowsSubject(Doc *doc, const Scene *scene)
     return false;
 }
 
+QList<quint32> AimSolver::aimable(Doc *doc, const QList<quint32> &fixtures)
+{
+    QList<quint32> heads;
+    if (doc == NULL)
+        return heads;
+    MonitorProperties *mProps = doc->monitorProperties();
+    foreach (quint32 fid, fixtures)
+    {
+        if (heads.contains(fid))
+            continue;
+        Fixture *fxi = doc->fixture(fid);
+        if (fxi == NULL || (mProps != NULL && !mProps->containsFixture(fid)))
+            continue;
+        if (fxi->channelNumber(QLCChannel::Pan,  QLCChannel::MSB) == QLCChannel::invalid()
+            && fxi->channelNumber(QLCChannel::Tilt, QLCChannel::MSB) == QLCChannel::invalid())
+            continue;               // nothing to point
+        heads << fid;
+    }
+    return heads;
+}
+
+QList<quint32> AimSolver::aimHeads(Doc *doc, const Scene *scene)
+{
+    if (doc == NULL || scene == NULL)
+        return QList<quint32>();
+
+    QList<quint32> all;
+    foreach (quint32 gid, scene->fixtureGroups())
+    {
+        FixtureGroup *fg = doc->fixtureGroup(gid);
+        if (fg == NULL)
+            continue;
+        foreach (quint32 fid, fg->fixtureList())
+            all << fid;
+    }
+    all << scene->fixtures();
+    return aimable(doc, all);
+}
+
+QHash<quint32, double> AimSolver::lineFractions(Doc *doc, const StageTarget *target,
+                                                const QList<quint32> &heads,
+                                                const LineSpread::Settings &settings)
+{
+    QHash<quint32, double> out;
+    if (doc == NULL || target == NULL || !target->isLine() || heads.isEmpty())
+        return out;
+
+    QList<quint32> ordered = heads;
+    if (settings.order == LineSpread::AlongLine)
+    {
+        /* By where the heads hang, measured from the line's first end
+           towards its last: the stage-left head takes the stage-left end, so
+           a full spread never crosses beams by accident. */
+        const QVector<QVector3D> pts = target->linePoints();
+        QVector<QVector3D> where;
+        foreach (quint32 fid, heads)
+        {
+            Frame f;
+            where << (frameFor(doc, fid, f) ? f.position : QVector3D());
+        }
+        if (pts.size() >= 2)
+        {
+            const QVector<int> order = LineSpread::orderAlong(where, pts.first(), pts.last());
+            ordered.clear();
+            foreach (int i, order)
+                ordered << heads.at(i);
+        }
+    }
+
+    const QVector<double> fr = LineSpread::fractions(ordered.size(), settings);
+    for (int i = 0; i < ordered.size(); ++i)
+        out.insert(ordered.at(i), fr.at(i));
+    return out;
+}
+
+QVector3D AimSolver::linePoint(Doc *doc, const StageTarget *target, double fraction)
+{
+    MonitorProperties *mProps = (doc != NULL) ? doc->monitorProperties() : NULL;
+    if (mProps == NULL || target == NULL)
+        return QVector3D();
+    return LineCurve(mProps->targetLinePoints(target)).pointAt(fraction);
+}
+
+QHash<quint32, QVector3D> AimSolver::linePoints(Doc *doc, const QLCPalette *look,
+                                                const StageTarget *target,
+                                                const QList<quint32> &heads)
+{
+    QHash<quint32, QVector3D> out;
+    MonitorProperties *mProps = (doc != NULL) ? doc->monitorProperties() : NULL;
+    if (mProps == NULL || look == NULL || target == NULL || !target->isLine())
+        return out;
+    const LineSpread::Settings settings = LineSpread::fromParams(look->effectParamValues());
+    const QHash<quint32, double> fr = lineFractions(doc, target, heads, settings);
+    const LineCurve curve(mProps->targetLinePoints(target));
+    for (auto it = fr.constBegin(); it != fr.constEnd(); ++it)
+        out.insert(it.key(), curve.pointAt(it.value()));
+    return out;
+}
+
 QList<AimSolver::SceneAim> AimSolver::sceneAims(Doc *doc, const Scene *scene)
 {
     QList<SceneAim> out;
@@ -233,20 +333,8 @@ QList<AimSolver::SceneAim> AimSolver::sceneAims(Doc *doc, const Scene *scene)
     if (mProps == NULL)
         return out;
 
-    // The heads: the scene's fixtures and its groups' members, once each.
-    QList<quint32> heads;
-    foreach (quint32 fid, scene->fixtures())
-        if (heads.contains(fid) == false)
-            heads << fid;
-    foreach (quint32 gid, scene->fixtureGroups())
-    {
-        FixtureGroup *fg = doc->fixtureGroup(gid);
-        if (fg == NULL)
-            continue;
-        foreach (quint32 fid, fg->fixtureList())
-            if (heads.contains(fid) == false)
-                heads << fid;
-    }
+    // The heads: the scene's groups' members and its fixtures, once each.
+    const QList<quint32> heads = aimHeads(doc, scene);
 
     const bool subject = sceneFollowsSubject(doc, scene);
     foreach (quint32 pid, scene->runtimePalettes())   // a tried-on Aim draws too
@@ -257,15 +345,12 @@ QList<AimSolver::SceneAim> AimSolver::sceneAims(Doc *doc, const Scene *scene)
         StageTarget *tgt = mProps->stageTarget(pal->stageTargetId());
         if (tgt == NULL)
             continue;
+        // A line gives each head its own point on it.
+        const QHash<quint32, QVector3D> onLine = linePoints(doc, pal, tgt, heads);
         foreach (quint32 fid, heads)
         {
-            Fixture *fxi = doc->fixture(fid);
-            if (fxi == NULL)
-                continue;
-            if (fxi->channelNumber(QLCChannel::Pan,  QLCChannel::MSB) == QLCChannel::invalid()
-                && fxi->channelNumber(QLCChannel::Tilt, QLCChannel::MSB) == QLCChannel::invalid())
-                continue;               // nothing to point
-            const QVector3D point = aimPointFor(doc, fid, tgt, subject);
+            const QVector3D point = tgt->isLine() ? onLine.value(fid, mProps->targetAimPoint(tgt))
+                                                  : aimPointFor(doc, fid, tgt, subject);
             SceneAim aim;
             aim.fixtureId = fid;
             aim.targetId = tgt->id();

@@ -1019,6 +1019,9 @@ private:
          *  QLCPalette's rule; the two have to agree or Edit and the rig view
          *  point different ways. */
         bool    subjectHeight = false;
+        /** On a line target: how far along it (0..1) this head lands; -1 =
+         *  not a line. */
+        double  lineFraction = -1.0;
     };
     /** The live world point a fixture is aimed at, or false if it aims at
      *  nothing. Resolved per frame from the target's CURRENT position. */

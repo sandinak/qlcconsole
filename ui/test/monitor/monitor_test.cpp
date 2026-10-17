@@ -7568,6 +7568,199 @@ void Monitor_Test::manyWhiteBeamsDoNotBlowOut()
     delete doc;
 }
 
+void Monitor_Test::aLineTargetIsEditedInTheStudio()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    StageTarget *line = props->addStageTarget();
+    line->setName("L");
+    line->setPosition(QVector3D(5.0f, 3.0f, 0.0f));
+    line->makeLine();                              // (3,3) .. (7,3)
+
+    auto world = [&]() { return props->targetLinePoints(line); };
+    auto near = [](const QVector3D &a, const QVector3D &b) { return (a - b).length() < 0.03f; };
+    auto str = [](const QVector3D &v) {
+        return QString("(%1, %2, %3)").arg(double(v.x()), 0, 'f', 2)
+                                      .arg(double(v.y()), 0, 'f', 2).arg(double(v.z()), 0, 'f', 2);
+    };
+
+    MonitorGraphicsView view(doc);
+    view.resize(1000, 700);
+    view.setGridMetrics(1000.0);
+    view.setGridSize(QSize(10, 7));
+    view.setViewPOV(MonitorGraphicsView::PovTop);
+    view.updateTargets();
+    view.show();
+    QCoreApplication::processEvents();
+
+    auto vpOf = [&](float x, float y) {
+        return view.mapFromScene(view.projectMm(double(x) * 1000.0, double(y) * 1000.0, 0.0));
+    };
+    auto send = [&](QEvent::Type type, const QPoint &vp, Qt::KeyboardModifiers mods) {
+        const Qt::MouseButton b = (type == QEvent::MouseMove) ? Qt::NoButton : Qt::LeftButton;
+        const Qt::MouseButtons held = (type == QEvent::MouseButtonRelease) ? Qt::NoButton : Qt::LeftButton;
+        QMouseEvent ev(type, vp, view.viewport()->mapToGlobal(vp), b, held, mods);
+        QApplication::sendEvent(view.viewport(), &ev);
+    };
+    auto drag = [&](const QPoint &from, const QPoint &to, Qt::KeyboardModifiers mods = Qt::NoModifier) {
+        send(QEvent::MouseButtonPress, from, mods);
+        send(QEvent::MouseMove, from + (to - from) / 2, mods);
+        send(QEvent::MouseMove, to, mods);
+        send(QEvent::MouseButtonRelease, to, mods);
+        QCoreApplication::processEvents();
+    };
+
+    TargetItem *ti = view.m_targetItems.value(line->id(), nullptr);
+    QVERIFY(ti != nullptr && ti->isLine());
+    QCOMPARE(ti->lineHandleCount(), 2);
+    QVERIFY2(ti->flags() & QGraphicsItem::ItemIsMovable, "a line in Design mode cannot be edited");
+    // Picked on the line, not on the empty stage its box covers.
+    QVERIFY(ti->shape().contains(ti->mapFromScene(view.mapToScene(vpOf(4.0f, 3.0f)))));
+    QVERIFY(!ti->shape().contains(ti->mapFromScene(view.mapToScene(vpOf(4.0f, 4.0f)))));
+
+    // 1. Drag the right-hand end up and right.
+    drag(vpOf(7.0f, 3.0f), vpOf(8.0f, 4.0f));
+    QVERIFY2(near(world().last(), QVector3D(8, 4, 0)), qPrintable(str(world().last())));
+    QVERIFY2(near(world().first(), QVector3D(3, 3, 0)), qPrintable(str(world().first())));
+    // Re-centred: the target's own point is half-way along again.
+    QVERIFY(near(line->position(), QVector3D(5.5f, 3.5f, 0)));
+
+    // ... and undone.
+    view.undoLastMove();
+    QVERIFY2(near(world().last(), QVector3D(7, 3, 0)), qPrintable(str(world().last())));
+    QVERIFY(near(line->position(), QVector3D(5, 3, 0)));
+
+    // 2. Alt on an end stretches it along the line, whatever way the mouse goes.
+    ti = view.m_targetItems.value(line->id(), nullptr);
+    drag(vpOf(7.0f, 3.0f), vpOf(8.0f, 4.0f), Qt::AltModifier);
+    QVERIFY2(near(world().last(), QVector3D(8, 3, 0)), qPrintable(str(world().last())));
+    view.undoLastMove();
+
+    // 3. Double-click the curve off the centre: a point there.
+    ti = view.m_targetItems.value(line->id(), nullptr);
+    QTest::mouseDClick(view.viewport(), Qt::LeftButton, Qt::NoModifier, vpOf(6.0f, 3.0f));
+    QCOMPARE(line->linePoints().size(), 3);
+    QVERIFY2(near(world().at(1), QVector3D(6, 3, 0)), qPrintable(str(world().at(1))));
+    // Bend it by that point: a drag of the mid handle.
+    drag(vpOf(6.0f, 3.0f), vpOf(6.0f, 2.0f));
+    QVERIFY2(near(world().at(1), QVector3D(6, 2, 0)), qPrintable(str(world().at(1))));
+    QVERIFY(near(world().first(), QVector3D(3, 3, 0)) && near(world().last(), QVector3D(7, 3, 0)));
+    // Double-click the mid point: gone.
+    QTest::mouseDClick(view.viewport(), Qt::LeftButton, Qt::NoModifier, vpOf(6.0f, 2.0f));
+    QCOMPARE(line->linePoints().size(), 2);
+    // Undo puts it back where it was bent to; undo again unbends; again un-adds.
+    view.undoLastMove();
+    QCOMPARE(line->linePoints().size(), 3);
+    QVERIFY(near(world().at(1), QVector3D(6, 2, 0)));
+    view.undoLastMove();
+    QVERIFY(near(world().at(1), QVector3D(6, 3, 0)));
+    view.undoLastMove();
+    QCOMPARE(line->linePoints().size(), 2);
+
+    // 4. Double-clicking an end adds nothing and removes nothing.
+    QTest::mouseDClick(view.viewport(), Qt::LeftButton, Qt::NoModifier, vpOf(3.0f, 3.0f));
+    QCOMPARE(line->linePoints().size(), 2);
+
+    // 5. Drag the body: the whole line goes, its shape with it.
+    view.m_scene->clearSelection();
+    drag(vpOf(4.0f, 3.0f), vpOf(4.0f, 5.0f));
+    QVERIFY2(near(line->position(), QVector3D(5, 5, 0)), qPrintable(str(line->position())));
+    QVERIFY(near(world().first(), QVector3D(3, 5, 0)) && near(world().last(), QVector3D(7, 5, 0)));
+    view.undoLastMove();
+    QVERIFY2(near(line->position(), QVector3D(5, 3, 0)), qPrintable(str(line->position())));
+
+    // 6. From the front, an end drags in height.
+    view.setViewPOV(MonitorGraphicsView::PovFront);
+    view.updateTargets();
+    QCoreApplication::processEvents();
+    auto vpFront = [&](float x, float z) {
+        return view.mapFromScene(view.projectMm(double(x) * 1000.0, 3000.0, double(z) * 1000.0));
+    };
+    drag(vpFront(7.0f, 0.0f), vpFront(7.0f, 2.0f));
+    QVERIFY2(near(world().last(), QVector3D(7, 3, 2)), qPrintable(str(world().last())));
+    QVERIFY(near(world().first(), QVector3D(3, 3, 0)));
+
+    // Outside Design mode a line does not edit: a double-click on it adds
+    // nothing, and its handles do not drag.
+    doc->setMode(Doc::Operate);
+    view.updateTargets();
+    QCoreApplication::processEvents();
+    const QVector<QVector3D> held = line->linePoints();
+    QTest::mouseDClick(view.viewport(), Qt::LeftButton, Qt::NoModifier, vpFront(4.0f, 0.5f));
+    QCOMPARE(line->linePoints(), held);
+    drag(vpFront(3.0f, 0.0f), vpFront(2.0f, 1.0f));
+    QCOMPARE(line->linePoints(), held);
+
+    delete doc;
+}
+
+void Monitor_Test::headsAimedAtALineGoToTheirOwnPoints()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Fixture *a = makeMover(doc, 15.0, 0, "A", QVector3D(2.0f, 0.5f, 5.0f));
+    Fixture *b = makeMover(doc, 15.0, 10, "B", QVector3D(8.0f, 0.5f, 5.0f));
+    QVERIFY(a != nullptr && b != nullptr);
+
+    StageTarget *line = props->addStageTarget();
+    line->setName("L");
+    line->setPosition(QVector3D(5.0f, 3.0f, 0.0f));
+    line->makeLine();
+
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, doc);
+    aim->setName("At L");
+    aim->setStageTargetId(line->id());
+    doc->addPalette(aim);
+    Scene *scene = new Scene(doc);
+    scene->setName("Fan");
+    scene->addFixture(b->id());
+    scene->addFixture(a->id());
+    scene->addPalette(aim->id());
+    doc->addFunction(scene);
+
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(1000, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(10, 7));
+        view.setViewPOV(MonitorGraphicsView::PovTop);
+        view.addFixture(a->id(), QPointF(2000.0, 500.0));
+        view.addFixture(b->id(), QPointF(8000.0, 500.0));
+        view.setActiveScene(scene->id());
+        view.updateTargets();
+
+        // The traces end on the line's two ends: A (stage left) on the left.
+        const QPointF leftEnd = view.projectMm(3000.0, 3000.0, 0.0);
+        const QPointF rightEnd = view.projectMm(7000.0, 3000.0, 0.0);
+        int toLeft = 0, toRight = 0;
+        foreach (QGraphicsLineItem *li, view.m_aimLines)
+        {
+            const QPointF end = li->line().p2();
+            if (QLineF(end, leftEnd).length() < 2.0)  toLeft++;
+            if (QLineF(end, rightEnd).length() < 2.0) toRight++;
+        }
+        QVERIFY2(toLeft == 1 && toRight == 1,
+                 qPrintable(QString("%1 traces to the left end, %2 to the right, of %3 lines")
+                            .arg(toLeft).arg(toRight).arg(view.m_aimLines.size())));
+    }
+
+    {
+        StructureStudioView rig(doc, StructureStudioView::StageKind, 0);
+        rig.setActiveScene(scene->id());
+        QVector3D pa, pb;
+        QVERIFY(rig.aimPointFor(a->id(), pa));
+        QVERIFY(rig.aimPointFor(b->id(), pb));
+        QVERIFY2((pa - QVector3D(3, 3, 0)).length() < 0.02f, "the rig view aims A elsewhere");
+        QVERIFY2((pb - QVector3D(7, 3, 0)).length() < 0.02f, "the rig view aims B elsewhere");
+        // Drag the line and the rig view follows, without a rebuild.
+        line->setPosition(QVector3D(5.0f, 4.0f, 0.0f));
+        QVERIFY(rig.aimPointFor(a->id(), pa));
+        QVERIFY((pa - QVector3D(3, 4, 0)).length() < 0.02f);
+    }
+
+    delete doc;
+}
+
 void Monitor_Test::aPersonTakesTheColourOfTheLightOnIt()
 {
     /* "The person should reflect the colour of the lights pointed at it and
@@ -10674,7 +10867,10 @@ void Monitor_Test::aPlatformOffersToPutSomethingOnIt()
     }
     QVERIFY2(offered.filter(QStringLiteral("Fixture")).count() == 1,
              qPrintable(QString("Add offers: %1").arg(offered.join(", "))));
-    QVERIFY2(offered.filter(QStringLiteral("Target")).count() == 1,
+    // A target and a target line.
+    QVERIFY2(offered.contains(QStringLiteral("Target Here"))
+             && offered.contains(QStringLiteral("Target Line Here"))
+             && offered.filter(QStringLiteral("Target")).count() == 2,
              qPrintable(QString("Add offers: %1").arg(offered.join(", "))));
     QVERIFY2(person != nullptr,
              qPrintable(QString("Add offers: %1").arg(offered.join(", "))));

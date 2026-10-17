@@ -28,6 +28,16 @@ under `~/.claude/.../memory/`.
   macOS (it would override the `.icns` in a packaged Dock). Could set it only
   when not running from a bundle, if it matters.
 
+## Line targets (in progress, 2026-10-16)
+
+On `feat/line-targets` (post-release); design in `LINE_TARGET_DESIGN.md`.
+
+- **P1 — line target, editing, even distribution**: done (see DONE.md).
+- **P2 — Spread slider** (-5..+5) in the look editor.
+- **P3 — Grouping**: Group / Cross (swap sides, mirror) / Share a point.
+- Later, if wanted: spread on a control-surface fader, a "breathe" effect on
+  a speed master, editing handles in the Rig Overview.
+
 ## Release 0.1.0 (in progress, 2026-10-15)
 
 On `release/0.1.0`. Universal (Apple silicon + Intel), macOS 12+.

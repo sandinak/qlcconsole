@@ -157,6 +157,96 @@ QPainterPath TargetItem::figurePath() const
     return path.simplified();
 }
 
+void TargetItem::setLineGeometry(const QPolygonF &curve, const QVector<double> &fractions,
+                                 const QVector<QPointF> &handles)
+{
+    prepareGeometryChange();
+    m_curve = curve;
+    m_curveFractions = fractions;
+    m_handles = handles;
+    update();
+}
+
+static constexpr double kHandleRadius = 6.0;    // px: grabbing a handle
+static constexpr double kCurveGrab = 6.0;       // px either side of the curve
+
+int TargetItem::lineHandleAt(const QPointF &local) const
+{
+    /* The nearest handle in reach. A mid point within a pixel of an end wins:
+       an end can always be grabbed further out, a mid point under it cannot. */
+    int best = -1;
+    double bestD = 0.0;
+    for (int i = 0; i < m_handles.size(); ++i)
+    {
+        const double d = QLineF(local, m_handles.at(i)).length();
+        if (d > kHandleRadius)
+            continue;
+        const bool isMid = (i > 0 && i < m_handles.size() - 1);
+        if (best < 0 || d < bestD - (isMid ? 1.0 : 0.0))
+        {
+            best = i;
+            bestD = d;
+        }
+    }
+    return best;
+}
+
+bool TargetItem::lineHitAt(const QPointF &local, double *fraction) const
+{
+    if (m_curve.size() < 2)
+        return false;
+    double best = -1.0, bestF = 0.0;
+    for (int i = 0; i + 1 < m_curve.size(); ++i)
+    {
+        const QPointF a = m_curve.at(i), b = m_curve.at(i + 1);
+        const QPointF ab = b - a;
+        const double len2 = ab.x() * ab.x() + ab.y() * ab.y();
+        double u = len2 > 0.0 ? QPointF::dotProduct(local - a, ab) / len2 : 0.0;
+        u = qBound(0.0, u, 1.0);
+        const double d = QLineF(local, a + ab * u).length();
+        if (best < 0.0 || d < best)
+        {
+            best = d;
+            const double fa = m_curveFractions.value(i), fb = m_curveFractions.value(i + 1);
+            bestF = fa + (fb - fa) * u;
+        }
+    }
+    if (best < 0.0 || best > kCurveGrab)
+        return false;
+    if (fraction != nullptr)
+        *fraction = bestF;
+    return true;
+}
+
+bool TargetItem::onCentreMark(const QPointF &local) const
+{
+    return QLineF(local, QPointF(0, 0)).length() <= double(kRadius);
+}
+
+QPainterPath TargetItem::shape() const
+{
+    if (!isLine())
+    {
+        QPainterPath path;
+        path.addRect(boundingRect());
+        return path;
+    }
+    QPainterPath path;
+    path.setFillRule(Qt::WindingFill);
+    path.addEllipse(QPointF(0, 0), double(kRadius) + 3.0, double(kRadius) + 3.0);
+    QPainterPath curve;
+    curve.addPolygon(m_curve);
+    QPainterPathStroker stroker;
+    stroker.setWidth(kCurveGrab * 2.0);
+    stroker.setCapStyle(Qt::RoundCap);
+    path.addPath(stroker.createStroke(curve));
+    for (const QPointF &h : m_handles)
+        path.addEllipse(h, kHandleRadius + 1.0, kHandleRadius + 1.0);
+    if (m_label != nullptr)
+        path.addRect(m_label->mapRectToParent(m_label->boundingRect()));
+    return path;
+}
+
 QRectF TargetItem::boundingRect() const
 {
     /* The crosshair arms already reach 1.4x the radius, and the aimed halo
@@ -176,6 +266,13 @@ QRectF TargetItem::boundingRect() const
     const QRectF foot = footprintRect();
     if (foot.isValid())
         rect |= foot.adjusted(-pad, -pad, pad, pad);
+    if (isLine())
+    {
+        const double r = kHandleRadius + 4.0;
+        rect |= m_curve.boundingRect().adjusted(-r, -r, r, r);
+        for (const QPointF &h : m_handles)
+            rect |= QRectF(h.x() - r, h.y() - r, 2 * r, 2 * r);
+    }
     return rect;
 }
 
@@ -224,6 +321,30 @@ void TargetItem::paint(QPainter *painter,
         painter->setPen(edge);
         painter->setBrush(tint);
         painter->drawRoundedRect(foot, 3.0, 3.0);
+    }
+
+    /* A line: the curve, its ends as squares and its mid points as dots. The
+       mark stays at the centre -- where every light goes at spread 0. */
+    if (isLine())
+    {
+        QPen linePen(col, selected ? 3.5 : 2.5);
+        linePen.setCapStyle(Qt::RoundCap);
+        linePen.setJoinStyle(Qt::RoundJoin);
+        painter->setPen(linePen);
+        painter->setBrush(Qt::NoBrush);
+        painter->drawPolyline(m_curve);
+        for (int i = 0; i < m_handles.size(); ++i)
+        {
+            const QPointF h = m_handles.at(i);
+            const bool isEnd = (i == 0 || i == m_handles.size() - 1);
+            painter->setPen(QPen(col.darker(160), 1.2));
+            painter->setBrush(selected ? col.lighter(130) : col);
+            if (isEnd)
+                painter->drawRect(QRectF(h.x() - kHandleRadius + 1.0, h.y() - kHandleRadius + 1.0,
+                                         2 * kHandleRadius - 2.0, 2 * kHandleRadius - 2.0));
+            else
+                painter->drawEllipse(h, kHandleRadius - 1.5, kHandleRadius - 1.5);
+        }
     }
 
     /* What stands here, under the mark: the mark still says where it is aimed,
@@ -316,8 +437,51 @@ QVariant TargetItem::itemChange(GraphicsItemChange change, const QVariant &value
     return QGraphicsItem::itemChange(change, value);
 }
 
+void TargetItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
+{
+    /* A line's handle is dragged on its own: the line bends or stretches, the
+       target does not move. Only where the target could be dragged at all. */
+    m_dragHandle = -1;
+    if (event->button() == Qt::LeftButton && isLine() && (flags() & ItemIsMovable))
+    {
+        const int h = lineHandleAt(event->pos());
+        if (h >= 0)
+        {
+            m_dragHandle = h;
+            if (!isSelected())
+            {
+                if (scene() != nullptr)
+                    scene()->clearSelection();
+                setSelected(true);
+            }
+            event->accept();
+            return;
+        }
+    }
+    QGraphicsItem::mousePressEvent(event);
+}
+
+void TargetItem::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
+{
+    if (m_dragHandle >= 0)
+    {
+        emit lineHandleMoved(this, m_dragHandle, event->scenePos(), event->modifiers());
+        event->accept();
+        return;
+    }
+    QGraphicsItem::mouseMoveEvent(event);
+}
+
 void TargetItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 {
+    if (m_dragHandle >= 0)
+    {
+        const int h = m_dragHandle;
+        m_dragHandle = -1;
+        event->accept();
+        emit lineHandleReleased(this, h);
+        return;
+    }
     QGraphicsItem::mouseReleaseEvent(event);
     emit itemDropped(this);
 }
@@ -325,6 +489,21 @@ void TargetItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 void TargetItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
 {
     QMenu menu;
+    /* A line: add a point where the click was, or take a mid point out. */
+    QAction *addPointAct = nullptr;
+    QAction *removePointAct = nullptr;
+    double addAt = 0.0;
+    const int handle = isLine() ? lineHandleAt(event->pos()) : -1;
+    const bool canEdit = (flags() & ItemIsMovable);
+    if (isLine() && canEdit)
+    {
+        if (handle > 0 && handle < m_handles.size() - 1)
+            removePointAct = menu.addAction(tr("Remove Point"));
+        else if (handle < 0 && lineHitAt(event->pos(), &addAt))
+            addPointAct = menu.addAction(tr("Add Point Here"));
+        if (addPointAct != nullptr || removePointAct != nullptr)
+            menu.addSeparator();
+    }
     QAction *lockAct = menu.addAction(
         m_target->locked() ? tr("Unlock Target") : tr("Lock Target"));
     menu.addSeparator();
@@ -333,6 +512,17 @@ void TargetItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
     QAction *chosen = menu.exec(event->screenPos());
     if (chosen == NULL)
         return;
+
+    if (chosen == addPointAct)
+    {
+        emit lineInsertRequested(this, addAt);
+        return;
+    }
+    if (chosen == removePointAct)
+    {
+        emit lineRemoveRequested(this, handle);
+        return;
+    }
 
     if (chosen == lockAct)
     {

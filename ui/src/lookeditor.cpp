@@ -1122,7 +1122,8 @@ void LookEditor::setPalette(quint32 paletteId)
         if (m_doc->monitorProperties())
         {
             for (StageTarget *t : m_doc->monitorProperties()->stageTargets())
-                m_aimTargetCombo->addItem(t->name(), QVariant(t->id()));
+                m_aimTargetCombo->addItem(t->isLine() ? tr("Line: %1").arg(t->name()) : t->name(),
+                                          QVariant(t->id()));
         }
         // Pre-select the palette's linked target
         int sel = 0;

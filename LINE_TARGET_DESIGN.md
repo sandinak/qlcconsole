@@ -231,15 +231,17 @@ below 0. Display only in P1 (Q7).
 </StageTarget>
 
 <Palette ID="12" Type="Aim" StageTarget="4" ...>
-  <AimParam name="lineSpread" value="-5"/>
-  <AimParam name="lineGroup"  value="3"/>    <!-- 0 = halves -->
-  <AimParam name="lineCross"  value="groups"/>
-  <AimParam name="lineShare"  value="0"/>
-  <AimParam name="lineOrder"  value="line"/>
+  <EffectParam name="__lineSpread" value="-5"/>
+  <EffectParam name="__lineGroup"  value="0"/>   <!-- 0 = halves -->
+  <EffectParam name="__lineCross"  value="1"/>   <!-- 0 swap sides, 1 mirror -->
+  <EffectParam name="__lineShare"  value="1"/>
+  <EffectParam name="__lineOrder"  value="1"/>   <!-- 0 along the line, 1 look order -->
 </Palette>
 ```
 
-Written only when they differ from the defaults. **Older builds**: an unknown
+As built: the same `EffectParam` element and reserved-name convention
+(`__line*`) as an effect's `__spread*`, one element per setting, written only
+when it differs from the default (so each can be inherited on its own later). **Older builds**: an unknown
 Kind reads as a plain point and child elements are skipped (both loaders
 already `skipCurrentElement()`), so an old build sees a point target at the
 line's centre with every light aimed there — sensible, not broken. Tests:

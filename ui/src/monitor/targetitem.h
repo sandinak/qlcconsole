@@ -18,6 +18,8 @@
 
 #include <QGraphicsItem>
 #include <QPainterPath>
+#include <QPolygonF>
+#include <QVector>
 #include <QStringList>
 #include <QObject>
 
@@ -97,8 +99,27 @@ public:
     void setFootprintPx(const QSizeF &size);
     QRectF footprintRect() const;
 
+    /** A line target (LINE_TARGET_DESIGN.md), in item coordinates -- the
+     *  item sits on the line's centre: the sampled curve, how far along
+     *  (0..1) each sample is, and the handles (the ends first and last).
+     *  Empty draws the plain mark. */
+    void setLineGeometry(const QPolygonF &curve, const QVector<double> &fractions,
+                         const QVector<QPointF> &handles);
+    bool isLine() const { return m_curve.size() >= 2; }
+    int lineHandleCount() const { return m_handles.size(); }
+    QPointF lineHandle(int index) const { return m_handles.value(index); }
+    /** The handle under @p local (item coordinates), or -1. */
+    int lineHandleAt(const QPointF &local) const;
+    /** True if @p local is on the curve; @p fraction gets how far along. */
+    bool lineHitAt(const QPointF &local, double *fraction = nullptr) const;
+    /** True if @p local is on the centre mark. */
+    bool onCentreMark(const QPointF &local) const;
+
     // QGraphicsItem interface
     QRectF   boundingRect() const override;
+    /** A line is picked on its curve, handles and mark -- not on the empty
+     *  stage its bounding box covers. */
+    QPainterPath shape() const override;
     void     paint(QPainter *painter, const QStyleOptionGraphicsItem *option,
                    QWidget *widget) override;
     QVariant itemChange(GraphicsItemChange change, const QVariant &value) override;
@@ -110,11 +131,22 @@ public:
 private:
 
 protected:
+    void mousePressEvent(QGraphicsSceneMouseEvent *event) override;
+    void mouseMoveEvent(QGraphicsSceneMouseEvent *event) override;
     void mouseReleaseEvent(QGraphicsSceneMouseEvent *event) override;
     void contextMenuEvent(QGraphicsSceneContextMenuEvent *event) override;
 
 signals:
     void itemDropped(TargetItem *item);
+    /** A line's handle is being dragged to @p scenePos. */
+    void lineHandleMoved(TargetItem *item, int index, QPointF scenePos,
+                         Qt::KeyboardModifiers modifiers);
+    /** The drag of a line's handle ended. */
+    void lineHandleReleased(TargetItem *item, int index);
+    /** Add a point to the line @p fraction of the way along. */
+    void lineInsertRequested(TargetItem *item, double fraction);
+    /** Remove the line's point @p index (a mid point). */
+    void lineRemoveRequested(TargetItem *item, int index);
 
 private:
     static constexpr float kRadius = 14.0f;   // crosshair radius in scene px
@@ -131,6 +163,11 @@ private:
     QPointF            m_crown;
     double             m_pxPerMetre = 0.0;   ///< 0 = no figure set
     bool               m_sideOn = false;
+
+    QPolygonF          m_curve;            ///< line: the curve, item coords
+    QVector<double>    m_curveFractions;   ///< parallel to m_curve
+    QVector<QPointF>   m_handles;          ///< line: ends first and last
+    int                m_dragHandle = -1;  ///< the handle being dragged
 };
 
 /** @} */

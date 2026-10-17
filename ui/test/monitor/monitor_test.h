@@ -634,6 +634,13 @@ private slots:
     void aBeamFadesAlongItsLengthWhicheverWayItPoints();
     void aPersonTargetIsDrawnAsAPerson();
     void anAreaTargetShowsItsSize();
+    /** A line target in the studio: drag an end, Alt-drag along it, double-
+     *  click the curve to add a point and the point to take it out, drag the
+     *  body to move it all; each one undoes. */
+    void aLineTargetIsEditedInTheStudio();
+    /** Each head aimed at a line traces to its own point, in the studio and
+     *  in the rig view. */
+    void headsAimedAtALineGoToTheirOwnPoints();
     void aPersonTakesTheColourOfTheLightOnIt();
     void manyWhiteBeamsDoNotBlowOut();
     void aFrameFilledAcrossCoresIsTheSameFrame();

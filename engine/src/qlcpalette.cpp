@@ -413,6 +413,10 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
             }
         });
 
+    // Aim at a line target: each head's point, worked out on first use.
+    bool lineReady = false;
+    QHash<quint32, QVector3D> linePts;
+
     foreach (quint32 id, fixtures)
     {
         Fixture *fixture = doc->fixture(id);
@@ -742,7 +746,28 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                    This used to be written out here AND again in the renderer,
                    and the two disagreed: a follow-spot aimed at chest height in
                    Edit while the rig view pointed at the target's own Z. */
-                const QVector3D tgtPos = AimSolver::aimPointFor(doc, id, tgt, subjectMode);
+                QVector3D tgtPos;
+                if (tgt->isLine())
+                {
+                    /* A line gives each head its own point, so where THIS head
+                       goes depends on every head the look aims: the owning
+                       scene's (groups and fixtures together, which this
+                       palette is expanded for in two calls), else the list
+                       this call was given. Worked out once per call. */
+                    if (!lineReady)
+                    {
+                        const QList<quint32> heads = (owner != nullptr)
+                                ? AimSolver::aimHeads(doc, owner)
+                                : AimSolver::aimable(doc, fixtures);
+                        linePts = AimSolver::linePoints(doc, this, tgt, heads);
+                        lineReady = true;
+                    }
+                    tgtPos = linePts.value(id, mProps->targetAimPoint(tgt));
+                }
+                else
+                {
+                    tgtPos = AimSolver::aimPointFor(doc, id, tgt, subjectMode);
+                }
 
                 // Shared aim geometry — identical to the follow-spot effect's, so
                 // a fixture points the same way in Edit and Run.

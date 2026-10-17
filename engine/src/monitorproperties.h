@@ -626,6 +626,11 @@ public:
      */
     QVector3D targetAimPoint(const class StageTarget *t, bool subjectMode = false) const;
 
+    /** A line target's control points in world space: its points around
+     *  targetAimPoint() (its centre, following any binding). Empty for any
+     *  other kind. */
+    QVector<QVector3D> targetLinePoints(const class StageTarget *t) const;
+
     /** The point a head at @p from with a beam @p beamDeg wide should aim at,
      *  for target @p t. A follow spot on a Person: the chest while the beam is
      *  narrow; as it widens, lower -- so its top edge stays just over the

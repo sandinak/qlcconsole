@@ -1784,11 +1784,23 @@ QVector3D MonitorProperties::targetAimPoint(const StageTarget *t, bool subjectMo
         }
     }
 
+    /* A line's points carry their own heights; an aim height would lift
+       the whole curve off the heights it was drawn at. */
+    if (t->isLine())
+        return p;
+
     const float above = targetAimHeight(t, subjectMode);
     if (above > 0.0f)
         p.setZ(platformHeightAt(p.x(), p.y()) + above);
 
     return p;
+}
+
+QVector<QVector3D> MonitorProperties::targetLinePoints(const StageTarget *t) const
+{
+    if (t == nullptr || !t->isLine())
+        return QVector<QVector3D>();
+    return t->linePointsAround(targetAimPoint(t));
 }
 
 QVector3D MonitorProperties::targetAimPointFor(const StageTarget *t, bool subjectMode,

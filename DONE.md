@@ -6,6 +6,55 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-16 — Line targets, P1: a curve in space that spreads lights along it *(feat/line-targets)*
+
+Branson: "we have point, area, we need line.. and the line can be in space ..
+and curvable in multiple directions.. where you doubleclick to add a mid point
+and drag to change.. handles on the ends to extend and retract and move...
+grab the center click hold can move it around... and the lights will be
+distributed along the line evenly." Design: `LINE_TARGET_DESIGN.md`.
+
+- **Model**: `StageTarget::Kind::Line` (`"line"`), control points stored
+  RELATIVE to the target's position, which is kept at the curve's half-way
+  point (`recentreLine()` after every edit) -- so a drag, the design
+  joystick, follow-spot hold and a structure binding all move the whole line,
+  and anything that reads a target's single point (follow spot, effects, an
+  older build) gets the centre. Points are under the position mutex (the DMX
+  thread reads them). Saved as `<LinePoint>` children; an older build reads
+  Kind="line" as a plain mark and skips the children.
+- **Curve**: `engine/src/linecurve.{h,cpp}` -- centripetal Catmull-Rom through
+  every point, arc-length table, `pointAt(fraction)`, `spanAt`,
+  `nearestFraction`, `recentred`.
+- **Distribution**: `engine/src/linespread.{h,cpp}` -- pure, over any ordered
+  list (so a cue-level aim over several looks' heads can use it later):
+  `fractions(n, settings)` and `orderAlong(positions, from, to)`. P1 uses the
+  defaults: ends included, ordered by where the heads hang along the line.
+  `AimSolver::aimHeads/aimable/lineFractions/linePoint/linePoints`;
+  `QLCPalette::valuesFromFixtures` (Aim) resolves the line points once per call
+  over the OWNING scene's heads (groups and fixtures are expanded in two calls,
+  so per-call lists would split the line), else the list it was given;
+  `sceneAims` (reach), the studio's aim traces and the Rig Overview's beams
+  (`AimSpec::lineFraction`, point read fresh per frame) all use it.
+  `targetAimPoint` ignores aim height for a line (its points carry heights).
+- **Studio editing** (`TargetItem` line geometry + `shape()` so only the
+  curve/handles/mark pick; `MonitorGraphicsView::slotLineHandle*`,
+  `slotLineInsertPoint/RemovePoint`, `commitLineEdit`): drag ends / mid
+  points, Alt = along the line, Shift = axis, double-click curve adds, double-
+  click mid point removes, right-click Add/Remove Point, body drag moves all;
+  Top keeps height above the deck, Front/Side drag height. Undo:
+  `UndoEntry::TargetLineEdit`; TargetMove now also restores Z. Add menu +
+  canvas "Target Line Here"; dialog Subject "Line"; copy/paste keeps a line.
+- **Rig Overview**: the curve and handle crosses drawn; beams land on each
+  head's own point. Display only.
+- Tests: engine `linetarget_test` (curve, spacing, XML, forgiving load, aim
+  per head, palette values); `monitor_test` `aLineTargetIsEditedInTheStudio`,
+  `headsAimedAtALineGoToTheirOwnPoints`. Help: stage-targets.md
+  "Line targets", whats-new.
+- Noticed on the way (not changed): a target's lock mirrors its layer's on
+  every plot refresh (`MonitorProperties::syncItemLocksToLayers`), so the
+  target menu's own "Lock Target" is undone by the next refresh unless the
+  layer is locked -- by design for layers, but the menu item then misleads.
+
 ### 2026-10-16 — A look's Speed and Spread survive picking an effect; Speed Masters window closes cleanly *(fix/speedmaster-dblclick-reset)*
 
 Branson: "when I set something on the speed masters .. and then double click
