@@ -315,5 +315,8 @@ built on Qt 6.9.
 - Engine: a fader's priority could be raised but never lowered, and an
   overriding 16-bit channel wrote only its low byte, to the coarse address.
   Nothing in 0.1.0 hit either yet; fixed ahead of the features that will.
+- Rig Overview: an RGB fixture with no dimmer channel (pixel bars, many
+  par cans) drew far too dark, or black, when dimmed: its level was counted
+  twice.
 
 [0.1.0]: https://github.com/sandinak/qlcconsole/releases/tag/v0.1.0

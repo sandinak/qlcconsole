@@ -10240,6 +10240,29 @@ void Monitor_Test::pixelBarDrawsEachPixelInItsOwnColour()
              qPrintable(QString("angled view drew no per-pixel colour: %1 red, "
                                 "%2 blue pixels").arg(reds).arg(blues)));
 
+    /* A DIMMED bar is still its colour (2026-10-17, Show Tree): Blue with a
+       19% Dimmer look on a bar with no dimmer channel goes out as (0,1,48)
+       per pixel. The level used to be counted twice -- in the colour and
+       again as the "dimmer" -- and the bar drew as 9/255: black, on a rig
+       that was plainly blue. */
+    QByteArray dimBlue(512, char(0));
+    for (int h = 0; h < PIX; ++h)
+    {
+        dimBlue[h * 3 + 1] = char(1);
+        dimBlue[h * 3 + 2] = char(48);
+    }
+    fxi->setChannelValues(dimBlue);
+    QColor hb;
+    uchar db = 0;
+    QVERIFY(fixtureHeadLiveState(fxi, 0, hb, db));
+    QCOMPARE(int(db), 48);
+    QVERIFY2(hb.blue() == 255 && hb.red() == 0 && hb.green() < 10,
+             qPrintable(QString("the hue at full, the level once: got %1").arg(hb.name())));
+    const QColor unlitGrey(90, 90, 90);
+    const QColor drawn = v.pixelColor(fxi, dimBlue, 0, unlitGrey, unlitGrey, 1.0, -1);
+    QVERIFY2(drawn.blue() >= 45 && drawn.blue() > drawn.red() + 20,
+             qPrintable(QString("a 19%% blue pixel should draw blue, got %1").arg(drawn.name())));
+
     m_doc->deleteFixture(fxi->id());
     props->removeTruss(t->id());
 }
