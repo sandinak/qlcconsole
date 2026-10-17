@@ -180,6 +180,8 @@ signals:
 private:
     Function::Direction m_direction;        //! Run-time direction (reversed by ping-pong)
     QList <ChaserRunnerStep *> m_runnerSteps;  //! Queue of the currently running steps
+    QList <ChaserRunnerStep *> m_leavingSteps; //! Left by a step change, not yet let go of (leaveSteps())
+    QList <ChaserRunnerStep *> m_handedOverSteps; //! Sharing with the new step: stopped on the next write
     quint32 m_startOffset;                  //! Start step offset time in milliseconds
     ChaserAction m_pendingAction;           //! Action to be performed on steps at the next write call
     int m_lastRunStepIdx;                   //! Index of the last step ran
@@ -230,9 +232,33 @@ public:
      ************************************************************************/
 private:
     /**
-     * Stop every running Function and clear the running list
+     * Stop every running Function and clear the running list.
+     *
+     * @a handOver: a step change. A step whose function is a Collection is
+     * not stopped here but left for leaveSteps(), once the new step is
+     * known (SHOW_TREE_DESIGN.md §4: a Scene two consecutive cues share
+     * keeps running across GO). Anything else -- the chaser stopping -- stops
+     * everything at once, those left too.
      */
-    void clearRunningList();
+    void clearRunningList(bool handOver = false);
+
+    /**
+     * Let go of the steps a step change left (m_leavingSteps), now that the
+     * new step has started. One whose Collection shares a member with the
+     * new step's is stopped on the next write() instead, when the new step's
+     * Collection has started and claimed that member too: stopped now, it
+     * would stop the shared member before the new step could take it over,
+     * and that member would start again from nothing (a re-fade, an effect
+     * from its first frame). The rest stop at once, as before.
+     */
+    void leaveSteps();
+
+    /** Stop and forget the steps held over by leaveSteps() a write ago. */
+    void stopHandedOverSteps();
+
+    /** Whether @a from and @a to are Collections with a member in common
+     *  (at any depth), or one holds the other. */
+    static bool sharesMembers(const Function *from, const Function *to);
 
     /**
      * Start a Chaser step Function with the given $index, at the given

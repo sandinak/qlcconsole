@@ -23,6 +23,7 @@
 
 #include <QMutex>
 #include <QList>
+#include <QHash>
 #include <QSet>
 
 #include "function.h"
@@ -108,6 +109,11 @@ protected:
     /** A list of intesity attribute override IDs populated when this Collection is
      *  started and cleaned when it's stopped */
     QList <int> m_intensityOverrideIds;
+    /** The intensity override this collection holds on each member it
+     *  started, by member: given back in postRun() to a member another
+     *  parent keeps running (m_intensityOverrideIds is by position, which
+     *  an edit to the member list while running would shift). */
+    QHash <quint32, int> m_overrideIdByMember;
 
     mutable QRecursiveMutex m_functionListMutex;
 

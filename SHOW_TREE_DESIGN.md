@@ -373,6 +373,38 @@ carry `Generated="ShowTree"` and their node id.
   `ChaserRunner` stops the old step and starts the new one in the same tick;
   if the stop lands first, a small hand-over change (start new, then stop old)
   is the only engine change P1 needs.
+
+  **Spike result (2026-10-16, `engine/test/cuehandover`):** it did *not*
+  work as it was. On GO the old cue's Collection was stopped first; its
+  `postRun()` let go of the shared Scene before the new Collection's
+  `preRun()` (which runs from the MasterTimer's start queue, *after* the stop
+  loop of the same tick) could claim it, so the Scene stopped and started
+  again: `stopped` emitted, `elapsed()` back to 0, a fresh fade-in from zero,
+  and the MasterTimer's `functionStopped`/`functionStarted` — what the
+  EffectScriptRunner tears effect instances down and builds them up on — for
+  it. Swapping the order inside `ChaserRunner::write()` alone would not have
+  fixed it, for the same reason: the new Collection only claims its members
+  at the end of the tick. **The fix (in `ChaserRunner`, as pre-approved):**
+  on a step change (GO, Back, a jump, auto-follow) a leaving step whose
+  function is a Collection is held until the new step has started; if the
+  two Collections share a member, the old one is stopped on the *next*
+  write (one tick, 20 ms, later), when the new Collection already holds the
+  shared Scene, so `Function::stop()` only removes one of two parents. A
+  leaving Collection that shares nothing stops at once, as before. "Shares"
+  counts nesting: a cue that *is* a member of the next one (DanceHysteria's
+  0.0.5 = Collection of the 0.0.4 Collection + StepTops-Bright) hands over
+  too, so today's collections-of-collections stop re-fading on GO as a side
+  benefit. Scene,
+  EFX and chase steps take exactly the old path. Also in `Collection::postRun()`:
+  a member another parent still runs gets this Collection's intensity
+  override released (else a cue played at 50 % would hold the shared Scene at
+  half for as long as it ran on). With the fix the spike shows: no
+  `stopped`/`running` signal, `elapsed()` strictly increasing every tick, the
+  shared channel at 255 on every tick through GO, Back, a jump and an
+  auto-follow, and the old cue's own scenes stopping. All chaser,
+  chaserrunner, collection, sub-cues, show, showrunner, cuestack and show
+  control tests unchanged and green. Cost: the old cue's own scenes start
+  their fade-out one tick later when it shares something with the new cue.
 - A changed layer is a new scene crossfading against the old one: colour LTP,
   intensity HTP — identical dimmers don't dip.
 - VC, footer GO, timecode, sub-cues, move-in-black look-ahead, show control and

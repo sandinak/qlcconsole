@@ -514,8 +514,17 @@ void ChaserRunner::adjustStepIntensity(qreal fraction, int requestedStepIndex, i
  * Running
  ****************************************************************************/
 
-void ChaserRunner::clearRunningList()
+void ChaserRunner::clearRunningList(bool handOver)
 {
+    if (handOver == false)
+    {
+        stopHandedOverSteps();
+        // Nothing new is coming: what a step change left goes now too.
+        m_handedOverSteps = m_leavingSteps;
+        m_leavingSteps.clear();
+        stopHandedOverSteps();
+    }
+
     // empty the running queue
     foreach (ChaserRunnerStep *step, m_runnerSteps)
     {
@@ -523,12 +532,63 @@ void ChaserRunner::clearRunningList()
         {
             // restore the original Function fade out time
             step->m_function->setOverrideFadeOutSpeed(stepFadeOut(step->m_index));
+            if (handOver && step->m_function->type() == Function::CollectionType)
+            {
+                m_lastFunctionID = Function::invalidId();
+                m_leavingSteps.append(step);
+                continue;
+            }
             stopStepFunction(step, m_chaser->type() == Function::SequenceType);
             m_lastFunctionID = step->m_function->type() == Function::SceneType ? step->m_function->id() : Function::invalidId();
         }
         delete step;
     }
     m_runnerSteps.clear();
+}
+
+bool ChaserRunner::sharesMembers(const Function *from, const Function *to)
+{
+    if (from == NULL || to == NULL || from == to
+        || from->type() != Function::CollectionType || to->type() != Function::CollectionType)
+        return false;
+    // One inside the other (a cue that includes the cue before it: a
+    // Collection of that Collection and more), or a member in common at any
+    // depth (Collection::contains() looks inside nested ones).
+    if (to->contains(from->id()) || from->contains(to->id()))
+        return true;
+    for (quint32 fid : from->components())
+        if (to->contains(fid))
+            return true;
+    return false;
+}
+
+void ChaserRunner::leaveSteps()
+{
+    if (m_leavingSteps.isEmpty())
+        return;
+
+    const ChaserRunnerStep *now = m_runnerSteps.isEmpty() ? NULL : m_runnerSteps.last();
+    foreach (ChaserRunnerStep *step, m_leavingSteps)
+    {
+        if (now != NULL && sharesMembers(step->m_function, now->m_function))
+        {
+            m_handedOverSteps.append(step);
+            continue;
+        }
+        stopStepFunction(step, m_chaser->type() == Function::SequenceType);
+        delete step;
+    }
+    m_leavingSteps.clear();
+}
+
+void ChaserRunner::stopHandedOverSteps()
+{
+    foreach (ChaserRunnerStep *step, m_handedOverSteps)
+    {
+        stopStepFunction(step, m_chaser->type() == Function::SequenceType);
+        delete step;
+    }
+    m_handedOverSteps.clear();
 }
 
 void ChaserRunner::stopStepFunction(ChaserRunnerStep *step, bool preserveAttributes)
@@ -947,17 +1007,21 @@ bool ChaserRunner::write(MasterTimer *timer, QList<Universe *> universes)
         m_goHeldIn = std::numeric_limits<qint64>::min();
     }
 
+    // A cue handed over a write ago: its successor has claimed what they
+    // share by now, so it can go.
+    stopHandedOverSteps();
+
     switch (m_pendingAction.m_action)
     {
         case ChaserNextStep:
         case ChaserPreviousStep:
-            clearRunningList();
+            clearRunningList(true);
             // the actual action will be performed below, on startNewStep
         break;
         case ChaserSetStepIndex:
             if (m_pendingAction.m_stepIndex != -1)
             {
-                clearRunningList();
+                clearRunningList(true);
                 if (m_chaser->runOrder() == Function::Random && !m_subCueHeld)
                     m_lastRunStepIdx = randomStepIndex(m_pendingAction.m_stepIndex);
                 else
@@ -1025,8 +1089,14 @@ bool ChaserRunner::write(MasterTimer *timer, QList<Universe *> universes)
                 prevStepRoundElapsed = step->m_elapsed % step->m_duration;
 
             m_lastFunctionID = step->m_function->type() == Function::SceneType ? step->m_function->id() : Function::invalidId();
-            stopStepFunction(step, m_chaser->type() == Function::SequenceType);
             m_runnerSteps.removeOne(step);
+            if (step->m_function->type() == Function::CollectionType)
+            {
+                // Auto-follow into the next cue: hand over as GO does.
+                m_leavingSteps.append(step);
+                continue;
+            }
+            stopStepFunction(step, m_chaser->type() == Function::SequenceType);
             delete step;
         }
         else
@@ -1053,6 +1123,7 @@ bool ChaserRunner::write(MasterTimer *timer, QList<Universe *> universes)
     {
         // Nothing playing yet (a GO from stopped): the first step lands on
         // the beat too, rather than starting now and jumping on the beat.
+        leaveSteps();
         m_pendingAction = held;
         return true;
     }
@@ -1070,10 +1141,12 @@ bool ChaserRunner::write(MasterTimer *timer, QList<Universe *> universes)
         }
         else
         {
+            leaveSteps();
             m_pendingAction.m_action = ChaserNoAction;
             return false;
         }
     }
+    leaveSteps();
 
     /* Sub GO / Sub Back / a jump to a sub-cue: after the step change, so a
        jump's parent step has started. A step change that landed drops a Sub

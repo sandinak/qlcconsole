@@ -292,6 +292,7 @@ void Collection::preRun(MasterTimer *timer)
     {
         QMutexLocker locker(&m_functionListMutex);
         m_runningChildren.clear();
+        m_overrideIdByMember.clear();
         foreach (quint32 fid, m_functions)
         {
             Function *function = doc->function(fid);
@@ -307,6 +308,7 @@ void Collection::preRun(MasterTimer *timer)
             }
 
             m_intensityOverrideIds << function->requestAttributeOverride(Function::Intensity, getAttributeValue(Function::Intensity));
+            m_overrideIdByMember.insert(function->id(), m_intensityOverrideIds.last());
 
             // Append the IDs of all functions started by this collection
             // to a set so that we can track which of them are still controlled
@@ -417,6 +419,14 @@ void Collection::postRun(MasterTimer* timer, QList<Universe *> universes)
             if (function == NULL) // may be NULL if deleted while running
             continue;
 
+            /* A member another parent still runs (a Scene the next cue
+               shares, SHOW_TREE_DESIGN.md §4) keeps running: give back this
+               collection's intensity override, or it would scale the
+               member for as long as it runs on. */
+            const int overrideId = m_overrideIdByMember.value(function->id(), Function::invalidAttributeId());
+            if (overrideId != Function::invalidAttributeId() && function->stopped() == false)
+                function->releaseAttributeOverride(overrideId);
+
             disconnect(function, SIGNAL(stopped(quint32)),
                     this, SLOT(slotChildStopped(quint32)));
             if (m_tick == 2)
@@ -427,6 +437,7 @@ void Collection::postRun(MasterTimer* timer, QList<Universe *> universes)
         }
 
         m_intensityOverrideIds.clear();
+        m_overrideIdByMember.clear();
     }
 
     Function::postRun(timer, universes);
