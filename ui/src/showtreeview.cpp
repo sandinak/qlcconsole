@@ -78,7 +78,10 @@
 using namespace ShowTree;
 
 #define SETTINGS_PINNED QStringLiteral("showtree/pinned")
-#define SETTINGS_SPLITTER QStringLiteral("showtree/splitter")
+// "2": the columns were reordered (Library | Tree | Editor, 2026-10-17), so
+// sizes saved for the old order are not read back.
+#define SETTINGS_SPLITTER QStringLiteral("showtree/splitter2")
+#define SETTINGS_EDITOR_SPLITTER QStringLiteral("showtree/editorSplitter")
 
 static const int kRecentMax = 10;
 
@@ -148,7 +151,12 @@ protected:
             *carried = ShowTree::Target();
         QTreeWidgetItem *item = itemAt(pos);
         if (item == nullptr)
+        {
+            // Below the last row: the selected cue (or the selected layer's
+            // cue) -- a new layer there.
+            *cue = m_view->currentCueId();
             return;
+        }
         const int kind = item->data(0, ShowTreeView::KindRole).toInt();
         if (kind == ShowTreeView::CueNode)
             *cue = item->data(0, ShowTreeView::IdRole).toUInt();
@@ -234,8 +242,10 @@ protected:
         {
             e->acceptProposedAction();
             if (m_hint != nullptr)
-                m_hint->setText(m_view->dropHint(cue, layer, e->mimeData(),
-                                                 e->modifiers() & Qt::AltModifier, carried, child));
+                m_hint->setText(itemAt(e->position().toPoint()) == nullptr
+                                ? m_view->dropHintBelow(cue, e->mimeData(), e->modifiers() & Qt::AltModifier)
+                                : m_view->dropHint(cue, layer, e->mimeData(),
+                                                   e->modifiers() & Qt::AltModifier, carried, child));
         }
         else
         {
@@ -306,6 +316,23 @@ public:
         setDragDropMode(QAbstractItemView::DragOnly);
         setSelectionMode(QAbstractItemView::ExtendedSelection);
     }
+    /** What a drag of @a items carries (Return / double-click use it too). */
+    QMimeData *mimeFor(const QList<QTreeWidgetItem *> &items) const { return mimeData(items); }
+    /** Return / Enter: told, with whether ⌥ was held. */
+    std::function<void(bool)> onReturn;
+
+protected:
+    void keyPressEvent(QKeyEvent *e) override
+    {
+        if ((e->key() == Qt::Key_Return || e->key() == Qt::Key_Enter) && onReturn)
+        {
+            onReturn(e->modifiers() & Qt::AltModifier);
+            e->accept();
+            return;
+        }
+        QTreeWidget::keyPressEvent(e);
+    }
+public:
 
 protected:
     QMimeData *mimeData(const QList<QTreeWidgetItem *> &items) const override
@@ -732,21 +759,19 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     connect(m_undo, &QToolButton::clicked, this, &ShowTreeView::slotUndo);
     connect(m_redo, &QToolButton::clicked, this, &ShowTreeView::slotRedo);
 
-    // The tree, inspector and Library above; the Look Editor (Programming's)
-    // under them, for the palette of the row being edited (§6, "Bottom").
-    QSplitter *vsplit = new QSplitter(Qt::Vertical, this);
-    vsplit->setObjectName("stVSplitter");
-    main->addWidget(vsplit, 1);
-    // The command line: always there, at the bottom (2026-10-17).
-    main->addWidget(m_commandBar);
-    QSplitter *split = new QSplitter(Qt::Horizontal, vsplit);
+    // Library | Tree | Editor, left to right (Branson, 2026-10-17: drags go
+    // from the Library straight into the tree beside it). The Look Editor
+    // docks under the editor column, for the palette of the row being
+    // edited; the command line stays full width at the bottom.
+    QSplitter *split = new QSplitter(Qt::Horizontal, this);
     split->setObjectName("stSplitter");
-    vsplit->addWidget(split);
+    main->addWidget(split, 1);
+    main->addWidget(m_commandBar);
+    QSplitter *vsplit = new QSplitter(Qt::Vertical, split);
+    vsplit->setObjectName("stVSplitter");
     m_lookEditor = new LookEditor(m_doc, vsplit);
     m_lookEditor->setObjectName("stLookEditor");
     vsplit->addWidget(m_lookEditor);
-    vsplit->setStretchFactor(0, 3);
-    vsplit->setStretchFactor(1, 2);
     m_lookEditor->hide();
     connect(m_lookEditor, &LookEditor::paletteChanged, this, [this](quint32 pid) {
         paletteEdited(pid, true);
@@ -755,7 +780,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         paletteEdited(pid, false);
     });
 
-    // Left: the tree
+    // Middle: the tree
     ShowTreeWidget *tree = new ShowTreeWidget(this, split);
     tree->setHint(m_hint);
     m_tree = tree;
@@ -772,6 +797,12 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         QShortcut *dupSc = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_D), m_tree);
         dupSc->setContext(Qt::WidgetShortcut);
         connect(dupSc, &QShortcut::activated, this, [this]() { duplicateSelection(); });
+    }
+    // ⌘F (or / in the tree): to the Library's filter -- type, Return adds.
+    {
+        QShortcut *findSc = new QShortcut(QKeySequence::Find, this);
+        findSc->setContext(Qt::WidgetWithChildrenShortcut);
+        connect(findSc, &QShortcut::activated, this, [this]() { focusLibraryFilter(); });
     }
     // In-place rename (Return / F2): committed, or Esc and back as it was.
     connect(m_tree, &QTreeWidget::itemChanged, this, &ShowTreeView::slotTreeItemRenamed);
@@ -791,8 +822,8 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     connect(m_tree, &QTreeWidget::customContextMenuRequested, this, &ShowTreeView::slotTreeContextMenu);
     split->addWidget(m_tree);
 
-    // Centre: the inspector
-    m_pages = new QStackedWidget(split);
+    // Right: the inspector (the page), the Look Editor under it
+    m_pages = new QStackedWidget(vsplit);
     m_pages->setObjectName("stInspector");
     m_emptyPage = new QLabel(tr("Select a cue or a layer.\n\nStart with + Production, or import a "
                                 "chaser you already have (Import chaser…)."), m_pages);
@@ -1053,9 +1084,11 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         v->addWidget(tip);
     }
     m_pages->addWidget(m_layerPage);
-    split->addWidget(m_pages);
+    vsplit->insertWidget(0, m_pages);
+    vsplit->setStretchFactor(0, 3);
+    vsplit->setStretchFactor(1, 2);
 
-    // Right: the Library
+    // Left: the Library
     QWidget *lib = new QWidget(split);
     {
         QVBoxLayout *v = new QVBoxLayout(lib);
@@ -1071,12 +1104,30 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_library->setHeaderHidden(true);
         m_library->setContextMenuPolicy(Qt::CustomContextMenu);
         connect(m_library, &QTreeWidget::customContextMenuRequested, this, &ShowTreeView::slotLibraryContextMenu);
+        // Return / double-click: what is selected acts on the tree's
+        // selection, as a drop on it would -- no dragging across.
+        static_cast<LibraryWidget *>(m_library)->onReturn = [this](bool alt) { applyLibrarySelection(alt); };
+        connect(m_library, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem *item) {
+            const int kind = item->data(0, KindRole).toInt();
+            if (kind == LibSection || kind == LibFolder)
+                return;
+            applyLibrarySelection(QApplication::keyboardModifiers() & Qt::AltModifier);
+        });
+        connect(m_library, &QTreeWidget::itemSelectionChanged, this, [this]() {
+            if (m_library->hasFocus() || m_filter->hasFocus())
+                m_hint->setText(libraryReturnHint());
+        });
+        // The filter: Return takes the first match there is (or what is
+        // selected) and adds it; ↓ goes into the list.
+        m_filter->installEventFilter(this);
         v->addWidget(m_library, 1);
     }
-    split->addWidget(lib);
+    split->insertWidget(0, lib);
+    split->insertWidget(1, m_tree);
+    split->insertWidget(2, vsplit);
     split->setStretchFactor(0, 2);
-    split->setStretchFactor(1, 3);
-    split->setStretchFactor(2, 2);
+    split->setStretchFactor(1, 2);
+    split->setStretchFactor(2, 3);
     {
         QSettings settings;
         const QVariant state = settings.value(SETTINGS_SPLITTER);
@@ -1085,6 +1136,13 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         connect(split, &QSplitter::splitterMoved, this, [split]() {
             QSettings s;
             s.setValue(SETTINGS_SPLITTER, split->saveState());
+        });
+        const QVariant editorState = settings.value(SETTINGS_EDITOR_SPLITTER);
+        if (editorState.isValid())
+            vsplit->restoreState(editorState.toByteArray());
+        connect(vsplit, &QSplitter::splitterMoved, this, [vsplit]() {
+            QSettings s;
+            s.setValue(SETTINGS_EDITOR_SPLITTER, vsplit->saveState());
         });
         for (const QString &entry : settings.value(SETTINGS_PINNED).toStringList())
         {
@@ -4492,6 +4550,83 @@ bool ShowTreeView::isHelpShown() const
     return !m_commandHelp->isHidden();
 }
 
+void ShowTreeView::focusLibraryFilter()
+{
+    m_filter->setFocus(Qt::ShortcutFocusReason);
+    m_filter->selectAll();
+    m_hint->setText(libraryReturnHint());
+}
+
+/* Where Return in the Library goes: the tree's current row -- a cue, a
+   layer of its own, or a layer carried in (by its target). */
+static void libraryTarget(const ShowTreeView *view, QTreeWidget *tree, quint32 *cue, quint32 *layer, Target *carried)
+{
+    *cue = view->currentCueId();
+    *layer = invalidId();
+    *carried = Target();
+    QTreeWidgetItem *item = tree->currentItem();
+    if (item == nullptr || *cue == invalidId())
+        return;
+    const int kind = item->data(0, ShowTreeView::KindRole).toInt();
+    if (kind == ShowTreeView::LayerNode)
+        *layer = item->data(0, ShowTreeView::IdRole).toUInt();
+    else if (kind == ShowTreeView::TrackedLayerNode)
+        *carried = view->carriedTarget(*cue, item->data(0, ShowTreeView::TargetRole).toString());
+}
+
+QString ShowTreeView::libraryReturnHint(bool separate) const
+{
+    const QList<QTreeWidgetItem *> sel = m_library->selectedItems();
+    if (sel.isEmpty())
+        return QString();
+    quint32 cue, layer;
+    Target carried;
+    libraryTarget(this, m_tree, &cue, &layer, &carried);
+    if (cue == invalidId())
+        return tr("Select a cue or a layer in the tree: Return adds the Library's selection there");
+    QScopedPointer<QMimeData> mime(static_cast<LibraryWidget *>(m_library)->mimeFor(sel));
+    if (mime.isNull() || !acceptsDrop(cue, layer, mime.data(), carried))
+        return QString();
+    return tr("Return: %1").arg(dropHint(cue, layer, mime.data(), separate, carried));
+}
+
+bool ShowTreeView::applyLibrarySelection(bool separate)
+{
+    const QList<QTreeWidgetItem *> sel = m_library->selectedItems();
+    quint32 cue, layer;
+    Target carried;
+    libraryTarget(this, m_tree, &cue, &layer, &carried);
+    if (sel.isEmpty() || cue == invalidId())
+    {
+        if (!sel.isEmpty())
+            m_hint->setText(tr("Select a cue or a layer in the tree first"));
+        return false;
+    }
+    QScopedPointer<QMimeData> mime(static_cast<LibraryWidget *>(m_library)->mimeFor(sel));
+    if (mime.isNull() || !acceptsDrop(cue, layer, mime.data(), carried))
+        return false;
+    // As a drop there: the cue stays (or the layer's cue page shows the
+    // new layer) -- the same rules, one undo step.
+    // On a cue the cue stays selected, so the next Return adds another.
+    return dropMime(cue, layer, mime.data(), separate, carried, layer == invalidId() && carried.isEmpty());
+}
+
+QString ShowTreeView::dropHintBelow(quint32 cueId, const QMimeData *mime, bool separate) const
+{
+    const CueList *list = m_st->listOfCue(cueId);
+    if (list == nullptr)
+        return QString();
+    Target t;
+    t.groups = idsFromMime(mime, FixtureGroupSource::fixtureGroupMimeType());
+    t.fixtures = idsFromMime(mime, FixtureGroupSource::fixtureMimeType());
+    t.sets = idsFromMime(mime, setMimeType());
+    if (t.isEmpty() || separate)
+        return dropHint(cueId, invalidId(), mime, separate);
+    return tr("New layer in %1: %2").arg(m_st->cueLabel(*list, list->indexOf(cueId)),
+                                          t.groups.isEmpty() && t.sets.isEmpty() ? tr("these fixtures")
+                                                                                 : m_st->targetLabel(t));
+}
+
 bool ShowTreeView::copySelection()
 {
     // Cues in list order, else the cue's own layers selected.
@@ -4660,6 +4795,47 @@ bool ShowTreeView::eventFilter(QObject *obj, QEvent *ev)
         if ((key == Qt::Key_Return || key == Qt::Key_Enter || key == Qt::Key_F2)
             && startRename())
             return true;
+    }
+    if (obj == m_tree && ev->type() == QEvent::KeyPress
+        && static_cast<QKeyEvent *>(ev)->text() == QLatin1String("/"))
+    {
+        focusLibraryFilter();
+        return true;
+    }
+    if (obj == m_filter && ev->type() == QEvent::KeyPress)
+    {
+        QKeyEvent *ke = static_cast<QKeyEvent *>(ev);
+        if (ke->key() == Qt::Key_Return || ke->key() == Qt::Key_Enter)
+        {
+            // What is selected, else the first item the filter left showing.
+            if (m_library->selectedItems().isEmpty())
+                for (QTreeWidgetItemIterator it(m_library); *it; ++it)
+                {
+                    const int kind = (*it)->data(0, KindRole).toInt();
+                    if (kind == LibSection || kind == LibFolder || (*it)->isHidden())
+                        continue;
+                    bool shown = true;
+                    for (QTreeWidgetItem *p = (*it)->parent(); p != nullptr; p = p->parent())
+                        shown &= !p->isHidden();
+                    if (!shown)
+                        continue;
+                    m_library->setCurrentItem(*it);
+                    (*it)->setSelected(true);
+                    break;
+                }
+            applyLibrarySelection(ke->modifiers() & Qt::AltModifier);
+            return true;
+        }
+        if (ke->key() == Qt::Key_Down)
+        {
+            m_library->setFocus(Qt::OtherFocusReason);
+            return true;
+        }
+        if (ke->key() == Qt::Key_Escape)
+        {
+            m_tree->setFocus(Qt::ShortcutFocusReason);
+            return true;
+        }
     }
     if (obj == m_tree && ev->type() == QEvent::KeyPress
         && static_cast<QKeyEvent *>(ev)->text() == QLatin1String(":"))

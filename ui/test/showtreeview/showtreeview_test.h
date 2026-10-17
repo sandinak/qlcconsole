@@ -85,6 +85,7 @@ private slots:
     void renameInPlace();
     void lineAimsInTheTab();
     void copyPasteAndHelp();
+    void libraryTreeEditorAndAddingWithoutDragging();
 
 private:
     quint32 dimmer(int level, const QString &name);

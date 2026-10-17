@@ -150,6 +150,19 @@ public:
     QString dropHint(quint32 cueId, quint32 layerId, const QMimeData *mime,
                      bool separate = false, const ShowTree::Target &target = ShowTree::Target(),
                      bool child = false) const;
+    /** A drop below the tree's last row, on the selected cue: "New layer
+     *  in 1.0.3 Out: Towers" (else what dropHint() says for the cue). */
+    QString dropHintBelow(quint32 cueId, const QMimeData *mime, bool separate = false) const;
+    /** Return or double-click in the Library: what is selected there acts on
+     *  the tree's selection, as a drop on it would -- on a cue: a new layer
+     *  (several: one; @a separate, ⌥: one each), a palette a cue look; on a
+     *  layer: added to it, a palette its look; functions a function layer.
+     *  One undo step. False: nothing to do. */
+    bool applyLibrarySelection(bool separate = false);
+    /** What Return in the Library would do now (the hint line says it). */
+    QString libraryReturnHint(bool separate = false) const;
+    /** ⌘F, or / in the tree: to the Library's filter. */
+    void focusLibraryFilter();
     bool acceptsDrop(quint32 cueId, quint32 layerId, const QMimeData *mime,
                      const ShowTree::Target &target = ShowTree::Target(), bool child = false) const;
     /** Any drop on (@a cueId, @a layerId or carried-in @a target), as the

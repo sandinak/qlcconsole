@@ -33,6 +33,7 @@
 #include <QLineEdit>
 #include <QLabel>
 #include <QCheckBox>
+#include <QSplitter>
 #include <QTextBrowser>
 #include <QListWidget>
 #include <QToolButton>
@@ -3201,6 +3202,102 @@ void ShowTreeView_Test::copyPasteAndHelp()
     // A misspelling says what was meant.
     QVERIFY(!view.runCommand("recrod"));
     QVERIFY2(view.commandMessage().contains("record"), qPrintable(view.commandMessage()));
+}
+
+/* Branson (2026-10-17): Library | Tree | Editor, the Look Editor under the
+   editor; a drop below the tree's last row is a new layer in the selected
+   cue; and adding without dragging -- Return / double-click in the Library
+   acts on the tree's selection, ⌘F or / goes to the filter, Return there
+   adds the first match. One undo step each; the hint says what Return does. */
+void ShowTreeView_Test::libraryTreeEditorAndAddingWithoutDragging()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    FixtureGroup *usts = group("USTs", 2, 2);
+    group("Floor", 4, 1);
+    const quint32 blue = colour(Qt::blue, "Blue");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCueNumbered(list, "1", "One");
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QSplitter *split = view.findChild<QSplitter *>("stSplitter");
+    QVERIFY(split != nullptr && split->count() == 3);
+    QVERIFY(split->widget(0)->isAncestorOf(view.library()));
+    QCOMPARE(split->widget(1), static_cast<QWidget *>(view.tree()));
+    QSplitter *editorCol = qobject_cast<QSplitter *>(split->widget(2));
+    QVERIFY(editorCol != nullptr);
+    QVERIFY(editorCol->isAncestorOf(view.lookEditor()));
+    QVERIFY(editorCol->isAncestorOf(view.findChild<QWidget *>("stInspector")));
+
+    // Below the last row: a new layer in the selected cue.
+    QTreeWidget *tree = view.tree();
+    QLabel *hint = view.findChild<QLabel *>("stDropHint");
+    QVERIFY(view.selectNode(c1));
+    const QPoint below(20, tree->viewport()->height() - 5);
+    QVERIFY(tree->itemAt(below) == nullptr);
+    QCOMPARE(dragAndDrop(tree->viewport(), below, idsMime(FixtureGroupSource::fixtureGroupMimeType(), { towers->id() }),
+                         hint), QString("New layer in 1 One: Towers"));
+    QCOMPARE(st->cue(c1)->layers.count(), 1);
+
+    // Return in the Library, a cue selected: a new layer, the cue stays.
+    QVERIFY(view.selectNode(c1));
+    QTreeWidget *lib = view.library();
+    lib->clearSelection();
+    QTreeWidgetItem *u = nullptr;
+    for (QTreeWidgetItemIterator it(lib); *it; ++it)
+        if ((*it)->text(0) == "USTs (2)" && (*it)->parent()->text(0) == "Groups")
+            u = *it;
+    QVERIFY(u != nullptr);
+    u->setSelected(true);
+    lib->setCurrentItem(u);
+    QCOMPARE(view.libraryReturnHint(), QString("Return: a new layer on USTs in 1 One"));
+    lib->setFocus();
+    QTest::keyClick(lib, Qt::Key_Return);
+    QCOMPARE(st->cue(c1)->layers.count(), 2);
+    QCOMPARE(view.currentKind(), ShowTreeView::CueNode);
+    QCOMPARE(st->undoText(), QString("Add layer"));
+    QVERIFY(st->undo());
+    QCOMPARE(st->cue(c1)->layers.count(), 1);
+
+    // A layer selected: double-click a palette -> that layer's look; a
+    // group -> added to it.
+    const quint32 layer = st->cue(c1)->layers.first().id;
+    QVERIFY(view.selectNode(layer, c1));
+    lib->clearSelection();
+    QTreeWidgetItem *b = libraryItem(lib, "Blue");
+    QVERIFY(b != nullptr);
+    b->setSelected(true);
+    emit lib->itemDoubleClicked(b, 0);
+    QVERIFY(st->cue(c1)->layer(layer)->look(KeyColour) != nullptr);
+    QVERIFY(view.selectNode(layer, c1));
+    lib->clearSelection();
+    u = nullptr;                                // the Library was rebuilt
+    for (QTreeWidgetItemIterator it(lib); *it; ++it)
+        if ((*it)->text(0) == "USTs (2)" && (*it)->parent()->text(0) == "Groups")
+            u = *it;
+    QVERIFY(u != nullptr);
+    u->setSelected(true);
+    QVERIFY(view.applyLibrarySelection());
+    QCOMPARE(st->cue(c1)->layer(layer)->target.groups, QList<quint32>({ towers->id(), usts->id() }));
+    Q_UNUSED(blue)
+
+    // Keyboard only: ⌘F, type, Return -- the first match, as a new layer.
+    QVERIFY(view.selectNode(c1));
+    tree->setFocus();
+    QTest::keyClick(tree, Qt::Key_Slash);
+    QLineEdit *filter = view.findChild<QLineEdit *>("stLibraryFilter");
+    QTRY_VERIFY(filter->hasFocus());
+    QTest::keyClicks(filter, "Floo");
+    lib->clearSelection();
+    QTest::keyClick(filter, Qt::Key_Return);
+    QCOMPARE(st->cue(c1)->layers.count(), 2);
+    QVERIFY(st->cue(c1)->layers.last().target.groups.count() == 1);
+    tree->setFocus();
+    QTest::keySequence(&view, QKeySequence::Find);
+    QTRY_VERIFY(filter->hasFocus());
 }
 
 QTEST_MAIN(ShowTreeView_Test)
