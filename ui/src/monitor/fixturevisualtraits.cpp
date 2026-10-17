@@ -468,6 +468,24 @@ static bool channelSetLiveState(QLCFixtureMode *mode, const QByteArray &v,
     if (shutterClosed)
         dimmer = 0;
 
+    /* WITHOUT A DIMMER, THE LEVEL IS IN THE COLOUR -- SAY IT ONCE.
+     *
+       Every reader draws colour x dimmer. With a dimmer channel that is right:
+       the colour channels say what mix, the dimmer how much of it. With none,
+       the level above IS the brightest emitter, and the colour carried it as
+       well -- so an RGB bar at 19% blue (0,1,48) drew as 48 x 19% = 9: black
+       on the Rig Overview while the bar on stage was plainly blue. (A Dimmer
+       look on a fixture with no dimmer channel scales its colour, so every
+       dimmed pixel bar showed it.) Hand back the hue at full, and the level
+       once, in the dimmer. */
+    if (master < 0 && !subtractiveOnly && found && dimmer > 0 && dimmer < 255)
+    {
+        const double up = 255.0 / dimmer;
+        colour = QColor(qMin(255, qRound(colour.red() * up)),
+                        qMin(255, qRound(colour.green() * up)),
+                        qMin(255, qRound(colour.blue() * up)));
+    }
+
     return true;
 }
 
