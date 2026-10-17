@@ -47,13 +47,16 @@ implementation notes and the questions below). Built: the hand-over fix,
 the engine model / cascade / bake / undo / import, the Show Tree tab and its
 help (DONE.md 2026-10-16). Handoff: SHOW_TREE_OVERNIGHT.md.
 
-- **Open for Branson** (§10): `Generated` mark on `<Function>` too?; an edit
-  to the cue on stage — show it at once or on its next GO (built: next GO)?;
-  undo shared with Programming?; gobo mapping (manual map + name match) and
-  an effect's own Gobo; DanceHysteria's Hold-0 cues 0.0.4–0.0.7 auto-follow —
-  intended?
-- **Left of P1:** gobo palettes by name per fixture definition (§3A, 10.7).
-- **Try on the rig:** GO through an imported list with effects running (the
+- **Fix pass 2026-10-17 done** (DONE.md): preview of the selected cue in
+  Design mode, several groups in one layer, Library group folders, gobos by
+  name per fixture type.
+- **Open for Branson** (§10): `Generated` mark on `<Function>` too?; undo
+  shared with Programming?; an effect's own Gobo (out of scope so far);
+  DanceHysteria's Hold-0 cues 0.0.4–0.0.7 auto-follow — intended?; a
+  preview on top of a *different* list running for real (built: allowed, as
+  Programming's preview is).
+- **Try on the rig:** the Design-mode preview while editing (and that Blind
+  mutes it); GO through an imported list with effects running (the
   hand-over keeps a shared scene's effect phase — tested on engine signals,
   not seen on stage).
 - **P2 next:** the cascade already does tracking, Block/Cue-only, Release

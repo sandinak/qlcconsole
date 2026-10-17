@@ -29,10 +29,15 @@ palettes and groups.
     so before you change it everywhere). **⋯** on a row sets it here (any palette of that kind, recent ones first,
     or a one-off level or colour), turns it **off here** (None), or clears it
     so it inherits again. *"applies to 4 of 8"* means only 4 of the layer's
-    fixtures have that attribute; the rest ignore it.
+    fixtures have that attribute (for a gobo by name: that gobo); the rest
+    ignore it.
 - **Right — the Library.** **Recent** (what you just used, one-off values
-  included), **Pinned** (right-click → Pin), and **All**: groups, palettes by
-  kind, and functions to play as they are. One filter box narrows them all.
+  included), **Pinned** (right-click → Pin), and **All**: groups in the
+  Fixture Manager's folders, palettes by kind, and functions to play as they
+  are. One filter box narrows them all — a group at any depth, or a folder by
+  its name; clearing it closes again what it opened.
+- **Top right** says what is on the rig: *"▶ On the rig: 0.0.4 SHOUT"* (see
+  [Seeing it on the rig](#seeing-it-on-the-rig)).
 
 ## Building a cue list
 
@@ -42,8 +47,11 @@ palettes and groups.
    whole number if it's free, else a point cue (0.0.4 and 0.0.5 taken →
    0.0.4.5). Cues are **never renumbered** — show control fires them by
    number.
-3. Drag **groups** from the Library onto the cue: one layer each (or select
-   them and **+ Layer**). Fixtures dragged together make one layer.
+3. Drag **groups** from the Library onto the cue. Groups (and fixtures)
+   dragged together make **one layer** on all of them; hold **⌥** as you drop
+   for a layer per group. Or select them and **+ Layer**.
+   Drop a group on a **layer** to add it to that layer. Right-click a layer
+   on several groups → **Remove &lt;group&gt; from layer** takes one out.
 4. Drag **palettes** onto a layer to set them, or onto the **cue** to set a
    *cue look* — it reaches every layer of the cue that doesn't set that
    attribute itself. Before you let go, the line at the top right says what
@@ -54,6 +62,26 @@ palettes and groups.
    stays); hold **⌥** as you drop to make the other cue **include** it.
 
 Every change is one step of **Undo** (⌘Z) / **Redo** (⇧⌘Z) in this tab.
+
+A layer stays one layer when its groups change: added to in a cue it
+tracked into, it takes the tracked layer's place and keeps its values;
+added to where it is set, the change carries on to the cues it tracks into.
+
+## Seeing it on the rig
+
+In **Design** mode, selecting a cue — or a layer in it — plays that cue on
+the rig, as the Programming tab plays its scene, and every change you make
+to it shows at once. Selecting another cue moves the preview there (a layer
+both cues share keeps running: no re-fade). Selecting the list, nothing, or
+leaving the tab stops it. **Blind** mutes it like anything else, and the
+status-bar power estimate counts it.
+
+In **Live** (Operate) mode, editing is blind: selecting a cue doesn't touch
+the stage, and your changes reach it when the cue plays (on GO).
+
+While a cue list is **running for real** (footer GO, a Virtual Console Cue
+List), its cues aren't previewed — the show wins; a change shows the next
+time that cue plays. The preview comes back when the list stops.
 
 ## What wins
 
@@ -113,3 +141,19 @@ production; the chaser itself is not touched.
 ⋯ → **One-off level…** or **One-off colour…** sets a value without making a
 palette for it. It shows in **Recent**; right-click it there → **Make
 reusable…** to name it and file it with your palettes.
+
+## Gobos by name
+
+A gobo look can mean *the same gobo* on fixtures with different wheels.
+Open it in the Look Editor (✎), pick the gobo on one type's wheel
+(**Wheel of** chooses the type): the look takes that gobo's name ("Dots"),
+and every other type plays **its own** gobo of that name. A type whose
+wheel has none ignores the look, and the row's *"applies to"* counts only
+the ones that have it. The editor lists, per type, what it plays.
+
+- Pick a slot on another type's wheel and it is kept for that type — useful
+  when the name differs ("Dot Ring" on one, "Dots" on the other).
+- **Gobo name** changes the name. Case, spaces, `-` and `_` don't matter. A
+  gobo's picture names it too, with its folder: `ClayPaky/gobo00006`.
+- A gobo look that was never edited this way plays one DMX value on every
+  fixture, as before.

@@ -686,6 +686,7 @@ the end.
             <Look Key="Beam.Gobo" None="1"/>                     <!-- off here -->
           </Layer>
           <Layer ID="6" Function="33"/>                          <!-- an opaque function layer -->
+          <Layer ID="8" Groups="19,20" ContinuesGroups="19"/>    <!-- two groups; carries on from the tracked 19 -->
         </Cue>
       </CueList>
     </Production>
@@ -774,9 +775,11 @@ the end.
 - **Orphans** (scenes, collections, chasers nothing uses any more) are deleted
   only when not running; a running one is left for a later bake, so an edit
   never pulls a look out from under the show (tested).
-- **Limitation:** an edit to the cue that is *on stage* shows the next time
-  that cue plays — the running Collection keeps the members it started with.
-  Safe; whether to re-take the cue live is open (below).
+- **An edit to the cue on stage** (resolved 2026-10-17, §10.8): in
+  **Design** mode the selected cue plays as a preview and every bake re-takes
+  it, so an edit shows at once. In **Live** (Operate), and while the list
+  runs for real, it shows the next time the cue plays (GO): the running
+  Collection keeps the members it started with — editing live is blind.
 
 ### 10.5 Undo
 
@@ -844,21 +847,93 @@ one sequence and back to 0.0.2 (Loop) — the import keeps that.
   once in the palette editor for a new type), else (2) a name match against
   the definition's Gobo capabilities (capability name or gobo resource file
   name, case- and space-insensitive). No match: not applied, and counted out
-  of "applies to". Not built tonight.
+  of "applies to". **Built 2026-10-17** (§10.8).
 - **An effect's own Gobo:** today's stack rule says a Gobo is never an
   effect's, wherever it sits. P1 supports an effect's own Colour/Dimmer only;
   a Gobo of its own needs the engine rule changed (open).
+
+### 10.8 Fix pass (2026-10-17)
+
+Branson tried P1; four fixes, all approved.
+
+- **Preview (Design mode).** `ShowTreeController::previewCue()/stopPreview()`;
+  the view calls it on selection (a cue, or a layer / tracked layer in one)
+  while the tab is on screen, and stops it on leaving the tab, selecting a
+  list, a production or nothing. The preview runs the cue Collection's
+  **members** (generated scenes, opaque functions), not the Collection, under
+  its own parent (`FunctionParent(AutoVCWidget, 0xFFFFFF53)`):
+  - a scene two previewed cues share is never let go of, so moving the
+    preview is the hand-over (no re-fade, effects keep their phase);
+  - after every bake the preview is synced as a start/stop diff (start new
+    members first, then stop the ones gone) — no stop/start of what stays,
+    so none of the MasterTimer start/stop race Programming's
+    `refreshPreview()` warns about. Bakes still never change a running
+    scene's content (10.4), so `m_valueListMutex` exposure is unchanged;
+  - stopping removes only that parent: a chaser's collection, a VC button or
+    Programming holding the same scene keeps it (a Master parent would clear
+    them all).
+  Scenes the preview let go of are still running for a tick, so a bake 250 ms
+  later sweeps them (a QTimer, stopped on reset/load).
+  **Safe behaviour while the list runs for real:** a cue whose own list's
+  chaser is running is *not* previewed (state `ListRunning`; the header says
+  so), and a preview gives way when its list starts (MasterTimer
+  `functionStarted`, queued) and comes back when it stops. A preview *on top
+  of a different* list running for real is allowed, as Programming's preview
+  is (open below). **Live (Operate):** state `NotDesign`, nothing plays;
+  into Design, the app has stopped everything, so the preview starts afresh.
+  Blind is the global output mute and covers the preview; the status-bar
+  power estimate reads what is lit in Design mode on any tab, so it covers
+  the preview with no change.
+- **Several groups in one layer.** A drop of several groups (and fixtures)
+  on a cue is one layer; ⌥ a layer per group; groups on a layer join its
+  target; "Remove X from layer" (never the last). `setLayerTarget()` keeps
+  the layer one layer: if in that cue it took a carried-in layer's place,
+  it remembers that target (`Layer.continues`, XML `ContinuesGroups` /
+  `ContinuesFixtures`) and the resolver lets it take that layer's place and
+  values under the new target; the same layer set again in the cues it
+  tracks into (an own layer that took the tracked one's place) is
+  retargeted in the same undo step. A Block cue's own layer is a fresh layer
+  and is left alone. Tests: two groups track across cues in any order;
+  a group added to a tracked layer; added where the layer starts.
+- **Library groups in folders** — FixtureGroup `path`, nested as in the
+  Fixture Manager; open folders remembered by path; the filter matches a
+  group at any depth or a group folder by name, and clearing it restores
+  the folders' open state from before it was typed.
+- **Gobo by name** (10.7). `QLCPalette::goboName()` (XML `GoboName`) and
+  `goboValues()` (per "Manufacturer/Model", XML `<GoboValue Fixture Value>`);
+  `goboValueFor(fixture)`: picked slot → the gobo capability of that name on
+  the channel the look writes to (the first gobo wheel), its middle value;
+  a picture counts as `Folder/file` (`ClayPaky/gobo00006`: Chauvet's own
+  `gobo00006` is other glass, so the file name alone is not enough) → else
+  not applied. Names compare ignoring case, spaces, `-` and `_`; exact
+  otherwise (so "Dots" never picks "Dots Shake"). **An unnamed gobo look
+  plays its one value everywhere, as before** — existing shows unchanged
+  until the look is edited. The Look Editor names the look from the first
+  pick (or from a change of the same type's pick), keeps every pick per type,
+  has a Gobo name field and a per-type "what it plays" list. The
+  programmer's back-derive of a named gobo sets the slot for that fixture's
+  type. `lookReach(target, look)` counts a gobo by name per fixture.
+  Not done: matching a swapped glass (MonitorProperties `goboSwap`, a
+  per-unit property not safe to read on the DMX path), a second gobo wheel,
+  and an effect's own Gobo (out of scope).
 
 ### Open for Branson
 
 1. **`Generated` mark on `<Function>`** as well as in `<ShowTree>`? (10.2;
    built without, to leave function.cpp alone.)
-2. **Editing the cue on stage:** show the change at once (re-take the cue
-   through the hand-over, or teach Collection to sync its running members) or
-   on its next GO (built: next GO)?
+2. ~~**Editing the cue on stage**~~ — **resolved 2026-10-17:** Design mode
+   shows it at once (the preview re-takes the cue after every bake); Live is
+   blind until GO (10.4, 10.8).
 3. **Undo shared with Programming?** (built: the tree's own.) And should tree
    undo cover palette value edits made from the tree's Look Editor?
-4. **Gobo mapping:** manual map + name match as in 10.7 — agree before it is
-   built? And an effect's own Gobo (engine rule change)?
+4. ~~**Gobo mapping**~~ — **resolved 2026-10-17:** manual map + name match,
+   built (10.8). Still open: an effect's own Gobo (engine stack rule change;
+   out of scope of the fix pass).
 5. **Hold 0 in imported lists:** DanceHysteria's 0.0.4–0.0.7 auto-follow
    (Hold 0). Intended? The import keeps it either way.
+6. **A preview on top of another list running for real** (new, 10.8): built
+   like Programming's preview — allowed, the two mix (HTP intensity, LTP the
+   rest). Alternative: no preview while *any* Show Tree list runs.
+7. **Gobo names that differ only by suffix** (new): matching is exact after
+   ignoring case/space/-/_, so "Dot" ≠ "Dots"; the per-type pick covers it.
+   Fuzzier matching would risk "Dots" picking "Dots Shake".

@@ -6,6 +6,33 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-17 — Show Tree fix pass: see the cue, layers on several groups, folders, gobos by name *(on feat/show-tree, not merged)*
+
+Branson tried P1 and asked for four fixes (SHOW_TREE_OVERNIGHT.md, "Fix
+pass"; SHOW_TREE_DESIGN.md §10.8).
+
+- **Selecting a cue plays it on the rig** (Design mode, tab on screen), as
+  Programming's preview does; every bake re-takes it, so edits show at once.
+  The preview runs the cue's members under a parent of its own
+  (`ShowTreeController::previewParent()`), so a scene shared with the next
+  previewed cue runs on, and stopping it never stops a chaser's or a VC
+  widget's. Not while the cue's own list runs for real (it gives way when the
+  list starts, comes back when it stops). Live (Operate): blind, edits on GO.
+  Header says what is on the rig. Power chip already covers it.
+- **Several groups in one layer**: a multi-group drop is one layer (⌥: one
+  each), a group dropped on a layer joins it, "Remove X from layer". A
+  layer stays one layer when its target changes (`Layer.continues`; the
+  same layer in the cues it tracks into follows).
+- **Library groups in the Fixture Manager's folders**, nested; open folders
+  kept by path; the filter works at any depth and by folder name.
+- **Gobos by name per fixture type** (§10.7): `QLCPalette::goboName()`,
+  per-definition `goboValues()`, `goboValueFor()`; Look Editor names the look
+  from a pick and lists what each type plays; "applies to N of M" counts it.
+  Unnamed gobo looks play as before.
+- Tests: `engine/test/showtree` (preview ×5, layer target ×3, gobo by name),
+  `ui/test/showtreeview` (preview, drops on a layer, folders, gobo in the
+  Look Editor). Not tried on the rig.
+
 ### 2026-10-16 — Show Tree P1: one tree for a show *(on feat/show-tree, not merged)*
 
 [SHOW_TREE_DESIGN.md](SHOW_TREE_DESIGN.md) (§10: implementation notes).
@@ -36,7 +63,7 @@ chaser that play it are generated. Handoff: SHOW_TREE_OVERNIGHT.md.
   under it (✎ on a row). Help: show-tree.md.
   Tests: `ui/test/showtreeview` (+ `QLC_SHOWTREE_SHOW`/`_SHOT` pictures a
   real show offscreen).
-- Not yet: gobo name mapping (TODO.md). Not tried on the rig.
+- Gobo name mapping: done in the 2026-10-17 fix pass. Not tried on the rig.
 
 ### 2026-10-16 — A look's Speed and Spread survive picking an effect; Speed Masters window closes cleanly *(fix/speedmaster-dblclick-reset)*
 

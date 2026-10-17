@@ -16,6 +16,15 @@ The latest changes, newest first. Each links to the guide with the detail.
   GO (no re-fade, effects keep their place). **Import chaser…** turns a
   chaser you have into a cue list that plays exactly as it did. See
   [Show Tree](show-tree.md).
+- **See the cue you're editing.** In Design mode, selecting a cue in the
+  Show Tree plays it on the rig and every edit shows at once; in Live it
+  stays blind until GO. Several groups dropped together make one layer (⌥ for
+  a layer each), a group dropped on a layer joins it, and the Library shows
+  groups in the Fixture Manager's folders. See
+  [Seeing it on the rig](show-tree.md#seeing-it-on-the-rig).
+- **Gobo looks by name.** A gobo look picked on one fixture type's wheel
+  plays the gobo of the same name on every other type's own wheel; types
+  without it ignore it. See [Gobos by name](show-tree.md#gobos-by-name).
 - **A scene two cues share no longer re-fades on GO.** A cue list stepping
   from one collection to another that holds the same scene (or the collection
   before it) now keeps that scene running instead of stopping and starting
