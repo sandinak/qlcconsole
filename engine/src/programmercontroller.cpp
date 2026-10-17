@@ -43,6 +43,9 @@
 #include "chaser.h"
 #include "chaseraction.h"
 #include "collection.h"
+#include "show.h"
+#include "track.h"
+#include "showfunction.h"
 #include "qlcpalette.h"
 #include "qlcphysical.h"
 #include "qlcchannel.h"
@@ -3185,4 +3188,94 @@ quint32 ProgrammerController::routeProgrammerEditByChannelType(int qlcChannelGro
 
     // Return a valid id so VCSlider knows the edit was taken.
     return (owningSceneId != Function::invalidId()) ? owningSceneId : pal->id();
+}
+
+/*****************************************************************************
+ * Where is this used
+ *****************************************************************************/
+
+QList<ProgrammerController::Usage> ProgrammerController::paletteUsage(quint32 pid) const
+{
+    QList<Usage> uses;
+    foreach (Function *f, m_doc->functions())
+    {
+        const Scene *s = qobject_cast<const Scene*>(f);
+        if (s == NULL)
+            continue;
+        const QList<quint32> looks = s->palettes();
+        for (int i = 0; i < looks.size(); i++)
+            if (looks.at(i) == pid)
+                uses << Usage{ Usage::SceneLook, s->id(), s->name(), i + 1, QString() };
+    }
+    foreach (QLCPalette *p, m_doc->palettes())
+    {
+        if (p == NULL || p->id() == pid)
+            continue;
+        const QMap<QString, quint32> binds = p->effectPaletteBindings();
+        for (auto it = binds.constBegin(); it != binds.constEnd(); ++it)
+            if (it.value() == pid)
+                uses << Usage{ Usage::EffectBinding, p->id(), p->name(), 0, it.key() };
+    }
+    return uses;
+}
+
+QList<ProgrammerController::Usage> ProgrammerController::functionUsage(quint32 fid) const
+{
+    QList<Usage> uses;
+    foreach (Function *f, m_doc->functions())
+    {
+        if (f == NULL || f->id() == fid)
+            continue;
+        if (const Collection *c = qobject_cast<const Collection*>(f))
+        {
+            if (c->functions().contains(fid))
+                uses << Usage{ Usage::CollectionMember, c->id(), c->name(), 0, QString() };
+        }
+        else if (const Chaser *ch = qobject_cast<const Chaser*>(f))
+        {
+            const QList<ChaserStep> steps = ch->steps();
+            for (int i = 0; i < steps.size(); i++)
+                if (steps.at(i).fid == fid)
+                    uses << Usage{ Usage::ChaserStep, ch->id(), ch->name(), i + 1, QString() };
+        }
+        else if (const Show *sh = qobject_cast<const Show*>(f))
+        {
+            foreach (Track *trk, sh->tracks())
+            {
+                if (trk == NULL)
+                    continue;
+                foreach (ShowFunction *sf, trk->showFunctions())
+                    if (sf != NULL && sf->functionID() == fid)
+                        uses << Usage{ Usage::ShowItem, sh->id(), sh->name(), 0, trk->name() };
+            }
+        }
+    }
+    return uses;
+}
+
+QStringList ProgrammerController::usageLines(const QList<Usage> &uses)
+{
+    QStringList lines;
+    for (const Usage &u : uses)
+    {
+        switch (u.kind)
+        {
+        case Usage::SceneLook:
+            lines << tr("Scene “%1” — look %2").arg(u.ownerName).arg(u.position);
+            break;
+        case Usage::EffectBinding:
+            lines << tr("Effect look “%1” — its “%2” slot").arg(u.ownerName, u.slot);
+            break;
+        case Usage::CollectionMember:
+            lines << tr("Collection “%1”").arg(u.ownerName);
+            break;
+        case Usage::ChaserStep:
+            lines << tr("Chaser “%1” — step %2").arg(u.ownerName).arg(u.position);
+            break;
+        case Usage::ShowItem:
+            lines << tr("Show “%1” — track “%2”").arg(u.ownerName, u.slot);
+            break;
+        }
+    }
+    return lines;
 }

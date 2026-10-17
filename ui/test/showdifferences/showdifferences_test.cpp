@@ -42,6 +42,23 @@
 
 namespace
 {
+    /* The user folder is under HOME on macOS and Linux and USERPROFILE on
+       Windows (QLCFile::userDirectory): point both, or on Windows the test
+       reads the real user's definitions. */
+    void setHome(const QString &home)
+    {
+        qputenv("HOME", home.toUtf8());
+        qputenv("USERPROFILE", home.toUtf8());
+    }
+
+    void restoreHome(const QByteArray &home, const QByteArray &profile)
+    {
+        qputenv("HOME", home);
+        if (profile.isEmpty())
+            qunsetenv("USERPROFILE");
+        else
+            qputenv("USERPROFILE", profile);
+    }
     QByteArray definition(const QString &note)
     {
         return QString("<?xml version='1.0' encoding='UTF-8'?>\n<!DOCTYPE FixtureDefinition>\n"
@@ -78,7 +95,7 @@ namespace
     /* A computer with these of its own, and a show open in it. */
     Doc *computer(QObject *parent, const QString &home, const QByteArray &def, const QByteArray &js)
     {
-        qputenv("HOME", home.toUtf8());
+        setHome(home);
         if (!def.isEmpty())
             write(QLCFixtureDefCache::userDefinitionDirectory().absoluteFilePath("Test-Maker-Bar.qxf"), def);
         if (!js.isEmpty())
@@ -164,12 +181,13 @@ namespace
 void ShowDifferences_Test::initTestCase()
 {
     m_realHome = qgetenv("HOME");
+    m_realProfile = qgetenv("USERPROFILE");
     ShowEmbedding::setDeleteInsteadOfTrash(true);
 }
 
 void ShowDifferences_Test::cleanupTestCase()
 {
-    qputenv("HOME", m_realHome);
+    restoreHome(m_realHome, m_realProfile);
     ShowEmbedding::setDeleteInsteadOfTrash(false);
 }
 
@@ -196,7 +214,7 @@ void ShowDifferences_Test::theFooterSaysWhatCameWithTheShow()
     QVERIFY(QFile::exists(QLCFixtureDefCache::userDefinitionDirectory().absoluteFilePath("Test-Maker-Bar.qxf")));
     delete doc;
     AppUtil::updateShowEmbeddingStatus(nullptr);
-    qputenv("HOME", m_realHome);
+    restoreHome(m_realHome, m_realProfile);
 }
 
 void ShowDifferences_Test::reviewSwitchesTheCompatibleAndKeepsTheRest()
@@ -227,7 +245,7 @@ void ShowDifferences_Test::reviewSwitchesTheCompatibleAndKeepsTheRest()
     AppUtil::updateShowEmbeddingStatus(doc);
     QVERIFY(entry("embedded.differ").key.isEmpty());
     delete doc;
-    qputenv("HOME", m_realHome);
+    restoreHome(m_realHome, m_realProfile);
 }
 
 /* The app itself: Save as .qlcc carries the show's own definitions, .qxw
@@ -235,7 +253,7 @@ void ShowDifferences_Test::reviewSwitchesTheCompatibleAndKeepsTheRest()
 void ShowDifferences_Test::theAppCarriesThemInAQlccOnly()
 {
     QTemporaryDir root;
-    qputenv("HOME", root.filePath("A").toUtf8());
+    setHome(root.filePath("A"));
     write(QLCFixtureDefCache::userDefinitionDirectory().absoluteFilePath("Test-Maker-Bar.qxf"), definition("A"));
     App *app = new App();
     app->init();
@@ -271,7 +289,7 @@ void ShowDifferences_Test::theAppCarriesThemInAQlccOnly()
     app->clearDocument();
     QVERIFY(entry("embedded.differ").key.isEmpty());
     delete app;
-    qputenv("HOME", m_realHome);
+    restoreHome(m_realHome, m_realProfile);
 }
 
 QTEST_MAIN(ShowDifferences_Test)

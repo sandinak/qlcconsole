@@ -20,6 +20,9 @@
 #include <QtTest>
 #include <QThread>
 #include <atomic>
+#if defined(Q_OS_WIN)
+#include <windows.h>
+#endif
 
 #include "genericfader_test.h"
 #include "qlcfixturemode.h"
@@ -138,6 +141,35 @@ void GenericFader_Test::writeZeroFade()
     QCOMPARE(ua[0]->preGMValues()[15], (char) 0);
     fader->write(ua[0]);
     QCOMPARE(ua[0]->preGMValues()[15], (char) 255);
+}
+
+void GenericFader_Test::anOverride16BitChannelWritesBothBytes()
+{
+    // A fader handling secondary channels holds a 16-bit channel (coarse +
+    // fine) in one FadeChannel. With the Override flag both bytes must reach
+    // the universe, MSB at the first address and LSB at the next -- not only
+    // the low byte at the coarse address.
+    QList<Universe*> ua = m_doc->inputOutputMap()->universes();
+    QSharedPointer<GenericFader> fader = ua[0]->requestFader();
+
+    FadeChannel fc(m_doc, 0, 5);
+    fc.addChannel(6);
+    QCOMPARE(fc.channelCount(), 2);
+    fc.setStart(0x1234);
+    fc.setCurrent(0x1234);
+    fc.setTarget(0x1234);
+    fc.setFadeTime(0);
+    fc.addFlag(FadeChannel::Override);
+    fader->add(fc);
+
+    // Something lower in the universe that Override has to replace.
+    ua[0]->write(15, 0xff);
+    ua[0]->write(16, 0xff);
+
+    fader->write(ua[0]);
+    QCOMPARE(uchar(ua[0]->preGMValues()[15]), uchar(0x12));
+    QCOMPARE(uchar(ua[0]->preGMValues()[16]), uchar(0x34));
+    ua[0]->dismissFader(fader);
 }
 
 void GenericFader_Test::writeLoop()
@@ -354,6 +386,43 @@ void GenericFader_Test::aChannelBeingSetUpStaysPutWhileTheUniverseWrites()
     delete universe;
 
     QCOMPARE(moved, 0);
+}
+
+/* Faders are made and dropped all the time -- a scene asks for one per
+   universe each time it starts. With the channel lock a std::recursive_mutex
+   under MinGW, each one left a kernel Event (and a heap block) behind:
+   libstdc++ never destroys that mutex, and winpthreads makes both on its
+   first lock. A stress show leaked ~5000 handles a second. The handle count
+   is Windows' to give; elsewhere this just churns faders. */
+void GenericFader_Test::aFaderLeavesNothingBehind()
+{
+    QList<Universe*> ua = m_doc->inputOutputMap()->universes();
+    QVERIFY(ua.count() > 0);
+    Universe *uni = ua.at(0);
+
+    auto churn = [&](int n) {
+        for (int i = 0; i < n; ++i)
+        {
+            QSharedPointer<GenericFader> fader(new GenericFader());
+            {
+                GenericFader::ChannelRef fc = fader->getChannelFader(m_doc, uni, Fixture::invalidId(), 100);
+                fc->setTarget(uchar(i));
+            }
+            fader->write(uni);   // the universe thread's lock, too
+        }
+    };
+
+    churn(100);   // whatever is made once, on first use
+#if defined(Q_OS_WIN)
+    DWORD before = 0, after = 0;
+    QVERIFY(GetProcessHandleCount(GetCurrentProcess(), &before));
+#endif
+    churn(5000);
+#if defined(Q_OS_WIN)
+    QVERIFY(GetProcessHandleCount(GetCurrentProcess(), &after));
+    QVERIFY2(after < before + 100,
+             qPrintable(QString("handles %1 -> %2 over 5000 faders").arg(before).arg(after)));
+#endif
 }
 
 QTEST_APPLESS_MAIN(GenericFader_Test)

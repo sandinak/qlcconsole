@@ -46,7 +46,14 @@ written, known issues included.
 
 - **Windows: engine ticks slow on heavy shows** — on the scaled soak show
   (94 universes, 2560 pixel fixtures) the tick can't keep its rate on
-  Windows; being fixed on `fix/win-tick-perf`. In CHANGELOG known issues.
+  Windows. `fix/win-tick-perf` (merged): the universe threads' per-tick
+  qDebug formatting held their fader locks (68 ms mean tick, 660% CPU on the
+  VM), and MinGW's std::recursive_mutex leaked a kernel Event per fader
+  (~5000 handles/s). GenericFader uses QRecursiveMutex on Windows now: STRESS
+  show on the VM at 8.1 ms / 0.2% over / 287% CPU, handles flat at ~1600
+  (Linux on ender: 2.3 ms / ~165%). What's left is ordinary engine work
+  (Scene::processValue, GenericFader::write). Still in CHANGELOG known issues
+  until a heavy show is soaked on Windows.
 - **The STRESS show is too heavy for the Windows 10 VM** — soak the VM
   with a lighter show; heavy-show Windows numbers want real hardware.
 - **macOS: the on-screen app's memory grows** — about 50 MB/h in the
@@ -57,18 +64,15 @@ written, known issues included.
 - **WLED config check: log noise** — reported from the soak logs (where
   it logs from is not yet pinned down); find what logs it and how often,
   and quiet it.
-- **Windows: remaining test failures** — the Windows CI test step is
-  informational (`continue-on-error`). Failing at the last count (126 of
-  136 binaries pass): qlcfixturedefcache (definitionSourceFile vs relPath
-  -- path form), rgbscript (`scriptName.toLower()`), addfixture
-  rememberExpanded, functionselection rememberFilter/constFilter,
-  programmingguide (these three look like QSettings persisting in the
-  registry between runs), monitor theInventoryButtonShowsAndHidesThePanel,
-  networkreportdialog saveCsv (a "locked" dir is writable on Windows),
-  showcontrol_ui OSC listener (firewall/port on the runner?), speedmasters
-  panel blink timing, lookeditor segfault (exit 139). mastertimer
-  startStopFunction failed once and passed once -- timing. Re-count
-  against the current branch before fixing.
+- **Windows: make the CI test step fail the job** — all 142 test binaries
+  pass on Windows CI since `fix/win-tests-and-nits` (run 38938082831); the
+  step is still informational (`continue-on-error`) -- make it fail the job
+  once a few more runs stay green. The failures were QSettings with no
+  organization name (every UI test now gets its own INI file,
+  ui/test/common/testsettings.cpp), USERPROFILE not set alongside HOME, mixed
+  '\\' separators in system fixture paths, and a read-only folder Windows
+  ignores. lookeditor's segfault (exit 139) went away with the settings
+  change; its exact cause was not pinned down.
 - **Windows leftovers** — not code-signed (SmartScreen warns); ~95 MB
   installer, mostly ffmpeg codec DLLs from Qt Multimedia (trim if it
   matters); `QLCIOPlugin` signals are connected by member pointer from the
@@ -78,6 +82,13 @@ written, known issues included.
   associations, and opening a .qlcc whose definitions the VM lacks.
 
 ## Needs the real rig / hardware
+
+- **Re-check the Oppsk wall-washer readings (2026-10-16)** — the 24 bars in
+  DanceHysteria-0.4 carry Full 12.3 A / Half 2.7 / Standby 0.4 (White 6.6,
+  R/G/B 2.3) against a definition rated 100 W: at 120 V that is 1.48 kW a
+  bar at full and 48 W dark, 9.6 A for the 24 doing nothing. A DC-side or
+  whole-chain reading would explain it; re-measure one bar on its mains lead.
+  The V-Show PL-4003 definition has no power at all (now guessed at 50 W).
 
 - **Rig test pass** — run `RIG_TEST_PLAN.md`, fix any ❌ (the gate on the
   freeze list).
@@ -569,6 +580,16 @@ rig edits, bulk repatching, cross-show consistency checks.
   the existing readiness indicator (`daeeb97d7`), or a footer chip. Probably
   the first — it is a per-patch-row fact.
 
+
+- **Verify node IP setting (ArtIpProg) on a real node (2026-10-16)** — built on
+  `fix/artnet-unconfigured-nodes` (see DONE.md 2026-10-16), tested only against
+  a sink. On the rig: a factory-fresh node, Connections → **Rescan** (does it
+  appear amber? if not, add the alias the docs give and Rescan again) →
+  right-click → **Set node IP address…** → Ask the node, then Apply. Watch
+  with `tools/artnetprobe --listen` from another machine if it misbehaves.
+  Open: whether the limited-broadcast poll really leaves by the named
+  interface on macOS/Windows (IP_PKTINFO), and whether nodes answer
+  ArtIpProg from the old or new address (both are accepted).
 
 - **Art-Net node configuration (ArtAddress) — send path built and proven, but
   no node here applies it (2026-08-26)** — `artnet-config.py` at the repo root

@@ -9,6 +9,7 @@
       http://www.apache.org/licenses/LICENSE-2.0.txt
 */
 
+#include <QNetworkAccessManager>
 #include <QJsonDocument>
 #include <QTcpServer>
 #include <QTcpSocket>
@@ -89,6 +90,24 @@ private:
     }
     QHash<QTcpSocket *, QByteArray> m_buffer;
 };
+
+QStringList s_messages;
+QtMessageHandler s_previousHandler = nullptr;
+
+void collectMessage(QtMsgType type, const QMessageLogContext &context, const QString &msg)
+{
+    s_messages << msg;
+    if (s_previousHandler != nullptr)
+        s_previousHandler(type, context, msg);
+}
+
+int messagesWith(const QString &text)
+{
+    int n = 0;
+    foreach (const QString &m, s_messages)
+        n += m.contains(text) ? 1 : 0;
+    return n;
+}
 
 QJsonObject liveCfg(bool en, int port, int uni, int addr, int mode)
 {
@@ -218,6 +237,58 @@ void WledConfigCheck_Test::aMismatchIsFoundShownAndFixed()
         still = still || e.key == "wled.config";
     QVERIFY(!still);
     QVERIFY(changed.count() >= 2);
+}
+
+void WledConfigCheck_Test::anUnreachableDeviceIsSaidOnceAndNeverRead()
+{
+    /* On the Linux soak a WLED that was switched off logged "QIODevice::read
+       (QNetworkReplyHttpImpl): device not open" every 30 s: each failed reply
+       was read. Now it is not read, and going quiet is said once -- and
+       coming back once. A port nothing listens on refuses at once. */
+    quint16 port = 0;
+    {
+        QTcpServer probe;
+        QVERIFY(probe.listen(QHostAddress::LocalHost));
+        port = probe.serverPort();
+    }
+    const QString ip = QString("127.0.0.1:%1").arg(port);
+    Fixture *fx = lantern(m_doc, ip, Fixture::WledTransport, "Effect (15ch)");
+    QVERIFY(fx != nullptr);
+    QVERIFY(m_doc->addFixture(fx));
+
+    WledConfigCheck check(m_doc);
+    QNetworkAccessManager *nam = check.findChild<QNetworkAccessManager *>();
+    QVERIFY(nam != nullptr);
+    QSignalSpy finished(nam, &QNetworkAccessManager::finished);
+
+    s_messages.clear();
+    s_previousHandler = qInstallMessageHandler(collectMessage);
+    auto restore = qScopeGuard([]() { qInstallMessageHandler(s_previousHandler); });
+
+    for (int i = 1; i <= 3; ++i)
+    {
+        check.checkNow();
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), i, 10000);
+    }
+    QVERIFY(check.finding(fx->id()).problems.isEmpty());   // silent is not misconfigured
+    QCOMPARE(messagesWith("device not open"), 0);
+    QCOMPARE(messagesWith("does not answer"), 1);
+    QCOMPARE(messagesWith("answers again"), 0);
+
+    // Back on the network: said once, and read.
+    FakeWled wled;
+    if (!wled.listen(QHostAddress::LocalHost, port))
+        QSKIP("the port was taken in the meantime");
+    wled.cfg = liveCfg(true, 5568, 1, 1, 4);
+    for (int i = 4; i <= 5; ++i)
+    {
+        check.checkNow();
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), i, 10000);
+    }
+    QVERIFY(!check.finding(fx->id()).problems.isEmpty());
+    QCOMPARE(messagesWith("answers again"), 1);
+    QCOMPARE(messagesWith("does not answer"), 1);
+    QCOMPARE(messagesWith("device not open"), 0);
 }
 
 QTEST_MAIN(WledConfigCheck_Test)

@@ -132,8 +132,12 @@ SpeedMastersPanel::SpeedMastersPanel(Doc *doc, QWidget *parent)
         r.name->setMinimumWidth(110);
         grid->addWidget(r.name, g, 1);
         connect(r.name, &QLineEdit::editingFinished, this, [this, i]() {
-            m_doc->speedMasters()->setName(i, m_rows[i].name->text().trimmed());
-            m_doc->setModified();
+            // Also on just leaving the field: only a new name is an edit.
+            SpeedMasters *sm = m_doc->speedMasters();
+            const QString before = sm->name(i);
+            sm->setName(i, m_rows[i].name->text().trimmed());
+            if (sm->name(i) != before)
+                m_doc->setModified();
         });
 
         r.source = new QComboBox(this);
@@ -213,6 +217,28 @@ SpeedMastersPanel::SpeedMastersPanel(Doc *doc, QWidget *parent)
     m_lightTimer->setInterval(30);
     connect(m_lightTimer, &QTimer::timeout, this, &SpeedMastersPanel::tickLights);
     m_lightTimer->start();
+}
+
+SpeedMastersPanel::~SpeedMastersPanel()
+{
+    /* Its children outlive this body: a Name field that still has focus
+       loses it as they go and says "edited" -- into a panel already gone
+       (a Qt assertion; a crash without one). Keep a name typed but not yet
+       left, then let the fields go quietly. */
+    for (int i = 0; i < SpeedMasters::MaxCount; ++i)
+    {
+        QLineEdit *name = m_rows[i].name;
+        if (name == nullptr)
+            continue;
+        name->disconnect(this);
+        if (name->isModified() && m_doc != nullptr)
+        {
+            const QString before = m_doc->speedMasters()->name(i);
+            m_doc->speedMasters()->setName(i, name->text().trimmed());
+            if (m_doc->speedMasters()->name(i) != before)
+                m_doc->setModified();
+        }
+    }
 }
 
 SpeedMastersPanel *SpeedMastersPanel::open(Doc *doc, QWidget *parent, int focus)

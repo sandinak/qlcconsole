@@ -46,6 +46,7 @@ private slots:
     void writeRelative();
     void aWritePastTheEndKeepsToTheUniverse();
     void reset();
+    void faderPriorityMovesBothWays();
 
     void loadEmpty();
     void loadPassthroughTrue();

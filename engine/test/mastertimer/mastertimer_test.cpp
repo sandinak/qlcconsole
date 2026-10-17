@@ -18,6 +18,8 @@
 */
 
 #include <QtTest>
+#include <future>
+#include <chrono>
 
 #define private public
 #include "mastertimer_test.h"
@@ -521,6 +523,23 @@ void MasterTimer_Test::stopWaitsForATickInProgress()
     mt->registerDMXSource(&fast);
     mt->start();
     QTRY_VERIFY_WITH_TIMEOUT(fast.m_writeCalls > 0, 5000);
+}
+
+/* stop() straight after start() must return: the run flag used to be set
+   by the new thread itself, so a stop() that beat it there was undone and
+   stop()'s wait() never returned (two App::clearDocument() in a row hung). */
+void MasterTimer_Test::stopRightAfterStartReturns()
+{
+    MasterTimer* mt = m_doc->masterTimer();
+    auto done = std::async(std::launch::async, [mt]() {
+        for (int i = 0; i < 500; i++)
+        {
+            mt->start();
+            mt->stop();
+        }
+    });
+    QVERIFY2(done.wait_for(std::chrono::seconds(20)) == std::future_status::ready,
+             "stop() right after start() did not return");
 }
 
 /* The beat clock (SPEED_SPREAD_DESIGN.md, S1): one running beat count every

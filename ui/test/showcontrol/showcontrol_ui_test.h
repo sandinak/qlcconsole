@@ -53,6 +53,7 @@ private:
     Doc *m_doc = nullptr;
     QTemporaryDir m_settingsDir;
     QByteArray m_realHome;
+    QByteArray m_realProfile;
 };
 
 #endif

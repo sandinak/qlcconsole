@@ -40,6 +40,23 @@
 
 namespace
 {
+    /* The user folder is under HOME on macOS and Linux and USERPROFILE on
+       Windows (QLCFile::userDirectory): point both, or on Windows the test
+       reads the real user's definitions. */
+    void setHome(const QString &home)
+    {
+        qputenv("HOME", home.toUtf8());
+        qputenv("USERPROFILE", home.toUtf8());
+    }
+
+    void restoreHome(const QByteArray &home, const QByteArray &profile)
+    {
+        qputenv("HOME", home);
+        if (profile.isEmpty())
+            qunsetenv("USERPROFILE");
+        else
+            qputenv("USERPROFILE", profile);
+    }
     typedef QList<QPair<QString, QStringList> > Modes;
 
     const QString kMake = QStringLiteral("Test Maker");
@@ -208,6 +225,7 @@ namespace
 void ShowEmbedding_Test::initTestCase()
 {
     m_realHome = qgetenv("HOME");
+    m_realProfile = qgetenv("USERPROFILE");
     ShowEmbedding::setDeleteInsteadOfTrash(true);
 }
 
@@ -226,14 +244,14 @@ void ShowEmbedding_Test::init()
 
 void ShowEmbedding_Test::cleanup()
 {
-    qputenv("HOME", m_realHome);
+    restoreHome(m_realHome, m_realProfile);
     EffectScriptCache::setSystemDirectoriesOverride(QString(), QString());
     m_root.reset();
 }
 
 void ShowEmbedding_Test::cleanupTestCase()
 {
-    qputenv("HOME", m_realHome);
+    restoreHome(m_realHome, m_realProfile);
     ShowEmbedding::setDeleteInsteadOfTrash(false);
 }
 
@@ -241,7 +259,7 @@ QString ShowEmbedding_Test::newComputer()
 {
     const QString home = m_root->filePath(QString("computer%1").arg(++m_computers));
     QDir().mkpath(home);
-    qputenv("HOME", home.toUtf8());
+    setHome(home);
     return home;
 }
 

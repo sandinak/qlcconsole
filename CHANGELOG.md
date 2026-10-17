@@ -363,6 +363,9 @@ console-first programmer-mode workflow.
 - Art-Net send-failure warnings flickered on and off for a target that
   never answered; and Connections read a merging node port as "SHORT
   DETECTED".
+- Engine: a fader's priority could be raised but never lowered, and an
+  overriding 16-bit channel wrote only its low byte, to the coarse address.
+  Nothing in 0.1.0 hit either yet; fixed ahead of the features that will.
 
 ### Known issues
 - **Windows:** on heavy shows (around 90 universes with thousands of

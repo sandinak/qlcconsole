@@ -152,22 +152,30 @@ void NetworkReportDialog_Test::saveCsvAsksWhereAndCanBeCancelled()
     QVERIFY2(QFile::exists(path), qPrintable(chosen.join(", ")));
 
     // Somewhere it cannot write -- a read-only folder (Linux's file dialog
-    // won't even accept one that doesn't exist): told so.
+    // won't even accept one that doesn't exist) holding a read-only report:
+    // told so. Windows ignores read-only on a folder, but not on a file.
     const QString locked = dir.filePath("locked");
+    const QString lockedFile = locked + "/network-report.csv";
     QVERIFY(QDir().mkpath(locked));
+    {
+        QFile f(lockedFile);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+    }
+    QVERIFY(QFile::setPermissions(lockedFile, QFileDevice::ReadOwner));
     QVERIFY(QFile::setPermissions(locked, QFileDevice::ReadOwner | QFileDevice::ExeOwner));
     QString told;
-    whenModal<QFileDialog>([&told, locked](QFileDialog *fd) {
+    whenModal<QFileDialog>([&told, locked, lockedFile](QFileDialog *fd) {
         whenModal<QMessageBox>([&told](QMessageBox *mb) {
             told = mb->text();
             mb->accept();
         });
         fd->setDirectory(locked);
-        fd->selectFile(locked + "/network-report.csv");
+        fd->selectFile(lockedFile);
         static_cast<QDialog *>(fd)->done(QDialog::Accepted);
     });
     dlg.slotSaveCsv();
     QFile::setPermissions(locked, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+    QFile::setPermissions(lockedFile, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
     QVERIFY2(told.startsWith("Could not save ") && told.contains("locked/network-report.csv"), qPrintable(told));
 }
 

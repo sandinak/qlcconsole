@@ -4,6 +4,24 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## October 2026
 
+### Programming
+
+- **Drag scenes and palettes into folders.** In the Programming tab, a scene
+  (or several, or a whole folder) dragged onto a folder moves into it, and
+  onto the type's heading or empty space moves back out; pressing on a row
+  and moving now always drags it, where before it could rubber-band select
+  instead. Right-click a folder to rename or delete it — deleting keeps what
+  was in it. See [Filing into folders](programming-tab.md#filing-into-folders).
+- **Take things out of a collection, chaser or show from the side tree.**
+  Right-click rows listed under one → **Remove from “…”** (the functions
+  stay). Delete on those rows now reads **Delete Function Everywhere…** and
+  says where else the function is used. See
+  [Taking something out](programming-tab.md#taking-something-out-of-a-collection-chaser-or-show).
+- **Deleting says where it's used.** Deleting a palette or a function in the
+  Programming tab (menu or ⌫) lists every scene look, effect-look slot,
+  collection, chaser step and show track using it before you confirm. See
+  [Deleting palettes and functions](programming-tab.md#deleting-palettes-and-functions).
+
 ### Sub-cues
 
 - **Cues inside a cue.** A chase used as a step of a cue list lists its
@@ -16,6 +34,30 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Outputs
 
+- **Patch a universe from the Fixture Manager.** Right-click a universe row
+  in the fixtures list: **Patch output…**, or on a patched one the menu says
+  where it goes and offers **Change interface / target…** and **Unpatch
+  output**; with several selected, **Patch N selected universes to…** /
+  **Unpatch N selected universes**, in the order you clicked them. The same
+  questions and undo as Connections. See
+  [Patching a universe's output](fixture-manager.md#patching-a-universes-output).
+- **Patch or unpatch several universes at once.** In Connections, select
+  universes and right-click: **Patch N selected universes to…** puts them on
+  a device's ports in the order you clicked them (more universes than ports:
+  the rest are named and left alone), and **Unpatch N selected universes**
+  removes them all in one go — each one undo step. See
+  [Connections &amp; patch](other-improvements.md#connections--patch).
+
+- **New Art-Net nodes can be found and given an address.** A node still on
+  its factory address (2.x.x.x and the like) shows in Connections in amber
+  with "set its IP"; **Rescan** now also polls each interface's limited
+  broadcast so such a node can hear it; and right-click → **Set node IP
+  address…** sets its IP, mask, gateway or DHCP (ArtIpProg), after a
+  confirmation. A node no network here can reach gets the command for a
+  temporary address instead. See
+  [Setting up a new Art-Net node](other-improvements.md#setting-up-a-new-art-net-node).
+- **A node's DHCP state reads right.** Connections had "DHCP capable" from
+  the bit that says the node is *using* DHCP.
 - **Art-Net and E1.31 say when an output is in trouble** — in the footer
   and in red on the universe's row in Connections: an address that can't
   be reached, an Art-Net node that stopped answering, a node port reporting

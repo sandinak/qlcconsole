@@ -34,10 +34,12 @@ private slots:
 
     void addRemove();
     void writeZeroFade();
+    void anOverride16BitChannelWritesBothBytes();
     void anUnpatchedFixturesValuesAreShownNotWritten();
     void replaceAllSwapsTheWholeSet();
     void aFaderRebuiltEveryTickIsNeverSeenEmpty();
     void aChannelBeingSetUpStaysPutWhileTheUniverseWrites();
+    void aFaderLeavesNothingBehind();
     void writeLoop();
     void adjustIntensity();
 

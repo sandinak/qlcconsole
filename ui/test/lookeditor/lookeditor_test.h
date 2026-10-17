@@ -43,6 +43,7 @@ private slots:
     void anEffectsTextIsTypedIn();
     void previewsShowWhatEachEffectDoes();
     void anEffectIsPutOnASpeedMaster();
+    void aLooksSpeedMasterAndSpreadSurviveADoubleClick();
     void theHostSpreadStandsInForTheEffectsOwn();
     void theSpreadIsPreviewed();
     void theEffectPickerIsAWindowOfItsOwn();

@@ -223,7 +223,7 @@ fixtures still in the inventory last:
 | **Make / model**, **Mode** | From its definition. |
 | **Ch** | How many channels it takes. |
 | **Connection** | DMX, or a network fixture's transport and the name its IP goes by ("WLED lantern-2"), or the IP when it has none ("WLED 172.18.2.50"). Point at it for the IP. |
-| **Goes to** | Where its universe goes: the output and device ("Art-Net → CS1 (172.18.2.211) port 1"), or nothing; point at it for all of it when the column is narrow. |
+| **Goes to** | Where its universe goes: the output and device ("Art-Net → CS1 (172.18.2.211) · port 1 · universe 0:0:0" — port is the socket on the node, universe its Art-Net address), or nothing; point at it for all of it when the column is narrow. |
 | **Mounted on** | The same words as Fixture Properties: "Truss FOH · 2.5 m along", "Tower T2 · shelf 3", "free / on the floor". |
 
 - **Save CSV…** — every column plus the fixture ID, the first and last
@@ -397,13 +397,38 @@ selected, and only offers what applies:
 5. **Deleting it** — Delete….
 
 Then what the clicked row offers — Add Fixture / Add RGB Panel on empty
-space, Delete Universe… on a universe, Add Power Source… / Add Circuit…,
+space, the universe's output and Delete Universe… on a universe (below),
+Add Power Source… / Add Circuit…,
 New Group… on a group folder, Number the Duplicates and Patch the Clashing
 Fixtures… on their roots, Add … to Inventory / Patch Inventory… on the
 inventory — and Expand All / Collapse All last.
 
 Patch is offered whenever none of the fixtures has an address yet; moving
 patched ones is Design mode's — the same rule everywhere.
+
+### Patching a universe's output
+
+A universe row patches where the universe goes, with the same questions,
+rules and undo as the Connections tab (see
+[Connections &amp; patch](other-improvements.md#connections--patch)):
+
+- **Patch output…** — on a universe that goes nowhere yet: the protocol,
+  then the interface, then (Art-Net, sACN) the node port — the visible
+  devices' ports, free ones first, with **Another address…** and
+  **Broadcast**. A port another universe already uses is refused.
+- On a patched universe the menu says where it goes now, e.g. **Output:
+  ArtNet → CS1 (172.18.2.211) · port 1 · universe 0:0:0**, then **Change
+  interface / target…** (the interface asked again, the current one
+  preselected, then the port) and **Unpatch output**. A protocol without
+  targets (a USB widget) offers **Patch output…** again instead, which
+  replaces the patch.
+- With several universe rows selected: **Patch N selected universes to…**
+  puts them on a device's ports in the order you clicked them, and
+  **Unpatch N selected universes** takes them all off.
+- **Show in Connections** opens the Connections tab on that universe.
+
+Each is one step of **Undo Patch Change** in Connections, and the row's
+"— destination" updates as soon as the patch changes.
 
 ## Fixture definitions
 

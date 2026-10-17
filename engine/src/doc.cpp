@@ -1913,6 +1913,18 @@ bool Doc::deletePalette(quint32 id)
             if (s != NULL && s->palettes().contains(id))
                 s->removePalette(id);
         }
+        // ...and from any effect look that binds it to a slot, so a palette
+        // made later under the same id isn't picked up by it. (The effect
+        // then falls back to its look colours, as with no binding.)
+        foreach (QLCPalette *other, m_palettes)
+        {
+            if (other == NULL)
+                continue;
+            const QMap<QString, quint32> binds = other->effectPaletteBindings();
+            for (auto it = binds.constBegin(); it != binds.constEnd(); ++it)
+                if (it.value() == id)
+                    other->clearEffectPaletteBinding(it.key());
+        }
 
         emit paletteRemoved(id);
         setModified();

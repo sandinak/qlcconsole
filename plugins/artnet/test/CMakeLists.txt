@@ -16,6 +16,7 @@ target_link_libraries(artnet_test PRIVATE
     # Remove: L../src
     Qt6::Core
     Qt6::Network
+    Qt6::Widgets
     Qt6::Test
     artnet
 )
