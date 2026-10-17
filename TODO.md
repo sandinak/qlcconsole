@@ -35,17 +35,61 @@ under `~/.claude/.../memory/`.
   macOS (it would override the `.icns` in a packaged Dock). Could set it only
   when not running from a bundle, if it matters.
 
-## Release 0.1.0 (in progress, 2026-10-15)
+## Release 0.1.0 (in progress, 2026-10-16)
 
-On `release/0.1.0`. Universal (Apple silicon + Intel), macOS 12+.
+On `release/0.1.0`. macOS universal (Apple silicon + Intel, 12+), Windows
+installer and Linux AppImage from CI. CHANGELOG.md's 0.1.0 section is
+written, known issues included.
 
-- **24-hour soak on kronk** (the Intel show machine, i7-9750H) — running
-  since 2026-10-15 09:56: the real show, the show plus a synthetic block,
-  then rough handling (`stresstest/soak24/`, results in
-  `~/soak24/run-20261015-0956/` on kronk). Review before releasing.
+- **First 24-hour soak (kronk) — reviewed, fixes merged** (DONE.md
+  2026-10-16). **Second soak done** (2026-10-16 → 17, 4 hosts, DONE.md):
+  0 crashes or hangs on Linux x86_64, Linux arm64 (podman) and macOS in all
+  three phases; Windows 10 VM clean in the real phase, the scaled phase cut
+  after 15 min by a Windows Update reboot. Left: a short Windows re-soak
+  (scaled + rough), and diff kronk's `--heap-track` snapshots.
 - **Rig test pass** — `RIG_TEST_PLAN.md`, section K first (the 0.1.0
   work), on the office rig with kronk.
-- Then: merge `release/0.1.0` to main, `./release.sh`.
+- Then: merge `release/0.1.0` to main, `./release.sh`, attach the Windows
+  installer and Linux AppImage from CI (RELEASE.md).
+
+## Platforms and soak findings — open (2026-10-16)
+
+- **Windows: engine ticks slow on heavy shows** — on the scaled soak show
+  (94 universes, 2560 pixel fixtures) the tick can't keep its rate on
+  Windows. `fix/win-tick-perf` (merged): the universe threads' per-tick
+  qDebug formatting held their fader locks (68 ms mean tick, 660% CPU on the
+  VM), and MinGW's std::recursive_mutex leaked a kernel Event per fader
+  (~5000 handles/s). GenericFader uses QRecursiveMutex on Windows now: STRESS
+  show on the VM at 8.1 ms / 0.2% over / 287% CPU, handles flat at ~1600
+  (Linux on ender: 2.3 ms / ~165%). What's left is ordinary engine work
+  (Scene::processValue, GenericFader::write). Still in CHANGELOG known issues
+  until a heavy show is soaked on Windows.
+- **The STRESS show is too heavy for the Windows 10 VM** — soak the VM
+  with a lighter show; heavy-show Windows numbers want real hardware.
+- **macOS: the on-screen app's memory grows** — about 50 MB/h in the
+  first soak's real-show phase (RSS 201 → 1116 MB, no crash, ticks fine);
+  neither the engine nor the App driven offscreen reproduces it. The
+  second soak runs with `--heap-track` (hourly `heap -s` / `vmmap
+  --summary`): diff two snapshots for what grew.
+- **WLED config check: log noise** — reported from the soak logs (where
+  it logs from is not yet pinned down); find what logs it and how often,
+  and quiet it.
+- **Windows: make the CI test step fail the job** — all 142 test binaries
+  pass on Windows CI since `fix/win-tests-and-nits` (run 38938082831); the
+  step is still informational (`continue-on-error`) -- make it fail the job
+  once a few more runs stay green. The failures were QSettings with no
+  organization name (every UI test now gets its own INI file,
+  ui/test/common/testsettings.cpp), USERPROFILE not set alongside HOME, mixed
+  '\' separators in system fixture paths, and a read-only folder Windows
+  ignores. lookeditor's segfault (exit 139) went away with the settings
+  change; its exact cause was not pinned down.
+- **Windows leftovers** — not code-signed (SmartScreen warns); ~95 MB
+  installer, mostly ffmpeg codec DLLs from Qt Multimedia (trim if it
+  matters); `QLCIOPlugin` signals are connected by member pointer from the
+  UI too but its moc lives in each plugin DLL as well as the engine, not
+  annotated; no `-Werror` on MinGW, by design. Still to confirm on the VM:
+  the main window's outer edges resizing, audio, DMX USB/D2XX, the file
+  associations, and opening a .qlcc whose definitions the VM lacks.
 
 ## Needs the real rig / hardware
 
@@ -58,6 +102,19 @@ On `release/0.1.0`. Universal (Apple silicon + Intel), macOS 12+.
 
 - **Rig test pass** — run `RIG_TEST_PLAN.md`, fix any ❌ (the gate on the
   freeze list).
+- **Output trouble reporting, on the rig** (built 2026-10-15, DONE.md)
+  — (1) unicast to an address with nothing on it for a few minutes — one
+  "not reachable" line per target in the footer and log, no "recovered";
+  (2) unplug a node that was answering — "stopped answering" within
+  ~9-12 s, back ~6 s after it is plugged in, fixtures respond at once
+  (reporting never holds output back); (3) short a DMX run on a node port
+  that reports it (or pull the terminator if that trips it) — "DMX output
+  short" on that universe's row, gone 10 s after it's cleared; (4) pull
+  the console's own cable — "not reachable" within 1-2 s, gone ~30 s after
+  it's back; (5) a node on another subnet: confirm it now appears and is
+  watched (unicast polls), and that nothing on the show segment minds a
+  poll every 3 s; (6) a healthy rig over a long run shows and logs
+  nothing; (7) check a merging port no longer reads SHORT DETECTED.
 - **WLED on a real device** — Branson tested some 2026-10-11: hit or miss,
   probably the WLED controller rather than the interface; needs more
   testing. Still to do: the live view included;
@@ -109,10 +166,10 @@ before building):
 
 - **Agreed next (2026-10-13/15), after 0.1.0:**
   - **Sub-cues** ([SUBCUES_DESIGN.md](SUBCUES_DESIGN.md)) — P1 (engine)
-    and P2 (editor, VC cue list, footer, ⌥⌘↩) built on `feat/sub-cues`
-    (DONE.md). Still to do: P3 show control (`/cue/4.2/go`, `/subgo`,
-    `/subback`, MSC GO 4.2, LOAD 4.2 — after `feat/connections-showcontrol`
-    merges; the engine API is there: `Chaser::findCueOrSubCue()`,
+    and P2 (editor, VC cue list, footer, ⌥⌘↩) shipped in 0.1.0 (DONE.md).
+    Still to do: P3 show control (`/cue/4.2/go`, `/subgo`, `/subback`, MSC
+    GO 4.2, LOAD 4.2 — show control is on Connections → Show control &
+    sync now; the engine API is there: `Chaser::findCueOrSubCue()`,
     `jumpToSubCue()`, `subGo()`, `subBack()`), P4 step-based effects on Sub
     GO.
   - **Sending to QLab** — OSC / MSC out. Its home is ready: the "QLab out"
@@ -123,25 +180,22 @@ before building):
     the same way, matched by their labels, and addressed. The addressing
     half exists (right-click → Patch Others Like This / the Patch dialog's
     Match); the placement half is the new part. Design first.
-  - **Windows build** — port upstream QLC+'s `build-windows` CI job
-    (MSYS2/MinGW) with qlcconsole names; installer `.exe` as an artifact.
-  - **WLED** — the rest of the 1D effects (Fireworks Starburst, Percent,
-    Noise 1–4, Perlin Move, Meteor Smooth…), from behaviour only (WLED is
-    EUPL).
   - **Playback timing** (PLAYBACK_TIMING_DESIGN.md): P2 fade shapes, P3
     per-chase-step transitions, P4 Swop, P5 clickable Load chip.
   - **Rig Overview frame rate** — maybe automatic (30, lower when the
     engine is busy): the overview now draws on every core, which competes
-    with the DMX engine on a 6-core machine. Decide from the soak.
+    with the DMX engine on a 6-core machine. Decide from the soak (the
+    first one's worst tick on kronk, 6 cores, was 40-43 ms).
 - **Stage and inventory across show files** — keep a stage layout
   (structures, platforms, scenery) and the hardware inventory (fixtures,
   network gear, their patch) outside any one show, and bring them into a
   new show instead of copying a .qlcc and stripping it.
-- **Stress test across Mac / Linux / Windows 11** — Branson can lend the
-  machines; plan the matrix first: 70–80 universes, a soak with the machine
-  kept awake (`caffeinate`), and the new paths (effect runner, WLED/JSON,
-  rig view at full rig). The 2026-10-10 overnight run was cut short when
-  the Mac slept.
+- **Stress test across Mac / Linux / Windows 11** — the 24-hour soak
+  runner (`stresstest/soak24/`) now runs on all three (DONE.md 2026-10-16)
+  and the second soak ran on 4 hosts (DONE.md). Still missing from the matrix: a real
+  Windows 11 machine (only the Windows 10 VM so far), and the new paths at
+  full rig (WLED/JSON output, effect runner) with outputs live rather than
+  stripped.
 - **One object editor** — merge Fixture Properties and "Edit Fixtures in
   Studio" into one: a tree of the object's fixtures by group, add by
   right-click or drag, multi-select → fixture group, distribute / put on
@@ -333,7 +387,8 @@ rig edits, bulk repatching, cross-show consistency checks.
   pthread linkage bug (`4a360911c`) that Ubuntu 22.04 structurally cannot see.
 
 - **MasterTimer misses ticks at full output load (2026-08-25, 2026-09-02) —
-  fixed on macOS, ROUGHED IN elsewhere, NOT YET VERIFIED on Linux/Windows.**
+  fixed on macOS, own thread on Windows (2026-10-16), ROUGHED IN and NOT
+  YET VERIFIED on Linux.**
   With 51 universes forced to `transmitMode="Full"` on `ender` (~2484 pkt/s,
   ~49 Hz per universe) a 61 s run logged **2** `MasterTimer is running late`
   events while a 91 s run at the same settings logged **0**. CPU was only 50%
@@ -362,16 +417,10 @@ rig edits, bulk repatching, cross-show consistency checks.
   or a bundled rtprio limits.d rule) is a separate, bigger decision — not
   done, flagged as its own backlog item below.
 
-  **Windows — MMCSS ("Pro Audio" thread characteristics), on its own timer
-  thread (2026-10-16).** `mastertimer-win32.cpp` used to tick from a
-  `CreateTimerQueueTimer` thread-pool callback; once ticks overran (Windows
-  soak dry run, STRESS show) the pool started a worker per overlapping tick:
-  111 -> 872 threads, 803 MB private, 40 s ticks, and MMCSS refused each new
-  worker (565, too many threads). Now one dedicated thread on a
-  high-resolution waitable timer (timeBeginPeriod(1) fallback), absolute
-  deadlines, re-anchor on overrun like the unix loop, MMCSS asked once and
-  reverted at stop. mastertimer_test covers an overrunning tick (one thread,
-  one tick at a time, no catch-up burst) and stop() during a tick.
+  **Windows — done 2026-10-16** (`fix/win-mastertimer`): one dedicated
+  timer thread with MMCSS instead of a thread-pool callback per tick
+  (DONE.md 2026-10-16). Ticks too slow on heavy shows is a separate,
+  open item ("Platforms and soak findings" above).
 
 - **Linux: package a way to actually grant SCHED_FIFO (2026-09-02, follow-on
   to the item above, not started)** — the DMX timer thread's real-time
@@ -439,59 +488,6 @@ rig edits, bulk repatching, cross-show consistency checks.
   Worth considering a `QLC_PLUGIN_PATH` env override so test rigs stop needing
   root to run what they just built.
 
-- **Output trouble reporting: send health, node health, UI (BUILT 2026-10-15
-  — needs the rig)** — started as "ArtNet failure reporting still flaps":
-  `e3905a2a1` logged once per state change, and a unicast target that never
-  answers ARP flips that state itself (macOS: ~5 s of queued "successes"
-  while ARP is out, then 20 s of "host is down"), so the soak still produced
-  200 "is failing" + 150 "recovered" lines across 50 universes in 120 s.
-  Built on `feat/artnet-status`:
-  - **Send health** (`plugins/interfaces/sendhealth.{h,cpp}`, shared by
-    Art-Net and E1.31): failing once failures persist 1 s (isolated successes
-    don't reset it), at once for a hard error; recovered only after 30 s of
-    uninterrupted successes. E1.31's per-packet `qDebug` spam is gone too.
-  - **Node health** (`plugins/artnet/src/artnetnodewatch.{h,cpp}`), from the
-    ArtPollReplies the plugin already asks for: a node heard this session
-    that misses 3 polls in a row is "stopped answering" (back after 2
-    answered); the port carrying our universe reporting a DMX short
-    (GoodOutputA bit 2), or no longer outputting after it was, is a port
-    fault (2 replies in a row; clears after 10 s clean). Broadcast universes
-    watch the nodes that output that Port-Address; unicast ones the node at
-    that address.
-  - **Traffic:** unchanged on-subnet (the existing 3 s broadcast ArtPoll per
-    interface with an output). New: one unicast ArtPoll per 3 s to each
-    distinct unicast output target OFF the interface's subnet (coalesced by
-    address, GUI thread, never in a DMX tick), since those never hear the
-    broadcast.
-  - **UI:** new `QLCIOPlugin::outputProblems(output, universe)`; footer entry
-    `outputs.problems` (one line per problem with the universes it hits,
-    **Open Connections**); the universe's Connections row gets the problem in
-    red with a tooltip, in both views, refreshed on `targetProblemsChanged()`.
-    The footer now listens to every plugin's `targetProblemsChanged()`, not
-    only WLED's.
-  - **Bug found on the way:** Connections had GoodOutput's short (0x04) and
-    merging (0x08) bits swapped, so a merging port showed SHORT DETECTED.
-    Fixed per the Art-Net 4 spec / libartnet's `PORT_STATUS_*` — **worth
-    confirming against a node that really is merging**.
-  - Tests: `artnet_test` 7 → 24, new `e131_test` (5), `connectionstree_test`
-    +2 (row + footer), all on injected results/times and fabricated replies;
-    nothing is sent.
-  **To confirm on the rig:** (1) unicast to an address with nothing on it for
-  a few minutes — one "not reachable" line per target in the footer and log,
-  no "recovered"; (2) unplug a node that was answering — "stopped answering"
-  within ~9-12 s, back ~6 s after it is plugged in, fixtures respond at once
-  (reporting never holds output back); (3) short a DMX run on a node port that
-  reports it (or pull the terminator if that trips it) — "DMX output short"
-  on that universe's row, gone 10 s after it's cleared; (4) pull the
-  console's own cable — "not reachable" within 1-2 s, gone ~30 s after it's
-  back; (5) a node on another subnet: confirm it now appears and is watched
-  (unicast polls), and that nothing on the show segment minds a poll every
-  3 s; (6) a healthy rig over a long run shows and logs nothing; (7) check
-  a merging port no longer reads SHORT DETECTED.
-  Not built: E1.31 has no per-receiver reply in the base protocol. E1.31
-  Universe Discovery packets only list the universes a *source* sends, so
-  they say nothing about receivers either -- noted, not worth building.
-
 - **`VCCueList_Test::functionRemoved()` flake — watch, don't assume fixed
   (OPEN, 2026-08-25)** — failed on 2 of ~9 macOS CI runs asserting a tree row
   count right after a 100 ms deferred refresh. `6d3757bb2` switched it to
@@ -501,76 +497,6 @@ rig edits, bulk repatching, cross-show consistency checks.
   across many runs is the only evidence that counts. If it returns, the fix was
   insufficient rather than wrong. Five other UI test files still use fixed
   `QTest::qWait` and were left alone — none has failed.
-
-- **Windows build back in CI (OPEN, 2026-10-15)** — `fb9c5fd74` had deleted
-  `build-windows` (it died seding the pre-rebrand `qlcplus4Qt6.nsi`).
-  Re-added: MSYS2 UCRT64 + MSYS2's own Qt 6 packages (6.11 at the time; GCC
-  16), NSIS installer `qlcconsole-<VERSION>-<date>-<rev>-win64-setup.exe`
-  uploaded as an artifact, `--version` smoke test run from the deploy dir with
-  MSYS2 off PATH. Fixed on the way: avrt.h include order, `near` (a windows.h
-  macro) as a variable name, PreviewItem typedefs, and -- the important one --
-  signals named by member pointer across the engine/UI DLL boundary silently
-  never connecting under MinGW (`qlcengine_export.h` / `qlcui_export.h`; a new
-  class whose signal another module connects by `&Class::signal` needs
-  `QLC_ENGINE_EXPORT` / `QLC_UI_EXPORT` too). Left open:
-  1. Nobody has installed it on a real Windows machine -- rig view on D3D11,
-     audio, DMX USB/D2XX and the per-user file associations are unverified.
-  2. ~95 MB installer, mostly ffmpeg codec DLLs pulled in by Qt Multimedia's
-     ffmpeg backend; trim if it matters.
-  3. Tests: all 142 binaries pass on Windows CI since fix/win-tests-and-nits
-     (run 38938082831); the step is still informational
-     (`continue-on-error`) -- make it fail the job once a few more runs stay
-     green. What the failures were: UI tests' QSettings() had no
-     organization name, and Qt's registry backend keeps nothing without one
-     (addfixture, functionselection, monitor, programmingguide,
-     speedmasterspanel) -- every UI test now gets an INI file of its own
-     (ui/test/common/testsettings.cpp); USERPROFILE not set alongside HOME
-     (showembedding, showdifferences); mixed '\' separators in system
-     fixture paths (qlcfixturedefcache) and a test splitting on them
-     (rgbscript); a read-only folder Windows ignores (networkreportdialog).
-     lookeditor's segfault (exit 139) went away with the settings change;
-     its exact cause was not pinned down.
-  4. Not code-signed (SmartScreen will warn). No `-Werror` on MinGW, by design.
-  5. `QLCIOPlugin` signals are connected by member pointer from the UI too, but
-     its moc lives in each plugin DLL as well as the engine; not annotated.
-  6. First install on a Windows 10 VM (2026-10-15), Branson's report and what
-     was done: unreadable buttons/combos/spin boxes on a dark theme (the
-     native windowsvista style ignores the palette's Button colour) -> Fusion
-     off macOS (main.cpp) plus theme-derived shade roles (App::applyTheme);
-     invisible splitter handles -> same; "Win+Shift+R does nothing" -> it is
-     Ctrl+Shift+R, now also in the Window menu, and the help spells keys as
-     Ctrl/Alt/Shift off a Mac (HelpBrowser::keysForPlatform); sluggishness ->
-     Art-Net/E1.31/OSC walked every network interface (~20 ms each on
-     Windows) on every outputs()/inputs() call, now at most once a second;
-     also fewer repolishes/registry reads on the status-bar timers, NoProxy
-     for WLED, and App::nativeEvent fixed for Qt 6's qintptr* (USB hotplug
-     never reached HotPlugMonitor). Still to confirm on the VM: the main
-     window's outer edges resizing, and whether it still feels slow.
-  7. "Rig Overview wireframed in red, no light" on the VM (GPU and CPU alike):
-     not Direct3D -- the VM had none of DanceHysteria's own definitions, so
-     those fixtures stood in as generic dimmers, 300 mm per channel: a
-     64-channel bar was a 19 m wall of heads in the overlap-warning red. A
-     stand-in now draws as one small box with no overlap warning; the footer's
-     "no definition on this computer" error names the folder to copy the
-     .qxf files into, and Fetch Definitions rereads it. Windows CI now runs
-     the rig view on D3D11 (WARP): GPU-vs-CPU matches as on Metal/GL, and the
-     pictures are kept (rig-shots-windows artifact).
-  8. Windows "slow ticks, 640% CPU" on the STRESS show (2026-10-16, VM, 8
-     vCPU i7-10700K, headless, outputs stripped). Stack-sampled (a ctypes
-     SuspendThread + dbghelp StackWalk64 sampler; nothing installed). The
-     build measured, da40149e5, predated d5f527e35: the 16 busy universe
-     threads spent ~40% of a core each formatting Universe::writeBlended's
-     per-tick qDebug (QTextStream/QLocale/toLocal8Bit -- dear on MinGW),
-     holding their fader locks, so the timer thread sat in
-     Universe::requestFader's mutex: 68 ms mean tick (94% over), 660% CPU.
-     release/0.1.0 (d7fe56924) already ran it at 7.9 ms / 0.3% over / 300%
-     CPU -- but leaked ~5000 kernel handles a second (3 M handles, +300 MB in
-     10 min): MinGW's std::recursive_mutex is never destroyed and winpthreads
-     gives each one an Event. GenericFader's lock is QRecursiveMutex on
-     Windows now (fix/win-tick-perf): handles flat at ~1600, private bytes
-     flat, 8.1 ms / 0.2% over / 287% CPU. What's left is ordinary engine work
-     (Scene::processValue, the universe threads' GenericFader::write); Linux
-     on ender does the same show at 2.3 ms / ~165%.
 
 - **Warning backlog outside the `-Werror` set (OPEN, 2026-08-25)** — a
   tree-wide `-Wall -Wextra` sweep reports ~1100
@@ -589,7 +515,7 @@ rig edits, bulk repatching, cross-show consistency checks.
 
 
 - **Output ENDPOINT reachability check (MOSTLY BUILT 2026-10-15, see "Output
-  trouble reporting" above)** — node liveness is now watched continuously
+  trouble reporting" in DONE.md)** — node liveness is now watched continuously
   from the ArtPoll the plugin already ran every 3 s, rather than the
   config-time probe sketched below; only nodes heard this session are judged,
   which answers the cry-wolf concern. Still open from this item: a check at
@@ -652,7 +578,8 @@ rig edits, bulk repatching, cross-show consistency checks.
     background heartbeat. A permanent poll across 50 universes is precisely
     the "desk that cries wolf" / spam failure mode this whole area already
     burned itself on once (the 2850-line `sendDmx` flood).
-  - **Backoff + hysteresis, shared with the ArtNet flapping item above.** A
+  - **Backoff + hysteresis, as in send health** (output trouble reporting,
+    DONE.md 2026-10-15 — built there, reuse it). A
     node that is down stays down between probes; don't re-report. The
     "don't announce recovery until it has held for N" rule wanted there is
     the same rule wanted here — build it once.

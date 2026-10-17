@@ -14,21 +14,52 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 
 First public release. qlcconsole is a fork of
 [QLC+ 4.14.2](https://github.com/mcallegari/qlcplus), rebuilt around a
-console-first programmer-mode workflow for macOS.
+console-first programmer-mode workflow.
 
-One app for **Apple silicon and Intel Macs** (macOS 12 Monterey or later),
-built on Qt 6.9.
+**Platforms:**
+- **macOS** — one app for Apple silicon and Intel Macs (macOS 12 Monterey
+  or later), signed and notarized, as a DMG.
+- **Windows** — a 64-bit installer (Windows 10 or later). Not code-signed
+  yet, so SmartScreen asks before it runs.
+- **Linux** — an x86_64 AppImage.
+
+**Soak-tested** (2026-10-16 → 17, the DanceHysteria show, three 8-hour
+phases — the real show, a scaled-up show, rough handling with reloads —
+with DMX output stripped): no crashes or hangs on Linux x86_64 (Debian 13),
+Linux arm64 or macOS in any phase. On Windows 10 (a VM) the real-show phase
+ran clean; the scaled phase was cut short by a Windows Update reboot, and
+a shorter Windows re-soak is planned.
 
 ### Added
 - **QLab and show control.** Chase steps carry cue numbers (a Cue column in
   the chaser editor, with Renumber); a chase can be the main cue list or
-  have a list number; **MIDI Show Control** on a patched MIDI input and
-  **OSC** on a port of its own (Settings → Show control) can GO, LOAD, STOP,
+  have a list number; **MIDI Show Control** and **OSC** can GO, LOAD, STOP,
   PAUSE, RESUME, RESET and ALL OFF them. The footer's **Next:** shows what
   the main list's GO plays next; GO (⌘↩) and Back (⌘⇧↩) work from any
   window; the Virtual Console cue list shows cue numbers and what's next.
   **Skip** a step without deleting it — GO, Next, Back and auto-follow pass
   over it.
+- **Connections → Show control & sync** — one page for what controls the
+  show from outside and what it syncs to: OSC in (port, listening or not,
+  the last command), MSC in (device number, **Listen on** all MIDI inputs
+  or just one, the last command), and the MIDI timecode source with its
+  sync health. The timecode source is saved with the show.
+- **Sub-cues** — a chase used as a cue lists its own steps under it as
+  4.1, 4.2…; set to **Sub GO** they wait for Sub GO (⌥⌘↩, Sub Back ⌥⌘⇧↩)
+  while GO moves on to the next cue. Shown in the chaser editor, the
+  Virtual Console cue list (with Sub GO / Sub Back buttons) and the footer
+  ("Sub: 4.2 · Next: 5").
+- **Output trouble is reported** — an Art-Net or E1.31 output that can't
+  send, an Art-Net node that stops answering, or a node port reporting a
+  DMX short shows in the footer (with **Open Connections**) and in red on
+  the universe's row in Connections. It settles before it warns, so a
+  brief hiccup doesn't flicker on and off.
+- **Shows carry their own definitions** — a `.qlcc` saves the fixture
+  definitions and effect scripts it uses. Opened on another computer, the
+  show's own copies are used (**Install on This Computer** keeps the ones
+  it lacks); where they differ from that computer's the footer says so and
+  **Review…** shows the differences. **File → Collect for Transfer…** gathers a
+  show and everything it needs into one folder.
 - **One beat clock and speed masters.** Every effect and beat chase reads
   one clock (effects started apart are on the same beat); a Tap on the
   Programming toolbar. Up to sixteen **speed masters**, each its own BPM and
@@ -45,6 +76,9 @@ built on Qt 6.9.
   why.
 - **Patch list** — every fixture's patch, where its universe goes and what
   it hangs on, as CSV or a printable PDF (Fixtures → Patch List…).
+  **Labels…** prints a label per fixture (all, or the selected rows) on
+  Avery 5160 sheets or a 62 mm roll: name, universe and address, mode,
+  and a network fixture's name (its IP on mouseover in the list).
 - **Units** — Settings → Units picks mm, cm, m, inches or feet (kg or lb
   to match); fixture sizes and weights show in it and take any unit typed
   with the number (`7.5"`, `6' 3"`, `26.5 lb`), and the Studio's grid
@@ -124,10 +158,11 @@ built on Qt 6.9.
   autosave recovery) on every platform, replacing the old indeterminate,
   macOS-only progress dialog. The main window now only ever appears once
   everything is actually ready.
-- **Real-time DMX output timing (macOS)** — the DMX timer thread now
-  requests real-time scheduling from the OS, fixing missed output ticks
-  under scheduling pressure on a busy machine; Linux/Windows equivalents
-  are in progress.
+- **Real-time DMX output timing** — on macOS the DMX timer thread asks the
+  OS for real-time scheduling, fixing missed output ticks on a busy
+  machine. On Windows it has a thread of its own with "Pro Audio"
+  priority; on Linux it asks for real-time priority, which a stock install
+  doesn't grant (it then runs at normal priority).
 - **Backstage color themes** — six selectable app-wide color themes (View →
   Theme): Default, Tan, Blue, QLC+ Original, Red Shift (keeps the blue
   channel near-zero, for working in the dark without wrecking night vision),
@@ -163,8 +198,9 @@ built on Qt 6.9.
   times a second at most). Devices that don't answer, or are on weak Wi-Fi,
   are reported in the footer; while the rig view is open it shows what each
   device's LEDs are actually doing. Looks can pick WLED's own effects for
-  the device to run. Tested against a stand-in so far, not yet a real WLED
-  on a show network.
+  the device to run, and **160 WLED effects** play in qlcconsole itself —
+  every 1D effect, the 23 sound-reactive ones on the audio input. Tried on
+  real devices only briefly so far.
 - **Scene transitions** — a scene can have a Transition in and out that
   reaches each fixture by where it stands: wipes across, up/down or
   front-to-back, from/to the centre, dissolve, or along each bar, set on
@@ -270,6 +306,14 @@ built on Qt 6.9.
 - Fixtures with a structure above them draw faded and dashed in the Top
   view; the rulers band any selection and mark the middle of what's dragged.
 - The Connections Devices header is one row.
+- Opening a show with many universes is much faster: a 94-universe show
+  loads in about 9 s (was 34 s), in a tenth of the memory.
+- A fixture whose definition isn't on this computer draws in the rig view
+  as one small box (not a wall of red heads); the footer says which folder
+  to copy the definition into, and **Fetch Definitions** looks there again.
+- Off a Mac: the themes are readable (buttons, lists and splitter handles
+  follow the theme), and the help spells keys Ctrl / Alt / Shift.
+- Linux: the app icon shows at every size, and on Wayland.
 - Effects on big pixel rigs: about 8 ms a tick for 96 × 64 pixels (was 68);
   the rig view about 9 ms a frame on a 200-fixture show (was 51).
 
@@ -316,6 +360,20 @@ built on Qt 6.9.
 - The speed master's beat blinked in the footer with nothing playing.
 - The Xbox controller profile was installed where the HID plugin never
   looked.
+- A crash under heavy load: with a busy show running, scenes and effects
+  starting and stopping could corrupt memory and bring the app down (found
+  in a 24-hour soak). Writes past the end of a universe are refused too.
+- Lighting Studio's **Add Target**, **Add Person**, **Copy** and **Paste**
+  did nothing.
+- The patch grid didn't follow universes being added or removed, and the
+  Function Manager's buttons didn't follow the selection.
+- Windows: a slow tick could pile up hundreds of timer threads until the
+  app stopped responding.
+- Windows: the app felt sluggish — every output check walked every network
+  interface; and USB devices plugged in while running weren't noticed.
+- Art-Net send-failure warnings flickered on and off for a target that
+  never answered; and Connections read a merging node port as "SHORT
+  DETECTED".
 - Engine: a fader's priority could be raised but never lowered, and an
   overriding 16-bit channel wrote only its low byte, to the coarse address.
   Nothing in 0.1.0 hit either yet; fixed ahead of the features that will.
@@ -327,5 +385,26 @@ built on Qt 6.9.
   from a colour-profiled picture that it frees too early (QTBUG-147602); the
   move cursor is now the open hand (closed while dragging) on macOS, and
   wait/busy the arrow. Linux and Windows are unchanged.
+- macOS: the same Qt 6.11 fault (QTBUG-147602) could crash the app wherever
+  one of its own pictures -- an icon, a gobo, a help picture -- was handed to
+  AppKit, since 508 of the 660 bundled PNGs carried a colour profile. The
+  profiles are removed (the pixels are unchanged, and the app never used
+  them), and the test gate now fails if one comes back.
+
+### Known issues
+- **Windows:** on heavy shows (around 90 universes with thousands of
+  pixel fixtures) the engine couldn't keep its tick rate. A fix is in
+  (the test VM now ticks that show at about 8 ms on average) but it hasn't
+  had a long soak on a heavy show yet. Moderate shows run normally.
+- **macOS:** over a long run the on-screen app's memory grows with no crash
+  or slowdown — about 50 MB an hour in the first 24-hour soak; in the
+  second, 312 → 492 MB over the 8-hour real-show phase. Being tracked
+  down.
+- **Linux:** DMX output timing runs at normal priority unless the system
+  grants real-time priority (CAP_SYS_NICE or an rtprio limit).
+- The universal Mac app has no OLA plugin.
+- Not yet tried against the real thing: QLab / MIDI Show Control end to
+  end, Art-Net trouble reporting on a failing node, and opening a show's
+  carried definitions on a machine without them.
 
 [0.1.0]: https://github.com/sandinak/qlcconsole/releases/tag/v0.1.0

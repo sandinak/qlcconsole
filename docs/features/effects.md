@@ -202,6 +202,12 @@ the step's own) to the look it plays, a collection to its members — so the
 same look can run on Speed 1 in one chase and Speed 3 in another. With
 nothing set anywhere an effect keeps its own speed, as before.
 
+A look's **Speed** and its **Spread** belong to the look, not to the
+effect: trying other effects in the look editor's picker — a click or a
+double-click on a tile — keeps them, so you can audition effects without
+setting the master again. An effect preset that sets one of them still
+wins. The **One-shot length** stays with the effect it was set for.
+
 On the main clock or a master, an effect's **rate** (or **speed**) counts
 **cycles per beat** — 1 is once a beat, 0.25 once a bar — and the look
 editor labels it "(per beat)". It stays on the beat, follows the master's
