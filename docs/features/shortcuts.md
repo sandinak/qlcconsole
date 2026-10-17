@@ -69,11 +69,15 @@ to zoom, ⇧⌘R or ⌘W to close.
 | Keys / mouse | Does |
 |---|---|
 | Drag from the Library onto a cue, a layer, or the page | One layer on everything dropped; onto a layer, added to it ([Adding layers](show-tree.md#adding-layers)) |
-| **⌥ held as you drop** | A layer for each group |
-| **:** (in the tree) | To the command line at the bottom; **Esc** goes back |
+| **⌥ held as you drop** groups | A layer for each group |
+| ⌥-click **+ Layer** | A layer for each group selected in the Library |
+| Drag a cue onto another cue | Move it there; with **⌥**, include it |
+| Delete / Backspace (in the tree) | Delete the selected cue or layer (a list or production asks first) |
+| **:** (in the tree) | To the command line at the bottom ([The command line](show-tree.md#the-command-line)) |
+| **Esc** (in the command line) | Back to the tree |
 | **Tab** (in the command line) | Complete the word; again, the next match |
 | ↑ / ↓ (in the command line) | Earlier / later commands |
-| ⌘Z / ⇧⌘Z | Undo / Redo in the tree |
+| ⌘Z / ⇧⌘Z | Undo / Redo in the tree (in the command line ⌘Z undoes typing: type `undo`) |
 
 ## Connections
 
