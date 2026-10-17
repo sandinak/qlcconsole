@@ -393,6 +393,10 @@ public:
     /** What a person reads for @a target: its groups' and fixtures' names,
      *  or the function's. */
     QString targetLabel(const ShowTree::Target &target) const;
+    /** What a layer on @a target holds, with counts: "TrussC-RGB (8) ·
+     *  TrussW-RGB (8) — 16 fixtures"; a set "Towers: SL (2) · SR (2) — 4
+     *  fixtures"; a function layer "plays Haze". */
+    QString targetContents(const ShowTree::Target &target) const;
     /** "0.0.4 SHOUT" */
     QString cueLabel(const ShowTree::CueList &list, int index) const;
 

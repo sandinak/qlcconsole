@@ -17,6 +17,12 @@ The latest changes, newest first. Each links to the guide with the detail.
   in the command line for every word with examples. See
   [Group sets](show-tree.md#group-sets), [Child layers](show-tree.md#child-layers),
   [Line aims](show-tree.md#line-aims) and [Help](show-tree.md#help).
+- **Show Tree: Library | Tree | Editor, and adding without dragging.** The
+  Library is on the left now, beside the tree. **Return** or a double-click
+  in the Library adds what is selected to the tree's selected cue or layer;
+  **⌘F** (or **/**) jumps to the filter, type and press Return. A drop below
+  the tree's last row is a new layer in the selected cue. A named layer
+  still shows what it holds. See [Adding layers](show-tree.md#adding-layers).
 - **Write a show as one tree.** A new **Show Tree** tab beside Programming:
   productions, cue lists, cues, and in each cue the layers — a group and the
   looks it plays. Drag groups onto a cue for layers and palettes onto a layer

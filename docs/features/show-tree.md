@@ -38,21 +38,28 @@ is changed only in the tree: elsewhere it is locked. See
     [Seeing it on the rig](#seeing-it-on-the-rig));
   - while you drag, what the drop will do; after an edit, which cues it
     changed (*"Changed: 1.0.1 Verse, 1.0.2 Out"*).
-- **Left: the tree.** It shows productions, cue lists, cues, and each cue's
+Left to right: **the Library**, **the tree**, **the page** — so a drag
+from the Library lands in the tree right beside it.
+
+- **Left: the [Library](#the-library).** It holds groups, group sets,
+  targets, palettes and functions to drag in, or to add with Return (see
+  [Adding layers](#adding-layers)).
+- **Middle: the tree.** It shows productions, cue lists, cues, and each cue's
   layers. Grey **⤳** rows under a cue are layers it doesn't hold itself but
   that are on stage in it. They are marked *tracked from*, *included from*
   or *base*. A cue's badges are **■ base**, **⊘ block**, **◐ cue-only** and
   *includes N*. A layer that plays a function as it is shows **▣**.
-- **Middle: the page** for what is selected:
+- **Right: the page** for what is selected:
   - **A cue list** shows its mode and base cue.
   - **A cue** shows its number, name, note, mode, base check box, includes,
     fade in / out, hold, cue looks, every layer on stage in it, a dashed
     drop area, and *Next cue receives*.
-  - **A layer** shows one row per attribute.
-- **Right: the [Library](#the-library).** It holds groups, palettes and
-  functions to drag in.
-- **Bottom: the Look Editor**, when **✎** opens a value. Under it is
-  **[the command line](#the-command-line)**, which is always there.
+  - **A layer** shows what it contains, then one row per attribute.
+- **Under the page: the Look Editor**, when **✎** opens a value. At the
+  bottom, full width, is **[the command line](#the-command-line)**, which
+  is always there.
+
+The dividers between them can be dragged; their places are kept.
 
 ## Quick start
 
@@ -130,7 +137,7 @@ cue + "Out" block
 
 ## Adding layers
 
-Drag from the Library onto the **tree** or onto the **page** in the middle;
+Drag from the Library onto the **tree** or onto the **page** on the right;
 both take the same drops. The line at the top right says what a drop will
 do before you let go, for example *"one layer on Towers + USTs in 1.0.0
 Preshow (⌥: a layer for each group)"*.
@@ -150,8 +157,24 @@ Preshow (⌥: a layer for each group)"*.
   a cue plays as it is, as a layer of its own (▣). The tree doesn't set
   its looks, and it has no Release. Several dropped together make a layer
   each, in one undo step.
+- **Below the tree's last row**, a drop is a new layer in the selected cue
+  (or the selected layer's cue): *"New layer in 1.0.3 Out: Towers"*.
 - After a drop on the cue page, the cue stays selected, so you can keep
   dropping.
+
+**Without dragging.** In the Library, **Return** (or a double-click) does
+what a drop on the tree's selection would:
+
+- a **cue** selected: the groups or fixtures selected in the Library become
+  a new layer (several: one layer; **⌥Return** a layer each), and the cue
+  stays selected for the next; a palette becomes a cue look;
+- a **layer** selected: groups join it, a palette sets its look;
+- a function: a layer that plays it; a target: Position aims at it.
+
+The line at the top right says what Return will do. **⌘F** (or **/** in
+the tree) jumps to the Library's filter: type a few letters and press
+**Return** to add the first match (or what is selected); **↓** goes into the
+list, **Esc** back to the tree. Each add is one undo step.
 - To take a group out, right-click a layer on several groups →
   **Remove &lt;group&gt; from layer** (never its last).
 
@@ -438,7 +461,15 @@ of its own.
 ## Renaming
 
 A layer's **name** is its own, separate from its groups (until you name it,
-it is called after them).
+it is called after them). A named layer still shows what it holds: in the
+tree after its name (*"Truss wash · TrussC-RGB + TrussW-RGB"*, the whole
+list with counts in its tooltip), on the cue page in brackets, and on its
+page as **Contains:** *"TrussC-RGB (8) · TrussW-RGB (8) — 16 fixtures"*.
+There each group is a link that shows it in the Library, and **✕** takes it
+out of the layer (one undo step; never its last). A named layer's name
+works on the command line as its groups do (`Truss wash dimmer 45`), and
+Tab completes it; with a layer selected, the command line says what it
+holds.
 
 - **In place, as in the Programming tab:** select the row in the tree and
   press **Return** (or **F2**). Type, then **Return** to keep it or **Esc**
@@ -713,7 +744,7 @@ In the command line, ⌘Z undoes your typing. Type `undo` to undo the tree.
 
 ## The Library
 
-The panel on the right. One filter box at its top narrows every section. It
+The panel on the left (⌘F jumps to it). One filter box at its top narrows every section. It
 finds a group at any depth, or a folder by its name, and clearing it closes
 again what it opened.
 
@@ -738,7 +769,7 @@ Layer**.
 ## Editing the tree
 
 Click a row to select it. **⌘-click** adds or removes a row, **⇧-click**
-takes the rows between. The page in the middle, the Design preview and
+takes the rows between. The page on the right, the Design preview and
 everything that acts on one row follow the row clicked last. Several rows
 selected are for **Merge** and **Delete**.
 

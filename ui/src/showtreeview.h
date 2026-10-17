@@ -247,6 +247,8 @@ public:
      *  carried-in @a target, or (no layer) the cue. */
     bool setLineParam(quint32 cueId, quint32 layerId, const QString &key, const QString &value,
                       const ShowTree::Target &target = ShowTree::Target());
+    /** The layer page's "Contains:" line, as text (tests). */
+    QString layerContentsText() const;
     /** The order strip under a line aim's Position row (null: none). */
     QWidget *lineStrip() const;
     /** The attribute rows the inspector shows for the selected layer, as
@@ -463,6 +465,7 @@ private:
     QLabel *m_cueNext;
     QWidget *m_layerPage;
     QLabel *m_layerTitle;
+    QLabel *m_layerContents;
     QCheckBox *m_layerRelease;
     ShowTree::Target m_layerReleaseTarget;     //!< a carried-in layer's, for Release
     QGridLayout *m_rows;

@@ -1361,6 +1361,18 @@ table — syntax, what, examples, related — that `keywords()` and
 shown in a pane over the command line. A test reads every example through
 the parser.
 
+*Layout and adding (Branson's feedback during P3):* the columns are now
+**Library | Tree | Editor** (the §6 sketch had the Library on the right),
+with the Look Editor docked under the editor column only — the page and the
+editor are worked on together, and the tree keeps its full height; the
+command line stays full width. A drop below the tree's last rows goes to
+the selected cue. Return / double-click in the Library acts on the tree's
+selection as a drop would (the hint says what); ⌘F or / jumps to the
+Library filter, Return adds the first match. A named layer still shows
+what it holds (tree, cue page, the layer page's "Contains:" with links and
+✕), its name works on the command line, and the command line's
+placeholder says what the selected layer holds.
+
 Tests: showtree_test `sceneExcludedFixturesAreNotWritten`,
 `exclusionIsThreadSafeWithLivePreview`, `groupSetsAreOneTargetAndKeepTracking`,
 `childLayersExcludeTheirFixturesFromTheParent`, `overlappingLayersLowerWins`,
@@ -1369,7 +1381,8 @@ Tests: showtree_test `sceneExcludedFixturesAreNotWritten`,
 `aCueAimIsOneFormationByPosition`, `aSpreadChangeFadesOverTheCueFade`,
 `everyCommandWordHasHelpAndItsExamplesParse`, `copyAndPasteCues`;
 showtreeview_test `groupSetsInTheLibrary`, `childLayersByMouse`,
-`renameInPlace`, `lineAimsInTheTab`, `copyPasteAndHelp`, and
+`renameInPlace`, `lineAimsInTheTab`, `copyPasteAndHelp`,
+`libraryTreeEditorAndAddingWithoutDragging`, `namedLayersShowWhatTheyHold`, and
 `everyActionIsOneUndoStep` (+13 actions).
 
 ### Open for Branson

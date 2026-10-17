@@ -703,9 +703,32 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
     // makes one per group.
     auto targets = [&]() {
         QList<Target> out;
-        const QStringList names = targetNames();
+        QStringList names = targetNames();
+        // A named layer of the selected cue, by its name: its groups.
+        QHash<QString, Target> layerNames;
+        if (const Cue *c = m_st->cue(ctx.cue))
+            for (const Layer &l : c->layers)
+                if (!l.name.isEmpty() && !l.target.isOpaque() && !names.contains(l.name, Qt::CaseInsensitive))
+                {
+                    names << l.name;
+                    layerNames.insert(l.name.toLower(), l.target);
+                }
         Target t;
         auto addName = [&](const QString &n) {
+            if (layerNames.contains(n.toLower()))
+            {
+                const Target lt = layerNames.value(n.toLower());
+                for (quint32 g : lt.groups)
+                    if (!t.groups.contains(g))
+                        t.groups << g;
+                for (quint32 f : lt.fixtures)
+                    if (!t.fixtures.contains(f))
+                        t.fixtures << f;
+                for (quint32 set : lt.sets)
+                    if (!t.sets.contains(set))
+                        t.sets << set;
+                return;
+            }
             // The first group of that name (by id, as Doc lists them), then
             // one by its folder path, then a fixture.
             for (const FixtureGroup *g : m_doc->fixtureGroups())
@@ -1398,7 +1421,12 @@ bool ShowTreeCommand::candidates(const QString &head, const Context &context, QS
     r.src = head;
     const QStringList modes({ "track", "block", "cueonly", "default", "base" });
     const QStringList none({ "none", "off", "clear" });
-    const QStringList targets = targetNames();
+    QStringList targets = targetNames();
+    // Named layers of the selected cue complete too.
+    if (const Cue *c = m_st->cue(context.cue))
+        for (const Layer &l : c->layers)
+            if (!l.name.isEmpty() && !l.target.isOpaque() && !targets.contains(l.name, Qt::CaseInsensitive))
+                targets << l.name;
 
     // attribute value, attribute value… to the end.
     auto assigns = [&]() -> bool {

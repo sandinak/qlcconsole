@@ -69,13 +69,20 @@ to zoom, ⇧⌘R or ⌘W to close.
 | Keys / mouse | Does |
 |---|---|
 | Drag from the Library onto a cue, a layer, or the page | One layer on everything dropped; onto a layer, added to it ([Adding layers](show-tree.md#adding-layers)) |
-| **⌥ held as you drop** groups | A layer for each group |
+| **⌥ held as you drop** groups | A layer for each group (a group set: each member) |
+| **⇧ held as you drop** groups on a layer | A child layer on them ([Child layers](show-tree.md#child-layers)) |
+| Drop below the tree's last row | A new layer in the selected cue |
+| **Return** / double-click (in the Library) | What is selected there goes to the tree's selection, as a drop would ([Adding layers](show-tree.md#adding-layers)) |
+| **⌘F**, or **/** in the tree | To the Library's filter; type, then Return adds the first match |
+| **Return** / **F2** (in the tree) | Rename the row in place ([Renaming](show-tree.md#renaming)) |
+| **⌘C** / **⌘V** / **⌘D** (in the tree) | Copy cues or layers / paste after (into) the selected cue / duplicate |
 | ⌥-click **+ Layer** | A layer for each group selected in the Library |
 | Drag a cue onto another cue | Move it there; with **⌥**, include it |
 | Delete / Backspace (in the tree) | Delete the selected cue or layer (a list or production asks first) |
 | **:** (in the tree) | To the command line at the bottom ([The command line](show-tree.md#the-command-line)) |
-| **Esc** (in the command line) | Back to the tree |
+| **Esc** (in the command line) | Close the help, then back to the tree |
 | **Tab** (in the command line) | Complete the word; again, the next match |
+| `help` / `?` (in the command line) | Every word, or `help <word>` with examples |
 | ↑ / ↓ (in the command line) | Earlier / later commands |
 | ⌘Z / ⇧⌘Z | Undo / Redo in the tree (in the command line ⌘Z undoes typing: type `undo`) |
 

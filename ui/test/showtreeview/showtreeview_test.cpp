@@ -3300,4 +3300,62 @@ void ShowTreeView_Test::libraryTreeEditorAndAddingWithoutDragging()
     QTRY_VERIFY(filter->hasFocus());
 }
 
+/* Branson (2026-10-17): a named layer still shows what is in it -- in the
+   tree after its name (whole in the tooltip), on the cue page, and on its
+   page as "Contains:" with each group a link (to the Library) and a ✕ to
+   take it out. Its name works on the command line and completes. */
+void ShowTreeView_Test::namedLayersShowWhatTheyHold()
+{
+    FixtureGroup *a = group("TrussC", 0, 2);
+    FixtureGroup *b = group("TrussW", 2, 2);
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCueNumbered(list, "1", "One");
+    Target t;
+    t.groups << a->id() << b->id();
+    const quint32 layer = st->addLayer(c1, t);
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidgetItem *row = rowOf(view.tree(), ShowTreeView::LayerNode, layer, c1);
+    QCOMPARE(row->text(0), QString("TrussC + TrussW"));       // unnamed: its groups
+    QVERIFY(st->renameNode(layer, "Truss wash"));
+    row = rowOf(view.tree(), ShowTreeView::LayerNode, layer, c1);
+    QCOMPARE(row->text(0), QString("Truss wash  · TrussC + TrussW"));
+    QVERIFY2(row->toolTip(0).startsWith("TrussC (2) · TrussW (2) — 4 fixture(s)"), qPrintable(row->toolTip(0)));
+    QVERIFY(view.selectNode(c1));
+    QCOMPARE(view.cueLayerItems().first(), QString("Truss wash (TrussC + TrussW)"));
+
+    QVERIFY(view.selectNode(layer, c1));
+    QCOMPARE(view.layerContentsText(), QString("Contains: TrussC (2) ✕ · TrussW (2) ✕ — 4 fixture(s)"));
+    QLabel *contents = view.findChild<QLabel *>("stLayerContents");
+    emit contents->linkActivated(QString("show:g:%1").arg(b->id()));
+    QVERIFY(view.library()->currentItem() != nullptr);
+    QCOMPARE(view.library()->currentItem()->data(0, ShowTreeView::IdRole).toUInt(), b->id());
+    emit contents->linkActivated(QString("rm:g:%1").arg(a->id()));
+    QCOMPARE(st->cue(c1)->layer(layer)->target.groups, QList<quint32>({ b->id() }));
+    QCOMPARE(st->cue(c1)->layer(layer)->name, QString("Truss wash"));
+    QVERIFY(view.selectNode(layer, c1));
+    QCOMPARE(view.layerContentsText(), QString("Contains: TrussW (2) — 2 fixture(s)"));   // the last: no ✕
+    QVERIFY(st->undo());
+    QCOMPARE(st->cue(c1)->layer(layer)->target.groups.count(), 2);
+
+    // Its name on the command line, and Tab.
+    QVERIFY(view.selectNode(c1));
+    QVERIFY2(view.runCommand("Truss wash dimmer Full"), qPrintable(view.commandMessage()));
+    QCOMPARE(st->cue(c1)->layers.count(), 1);
+    QCOMPARE(st->cue(c1)->layer(layer)->look(KeyDimmer)->palettes, QList<quint32>({ full }));
+    QLineEdit *line = view.commandLine();
+    line->setFocus();
+    line->setText("Truss w");
+    QTest::keyClick(line, Qt::Key_Tab);
+    QCOMPARE(line->text(), QString("Truss wash "));
+    // The command line says what a selected layer holds.
+    QVERIFY(view.selectNode(layer, c1));
+    QVERIFY2(line->placeholderText().contains("TrussC (2) · TrussW (2)"), qPrintable(line->placeholderText()));
+}
+
 QTEST_MAIN(ShowTreeView_Test)

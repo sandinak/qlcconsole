@@ -45,6 +45,7 @@
 #include <QSplitter>
 #include <QShortcut>
 #include <QTextBrowser>
+#include <QTextDocument>
 #include <QListWidget>
 #include <QKeyEvent>
 #include <QSettings>
@@ -1063,6 +1064,60 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_layerTitle->setFont(bold);
         m_layerTitle->setWordWrap(true);
         v->addWidget(m_layerTitle);
+        // What it holds: each group a link (to it in the Library), with ✕ to
+        // take it out of the layer (never its last).
+        m_layerContents = new QLabel(m_layerPage);
+        m_layerContents->setObjectName("stLayerContents");
+        m_layerContents->setWordWrap(true);
+        m_layerContents->setTextFormat(Qt::RichText);
+        connect(m_layerContents, &QLabel::linkActivated, this, [this](const QString &link) {
+            const QStringList parts = link.split(QLatin1Char(':'));
+            if (parts.count() != 3)
+                return;
+            const quint32 id = parts.at(2).toUInt();
+            if (parts.at(0) == QLatin1String("rm"))
+            {
+                const quint32 cueId = currentCueId(), layerId = currentId();
+                if (currentKind() != LayerNode)
+                    return;
+                if (parts.at(1) == QLatin1String("g"))
+                    m_st->removeGroupFromLayer(cueId, layerId, id);
+                else if (parts.at(1) == QLatin1String("f"))
+                    m_st->removeFixtureFromLayer(cueId, layerId, id);
+                else if (parts.at(1) == QLatin1String("s"))
+                {
+                    const Layer *l = m_st->cue(cueId) == nullptr ? nullptr : m_st->cue(cueId)->layer(layerId);
+                    if (l != nullptr)
+                    {
+                        Target t = l->target;
+                        t.sets.removeAll(id);
+                        m_st->setLayerTarget(cueId, layerId, t, tr("Remove a set from layer"));
+                    }
+                }
+                return;
+            }
+            // Show it in the Library (All).
+            const int kind = parts.at(1) == QLatin1String("g") ? LibGroup
+                             : parts.at(1) == QLatin1String("s") ? LibSet : LibFixture;
+            for (QTreeWidgetItemIterator it(m_library); *it; ++it)
+            {
+                if ((*it)->data(0, KindRole).toInt() != kind || (*it)->data(0, IdRole).toUInt() != id)
+                    continue;
+                QTreeWidgetItem *top = *it;
+                while (top->parent() != nullptr)
+                    top = top->parent();
+                if (top->data(0, IdRole).toUInt() != 2)
+                    continue;                           // All's, not Recent's
+                for (QTreeWidgetItem *p = (*it)->parent(); p != nullptr; p = p->parent())
+                    p->setExpanded(true);
+                m_library->clearSelection();
+                m_library->setCurrentItem(*it);
+                (*it)->setSelected(true);
+                m_library->scrollToItem(*it);
+                break;
+            }
+        });
+        v->addWidget(m_layerContents);
         m_layerRelease = new QCheckBox(tr("Release when the cue is left (back to the base cue, else dark)"),
                                        m_layerPage);
         m_layerRelease->setObjectName("stLayerRelease");
@@ -1522,15 +1577,19 @@ void ShowTreeView::buildTree()
                     QTreeWidgetItem *under = layer.parent == invalidId() ? nullptr : layerItems.value(layer.parent);
                     QTreeWidgetItem *yi = new QTreeWidgetItem(under != nullptr ? under : ci);
                     layerItems.insert(layer.id, yi);
-                    QString name = layer.name.isEmpty() ? m_st->targetLabel(layer.target) : layer.name;
+                    // A named layer still says what it holds, after its name
+                    // (elided to fit; the whole list in the tooltip).
+                    QString name = layer.name.isEmpty() ? m_st->targetLabel(layer.target)
+                                   : tr("%1  · %2").arg(layer.name, m_st->targetLabel(layer.target));
                     if (layer.target.isOpaque())
-                        name = tr("▣ %1").arg(name);
+                        name = tr("▣ %1").arg(layer.name.isEmpty() ? m_st->targetLabel(layer.target) : layer.name);
                     yi->setText(0, name);
                     QStringList looks;
                     for (const Look &l : layer.looks)
                         looks << lookText(l);
                     yi->setText(1, layer.release ? tr("release") : QString());
-                    yi->setToolTip(0, looks.join(QStringLiteral(", ")));
+                    yi->setToolTip(0, QStringLiteral("%1\n%2").arg(m_st->targetContents(layer.target),
+                                                                   looks.join(QStringLiteral(", "))).trimmed());
                     yi->setData(0, KindRole, LayerNode);
                     yi->setData(0, IdRole, layer.id);
                     yi->setData(0, CueRole, cue.id);
@@ -1647,6 +1706,19 @@ void ShowTreeView::slotTreeSelectionChanged()
 {
     if (m_reloading)
         return;
+    // The command line says what the selected layer holds.
+    {
+        QString holds;
+        if (currentKind() == LayerNode)
+            if (const Cue *c = m_st->cue(currentCueId()))
+                if (const Layer *l = c->layer(currentId()))
+                    holds = tr("Layer %1: %2 — e.g. colour Blue, or name \"…\"")
+                            .arg(l->name.isEmpty() ? m_st->targetLabel(l->target) : l->name,
+                                 m_st->targetContents(l->target));
+        m_command->setPlaceholderText(holds.isEmpty()
+                                      ? tr("Type a command (: from the tree) — e.g. Towers colour Blue dimmer 45, or help")
+                                      : holds);
+    }
     updateInspector();
     updateButtons();
     syncPreview();
@@ -1925,7 +1997,8 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
     const QColor grey = palette().color(QPalette::Disabled, QPalette::Text);
     for (const ResolvedLayer &rl : resolved.at(index).layers)
     {
-        QString name = rl.name.isEmpty() ? m_st->targetLabel(rl.target) : rl.name;
+        QString name = rl.name.isEmpty() ? m_st->targetLabel(rl.target)
+                       : tr("%1 (%2)").arg(rl.name, m_st->targetLabel(rl.target));
         if (rl.depth > 0)
             name = QString(rl.depth * 3, QLatin1Char(' ')) + QStringLiteral("↳ ") + name;
         QStringList vals;
@@ -2094,6 +2167,7 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
 
     if (rl == nullptr)
     {
+        m_layerContents->setVisible(false);
         m_layerTitle->setText(tr("(not on stage in this cue)"));
         m_layerRelease->setVisible(false);
         m_pages->setCurrentWidget(m_layerPage);
@@ -2113,6 +2187,46 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
     else
     {
         m_layerTitle->setText(tr("%1 in cue %2").arg(name, m_st->cueLabel(list, index)));
+    }
+    // What it holds: groups (links to them in the Library) with counts, ✕
+    // to take one out (an own layer on more than one).
+    {
+        const Target &t = rl->target;
+        QStringList parts;
+        const int units = int(t.groups.count() + t.fixtures.count() + t.sets.count());
+        const bool removable = own != nullptr && units > 1;
+        auto part = [&](const QString &kind, quint32 id, const QString &text) {
+            QString out = QStringLiteral("<a href=\"show:%1:%2\">%3</a>").arg(kind).arg(id).arg(text.toHtmlEscaped());
+            if (removable)
+                out += QStringLiteral(" <a href=\"rm:%1:%2\" title=\"%3\">✕</a>").arg(kind).arg(id)
+                       .arg(tr("Take it out of this layer").toHtmlEscaped());
+            return out;
+        };
+        if (t.isOpaque())
+            parts << m_st->targetContents(t).toHtmlEscaped();
+        for (quint32 set : t.sets)
+        {
+            Target one;
+            one.sets << set;
+            parts << part(QStringLiteral("s"), set, m_st->targetContents(one).section(QStringLiteral(" — "), 0, 0));
+        }
+        for (quint32 g : t.groups)
+        {
+            const FixtureGroup *grp = m_doc->fixtureGroup(g);
+            parts << part(QStringLiteral("g"), g, grp == nullptr ? tr("(missing group)")
+                          : QStringLiteral("%1 (%2)").arg(grp->name()).arg(grp->fixtureList().count()));
+        }
+        for (quint32 f : t.fixtures)
+        {
+            const Fixture *fxi = m_doc->fixture(f);
+            parts << part(QStringLiteral("f"), f, fxi == nullptr ? tr("(missing fixture)") : fxi->name());
+        }
+        QString text = tr("Contains: %1").arg(parts.join(QStringLiteral(" · ")));
+        if (!t.isOpaque())
+            text += tr(" — %1 fixture(s)").arg(m_st->targetFixtures(t).count());
+        m_layerContents->setText(text);
+        m_layerContents->setToolTip(m_st->targetContents(t));
+        m_layerContents->setVisible(true);
     }
     // A child layer (§3.5): what it doesn't set, its parent lights.
     QHash<QString, QPair<ResolvedValue, QString>> inherited;
@@ -2391,6 +2505,13 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
 QStringList ShowTreeView::attributeRows() const
 {
     return m_rowText;
+}
+
+QString ShowTreeView::layerContentsText() const
+{
+    QTextDocument doc;
+    doc.setHtml(m_layerContents->text());
+    return doc.toPlainText();
 }
 
 QWidget *ShowTreeView::lineStrip() const

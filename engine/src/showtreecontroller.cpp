@@ -3047,6 +3047,42 @@ QString ShowTreeController::targetLabel(const Target &target) const
     return names.join(QStringLiteral(" + "));
 }
 
+QString ShowTreeController::targetContents(const Target &target) const
+{
+    if (target.isOpaque())
+        return tr("plays %1").arg(targetLabel(target));
+    QStringList parts;
+    auto group = [this](quint32 g) {
+        const FixtureGroup *grp = m_doc->fixtureGroup(g);
+        return grp == nullptr ? tr("(missing group)")
+                              : QStringLiteral("%1 (%2)").arg(grp->name()).arg(grp->fixtureList().count());
+    };
+    for (quint32 set : target.sets)
+    {
+        const GroupSet *gs = groupSet(set);
+        if (gs == nullptr)
+        {
+            parts << tr("(missing set)");
+            continue;
+        }
+        QStringList members;
+        for (quint32 g : gs->groups)
+            members << group(g);
+        if (!gs->fixtures.isEmpty())
+            members << tr("%1 fixture(s)").arg(gs->fixtures.count());
+        parts << QStringLiteral("%1: %2").arg(gs->name, members.join(QStringLiteral(" · ")));
+    }
+    for (quint32 g : target.groups)
+        parts << group(g);
+    for (quint32 f : target.fixtures)
+    {
+        const Fixture *fxi = m_doc->fixture(f);
+        parts << (fxi == nullptr ? tr("(missing fixture)") : fxi->name());
+    }
+    const int n = int(targetFixtures(target).count());
+    return tr("%1 — %2 fixture(s)").arg(parts.join(QStringLiteral(" · "))).arg(n);
+}
+
 QString ShowTreeController::cueLabel(const CueList &list, int index) const
 {
     if (index < 0 || index >= list.cues.count())
