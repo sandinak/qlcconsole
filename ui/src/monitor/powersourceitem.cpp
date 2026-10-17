@@ -18,6 +18,7 @@
 
 #include <QtMath>
 #include "powersourceitem.h"
+#include "apputil.h"
 
 #define PSI_W 64.0
 #define PSI_H 26.0
@@ -32,14 +33,14 @@ PowerSourceItem::PowerSourceItem(int sourceIndex, const QString &name, bool lock
 {
     setFlags(ItemIsMovable | ItemIsSelectable | ItemSendsGeometryChanges);
     setZValue(0.5);   // above platforms, below fixtures
-    setCursor(Qt::SizeAllCursor);
+    setCursor(AppUtil::nativeCursorShape(Qt::SizeAllCursor));
     setToolTip(QObject::tr("Power source: %1").arg(name));
 }
 
 void PowerSourceItem::setMovable(bool movable)
 {
     setFlag(ItemIsMovable, movable);
-    setCursor(movable ? Qt::SizeAllCursor : Qt::ArrowCursor);
+    setCursor(movable ? AppUtil::nativeCursorShape(Qt::SizeAllCursor) : Qt::ArrowCursor);
 }
 
 void PowerSourceItem::setCircuitColors(const QList<QColor> &colors)

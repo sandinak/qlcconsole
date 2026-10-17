@@ -20,6 +20,7 @@
 #include <QtMath>
 #include "networknodeitem.h"
 #include "networktopology.h"
+#include "apputil.h"
 
 #define NNI_W 72.0
 #define NNI_H 26.0
@@ -55,14 +56,14 @@ NetworkNodeItem::NetworkNodeItem(int nodeIndex, const QString &name, int transpo
 {
     setFlags(ItemIsMovable | ItemIsSelectable | ItemSendsGeometryChanges);
     setZValue(0.5);   // above platforms, below fixtures -- same layer as power sources
-    setCursor(Qt::SizeAllCursor);
+    setCursor(AppUtil::nativeCursorShape(Qt::SizeAllCursor));
     setToolTip(QObject::tr("Network node: %1").arg(name));
 }
 
 void NetworkNodeItem::setMovable(bool movable)
 {
     setFlag(ItemIsMovable, movable);
-    setCursor(movable ? Qt::SizeAllCursor : Qt::ArrowCursor);
+    setCursor(movable ? AppUtil::nativeCursorShape(Qt::SizeAllCursor) : Qt::ArrowCursor);
 }
 
 QRectF NetworkNodeItem::boundingRect() const

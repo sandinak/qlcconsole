@@ -21,6 +21,7 @@
 #include "tower.h"
 #include "monitorproperties.h"
 #include "doc.h"
+#include "apputil.h"
 
 TowerItem::TowerItem(Tower *tower, Doc *doc,
                      float pxX, float pxY, float pxW, float pxH,
@@ -37,7 +38,7 @@ TowerItem::TowerItem(Tower *tower, Doc *doc,
     setFlags(ItemIsSelectable | ItemSendsGeometryChanges);
     setZValue(-0.9);
     setFlag(ItemIsMovable, !elevation && !tower->locked());
-    setCursor((elevation || tower->locked()) ? Qt::ArrowCursor : Qt::SizeAllCursor);
+    setCursor((elevation || tower->locked()) ? Qt::ArrowCursor : AppUtil::nativeCursorShape(Qt::SizeAllCursor));
     setPos(pxX, pxY);
 
     const bool isFeet = doc->monitorProperties()->gridUnits() == MonitorProperties::Feet;
@@ -62,7 +63,7 @@ quint32 TowerItem::towerId() const { return m_tower->id(); }
 void TowerItem::setMovable(bool movable)
 {
     setFlag(ItemIsMovable, movable && !m_elevation);
-    setCursor((movable && !m_elevation) ? Qt::SizeAllCursor : Qt::ArrowCursor);
+    setCursor((movable && !m_elevation) ? AppUtil::nativeCursorShape(Qt::SizeAllCursor) : Qt::ArrowCursor);
 }
 
 void TowerItem::showLabel(bool visible)
@@ -170,7 +171,7 @@ void TowerItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
         m_tower->setLocked(!m_tower->locked());
         const bool canMove = !m_tower->locked();
         setFlag(ItemIsMovable, canMove && !m_elevation);
-        setCursor((canMove && !m_elevation) ? Qt::SizeAllCursor : Qt::ArrowCursor);
+        setCursor((canMove && !m_elevation) ? AppUtil::nativeCursorShape(Qt::SizeAllCursor) : Qt::ArrowCursor);
         update();
         if (m_doc) m_doc->setModified();
     }

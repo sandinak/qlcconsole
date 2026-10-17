@@ -25,6 +25,7 @@
 #include "stageplatform.h"
 #include "monitorproperties.h"
 #include "doc.h"
+#include "apputil.h"
 
 PlatformItem::PlatformItem(StagePlatform *platform, Doc *doc,
                            float pxX, float pxY, float pxW, float pxD,
@@ -41,7 +42,7 @@ PlatformItem::PlatformItem(StagePlatform *platform, Doc *doc,
     setZValue(-1.0);   // below trusses and fixtures
     // Respect a persisted per-platform lock: a locked platform can't be dragged.
     setFlag(ItemIsMovable, !platform->locked());
-    setCursor(platform->locked() ? Qt::ArrowCursor : Qt::SizeAllCursor);
+    setCursor(platform->locked() ? Qt::ArrowCursor : AppUtil::nativeCursorShape(Qt::SizeAllCursor));
     setPos(pxX, pxY);
 
     bool isFeet = doc->monitorProperties()->gridUnits() == MonitorProperties::Feet;
@@ -76,7 +77,7 @@ quint32 PlatformItem::platformId() const
 void PlatformItem::setMovable(bool movable)
 {
     setFlag(ItemIsMovable, movable);
-    setCursor(movable ? Qt::SizeAllCursor : Qt::ArrowCursor);
+    setCursor(movable ? AppUtil::nativeCursorShape(Qt::SizeAllCursor) : Qt::ArrowCursor);
 }
 
 void PlatformItem::showLabel(bool visible)
@@ -327,7 +328,7 @@ void PlatformItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
         m_platform->setLocked(!m_platform->locked());
         const bool canMove = !m_platform->locked();
         setFlag(ItemIsMovable, canMove);
-        setCursor(canMove ? Qt::SizeAllCursor : Qt::ArrowCursor);
+        setCursor(canMove ? AppUtil::nativeCursorShape(Qt::SizeAllCursor) : Qt::ArrowCursor);
         update();
         if (m_doc)
             m_doc->setModified();

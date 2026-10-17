@@ -9,6 +9,35 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 ### 2026-10-17 — Rig Overview: dimmed RGB without a dimmer channel drew black
 
 `channelSetLiveState()` (`ui/src/monitor/fixturevisualtraits.cpp`) handed back the raw, already-dimmed colour *and* a level of max(R,G,B) for fixtures with no dimmer channel; every reader draws colour × level, so Blue at 19% (0,1,48) drew at 9/255. It now returns the hue at full and the level once. Fixtures with a dimmer channel are unchanged. Found from a Show Tree preview (feat/show-tree d8664080a); backported with its `monitor_test` case.
+### 2026-10-17 — macOS: no image-based cursors (crash orbiting the Angled view) *(fix/macos-native-cursors)*
+
+Crash report 2026-10-17 15:36 (macOS 27.0, Homebrew Qt 6.11.1): pressing the
+empty canvas in Structure Studio's Angled view to orbit called
+`setCursor(Qt::SizeAllCursor)` and died in `CGColorSpaceGetType` under
+`QImage::toCGImage()` ← `QCocoaCursor::createCursorData()`.
+
+- **Root cause (Qt):** cursors with no native NSCursor are built from PNGs;
+  `sizeallcursor.png`, `spincursor.png` and `waitcursor.png` all carry an
+  `iCCP` profile, so the QImage has a custom colour space. In Qt 6.11.x
+  `qt_mac_cgImageFormatForImage()` returns a raw `CGColorSpaceRef` whose
+  `QCFType` owner has already released it -- a use-after-free that only
+  survives for the system sRGB space. QTBUG-147602, fixed upstream in qtbase
+  a481ede673 (picked to 6.11/6.12), not yet in the Homebrew 6.11.1 here.
+- **Fix:** `AppUtil::nativeCursorShape()` -- on macOS SizeAll → OpenHand
+  (ClosedHand while dragging), Wait/Busy → Arrow; everything else (and every
+  shape on Linux/Windows) passes through. In Qt 6.11 Forbidden, WhatsThis,
+  Drag*, the four resize arrows and the hands are native NSCursors already,
+  and Blank is a profile-less pixmap, so they stay. All 21 SizeAll call
+  sites (Structure Studio view and its items, path draw widget, VC widget
+  move) and the VC widget's FDiag resize go through it.
+- **Residual risk:** any other QImage with an embedded profile that reaches
+  `toCGImage()` (e.g. a drag pixmap made from a profiled PNG) can hit the same
+  Qt bug until Qt is upgraded.
+- **Test:** `ui/test/nativecursor` -- the mapping, that no shape maps to a
+  PNG-backed one, pass-through off macOS, and a source guard that no
+  `Qt::SizeAll/Wait/BusyCursor` in `ui/src`, `main`, `fixtureeditor` or
+  `webaccess/src` bypasses the helper. The CoreGraphics crash itself cannot be
+  reproduced offscreen.
 
 ### 2026-10-17 — Engine: fader priority moves both ways; an Override 16-bit channel writes both bytes *(fix/fader-priority-16bit)*
 

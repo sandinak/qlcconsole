@@ -57,6 +57,7 @@
 #include "zraster.h"
 #include "rhiraster.h"
 #include "aimsolver.h"
+#include "apputil.h"
 #include <QScopedValueRollback>
 #include <array>
 #include <QVarLengthArray>
@@ -8555,7 +8556,7 @@ void StructureStudioView::mousePressEvent(QMouseEvent *e)
             {
                 m_orbiting = true;
                 m_orbitLast = e->pos();
-                setCursor(Qt::SizeAllCursor);
+                setCursor(AppUtil::nativeCursorShape(Qt::SizeAllCursor, true));
             }
             else
             {

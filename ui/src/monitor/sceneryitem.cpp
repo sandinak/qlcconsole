@@ -17,6 +17,7 @@
 
 #include "sceneryitem.h"
 #include "scenery.h"
+#include "apputil.h"
 
 SceneryItem::SceneryItem(Scenery *scenery, Doc *doc, const QPointF &anchor,
                          const QList<QPolygonF> &parts, bool elevation, QGraphicsItem *parent)
@@ -59,7 +60,7 @@ void SceneryItem::setMovable(bool movable)
     // Moved on the floor plan only, as the stands and towers are.
     const bool can = movable && !m_elevation && !m_scenery->locked();
     setFlag(ItemIsMovable, can);
-    setCursor(can ? Qt::SizeAllCursor : Qt::ArrowCursor);
+    setCursor(can ? AppUtil::nativeCursorShape(Qt::SizeAllCursor) : Qt::ArrowCursor);
 }
 
 void SceneryItem::showLabel(bool visible)
