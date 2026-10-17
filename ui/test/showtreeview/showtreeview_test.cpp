@@ -2488,6 +2488,8 @@ static QString treeState(Doc *doc)
     QXmlStreamWriter w(&buffer);
     w.writeStartDocument();
     w.writeStartElement("S");
+    for (const GroupSet &gs : st->groupSets())
+        ShowTree::saveXML(&w, gs);
     for (const Production &p : st->productions())
         ShowTree::saveXML(&w, p);
     w.writeEndElement();
@@ -2721,7 +2723,278 @@ void ShowTreeView_Test::everyActionIsOneUndoStep()
                  view.selectNode(st->cueList(list)->cues.last().id);
                  return view.runCommand(include);
              }), qPrintable(include + ": " + view.commandMessage()));
-    QVERIFY(walked >= 45);
+    // P3: group sets, child layers, rename in place, overlap.
+    quint32 wings = invalidId();
+    QVERIFY(oneStep("Make set", [&] {
+        wings = st->addGroupSet("Wings", { towers->id(), usts->id() });
+        return wings != invalidId();
+    }));
+    QVERIFY(oneStep("a set's members", [&] { return st->setGroupSetMembers(wings, { towers->id() }); }));
+    QVERIFY(oneStep("rename a set", [&] { return st->renameGroupSet(wings, "Wing"); }));
+    const quint32 last = st->cueList(list)->cues.last().id;
+    QVERIFY(oneStep("a set dropped on a cue", [&] { return view.dropTargets(last, {}, {}, false, { wings }); }));
+    QVERIFY(oneStep("a set ⌥-dropped: a layer per member", [&] {
+        return view.dropTargets(last, {}, {}, true, { wings });
+    }));
+    quint32 big = invalidId();
+    QVERIFY(oneStep("a layer for children", [&] {
+        big = st->addLayer(last, Target { { pars->id() }, {}, {}, 0xFFFFFFFF });
+        return big != invalidId();
+    }));
+    QVERIFY(oneStep("a child layer by ⇧-drop", [&] {
+        return view.dropChildLayers(last, big, {}, { m_fixtures[4] });
+    }));
+    QVERIFY(oneStep("overlap: mix", [&] { return st->setCueMixOverlap(last, true); }));
+    QVERIFY(oneStep("rename in place (Return)", [&] {
+        view.selectNode(big, last);
+        view.tree()->setFocus();
+        QTest::keyClick(view.tree(), Qt::Key_Return);
+        QLineEdit *editor = qobject_cast<QLineEdit *>(QApplication::focusWidget());
+        if (editor == nullptr)
+            return false;
+        editor->clear();
+        QTest::keyClicks(editor, "Floor wash");
+        QTest::keyClick(editor, Qt::Key_Return);
+        QTest::qWait(30);
+        return st->cue(last)->layer(big)->name == QLatin1String("Floor wash");
+    }));
+    for (const char *line : { "set \"Sides\" Towers Pars", "Sides dimmer 45", "Dim 2 in Towers dimmer 45",
+                              "name \"Typed\"" })
+        QVERIFY2(oneStep(line, [&] {
+                     view.selectNode(st->cueList(list)->cues.last().id);
+                     return view.runCommand(QString::fromUtf8(line));
+                 }),
+                 qPrintable(QStringLiteral("%1: %2").arg(QString::fromUtf8(line), view.commandMessage())));
+    QVERIFY(walked >= 57);
+}
+
+/****************************************************************************
+ * P3 (2026-10-17): group sets, child layers, renaming in place
+ ****************************************************************************/
+
+/* §1 "Make set": groups selected in the Library made into a named set,
+   shown under All → Group sets, dragged like a group (one layer on the
+   set; ⌥ a layer per member), and usable by name on the command line. */
+void ShowTreeView_Test::groupSetsInTheLibrary()
+{
+    FixtureGroup *sl = group("SL", 0, 2);
+    FixtureGroup *sr = group("SR", 2, 2);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 c2 = st->addCue(list, 0, "Two");
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *lib = view.library();
+    QTreeWidgetItem *a = libraryItem(lib, "SL (2)");
+    QTreeWidgetItem *b = libraryItem(lib, "SR (2)");
+    QVERIFY(a != nullptr && b != nullptr);
+    QCOMPARE(view.makeSetFromLibrary("Towers"), invalidId());      // nothing selected
+    a->setSelected(true);
+    b->setSelected(true);
+    const quint32 towers = view.makeSetFromLibrary("Towers");
+    QVERIFY(towers != invalidId());
+    QCOMPARE(st->groupSet(towers)->groups, QList<quint32>({ sl->id(), sr->id() }));
+    QTRY_VERIFY(libraryItem(lib, "Towers (SL + SR)") != nullptr);
+    bool inAll = false;
+    for (QTreeWidgetItemIterator it(lib); *it; ++it)
+        if ((*it)->text(0) == "Towers (SL + SR)" && (*it)->parent()->text(0) == "Group sets")
+            inAll = true;
+    QVERIFY(inAll);
+    QVERIFY(st->undo());
+    QVERIFY(st->groupSets().isEmpty());
+    QVERIFY(st->redo());
+
+    // Dropped on the cue page: one layer on the set.
+    QVERIFY(view.selectNode(c1));
+    QLabel *hint = view.findChild<QLabel *>("stDropHint");
+    QWidget *page = view.findChild<QWidget *>("stCuePage");
+    QLabel *zone = view.findChild<QLabel *>("stCueDropZone");
+    const QPoint onZone = zone->mapTo(page, zone->rect().center());
+    QCOMPARE(dragAndDrop(page, onZone, idsMime(ShowTreeView::setMimeType(), { towers }), hint),
+             QString("one layer on Towers in 1 One (⌥: a layer for each group)"));
+    QCOMPARE(st->cue(c1)->layers.count(), 1);
+    QCOMPARE(st->cue(c1)->layers.first().target.sets, QList<quint32>({ towers }));
+    QVERIFY(treeText(view.tree()).join("\n").contains("Towers"));
+    // ⌥: a layer per member, one undo step.
+    QVERIFY(view.selectNode(c2));
+    QCOMPARE(dragAndDrop(page, onZone, idsMime(ShowTreeView::setMimeType(), { towers }), hint, Qt::AltModifier),
+             QString("2 new layers in 2 Two, one for each group"));
+    QCOMPARE(st->cue(c2)->layers.count(), 2);
+    QCOMPARE(st->cue(c2)->layers.at(1).target.groups, QList<quint32>({ sr->id() }));
+    QVERIFY(st->undo());
+    QCOMPARE(st->cue(c2)->layers.count(), 0);
+
+    // The command line: a set by name, and made there.
+    QVERIFY(view.selectNode(c2));
+    QVERIFY2(view.runCommand("set \"Wings\" SL SR"), qPrintable(view.commandMessage()));
+    QCOMPARE(st->groupSets().count(), 2);
+    QVERIFY2(view.runCommand("Wings dimmer 50"), qPrintable(view.commandMessage()));
+    QCOMPARE(st->cue(c2)->layers.first().target.sets.count(), 1);
+    QVERIFY(st->undo());
+    QVERIFY(st->undo());
+    QCOMPARE(st->groupSets().count(), 1);
+}
+
+/* §3.5 by mouse: ⇧-drop a group that is part of a layer onto it -- a child
+   layer, nested under it in the tree; its page shows what the parent
+   lights grey ("from Steps (parent)"); a group that isn't part of it is
+   refused, and the hint says why. */
+void ShowTreeView_Test::childLayersByMouse()
+{
+    FixtureGroup *steps = group("Steps", 0, 3);
+    FixtureGroup *us = group("US", 1, 1);
+    FixtureGroup *floor = group("Floor", 4, 1);
+    const quint32 full = dimmer(255, "Full");
+    const quint32 red = colour(Qt::red, "Red");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(list, -1, "One");
+    Target t;
+    t.groups << steps->id();
+    const quint32 parent = st->addLayer(c1, t);
+    st->setLayerLook(c1, parent, st->lookForPalette(full));
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QLabel *hint = view.findChild<QLabel *>("stDropHint");
+    QTreeWidget *tree = view.tree();
+    QVERIFY(view.selectNode(parent, c1));
+    QTreeWidgetItem *row = rowOf(tree, ShowTreeView::LayerNode, parent, c1);
+    tree->scrollToItem(row);
+    const QPoint at = tree->visualItemRect(row).center();
+
+    // Not part of Steps: refused, the hint says so.
+    bool taken = true;
+    QCOMPARE(dragAndDrop(tree->viewport(), at, idsMime(FixtureGroupSource::fixtureGroupMimeType(), { floor->id() }),
+                         hint, Qt::ShiftModifier, &taken),
+             QString("Floor isn't part of Steps: a child layer is on part of its parent"));
+    QCOMPARE(st->cue(c1)->layers.count(), 1);
+
+    // US is: a child layer, under Steps's row.
+    row = rowOf(tree, ShowTreeView::LayerNode, parent, c1);
+    QCOMPARE(dragAndDrop(tree->viewport(), tree->visualItemRect(row).center(),
+                         idsMime(FixtureGroupSource::fixtureGroupMimeType(), { us->id() }), hint, Qt::ShiftModifier),
+             QString("a child layer on US under Steps in 1 One: it sets only what it sets"));
+    QCOMPARE(st->cue(c1)->layers.count(), 2);
+    const quint32 child = st->cue(c1)->layers.at(1).id;
+    QCOMPARE(st->cue(c1)->layers.at(1).parent, parent);
+    QTreeWidgetItem *childRow = rowOf(tree, ShowTreeView::LayerNode, child, c1);
+    QVERIFY(childRow != nullptr);
+    QCOMPARE(childRow->parent(), rowOf(tree, ShowTreeView::LayerNode, parent, c1));
+    // Without ⇧ the same group joins the layer, as before.
+    QCOMPARE(view.dropHint(c1, parent, idsMime(FixtureGroupSource::fixtureGroupMimeType(), { us->id() })),
+             QString("add US to layer Steps in 1 One (⇧: a child layer on it)"));
+
+    // Its page: what it sets, and what its parent lights for it, grey.
+    st->setLayerLook(c1, child, st->lookForPalette(red));
+    QVERIFY(view.selectNode(child, c1));
+    QCOMPARE(rowFor(view.attributeRows(), "Colour"), QString("Colour | Red | "));
+    QCOMPARE(rowFor(view.attributeRows(), "Dimmer"), QString("Dimmer | Full | from Steps (parent)"));
+    // The cue page lists it under its parent.
+    QVERIFY(view.selectNode(c1));
+    QVERIFY2(view.cueLayerItems().join("|").contains(QString::fromUtf8("   ↳ US")),
+             qPrintable(view.cueLayerItems().join("|")));
+    // The command line: US in Steps.
+    QVERIFY2(view.runCommand("US in Steps dimmer 50"), qPrintable(view.commandMessage()));
+    QCOMPARE(st->cue(c1)->layers.count(), 2);
+    QVERIFY(st->cue(c1)->layers.at(1).look(KeyDimmer) != nullptr);
+
+    // Overlap: the cue page's check box.
+    QVERIFY(view.selectNode(c1));
+    QCheckBox *mix = view.findChild<QCheckBox *>("stCueMix");
+    QVERIFY(mix != nullptr && !mix->isChecked());
+    mix->click();
+    QVERIFY(st->cue(c1)->mixOverlap);
+    QVERIFY(st->undo());
+    QVERIFY(!st->cue(c1)->mixOverlap);
+}
+
+/* Branson (2026-10-17): a layer's name is its own, renamed as in the
+   Programming tab -- Return or F2 on the row, Return commits, Esc cancels,
+   empty goes back to its groups' name; one undo step; it stays the same
+   layer (tracking unchanged). A cue's name, not its number; a list's. */
+void ShowTreeView_Test::renameInPlace()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 c2 = st->addCue(list, 0, "Two");
+    Target t;
+    t.groups << towers->id();
+    const quint32 layer = st->addLayer(c1, t);
+    st->setLayerLook(c1, layer, st->lookForPalette(full));
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *tree = view.tree();
+    auto rename = [&](int key, const QString &text, int finish) {
+        tree->setFocus();
+        QTest::keyClick(tree, Qt::Key(key));
+        QTRY_VERIFY(view.isRenaming());
+        QLineEdit *editor = qobject_cast<QLineEdit *>(QApplication::focusWidget());
+        QVERIFY(editor != nullptr);
+        editor->clear();
+        QTest::keyClicks(editor, text);
+        QTest::keyClick(editor, Qt::Key(finish));
+        QTRY_VERIFY(!view.isRenaming());
+        QTest::qWait(20);
+    };
+
+    QVERIFY(view.selectNode(layer, c1));
+    const int steps = st->canUndo() ? 1 : 0;
+    Q_UNUSED(steps)
+    const QString undoBefore = st->undoText();
+    rename(Qt::Key_Return, "Hero", Qt::Key_Return);
+    QCOMPARE(st->cue(c1)->layer(layer)->name, QString("Hero"));
+    QCOMPARE(st->undoText(), QString("Rename"));
+    QVERIFY(st->cue(c1)->layer(layer)->target == t);
+    // Still the same layer: tracked into Two under its new name.
+    const QList<ResolvedCue> r = st->resolved(*st->cueList(list));
+    QCOMPARE(r.at(1).layers.first().name, QString("Hero"));
+    QCOMPARE(int(r.at(1).layers.first().origin), int(Origin::Tracked));
+    QVERIFY(treeText(tree).join("\n").contains("Hero"));
+    QVERIFY(st->undo());
+    QVERIFY(st->cue(c1)->layer(layer)->name.isEmpty());
+    QCOMPARE(st->undoText(), undoBefore);
+    QVERIFY(st->redo());
+
+    // Esc: nothing changes.
+    QVERIFY(view.selectNode(layer, c1));
+    rename(Qt::Key_F2, "Nope", Qt::Key_Escape);
+    QCOMPARE(st->cue(c1)->layer(layer)->name, QString("Hero"));
+    QTRY_VERIFY(treeText(tree).join("\n").contains("Hero"));
+
+    // Empty: back to its groups' name.
+    QVERIFY(view.selectNode(layer, c1));
+    rename(Qt::Key_Return, "", Qt::Key_Return);
+    QVERIFY(st->cue(c1)->layer(layer)->name.isEmpty());
+
+    // A cue: its name, the number stays.
+    QVERIFY(view.selectNode(c2));
+    rename(Qt::Key_Return, "Verse", Qt::Key_Return);
+    QCOMPARE(st->cue(c2)->name, QString("Verse"));
+    QCOMPARE(st->cue(c2)->number, QString("2"));
+    // A cue list.
+    QVERIFY(view.selectNode(list));
+    rename(Qt::Key_F2, "Opener", Qt::Key_Return);
+    QCOMPARE(st->cueList(list)->name, QString("Opener"));
+
+    // The command line names the selected layer.
+    QVERIFY(view.selectNode(layer, c1));
+    QVERIFY2(view.runCommand("name \"Lead\""), qPrintable(view.commandMessage()));
+    QCOMPARE(st->cue(c1)->layer(layer)->name, QString("Lead"));
+    QVERIFY2(view.runCommand("name \"\""), qPrintable(view.commandMessage()));
+    QVERIFY(st->cue(c1)->layer(layer)->name.isEmpty());
 }
 
 QTEST_MAIN(ShowTreeView_Test)

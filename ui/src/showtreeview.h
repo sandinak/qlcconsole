@@ -94,7 +94,7 @@ public:
     };
 
     /** Library item kinds. */
-    enum LibraryKind { LibSection = 100, LibFolder, LibGroup, LibFixture, LibPalette, LibFunction };
+    enum LibraryKind { LibSection = 100, LibFolder, LibGroup, LibFixture, LibPalette, LibFunction, LibSet };
 
     QTreeWidget *tree() const { return m_tree; }
     QTreeWidget *library() const { return m_library; }
@@ -109,13 +109,25 @@ public:
      * What the mouse does (drops, pickers) -- public for the tests
      ************************************************************************/
 public:
-    /** Groups / fixtures dropped on a cue: one layer on all of them, or
-     *  (@a separate, ⌥ held) one layer per group (and one on the fixtures). */
+    /** Groups / fixtures / group sets dropped on a cue: one layer on all
+     *  of them, or (@a separate, ⌥ held) one layer per group -- a set's
+     *  members each a layer of their own -- and one on the fixtures. */
     bool dropTargets(quint32 cueId, const QList<quint32> &groups, const QList<quint32> &fixtures,
-                     bool separate = false);
-    /** Groups / fixtures dropped on a layer: added to its target. */
+                     bool separate = false, const QList<quint32> &sets = QList<quint32>());
+    /** Groups / fixtures / sets dropped on a layer: added to its target. */
     bool dropTargetsOnLayer(quint32 cueId, quint32 layerId, const QList<quint32> &groups,
-                            const QList<quint32> &fixtures);
+                            const QList<quint32> &fixtures, const QList<quint32> &sets = QList<quint32>());
+    /** Groups / fixtures / sets dropped on a layer with ⇧ held: a child
+     *  layer on them (§3.5) -- or, @a separate (⌥⇧), one child each. Each
+     *  must be part of the layer's fixtures; refused (@a why) if not. */
+    bool dropChildLayers(quint32 cueId, quint32 parentId, const QList<quint32> &groups,
+                         const QList<quint32> &fixtures, const QList<quint32> &sets = QList<quint32>(),
+                         bool separate = false, QString *why = nullptr);
+    /** Make set (§1): the groups and fixtures selected in the Library as a
+     *  group set named @a name. Invalid: nothing selected. */
+    quint32 makeSetFromLibrary(const QString &name);
+    /** MIME type of group sets dragged from the Library (a stream of ids). */
+    static const char *setMimeType();
     /** Functions dropped on a cue: opaque function layers. */
     bool dropFunctions(quint32 cueId, const QList<quint32> &functions);
     /** Palettes dropped on a layer (or, with no layer, on the cue's looks;
@@ -127,21 +139,23 @@ public:
      *  (tracked, included, base): it becomes the cue's own with them added,
      *  keeping what it carried -- one undo step. */
     bool dropTargetsOnTracked(quint32 cueId, const ShowTree::Target &target, const QList<quint32> &groups,
-                              const QList<quint32> &fixtures);
+                              const QList<quint32> &fixtures, const QList<quint32> &sets = QList<quint32>());
     /** What a drop of @a mime on (@a cueId, @a layerId) would do, before it
      *  is let go of: "Blue → cue look: reaches 2 of 3 layers". With no layer
      *  but a @a target: onto a layer carried into the cue. */
     QString dropHint(quint32 cueId, quint32 layerId, const QMimeData *mime,
-                     bool separate = false, const ShowTree::Target &target = ShowTree::Target()) const;
+                     bool separate = false, const ShowTree::Target &target = ShowTree::Target(),
+                     bool child = false) const;
     bool acceptsDrop(quint32 cueId, quint32 layerId, const QMimeData *mime,
-                     const ShowTree::Target &target = ShowTree::Target()) const;
+                     const ShowTree::Target &target = ShowTree::Target(), bool child = false) const;
     /** Any drop on (@a cueId, @a layerId or carried-in @a target), as the
      *  tree, the cue page and the layer page take it: palettes set looks,
      *  groups / fixtures make a layer (⌥ @a separate: one each) or join
      *  one, functions play as they are. @a stayOnCue: the cue stays
      *  selected (a drop on the cue page), else the new layer is. */
     bool dropMime(quint32 cueId, quint32 layerId, const QMimeData *mime, bool separate = false,
-                  const ShowTree::Target &target = ShowTree::Target(), bool stayOnCue = false);
+                  const ShowTree::Target &target = ShowTree::Target(), bool stayOnCue = false,
+                  bool child = false);
     /** The cue page's layer rows, as text ("⤳ Towers  Blue · tracked from 1
      *  One"), and the list itself (it takes drops). */
     QStringList cueLayerItems() const;
@@ -278,6 +292,13 @@ public:
      *  of a cue's own): the new plain scene, invalid when there is none. */
     static quint32 detachGenerated(Doc *doc, quint32 sceneId);
 
+    /** Rename the selected tree row in place, as the Programming tab does
+     *  (Return or F2 in the tree): a production, cue list, cue (its name,
+     *  not its number) or layer (empty: back to its groups' name). Return
+     *  commits, Esc cancels; one undo step. False: nothing to rename. */
+    bool startRename();
+    bool isRenaming() const { return m_renaming; }
+
     bool isPinned(int kind, quint32 id) const;
     void setPinned(int kind, quint32 id, bool pinned);
 
@@ -311,6 +332,7 @@ private slots:
     void slotListModeChanged(int index);
     void slotListBaseChanged(int index);
     void slotCueBaseToggled(bool on);
+    void slotCueMixToggled(bool on);
     void slotLayerReleaseToggled(bool on);
     void slotCommandEntered();
     void slotFilterChanged(const QString &text);
@@ -387,6 +409,7 @@ private:
     QLineEdit *m_cueNote;
     QComboBox *m_cueMode;
     QCheckBox *m_cueBase;
+    QCheckBox *m_cueMix;
     QListWidget *m_cueIncludes;
     QToolButton *m_includeAdd;
     QToolButton *m_includeRemove;
@@ -432,6 +455,8 @@ private:
     QList<quint32> m_expanded;
     quint32 m_pageCue = 0xFFFFFFFF;      //!< the cue the cue page shows
     bool m_reloading = false;
+    bool m_renaming = false;
+    void slotTreeItemRenamed(QTreeWidgetItem *item, int column);
     bool m_inspectorUpdating = false;
 };
 

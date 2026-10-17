@@ -60,6 +60,12 @@ class Doc;
  *   record [selected|running|lit]   Record as new cue: the setting says
  *                                which when the choices differ (or asks)
  *   list "01-Opener"             select that cue list, or make it
+ *   set "Towers" SL SR           a group set (Make set), or its members again
+ *   US in Steps colour Red       a child layer of the cue's Steps layer (§3.5)
+ *   Towers aim DS-Edge spread 0 group pairs cross mirror
+ *                                a line aim and its parameters (§3B)
+ *   cue look spread +5           a cue's Spread: line aims only (D18)
+ *   name "Hero"                  name the selected layer (or cue); "" = automatic
  *   dup · undo · redo
  *
  * Names are the Library's (groups, fixtures, palettes, functions), matched
@@ -77,6 +83,8 @@ public:
         quint32 production = 0xFFFFFFFF;
         quint32 list = 0xFFFFFFFF;
         quint32 cue = 0xFFFFFFFF;
+        /** The layer selected in the cue (invalid: none): what `name` names. */
+        quint32 layer = 0xFFFFFFFF;
         /** The Library's Recent palettes, newest first: a typed value
          *  reuses one of these before any other (after In this cue list). */
         QList<quint32> recentPalettes;
@@ -137,6 +145,9 @@ private:
     static QString typed(const QString &name, bool quoted);
 
     QStringList groupNames() const;
+    QStringList setNames() const;
+    /** Stage targets (points, areas, lines) by name: what `aim` takes. */
+    QStringList stageTargetNames() const;
     /** Groups (and, for those in a folder, "Movers/Front/Spots"), then
      *  fixtures: every name a layer can be made on. */
     QStringList targetNames() const;

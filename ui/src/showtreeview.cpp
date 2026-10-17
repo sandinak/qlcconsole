@@ -224,12 +224,13 @@ protected:
         }
         ShowTree::Target carried;
         target(e->position().toPoint(), &cue, &layer, &carried);
-        if (cue != ShowTree::invalidId() && m_view->acceptsDrop(cue, layer, e->mimeData(), carried))
+        const bool child = e->modifiers() & Qt::ShiftModifier;
+        if (cue != ShowTree::invalidId() && m_view->acceptsDrop(cue, layer, e->mimeData(), carried, child))
         {
             e->acceptProposedAction();
             if (m_hint != nullptr)
                 m_hint->setText(m_view->dropHint(cue, layer, e->mimeData(),
-                                                 e->modifiers() & Qt::AltModifier, carried));
+                                                 e->modifiers() & Qt::AltModifier, carried, child));
         }
         else
         {
@@ -276,8 +277,9 @@ protected:
             }
             return;
         }
-        if (m_view->acceptsDrop(cue, layer, mime, carried)
-            && m_view->dropMime(cue, layer, mime, e->modifiers() & Qt::AltModifier, carried))
+        const bool child = e->modifiers() & Qt::ShiftModifier;
+        if (m_view->acceptsDrop(cue, layer, mime, carried, child)
+            && m_view->dropMime(cue, layer, mime, e->modifiers() & Qt::AltModifier, carried, false, child))
             e->acceptProposedAction();
         else
             e->ignore();
@@ -303,10 +305,11 @@ public:
 protected:
     QMimeData *mimeData(const QList<QTreeWidgetItem *> &items) const override
     {
-        QByteArray grp, fx, pal, fn;
+        QByteArray grp, fx, pal, fn, set;
         QDataStream gs(&grp, QIODevice::WriteOnly), xs(&fx, QIODevice::WriteOnly),
-                    ps(&pal, QIODevice::WriteOnly), fs(&fn, QIODevice::WriteOnly);
-        int g = 0, x = 0, p = 0, f = 0;
+                    ps(&pal, QIODevice::WriteOnly), fs(&fn, QIODevice::WriteOnly),
+                    ss(&set, QIODevice::WriteOnly);
+        int g = 0, x = 0, p = 0, f = 0, t = 0;
         for (QTreeWidgetItem *item : items)
         {
             const quint32 id = item->data(0, ShowTreeView::IdRole).toUInt();
@@ -316,10 +319,11 @@ protected:
                 case ShowTreeView::LibFixture: xs << id; ++x; break;
                 case ShowTreeView::LibPalette: ps << id; ++p; break;
                 case ShowTreeView::LibFunction: fs << id; ++f; break;
+                case ShowTreeView::LibSet: ss << id; ++t; break;
                 default: break;
             }
         }
-        if (g + x + p + f == 0)
+        if (g + x + p + f + t == 0)
             return nullptr;
         QMimeData *mime = new QMimeData();
         if (g > 0)
@@ -330,6 +334,8 @@ protected:
             mime->setData(QLatin1String(FunctionsTreeWidget::paletteDragMimeType()), pal);
         if (f > 0)
             mime->setData(QLatin1String(FunctionsTreeWidget::functionDragMimeType()), fn);
+        if (t > 0)
+            mime->setData(QLatin1String(ShowTreeView::setMimeType()), set);
         return mime;
     }
 };
@@ -373,28 +379,30 @@ public:
     }
 
 protected:
-    bool takes(const QMimeData *mime) const
+    bool takes(const QMimeData *mime, bool child = false) const
     {
-        return cue != ShowTree::invalidId() && m_view->acceptsDrop(cue, layer, mime, target);
+        return cue != ShowTree::invalidId() && m_view->acceptsDrop(cue, layer, mime, target, child);
     }
     void dragEnterEvent(QDragEnterEvent *e) override
     {
-        if (!takes(e->mimeData()))
+        const bool child = e->modifiers() & Qt::ShiftModifier;
+        if (!takes(e->mimeData(), child))
             return;
         e->acceptProposedAction();
         setDropActive(true);
-        say(m_view->dropHint(cue, layer, e->mimeData(), e->modifiers() & Qt::AltModifier, target));
+        say(m_view->dropHint(cue, layer, e->mimeData(), e->modifiers() & Qt::AltModifier, target, child));
     }
     void dragMoveEvent(QDragMoveEvent *e) override
     {
-        if (!takes(e->mimeData()))
+        const bool child = e->modifiers() & Qt::ShiftModifier;
+        if (!takes(e->mimeData(), child))
         {
             e->ignore();
             return;
         }
         e->acceptProposedAction();
         setDropActive(true);
-        say(m_view->dropHint(cue, layer, e->mimeData(), e->modifiers() & Qt::AltModifier, target));
+        say(m_view->dropHint(cue, layer, e->mimeData(), e->modifiers() & Qt::AltModifier, target, child));
     }
     void dragLeaveEvent(QDragLeaveEvent *) override
     {
@@ -405,8 +413,10 @@ protected:
     {
         setDropActive(false);
         say(QString());
-        if (takes(e->mimeData())
-            && m_view->dropMime(cue, layer, e->mimeData(), e->modifiers() & Qt::AltModifier, target, stayOnCue))
+        const bool child = e->modifiers() & Qt::ShiftModifier;
+        if (takes(e->mimeData(), child)
+            && m_view->dropMime(cue, layer, e->mimeData(), e->modifiers() & Qt::AltModifier, target, stayOnCue,
+                                child))
             e->acceptProposedAction();
         else
             e->ignore();
@@ -452,7 +462,8 @@ public:
 
     /** Where a drop at @a pos goes: the row's layer if it takes it, else the
      *  cue. False: neither takes it. */
-    bool where(const QPoint &pos, const QMimeData *mime, quint32 *layer, ShowTree::Target *target, int *row) const
+    bool where(const QPoint &pos, const QMimeData *mime, quint32 *layer, ShowTree::Target *target, int *row,
+               bool child = false) const
     {
         *layer = ShowTree::invalidId();
         *target = ShowTree::Target();
@@ -470,7 +481,7 @@ public:
                 l = item->data(ShowTreeView::IdRole).toUInt();
             else if (r < targets.count())
                 t = targets.at(r);
-            if (m_view->acceptsDrop(cue, l, mime, t))
+            if (m_view->acceptsDrop(cue, l, mime, t, child))
             {
                 *layer = l;
                 *target = t;
@@ -478,7 +489,7 @@ public:
                 return true;
             }
         }
-        return m_view->acceptsDrop(cue, ShowTree::invalidId(), mime);
+        return !child && m_view->acceptsDrop(cue, ShowTree::invalidId(), mime);
     }
     void clearDropRow()
     {
@@ -507,7 +518,8 @@ protected:
         ShowTree::Target t;
         int r;
         const bool alt = e->modifiers() & Qt::AltModifier;
-        if (!where(e->position().toPoint(), e->mimeData(), &l, &t, &r))
+        const bool child = e->modifiers() & Qt::ShiftModifier;
+        if (!where(e->position().toPoint(), e->mimeData(), &l, &t, &r, child))
         {
             e->ignore();
             showRow(-1);
@@ -519,7 +531,7 @@ protected:
         showRow(r);
         // Onto a row: that row lights up; else the whole page (a new layer).
         m_page->setDropActive(r < 0);
-        m_page->say(m_view->dropHint(m_page->cue, l, e->mimeData(), alt, t));
+        m_page->say(m_view->dropHint(m_page->cue, l, e->mimeData(), alt, t, child));
     }
     void dragEnterEvent(QDragEnterEvent *e) override { hover(e); }
     void dragMoveEvent(QDragMoveEvent *e) override { hover(e); }
@@ -534,11 +546,12 @@ protected:
         quint32 l;
         ShowTree::Target t;
         int r;
-        const bool ok = where(e->position().toPoint(), e->mimeData(), &l, &t, &r);
+        const bool child = e->modifiers() & Qt::ShiftModifier;
+        const bool ok = where(e->position().toPoint(), e->mimeData(), &l, &t, &r, child);
         showRow(-1);
         m_page->setDropActive(false);
         m_page->say(QString());
-        if (ok && m_view->dropMime(m_page->cue, l, e->mimeData(), e->modifiers() & Qt::AltModifier, t, true))
+        if (ok && m_view->dropMime(m_page->cue, l, e->mimeData(), e->modifiers() & Qt::AltModifier, t, true, child))
             e->acceptProposedAction();
         else
             e->ignore();
@@ -718,6 +731,14 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     tree->setHint(m_hint);
     m_tree = tree;
     m_tree->installEventFilter(this);
+    // In-place rename (Return / F2): committed, or Esc and back as it was.
+    connect(m_tree, &QTreeWidget::itemChanged, this, &ShowTreeView::slotTreeItemRenamed);
+    connect(m_tree->itemDelegate(), &QAbstractItemDelegate::closeEditor, this, [this]() {
+        if (!m_renaming)
+            return;
+        m_renaming = false;
+        QTimer::singleShot(0, this, [this]() { buildTree(); });
+    });
     m_tree->setObjectName("stTree");
     m_tree->setHeaderLabels({ tr("Show"), tr("") });
     m_tree->header()->setStretchLastSection(false);
@@ -807,6 +828,14 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_cueBase->setObjectName("stCueBase");
         f->addRow(QString(), m_cueBase);
         connect(m_cueBase, &QCheckBox::toggled, this, &ShowTreeView::slotCueBaseToggled);
+        m_cueMix = new QCheckBox(tr("Overlapping layers mix (as a chaser)"), inner);
+        m_cueMix->setObjectName("stCueMix");
+        m_cueMix->setToolTip(tr("Off (the tree's rule): where two layers share fixtures, the lower one wins "
+                                "what both set, and the upper isn't lit there for it. On: they both play, "
+                                "highest intensity wins -- how an imported chaser played, which an import "
+                                "keeps. Child layers always win."));
+        f->addRow(QString(), m_cueMix);
+        connect(m_cueMix, &QCheckBox::toggled, this, &ShowTreeView::slotCueMixToggled);
         {
             // Includes (D8): this cue plays their output under its own,
             // in order -- the later wins.
@@ -1176,6 +1205,76 @@ bool ShowTreeView::refuseGenerated(QWidget *parent, Doc *doc, const QList<quint3
  * The tree
  ****************************************************************************/
 
+bool ShowTreeView::startRename()
+{
+    QTreeWidgetItem *item = m_tree->currentItem();
+    if (item == nullptr || m_tree->selectedItems().count() > 1)
+        return false;
+    const int kind = item->data(0, KindRole).toInt();
+    const quint32 id = item->data(0, IdRole).toUInt();
+    QString text;
+    if (kind == ProductionNode)
+    {
+        const Production *p = m_st->production(id);
+        text = p == nullptr ? QString() : p->name;
+    }
+    else if (kind == ListNode)
+    {
+        const CueList *l = m_st->cueList(id);
+        text = l == nullptr ? QString() : l->name;
+    }
+    else if (kind == CueNode)
+    {
+        const Cue *c = m_st->cue(id);
+        text = c == nullptr ? QString() : c->name;     // its name; the number stays
+    }
+    else if (kind == LayerNode)
+    {
+        const Cue *c = m_st->cue(item->data(0, CueRole).toUInt());
+        const Layer *l = c == nullptr ? nullptr : c->layer(id);
+        if (l == nullptr)
+            return false;
+        text = l->name.isEmpty() ? m_st->targetLabel(l->target) : l->name;
+    }
+    else
+        return false;
+    // The bare name to edit (a cue's row shows its number, a layer's ▣).
+    m_reloading = true;
+    item->setFlags(item->flags() | Qt::ItemIsEditable);
+    item->setText(0, text);
+    m_reloading = false;
+    m_renaming = true;
+    m_tree->editItem(item, 0);
+    return true;
+}
+
+void ShowTreeView::slotTreeItemRenamed(QTreeWidgetItem *item, int column)
+{
+    if (!m_renaming || m_reloading || column != 0 || item == nullptr)
+        return;
+    m_renaming = false;
+    const int kind = item->data(0, KindRole).toInt();
+    const quint32 id = item->data(0, IdRole).toUInt();
+    QString name = item->text(0).trimmed();
+    if (kind == LayerNode)
+    {
+        // Its groups' name again (or nothing): the automatic name.
+        const Cue *c = m_st->cue(item->data(0, CueRole).toUInt());
+        const Layer *l = c == nullptr ? nullptr : c->layer(id);
+        if (l != nullptr && name == m_st->targetLabel(l->target))
+            name.clear();
+    }
+    // After the editor is done with the row: the rename rebuilds the tree.
+    const quint32 cueId = item->data(0, CueRole).toUInt();
+    QTimer::singleShot(0, this, [this, id, name, cueId, kind]() {
+        if (!m_st->renameNode(id, name))
+            buildTree();                                    // as it was
+        if (kind == LayerNode)
+            selectNode(id, cueId);
+        m_tree->setFocus(Qt::OtherFocusReason);
+    });
+}
+
 void ShowTreeView::slotTreeChanged()
 {
     if (m_reloading)
@@ -1295,9 +1394,13 @@ void ShowTreeView::buildTree()
                 ci->setData(0, KindRole, CueNode);
                 ci->setData(0, IdRole, cue.id);
 
+                // A child layer sits under its parent's row (§3.5).
+                QHash<quint32, QTreeWidgetItem *> layerItems;
                 for (const Layer &layer : cue.layers)
                 {
-                    QTreeWidgetItem *yi = new QTreeWidgetItem(ci);
+                    QTreeWidgetItem *under = layer.parent == invalidId() ? nullptr : layerItems.value(layer.parent);
+                    QTreeWidgetItem *yi = new QTreeWidgetItem(under != nullptr ? under : ci);
+                    layerItems.insert(layer.id, yi);
                     QString name = layer.name.isEmpty() ? m_st->targetLabel(layer.target) : layer.name;
                     if (layer.target.isOpaque())
                         name = tr("▣ %1").arg(name);
@@ -1319,8 +1422,10 @@ void ShowTreeView::buildTree()
                         if (rl.own)
                             continue;
                         QTreeWidgetItem *ti = new QTreeWidgetItem(ci);
-                        ti->setText(0, QStringLiteral("⤳ %1").arg(rl.name.isEmpty()
-                                                                   ? m_st->targetLabel(rl.target) : rl.name));
+                        QString tname = rl.name.isEmpty() ? m_st->targetLabel(rl.target) : rl.name;
+                        if (rl.depth > 0)
+                            tname = tr("%1 (in %2)").arg(tname, m_st->targetLabel(rl.parent));
+                        ti->setText(0, QStringLiteral("⤳ %1").arg(tname));
                         const int from = list.indexOf(rl.fromCue);
                         const QString src = from < 0 ? QString() : m_st->cueLabel(list, from);
                         ti->setText(1, rl.origin == Origin::Included ? tr("included from %1").arg(src)
@@ -1655,6 +1760,10 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
         QSignalBlocker block(m_cueBase);
         m_cueBase->setChecked(list.baseCue == cue.id);
     }
+    {
+        QSignalBlocker block(m_cueMix);
+        m_cueMix->setChecked(cue.mixOverlap);
+    }
 
     // Includes, in order (the later wins); the selected one kept.
     {
@@ -1691,7 +1800,9 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
     const QColor grey = palette().color(QPalette::Disabled, QPalette::Text);
     for (const ResolvedLayer &rl : resolved.at(index).layers)
     {
-        const QString name = rl.name.isEmpty() ? m_st->targetLabel(rl.target) : rl.name;
+        QString name = rl.name.isEmpty() ? m_st->targetLabel(rl.target) : rl.name;
+        if (rl.depth > 0)
+            name = QString(rl.depth * 3, QLatin1Char(' ')) + QStringLiteral("↳ ") + name;
         QStringList vals;
         for (const Look &l : rl.playedLooks())
             vals << lookText(l);
@@ -1878,6 +1989,26 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
     {
         m_layerTitle->setText(tr("%1 in cue %2").arg(name, m_st->cueLabel(list, index)));
     }
+    // A child layer (§3.5): what it doesn't set, its parent lights.
+    QHash<QString, QPair<ResolvedValue, QString>> inherited;
+    if (rl->depth > 0)
+    {
+        const QList<ResolvedCue> rcs = m_st->resolved(list);
+        Target up = rl->parent;
+        for (int guard = 0; guard < 16 && !up.isEmpty() && index < rcs.count(); ++guard)
+        {
+            const ResolvedLayer *p = rcs.at(index).layer(up);
+            if (p == nullptr)
+                break;
+            const QString pname = p->name.isEmpty() ? m_st->targetLabel(p->target) : p->name;
+            for (auto it = p->values.constBegin(); it != p->values.constEnd(); ++it)
+                if (!inherited.contains(it.key()))
+                    inherited.insert(it.key(), qMakePair(it.value(), pname));
+            up = p->parent;
+        }
+        m_layerTitle->setText(m_layerTitle->text()
+                              + tr(" — a child layer of %1: it sets only what it sets").arg(m_st->targetLabel(rl->parent)));
+    }
     // Release: on the cue's own layer, or on a carried-in one (which then
     // becomes the cue's own, in the same undo step).
     m_layerRelease->setVisible(!rl->target.isOpaque());
@@ -1900,6 +2031,9 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
 
     QStringList keys = attributeKeys();
     for (const QString &k : rl->values.keys())
+        if (!keys.contains(k))
+            keys << k;
+    for (const QString &k : inherited.keys())
         if (!keys.contains(k))
             keys << k;
     if (own != nullptr)
@@ -1935,6 +2069,18 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
                 f.setItalic(true);
                 value->setFont(f);
             }
+        }
+        else if (!addEffect && inherited.contains(key))
+        {
+            // Lit by the parent (a child layer): grey, and says so.
+            text = lookText(inherited.value(key).first.look);
+            origin = tr("from %1 (parent)").arg(inherited.value(key).second);
+            QPalette pal = value->palette();
+            pal.setBrush(QPalette::WindowText, grey);
+            value->setPalette(pal);
+            QFont f = value->font();
+            f.setItalic(true);
+            value->setFont(f);
         }
         else
         {
@@ -2325,6 +2471,13 @@ void ShowTreeView::slotCueBaseToggled(bool on)
         m_st->setBaseCue(list->id, on ? m_pageCue : invalidId());
 }
 
+void ShowTreeView::slotCueMixToggled(bool on)
+{
+    if (m_inspectorUpdating || m_pageCue == invalidId())
+        return;
+    m_st->setCueMixOverlap(m_pageCue, on);
+}
+
 void ShowTreeView::slotRecordCue()
 {
     const quint32 cueId = currentCueId();
@@ -2514,7 +2667,7 @@ bool ShowTreeView::addLayersFromLibrary(bool separate)
     const quint32 cueId = currentCueId();
     if (cueId == invalidId())
         return false;
-    QList<quint32> groups, fixtures;
+    QList<quint32> groups, fixtures, sets;
     for (QTreeWidgetItem *item : m_library->selectedItems())
     {
         // The same group may be selected in two sections (Recent and All).
@@ -2524,14 +2677,51 @@ bool ShowTreeView::addLayersFromLibrary(bool separate)
             groups << id;
         else if (kind == LibFixture && !fixtures.contains(id))
             fixtures << id;
+        else if (kind == LibSet && !sets.contains(id))
+            sets << id;
     }
-    if (groups.isEmpty() && fixtures.isEmpty())
+    if (groups.isEmpty() && fixtures.isEmpty() && sets.isEmpty())
     {
         QMessageBox::information(this, tr("Add layer"),
                                  tr("Select one or more groups in the Library first (or drag them onto the cue)."));
         return false;
     }
-    return dropTargets(cueId, groups, fixtures, separate);
+    return dropTargets(cueId, groups, fixtures, separate, sets);
+}
+
+quint32 ShowTreeView::makeSetFromLibrary(const QString &name)
+{
+    QList<quint32> groups, fixtures;
+    for (QTreeWidgetItem *item : m_library->selectedItems())
+    {
+        const int kind = item->data(0, KindRole).toInt();
+        const quint32 id = item->data(0, IdRole).toUInt();
+        if (kind == LibGroup && !groups.contains(id))
+            groups << id;
+        else if (kind == LibFixture && !fixtures.contains(id))
+            fixtures << id;
+        else if (kind == LibSet)
+            if (const GroupSet *gs = m_st->groupSet(id))
+            {
+                for (quint32 g : gs->groups)
+                    if (!groups.contains(g))
+                        groups << g;
+                for (quint32 f : gs->fixtures)
+                    if (!fixtures.contains(f))
+                        fixtures << f;
+            }
+    }
+    if (groups.isEmpty() && fixtures.isEmpty())
+        return invalidId();
+    const quint32 id = m_st->addGroupSet(name, groups, fixtures);
+    if (id != invalidId())
+        noteRecent(LibSet, id);
+    return id;
+}
+
+const char *ShowTreeView::setMimeType()
+{
+    return "application/x-qlcconsole-showtree-groupsets";
 }
 
 bool ShowTreeView::splitLayer(quint32 cueId, quint32 layerId, QString *why)
@@ -2675,50 +2865,127 @@ void ShowTreeView::slotRedo()
 }
 
 bool ShowTreeView::dropTargets(quint32 cueId, const QList<quint32> &groups, const QList<quint32> &fixtures,
-                               bool separate)
+                               bool separate, const QList<quint32> &sets)
 {
     quint32 last = invalidId();
     if (separate)
     {
-        // ⌥: one layer per group (and one on the fixtures), one undo step.
-        m_st->beginBatch(tr("Add %1 layers").arg(groups.count() + (fixtures.isEmpty() ? 0 : 1)));
-        for (quint32 g : groups)
+        // ⌥: one layer per group -- a set's members each one (§1) -- and
+        // one on the fixtures, one undo step.
+        QList<quint32> each = groups;
+        QList<quint32> loose = fixtures;
+        for (quint32 set : sets)
+            if (const GroupSet *gs = m_st->groupSet(set))
+            {
+                for (quint32 g : gs->groups)
+                    if (!each.contains(g))
+                        each << g;
+                for (quint32 f : gs->fixtures)
+                    if (!loose.contains(f))
+                        loose << f;
+            }
+        m_st->beginBatch(tr("Add %1 layers").arg(each.count() + (loose.isEmpty() ? 0 : 1)));
+        for (quint32 g : each)
         {
             Target t;
             t.groups << g;
             last = m_st->addLayer(cueId, t);
         }
-        if (!fixtures.isEmpty())
+        if (!loose.isEmpty())
         {
             Target t;
-            t.fixtures = fixtures;
+            t.fixtures = loose;
             last = m_st->addLayer(cueId, t);
         }
         m_st->endBatch(last != invalidId());
     }
-    else if (!groups.isEmpty() || !fixtures.isEmpty())
+    else if (!groups.isEmpty() || !fixtures.isEmpty() || !sets.isEmpty())
     {
         // One layer on everything dropped together.
         Target t;
         t.groups = groups;
         t.fixtures = fixtures;
+        t.sets = sets;
         last = m_st->addLayer(cueId, t);
     }
     for (quint32 g : groups)
         noteRecent(LibGroup, g);
+    for (quint32 set : sets)
+        noteRecent(LibSet, set);
     if (last != invalidId())
         selectNode(last, cueId);
     return last != invalidId();
 }
 
 bool ShowTreeView::dropTargetsOnLayer(quint32 cueId, quint32 layerId, const QList<quint32> &groups,
-                                      const QList<quint32> &fixtures)
+                                      const QList<quint32> &fixtures, const QList<quint32> &sets)
 {
-    if (!m_st->addToLayer(cueId, layerId, groups, fixtures))
+    if (!m_st->addToLayer(cueId, layerId, groups, fixtures, sets))
         return false;
     for (quint32 g : groups)
         noteRecent(LibGroup, g);
+    for (quint32 set : sets)
+        noteRecent(LibSet, set);
     selectNode(layerId, cueId);
+    return true;
+}
+
+bool ShowTreeView::dropChildLayers(quint32 cueId, quint32 parentId, const QList<quint32> &groups,
+                                   const QList<quint32> &fixtures, const QList<quint32> &sets,
+                                   bool separate, QString *why)
+{
+    QList<Target> children;
+    if (separate)
+    {
+        for (quint32 g : groups)
+        {
+            Target t;
+            t.groups << g;
+            children << t;
+        }
+        for (quint32 set : sets)
+        {
+            Target t;
+            t.sets << set;
+            children << t;
+        }
+        if (!fixtures.isEmpty())
+        {
+            Target t;
+            t.fixtures = fixtures;
+            children << t;
+        }
+    }
+    else
+    {
+        Target t;
+        t.groups = groups;
+        t.fixtures = fixtures;
+        t.sets = sets;
+        if (!t.isEmpty())
+            children << t;
+    }
+    if (children.isEmpty())
+        return false;
+    // One undo step, all or none.
+    m_st->beginBatch(children.count() == 1 ? tr("Add child layer %1").arg(m_st->targetLabel(children.first()))
+                                           : tr("Add %1 child layers").arg(children.count()));
+    quint32 last = invalidId();
+    QString reason;
+    for (const Target &t : children)
+    {
+        last = m_st->addChildLayer(cueId, parentId, t, &reason);
+        if (last == invalidId())
+            break;
+    }
+    m_st->endBatch(last != invalidId());
+    if (why != nullptr)
+        *why = reason;
+    if (last == invalidId())
+        return false;
+    for (quint32 g : groups)
+        noteRecent(LibGroup, g);
+    selectNode(last, cueId);
     return true;
 }
 
@@ -2799,13 +3066,22 @@ bool ShowTreeView::dropPalettes(quint32 cueId, quint32 layerId, const QList<quin
     return done;
 }
 
-bool ShowTreeView::acceptsDrop(quint32 cueId, quint32 layerId, const QMimeData *mime, const Target &target) const
+bool ShowTreeView::acceptsDrop(quint32 cueId, quint32 layerId, const QMimeData *mime, const Target &target,
+                               bool child) const
 {
     if (cueId == invalidId() || mime == nullptr)
         return false;
     const bool targets = mime->hasFormat(QLatin1String(FixtureGroupSource::fixtureGroupMimeType()))
-                         || mime->hasFormat(QLatin1String(FixtureGroupSource::fixtureMimeType()));
+                         || mime->hasFormat(QLatin1String(FixtureGroupSource::fixtureMimeType()))
+                         || mime->hasFormat(QLatin1String(setMimeType()));
     const bool palettes = mime->hasFormat(QLatin1String(FunctionsTreeWidget::paletteDragMimeType()));
+    if (child)
+    {
+        // ⇧: a child layer, under a layer of the cue's own.
+        const Cue *cue = m_st->cue(cueId);
+        const Layer *l = cue == nullptr || layerId == invalidId() ? nullptr : cue->layer(layerId);
+        return l != nullptr && !l->target.isOpaque() && targets;
+    }
     if (layerId == invalidId() && !target.isEmpty())
     {
         // A layer carried in: looks and groups make it the cue's own.
@@ -2862,23 +3138,32 @@ QStringList ShowTreeView::cueLayerItems() const
 }
 
 bool ShowTreeView::dropMime(quint32 cueId, quint32 layerId, const QMimeData *mime, bool separate,
-                            const Target &target, bool stayOnCue)
+                            const Target &target, bool stayOnCue, bool child)
 {
-    if (!acceptsDrop(cueId, layerId, mime, target))
+    if (!acceptsDrop(cueId, layerId, mime, target, child))
         return false;
     const QList<quint32> pals = idsFromMime(mime, FunctionsTreeWidget::paletteDragMimeType());
     const QList<quint32> groups = idsFromMime(mime, FixtureGroupSource::fixtureGroupMimeType());
     const QList<quint32> fixtures = idsFromMime(mime, FixtureGroupSource::fixtureMimeType());
+    const QList<quint32> sets = idsFromMime(mime, setMimeType());
     const QList<quint32> funcs = idsFromMime(mime, FunctionsTreeWidget::functionDragMimeType());
+    const bool targets = !groups.isEmpty() || !fixtures.isEmpty() || !sets.isEmpty();
     bool done = false;
-    if (!pals.isEmpty())
+    if (child)
+    {
+        QString why;
+        done = targets && dropChildLayers(cueId, layerId, groups, fixtures, sets, separate, &why);
+        if (!done && !why.isEmpty())
+            m_hint->setText(why);
+    }
+    else if (!pals.isEmpty())
         done = dropPalettes(cueId, layerId, pals, layerId == invalidId() ? target : Target());
-    else if ((!groups.isEmpty() || !fixtures.isEmpty()) && layerId != invalidId())
-        done = dropTargetsOnLayer(cueId, layerId, groups, fixtures);
-    else if ((!groups.isEmpty() || !fixtures.isEmpty()) && !target.isEmpty())
-        done = dropTargetsOnTracked(cueId, target, groups, fixtures);
-    else if (!groups.isEmpty() || !fixtures.isEmpty())
-        done = dropTargets(cueId, groups, fixtures, separate);
+    else if (targets && layerId != invalidId())
+        done = dropTargetsOnLayer(cueId, layerId, groups, fixtures, sets);
+    else if (targets && !target.isEmpty())
+        done = dropTargetsOnTracked(cueId, target, groups, fixtures, sets);
+    else if (targets)
+        done = dropTargets(cueId, groups, fixtures, separate, sets);
     else if (!funcs.isEmpty() && layerId == invalidId() && target.isEmpty())
         done = dropFunctions(cueId, funcs);
     // From the cue page the cue stays up, ready for the next drop.
@@ -2888,7 +3173,7 @@ bool ShowTreeView::dropMime(quint32 cueId, quint32 layerId, const QMimeData *mim
 }
 
 bool ShowTreeView::dropTargetsOnTracked(quint32 cueId, const Target &target, const QList<quint32> &groups,
-                                        const QList<quint32> &fixtures)
+                                        const QList<quint32> &fixtures, const QList<quint32> &sets)
 {
     const Cue *cue = m_st->cue(cueId);
     if (cue == nullptr || target.isEmpty() || target.isOpaque())
@@ -2896,12 +3181,14 @@ bool ShowTreeView::dropTargetsOnTracked(quint32 cueId, const Target &target, con
     // The cue's own already (a row a moment old): add to that.
     for (const Layer &l : cue->layers)
         if (l.target == target)
-            return dropTargetsOnLayer(cueId, l.id, groups, fixtures);
+            return dropTargetsOnLayer(cueId, l.id, groups, fixtures, sets);
     bool adds = false;
     for (quint32 g : groups)
         adds |= !target.groups.contains(g);
     for (quint32 f : fixtures)
         adds |= !target.fixtures.contains(f);
+    for (quint32 set : sets)
+        adds |= !target.sets.contains(set);
     if (!adds)
         return false;
 
@@ -2910,9 +3197,10 @@ bool ShowTreeView::dropTargetsOnTracked(quint32 cueId, const Target &target, con
     Target added;
     added.groups = groups;
     added.fixtures = fixtures;
+    added.sets = sets;
     m_st->beginBatch(tr("Add %1 to layer %2").arg(m_st->targetLabel(added), m_st->targetLabel(target)));
     const quint32 lid = m_st->addLayer(cueId, target);
-    const bool ok = lid != invalidId() && m_st->addToLayer(cueId, lid, groups, fixtures);
+    const bool ok = lid != invalidId() && m_st->addToLayer(cueId, lid, groups, fixtures, sets);
     m_st->endBatch(ok);
     if (!ok)
         return false;
@@ -2923,7 +3211,7 @@ bool ShowTreeView::dropTargetsOnTracked(quint32 cueId, const Target &target, con
 }
 
 QString ShowTreeView::dropHint(quint32 cueId, quint32 layerId, const QMimeData *mime, bool separate,
-                               const Target &target) const
+                               const Target &target, bool child) const
 {
     const CueList *list = m_st->listOfCue(cueId);
     const Cue *cue = m_st->cue(cueId);
@@ -2931,6 +3219,23 @@ QString ShowTreeView::dropHint(quint32 cueId, quint32 layerId, const QMimeData *
         return QString();
     const QString cueText = m_st->cueLabel(*list, list->indexOf(cueId));
     const QList<quint32> pals = idsFromMime(mime, FunctionsTreeWidget::paletteDragMimeType());
+    if (child)
+    {
+        // ⇧: a child layer -- said only where it can go.
+        const Layer *l = layerId == invalidId() ? nullptr : cue->layer(layerId);
+        if (l == nullptr || l->target.isOpaque())
+            return tr("⇧: a child layer goes under a layer of this cue's own");
+        Target t;
+        t.groups = idsFromMime(mime, FixtureGroupSource::fixtureGroupMimeType());
+        t.fixtures = idsFromMime(mime, FixtureGroupSource::fixtureMimeType());
+        t.sets = idsFromMime(mime, setMimeType());
+        const QString parent = l->name.isEmpty() ? m_st->targetLabel(l->target) : l->name;
+        if (!m_st->targetContains(l->target, t))
+            return tr("%1 isn't part of %2: a child layer is on part of its parent").arg(m_st->targetLabel(t), parent);
+        return separate ? tr("a child layer each under %1 in %2").arg(parent, cueText)
+                        : tr("a child layer on %1 under %2 in %3: it sets only what it sets").arg(
+                              m_st->targetLabel(t), parent, cueText);
+    }
     if (layerId == invalidId() && !target.isEmpty())
     {
         // Onto a layer carried in: it becomes this cue's own.
@@ -2948,7 +3253,8 @@ QString ShowTreeView::dropHint(quint32 cueId, quint32 layerId, const QMimeData *
         Target t;
         t.groups = idsFromMime(mime, FixtureGroupSource::fixtureGroupMimeType());
         t.fixtures = idsFromMime(mime, FixtureGroupSource::fixtureMimeType());
-        const QString what = t.groups.isEmpty() ? tr("these fixtures") : m_st->targetLabel(t);
+        t.sets = idsFromMime(mime, setMimeType());
+        const QString what = t.groups.isEmpty() && t.sets.isEmpty() ? tr("these fixtures") : m_st->targetLabel(t);
         return tr("add %1 to layer %2 in %3 (brings it into this cue)").arg(what, layerName, cueText);
     }
     if (!pals.isEmpty())
@@ -2979,20 +3285,29 @@ QString ShowTreeView::dropHint(quint32 cueId, quint32 layerId, const QMimeData *
     }
     const QList<quint32> groups = idsFromMime(mime, FixtureGroupSource::fixtureGroupMimeType());
     const QList<quint32> fixtures = idsFromMime(mime, FixtureGroupSource::fixtureMimeType());
-    if (!groups.isEmpty() || !fixtures.isEmpty())
+    const QList<quint32> sets = idsFromMime(mime, setMimeType());
+    if (!groups.isEmpty() || !fixtures.isEmpty() || !sets.isEmpty())
     {
         Target t;
         t.groups = groups;
         t.fixtures = fixtures;
-        const QString what = groups.isEmpty() ? tr("these fixtures") : m_st->targetLabel(t);
+        t.sets = sets;
+        const QString what = groups.isEmpty() && sets.isEmpty() ? tr("these fixtures") : m_st->targetLabel(t);
         if (layerId != invalidId())
         {
             const Layer *l = cue->layer(layerId);
-            return tr("add %1 to layer %2 in %3")
+            // Part of it already: ⇧ would make it a child layer instead.
+            const bool inside = l != nullptr && m_st->targetContains(l->target, t);
+            return (inside ? tr("add %1 to layer %2 in %3 (⇧: a child layer on it)")
+                           : tr("add %1 to layer %2 in %3"))
                    .arg(what, l == nullptr ? QString()
                               : (l->name.isEmpty() ? m_st->targetLabel(l->target) : l->name), cueText);
         }
-        const int pieces = int(groups.count()) + (fixtures.isEmpty() ? 0 : 1);
+        // ⌥ makes a layer of each group, a set's members each one.
+        int pieces = int(groups.count()) + (fixtures.isEmpty() ? 0 : 1);
+        for (quint32 set : sets)
+            if (const GroupSet *gs = m_st->groupSet(set))
+                pieces += int(gs->groups.count());
         if (pieces < 2)
             return tr("a new layer on %1 in %2").arg(what, cueText);
         if (separate)
@@ -3245,6 +3560,56 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
             menu.addAction(tr("Detach to plain scene"), this, [this, cueId, layerId]() {
                 m_st->detachLayer(cueId, layerId);
             });
+            // A child layer (§3.5) on part of it: a member of its set, a
+            // group inside it, or what the Library has selected.
+            {
+                const Cue *c = m_st->cue(cueId);
+                const Layer *l = c == nullptr ? nullptr : c->layer(layerId);
+                if (l != nullptr && !l->target.isOpaque())
+                {
+                    QMenu *childMenu = menu.addMenu(tr("Add child layer"));
+                    childMenu->setObjectName("stAddChild");
+                    QList<FixtureGroup *> inside;
+                    for (FixtureGroup *g : m_doc->fixtureGroups())
+                    {
+                        Target t;
+                        t.groups << g->id();
+                        if (!(t == l->target) && m_st->targetContains(l->target, t))
+                            inside << g;
+                    }
+                    std::sort(inside.begin(), inside.end(), [](const FixtureGroup *a, const FixtureGroup *b) {
+                        return a->name().compare(b->name(), Qt::CaseInsensitive) < 0;
+                    });
+                    for (FixtureGroup *g : inside)
+                    {
+                        const quint32 gid = g->id();
+                        childMenu->addAction(g->name(), this, [this, cueId, layerId, gid]() {
+                            QString why;
+                            if (!dropChildLayers(cueId, layerId, { gid }, {}, {}, false, &why))
+                                QMessageBox::information(this, tr("Add child layer"), why);
+                        });
+                    }
+                    childMenu->addSeparator();
+                    childMenu->addAction(tr("The Library's selection"), this, [this, cueId, layerId]() {
+                        QList<quint32> groups, fixtures, sets;
+                        for (QTreeWidgetItem *it : m_library->selectedItems())
+                        {
+                            const int k = it->data(0, KindRole).toInt();
+                            const quint32 id = it->data(0, IdRole).toUInt();
+                            if (k == LibGroup && !groups.contains(id))
+                                groups << id;
+                            else if (k == LibFixture && !fixtures.contains(id))
+                                fixtures << id;
+                            else if (k == LibSet && !sets.contains(id))
+                                sets << id;
+                        }
+                        QString why = tr("Select groups in the Library first.");
+                        if (!dropChildLayers(cueId, layerId, groups, fixtures, sets, false, &why))
+                            QMessageBox::information(this, tr("Add child layer"), why);
+                    });
+                    childMenu->setEnabled(true);
+                }
+            }
             // Split (one per group) and Merge (the layers selected).
             {
                 const Cue *c = m_st->cue(cueId);
@@ -3493,6 +3858,22 @@ void ShowTreeView::reloadLibrary()
             text = f->name();
             icon = f->getIcon();
         }
+        else if (kind == LibSet)
+        {
+            const GroupSet *gs = m_st->groupSet(id);
+            if (gs == nullptr)
+                return nullptr;
+            Target t;
+            t.sets << id;
+            QStringList members;
+            for (quint32 g : gs->groups)
+                if (const FixtureGroup *fg = m_doc->fixtureGroup(g))
+                    members << fg->name();
+            if (!gs->fixtures.isEmpty())
+                members << tr("%n fixture(s)", "", int(gs->fixtures.count()));
+            text = tr("%1 (%2)").arg(gs->name, members.join(QStringLiteral(" + ")));
+            icon = QIcon(":/group.png");
+        }
         QTreeWidgetItem *item = new QTreeWidgetItem(parent);
         item->setText(0, text);
         item->setIcon(0, icon);
@@ -3516,6 +3897,8 @@ void ShowTreeView::reloadLibrary()
         const ShowTreeController::Usage u = m_st->usageInList(m_libraryList);
         struct Entry { int kind; quint32 id; int count; };
         QList<Entry> entries;
+        for (auto it = u.sets.constBegin(); it != u.sets.constEnd(); ++it)
+            entries << Entry { LibSet, it.key(), it.value() };
         for (auto it = u.groups.constBegin(); it != u.groups.constEnd(); ++it)
             entries << Entry { LibGroup, it.key(), it.value() };
         for (auto it = u.fixtures.constBegin(); it != u.fixtures.constEnd(); ++it)
@@ -3564,6 +3947,27 @@ void ShowTreeView::reloadLibrary()
         f->setFlags(Qt::ItemIsEnabled);
         return f;
     };
+
+    // Group sets (§1): named sets of groups, made here (Make set).
+    QTreeWidgetItem *setsFolder = folder(all, tr("Group sets"));
+    setsFolder->setData(0, PathRole, QStringLiteral("Group sets"));
+    setsFolder->setToolTip(0, tr("Select groups below, right-click → Make set… (e.g. Towers = SL + SR); "
+                                 "then drag the set onto a cue like a group"));
+    {
+        QList<GroupSet> gsl = m_st->groupSets();
+        std::sort(gsl.begin(), gsl.end(), [](const GroupSet &a, const GroupSet &b) {
+            return a.name.compare(b.name, Qt::CaseInsensitive) < 0;
+        });
+        for (const GroupSet &gs : gsl)
+            add(setsFolder, LibSet, gs.id);
+        if (gsl.isEmpty())
+        {
+            QTreeWidgetItem *none = new QTreeWidgetItem(setsFolder);
+            none->setText(0, tr("(none yet: select groups, right-click → Make set…)"));
+            none->setFlags(Qt::ItemIsEnabled);
+            none->setData(0, KindRole, LibFolder);
+        }
+    }
 
     // Groups in the Fixture Manager's folders (FixtureGroup::path), nested
     // the same way: folders first, then the groups, each by name.
@@ -3717,13 +4121,64 @@ void ShowTreeView::slotLibraryContextMenu(const QPoint &pos)
         return;
     const int kind = item->data(0, KindRole).toInt();
     const quint32 id = item->data(0, IdRole).toUInt();
-    if (kind != LibGroup && kind != LibFixture && kind != LibPalette && kind != LibFunction)
+    if (kind != LibGroup && kind != LibFixture && kind != LibPalette && kind != LibFunction && kind != LibSet)
         return;
     QMenu menu(this);
     const bool pinned = isPinned(kind, id);
     menu.addAction(pinned ? tr("Unpin") : tr("Pin"), this, [this, kind, id, pinned]() {
         setPinned(kind, id, !pinned);
     });
+    // Make set (§1): the groups (and fixtures) selected, as one named set.
+    if (!item->isSelected())
+        m_library->setCurrentItem(item);
+    QList<quint32> selGroups, selFixtures;
+    for (QTreeWidgetItem *sel : m_library->selectedItems())
+    {
+        const int k = sel->data(0, KindRole).toInt();
+        const quint32 sid = sel->data(0, IdRole).toUInt();
+        if (k == LibGroup && !selGroups.contains(sid))
+            selGroups << sid;
+        else if (k == LibFixture && !selFixtures.contains(sid))
+            selFixtures << sid;
+    }
+    if (kind == LibGroup || kind == LibFixture || kind == LibSet)
+    {
+        QAction *make = menu.addAction(tr("Make set…"), this, [this]() {
+            bool ok = false;
+            const QString n = QInputDialog::getText(this, tr("Make set"),
+                                                    tr("Name of the set (e.g. Towers):"), QLineEdit::Normal,
+                                                    QString(), &ok);
+            if (ok && !n.trimmed().isEmpty())
+                makeSetFromLibrary(n.trimmed());
+        });
+        make->setObjectName("stMakeSet");
+        make->setToolTip(tr("A named set of the groups selected (⌘-click several), reusable by name "
+                            "in any cue"));
+    }
+    if (kind == LibSet)
+    {
+        menu.addAction(tr("Rename set…"), this, [this, id]() {
+            const GroupSet *gs = m_st->groupSet(id);
+            bool ok = false;
+            const QString n = QInputDialog::getText(this, tr("Rename set"), tr("Name"), QLineEdit::Normal,
+                                                    gs == nullptr ? QString() : gs->name, &ok);
+            if (ok)
+                m_st->renameGroupSet(id, n);
+        });
+        if (!selGroups.isEmpty() || !selFixtures.isEmpty())
+            menu.addAction(tr("Members: the %n selected group(s)", "", int(selGroups.count() + selFixtures.count())),
+                           this, [this, id, selGroups, selFixtures]() {
+                if (!m_st->setGroupSetMembers(id, selGroups, selFixtures))
+                    QMessageBox::information(this, tr("Group set"),
+                                             tr("Not changed: a child layer under a layer on this set "
+                                                "would no longer be part of it."));
+            });
+        menu.addAction(tr("Delete set"), this, [this, id]() {
+            QString why;
+            if (!m_st->removeGroupSet(id, &why) && !why.isEmpty())
+                QMessageBox::information(this, tr("Delete set"), why);
+        });
+    }
     if (kind == LibPalette && m_st->isInlinePalette(id))
     {
         menu.addAction(tr("Make reusable…"), this, [this, id]() {
@@ -3773,6 +4228,7 @@ bool ShowTreeView::runCommand(const QString &line)
         ctx.production = m_st->productions().first().id;
     ctx.list = currentListId();
     ctx.cue = currentCueId();
+    ctx.layer = currentKind() == LayerNode ? currentId() : invalidId();
     ctx.recentPalettes = recentPalettes();
 
     const ShowTreeCommand::Result r = m_commander->run(line, ctx);
@@ -3846,6 +4302,14 @@ bool ShowTreeView::eventFilter(QObject *obj, QEvent *ev)
             m_command->setText(m_historyAt < 0 ? QString() : m_commandHistory.at(m_historyAt));
             return true;
         }
+    }
+    if (obj == m_tree && ev->type() == QEvent::KeyPress && !m_renaming)
+    {
+        // Return / F2: rename in place, as in the Programming tab.
+        const int key = static_cast<QKeyEvent *>(ev)->key();
+        if ((key == Qt::Key_Return || key == Qt::Key_Enter || key == Qt::Key_F2)
+            && startRename())
+            return true;
     }
     if (obj == m_tree && ev->type() == QEvent::KeyPress
         && static_cast<QKeyEvent *>(ev)->text() == QLatin1String(":"))

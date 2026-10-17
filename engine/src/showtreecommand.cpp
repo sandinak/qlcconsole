@@ -28,6 +28,8 @@
 #include "function.h"
 #include "fixture.h"
 #include "qlcpalette.h"
+#include "monitorproperties.h"
+#include "stagetarget.h"
 #include "doc.h"
 
 using namespace ShowTree;
@@ -47,9 +49,12 @@ QString ShowTreeCommand::grammar()
 {
     return tr("cue 1.0.1 \"name\" · cue + \"name\" · track | block | cueonly | base · "
               "Towers colour Blue dimmer 45 · Towers USTs … = one layer · Towers, USTs … = a layer each · "
+              "US in Steps colour Red (a child layer) · set \"Towers\" SL SR · "
+              "Towers aim DS-Edge spread 0 group pairs cross mirror · cue look spread +5 · "
               "cue look colour Red · Steps effect Sinelon colour Red · gobo none · release Towers · "
-              "T1-CW … (a fixture) · function Haze · include 0.0.3 · record [selected|running|lit] · "
-              "list \"name\" · dup · undo — Tab completes every word (again: the next), ↑ recalls");
+              "name \"Hero\" · T1-CW … (a fixture) · function Haze · include 0.0.3 · "
+              "record [selected|running|lit] · list \"name\" · dup · undo — Tab completes every word "
+              "(again: the next), ↑ recalls");
 }
 
 QStringList ShowTreeCommand::keywords()
@@ -59,7 +64,7 @@ QStringList ShowTreeCommand::keywords()
              QStringLiteral("base"), QStringLiteral("release"), QStringLiteral("include"),
              QStringLiteral("record"), QStringLiteral("dup"), QStringLiteral("undo"),
              QStringLiteral("redo"), QStringLiteral("list"), QStringLiteral("layer"),
-             QStringLiteral("function") };
+             QStringLiteral("function"), QStringLiteral("set"), QStringLiteral("name") };
 }
 
 QStringList ShowTreeCommand::attributeWords()
@@ -67,8 +72,9 @@ QStringList ShowTreeCommand::attributeWords()
     // What Tab offers; attributeKey() also takes color, dim, level, pos,
     // focus, frost, iris, strobe and fx.
     return { QStringLiteral("colour"), QStringLiteral("dimmer"), QStringLiteral("position"),
-             QStringLiteral("gobo"), QStringLiteral("zoom"), QStringLiteral("beam"),
-             QStringLiteral("shutter"), QStringLiteral("effect") };
+             QStringLiteral("aim"), QStringLiteral("spread"), QStringLiteral("group"),
+             QStringLiteral("cross"), QStringLiteral("gobo"), QStringLiteral("zoom"),
+             QStringLiteral("beam"), QStringLiteral("shutter"), QStringLiteral("effect") };
 }
 
 QString ShowTreeCommand::attributeKey(const QString &word)
@@ -78,8 +84,14 @@ QString ShowTreeCommand::attributeKey(const QString &word)
         return KeyColour;
     if (w == QLatin1String("dimmer") || w == QLatin1String("dim") || w == QLatin1String("level"))
         return KeyDimmer;
-    if (w == QLatin1String("position") || w == QLatin1String("pos"))
+    if (w == QLatin1String("position") || w == QLatin1String("pos") || w == QLatin1String("aim"))
         return KeyPosition;
+    if (w == QLatin1String("spread"))
+        return KeySpread;
+    if (w == QLatin1String("group") || w == QLatin1String("grouping"))
+        return KeyGrouping;
+    if (w == QLatin1String("cross"))
+        return KeyCross;
     if (w == QLatin1String("gobo"))
         return KeyGobo;
     if (w == QLatin1String("zoom"))
@@ -103,9 +115,33 @@ QStringList ShowTreeCommand::groupNames() const
     return out;
 }
 
+QStringList ShowTreeCommand::setNames() const
+{
+    QStringList out;
+    for (const GroupSet &gs : m_st->groupSets())
+        if (!gs.name.isEmpty() && !out.contains(gs.name, Qt::CaseInsensitive))
+            out << gs.name;
+    return out;
+}
+
+QStringList ShowTreeCommand::stageTargetNames() const
+{
+    QStringList out;
+    const MonitorProperties *mp = m_doc->monitorProperties();
+    if (mp == nullptr)
+        return out;
+    for (const StageTarget *t : mp->stageTargets())
+        if (!t->name().isEmpty() && !out.contains(t->name(), Qt::CaseInsensitive))
+            out << t->name();
+    return out;
+}
+
 QStringList ShowTreeCommand::targetNames() const
 {
     QStringList out = groupNames();
+    for (const QString &n : setNames())
+        if (!out.contains(n, Qt::CaseInsensitive))
+            out << n;
     for (const FixtureGroup *g : m_doc->fixtureGroups())
     {
         const QString path = g->path();
@@ -427,6 +463,13 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
                     return;
                 }
             }
+            for (const GroupSet &gs : m_st->groupSets())
+                if (gs.name.compare(n, Qt::CaseInsensitive) == 0)
+                {
+                    if (!t.sets.contains(gs.id))
+                        t.sets << gs.id;
+                    return;
+                }
             for (const Fixture *f : m_doc->fixtures())
                 if (f->name().compare(n, Qt::CaseInsensitive) == 0)
                 {
@@ -526,6 +569,56 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
                     l.none = !clear;
                     setLook(l);
                 }
+                effect.clear();
+                ++n;
+                continue;
+            }
+
+            if (isLineParamKey(key))
+            {
+                // A line aim's Spread / Grouping / Cross (§3B, D16): a value,
+                // set on its own; a cue's reaches only line aims (D18).
+                const QString w = r.word();
+                const Look l = ShowTreeController::lineParamLook(key, w);
+                if (l.value.isEmpty())
+                    return key == KeySpread ? tr("spread -5 … +5 (0: all on the line's centre), got “%1”.").arg(w)
+                           : key == KeyGrouping ? tr("group each | pairs | threes | fours | halves, got “%1”.").arg(w)
+                           : tr("cross swap | mirror, got “%1”.").arg(w);
+                setLook(l);
+                effect.clear();
+                ++n;
+                continue;
+            }
+            if (kw.compare(QLatin1String("aim"), Qt::CaseInsensitive) == 0)
+            {
+                // Aim at a target (a line, a point, an area) by its name, or
+                // an Aim palette by name: the palette pointing there is
+                // reused, else one is made.
+                quint32 pid = QLCPalette::invalidId();
+                const QString pal = r.name(paletteNames(KeyPosition));
+                if (!pal.isEmpty())
+                {
+                    for (const QLCPalette *have : m_doc->palettes())
+                        if (have->name().compare(pal, Qt::CaseInsensitive) == 0
+                            && m_st->keyForPalette(have->id()) == KeyPosition && !m_st->isInlinePalette(have->id()))
+                            pid = have->id();
+                }
+                else
+                {
+                    const QString tn = r.name(stageTargetNames());
+                    if (tn.isEmpty())
+                        return tr("aim <target>: no target or Aim palette “%1”. Tab lists them.").arg(r.peek());
+                    if (const MonitorProperties *mp = m_doc->monitorProperties())
+                        for (const StageTarget *t : mp->stageTargets())
+                            if (t->name().compare(tn, Qt::CaseInsensitive) == 0)
+                            {
+                                pid = m_st->aimPaletteFor(t->id());
+                                break;
+                            }
+                }
+                if (pid == QLCPalette::invalidId())
+                    return tr("Couldn't aim there.");
+                setLook(m_st->lookForPalette(pid));
                 effect.clear();
                 ++n;
                 continue;
@@ -640,7 +733,61 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
 
     const CueList *list = m_st->cueList(ctx.list);
 
-    if (w0 == QLatin1String("list"))
+    if (w0 == QLatin1String("set"))
+    {
+        // Make set (§1): set "Towers" SL SR -- or, a set of that name
+        // already there, its members again. Usable by name from then on.
+        r.word();
+        QString nm = r.quoted();
+        if (nm.isNull())
+            nm = r.word();
+        const QList<Target> ts = targets();
+        Target all;
+        for (const Target &t : ts)
+        {
+            Target ex = m_st->expandTarget(t);
+            for (quint32 g : ex.groups)
+                if (!all.groups.contains(g))
+                    all.groups << g;
+            for (quint32 f : ex.fixtures)
+                if (!all.fixtures.contains(f))
+                    all.fixtures << f;
+        }
+        quint32 have = invalidId();
+        for (const GroupSet &gs : m_st->groupSets())
+            if (gs.name.compare(nm, Qt::CaseInsensitive) == 0)
+                have = gs.id;
+        if (nm.trimmed().isEmpty() || (all.groups.isEmpty() && all.fixtures.isEmpty()))
+            error = tr("set \"name\" <groups> -- e.g. set \"Towers\" SL SR");
+        else if (!r.atEnd())
+            error = tr("Don't know “%1”.").arg(r.peek());
+        else if (have != invalidId())
+        {
+            if (!m_st->setGroupSetMembers(have, all.groups, all.fixtures))
+                error = tr("%1 already has those members.").arg(nm);
+        }
+        else if (m_st->addGroupSet(nm, all.groups, all.fixtures) == invalidId())
+            error = tr("Couldn't make the set.");
+    }
+    else if (w0 == QLatin1String("name"))
+    {
+        // name "Hero": the selected layer (or else the cue); "" goes back
+        // to the automatic name (the layer's groups). Identity is kept.
+        r.word();
+        QString nm = r.quoted();
+        if (nm.isNull())
+            nm = r.src.mid(r.i).trimmed();
+        else if (!r.atEnd())
+            error = tr("name \"…\" -- then nothing more");
+        const quint32 node = ctx.layer != invalidId() ? ctx.layer : ctx.cue;
+        if (error.isEmpty() && node == invalidId())
+            error = tr("Select a layer or a cue to name.");
+        else if (error.isEmpty() && !m_st->renameNode(node, nm.trimmed()))
+            error = tr("It is called that already.");
+        if (error.isEmpty() && ctx.layer != invalidId())
+            res.layer = ctx.layer;
+    }
+    else if (w0 == QLatin1String("list"))
     {
         r.word();
         QString nm = r.quoted();
@@ -809,16 +956,58 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
         if (ts.isEmpty())
         {
             error = tr("Don't know “%1”. Start with cue, a group or fixture, track/block/cueonly, base, "
-                       "release, include, function, record, list, dup, undo.").arg(r.peek());
+                       "release, include, function, record, list, set, name, dup, undo.").arg(r.peek());
         }
         else
         {
             QList<quint32> layers;
-            for (const Target &t : ts)
+            if (r.peek().toLower() == QLatin1String("in"))
             {
-                const quint32 lid = layerOn(t);
-                if (lid != invalidId())
-                    layers << lid;
+                // US in Steps …: child layers of the cue's Steps layer (§3.5).
+                r.word();
+                const QList<Target> up = targets();
+                if (up.count() != 1)
+                    error = tr("… in <one layer's groups>: the parent layer");
+                quint32 parent = invalidId();
+                if (error.isEmpty())
+                {
+                    if (const Cue *c = m_st->cue(ctx.cue))
+                        for (const Layer &l : c->layers)
+                            if (l.target == up.first())
+                                parent = l.id;
+                    if (parent == invalidId())
+                        parent = m_st->addLayer(ctx.cue, up.first());
+                }
+                for (const Target &t : ts)
+                {
+                    if (!error.isEmpty())
+                        break;
+                    quint32 lid = invalidId();
+                    if (const Cue *c = m_st->cue(ctx.cue))
+                        for (const Layer &l : c->layers)
+                            if (l.parent == parent && l.target == t)
+                                lid = l.id;
+                    QString why;
+                    if (lid == invalidId())
+                        lid = m_st->addChildLayer(ctx.cue, parent, t, &why);
+                    if (lid == invalidId())
+                        error = why;
+                    else
+                        layers << lid;
+                }
+            }
+            else
+                for (const Target &t : ts)
+                {
+                    const quint32 lid = layerOn(t);
+                    if (lid != invalidId())
+                        layers << lid;
+                }
+            if (!error.isEmpty())
+            {
+                m_st->endBatch(false);
+                res.message = error;
+                return res;
             }
             if (!r.atEnd())
                 error = assigns(layers);
@@ -871,12 +1060,23 @@ bool ShowTreeCommand::candidates(const QString &head, const Context &context, QS
                 *out = attributeWords();
                 return true;
             }
-            const QString key = attributeKey(r.word());
+            const QString kw = r.word();
+            const QString key = attributeKey(kw);
             if (key.isEmpty())
                 return false;
+            const bool aim = kw.compare(QLatin1String("aim"), Qt::CaseInsensitive) == 0;
             if (r.atEnd())
             {
-                *out = paletteNames(key) + none;
+                if (key == KeySpread)
+                    *out = QStringList({ "-5", "-2.5", "0", "+2.5", "+5" }) + none;
+                else if (key == KeyGrouping)
+                    *out = QStringList({ "each", "pairs", "threes", "fours", "halves" }) + none;
+                else if (key == KeyCross)
+                    *out = QStringList({ "swap", "mirror" }) + none;
+                else if (aim)
+                    *out = stageTargetNames() + paletteNames(key) + none;
+                else
+                    *out = paletteNames(key) + none;
                 return true;
             }
             const QString next = r.peek().toLower();
@@ -885,6 +1085,14 @@ bool ShowTreeCommand::candidates(const QString &head, const Context &context, QS
                 r.word();
                 continue;
             }
+            if (isLineParamKey(key))
+            {
+                if (ShowTreeController::lineParamValue(key, r.word()).isEmpty())
+                    return false;
+                continue;
+            }
+            if (aim && !r.name(stageTargetNames()).isEmpty())
+                continue;
             if (!r.name(paletteNames(key)).isEmpty())
                 continue;
             static const QRegularExpression value(QStringLiteral("^(\\d{1,3}%?|#[0-9a-fA-F]{6})$"));
@@ -894,7 +1102,8 @@ bool ShowTreeCommand::candidates(const QString &head, const Context &context, QS
         }
     };
     // Names one after another (or joined by '+', or ',' for another layer).
-    auto names = [&](const QStringList &all, bool thenAssign) -> bool {
+    std::function<bool(const QStringList &, bool)> names;
+    names = [&](const QStringList &all, bool thenAssign) -> bool {
         bool joined = false;
         int n = 0;
         for (;;)
@@ -903,7 +1112,7 @@ bool ShowTreeCommand::candidates(const QString &head, const Context &context, QS
             {
                 *out = all;
                 if (thenAssign && !joined && n > 0)
-                    *out += attributeWords();
+                    *out += attributeWords() + QStringList({ "in" });
                 return true;
             }
             const int save = r.i;
@@ -917,6 +1126,12 @@ bool ShowTreeCommand::candidates(const QString &head, const Context &context, QS
             }
             joined = false;
             ++n;
+        }
+        if (n > 0 && thenAssign && r.peek().toLower() == QLatin1String("in"))
+        {
+            // … in <parent>: a child layer, then its looks.
+            r.word();
+            return names(all, true);
         }
         return n > 0 && thenAssign && assigns();
     };
@@ -945,8 +1160,21 @@ bool ShowTreeCommand::candidates(const QString &head, const Context &context, QS
         *out = QStringList({ "selected", "running", "lit" });
         return true;
     }
-    if (w0 == QLatin1String("undo") || w0 == QLatin1String("redo") || w0 == QLatin1String("dup"))
+    if (w0 == QLatin1String("undo") || w0 == QLatin1String("redo") || w0 == QLatin1String("dup")
+        || w0 == QLatin1String("name"))
         return true;
+    if (w0 == QLatin1String("set"))
+    {
+        // set "Towers" SL SR: a name, then groups.
+        r.word();
+        if (r.atEnd())
+            return true;
+        if (r.src.mid(r.i).trimmed().startsWith(QLatin1Char('"')))
+            r.quoted();
+        else
+            r.word();
+        return names(targets, false);
+    }
     if (w0 == QLatin1String("list"))
     {
         r.word();

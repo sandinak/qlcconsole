@@ -79,6 +79,11 @@ private slots:
     void generatedFunctionsAreLockedElsewhere();
     void everyActionIsOneUndoStep();
 
+    // P3 (2026-10-17)
+    void groupSetsInTheLibrary();
+    void childLayersByMouse();
+    void renameInPlace();
+
 private:
     quint32 dimmer(int level, const QString &name);
     quint32 colour(const QColor &c, const QString &name);

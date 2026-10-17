@@ -1565,33 +1565,29 @@ ShowTreeController::Usage ShowTreeController::usageInList(quint32 listId) const
 
 bool ShowTreeController::renameNode(quint32 nodeId, const QString &name)
 {
+    // A name only: a layer's identity is its target (an empty name goes
+    // back to the automatic one, its groups'), a cue's is its number.
     return edit(tr("Rename"), [&](QList<Production> &ps) {
+        auto set = [&name](QString &have) {
+            if (have == name)
+                return false;
+            have = name;
+            return true;
+        };
         for (Production &p : ps)
         {
             if (p.id == nodeId)
-            {
-                p.name = name;
-                return true;
-            }
+                return !name.isEmpty() && set(p.name);
             for (CueList &l : p.lists)
             {
                 if (l.id == nodeId)
-                {
-                    l.name = name;
-                    return true;
-                }
+                    return !name.isEmpty() && set(l.name);
                 for (Cue &c : l.cues)
                 {
                     if (c.id == nodeId)
-                    {
-                        c.name = name;
-                        return true;
-                    }
+                        return set(c.name);
                     if (Layer *layer = c.layer(nodeId))
-                    {
-                        layer->name = name;
-                        return true;
-                    }
+                        return set(layer->name);
                 }
             }
         }
