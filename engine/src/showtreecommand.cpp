@@ -398,9 +398,6 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
 
     // attribute value, attribute value… on @a layers (none: the cue's looks)
     auto assigns = [&](const QList<quint32> &layers) -> QString {
-        QString where;
-        if (const CueList *l = m_st->cueList(ctx.list))
-            where = m_st->cueLabel(*l, l->indexOf(ctx.cue));
         QString effect;         // the effect just set: a colour/dimmer after it is its own
         int n = 0;
         auto setLook = [&](const Look &look) {
@@ -408,16 +405,6 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
                 m_st->setCueLook(ctx.cue, look);
             for (quint32 lid : layers)
                 m_st->setLayerLook(ctx.cue, lid, look);
-        };
-        auto layerText = [&]() {
-            if (layers.isEmpty())
-                return tr("cue");
-            QStringList names;
-            if (const Cue *c = m_st->cue(ctx.cue))
-                for (quint32 lid : layers)
-                    if (const Layer *l = c->layer(lid))
-                        names << (l->name.isEmpty() ? m_st->targetLabel(l->target) : l->name);
-            return names.join(QStringLiteral(", "));
         };
         while (!r.atEnd())
         {
