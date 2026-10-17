@@ -74,6 +74,17 @@ private slots:
     void anAimLooksSpreadIsSavedWithIt();
     /** At spread 0 every head aims at the centre; at -5 they swap ends. */
     void theSpreadMovesTheHeads();
+
+    /** Grouping, six lights, as LINE_TARGET_DESIGN.md draws it: halves
+     *  swapping sides, halves flipping, pairs as blocks, pairs flipping. */
+    void groupsCrossAsTheDesignDraws();
+    /** Halves of an odd count leave the middle light on the centre; a short
+     *  last group is still a group. */
+    void unevenGroupsStillWork();
+    /** Share a point: a group's lights land together, groups end to end. */
+    void groupsCanShareAPoint();
+    /** Look order puts the heads in the look's order, not where they hang. */
+    void lookOrderIsTheLooksOrder();
 };
 
 #endif

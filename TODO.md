@@ -28,15 +28,13 @@ under `~/.claude/.../memory/`.
   macOS (it would override the `.icns` in a packaged Dock). Could set it only
   when not running from a bundle, if it matters.
 
-## Line targets (in progress, 2026-10-16)
+## Line targets — leftovers (2026-10-17)
 
-On `feat/line-targets` (post-release); design in `LINE_TARGET_DESIGN.md`.
-
-- **P1 — line target, editing, even distribution**: done (see DONE.md).
-- **P2 — Spread slider**: done (see DONE.md).
-- **P3 — Grouping**: Group / Cross (swap sides, mirror) / Share a point.
-- Later, if wanted: spread on a control-surface fader, a "breathe" effect on
-  a speed master, editing handles in the Rig Overview.
+P1–P3 built on `feat/line-targets` (DONE.md); not merged yet. If wanted
+later (LINE_TARGET_DESIGN.md P4): Spread on a control-surface fader; a
+"breathe" effect sweeping Spread on a speed master; dragging line handles in
+the Rig Overview; effects that chase along a line. Also: the target menu's
+"Lock Target" is undone by the next plot refresh (locks mirror the layer's).
 
 ## Release 0.1.0 (in progress, 2026-10-15)
 

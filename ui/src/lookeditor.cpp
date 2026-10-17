@@ -546,6 +546,56 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     m_lineSpreadSpin->setSingleStep(0.1);
     m_lineSpreadSpin->setDecimals(1);
     lg->addWidget(m_lineSpreadSpin, 0, 4);
+    /* Grouping: which lights move together. "1 2 3 cross 4 5 6" is halves
+       whose groups swap sides; "1 and 2, then 3 and 4" is pairs, each pair
+       a block. */
+    QWidget *grow = new QWidget(m_lineBox);
+    QHBoxLayout *gl = new QHBoxLayout(grow);
+    gl->setContentsMargins(0, 0, 0, 0);
+    m_lineGroupCombo = new QComboBox(grow);
+    m_lineGroupCombo->setObjectName(QStringLiteral("lineGroup"));
+    m_lineGroupCombo->addItem(tr("Each light"), 1);
+    m_lineGroupCombo->addItem(tr("Pairs"), 2);
+    m_lineGroupCombo->addItem(tr("Threes"), 3);
+    m_lineGroupCombo->addItem(tr("Fours"), 4);
+    m_lineGroupCombo->addItem(tr("Halves"), LineSpread::Halves);
+    m_lineGroupCombo->setToolTip(tr("Lights that move together, in order along the line. "
+                                    "Halves: the first half and the second (an odd middle "
+                                    "light stays on the centre)."));
+    gl->addWidget(m_lineGroupCombo);
+    QLabel *crossWhat = new QLabel(tr("Cross:"), grow);
+    gl->addWidget(crossWhat);
+    m_lineCrossCombo = new QComboBox(grow);
+    m_lineCrossCombo->setObjectName(QStringLiteral("lineCross"));
+    m_lineCrossCombo->addItem(tr("Groups swap sides"), int(LineSpread::SwapSides));
+    m_lineCrossCombo->addItem(tr("Each group flips (mirror)"), int(LineSpread::Mirror));
+    m_lineCrossCombo->setToolTip(tr("Below 0, what crosses: whole groups swap sides of the "
+                                    "centre keeping their order (1 2 3 | 4 5 6 becomes "
+                                    "4 5 6 | 1 2 3), or each group flips where it is "
+                                    "(3 2 1 | 6 5 4)."));
+    gl->addWidget(m_lineCrossCombo, 1);
+    m_lineShareCheck = new QCheckBox(tr("Share a point"), grow);
+    m_lineShareCheck->setObjectName(QStringLiteral("lineShare"));
+    m_lineShareCheck->setToolTip(tr("A group's lights all land on one point, the groups "
+                                    "spread end to end."));
+    gl->addWidget(m_lineShareCheck);
+    QLabel *groupLbl = new QLabel(tr("Group:"), m_lineBox);
+    lg->addWidget(groupLbl, 1, 0);
+    lg->addWidget(grow, 1, 1, 1, 4);
+    m_lineOrderCombo = new QComboBox(m_lineBox);
+    m_lineOrderCombo->setObjectName(QStringLiteral("lineOrder"));
+    m_lineOrderCombo->addItem(tr("Along the line, as they hang"), int(LineSpread::AlongLine));
+    m_lineOrderCombo->addItem(tr("Look order"), int(LineSpread::LookOrder));
+    m_lineOrderCombo->setToolTip(tr("Which light goes where: the one hanging nearest the "
+                                    "line's start takes the start, or the order the look "
+                                    "lists them in (its groups' head order, then its "
+                                    "fixtures)."));
+    lg->addWidget(new QLabel(tr("Order:"), m_lineBox), 3, 0);
+    lg->addWidget(m_lineOrderCombo, 3, 1, 1, 4);
+    for (QComboBox *cb : { m_lineGroupCombo, m_lineCrossCombo, m_lineOrderCombo })
+        connect(cb, QOverload<int>::of(&QComboBox::currentIndexChanged),
+                this, [this](int) { slotLineSettingsChanged(); });
+    connect(m_lineShareCheck, &QCheckBox::toggled, this, [this](bool) { slotLineSettingsChanged(); });
     m_linePreview = new LineSpreadPreview(m_doc, m_lineBox);
     lg->addWidget(m_linePreview, 2, 0, 1, 5);
     av->addWidget(m_lineBox);
@@ -1693,7 +1743,22 @@ void LookEditor::syncLineControls()
         const QSignalBlocker b1(m_lineSpreadSlider), b2(m_lineSpreadSpin);
         m_lineSpreadSlider->setValue(int(std::lround(s.spread * 10.0)));
         m_lineSpreadSpin->setValue(s.spread);
+        const QSignalBlocker b3(m_lineGroupCombo), b4(m_lineCrossCombo),
+                             b5(m_lineShareCheck), b6(m_lineOrderCombo);
+        int gi = m_lineGroupCombo->findData(s.group);
+        if (gi < 0)
+        {
+            // A group size the list does not offer (set elsewhere): show it.
+            m_lineGroupCombo->addItem(tr("Groups of %1").arg(s.group), s.group);
+            gi = m_lineGroupCombo->count() - 1;
+        }
+        m_lineGroupCombo->setCurrentIndex(gi);
+        m_lineCrossCombo->setCurrentIndex(qMax(0, m_lineCrossCombo->findData(int(s.cross))));
+        m_lineShareCheck->setChecked(s.share);
+        m_lineOrderCombo->setCurrentIndex(qMax(0, m_lineOrderCombo->findData(int(s.order))));
     }
+    // Each light on its own has nothing to choose between: both cross it all.
+    m_lineCrossCombo->setEnabled(s.group != 1 && !s.share);
     m_linePreview->setLook(m_contextScene, p);
 }
 
@@ -1707,6 +1772,11 @@ void LookEditor::slotLineSettingsChanged()
 
     LineSpread::Settings s = LineSpread::fromParams(p->effectParamValues());
     s.spread = m_lineSpreadSpin->value();
+    s.group = m_lineGroupCombo->currentData().toInt();
+    s.cross = LineSpread::Cross(m_lineCrossCombo->currentData().toInt());
+    s.share = m_lineShareCheck->isChecked();
+    s.order = LineSpread::Order(m_lineOrderCombo->currentData().toInt());
+    m_lineCrossCombo->setEnabled(s.group != 1 && !s.share);
 
     /* Each setting is its own param, and one at its default is taken out,
        so the look carries only what it changes. */

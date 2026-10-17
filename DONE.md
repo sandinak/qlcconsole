@@ -6,6 +6,29 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-17 — Line targets, P3: grouping on the spread *(feat/line-targets)*
+
+"A way to group them on the spreads .. so for 6 lights I could have them
+1 2 3 cross 4 5 6 .. or an adjustment to have 1 and 2 .. then 3 and 4."
+Branson's decisions: Cross offers both readings; pairs move as blocks; Share
+a point kept as a minor option.
+
+- **Group** (`__lineGroup`): each light / pairs / threes / fours / halves (0;
+  an odd middle light stays on the centre). **Cross** (`__lineCross`):
+  groups swap sides keeping their order (default: halves at -5 =
+  `4 5 6 | 1 2 3`, pairs = `5 6 3 4 1 2`) or each group flips in place
+  (`3 2 1 | 6 5 4`, `2 1 4 3 6 5`). Groups of one or a single group give
+  the plain mirror either way. **Share a point** (`__lineShare`): a group's
+  lights on one point, groups end to end (sharing forces swap-sides).
+  **Order** (`__lineOrder`): along the line as they hang (default) or look
+  order.
+- Maths in `LineSpread::fractions()` (group centre D, member offset e,
+  `0.5 + |s|/5 * (sg*D + sm*e)`); look editor Aim page: Group / Cross /
+  Share / Order row, Cross disabled when it cannot matter.
+- Tests: linetarget_test (the design's six-light diagrams, odd halves,
+  short last pair, share, look order), lookeditor_test
+  `aLineLooksGroupingIsSetOnTheAimPage`. Help: stage-targets.md "Grouping".
+
 ### 2026-10-17 — Line targets, P2: the Spread slider *(feat/line-targets)*
 
 "The effect should have a horizontal spread slider to move the lights away

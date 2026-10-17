@@ -85,7 +85,7 @@ QVector<double> LineSpread::fractions(int count, const Settings &s)
        group has no other side to swap to: either way both choices mean the
        whole line mirrored, so give that rather than nothing at all. */
     Cross cross = s.cross;
-    if (groups.size() == count)
+    if (groups.size() == count || s.share)      // a shared point cannot flip
         cross = SwapSides;
     else if (groups.size() == 1)
         cross = Mirror;

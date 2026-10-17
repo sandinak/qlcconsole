@@ -249,6 +249,9 @@ round-trip, and an old-format file loads unchanged.
 
 ## Phases
 
+*Status 2026-10-17: P1, P2 and P3 built on `feat/line-targets` (see
+DONE.md); P4 not started.*
+
 - **P1 — Line target + editing + even distribution.** `Kind::Line`, points,
   `LineCurve` (Catmull-Rom, arc length), XML; per-light aim points through
   every consumer (palette expansion with the whole fixture set, `sceneAims`,

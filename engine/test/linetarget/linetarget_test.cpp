@@ -499,4 +499,121 @@ void LineTarget_Test::theSpreadMovesTheHeads()
     delete rig.doc;
 }
 
+/* Light k (0-based) on slot u: the diagrams in the design are slots
+   0, .2 .. 1 with the light number written in each. */
+static QVector<double> slotsOf(const QVector<int> &lightAtSlot)
+{
+    QVector<double> f(lightAtSlot.size());
+    for (int slot = 0; slot < lightAtSlot.size(); ++slot)
+        f[lightAtSlot.at(slot) - 1] = slot / double(lightAtSlot.size() - 1);
+    return f;
+}
+
+void LineTarget_Test::groupsCrossAsTheDesignDraws()
+{
+    LineSpread::Settings s;
+    s.group = LineSpread::Halves;
+    s.spread = 5.0;
+    QVector<double> f = LineSpread::fractions(6, s);
+    QVERIFY2(sameFractions(f, slotsOf({ 1, 2, 3, 4, 5, 6 })), qPrintable(list(f)));
+
+    // "1 2 3 cross 4 5 6": the halves swap sides, each keeping its order.
+    s.spread = -5.0;
+    f = LineSpread::fractions(6, s);
+    QVERIFY2(sameFractions(f, slotsOf({ 4, 5, 6, 1, 2, 3 })), qPrintable(list(f)));
+    s.spread = -2.5;
+    f = LineSpread::fractions(6, s);
+    QVERIFY2(sameFractions(f, { 0.55, 0.65, 0.75, 0.25, 0.35, 0.45 }), qPrintable(list(f)));
+
+    // ... or each half flips where it is.
+    s.cross = LineSpread::Mirror;
+    s.spread = -5.0;
+    f = LineSpread::fractions(6, s);
+    QVERIFY2(sameFractions(f, slotsOf({ 3, 2, 1, 6, 5, 4 })), qPrintable(list(f)));
+
+    // "1 and 2 .. then 3 and 4": pairs keep their two points, crossing as blocks.
+    s.group = 2;
+    s.cross = LineSpread::SwapSides;
+    f = LineSpread::fractions(6, s);
+    QVERIFY2(sameFractions(f, slotsOf({ 5, 6, 3, 4, 1, 2 })), qPrintable(list(f)));
+    s.cross = LineSpread::Mirror;
+    f = LineSpread::fractions(6, s);
+    QVERIFY2(sameFractions(f, slotsOf({ 2, 1, 4, 3, 6, 5 })), qPrintable(list(f)));
+
+    // At 0 every mode is on the centre; above 0 grouping changes nothing.
+    s.spread = 0.0;
+    foreach (double v, LineSpread::fractions(6, s))
+        QCOMPARE(v, 0.5);
+    s.spread = 5.0;
+    f = LineSpread::fractions(6, s);
+    QVERIFY2(sameFractions(f, slotsOf({ 1, 2, 3, 4, 5, 6 })), qPrintable(list(f)));
+
+    // One light per group: both choices are the plain mirror.
+    s.group = 1;
+    s.spread = -5.0;
+    s.cross = LineSpread::Mirror;
+    f = LineSpread::fractions(6, s);
+    QVERIFY2(sameFractions(f, slotsOf({ 6, 5, 4, 3, 2, 1 })), qPrintable(list(f)));
+    // One group of them all: the same.
+    s.group = 6;
+    s.cross = LineSpread::SwapSides;
+    f = LineSpread::fractions(6, s);
+    QVERIFY2(sameFractions(f, slotsOf({ 6, 5, 4, 3, 2, 1 })), qPrintable(list(f)));
+}
+
+void LineTarget_Test::unevenGroupsStillWork()
+{
+    LineSpread::Settings s;
+    s.group = LineSpread::Halves;
+    s.spread = -5.0;
+    QVector<double> f = LineSpread::fractions(5, s);
+    // 1 2 | 3 | 4 5  ->  4 5 | 3 | 1 2
+    QVERIFY2(sameFractions(f, { 0.75, 1.0, 0.5, 0.0, 0.25 }), qPrintable(list(f)));
+    s.spread = 2.0;
+    QCOMPARE(LineSpread::fractions(5, s).at(2), 0.5);
+
+    // Pairs of five: the last is on its own.
+    s.group = 2;
+    s.spread = -5.0;
+    f = LineSpread::fractions(5, s);
+    // 1 2 | 3 4 | 5  ->  5 | 3 4 | 1 2, each pair keeping its spacing
+    QVERIFY2(sameFractions(f, { 0.75, 1.0, 0.25, 0.5, 0.0 }), qPrintable(list(f)));
+}
+
+void LineTarget_Test::groupsCanShareAPoint()
+{
+    LineSpread::Settings s;
+    s.group = 2;
+    s.share = true;
+    QVector<double> f = LineSpread::fractions(6, s);
+    QVERIFY2(sameFractions(f, { 0.0, 0.0, 0.5, 0.5, 1.0, 1.0 }), qPrintable(list(f)));
+    s.spread = 2.5;
+    f = LineSpread::fractions(6, s);
+    QVERIFY2(sameFractions(f, { 0.25, 0.25, 0.5, 0.5, 0.75, 0.75 }), qPrintable(list(f)));
+    // Crossing swaps the shared points, whatever Cross says.
+    s.spread = -5.0;
+    s.cross = LineSpread::Mirror;
+    f = LineSpread::fractions(6, s);
+    QVERIFY2(sameFractions(f, { 1.0, 1.0, 0.5, 0.5, 0.0, 0.0 }), qPrintable(list(f)));
+
+    QMap<QString, double> params;
+    LineSpread::toParams(s, params);
+    const LineSpread::Settings back = LineSpread::fromParams(params);
+    QVERIFY(back == s);
+    QCOMPARE(params.size(), 4);                 // spread, group, cross, share
+}
+
+void LineTarget_Test::lookOrderIsTheLooksOrder()
+{
+    Rig rig = makeRig(this);                    // the scene lists right, left, mid
+    rig.aim->setEffectParamValue("__lineOrder", LineSpread::LookOrder);
+    QHash<quint32, QVector3D> at;
+    foreach (const AimSolver::SceneAim &a, AimSolver::sceneAims(rig.doc, rig.scene))
+        at.insert(a.fixtureId, a.point);
+    QVERIFY2(near3(at.value(rig.right->id()), QVector3D(-2, 3, 0)), qPrintable(str(at.value(rig.right->id()))));
+    QVERIFY(near3(at.value(rig.left->id()), QVector3D(0, 3, 0)));
+    QVERIFY(near3(at.value(rig.mid->id()), QVector3D(2, 3, 0)));
+    delete rig.doc;
+}
+
 QTEST_MAIN(LineTarget_Test)

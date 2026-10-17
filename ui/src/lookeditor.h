@@ -219,6 +219,10 @@ private:
     QWidget *m_lineBox = nullptr;
     QSlider *m_lineSpreadSlider = nullptr;       //!< -50..50 = -5..+5
     QDoubleSpinBox *m_lineSpreadSpin = nullptr;
+    QComboBox *m_lineGroupCombo = nullptr;       //!< data: LineSpread group
+    QComboBox *m_lineCrossCombo = nullptr;       //!< data: LineSpread::Cross
+    QCheckBox *m_lineShareCheck = nullptr;
+    QComboBox *m_lineOrderCombo = nullptr;       //!< data: LineSpread::Order
     LineSpreadPreview *m_linePreview = nullptr;
     /** Show the line controls for the look's target, filled from the look. */
     void syncLineControls();

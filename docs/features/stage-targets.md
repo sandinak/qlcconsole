@@ -112,6 +112,27 @@ the line: duplicate the look for a second spread on the same line. A cue
 fading from one spread to another fades pan and tilt, so the beams travel
 close to, but not exactly along, the line.
 
+### Grouping
+
+Under the Spread, **Group** picks lights that move together, in order along
+the line — **Each light**, **Pairs**, **Threes**, **Fours** or **Halves**
+(with an odd count the middle light stays on the centre) — and **Cross**
+says what crosses below 0:
+
+- **Groups swap sides** — whole groups change sides of the centre, each
+  keeping its order. Six lights in halves at -5: `4 5 6 | 1 2 3`. In pairs:
+  `5 6 3 4 1 2` — each pair keeps its two points and moves as a block.
+- **Each group flips (mirror)** — each group turns round where it is. Halves
+  at -5: `3 2 1 | 6 5 4`; pairs: `2 1 4 3 6 5`.
+
+With **Each light**, both mean the whole line mirrored. **Share a point**
+puts a group's lights on one point, the groups spread end to end (pairs at
++5: `1+2`, `3+4`, `5+6`).
+
+**Order** chooses which light goes where: **Along the line, as they hang**
+(the default — the head nearest the line's start takes the start) or **Look
+order** (the look's groups in their head order, then its own fixtures).
+
 ### Steps as aim surfaces
 
 A flight of **Steps** (Lighting Studio: Add > Add Steps, or a platform
