@@ -26,7 +26,12 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
   (D18), spread changes fade (D19), the order strip.
 - **Rename in place** (Return/F2, `name`), **copy/paste** (⌘C/⌘V/⌘D,
   `copy`/`paste`), **`help`** from the command table, with did-you-mean.
-- Tests: showtree_test +17, showtreeview_test +6 (and the undo walk +13).
+- **Layout** Library | Tree | Editor; Return / double-click in the Library
+  and ⌘F or / to add without dragging; a drop below the tree's rows; a
+  named layer is its name in the tree, its contents on the page; **several
+  layers edited together** (shared / mixed values, tri-state Release, one
+  undo step, the command line on the selection).
+- Tests: showtree_test +17, showtreeview_test +9 (and the undo walk +13).
 
 ### 2026-10-17 — Show Tree: the four limits from the help closed — Merge by mouse, D13 lock, new lists Tracking, one undo step per action *(on feat/show-tree, not merged)*
 

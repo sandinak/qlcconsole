@@ -1122,6 +1122,18 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                                        m_layerPage);
         m_layerRelease->setObjectName("stLayerRelease");
         connect(m_layerRelease, &QCheckBox::toggled, this, &ShowTreeView::slotLayerReleaseToggled);
+        // Several layers: a click releases them all -- unless all already
+        // are, then it carries them all (a part-ticked box goes to ticked).
+        connect(m_layerRelease, &QCheckBox::clicked, this, [this]() {
+            if (m_inspectorUpdating || m_multi.count() < 2)
+                return;
+            bool all = true;
+            for (const QPair<quint32, quint32> &ref : m_multi)
+                if (const Cue *c = m_st->cue(ref.first))
+                    if (const Layer *l = c->layer(ref.second))
+                        all &= l->release;
+            setReleaseOnSelected(!all);
+        });
         v->addWidget(m_layerRelease);
         QScrollArea *scroll = new QScrollArea(m_layerPage);
         scroll->setWidgetResizable(true);
@@ -1577,12 +1589,11 @@ void ShowTreeView::buildTree()
                     QTreeWidgetItem *under = layer.parent == invalidId() ? nullptr : layerItems.value(layer.parent);
                     QTreeWidgetItem *yi = new QTreeWidgetItem(under != nullptr ? under : ci);
                     layerItems.insert(layer.id, yi);
-                    // A named layer still says what it holds, after its name
-                    // (elided to fit; the whole list in the tooltip).
-                    QString name = layer.name.isEmpty() ? m_st->targetLabel(layer.target)
-                                   : tr("%1  · %2").arg(layer.name, m_st->targetLabel(layer.target));
+                    // Its name (Branson: the short name only); what it holds
+                    // is in the tooltip, and on its page when selected.
+                    QString name = layer.name.isEmpty() ? m_st->targetLabel(layer.target) : layer.name;
                     if (layer.target.isOpaque())
-                        name = tr("▣ %1").arg(layer.name.isEmpty() ? m_st->targetLabel(layer.target) : layer.name);
+                        name = tr("▣ %1").arg(name);
                     yi->setText(0, name);
                     QStringList looks;
                     for (const Look &l : layer.looks)
@@ -1873,6 +1884,8 @@ void ShowTreeView::updateInspector()
 {
     m_inspectorUpdating = true;
     m_pageCue = invalidId();
+    m_multi.clear();
+    m_layerRelease->setTristate(false);
     const NodeKind kind = currentKind();
     const quint32 id = currentId();
 
@@ -1918,6 +1931,12 @@ void ShowTreeView::updateInspector()
     if (kind == CueNode)
     {
         showCuePage(*list, index);
+    }
+    else if (kind == LayerNode && selectedLayerRefs().count() > 1
+             && selectedLayerRefs().contains(qMakePair(cueId, id)))
+    {
+        // Several layers selected: one page for all of them.
+        showMultiLayerPage(selectedLayerRefs());
     }
     else
     {
@@ -1997,8 +2016,7 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
     const QColor grey = palette().color(QPalette::Disabled, QPalette::Text);
     for (const ResolvedLayer &rl : resolved.at(index).layers)
     {
-        QString name = rl.name.isEmpty() ? m_st->targetLabel(rl.target)
-                       : tr("%1 (%2)").arg(rl.name, m_st->targetLabel(rl.target));
+        QString name = rl.name.isEmpty() ? m_st->targetLabel(rl.target) : rl.name;
         if (rl.depth > 0)
             name = QString(rl.depth * 3, QLatin1Char(' ')) + QStringLiteral("↳ ") + name;
         QStringList vals;
@@ -2027,6 +2045,10 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
             rows->targets << rl.target;
         }
         it->setData(TargetRole, rl.target.signature());
+        // A named layer: what it holds, compact, on a line under it.
+        if (!rl.name.isEmpty() && !rl.target.isOpaque())
+            line += QStringLiteral("\n") + QString(rl.depth * 3 + 4, QLatin1Char(' '))
+                    + m_st->targetContents(rl.target);
         it->setText(line);
         it->setToolTip(rl.own ? tr("Drop groups here to add them to %1, a palette to set it").arg(name)
                               : tr("Carried into this cue: a drop here sets it in this cue"));
@@ -2038,8 +2060,11 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
     }
     else
     {
-        const int rowH = qMax(rows->sizeHintForRow(0), fontMetrics().height() + 6);
-        rows->setFixedHeight(rows->count() * rowH + 2 * rows->frameWidth() + 2);
+        int h = 0;
+        for (int r = 0; r < rows->count(); ++r)
+            h += qMax(rows->sizeHintForRow(r),
+                      (rows->item(r)->text().count(QLatin1Char('\n')) + 1) * fontMetrics().height() + 6);
+        rows->setFixedHeight(h + 2 * rows->frameWidth() + 2);
         rows->show();
         m_cueDropZone->setMinimumHeight(0);
     }
@@ -2708,8 +2733,33 @@ void ShowTreeView::attributeMenu(quint32 cueId, quint32 layerId, const Target &t
     menu.exec(globalPos);
 }
 
+bool ShowTreeView::isMulti(quint32 cueId, quint32 layerId) const
+{
+    return !m_applyingMulti && m_multi.count() > 1 && m_multi.contains(qMakePair(cueId, layerId));
+}
+
+bool ShowTreeView::forEachEdited(quint32 cueId, quint32 layerId, const QString &label,
+                                 const std::function<bool(quint32, quint32)> &one)
+{
+    if (!isMulti(cueId, layerId))
+        return one(cueId, layerId);
+    // Every selected layer, one undo step.
+    const QList<QPair<quint32, quint32>> all = m_multi;
+    m_st->beginBatch(label);
+    m_applyingMulti = true;
+    bool any = false;
+    for (const QPair<quint32, quint32> &ref : all)
+        any |= one(ref.first, ref.second);
+    m_applyingMulti = false;
+    m_st->endBatch(any);
+    return any;
+}
+
 bool ShowTreeView::applyLook(quint32 cueId, quint32 layerId, const Target &target, const Look &look)
 {
+    if (isMulti(cueId, layerId))
+        return forEachEdited(cueId, layerId, tr("Set %1 on %2 layers").arg(keyLabel(look.key)).arg(m_multi.count()),
+                             [this, &look](quint32 c, quint32 l) { return m_st->setLayerLook(c, l, look); });
     if (layerId != invalidId())
         return m_st->setLayerLook(cueId, layerId, look);
     if (!target.isEmpty())
@@ -2803,6 +2853,8 @@ void ShowTreeView::slotLayerReleaseToggled(bool on)
 {
     if (m_inspectorUpdating)
         return;
+    if (m_multi.count() > 1)
+        return;             // several layers: on click (below), all at once
     const quint32 cueId = currentCueId();
     if (currentKind() == LayerNode)
     {
@@ -3833,6 +3885,10 @@ bool ShowTreeView::setOneOffColour(quint32 cueId, quint32 layerId, const QColor 
 bool ShowTreeView::setEffectOwn(quint32 cueId, quint32 layerId, const QString &key,
                                 const QList<quint32> &palettes, const Target &target)
 {
+    if (isMulti(cueId, layerId))
+        return forEachEdited(cueId, layerId, tr("Set the effect's own looks"), [&](quint32 c, quint32 l) {
+            return setEffectOwn(c, l, key, palettes);
+        });
     const Cue *cue = m_st->cue(cueId);
     const CueList *list = m_st->listOfCue(cueId);
     if (cue == nullptr || list == nullptr)
@@ -3875,7 +3931,7 @@ bool ShowTreeView::clearAttribute(quint32 cueId, quint32 layerId, const QString 
 {
     Look l;
     l.key = key;
-    return layerId == invalidId() ? m_st->setCueLook(cueId, l) : m_st->setLayerLook(cueId, layerId, l);
+    return applyLook(cueId, layerId, Target(), l);
 }
 
 bool ShowTreeView::setAttributeNone(quint32 cueId, quint32 layerId, const QString &key)
@@ -3883,7 +3939,196 @@ bool ShowTreeView::setAttributeNone(quint32 cueId, quint32 layerId, const QStrin
     Look l;
     l.key = key;
     l.none = true;
-    return layerId == invalidId() ? m_st->setCueLook(cueId, l) : m_st->setLayerLook(cueId, layerId, l);
+    return applyLook(cueId, layerId, Target(), l);
+}
+
+QList<QPair<quint32, quint32>> ShowTreeView::selectedLayerRefs() const
+{
+    QList<QPair<quint32, quint32>> out;
+    for (QTreeWidgetItemIterator it(m_tree); *it; ++it)
+        if ((*it)->isSelected() && (*it)->data(0, KindRole).toInt() == LayerNode)
+            out << qMakePair((*it)->data(0, CueRole).toUInt(), (*it)->data(0, IdRole).toUInt());
+    return out;
+}
+
+bool ShowTreeView::setReleaseOnSelected(bool release)
+{
+    const QList<QPair<quint32, quint32>> refs = selectedLayerRefs();
+    if (refs.isEmpty())
+        return false;
+    m_st->beginBatch(release ? tr("Release %1 layers").arg(refs.count()) : tr("Carry %1 layers").arg(refs.count()));
+    bool any = false;
+    for (const QPair<quint32, quint32> &ref : refs)
+        any |= m_st->setLayerRelease(ref.first, ref.second, release);
+    m_st->endBatch(any);
+    return any;
+}
+
+void ShowTreeView::showMultiLayerPage(const QList<QPair<quint32, quint32>> &layers)
+{
+    m_multi = layers;
+    DropPage *page = static_cast<DropPage *>(m_layerPage);
+    const quint32 curCue = currentCueId(), curLayer = currentId();
+    page->cue = curCue;                 // drops go to all of them (applyLook)
+    page->layer = curLayer;
+    page->target = Target();
+    while (QLayoutItem *item = m_rows->takeAt(0))
+    {
+        if (QWidget *w = item->widget())
+        {
+            w->hide();
+            w->deleteLater();
+        }
+        delete item;
+    }
+    m_rowText.clear();
+
+    // Each layer as it resolves in its cue.
+    QHash<quint32, QList<ResolvedCue>> byList;
+    QList<const ResolvedLayer *> rls;
+    QStringList names;
+    QSet<quint32> cues, fixtures;
+    int released = 0;
+    for (const QPair<quint32, quint32> &ref : layers)
+    {
+        const CueList *list = m_st->listOfCue(ref.first);
+        const Cue *c = m_st->cue(ref.first);
+        const Layer *l = c == nullptr ? nullptr : c->layer(ref.second);
+        if (list == nullptr || l == nullptr)
+            continue;
+        if (!byList.contains(list->id))
+            byList.insert(list->id, m_st->resolved(*list));
+        const ResolvedLayer *rl = byList[list->id].at(list->indexOf(ref.first)).layer(l->target);
+        if (rl == nullptr)
+            continue;
+        rls << rl;
+        cues.insert(ref.first);
+        names << (l->name.isEmpty() ? m_st->targetLabel(l->target) : l->name);
+        for (quint32 f : m_st->targetFixtures(l->target))
+            fixtures.insert(f);
+        if (l->release)
+            ++released;
+    }
+    QString where;
+    if (cues.count() == 1)
+    {
+        const CueList *list = m_st->listOfCue(*cues.begin());
+        where = tr("in cue %1").arg(m_st->cueLabel(*list, list->indexOf(*cues.begin())));
+    }
+    else
+        where = tr("in %1 cues").arg(cues.count());
+    m_layerTitle->setText(tr("%1 layers %2 — edited together").arg(rls.count()).arg(where));
+    m_layerContents->setText(tr("%1 — %2 fixture(s)").arg(names.join(QStringLiteral(" · ")).toHtmlEscaped())
+                             .arg(fixtures.count()));
+    m_layerContents->setToolTip(QString());
+    m_layerContents->setVisible(true);
+    // Release: all, none, or some (partly ticked); a click sets it on all.
+    m_layerRelease->setVisible(true);
+    {
+        QSignalBlocker block(m_layerRelease);
+        const bool mixed = released > 0 && released < rls.count();
+        m_layerRelease->setTristate(mixed);
+        m_layerRelease->setCheckState(mixed ? Qt::PartiallyChecked : released > 0 ? Qt::Checked : Qt::Unchecked);
+    }
+
+    QStringList keys = attributeKeys();
+    for (const ResolvedLayer *rl : rls)
+        for (const QString &k : rl->values.keys())
+            if (!keys.contains(k))
+                keys << k;
+    std::sort(keys.begin(), keys.end(), keyLessThan);
+    const QBrush grey = palette().brush(QPalette::Disabled, QPalette::Text);
+    int row = 0;
+    for (const QString &key : keys)
+    {
+        QLabel *label = new QLabel(keyLabel(key), m_rowsHost);
+        if (key.startsWith(QLatin1String("Beam.")) || isLineParamKey(key))
+            label->setText(QStringLiteral("   ") + label->text());
+        QLabel *value = new QLabel(m_rowsHost);
+        value->setObjectName(QStringLiteral("stRow:%1").arg(key));
+        // The same on all (and from where), mixed, or none.
+        int have = 0;
+        bool same = true, allOwn = true;
+        Look first;
+        QSet<QString> origins;
+        for (const ResolvedLayer *rl : rls)
+        {
+            if (!rl->values.contains(key))
+                continue;
+            const ResolvedValue &v = rl->values.value(key);
+            if (have == 0)
+                first = v.look;
+            else if (v.look != first)
+                same = false;
+            ++have;
+            allOwn &= v.origin == Origin::Own;
+            const CueList *list = m_st->listOfCue(v.fromCue);
+            origins.insert(list == nullptr ? QString() : originText(*list, v));
+        }
+        QString text, origin;
+        if (have == 0)
+            text = QStringLiteral("—");
+        else if (!same || have < rls.count())
+            text = tr("mixed");
+        else
+        {
+            text = isLineParamKey(key) && !first.none ? ShowTreeController::lineParamText(key, first.value)
+                                                      : lookText(first);
+            origin = origins.count() == 1 ? *origins.begin() : tr("from several places");
+        }
+        if (have > 0 && (!allOwn || text == tr("mixed")))
+        {
+            QPalette pal = value->palette();
+            pal.setBrush(QPalette::WindowText, grey);
+            value->setPalette(pal);
+            QFont f = value->font();
+            f.setItalic(true);
+            value->setFont(f);
+        }
+        value->setText(origin.isEmpty() ? text : QStringLiteral("%1 — %2").arg(text, origin));
+        value->setWordWrap(true);
+        // Applies to: summed over them.
+        QLabel *reach = new QLabel(m_rowsHost);
+        if (!isEffectKey(key) && !isLineParamKey(key))
+        {
+            int n = 0, total = 0;
+            for (const ResolvedLayer *rl : rls)
+            {
+                Look probe;
+                probe.key = key;
+                if (rl->values.contains(key))
+                    probe = rl->values.value(key).look;
+                int a = 0, b = 0;
+                m_st->lookReach(rl->target, probe, &a, &b);
+                n += a;
+                total += b;
+            }
+            if (total > 0 && n < total)
+                reach->setText(tr("applies to %1 of %2").arg(n).arg(total));
+        }
+        QToolButton *more = new QToolButton(m_rowsHost);
+        more->setText(QStringLiteral("⋯"));
+        more->setToolTip(tr("Set, clear or turn off %1 on all %2").arg(label->text().trimmed()).arg(rls.count()));
+        connect(more, &QToolButton::clicked, this, [this, curCue, curLayer, key, more]() {
+            const QPoint at = more->mapToGlobal(QPoint(0, more->height()));
+            if (isLineParamKey(key))
+            {
+                QMenu menu(this);
+                lineParamMenu(&menu, curCue, curLayer, Target(), key);
+                menu.exec(at);
+                return;
+            }
+            attributeMenu(curCue, curLayer, Target(), Target(), key, at);
+        });
+        m_rows->addWidget(label, row, 0);
+        m_rows->addWidget(value, row, 1);
+        m_rows->addWidget(reach, row, 2);
+        m_rows->addWidget(more, row, 4);
+        m_rowText << QStringLiteral("%1 | %2 | %3").arg(label->text().trimmed(), text, origin);
+        ++row;
+    }
+    m_rows->setRowStretch(row, 1);
+    m_pages->setCurrentWidget(m_layerPage);
 }
 
 void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
@@ -3957,6 +4202,53 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
                 selectNode(cueId);
             });
             down->setEnabled(list != nullptr && at + 1 < list->cues.count());
+        }
+        const QList<QPair<quint32, quint32>> sel = selectedLayerRefs();
+        if (kind == LayerNode && sel.count() > 1 && item->isSelected())
+        {
+            // Several layers: the edits act on all of them, one step each.
+            QMenu *several = menu.addMenu(tr("%1 selected layers").arg(sel.count()));
+            several->setObjectName("stSeveralLayers");
+            several->addAction(tr("Release on"), this, [this]() { setReleaseOnSelected(true); });
+            several->addAction(tr("Release off"), this, [this]() { setReleaseOnSelected(false); });
+            QMenu *set = several->addMenu(tr("Set look"));
+            QMenu *clear = several->addMenu(tr("Clear look"));
+            const QPair<quint32, quint32> cur(item->data(0, CueRole).toUInt(), item->data(0, IdRole).toUInt());
+            QHash<QString, QMenu *> kinds;
+            QList<QLCPalette *> pals = m_doc->palettes();
+            std::sort(pals.begin(), pals.end(), [](const QLCPalette *a, const QLCPalette *b) {
+                return a->name().compare(b->name(), Qt::CaseInsensitive) < 0;
+            });
+            const QStringList keys = attributeKeys();
+            for (const QString &k : keys)
+            {
+                kinds.insert(k, set->addMenu(keyLabel(k)));
+                clear->addAction(keyLabel(k), this, [this, cur, k]() {
+                    m_multi = selectedLayerRefs();
+                    clearAttribute(cur.first, cur.second, k);
+                });
+            }
+            for (QLCPalette *p : pals)
+            {
+                if (m_st->isInlinePalette(p->id()))
+                    continue;
+                QMenu *m = kinds.value(m_st->keyForPalette(p->id()));
+                if (m == nullptr)
+                    continue;
+                const quint32 pid = p->id();
+                m->addAction(p->name(), this, [this, cur, pid]() {
+                    m_multi = selectedLayerRefs();
+                    dropPalettes(cur.first, cur.second, { pid });
+                });
+            }
+            several->addAction(tr("Split each (one layer per group)"), this, [this, sel]() {
+                m_st->beginBatch(tr("Split %1 layers").arg(sel.count()));
+                bool any = false;
+                for (const QPair<quint32, quint32> &ref : sel)
+                    any |= m_st->splitLayer(ref.first, ref.second);
+                m_st->endBatch(any);
+            });
+            menu.addSeparator();
         }
         if (kind == LayerNode)
         {
@@ -4826,6 +5118,7 @@ bool ShowTreeView::runCommand(const QString &line)
     ctx.list = currentListId();
     ctx.cue = currentCueId();
     ctx.layer = currentKind() == LayerNode ? currentId() : invalidId();
+    ctx.layers = selectedLayerRefs();
     ctx.recentPalettes = recentPalettes();
 
     const ShowTreeCommand::Result r = m_commander->run(line, ctx);
@@ -4844,7 +5137,10 @@ bool ShowTreeView::runCommand(const QString &line)
     if (m_commandHistory.isEmpty() || m_commandHistory.last() != line)
         m_commandHistory << line;
     m_historyAt = -1;
-    // Where the command leaves the selection: its layer, cue or list.
+    // Where the command leaves the selection: its layer, cue or list (or,
+    // acting on the layers selected, as it was).
+    if (r.keepSelection)
+        return true;
     if (r.layer != invalidId() && r.context.cue != invalidId())
         selectNode(r.layer, r.context.cue);
     else if (r.context.cue != invalidId())

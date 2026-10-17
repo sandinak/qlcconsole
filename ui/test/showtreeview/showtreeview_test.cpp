@@ -2761,8 +2761,8 @@ void ShowTreeView_Test::everyActionIsOneUndoStep()
         editor->clear();
         QTest::keyClicks(editor, "Floor wash");
         QTest::keyClick(editor, Qt::Key_Return);
-        QTest::qWait(30);
-        return st->cue(last)->layer(big)->name == QLatin1String("Floor wash");
+        // The rename lands once the editor has let go of the row.
+        return QTest::qWaitFor([&] { return st->cue(last)->layer(big)->name == QLatin1String("Floor wash"); }, 3000);
     }));
     for (const char *line : { "set \"Sides\" Towers Pars", "Sides dimmer 45", "Dim 2 in Towers dimmer 45",
                               "name \"Typed\"" })
@@ -2953,7 +2953,7 @@ void ShowTreeView_Test::renameInPlace()
         QTest::keyClicks(editor, text);
         QTest::keyClick(editor, Qt::Key(finish));
         QTRY_VERIFY(!view.isRenaming());
-        QTest::qWait(20);
+        QTest::qWait(100);
     };
 
     QVERIFY(view.selectNode(layer, c1));
@@ -2961,7 +2961,7 @@ void ShowTreeView_Test::renameInPlace()
     Q_UNUSED(steps)
     const QString undoBefore = st->undoText();
     rename(Qt::Key_Return, "Hero", Qt::Key_Return);
-    QCOMPARE(st->cue(c1)->layer(layer)->name, QString("Hero"));
+    QTRY_COMPARE(st->cue(c1)->layer(layer)->name, QString("Hero"));
     QCOMPARE(st->undoText(), QString("Rename"));
     QVERIFY(st->cue(c1)->layer(layer)->target == t);
     // Still the same layer: tracked into Two under its new name.
@@ -2983,17 +2983,17 @@ void ShowTreeView_Test::renameInPlace()
     // Empty: back to its groups' name.
     QVERIFY(view.selectNode(layer, c1));
     rename(Qt::Key_Return, "", Qt::Key_Return);
-    QVERIFY(st->cue(c1)->layer(layer)->name.isEmpty());
+    QTRY_VERIFY(st->cue(c1)->layer(layer)->name.isEmpty());
 
     // A cue: its name, the number stays.
     QVERIFY(view.selectNode(c2));
     rename(Qt::Key_Return, "Verse", Qt::Key_Return);
-    QCOMPARE(st->cue(c2)->name, QString("Verse"));
+    QTRY_COMPARE(st->cue(c2)->name, QString("Verse"));
     QCOMPARE(st->cue(c2)->number, QString("2"));
     // A cue list.
     QVERIFY(view.selectNode(list));
     rename(Qt::Key_F2, "Opener", Qt::Key_Return);
-    QCOMPARE(st->cueList(list)->name, QString("Opener"));
+    QTRY_COMPARE(st->cueList(list)->name, QString("Opener"));
 
     // The command line names the selected layer.
     QVERIFY(view.selectNode(layer, c1));
@@ -3324,10 +3324,11 @@ void ShowTreeView_Test::namedLayersShowWhatTheyHold()
     QCOMPARE(row->text(0), QString("TrussC + TrussW"));       // unnamed: its groups
     QVERIFY(st->renameNode(layer, "Truss wash"));
     row = rowOf(view.tree(), ShowTreeView::LayerNode, layer, c1);
-    QCOMPARE(row->text(0), QString("Truss wash  · TrussC + TrussW"));
+    QCOMPARE(row->text(0), QString("Truss wash"));           // the short name only
     QVERIFY2(row->toolTip(0).startsWith("TrussC (2) · TrussW (2) — 4 fixture(s)"), qPrintable(row->toolTip(0)));
     QVERIFY(view.selectNode(c1));
-    QCOMPARE(view.cueLayerItems().first(), QString("Truss wash (TrussC + TrussW)"));
+    QCOMPARE(view.cueLayerItems().first(),
+             QString("Truss wash\n    TrussC (2) · TrussW (2) — 4 fixture(s)"));
 
     QVERIFY(view.selectNode(layer, c1));
     QCOMPARE(view.layerContentsText(), QString("Contains: TrussC (2) ✕ · TrussW (2) ✕ — 4 fixture(s)"));
@@ -3356,6 +3357,96 @@ void ShowTreeView_Test::namedLayersShowWhatTheyHold()
     // The command line says what a selected layer holds.
     QVERIFY(view.selectNode(layer, c1));
     QVERIFY2(line->placeholderText().contains("TrussC (2) · TrussW (2)"), qPrintable(line->placeholderText()));
+}
+
+/* Branson (2026-10-17): several layers selected are edited together -- the
+   page says how many, Release is ticked / unticked / part-ticked and a click
+   sets it on all, a value set (dropped, picked) goes on all in one undo
+   step, a row shows the value they share or "mixed"; the command line acts
+   on them; across cues too. */
+void ShowTreeView_Test::editSeveralLayersAtOnce()
+{
+    FixtureGroup *a = group("A", 0, 1);
+    FixtureGroup *b = group("B", 1, 1);
+    FixtureGroup *c = group("C", 2, 1);
+    FixtureGroup *d = group("D", 3, 1);
+    const quint32 blue = colour(Qt::blue, "Blue");
+    const quint32 red = colour(Qt::red, "Red");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCueNumbered(list, "1", "One");
+    const quint32 c2 = st->addCueNumbered(list, "2", "Two");
+    auto layerOn = [&](quint32 cue, FixtureGroup *g) {
+        Target t;
+        t.groups << g->id();
+        return st->addLayer(cue, t);
+    };
+    const quint32 la = layerOn(c1, a), lb = layerOn(c1, b), lc = layerOn(c1, c), ld = layerOn(c2, d);
+    st->setLayerRelease(c1, la, true);
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *tree = view.tree();
+    view.tree()->clearSelection();
+    clickRow(tree, rowOf(tree, ShowTreeView::LayerNode, la, c1));
+    clickRow(tree, rowOf(tree, ShowTreeView::LayerNode, lb, c1), Qt::ControlModifier);
+    clickRow(tree, rowOf(tree, ShowTreeView::LayerNode, lc, c1), Qt::ControlModifier);
+    QCOMPARE(view.multiLayers().count(), 3);
+    QLabel *title = view.findChild<QWidget *>("stLayerPage")->findChildren<QLabel *>().first();
+    QCOMPARE(title->text(), QString("3 layers in cue 1 One — edited together"));
+    QCOMPARE(view.layerContentsText(), QString("A · B · C — 3 fixture(s)"));
+
+    // Release: part-ticked; a click releases all; again, carries all.
+    QCheckBox *release = view.findChild<QCheckBox *>("stLayerRelease");
+    QCOMPARE(release->checkState(), Qt::PartiallyChecked);
+    release->click();
+    QVERIFY(st->cue(c1)->layer(lb)->release && st->cue(c1)->layer(lc)->release);
+    QCOMPARE(st->undoText(), QString("Release 3 layers"));
+    QCOMPARE(view.multiLayers().count(), 3);            // still edited together
+    QCOMPARE(release->checkState(), Qt::Checked);
+    release->click();
+    QVERIFY(!st->cue(c1)->layer(la)->release && !st->cue(c1)->layer(lc)->release);
+
+    // A colour on all three, one undo step; the row shows it.
+    QVERIFY(view.dropPalettes(c1, view.currentId(), { blue }));
+    for (quint32 l : { la, lb, lc })
+        QCOMPARE(st->cue(c1)->layer(l)->look(KeyColour)->palettes, QList<quint32>({ blue }));
+    QCOMPARE(st->undoText(), QString("Set Colour on 3 layers"));
+    QCOMPARE(rowFor(view.attributeRows(), "Colour"), QString("Colour | Blue | "));
+    QVERIFY(st->undo());
+    QVERIFY(st->cue(c1)->layer(lb)->look(KeyColour) == nullptr);
+    QVERIFY(st->redo());
+    // One different: "mixed".
+    QVERIFY(st->setLayerLook(c1, lb, st->lookForPalette(red)));
+    QCOMPARE(rowFor(view.attributeRows(), "Colour"), QString("Colour | mixed | "));
+    // None on all from the row.
+    QVERIFY(view.setAttributeNone(c1, view.currentId(), KeyColour));
+    QVERIFY(st->cue(c1)->layer(la)->look(KeyColour)->none && st->cue(c1)->layer(lb)->look(KeyColour)->none);
+
+    // The command line: an attribute first acts on the selection.
+    QVERIFY2(view.runCommand("dimmer 45"), qPrintable(view.commandMessage()));
+    for (quint32 l : { la, lb, lc })
+        QVERIFY(st->cue(c1)->layer(l)->look(KeyDimmer) != nullptr);
+    QVERIFY(st->undo());
+    QVERIFY(st->cue(c1)->layer(la)->look(KeyDimmer) == nullptr);
+    QVERIFY(st->redo());
+    QVERIFY2(view.runCommand("release on"), qPrintable(view.commandMessage()));
+    QVERIFY(st->cue(c1)->layer(lc)->release);
+
+    // Across cues.
+    view.tree()->clearSelection();
+    clickRow(tree, rowOf(tree, ShowTreeView::LayerNode, la, c1));
+    clickRow(tree, rowOf(tree, ShowTreeView::LayerNode, ld, c2), Qt::ControlModifier);
+    QCOMPARE(view.multiLayers().count(), 2);
+    QCOMPARE(view.findChild<QWidget *>("stLayerPage")->findChildren<QLabel *>().first()->text(),
+             QString("2 layers in 2 cues — edited together"));
+    QVERIFY(view.dropPalettes(c2, ld, { red }));
+    QCOMPARE(st->cue(c1)->layer(la)->look(KeyColour)->palettes, QList<quint32>({ red }));
+    QCOMPARE(st->cue(c2)->layer(ld)->look(KeyColour)->palettes, QList<quint32>({ red }));
+    QVERIFY(view.setReleaseOnSelected(true));
+    QVERIFY(st->cue(c2)->layer(ld)->release);
 }
 
 QTEST_MAIN(ShowTreeView_Test)

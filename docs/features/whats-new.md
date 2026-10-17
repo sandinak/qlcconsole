@@ -22,7 +22,10 @@ The latest changes, newest first. Each links to the guide with the detail.
   in the Library adds what is selected to the tree's selected cue or layer;
   **⌘F** (or **/**) jumps to the filter, type and press Return. A drop below
   the tree's last row is a new layer in the selected cue. A named layer
-  still shows what it holds. See [Adding layers](show-tree.md#adding-layers).
+  is just its name in the tree; its page says what it holds. Select several
+  layers and edit them together — Release, a colour, a dimmer, all in one
+  step. See [Adding layers](show-tree.md#adding-layers) and
+  [Editing several layers](show-tree.md#editing-several-layers).
 - **Write a show as one tree.** A new **Show Tree** tab beside Programming:
   productions, cue lists, cues, and in each cue the layers — a group and the
   looks it plays. Drag groups onto a cue for layers and palettes onto a layer

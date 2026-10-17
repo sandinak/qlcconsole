@@ -1368,10 +1368,17 @@ editor are worked on together, and the tree keeps its full height; the
 command line stays full width. A drop below the tree's last rows goes to
 the selected cue. Return / double-click in the Library acts on the tree's
 selection as a drop would (the hint says what); ⌘F or / jumps to the
-Library filter, Return adds the first match. A named layer still shows
-what it holds (tree, cue page, the layer page's "Contains:" with links and
-✕), its name works on the command line, and the command line's
-placeholder says what the selected layer holds.
+Library filter, Return adds the first match. A named layer shows only its
+name in the tree (Branson: short; contents in the tooltip); the main window
+says what it holds (a line under it on the cue page, the layer page's
+"Contains:" with links and ✕); its name works on the command line, and the
+command line's placeholder says what the selected layer holds. **Several
+layers selected are edited together** (any cues): the page shows the shared
+value or "mixed", a tri-state Release, sums "applies to"; every set goes
+through one funnel (`applyLook`, `setEffectOwn`) that applies it to all of
+them in one batch (one undo step); a right-click menu for them; the command
+line takes an attribute first for the selection (`dimmer 45`, `release
+on`).
 
 Tests: showtree_test `sceneExcludedFixturesAreNotWritten`,
 `exclusionIsThreadSafeWithLivePreview`, `groupSetsAreOneTargetAndKeepTracking`,
@@ -1382,7 +1389,8 @@ Tests: showtree_test `sceneExcludedFixturesAreNotWritten`,
 `everyCommandWordHasHelpAndItsExamplesParse`, `copyAndPasteCues`;
 showtreeview_test `groupSetsInTheLibrary`, `childLayersByMouse`,
 `renameInPlace`, `lineAimsInTheTab`, `copyPasteAndHelp`,
-`libraryTreeEditorAndAddingWithoutDragging`, `namedLayersShowWhatTheyHold`, and
+`libraryTreeEditorAndAddingWithoutDragging`, `namedLayersShowWhatTheyHold`,
+`editSeveralLayersAtOnce`, and
 `everyActionIsOneUndoStep` (+13 actions).
 
 ### Open for Branson

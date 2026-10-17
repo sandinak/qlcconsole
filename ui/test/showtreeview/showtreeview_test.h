@@ -87,6 +87,7 @@ private slots:
     void copyPasteAndHelp();
     void libraryTreeEditorAndAddingWithoutDragging();
     void namedLayersShowWhatTheyHold();
+    void editSeveralLayersAtOnce();
 
 private:
     quint32 dimmer(int level, const QString &name);

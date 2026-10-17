@@ -205,6 +205,29 @@ it is set, the change carries on to the cues it tracks into.
   - merging would change what a later cue plays (*"Merging would change what
     cue 0.0.5 plays on USTs (Dimmer)"*).
 
+### Editing several layers
+
+Select several layers in the tree (⌘-click, ⇧-click) — of one cue or of
+several — and the page edits them **together**:
+
+- the header says *"3 layers in cue 0.0.1 Startup — edited together"* (or
+  *"in 2 cues"*), with their names and how many fixtures they hold;
+- **Release** is ticked when all are released, empty when none are, and
+  part-ticked when some are; a click releases them all (and, when all
+  already are, carries them all);
+- each attribute row shows the value they **share** (grey when it comes
+  from elsewhere) or *mixed*; *applies to N of M* adds them up;
+- whatever you set there — a palette dropped on the page, **⋯ → Set to**,
+  **Level…**, **Colour…**, **None**, **Clear**, Spread / Grouping / Cross —
+  goes on **every** selected layer, in one undo step;
+- right-click one of them → **N selected layers** → Release on / off, Set
+  look, Clear look, Split each; **Merge** and **Delete** take the selection
+  as before;
+- on the command line, start with the attribute and it acts on them all:
+  `colour Blue`, `dimmer 45`, `release on`.
+
+The Design preview shows the cue of the layer you clicked last.
+
 ### Group sets
 
 A **group set** is one name for several groups, made once and used in any
@@ -461,10 +484,10 @@ of its own.
 ## Renaming
 
 A layer's **name** is its own, separate from its groups (until you name it,
-it is called after them). A named layer still shows what it holds: in the
-tree after its name (*"Truss wash · TrussC-RGB + TrussW-RGB"*, the whole
-list with counts in its tooltip), on the cue page in brackets, and on its
-page as **Contains:** *"TrussC-RGB (8) · TrussW-RGB (8) — 16 fixtures"*.
+it is called after them). The tree shows just the name (what it holds is
+in the row's tooltip). The main window shows what it holds: on the cue
+page a compact line under its name, and on its page **Contains:**
+*"TrussC-RGB (8) · TrussW-RGB (8) — 16 fixtures"*.
 There each group is a link that shows it in the Library, and **✕** takes it
 out of the layer (one undo step; never its last). A named layer's name
 works on the command line as its groups do (`Truss wash dimmer 45`), and
@@ -770,8 +793,9 @@ Layer**.
 
 Click a row to select it. **⌘-click** adds or removes a row, **⇧-click**
 takes the rows between. The page on the right, the Design preview and
-everything that acts on one row follow the row clicked last. Several rows
-selected are for **Merge** and **Delete**.
+everything that acts on one row follow the row clicked last; several layers
+selected are edited together on the page ([Editing several
+layers](#editing-several-layers)), and Merge and Delete take them all.
 
 Right-click in the tree for:
 

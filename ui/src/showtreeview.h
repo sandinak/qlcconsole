@@ -209,6 +209,13 @@ public:
     /** The cue's own layers selected in the tree, when all are of one cue
      *  (@a cueId); empty otherwise. */
     QList<quint32> selectedLayers(quint32 *cueId = nullptr) const;
+    /** Every own layer selected in the tree, of any cue, in tree order:
+     *  (cue, layer). Two or more: the page edits them together. */
+    QList<QPair<quint32, quint32>> selectedLayerRefs() const;
+    /** The layers the page edits together now (two or more; else empty). */
+    QList<QPair<quint32, quint32>> multiLayers() const { return m_multi; }
+    /** Release on (or off) on every selected layer: one undo step. */
+    bool setReleaseOnSelected(bool release);
     /** Delete the cues and own layers selected in the tree (two or more)
      *  as one undo step; false (nothing done) when fewer, or a cue list
      *  or production is among them. */
@@ -383,6 +390,14 @@ private:
     void showCuePage(const ShowTree::CueList &list, int index);
     void showLayerPage(const ShowTree::CueList &list, int index, const ShowTree::Layer *own,
                        const ShowTree::ResolvedLayer *resolved);
+    /** Several layers selected: one page editing them together. */
+    void showMultiLayerPage(const QList<QPair<quint32, quint32>> &layers);
+    /** Whether (@a cueId, @a layerId) is one of several edited together. */
+    bool isMulti(quint32 cueId, quint32 layerId) const;
+    /** Run @a one on every layer edited together (one undo step, @a label),
+     *  or only on (@a cueId, @a layerId) when it isn't one of them. */
+    bool forEachEdited(quint32 cueId, quint32 layerId, const QString &label,
+                       const std::function<bool(quint32, quint32)> &one);
     /** @a target: a carried-in layer's (set on it makes it the cue's own);
      *  @a rowTarget: the row's layer, own or not (for "Update cue X"). */
     void attributeMenu(quint32 cueId, quint32 layerId, const ShowTree::Target &target,
@@ -499,6 +514,8 @@ private:
     quint32 m_pageCue = 0xFFFFFFFF;      //!< the cue the cue page shows
     bool m_reloading = false;
     bool m_renaming = false;
+    QList<QPair<quint32, quint32>> m_multi;
+    bool m_applyingMulti = false;
     void slotTreeItemRenamed(QTreeWidgetItem *item, int column);
     bool m_inspectorUpdating = false;
 };

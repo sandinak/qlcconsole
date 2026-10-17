@@ -99,7 +99,9 @@ const QList<ShowTreeCommand::Word> &ShowTreeCommand::words()
         add("layer", "build", "[layer] <groups> [, <groups>…] [in <parent>] <attribute> <value>…",
             "The selected cue's layer on those groups (made if needed; a grey carried-in one is brought "
             "in), then its looks. Names one after another (or joined with +) are ONE layer; a comma "
-            "starts another. A group, a set, a fixture or a folder path (Movers/Front/Spots).",
+            "starts another. A group, a set, a fixture, a named layer or a folder path "
+            "(Movers/Front/Spots). With layers selected in the tree, start with the attribute "
+            "(colour Blue, dimmer 45, release on) and it acts on all of them.",
             { "Towers colour Blue dimmer 45", "Towers USTs dimmer 100", "Towers, USTs dimmer 100",
               "layer Steps colour Red" }, { "in", "set", "colour" });
         add("in", "build", "<groups> in <parent groups> <attribute> <value>…",
@@ -1300,6 +1302,43 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
             error = tr("function <name>: no function “%1”. Tab lists them.").arg(r.peek());
         else if (!r.atEnd())
             error = tr("function <name>, <name>… -- then nothing more (“%1”)").arg(r.peek());
+    }
+    else if (w0 == QLatin1String("release") && !ctx.layers.isEmpty()
+             && QStringList({ "on", "off", "" }).contains(r.src.mid(r.i + 7).trimmed().toLower()))
+    {
+        // Several layers selected: release on (or off) on all of them.
+        r.word();
+        const bool on = r.word().toLower() != QLatin1String("off");
+        for (const QPair<quint32, quint32> &ref : ctx.layers)
+            m_st->setLayerRelease(ref.first, ref.second, on);
+        res.keepSelection = true;
+    }
+    else if (!attributeKey(w0).isEmpty() && !ctx.layers.isEmpty() && targetNames().indexOf(QRegularExpression(
+                 QStringLiteral("^%1$").arg(QRegularExpression::escape(w0)),
+                 QRegularExpression::CaseInsensitiveOption)) < 0)
+    {
+        // `colour Blue`, `dimmer 45`… with several layers selected: on all
+        // of them, cue by cue, one undo step.
+        QList<quint32> cues;
+        for (const QPair<quint32, quint32> &ref : ctx.layers)
+            if (!cues.contains(ref.first))
+                cues << ref.first;
+        const int start = r.i;
+        const quint32 keepCue = ctx.cue;
+        for (quint32 cid : cues)
+        {
+            QList<quint32> ls;
+            for (const QPair<quint32, quint32> &ref : ctx.layers)
+                if (ref.first == cid)
+                    ls << ref.second;
+            r.i = start;
+            ctx.cue = cid;
+            error = assigns(ls);
+            if (!error.isEmpty())
+                break;
+        }
+        ctx.cue = keepCue;
+        res.keepSelection = true;
     }
     else if (w0 == QLatin1String("release"))
     {

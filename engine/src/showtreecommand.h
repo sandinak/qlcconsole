@@ -85,6 +85,10 @@ public:
         quint32 cue = 0xFFFFFFFF;
         /** The layer selected in the cue (invalid: none): what `name` names. */
         quint32 layer = 0xFFFFFFFF;
+        /** The layers selected in the tree, (cue, layer):
+         *  a command starting with an attribute (`colour Blue`, `dimmer 45`)
+         *  or `release on|off` acts on all of them. */
+        QList<QPair<quint32, quint32>> layers;
         /** The Library's Recent palettes, newest first: a typed value
          *  reuses one of these before any other (after In this cue list). */
         QList<quint32> recentPalettes;
@@ -101,6 +105,8 @@ public:
         Context context;
         /** The layer it set last (invalid: none), to select. */
         quint32 layer = 0xFFFFFFFF;
+        /** It acted on the layers selected: leave the selection as it is. */
+        bool keepSelection = false;
     };
 
     Result run(const QString &line, const Context &context);
