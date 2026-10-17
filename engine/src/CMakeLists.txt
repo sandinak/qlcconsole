@@ -46,6 +46,7 @@ add_library(${module_name} SHARED
     patchlist.cpp patchlist.h
     speedmasters.cpp speedmasters.h
     showcontrol.cpp showcontrol.h
+    showtreecommand.cpp showtreecommand.h
     showtreecontroller.cpp showtreecontroller.h
     showtreemodel.cpp showtreemodel.h
     spreadlayer.cpp spreadlayer.h

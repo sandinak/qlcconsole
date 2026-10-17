@@ -155,6 +155,17 @@ ShowTree::Cue *ShowTreeController::findCue(quint32 cueId, CueList **list)
 bool ShowTreeController::edit(const QString &label,
                               const std::function<bool(QList<Production> &)> &change)
 {
+    if (m_batchDepth > 0)
+    {
+        // Part of a command: applied now, baked and recorded once at the end.
+        QList<Production> work = m_productions;
+        if (!change(work))
+            return false;
+        m_productions = work;
+        m_batchChanged = true;
+        return true;
+    }
+
     const QByteArray before = snapshotXml();
     QList<Production> work = m_productions;
     if (!change(work))
@@ -170,6 +181,39 @@ bool ShowTreeController::edit(const QString &label,
     m_doc->setModified();
     emit changed();
     return true;
+}
+
+void ShowTreeController::beginBatch(const QString &label)
+{
+    if (m_batchDepth++ > 0)
+        return;
+    m_batchLabel = label;
+    m_batchBefore = snapshotXml();
+    m_batchProductions = m_productions;
+    m_batchChanged = false;
+}
+
+void ShowTreeController::endBatch(bool keep)
+{
+    if (m_batchDepth == 0 || --m_batchDepth > 0)
+        return;
+    if (!m_batchChanged)
+        return;
+    if (!keep)
+    {
+        // Back as it was; a bake drops a one-off value made on the way.
+        m_productions = m_batchProductions;
+        bake();
+        emit changed();
+        return;
+    }
+    m_undo.append(Snapshot { m_batchLabel, m_batchBefore });
+    while (m_undo.count() > kUndoLimit)
+        m_undo.removeFirst();
+    m_redo.clear();
+    bake();
+    m_doc->setModified();
+    emit changed();
 }
 
 quint32 ShowTreeController::addProduction(const QString &name)
@@ -262,7 +306,14 @@ bool ShowTreeController::setCue(const Cue &cue)
         const quint32 coll = c->collection;
         *c = cue;
         c->collection = coll;
-        c->includes.removeAll(cue.id);
+        // Includes as given, less any that are gone or would loop (D8).
+        const QList<quint32> wanted = c->includes;
+        c->includes.clear();
+        CueList *l = nullptr;
+        cueIn(ps, cue.id, &l);
+        for (quint32 inc : wanted)
+            if (canInclude(*l, cue.id, inc))
+                c->includes << inc;
         return true;
     });
 }
@@ -509,6 +560,295 @@ bool ShowTreeController::setBaseCue(quint32 listId, quint32 cueId)
         l->baseCue = cueId;
         return true;
     });
+}
+
+bool ShowTreeController::setCueMode(quint32 cueId, CueMode mode)
+{
+    return edit(tr("Cue mode"), [&](QList<Production> &ps) {
+        Cue *c = cueIn(ps, cueId);
+        if (c == nullptr || c->mode == mode)
+            return false;
+        c->mode = mode;
+        return true;
+    });
+}
+
+bool ShowTreeController::setTargetRelease(quint32 cueId, const Target &target, bool release)
+{
+    if (target.isEmpty())
+        return false;
+    const quint32 newLayer = newId();
+    return edit(release ? tr("Release layer") : tr("Carry layer"), [&](QList<Production> &ps) {
+        Cue *c = cueIn(ps, cueId);
+        if (c == nullptr)
+            return false;
+        Layer *l = nullptr;
+        for (Layer &have : c->layers)
+            if (have.target == target)
+                l = &have;
+        if (l == nullptr)
+        {
+            if (!release)
+                return false;           // carried in, and carried on: nothing to do
+            Layer fresh;
+            fresh.id = newLayer;
+            fresh.target = target;      // takes the carried-in layer's place and values
+            c->layers << fresh;
+            l = &c->layers.last();
+        }
+        if (l->release == release)
+            return false;
+        l->release = release;
+        return true;
+    });
+}
+
+bool ShowTreeController::addInclude(quint32 cueId, quint32 includedId, QString *why)
+{
+    const CueList *list = listOfCue(cueId);
+    if (list == nullptr)
+        return false;
+    if (!canInclude(*list, cueId, includedId, why))
+        return false;
+    const Cue *inc = list->cue(includedId);
+    return edit(tr("Include %1").arg(cueLabel(*list, list->indexOf(inc->id))), [&](QList<Production> &ps) {
+        Cue *c = cueIn(ps, cueId);
+        if (c == nullptr)
+            return false;
+        c->includes << includedId;
+        return true;
+    });
+}
+
+bool ShowTreeController::removeInclude(quint32 cueId, quint32 includedId)
+{
+    return edit(tr("Remove include"), [&](QList<Production> &ps) {
+        Cue *c = cueIn(ps, cueId);
+        return c != nullptr && c->includes.removeAll(includedId) > 0;
+    });
+}
+
+bool ShowTreeController::moveInclude(quint32 cueId, quint32 includedId, int toIndex)
+{
+    return edit(tr("Move include"), [&](QList<Production> &ps) {
+        Cue *c = cueIn(ps, cueId);
+        if (c == nullptr)
+            return false;
+        const int from = c->includes.indexOf(includedId);
+        toIndex = qBound(0, toIndex, int(c->includes.count()) - 1);
+        if (from < 0 || from == toIndex)
+            return false;
+        c->includes.move(from, toIndex);
+        return true;
+    });
+}
+
+quint32 ShowTreeController::addCueNumbered(quint32 listId, const QString &number, const QString &name)
+{
+    const QString num = number.trimmed();
+    const CueList *have = cueList(listId);
+    if (have == nullptr || num.isEmpty() || indexOfNumber(*have, num) >= 0)
+        return invalidId();
+    const quint32 id = newId();
+    const bool ok = edit(tr("New cue"), [&](QList<Production> &ps) {
+        CueList *l = listIn(ps, listId);
+        if (l == nullptr)
+            return false;
+        Cue c;
+        c.id = id;
+        c.number = num;
+        c.name = name;
+        int at = 0;
+        while (at < l->cues.count())
+        {
+            const QString n = l->cues.at(at).number.isEmpty() ? QString::number(at + 1)
+                                                               : l->cues.at(at).number;
+            if (compareCueNumbers(n, num) > 0)
+                break;
+            ++at;
+        }
+        l->cues.insert(at, c);
+        return true;
+    });
+    return ok ? id : invalidId();
+}
+
+quint32 ShowTreeController::duplicateCue(quint32 cueId)
+{
+    const CueList *have = listOfCue(cueId);
+    if (have == nullptr)
+        return invalidId();
+    const int at = have->indexOf(cueId);
+    Cue copy = have->cues.at(at);
+    copy.id = newId();
+    copy.collection = invalidId();
+    copy.number = numberForInsert(*have, at);
+    for (Layer &l : copy.layers)
+        l.id = newId();
+    const quint32 listId = have->id;
+    const bool ok = edit(tr("Duplicate cue"), [&](QList<Production> &ps) {
+        CueList *l = listIn(ps, listId);
+        if (l == nullptr)
+            return false;
+        l->cues.insert(at + 1, copy);
+        return true;
+    });
+    return ok ? copy.id : invalidId();
+}
+
+quint32 ShowTreeController::recordCue(quint32 cueId)
+{
+    const CueList *have = listOfCue(cueId);
+    if (have == nullptr)
+        return invalidId();
+    const int at = have->indexOf(cueId);
+    const Cue &src = have->cues.at(at);
+    const QList<ResolvedCue> resolved = resolve(*have);
+
+    Cue rec;
+    rec.id = newId();
+    rec.number = numberForInsert(*have, at);
+    rec.name = src.name.isEmpty() ? tr("recorded") : tr("%1 (recorded)").arg(src.name);
+    rec.mode = CueMode::Block;
+    rec.fadeIn = src.fadeIn;
+    rec.fadeOut = src.fadeOut;
+    rec.hold = src.hold;
+    for (const ResolvedLayer &rl : resolved.at(at).layers)
+    {
+        // What is on stage: a layer that plays nothing (only None) isn't.
+        if (!rl.target.isOpaque() && rl.isDark())
+            continue;
+        Layer l;
+        l.id = newId();
+        l.name = rl.name;
+        l.target = rl.target;
+        if (!rl.target.isOpaque())
+            l.looks = rl.playedLooks();
+        rec.layers << l;
+    }
+
+    const quint32 listId = have->id;
+    const bool ok = edit(tr("Record as new cue"), [&](QList<Production> &ps) {
+        CueList *l = listIn(ps, listId);
+        if (l == nullptr)
+            return false;
+        l->cues.insert(at + 1, rec);
+        return true;
+    });
+    return ok ? rec.id : invalidId();
+}
+
+bool ShowTreeController::valueSource(quint32 cueId, const Target &target, const QString &key,
+                                     quint32 *sourceCue, quint32 *sourceLayer) const
+{
+    const CueList *list = listOfCue(cueId);
+    if (list == nullptr || target.isEmpty())
+        return false;
+    const QList<ResolvedCue> resolved = resolve(*list);
+
+    quint32 cur = cueId;
+    Target t = target;
+    quint32 layerId = invalidId();
+    // Back along where it came from: tracked, included, base. Every step
+    // goes to another cue, so a list's length of steps is enough.
+    for (int guard = 0; guard <= list->cues.count(); ++guard)
+    {
+        const int idx = list->indexOf(cur);
+        if (idx < 0)
+            return false;
+        const ResolvedLayer *rl = resolved.at(idx).layer(t);
+        if (rl == nullptr && layerId != invalidId())
+        {
+            // The layer is on another target there (a group added later on).
+            for (const ResolvedLayer &l : resolved.at(idx).layers)
+                if (l.layerId == layerId)
+                    rl = &l;
+        }
+        if (rl == nullptr || !rl->values.contains(key))
+            return false;
+        const ResolvedValue &v = rl->values.value(key);
+        if (v.origin == Origin::Own || v.origin == Origin::CueLook)
+        {
+            if (cur == cueId)
+                return false;           // set in this cue: nothing to update elsewhere
+            if (sourceCue != nullptr)
+                *sourceCue = cur;
+            if (sourceLayer != nullptr)
+                *sourceLayer = v.origin == Origin::Own ? rl->layerId : invalidId();
+            return true;
+        }
+        if (v.fromCue == cur || v.fromCue == invalidId())
+            return false;
+        t = rl->target;
+        layerId = rl->layerId;
+        cur = v.fromCue;
+    }
+    return false;
+}
+
+bool ShowTreeController::updateSource(quint32 cueId, const Target &target, const Look &look)
+{
+    quint32 srcCue = invalidId(), srcLayer = invalidId();
+    if (!valueSource(cueId, target, look.key, &srcCue, &srcLayer))
+        return false;
+    const CueList *list = listOfCue(srcCue);
+    const QString label = tr("Update cue %1: %2").arg(cueLabel(*list, list->indexOf(srcCue)),
+                                                      keyLabel(look.key));
+    return edit(label, [&](QList<Production> &ps) {
+        Cue *c = cueIn(ps, srcCue);
+        if (c == nullptr)
+            return false;
+        if (srcLayer != invalidId())
+        {
+            Layer *l = c->layer(srcLayer);
+            if (l == nullptr || l->target.isOpaque())
+                return false;
+            const Look *was = l->look(look.key);
+            if (was != nullptr && *was == look)
+                return false;
+            l->setLook(look);
+            return true;
+        }
+        // A cue look there: the cue's look changes (it reaches that cue's
+        // own layers that don't set it themselves).
+        const Look *was = c->look(look.key);
+        if (was != nullptr && *was == look)
+            return false;
+        c->setLook(look);
+        return true;
+    });
+}
+
+ShowTreeController::Usage ShowTreeController::usageInList(quint32 listId) const
+{
+    Usage u;
+    const CueList *list = cueList(listId);
+    if (list == nullptr)
+        return u;
+    auto looks = [&u](const QList<Look> &ls) {
+        for (const Look &l : ls)
+        {
+            for (quint32 p : l.palettes)
+                u.palettes[p]++;
+            for (quint32 p : l.own)
+                u.palettes[p]++;
+        }
+    };
+    for (const Cue &c : list->cues)
+    {
+        looks(c.looks);
+        for (const Layer &l : c.layers)
+        {
+            looks(l.looks);
+            if (l.target.isOpaque())
+                u.functions[l.target.function]++;
+            for (quint32 g : l.target.groups)
+                u.groups[g]++;
+            for (quint32 f : l.target.fixtures)
+                u.fixtures[f]++;
+        }
+    }
+    return u;
 }
 
 bool ShowTreeController::renameNode(quint32 nodeId, const QString &name)
@@ -963,6 +1303,7 @@ void ShowTreeController::bake()
 
     QSet<quint32> keepScenes, keepCollections, keepChasers;
     m_generatedLabels.clear();
+    m_lastChanged.clear();
 
     // Generated scenes are found again by what they play.
     QHash<QString, quint32> bySignature;
@@ -1096,6 +1437,7 @@ void ShowTreeController::bake()
                     coll->setPath(folder);
                 if (coll->functions() != members)
                 {
+                    m_lastChanged << cue.id;
                     for (quint32 fid : coll->functions())
                         coll->removeFunction(fid);
                     for (quint32 fid : members)

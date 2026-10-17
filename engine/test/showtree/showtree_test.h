@@ -77,6 +77,21 @@ private slots:
     void importListsHtpConflicts();
     void importARealShow();
 
+    // P2: tracking in the tab, D22/D23, the Library's list usage, the
+    // command line
+    void theRebakeChain();
+    void aBakeChangesOnlyTheChain();
+    void includesAreCycleProof();
+    void updateCueWhereATrackedValueWasSet();
+    void recordAsNewCueFreezesTheStage();
+    void duplicateACue();
+    void usageInAList();
+    void previewShowsTheTrackedState();
+    void convertAnImportToTracking();
+    void commandLine();
+    void commandLineFailsAsAWhole();
+    void commandLineCompletes();
+
 private:
     quint32 dimmer(int level, const QString &name);
     quint32 colour(const QString &name);
@@ -85,6 +100,7 @@ private:
     void tick(int n = 1);
     void go(Chaser *c);
     void stopAll();
+    QList<QHash<quint32, uchar>> playAll(Chaser *c);
 
     Doc *m_doc = nullptr;
     QList<quint32> m_fixtures;

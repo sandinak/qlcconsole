@@ -29,6 +29,7 @@
 #undef protected
 #undef private
 #include "showtreecontroller.h"
+#include "showtreecommand.h"
 #include "inputoutputmap.h"
 #include "functionparent.h"
 #include "qlcfixturedefcache.h"
@@ -439,9 +440,31 @@ void ShowTree_Test::anIncludeThatWouldLoopIsLeftOut()
     list.cues << cue(1, "1", CueMode::ListDefault, { layer(11, Towers, { look(KeyColour, { Red }) }) }, {}, { 2 });
     list.cues << cue(2, "2", CueMode::ListDefault, { layer(21, USTs, { look(KeyColour, { Blue }) }) }, {}, { 1 });
     const QList<ResolvedCue> r = resolve(list);
-    // Cue 1 includes 2 (which can't include 1 back while 1 is resolving).
-    CHECK_VALUE(r[0], USTs, KeyColour, Blue, Origin::Included, 2);
+    // A loop is left out on both sides, whichever cue is read first: each
+    // plays only its own (the editor never makes one; a file might hold it).
+    QVERIFY(value(r[0], USTs, KeyColour) == nullptr);
+    CHECK_VALUE(r[0], Towers, KeyColour, Red, Origin::Own, 1);
+    CHECK_VALUE(r[1], USTs, KeyColour, Blue, Origin::Own, 2);
+    QCOMPARE(r[0].skippedIncludes, QList<quint32>({ 2 }));
     QCOMPARE(r[1].skippedIncludes, QList<quint32>({ 1 }));
+
+    // A loop through tracking: cue 1 includes 2, and 2 tracks from 1. Cue 2
+    // still tracks Towers from cue 1 (not an empty start read half done).
+    list.mode = ListMode::Tracking;
+    list.cues[1].includes.clear();
+    const QList<ResolvedCue> t = resolve(list);
+    QCOMPARE(t[0].skippedIncludes, QList<quint32>({ 2 }));
+    CHECK_VALUE(t[1], Towers, KeyColour, Red, Origin::Tracked, 1);
+    CHECK_VALUE(t[1], USTs, KeyColour, Blue, Origin::Own, 2);
+    QVERIFY(dependsOn(list, 2, 1));
+    QVERIFY(!dependsOn(list, 1, 2) || list.cues[0].includes.contains(2));
+    QString why;
+    QVERIFY(!canInclude(list, 1, 1, &why));
+    list.cues[0].includes.clear();
+    QVERIFY(!dependsOn(list, 1, 2));
+    QVERIFY(!canInclude(list, 1, 2, &why));     // 2 tracks from 1: a loop
+    QVERIFY(why.contains("loop"));
+    QVERIFY(canInclude(list, 2, 1, &why));
 }
 
 /* D23: next whole number in the last place, else a point cue; never renumber. */
@@ -1628,6 +1651,667 @@ void ShowTree_Test::importARealShow()
                                  .arg(m_doc->showTree()->cueLabel(*list, i)).arg(lit).arg(differ);
         }
     }
+}
+
+/****************************************************************************
+ * P2: tracking, Update cue / Record (D22, D23), usage, the command line
+ ****************************************************************************/
+
+QList<QHash<quint32, uchar>> ShowTree_Test::playAll(Chaser *c)
+{
+    // Every cue from the top, as GO would play it.
+    stopAll();
+    QList<QHash<quint32, uchar>> out;
+    for (int i = 0; i < c->stepsCount(); ++i)
+    {
+        go(c);
+        out << settle(10);
+    }
+    stopAll();
+    return out;
+}
+
+namespace
+{
+quint32 ownLayer(const ShowTreeController *st, quint32 cueId, quint32 groupId)
+{
+    if (const Cue *c = st->cue(cueId))
+        for (const Layer &l : c->layers)
+            if (l.target.groups == QList<quint32>({ groupId }))
+                return l.id;
+    return invalidId();
+}
+
+QSet<quint32> idSet(const QList<quint32> &ids)
+{
+    return QSet<quint32>(ids.begin(), ids.end());
+}
+}
+
+/* The re-bake chain (§4): this cue, the following ones until a Block (a
+   Cue-only cue passes on only what it started from), every includer, and
+   the cues a released layer goes back to the base in. */
+void ShowTree_Test::theRebakeChain()
+{
+    CueList list;
+    list.mode = ListMode::Tracking;
+    list.baseCue = 1;
+    list.cues << cue(1, "1", CueMode::Block, { layer(11, ATSpots, { look(KeyDimmer, { BaseDim }) }) });
+    list.cues << cue(2, "2", CueMode::ListDefault, { layer(21, ATSpots, { look(KeyDimmer, { Full }) }, true) });
+    list.cues << cue(3, "3", CueMode::ListDefault, { layer(31, BackStage, { look(KeyDimmer, { D45 }) }) });
+    list.cues << cue(4, "4", CueMode::CueOnly, { layer(41, ATWAll, { look(KeyDimmer, { Full }) }) });
+    list.cues << cue(5, "5", CueMode::ListDefault, { layer(51, StepTops, { look(KeyDimmer, { Full }) }) });
+    list.cues << cue(6, "6", CueMode::Block, { layer(61, StepTops, { look(KeyDimmer, { D45 }) }) });
+    list.cues << cue(7, "7", CueMode::ListDefault, { layer(71, Towers, { look(KeyDimmer, { Full }) }) });
+    list.cues << cue(8, "8", CueMode::Block, {}, {}, { 3 });
+
+    QCOMPARE(rebakeChain(list, 3), QList<quint32>({ 3, 4, 5, 8 }));
+    QCOMPARE(rebakeChain(list, 4), QList<quint32>({ 4 }));        // cue-only: its own only
+    QCOMPARE(rebakeChain(list, 6), QList<quint32>({ 6, 7 }));
+    QCOMPARE(rebakeChain(list, 7), QList<quint32>({ 7 }));
+    QCOMPARE(rebakeChain(list, 1), QList<quint32>({ 1, 2, 3, 4, 5, 8 }));
+    QVERIFY(rebakeChain(list, 99).isEmpty());
+
+    // The base reaches past a Block only through a release: 6 releases.
+    list.cues[5].layers[0].release = true;
+    QCOMPARE(rebakeChain(list, 1), QList<quint32>({ 1, 2, 3, 4, 5, 7, 8 }));
+    // An includer of an includer.
+    list.cues << cue(9, "9", CueMode::Block, {}, {}, { 8 });
+    QCOMPARE(rebakeChain(list, 3), QList<quint32>({ 3, 4, 5, 8, 9 }));
+}
+
+/* What a bake really changes is inside the chain -- and is the chain where
+   every cue in it plays what changed. */
+void ShowTree_Test::aBakeChangesOnlyTheChain()
+{
+    FixtureGroup *at = group("AT-Spots", { m_fixtures[0] });
+    FixtureGroup *bs = group("BackStage", { m_fixtures[1] });
+    FixtureGroup *aw = group("AT-W-ALL", { m_fixtures[2] });
+    FixtureGroup *stp = group("StepTops", { m_fixtures[3] });
+    FixtureGroup *tw = group("Towers", { m_fixtures[4] });
+    const quint32 base = dimmer(60, "Base");
+    const quint32 d45 = dimmer(115, "45%");
+    const quint32 full = dimmer(255, "Full");
+
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    QList<quint32> c;
+    for (int i = 0; i < 8; ++i)
+        c << st->addCue(listId, i - 1, QString("C%1").arg(i + 1));
+    auto set = [&](int i, FixtureGroup *g, quint32 pal, bool release = false) {
+        const quint32 l = st->addLayer(c[i], groupTarget(g->id()));
+        QVERIFY(st->setLayerLook(c[i], l, st->lookForPalette(pal)));
+        if (release)
+            QVERIFY(st->setLayerRelease(c[i], l, true));
+    };
+    set(0, at, base);
+    set(1, at, full, true);
+    set(2, bs, d45);
+    set(3, aw, full);
+    set(4, stp, full);
+    set(5, stp, d45);
+    set(6, tw, full);
+    QVERIFY(st->setBaseCue(listId, c[0]));
+    QVERIFY(st->setCueMode(c[0], CueMode::Block));
+    QVERIFY(st->setCueMode(c[3], CueMode::CueOnly));
+    QVERIFY(st->setCueMode(c[5], CueMode::Block));
+    QVERIFY(st->setCueMode(c[7], CueMode::Block));
+    QVERIFY(st->addInclude(c[7], c[2]));
+
+    // BackStage changes in cue 3: 3, 4 (cue-only, starts from 3), 5, and 8
+    // (includes 3) play it; 6 and 7 come after a Block.
+    const QList<quint32> chain3 = rebakeChain(*st->cueList(listId), c[2]);
+    QCOMPARE(chain3, QList<quint32>({ c[2], c[3], c[4], c[7] }));
+    QVERIFY(st->setLayerLook(c[2], ownLayer(st, c[2], bs->id()), st->lookForPalette(full)));
+    QCOMPARE(st->lastBakeChanged(), chain3);
+
+    // The base's AT-Spots level: cue 2 sets its own, so it doesn't change;
+    // everything after the release does.
+    const QList<quint32> chain1 = rebakeChain(*st->cueList(listId), c[0]);
+    QVERIFY(st->setLayerLook(c[0], ownLayer(st, c[0], at->id()), st->lookForPalette(d45)));
+    QVERIFY(idSet(chain1).contains(idSet(st->lastBakeChanged())));
+    QCOMPARE(st->lastBakeChanged(), QList<quint32>({ c[0], c[2], c[3], c[4], c[7] }));
+
+    // A cue-only cue's own change stays in it.
+    QVERIFY(st->setLayerLook(c[3], ownLayer(st, c[3], aw->id()), st->lookForPalette(d45)));
+    QCOMPARE(st->lastBakeChanged(), QList<quint32>({ c[3] }));
+
+    // And it plays that way: GO through the list.
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    const QList<QHash<quint32, uchar>> v = playAll(chaser);
+    QCOMPARE(int(v[0][0]), 115);        // the base, at its new level
+    QCOMPARE(int(v[1][0]), 255);
+    QCOMPARE(int(v[2][0]), 115);        // released: back to the base
+    QCOMPARE(int(v[2][1]), 255);
+    QCOMPARE(int(v[3][2]), 115);        // cue-only flash
+    QCOMPARE(int(v[4][2]), 0);          // ...gone in the next cue
+    QCOMPARE(int(v[4][1]), 255);        // BackStage tracked on
+    QCOMPARE(int(v[5][1]), 0);          // Block
+    QCOMPARE(int(v[5][3]), 115);
+    QCOMPARE(int(v[6][3]), 115);
+    QCOMPARE(int(v[6][4]), 255);
+    QCOMPARE(int(v[7][1]), 255);        // includes cue 3
+    QCOMPARE(int(v[7][0]), 115);        // ...with what was on in it
+    QCOMPARE(int(v[7][4]), 0);
+}
+
+void ShowTree_Test::includesAreCycleProof()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    const quint32 c3 = st->addCue(listId, 1, "Three");
+    QVERIFY(st->setLayerLook(c1, st->addLayer(c1, groupTarget(a->id())), st->lookForPalette(full)));
+    QVERIFY(st->setCueMode(c3, CueMode::Block));
+
+    QString why;
+    QVERIFY(!st->addInclude(c1, c1, &why));
+    QVERIFY(!st->addInclude(c1, c2, &why));         // 2 tracks from 1
+    QVERIFY(why.contains("loop"));
+    QVERIFY(st->addInclude(c3, c1, &why));
+    QVERIFY(st->addInclude(c3, c2, &why));
+    QVERIFY(!st->addInclude(c3, c2, &why));         // already
+    QVERIFY(!st->addInclude(c1, c3, &why));         // 3 includes 1
+    QCOMPARE(st->cue(c3)->includes, QList<quint32>({ c1, c2 }));
+
+    // Reorder: later wins.
+    QVERIFY(st->moveInclude(c3, c2, 0));
+    QCOMPARE(st->cue(c3)->includes, QList<quint32>({ c2, c1 }));
+    QVERIFY(!st->moveInclude(c3, c2, 0));
+    QCOMPARE(st->undoText(), QString("Move include"));
+    QVERIFY(st->undo());
+    QCOMPARE(st->cue(c3)->includes, QList<quint32>({ c1, c2 }));
+
+    // setCue can't sneak a loop in either.
+    Cue copy = *st->cue(c1);
+    copy.includes << c3 << c2;
+    QVERIFY(st->setCue(copy));
+    QVERIFY(st->cue(c1)->includes.isEmpty());
+
+    QVERIFY(st->removeInclude(c3, c1));
+    QCOMPARE(st->cue(c3)->includes, QList<quint32>({ c2 }));
+    QVERIFY(!st->removeInclude(c3, c1));
+    // Now 1 may include 3: 3 no longer plays from 1 at any depth? It still
+    // includes 2, which tracks from 1.
+    QVERIFY(!st->addInclude(c1, c3, &why));
+}
+
+/* D22: a tracked value's picker offers "Update cue X" -- where it was set,
+   so the change tracks on from there. */
+void ShowTree_Test::updateCueWhereATrackedValueWasSet()
+{
+    FixtureGroup *bs = group("BackStage", { m_fixtures[0] });
+    FixtureGroup *stp = group("StepTops", { m_fixtures[1] });
+    const quint32 d45 = dimmer(115, "45%");
+    const quint32 full = dimmer(255, "Full");
+    const quint32 blue = colour("Blue");
+    const quint32 red = colour("Red");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    const quint32 c3 = st->addCue(listId, 1, "Three");
+    const quint32 c4 = st->addCue(listId, 2, "Four");
+    const quint32 bl = st->addLayer(c1, groupTarget(bs->id()));
+    QVERIFY(st->setLayerLook(c1, bl, st->lookForPalette(d45)));
+    QVERIFY(st->setCueLook(c1, st->lookForPalette(blue)));
+    QVERIFY(st->setLayerLook(c2, st->addLayer(c2, groupTarget(stp->id())), st->lookForPalette(d45)));
+    QVERIFY(st->setCueMode(c4, CueMode::Block));
+    QVERIFY(st->addInclude(c4, c2));
+
+    quint32 src = invalidId(), srcLayer = invalidId();
+    QVERIFY(st->valueSource(c3, groupTarget(bs->id()), KeyDimmer, &src, &srcLayer));
+    QCOMPARE(src, c1);
+    QCOMPARE(srcLayer, bl);
+    // Set by the cue's look there: no layer.
+    QVERIFY(st->valueSource(c3, groupTarget(bs->id()), KeyColour, &src, &srcLayer));
+    QCOMPARE(src, c1);
+    QCOMPARE(srcLayer, invalidId());
+    // Own here: nothing to update elsewhere. Nowhere: neither.
+    QVERIFY(!st->valueSource(c1, groupTarget(bs->id()), KeyDimmer, &src));
+    QVERIFY(!st->valueSource(c3, groupTarget(bs->id()), KeyGobo, &src));
+    // Included: where the included cue got it.
+    QVERIFY(st->valueSource(c4, groupTarget(stp->id()), KeyDimmer, &src));
+    QCOMPARE(src, c2);
+
+    // Update cue 1 from cue 3: one step, cue 3 still tracks it.
+    QVERIFY(st->updateSource(c3, groupTarget(bs->id()), st->lookForPalette(full)));
+    QCOMPARE(st->undoText(), QString("Update cue 1 One: Dimmer"));
+    QCOMPARE(st->cue(c1)->layer(bl)->look(KeyDimmer)->palettes, QList<quint32>({ full }));
+    QVERIFY(st->cue(c3)->layers.isEmpty());
+    const QList<ResolvedCue> r = resolve(*st->cueList(listId));
+    CHECK_VALUE(r[2], bs->id(), KeyDimmer, full, Origin::Tracked, c1);
+    // Through a cue look.
+    QVERIFY(st->updateSource(c3, groupTarget(bs->id()), st->lookForPalette(red)));
+    QCOMPARE(st->cue(c1)->look(KeyColour)->palettes, QList<quint32>({ red }));
+    // Own value: refused (the picker's plain Set covers it).
+    QVERIFY(!st->updateSource(c1, groupTarget(bs->id()), st->lookForPalette(d45)));
+
+    QVERIFY(st->undo());
+    QVERIFY(st->undo());
+    QCOMPARE(st->cue(c1)->layer(bl)->look(KeyDimmer)->palettes, QList<quint32>({ d45 }));
+    QCOMPARE(st->cue(c1)->look(KeyColour)->palettes, QList<quint32>({ blue }));
+}
+
+/* D22 + D23: Record as new cue freezes what a cue puts on stage into a new
+   Block cue, numbered after it; it plays the same scenes. */
+void ShowTree_Test::recordAsNewCueFreezesTheStage()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    FixtureGroup *b = group("B", { m_fixtures[1] });
+    FixtureGroup *c = group("C", { m_fixtures[2] });
+    const quint32 d45 = dimmer(115, "45%");
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    const quint32 c3 = st->addCue(listId, 1, "Three");
+    QVERIFY(st->setLayerLook(c1, st->addLayer(c1, groupTarget(a->id())), st->lookForPalette(full)));
+    QVERIFY(st->setLayerLook(c2, st->addLayer(c2, groupTarget(b->id())), st->lookForPalette(d45)));
+    QVERIFY(st->setLayerLook(c3, st->addLayer(c3, groupTarget(c->id())), st->lookForPalette(full)));
+    // "None" on a layer: nothing on stage, so not recorded.
+    QVERIFY(st->setTargetLook(c2, groupTarget(a->id()), noneLook(KeyDimmer)));
+
+    const quint32 rec = st->recordCue(c2);
+    QVERIFY(rec != invalidId());
+    QCOMPARE(st->undoText(), QString("Record as new cue"));
+    const CueList *list = st->cueList(listId);
+    QCOMPARE(list->indexOf(rec), 2);
+    QCOMPARE(list->cue(rec)->number, QString("2.5"));      // 3 is taken: a point cue (D23)
+    QCOMPARE(list->cue(rec)->mode, CueMode::Block);
+    QCOMPARE(list->cue(rec)->name, QString("Two (recorded)"));
+    QCOMPARE(list->cue(rec)->layers.count(), 1);           // B; A is None there
+    QVERIFY(list->cue(rec)->layers.first().id != list->cue(c2)->layers.first().id);
+
+    // The same stage as cue 2: the same scenes.
+    const Collection *two = qobject_cast<const Collection *>(m_doc->function(list->cue(c2)->collection));
+    const Collection *recorded = qobject_cast<const Collection *>(m_doc->function(list->cue(rec)->collection));
+    QCOMPARE(idSet(recorded->functions()), idSet(two->functions()));
+
+    // 3 now tracks from the recorded cue, still on.
+    const QList<ResolvedCue> r = resolve(*list);
+    CHECK_VALUE(r[3], b->id(), KeyDimmer, d45, Origin::Tracked, rec);
+    QVERIFY(st->undo());
+    QCOMPARE(st->cueList(listId)->cues.count(), 3);
+}
+
+void ShowTree_Test::duplicateACue()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    QVERIFY(st->setLayerLook(c1, st->addLayer(c1, groupTarget(a->id())), st->lookForPalette(full)));
+    QVERIFY(st->setBaseCue(listId, c1));
+    const quint32 d = st->duplicateCue(c1);
+    const CueList *list = st->cueList(listId);
+    QCOMPARE(list->indexOf(d), 1);
+    QCOMPARE(list->cue(d)->number, QString("1.5"));
+    QCOMPARE(list->cue(d)->layers.count(), 1);
+    QVERIFY(list->cue(d)->layers.first().id != list->cue(c1)->layers.first().id);
+    QCOMPARE(list->baseCue, c1);                             // never the base
+    QCOMPARE(list->indexOf(c2), 2);
+}
+
+/* D20: "In this cue list" -- what the list's cues use, with counts. */
+void ShowTree_Test::usageInAList()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    FixtureGroup *b = group("B", { m_fixtures[1] });
+    const quint32 d45 = dimmer(115, "45%");
+    const quint32 full = dimmer(255, "Full");
+    const quint32 blue = colour("Blue");
+    Scene *raw = new Scene(m_doc);
+    raw->setValue(m_fixtures[5], 0, 90);
+    m_doc->addFunction(raw);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    QVERIFY(st->setLayerLook(c1, st->addLayer(c1, groupTarget(a->id())), st->lookForPalette(full)));
+    QVERIFY(st->setLayerLook(c2, st->addLayer(c2, groupTarget(a->id())), st->lookForPalette(full)));
+    QVERIFY(st->setLayerLook(c2, st->addLayer(c2, groupTarget(b->id())), st->lookForPalette(d45)));
+    QVERIFY(st->setCueLook(c2, st->lookForPalette(blue)));
+    Target t;
+    t.function = raw->id();
+    QVERIFY(st->addLayer(c1, t) != invalidId());
+
+    const ShowTreeController::Usage u = st->usageInList(listId);
+    QCOMPARE(u.groups.value(a->id()), 2);
+    QCOMPARE(u.groups.value(b->id()), 1);
+    QCOMPARE(u.palettes.value(full), 2);
+    QCOMPARE(u.palettes.value(d45), 1);
+    QCOMPARE(u.palettes.value(blue), 1);
+    QCOMPARE(u.functions.value(raw->id()), 1);
+    QVERIFY(st->usageInList(invalidId()).groups.isEmpty());
+}
+
+/* Design: previewing a cue shows its whole tracked state. */
+void ShowTree_Test::previewShowsTheTrackedState()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    FixtureGroup *b = group("B", { m_fixtures[1] });
+    const quint32 d45 = dimmer(115, "45%");
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    const quint32 c3 = st->addCue(listId, 1, "Three");
+    QVERIFY(st->setLayerLook(c1, st->addLayer(c1, groupTarget(a->id())), st->lookForPalette(full)));
+    QVERIFY(st->setLayerLook(c2, st->addLayer(c2, groupTarget(b->id())), st->lookForPalette(d45)));
+    Q_UNUSED(c3)
+
+    st->previewCue(c3);
+    QHash<quint32, uchar> v = settle();
+    QCOMPARE(int(v[0]), 255);       // tracked from 1
+    QCOMPARE(int(v[1]), 115);       // tracked from 2
+    // An edit where it was set shows in the previewed cue at once.
+    QVERIFY(st->updateSource(c3, groupTarget(a->id()), st->lookForPalette(d45)));
+    v = settle();
+    QCOMPARE(int(v[0]), 115);
+    // Block: only its own (nothing).
+    QVERIFY(st->setCueMode(c3, CueMode::Block));
+    v = settle();
+    QCOMPARE(int(v[0]), 0);
+    QCOMPARE(int(v[1]), 0);
+    st->stopPreview();
+}
+
+/* Import -> Convert manually (P4 will do it for you): the list made
+   Tracking by hand plays the §3.2, §3.3 and §3.4 examples, on the rig. */
+void ShowTree_Test::convertAnImportToTracking()
+{
+    FixtureGroup *at = group("AT-Spots", { m_fixtures[0] });
+    FixtureGroup *bs = group("BackStage", { m_fixtures[1], m_fixtures[2] });
+    FixtureGroup *stp = group("StepTops", { m_fixtures[3] });
+    FixtureGroup *aw = group("AT-W-ALL", { m_fixtures[4] });
+    const quint32 base = dimmer(60, "Base");
+    const quint32 d45 = dimmer(115, "45%");
+    const quint32 full = dimmer(255, "Full");
+    const quint32 white = colour("White");
+    const quint32 blue = colour("Blue");
+
+    // Today's way of writing it: every cue repeats what stays on, and
+    // carries looks forward as collections of collections.
+    Scene *atBase = groupScene(m_doc, "AT-Base", at->id(), { white, base });
+    Scene *atFull = groupScene(m_doc, "AT-Full", at->id(), { white, full });
+    Scene *backStage = groupScene(m_doc, "BackStage", bs->id(), { blue, d45 });
+    Scene *stepBright = groupScene(m_doc, "StepTops-Bright", stp->id(), { white, full });
+    Scene *step45 = groupScene(m_doc, "StepTops-45", stp->id(), { d45 });
+    Scene *flash = groupScene(m_doc, "FlashWashes", aw->id(), { white, full });
+    Scene *at45 = groupScene(m_doc, "AT-45", at->id(), { d45 });
+    Collection *q0 = collection(m_doc, "0.0.0-base", { atBase->id() });
+    Collection *q3 = collection(m_doc, "0.0.3-Announcer", { atFull->id(), backStage->id() });
+    Collection *q4 = collection(m_doc, "0.0.4-SHOUT", { atBase->id(), backStage->id(), stepBright->id() });
+    Collection *q5 = collection(m_doc, "0.0.5-WHO ARE WE", { q4->id(), step45->id() });
+    Collection *q6 = collection(m_doc, "0.0.6-STOMP", { q5->id(), flash->id() });
+    Collection *q7 = collection(m_doc, "0.0.7-After", { q5->id() });
+    Collection *q9 = collection(m_doc, "0.0.9-AnnouncerFinish", { q3->id(), at45->id() });
+    Chaser *chaser = new Chaser(m_doc);
+    chaser->setName("Full Show");
+    chaser->setDurationMode(Chaser::PerStep);
+    m_doc->addFunction(chaser);
+    for (Collection *coll : { q0, q3, q4, q5, q6, q7, q9 })
+        chaser->addStep(ChaserStep(coll->id(), 0, Function::infiniteSpeed(), 0));
+    const QList<QHash<quint32, uchar>> original = playAll(chaser);
+    QCOMPARE(int(original[3][3]), 255);     // 0.0.5: Bright and 45% both run, the brighter wins
+
+    ShowTreeController *st = m_doc->showTree();
+    const ShowTreeController::ImportReport rep = st->importChaser(chaser->id());
+    const quint32 listId = rep.list;
+    QCOMPARE(rep.cues, 7);
+    QCOMPARE(rep.includes, 4);
+    QCOMPARE(st->cueList(listId)->mode, ListMode::NonTracking);
+    QList<quint32> c;
+    for (const Cue &cue : st->cueList(listId)->cues)
+        c << cue.id;
+    QCOMPARE(st->cue(c[3])->includes, QList<quint32>({ c[2] }));
+    Chaser *list = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+
+    // As imported it plays as the chaser did, but where two scenes fought
+    // over a level (0.0.5, 0.0.6, 0.0.7, 0.0.9): there the later one wins.
+    QList<QHash<quint32, uchar>> v = playAll(list);
+    for (int i : { 0, 1, 2 })
+        for (quint32 ch = 0; ch < 5; ++ch)
+            QCOMPARE(int(v[i][ch]), int(original[i][ch]));
+    QCOMPARE(int(v[3][3]), 115);
+
+    // Convert by hand: Tracking; 0.0.0 is the base; AT-Spots released in
+    // 0.0.3; what only repeats the cue before goes.
+    QVERIFY(st->setListMode(listId, ListMode::Tracking));
+    QVERIFY(st->setBaseCue(listId, c[0]));
+    QVERIFY(st->setCueMode(c[0], CueMode::Block));
+    QVERIFY(st->setLayerRelease(c[1], ownLayer(st, c[1], at->id()), true));
+    QVERIFY(st->removeLayer(c[2], ownLayer(st, c[2], bs->id())));
+    QVERIFY(st->removeLayer(c[2], ownLayer(st, c[2], at->id())));
+    QVERIFY(st->removeInclude(c[3], c[2]));
+    QVERIFY(st->removeInclude(c[4], c[3]));
+    QVERIFY(st->setCueMode(c[4], CueMode::CueOnly));
+    QVERIFY(st->removeInclude(c[5], c[3]));
+    QVERIFY(st->setCueMode(c[6], CueMode::Block));
+    QCOMPARE(st->cue(c[6])->includes, QList<quint32>({ c[1] }));
+
+    // §3.2, as values...
+    QList<ResolvedCue> r = resolve(*st->cueList(listId));
+    CHECK_VALUE(r[1], at->id(), KeyDimmer, full, Origin::Own, c[1]);
+    CHECK_VALUE(r[1], bs->id(), KeyColour, blue, Origin::Own, c[1]);
+    CHECK_VALUE(r[2], at->id(), KeyDimmer, base, Origin::Base, c[0]);
+    CHECK_VALUE(r[2], bs->id(), KeyColour, blue, Origin::Tracked, c[1]);
+    CHECK_VALUE(r[2], bs->id(), KeyDimmer, d45, Origin::Tracked, c[1]);
+    CHECK_VALUE(r[2], stp->id(), KeyColour, white, Origin::Own, c[2]);
+    CHECK_VALUE(r[3], at->id(), KeyDimmer, base, Origin::Tracked, c[0]);
+    CHECK_VALUE(r[3], bs->id(), KeyDimmer, d45, Origin::Tracked, c[1]);
+    CHECK_VALUE(r[3], stp->id(), KeyColour, white, Origin::Tracked, c[2]);
+    CHECK_VALUE(r[3], stp->id(), KeyDimmer, d45, Origin::Own, c[3]);
+    QCOMPARE(st->cue(c[3])->layers.count(), 1);         // one value of its own
+
+    // ...and on the rig. Going darker works: StepTops 255 -> 115.
+    v = playAll(list);
+    QCOMPARE(int(v[0][0]), 60);
+    QCOMPARE(int(v[1][0]), 255);
+    QCOMPARE(int(v[1][1]), 115);
+    QCOMPARE(int(v[2][0]), 60);         // released to the base
+    QCOMPARE(int(v[2][1]), 115);        // BackStage tracked
+    QCOMPARE(int(v[2][3]), 255);
+    QCOMPARE(int(v[3][3]), 115);        // darker than 0.0.4
+    QCOMPARE(int(v[3][1]), 115);
+    // §3.4: the flash plays in 0.0.6 (cue-only) and is gone in 0.0.7, with
+    // no Release and no "washes off" cue.
+    QCOMPARE(int(v[4][4]), 255);
+    QCOMPARE(int(v[4][3]), 115);
+    QCOMPARE(int(v[5][4]), 0);
+    QCOMPARE(int(v[5][3]), 115);
+    QCOMPARE(int(v[5][1]), 115);
+    // 0.0.9 Block, includes 0.0.3: the announcer look back, AT-Spots at 45%.
+    QCOMPARE(int(v[6][0]), 115);
+    QCOMPARE(int(v[6][1]), 115);
+    QCOMPARE(int(v[6][3]), 0);
+    QCOMPARE(int(v[6][4]), 0);
+
+    // §3.3: 0.0.4 Block -- BackStage dark there, StepTops alone; 0.0.5
+    // tracks from it. The bake changes 0.0.4 → 0.0.7 and nothing else.
+    QVERIFY(st->setCueMode(c[2], CueMode::Block));
+    QCOMPARE(st->lastBakeChanged(), QList<quint32>({ c[2], c[3], c[4], c[5] }));
+    QCOMPARE(st->lastBakeChanged(), rebakeChain(*st->cueList(listId), c[2]));
+    v = playAll(list);
+    QCOMPARE(int(v[2][1]), 0);
+    QCOMPARE(int(v[2][0]), 0);
+    QCOMPARE(int(v[2][3]), 255);
+    QCOMPARE(int(v[3][3]), 115);
+    QCOMPARE(int(v[3][1]), 0);
+    QCOMPARE(int(v[6][1]), 115);        // 0.0.9 unchanged: it includes 0.0.3
+
+    // Change 0.0.3 later and 0.0.9 follows.
+    QVERIFY(st->setLayerLook(c[1], ownLayer(st, c[1], bs->id()), st->lookForPalette(full)));
+    QVERIFY(st->lastBakeChanged().contains(c[6]));
+    v = playAll(list);
+    QCOMPARE(int(v[6][1]), 255);
+}
+
+/* §6C: the command line calls the same operations; one undo step each. */
+void ShowTree_Test::commandLine()
+{
+    FixtureGroup *tw = group("Towers", { m_fixtures[0] });
+    FixtureGroup *us = group("US Truss", { m_fixtures[1] });
+    const quint32 full = dimmer(255, "Full");
+    const quint32 blue = colour("Blue");
+    ShowTreeController *st = m_doc->showTree();
+    ShowTreeCommand cmd(m_doc, st);
+    ShowTreeCommand::Context ctx;
+    ctx.production = st->addProduction("P");
+    st->clearUndo();
+
+    ShowTreeCommand::Result r = cmd.run("Towers colour Blue", ctx);
+    QVERIFY(!r.ok);
+    QVERIFY(r.message.contains("cue list"));
+
+    r = cmd.run("list \"01-Everybody Scream\"", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    ctx = r.context;
+    QCOMPARE(st->cueList(ctx.list)->name, QString("01-Everybody Scream"));
+    QCOMPARE(st->cueList(ctx.list)->mode, ListMode::Tracking);
+
+    r = cmd.run("cue 1.0.0 \"base\" block base", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    ctx = r.context;
+    const quint32 c1 = ctx.cue;
+    QCOMPARE(st->cue(c1)->number, QString("1.0.0"));
+    QCOMPARE(st->cue(c1)->name, QString("base"));
+    QCOMPARE(st->cue(c1)->mode, CueMode::Block);
+    QCOMPARE(st->cueList(ctx.list)->baseCue, c1);
+    QCOMPARE(st->undoText(), QString("cue 1.0.0 \"base\" block base"));   // one step for all of it
+
+    // Names with spaces, a level as a number, a cue look.
+    r = cmd.run("Towers US Truss colour Blue dimmer 45", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(st->cue(c1)->layers.count(), 2);
+    for (const Layer &l : st->cue(c1)->layers)
+    {
+        QCOMPARE(l.look(KeyColour)->palettes, QList<quint32>({ blue }));
+        QVERIFY(st->isInlinePalette(l.look(KeyDimmer)->palettes.first()));
+    }
+    QVERIFY(r.layer == ownLayer(st, c1, us->id()));
+    r = cmd.run("cue look dimmer Full", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(st->cue(c1)->look(KeyDimmer)->palettes, QList<quint32>({ full }));
+
+    // + : a new cue after the selected one (D23), tracking by default.
+    r = cmd.run("cue + \"Verse\"", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    ctx = r.context;
+    const quint32 c2 = ctx.cue;
+    QCOMPARE(st->cue(c2)->number, QString("1.0.1"));
+    r = cmd.run("towers+\"US Truss\" dimmer Full", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(st->cue(c2)->layers.count(), 1);
+    QCOMPARE(st->cue(c2)->layers.first().target.groups, QList<quint32>({ tw->id(), us->id() }));
+
+    // None, release, include, modes.
+    r = cmd.run("Towers dimmer none", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QVERIFY(st->cue(c2)->layer(ownLayer(st, c2, tw->id()))->look(KeyDimmer)->none);
+    r = cmd.run("release Towers", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QVERIFY(st->cue(c2)->layer(ownLayer(st, c2, tw->id()))->release);
+    r = cmd.run("cueonly", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(st->cue(c2)->mode, CueMode::CueOnly);
+    r = cmd.run("block", ctx);
+    QVERIFY(r.ok);
+    QCOMPARE(st->cue(c2)->mode, CueMode::Block);
+    r = cmd.run("include 1.0.0", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(st->cue(c2)->includes, QList<quint32>({ c1 }));
+
+    // Selecting by number; a loop refused; record; dup.
+    r = cmd.run("cue 1.0.0", ctx);
+    QVERIFY(r.ok);
+    QCOMPARE(r.context.cue, c1);
+    ShowTreeCommand::Result loop = cmd.run("include 1.0.1", r.context);
+    QVERIFY(!loop.ok);                          // 1.0.1 includes 1.0.0
+    QVERIFY(loop.message.contains("loop"));
+    r = cmd.run("record", r.context);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(st->cue(r.context.cue)->number, QString("1.0.0.5"));
+    r = cmd.run("dup", r.context);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(st->cueList(ctx.list)->cues.count(), 4);
+
+    // undo: the last command, whole.
+    r = cmd.run("undo", r.context);
+    QVERIFY(r.ok);
+    QCOMPARE(st->cueList(ctx.list)->cues.count(), 3);
+    r = cmd.run("redo", r.context);
+    QVERIFY(r.ok);
+    QCOMPARE(st->cueList(ctx.list)->cues.count(), 4);
+}
+
+/* A command that fails part way leaves the tree as it was, and no undo. */
+void ShowTree_Test::commandLineFailsAsAWhole()
+{
+    group("Towers", { m_fixtures[0] });
+    colour("Blue");
+    ShowTreeController *st = m_doc->showTree();
+    ShowTreeCommand cmd(m_doc, st);
+    ShowTreeCommand::Context ctx;
+    ctx.production = st->addProduction("P");
+    ctx.list = st->addCueList(ctx.production, "L");
+    ctx.cue = st->addCue(ctx.list, -1, "One");
+    const QString undo = st->undoText();
+    const int palettes = m_doc->palettes().count();
+
+    // The layer was added, a one-off level made, then "Nope" isn't a colour.
+    ShowTreeCommand::Result r = cmd.run("Towers dimmer 30 colour Nope", ctx);
+    QVERIFY(!r.ok);
+    QVERIFY(r.message.contains("Nope"));
+    QVERIFY(st->cue(ctx.cue)->layers.isEmpty());
+    QCOMPARE(st->undoText(), undo);
+    QCOMPARE(m_doc->palettes().count(), palettes);      // the one-off went too
+
+    r = cmd.run("Nobody colour Blue", ctx);
+    QVERIFY(!r.ok);
+    QVERIFY(r.message.contains("Nobody"));
+    r = cmd.run("cue 2 \"Two\" sideways", ctx);
+    QVERIFY(!r.ok);
+    QCOMPARE(st->cueList(ctx.list)->cues.count(), 1);
+    QCOMPARE(st->undoText(), undo);
+}
+
+void ShowTree_Test::commandLineCompletes()
+{
+    group("Towers", { m_fixtures[0] });
+    group("Tops", { m_fixtures[1] });
+    colour("Blue");
+    colour("Blush");
+    colour("Red");
+    ShowTreeController *st = m_doc->showTree();
+    ShowTreeCommand cmd(m_doc, st);
+    ShowTreeCommand::Context ctx;
+    ctx.production = st->addProduction("P");
+    ctx.list = st->addCueList(ctx.production, "L");
+    ctx.cue = st->addCue(ctx.list, -1, "One");
+
+    QStringList options;
+    QCOMPARE(cmd.complete("Tow", ctx, &options), QString("Towers "));
+    QCOMPARE(cmd.complete("To", ctx, &options), QString("To"));
+    QCOMPARE(options, QStringList({ "Tops", "Towers" }));
+    QCOMPARE(cmd.complete("Towers colour R", ctx), QString("Towers colour Red "));
+    QCOMPARE(cmd.complete("Towers colour Bl", ctx, &options), QString("Towers colour Blu"));
+    QCOMPARE(options, QStringList({ "Blue", "Blush" }));
+    QCOMPARE(cmd.complete("Towers col", ctx), QString("Towers colour "));
+    QCOMPARE(cmd.complete("rec", ctx), QString("record "));
+    QCOMPARE(cmd.complete("cue ", ctx, &options), QString("cue "));
+    QVERIFY(options.contains("1"));
+    QCOMPARE(cmd.complete("zzz", ctx, &options), QString("zzz"));
+    QVERIFY(options.isEmpty());
+    QVERIFY(!ShowTreeCommand::grammar().isEmpty());
 }
 
 QTEST_MAIN(ShowTree_Test)

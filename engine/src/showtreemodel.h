@@ -250,6 +250,28 @@ namespace ShowTree
      *  Track or Block). */
     QLC_ENGINE_EXPORT CueMode effectiveMode(const CueList &list, const Cue &cue);
 
+    /** Whether resolving cue @a fromCue needs cue @a onCue, at any depth:
+     *  it tracks from the cue before it (Track, Cue-only), it includes a
+     *  cue, or it releases a layer to the base cue. A cue depends on
+     *  itself. An include that would make a cue depend on itself is a loop
+     *  (D8: no cycles). */
+    QLC_ENGINE_EXPORT bool dependsOn(const CueList &list, quint32 fromCue, quint32 onCue);
+
+    /** Whether cue @a cueId may include cue @a includedId: both in @a list,
+     *  not the same, not already included, and no loop (@a includedId does
+     *  not depend on @a cueId). @a why says why not. */
+    QLC_ENGINE_EXPORT bool canInclude(const CueList &list, quint32 cueId, quint32 includedId,
+                                      QString *why = nullptr);
+
+    /** The cues whose output can change when cue @a cueId's own content
+     *  changes (its layers, looks, mode, includes), in list order: the cue
+     *  itself; the cues after it that start from it, up to a Block cue (a
+     *  Cue-only cue passes on only what it started from); every cue that
+     *  includes any of them; and, when one of them is the base cue, the
+     *  cues a released layer comes back to it in -- and so on, until
+     *  nothing more is reached. A bake changes no cue outside it. */
+    QLC_ENGINE_EXPORT QList<quint32> rebakeChain(const CueList &list, quint32 cueId);
+
     /************************************************************************
      * Numbering (D23)
      ************************************************************************/
@@ -258,6 +280,14 @@ namespace ShowTree
      *  the next whole number in the last place if free, else a point cue
      *  between its neighbours. Never renumbers. */
     QLC_ENGINE_EXPORT QString numberForInsert(const CueList &list, int afterIndex);
+
+    /** Compare two cue numbers part by part, as numbers: "0.0.4" <
+     *  "0.0.4.5" < "0.0.5". Negative, 0 or positive. */
+    QLC_ENGINE_EXPORT int compareCueNumbers(const QString &a, const QString &b);
+
+    /** The index of the cue numbered @a number in @a list (-1: none). A cue
+     *  with no number is numbered by its position. */
+    QLC_ENGINE_EXPORT int indexOfNumber(const CueList &list, const QString &number);
 
     /** Split "0.0.4-SHOUT" into "0.0.4" and "SHOUT"; false when @a text
      *  doesn't start with a number. */

@@ -117,6 +117,64 @@ public:
     bool removeFixtureFromLayer(quint32 cueId, quint32 layerId, quint32 fixtureId);
     bool setListMode(quint32 listId, ShowTree::ListMode mode);
     bool setBaseCue(quint32 listId, quint32 cueId);
+    bool setCueMode(quint32 cueId, ShowTree::CueMode mode);
+
+    /** Release (or carry) the layer on @a target in cue @a cueId -- made the
+     *  cue's own first if it is only carried in: one undo step. */
+    bool setTargetRelease(quint32 cueId, const ShowTree::Target &target, bool release);
+
+    /** Includes (D8): add one at the end, take one out, or move one to
+     *  @a toIndex in the cue's include order (later wins). An include that
+     *  would loop is refused (ShowTree::canInclude); @a why says why. */
+    bool addInclude(quint32 cueId, quint32 includedId, QString *why = nullptr);
+    bool removeInclude(quint32 cueId, quint32 includedId);
+    bool moveInclude(quint32 cueId, quint32 includedId, int toIndex);
+
+    /** A new cue numbered @a number (D23 is not asked: the number is
+     *  given), put in number order. Invalid when the number is taken. */
+    quint32 addCueNumbered(quint32 listId, const QString &number, const QString &name);
+    /** A copy of cue @a cueId after it (its own layers, looks, mode,
+     *  includes and timing; never the base), numbered per D23. */
+    quint32 duplicateCue(quint32 cueId);
+    /** Record as new cue (D22): what cue @a cueId puts on stage -- tracked,
+     *  included and its own, resolved -- frozen into a new Block cue after
+     *  it, numbered per D23. Every layer becomes the new cue's own with the
+     *  values it has there. */
+    quint32 recordCue(quint32 cueId);
+
+    /** Where the value of @a key on @a target in cue @a cueId was set (D22):
+     *  the cue, and the layer there (invalid: the cue's own look). False
+     *  when it is set in this cue itself, or nowhere. Follows tracking,
+     *  includes and the base back to the cue that sets it. */
+    bool valueSource(quint32 cueId, const ShowTree::Target &target, const QString &key,
+                     quint32 *sourceCue, quint32 *sourceLayer = nullptr) const;
+    /** "Update cue 1.0.0" (D22): set @a look where the value @a target has
+     *  in cue @a cueId was set, so the change tracks on from there. One
+     *  undo step. False when it is this cue's own value. */
+    bool updateSource(quint32 cueId, const ShowTree::Target &target, const ShowTree::Look &look);
+
+    /** Several edits as one undo step (a command line command): edits made
+     *  between beginBatch() and endBatch() are applied at once but bake and
+     *  record undo only at the end. endBatch(false) puts everything back. */
+    void beginBatch(const QString &label);
+    void endBatch(bool keep);
+    bool inBatch() const { return m_batchDepth > 0; }
+
+    /** The cues whose Collection the last bake changed (what they play),
+     *  in tree order: the re-bake chain of the last edit, as it came out. */
+    QList<quint32> lastBakeChanged() const { return m_lastChanged; }
+
+    /** What the cues of a list use, with counts (Library "In this cue
+     *  list", D20): palettes (cue and layer looks, an effect's own), groups,
+     *  fixtures and functions (opaque layers). */
+    struct Usage
+    {
+        QHash<quint32, int> palettes;
+        QHash<quint32, int> groups;
+        QHash<quint32, int> fixtures;
+        QHash<quint32, int> functions;
+    };
+    Usage usageInList(quint32 listId) const;
     bool renameNode(quint32 nodeId, const QString &name);
     bool removeCueList(quint32 listId);
     bool removeProduction(quint32 productionId);
@@ -338,6 +396,13 @@ private:
     void saveState(QXmlStreamWriter *doc, bool snapshot) const;
 
     ShowTree::Cue *findCue(quint32 cueId, ShowTree::CueList **list = nullptr);
+
+    int m_batchDepth = 0;
+    QString m_batchLabel;
+    QByteArray m_batchBefore;
+    QList<ShowTree::Production> m_batchProductions;
+    bool m_batchChanged = false;
+    QList<quint32> m_lastChanged;
 
     Doc *m_doc;
     QList<ShowTree::Production> m_productions;

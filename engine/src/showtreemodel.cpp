@@ -294,6 +294,57 @@ CueMode effectiveMode(const CueList &list, const Cue &cue)
 namespace
 {
 
+/** Whether cue @a k releases a layer it passes on to the base (D7). */
+bool releasesToBase(const CueList &list, int k)
+{
+    const Cue &cue = list.cues.at(k);
+    if (effectiveMode(list, cue) == CueMode::CueOnly)
+        return false;               // a Cue-only cue's changes, its releases too, don't pass on
+    for (const Layer &l : cue.layers)
+        if (l.release && !l.target.isEmpty())
+            return true;
+    return false;
+}
+
+/** The cues resolving cue @a k reads straight away (indexes). */
+QList<int> needs(const CueList &list, int k)
+{
+    QList<int> out;
+    const Cue &cue = list.cues.at(k);
+    const CueMode mode = effectiveMode(list, cue);
+    if (k > 0 && (mode == CueMode::Track || mode == CueMode::CueOnly))
+        out << k - 1;
+    for (quint32 inc : cue.includes)
+    {
+        const int j = list.indexOf(inc);
+        if (j >= 0 && j != k && !out.contains(j))
+            out << j;
+    }
+    const int base = list.indexOf(list.baseCue);
+    if (base >= 0 && base != k && !out.contains(base) && releasesToBase(list, k))
+        out << base;
+    return out;
+}
+
+bool dependsOnIndex(const CueList &list, int from, int on)
+{
+    if (from < 0 || on < 0)
+        return false;
+    QVector<bool> seen(list.cues.count(), false);
+    QList<int> todo { from };
+    while (!todo.isEmpty())
+    {
+        const int k = todo.takeLast();
+        if (k == on)
+            return true;
+        if (seen.at(k))
+            continue;
+        seen[k] = true;
+        todo << needs(list, k);
+    }
+    return false;
+}
+
 int indexOfTarget(const QList<ResolvedLayer> &layers, const QString &sig)
 {
     for (int i = 0; i < layers.count(); ++i)
@@ -371,7 +422,9 @@ struct Resolver
         for (quint32 inc : cue.includes)
         {
             const int j = list.indexOf(inc);
-            if (j < 0 || j == i || state.at(j) == 1)
+            // One that would loop (it needs this cue, at any depth) is left
+            // out; resolving it would read this cue half done.
+            if (j < 0 || j == i || state.at(j) == 1 || dependsOnIndex(list, j, i))
             {
                 rc.skippedIncludes << inc;
                 continue;
@@ -459,8 +512,11 @@ struct Resolver
                     continue;
                 const Target t = pass.at(k).target;
                 pass.removeAt(k);
-                if (baseIdx < 0 || baseIdx == i || state.at(baseIdx) == 1)
-                    continue;                       // dark
+                // Dark: no base, or a base that needs this cue (it tracks
+                // or includes its way back here) -- a loop.
+                if (baseIdx < 0 || baseIdx == i || state.at(baseIdx) == 1
+                    || dependsOnIndex(list, baseIdx, i))
+                    continue;
                 resolveAt(baseIdx);
                 const ResolvedLayer *b = out.at(baseIdx).layer(t);
                 if (b == nullptr)
@@ -484,6 +540,84 @@ struct Resolver
 };
 
 } // namespace
+
+bool dependsOn(const CueList &list, quint32 fromCue, quint32 onCue)
+{
+    return dependsOnIndex(list, list.indexOf(fromCue), list.indexOf(onCue));
+}
+
+bool canInclude(const CueList &list, quint32 cueId, quint32 includedId, QString *why)
+{
+    auto no = [why](const QString &text) {
+        if (why != nullptr)
+            *why = text;
+        return false;
+    };
+    const int i = list.indexOf(cueId), j = list.indexOf(includedId);
+    if (i < 0 || j < 0)
+        return no(QStringLiteral("not a cue of this list"));
+    if (i == j)
+        return no(QStringLiteral("a cue can't include itself"));
+    if (list.cues.at(i).includes.contains(includedId))
+        return no(QStringLiteral("already included"));
+    if (dependsOnIndex(list, j, i))
+        return no(QStringLiteral("it would loop: that cue already plays from this one"));
+    return true;
+}
+
+QList<quint32> rebakeChain(const CueList &list, quint32 cueId)
+{
+    const int n = list.cues.count();
+    const int at = list.indexOf(cueId);
+    if (at < 0)
+        return {};
+
+    // start[k]: what cue k starts from may change; content[k]: what it adds
+    // itself (its own layers and looks, its includes) may.
+    QVector<bool> start(n, false), content(n, false);
+    content[at] = true;
+    const int base = list.indexOf(list.baseCue);
+
+    bool more = true;
+    while (more)
+    {
+        more = false;
+        auto mark = [&more](QVector<bool> &v, int k) {
+            if (!v.at(k))
+            {
+                v[k] = true;
+                more = true;
+            }
+        };
+        for (int k = 0; k < n; ++k)
+        {
+            if (!start.at(k) && !content.at(k))
+                continue;
+            const Cue &cue = list.cues.at(k);
+            // What it passes on: a Cue-only cue passes on what it started from.
+            const bool passes = effectiveMode(list, cue) != CueMode::CueOnly || start.at(k);
+            if (passes && k + 1 < n && effectiveMode(list, list.cues.at(k + 1)) != CueMode::Block)
+                mark(start, k + 1);
+            // Every cue that includes it plays its output.
+            for (int m = 0; m < n; ++m)
+                if (m != k && list.cues.at(m).includes.contains(cue.id))
+                    mark(content, m);
+            // The base: every cue that releases a layer back to it passes
+            // the base's values on.
+            if (k == base)
+                for (int m = 0; m < n; ++m)
+                    if (m != k && m + 1 < n && releasesToBase(list, m)
+                        && effectiveMode(list, list.cues.at(m + 1)) != CueMode::Block)
+                        mark(start, m + 1);
+        }
+    }
+
+    QList<quint32> out;
+    for (int k = 0; k < n; ++k)
+        if (start.at(k) || content.at(k))
+            out << list.cues.at(k).id;
+    return out;
+}
 
 QList<ResolvedCue> resolve(const CueList &list)
 {
@@ -523,6 +657,11 @@ static int compareNumbers(const QString &a, const QString &b)
     return 0;
 }
 
+int compareCueNumbers(const QString &a, const QString &b)
+{
+    return compareNumbers(a, b);
+}
+
 static QString numberAt(const CueList &list, int index)
 {
     const QString n = list.cues.at(index).number;
@@ -535,6 +674,16 @@ static bool numberUsed(const CueList &list, const QString &number)
         if (compareNumbers(numberAt(list, i), number) == 0)
             return true;
     return false;
+}
+
+int indexOfNumber(const CueList &list, const QString &number)
+{
+    if (number.trimmed().isEmpty())
+        return -1;
+    for (int i = 0; i < list.cues.count(); ++i)
+        if (compareNumbers(numberAt(list, i), number.trimmed()) == 0)
+            return i;
+    return -1;
 }
 
 QString numberForInsert(const CueList &list, int afterIndex)
