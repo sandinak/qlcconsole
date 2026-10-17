@@ -417,3 +417,29 @@ cp ~/git/qlcconsole/test-workspaces/DanceHysteria-0.5.qlcc /tmp/dh-drop.qlcc
    low Dimmer now shows dim blue (it drew black).
 3. Command line at the bottom: press **:** in the tree, type `Tow`⇥,
    `col`⇥, `B`⇥⇥⇥ (cycles), `function Ha`⇥, `list 0`⇥.
+
+## The four limits from the help (2026-10-17, late)
+
+Found while writing docs/features/show-tree.md (7cf0c70c5); design §10.12.
+
+- **Merge by mouse.** ⌘-click two layers of one cue → **Merge** (in the header or the
+  context menu). ⇧-click takes a range. Delete takes several cues/layers in one step.
+- **D13 lock.** Open the list's chaser in the Functions window or the Programming tab:
+  steps and name are locked under a bar saying *"Made by the Show Tree — edit it
+  there."*, with **Show in Show Tree**. Run order and speed modes stay editable.
+  Delete/rename/move of it is refused. Not built: *Detach to plain chaser*.
+- **+ Cue list** now makes a **Tracking** list, as `list` does. An import stays
+  Non-tracking.
+- **Undo:** Make reusable, Detach, several functions dropped together, and a colour +
+  dimmer dropped together are each one step now. `everyActionIsOneUndoStep` walks 47
+  actions.
+- **Gate** (`git archive` copy of f92add51b, JOBS=4): Qt6 PASS 461 s, Qt6-Release PASS
+  399 s, Qt6-Werror PASS 438 s (1298 s).
+- **Crash reports:** `showtreeview_test-2026-10-17-163315.ips` / `-163354.ips` are
+  QTest watchdog aborts from my own runs while writing the undo walk. A modal "Delete
+  cue list?" opened because the selection bug above toggled rows; both are fixed, and
+  the test now closes any modal box. None since.
+
+**Try** (on a COPY): select a cue, ⌘-click two of its layers, Merge. Open Functions
+(Window menu) → Productions → the list's chaser: it is locked, and Show in Show Tree
+works.

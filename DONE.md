@@ -6,6 +6,29 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-17 — Show Tree: the four limits from the help closed — Merge by mouse, D13 lock, new lists Tracking, one undo step per action *(on feat/show-tree, not merged)*
+
+- **Multi-select** in the tree (⌘/⇧-click). The page, the preview and single-row
+  actions follow the row clicked last. **Merge** is in the header and the context menu
+  when 2+ layers of one cue are selected. Delete removes several cues/layers in one
+  step (a list/production in the selection is refused). Dragging several cues is
+  refused, with a hint. Rows selected from code use ClearAndSelect (a held ⌘ toggled
+  them; the test found it).
+- **D13 enforced**: "Made by the Show Tree — edit it there." The chaser's editor is
+  locked in the Functions window, Programming tab, Shows and VC live edit (steps and
+  name; run order, speed modes, cue-list number and testing are kept), with **Show in
+  Show Tree**. Delete, in-place rename, folder move and add-to/take-out-of are refused
+  everywhere. A layer's scene offers **Detach to plain scene**. Open: Detach to plain
+  *chaser*.
+- **New list = Tracking** from + Cue list and from `list`. An import stays
+  Non-tracking (D12).
+- **Undo audit (D22)**: Make reusable is now a step. Detach undo removes its scene and
+  redo brings it back. Several functions, or a colour + dimmer, dropped together are
+  one step.
+- Tests: showtree_test +4; showtreeview_test +5, including a 47-action walk (one undo
+  gives back the state before, redo the state after). The gate passed, -j4: Qt6 461 s,
+  Release 399 s, Werror 438 s.
+
 ### 2026-10-17 — Show Tree: drop on the page, command line always open, Tab for every word; dimmed RGB bars on the Rig Overview *(on feat/show-tree, not merged)*
 
 - **Cue page takes drops** as the tree does: groups/fixtures on the page =
