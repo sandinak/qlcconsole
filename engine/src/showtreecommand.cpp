@@ -31,6 +31,8 @@
 #include "monitorproperties.h"
 #include "stagetarget.h"
 #include "doc.h"
+#include <QUrl>
+#include <QVector>
 
 using namespace ShowTree;
 
@@ -57,24 +59,278 @@ QString ShowTreeCommand::grammar()
               "(again: the next), ↑ recalls");
 }
 
+/****************************************************************************
+ * The language: one table, for the parser's words and for `help`
+ ****************************************************************************/
+
+const QList<ShowTreeCommand::Word> &ShowTreeCommand::words()
+{
+    // Each word with its syntax, what it does and examples: `help` reads
+    // this, keywords() and attributeWords() come from it, and a test runs
+    // every example through the parser.
+    static const QList<Word> table = [] {
+        QList<Word> t;
+        auto add = [&t](const char *word, const char *group, const char *syntax, const char *what,
+                        QStringList examples, QStringList related = {}, QStringList aliases = {},
+                        bool attribute = false) {
+            Word w;
+            w.word = QString::fromUtf8(word);
+            w.group = QString::fromUtf8(group);
+            w.syntax = QString::fromUtf8(syntax);
+            w.what = tr(what);
+            w.examples = examples;
+            w.related = related;
+            w.aliases = aliases;
+            w.attribute = attribute;
+            t << w;
+        };
+        // navigate
+        add("list", "navigate", "list \"name\"",
+            "Selects that cue list, or makes a new Tracking one in the selected production.",
+            { "list \"01-Opener\"" }, { "cue" });
+        add("cue", "navigate", "cue <number> [\"name\"] [track|block|cueonly|default] [base] | cue + [\"name\"] … | "
+                                "cue look <attribute> <value>…",
+            "Selects cue <number>, or makes it in number order (renamed if the name differs); "
+            "cue + makes a new cue after the selected one, numbered as + Cue does; cue look sets a look "
+            "for the whole cue (it reaches the cue's own layers that don't set it).",
+            { "cue 1.0.1 \"Verse\"", "cue + \"Chorus\" block", "cue look colour Blue", "cue look spread +5" },
+            { "list", "track", "copy" }, { "new" });
+        // build
+        add("layer", "build", "[layer] <groups> [, <groups>…] [in <parent>] <attribute> <value>…",
+            "The selected cue's layer on those groups (made if needed; a grey carried-in one is brought "
+            "in), then its looks. Names one after another (or joined with +) are ONE layer; a comma "
+            "starts another. A group, a set, a fixture or a folder path (Movers/Front/Spots).",
+            { "Towers colour Blue dimmer 45", "Towers USTs dimmer 100", "Towers, USTs dimmer 100",
+              "layer Steps colour Red" }, { "in", "set", "colour" });
+        add("in", "build", "<groups> in <parent groups> <attribute> <value>…",
+            "A child layer: on part of the cue's layer on <parent>. It sets only what it sets; its parent "
+            "lights the rest of it, and doesn't light what it sets.",
+            { "US in Steps colour Red", "US in Steps dimmer 0" }, { "layer" });
+        add("set", "build", "set \"name\" <groups>…",
+            "Makes a group set -- one name for several groups, reusable in any cue (e.g. Towers = SL + "
+            "SR) -- or gives an existing set its members again. Spread across a set, lights are "
+            "numbered by where they stand, not by group.",
+            { "set \"Towers\" SL SR" }, { "layer" });
+        add("function", "build", "function <name> [, <name>…]",
+            "Functions played as they are (an EFX, an RGB Matrix, a scene with channel values): a layer "
+            "each.", { "function Haze" }, { "layer" }, { "fn" });
+        add("name", "build", "name \"text\"",
+            "Names the selected layer (else the cue). \"\" goes back to the automatic name (the layer's "
+            "groups). The layer stays the same layer: tracking is unchanged.",
+            { "name \"Hero\"", "name \"\"" }, { "layer", "cue" });
+        // looks (attributes)
+        add("colour", "looks", "<groups> colour <palette>[ <palette>…] | #rrggbb | none | clear",
+            "The Colour look: palettes by name (colours 1, 2…), or a hex colour (the palette playing "
+            "exactly it is reused, else one is made, named as yours are).",
+            { "Towers colour Blue", "Steps colour #33aa55" }, { "dimmer", "none" }, { "color" }, true);
+        add("dimmer", "looks", "<groups> dimmer <palette> | <0-100>[%] | none | clear",
+            "The Dimmer look: a palette by name, or a level (reused, or a palette made for it).",
+            { "Towers dimmer 45", "Towers dimmer Full" }, { "colour" }, { "dim", "level" }, true);
+        add("position", "looks", "<groups> position <palette> | none | clear",
+            "The Position look: a Pan/Tilt or Aim palette by name.",
+            { "Towers position Aim DS-Edge" }, { "aim" }, { "pos" }, true);
+        add("aim", "looks", "<groups> aim <target>|<Aim palette>",
+            "Position aimed at a stage target (a point, an area or a line) by name: the Aim palette "
+            "pointing there is reused, else one is made. On a line, the lights spread along it.",
+            { "Towers aim DS-Edge", "cue look aim DS-Edge" }, { "spread", "group", "cross" }, {}, true);
+        add("spread", "looks", "<groups> spread <-5…+5> | none | clear",
+            "A line aim's Spread: +5 end to end, 0 all on the centre, below 0 crossed. On the cue it "
+            "reaches only layers aiming at a line, as one formation.",
+            { "Towers aim DS-Edge spread 0", "cue look spread +5", "Towers spread -2.5" },
+            { "aim", "group", "cross" }, {}, true);
+        add("group", "looks", "<groups> group each|pairs|threes|fours|halves | none | clear",
+            "A line aim's Grouping: which lights move together across the centre.",
+            { "Towers group pairs" }, { "spread", "cross" }, { "grouping" }, true);
+        add("cross", "looks", "<groups> cross swap|mirror | none | clear",
+            "A line aim's Cross, below spread 0: groups swap sides keeping their order, or each group "
+            "flips in place.", { "Towers cross mirror" }, { "spread", "group" }, {}, true);
+        add("gobo", "looks", "<groups> gobo <palette> | none | clear",
+            "The Gobo look (by name per fixture type).", { "Towers gobo Breakup", "Towers gobo none" },
+            { "zoom", "beam" }, {}, true);
+        add("zoom", "looks", "<groups> zoom <palette> | none | clear", "The Zoom look.",
+            { "Towers zoom none" }, { "gobo", "beam" }, {}, true);
+        add("beam", "looks", "<groups> beam <palette> | none | clear", "The Focus / Frost / Iris look.",
+            { "Towers beam clear" }, { "gobo", "zoom" }, { "focus", "frost", "iris" }, true);
+        add("shutter", "looks", "<groups> shutter <palette> | none | clear", "The Shutter (and strobe) look.",
+            { "Towers shutter none" }, { "dimmer" }, { "strobe" }, true);
+        add("effect", "looks", "<groups> effect <palette> [colour <palette>] [dimmer <palette>] | none | clear",
+            "An effect; a colour or dimmer right after it is the effect's own. On the cue: one effect "
+            "across its layers (those setting that effect themselves are left out).",
+            { "Steps effect Sinelon colour Red", "cue look effect Sinelon", "Steps effect none" },
+            { "colour" }, { "fx" }, true);
+        add("none", "looks", "<groups> <attribute> none | off | clear",
+            "none (or off): the attribute is off here, whatever it would inherit. clear: takes this "
+            "layer's value away, so it inherits again.",
+            { "Towers gobo none", "Towers dimmer clear" }, { "colour" }, { "off", "clear" });
+        // tracking
+        add("track", "tracking", "track | block | cueonly | default",
+            "The selected cue's mode: Track (starts from the cue before), Block (from nothing), "
+            "Cue-only (its changes don't pass on), default (the list's).",
+            { "block", "track", "cue + \"Top\" block" }, { "base", "release" },
+            { "block", "cueonly", "cue-only", "default" });
+        add("base", "tracking", "base", "Makes the selected cue the list's base cue: released layers go "
+            "back to it.", { "base" }, { "release" });
+        add("release", "tracking", "release <groups> [, <groups>…]",
+            "Turns Release on the cue's layer on, or off again: leaving the cue it goes back to the "
+            "base cue, else dark.", { "release Towers" }, { "base" });
+        add("include", "tracking", "include <cue number>",
+            "Includes that cue's output (as if standing in it); again, takes it out.",
+            { "include 0.0.3" }, { "track" });
+        // record & copy
+        add("record", "record", "record [selected|running|lit]",
+            "Record as new cue: what is on stage frozen into a new Block cue after the selected one -- "
+            "the selected cue, the list's running cue, or everything lit (your setting, or it asks).",
+            { "record", "record running" }, { "dup", "copy" });
+        add("dup", "record", "dup", "Duplicates the selected cue right after it (numbered for you).",
+            { "dup" }, { "copy", "paste" });
+        add("copy", "record", "copy [cue <number>…] | copy layer <groups>",
+            "Copies the selected cue (or cues by number, or the selected cue's layer on those groups) "
+            "for paste. In the tree, ⌘C does the same.",
+            { "copy", "copy cue 1.0.1", "copy layer Towers" }, { "paste", "dup" });
+        add("paste", "record", "paste",
+            "Pastes what copy took: cues right after the selected cue (numbered in turn, never "
+            "renumbering), or layers into the selected cue. One undo step. ⌘V in the tree.",
+            { "paste" }, { "copy" });
+        // undo
+        add("undo", "undo", "undo | redo", "Undoes (redoes) the last change to the tree.",
+            { "undo", "redo" }, {}, { "redo" });
+        add("help", "help", "help [<word>] | ?", "This: every word, or one word's syntax and examples.",
+            { "help", "help spread", "?" }, {}, { "?" });
+        return t;
+    }();
+    return table;
+}
+
+const ShowTreeCommand::Word *ShowTreeCommand::word(const QString &w)
+{
+    const QString lw = w.trimmed().toLower();
+    for (const Word &e : words())
+        if (e.word == lw || e.aliases.contains(lw))
+            return &e;
+    return nullptr;
+}
+
+static int editDistance(const QString &a, const QString &b)
+{
+    QVector<int> prev(b.length() + 1), cur(b.length() + 1);
+    for (int j = 0; j <= b.length(); ++j)
+        prev[j] = j;
+    for (int i = 1; i <= a.length(); ++i)
+    {
+        cur[0] = i;
+        for (int j = 1; j <= b.length(); ++j)
+            cur[j] = qMin(qMin(prev[j] + 1, cur[j - 1] + 1), prev[j - 1] + (a.at(i - 1) == b.at(j - 1) ? 0 : 1));
+        prev = cur;
+    }
+    return prev[b.length()];
+}
+
+QString ShowTreeCommand::nearestWord(const QString &typed, bool attributesOnly)
+{
+    const QString t = typed.trimmed().toLower();
+    if (t.length() < 2)
+        return QString();
+    QString best;
+    int bestD = 3;
+    for (const Word &e : words())
+    {
+        if (attributesOnly && !e.attribute)
+            continue;
+        for (const QString &cand : QStringList(e.word) + e.aliases)
+        {
+            if (cand.length() < 2)
+                continue;
+            int d = editDistance(t, cand);
+            if (cand.startsWith(t) && t.length() >= 3)
+                d = qMin(d, 1);
+            if (d < bestD)
+            {
+                bestD = d;
+                best = e.word;
+            }
+        }
+    }
+    return best;
+}
+
+QString ShowTreeCommand::helpText(const QString &w)
+{
+    auto esc = [](const QString &x) { return x.toHtmlEscaped(); };
+    auto example = [&esc](const QString &x) {
+        return QStringLiteral("<a href=\"ex:%1\"><code>%2</code></a>").arg(QString::fromUtf8(QUrl::toPercentEncoding(x)),
+                                                                           esc(x));
+    };
+    if (!w.trimmed().isEmpty())
+    {
+        const Word *e = word(w);
+        if (e == nullptr)
+        {
+            const QString near = nearestWord(w);
+            return near.isEmpty() ? tr("No word “%1”. Type <code>help</code> for them all.").arg(esc(w.trimmed()))
+                                  : tr("No word “%1”. Did you mean <b>%2</b>? %3")
+                                    .arg(esc(w.trimmed()), near, example(QStringLiteral("help ") + near));
+        }
+        QString out = QStringLiteral("<b>%1</b>").arg(esc(e->word));
+        if (!e->aliases.isEmpty())
+            out += tr(" (also %1)").arg(esc(e->aliases.join(QStringLiteral(", "))));
+        out += QStringLiteral("<br><code>%1</code><br>%2").arg(esc(e->syntax), esc(e->what));
+        QStringList ex;
+        for (const QString &x : e->examples)
+            ex << example(x);
+        out += tr("<br>Examples: %1").arg(ex.join(QStringLiteral(" · ")));
+        if (!e->related.isEmpty())
+        {
+            QStringList rel;
+            for (const QString &r : e->related)
+                rel << example(QStringLiteral("help ") + r).replace(QStringLiteral("<code>help "), QStringLiteral("<code>"));
+            out += tr("<br>See also: %1").arg(rel.join(QStringLiteral(", ")));
+        }
+        return out;
+    }
+    const QList<QPair<QString, QString>> groups = {
+        { "navigate", tr("Navigate") }, { "build", tr("Build") }, { "looks", tr("Looks") },
+        { "tracking", tr("Tracking") }, { "record", tr("Record and copy") }, { "undo", tr("Undo") },
+        { "help", tr("Help") } };
+    QString out = tr("Every word (<code>help &lt;word&gt;</code> for one, with examples; Tab completes):");
+    for (const auto &g : groups)
+    {
+        out += QStringLiteral("<br><b>%1</b>").arg(g.second);
+        for (const Word &e : words())
+            if (e.group == g.first)
+                out += QStringLiteral("<br>&nbsp;&nbsp;<a href=\"ex:help%20%1\"><code>%1</code></a> — %2")
+                       .arg(esc(e.word), esc(e.what.section(QLatin1Char('.'), 0, 0)));
+    }
+    return out;
+}
+
 QStringList ShowTreeCommand::keywords()
 {
-    return { QStringLiteral("cue"), QStringLiteral("look"), QStringLiteral("track"),
-             QStringLiteral("block"), QStringLiteral("cueonly"), QStringLiteral("default"),
-             QStringLiteral("base"), QStringLiteral("release"), QStringLiteral("include"),
-             QStringLiteral("record"), QStringLiteral("dup"), QStringLiteral("undo"),
-             QStringLiteral("redo"), QStringLiteral("list"), QStringLiteral("layer"),
-             QStringLiteral("function"), QStringLiteral("set"), QStringLiteral("name") };
+    // The words a command starts with: the table's (less the attributes
+    // and "in", which come after a group), "look" after cue, "block" and
+    // the other modes.
+    QStringList out;
+    for (const Word &w : words())
+    {
+        if (w.attribute || w.word == QLatin1String("in") || w.word == QLatin1String("none"))
+            continue;
+        out << w.word;
+        for (const QString &a : w.aliases)
+            if (a != QLatin1String("cue-only") && a != QLatin1String("new") && a != QLatin1String("fn"))
+                out << a;
+    }
+    out << QStringLiteral("look");
+    return out;
 }
 
 QStringList ShowTreeCommand::attributeWords()
 {
-    // What Tab offers; attributeKey() also takes color, dim, level, pos,
-    // focus, frost, iris, strobe and fx.
-    return { QStringLiteral("colour"), QStringLiteral("dimmer"), QStringLiteral("position"),
-             QStringLiteral("aim"), QStringLiteral("spread"), QStringLiteral("group"),
-             QStringLiteral("cross"), QStringLiteral("gobo"), QStringLiteral("zoom"),
-             QStringLiteral("beam"), QStringLiteral("shutter"), QStringLiteral("effect") };
+    // What Tab offers; attributeKey() also takes the aliases (color, dim,
+    // level, pos, focus, frost, iris, strobe, fx).
+    QStringList out;
+    for (const Word &w : words())
+        if (w.attribute)
+            out << w.word;
+    return out;
 }
 
 QString ShowTreeCommand::attributeKey(const QString &word)
@@ -328,6 +584,16 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
     }
 
     const QString w0 = r.peek().toLower();
+    if (w0 == QLatin1String("help") || w0 == QLatin1String("?"))
+    {
+        // The language, from the table the parser's words come from.
+        r.word();
+        const QString what = r.src.mid(r.i).trimmed();
+        res.ok = true;
+        res.help = helpText(what);
+        res.message = what.isEmpty() ? tr("help: every word (Esc closes)") : tr("help %1").arg(what);
+        return res;
+    }
     if (w0 == QLatin1String("undo") || w0 == QLatin1String("redo"))
     {
         const bool undo = w0 == QLatin1String("undo");
@@ -527,8 +793,12 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
             const QString kw = r.word();
             const QString key = attributeKey(kw);
             if (key.isEmpty())
-                return tr("Expected an attribute (colour, dimmer, position, gobo, zoom, beam, shutter, "
-                          "effect), got “%1”.").arg(kw);
+            {
+                const QString near = nearestWord(kw, true);
+                return tr("Expected an attribute (colour, dimmer, position, aim, spread, group, cross, gobo, "
+                          "zoom, beam, shutter, effect), got “%1”.%2").arg(kw)
+                       .arg(near.isEmpty() ? QString() : tr(" Did you mean “%1”? Type help %1.").arg(near));
+            }
             const QString next = r.peek().toLower();
 
             if (next == QLatin1String("none") || next == QLatin1String("off")
@@ -880,6 +1150,82 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
         else
             ctx.cue = id;
     }
+    else if (w0 == QLatin1String("copy"))
+    {
+        // copy | copy cue <n>… | copy layer <groups>: for paste (and ⌘V).
+        r.word();
+        const QString what = r.peek().toLower();
+        Clipboard clip;
+        if (what == QLatin1String("cue"))
+        {
+            r.word();
+            while (!r.atEnd() && error.isEmpty())
+            {
+                const QString num = r.word();
+                const int idx = indexOfNumber(*list, num);
+                if (idx < 0)
+                    error = tr("copy cue <number>…: no cue %1").arg(num);
+                else
+                    clip.cues << list->cues.at(idx).id;
+            }
+            if (clip.cues.isEmpty() && error.isEmpty())
+                clip.cues << ctx.cue;
+        }
+        else if (what == QLatin1String("layer"))
+        {
+            r.word();
+            for (const Target &t : targets())
+                if (const Cue *c = m_st->cue(ctx.cue))
+                    for (const Layer &l : c->layers)
+                        if (l.target == t)
+                            clip.layers << qMakePair(ctx.cue, l.id);
+            if (clip.layers.isEmpty())
+                error = tr("copy layer <groups>: the selected cue has no layer on “%1”.").arg(r.peek());
+        }
+        else if (what.isEmpty())
+        {
+            if (ctx.layer != invalidId())
+                clip.layers << qMakePair(ctx.cue, ctx.layer);
+            else
+                clip.cues << ctx.cue;
+        }
+        else
+            error = tr("copy · copy cue <number>… · copy layer <groups>");
+        if (error.isEmpty() && !r.atEnd())
+            error = tr("Don't know “%1”.").arg(r.peek());
+        if (error.isEmpty())
+        {
+            clipboard = clip;
+            res.message = clip.cues.isEmpty() ? tr("copied %1 layer(s); paste puts them in the selected cue")
+                                                .arg(clip.layers.count())
+                                              : tr("copied %1 cue(s); paste puts them after the selected cue")
+                                                .arg(clip.cues.count());
+        }
+    }
+    else if (w0 == QLatin1String("paste"))
+    {
+        r.word();
+        if (!r.atEnd())
+            error = tr("paste -- then nothing more");
+        else if (clipboard.isEmpty())
+            error = tr("Nothing copied yet (copy, or ⌘C in the tree).");
+        else if (!clipboard.cues.isEmpty())
+        {
+            const QList<quint32> made = m_st->pasteCues(clipboard.cues, ctx.cue);
+            if (made.isEmpty())
+                error = tr("Couldn't paste here.");
+            else
+                ctx.cue = made.last();
+        }
+        else
+        {
+            const QList<quint32> made = m_st->pasteLayers(clipboard.layers, ctx.cue);
+            if (made.isEmpty())
+                error = tr("Couldn't paste here.");
+            else
+                res.layer = made.last();
+        }
+    }
     else if (w0 == QLatin1String("include"))
     {
         r.word();
@@ -955,8 +1301,10 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
         const QList<Target> ts = targets();
         if (ts.isEmpty())
         {
-            error = tr("Don't know “%1”. Start with cue, a group or fixture, track/block/cueonly, base, "
-                       "release, include, function, record, list, set, name, dup, undo.").arg(r.peek());
+            const QString near = nearestWord(r.peek());
+            error = tr("Don't know “%1”.%2 Start with cue, a group or fixture, a mode, base, release, include, "
+                       "function, record, list, set, name, copy, paste, dup, undo — type help.")
+                    .arg(r.peek(), near.isEmpty() ? QString() : tr(" Did you mean “%1”? (help %1)").arg(near));
         }
         else
         {
@@ -1024,7 +1372,8 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
         return res;
     }
     res.ok = true;
-    res.message = QStringLiteral("✓ %1").arg(r.src);
+    res.message = res.message.isEmpty() ? QStringLiteral("✓ %1").arg(r.src)
+                                        : QStringLiteral("✓ %1").arg(res.message);
     QStringList said;
     for (quint32 pid : valuePalettes)
         if (const QLCPalette *p = m_doc->palette(pid))
@@ -1161,8 +1510,40 @@ bool ShowTreeCommand::candidates(const QString &head, const Context &context, QS
         return true;
     }
     if (w0 == QLatin1String("undo") || w0 == QLatin1String("redo") || w0 == QLatin1String("dup")
-        || w0 == QLatin1String("name"))
+        || w0 == QLatin1String("name") || w0 == QLatin1String("paste"))
         return true;
+    if (w0 == QLatin1String("help") || w0 == QLatin1String("?"))
+    {
+        r.word();
+        if (r.atEnd())
+        {
+            for (const Word &w : words())
+                *out << w.word;
+            return true;
+        }
+        r.word();
+        return r.atEnd();
+    }
+    if (w0 == QLatin1String("copy"))
+    {
+        r.word();
+        if (r.atEnd())
+        {
+            *out = QStringList({ "cue", "layer" });
+            return true;
+        }
+        const QString what = r.word().toLower();
+        if (what == QLatin1String("cue"))
+        {
+            while (!r.atEnd())
+                r.word();
+            *out = cueNumbers(context);
+            return true;
+        }
+        if (what == QLatin1String("layer"))
+            return names(targets, false);
+        return false;
+    }
     if (w0 == QLatin1String("set"))
     {
         // set "Towers" SL SR: a name, then groups.

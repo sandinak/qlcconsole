@@ -218,6 +218,19 @@ public:
     /** A copy of cue @a cueId after it (its own layers, looks, mode,
      *  includes and timing; never the base), numbered per D23. */
     quint32 duplicateCue(quint32 cueId);
+    /** Paste copies of cues @a cueIds (any list, in the order given) as a
+     *  run right after cue @a afterCueId, each numbered per D23 after the
+     *  one before (never renumbering others): their own layers (the same
+     *  targets, so they track as any cue's own), looks, mode, timing, note,
+     *  name and overlap; includes only within the same list; never the
+     *  base flag. One undo step. The new cue ids (empty: nothing pasted). */
+    QList<quint32> pasteCues(const QList<quint32> &cueIds, quint32 afterCueId);
+    /** Paste copies of layers (cue, layer pairs) into cue @a toCueId: one
+     *  undo step. A layer on a target the cue already has sets its looks
+     *  there instead (one layer per target). A child keeps its parent when
+     *  the parent comes too, or the cue has a layer on the parent's target.
+     *  The layers pasted (or set). */
+    QList<quint32> pasteLayers(const QList<QPair<quint32, quint32>> &layers, quint32 toCueId);
     /** Record as new cue (D22): what cue @a cueId puts on stage -- tracked,
      *  included and its own, resolved -- frozen into a new Block cue after
      *  it, numbered per D23. Every layer becomes the new cue's own with the

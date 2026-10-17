@@ -127,6 +127,10 @@ private slots:
     void aCueAimIsOneFormationByPosition();
     void aSpreadChangeFadesOverTheCueFade();
 
+    // The command line's help; copy / paste
+    void everyCommandWordHasHelpAndItsExamplesParse();
+    void copyAndPasteCues();
+
 private:
     quint32 dimmer(int level, const QString &name);
     quint32 colour(const QString &name);

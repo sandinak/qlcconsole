@@ -44,6 +44,7 @@
 #include <QCheckBox>
 #include <QSplitter>
 #include <QShortcut>
+#include <QTextBrowser>
 #include <QListWidget>
 #include <QKeyEvent>
 #include <QSettings>
@@ -672,6 +673,27 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         QVBoxLayout *v = new QVBoxLayout(m_commandBar);
         v->setContentsMargins(0, 0, 0, 0);
         v->setSpacing(2);
+        // help / ? : the language, with examples (a click puts one in the
+        // line). Scrolls; Esc in the line closes it. Never a dialog.
+        m_commandHelp = new QTextBrowser(m_commandBar);
+        m_commandHelp->setObjectName("stCommandHelp");
+        m_commandHelp->setOpenLinks(false);
+        m_commandHelp->setMaximumHeight(170);
+        m_commandHelp->hide();
+        connect(m_commandHelp, &QTextBrowser::anchorClicked, this, [this](const QUrl &url) {
+            const QString s = url.toString();
+            if (!s.startsWith(QLatin1String("ex:")))
+                return;
+            const QString cmd = QUrl::fromPercentEncoding(s.mid(3).toUtf8());
+            if (cmd.startsWith(QLatin1String("help")))
+            {
+                runCommand(cmd);                // another word's help
+                return;
+            }
+            m_command->setText(cmd);
+            m_command->setFocus(Qt::OtherFocusReason);
+        });
+        v->addWidget(m_commandHelp);
         QHBoxLayout *h = new QHBoxLayout();
         QLabel *lbl = new QLabel(tr("Command"), m_commandBar);
         h->addWidget(lbl);
@@ -738,6 +760,19 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     tree->setHint(m_hint);
     m_tree = tree;
     m_tree->installEventFilter(this);
+    // ⌘C / ⌘V / ⌘D: cues and layers, in the tree only -- the command line
+    // and the page's fields keep their own copy and paste.
+    {
+        QShortcut *copySc = new QShortcut(QKeySequence::Copy, m_tree);
+        copySc->setContext(Qt::WidgetShortcut);
+        connect(copySc, &QShortcut::activated, this, [this]() { copySelection(); });
+        QShortcut *pasteSc = new QShortcut(QKeySequence::Paste, m_tree);
+        pasteSc->setContext(Qt::WidgetShortcut);
+        connect(pasteSc, &QShortcut::activated, this, [this]() { pasteClipboard(); });
+        QShortcut *dupSc = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_D), m_tree);
+        dupSc->setContext(Qt::WidgetShortcut);
+        connect(dupSc, &QShortcut::activated, this, [this]() { duplicateSelection(); });
+    }
     // In-place rename (Return / F2): committed, or Esc and back as it was.
     connect(m_tree, &QTreeWidget::itemChanged, this, &ShowTreeView::slotTreeItemRenamed);
     connect(m_tree->itemDelegate(), &QAbstractItemDelegate::closeEditor, this, [this]() {
@@ -3864,6 +3899,19 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
                     m_st->renameNode(id, n.trimmed());
             });
         }
+        if (kind == CueNode || kind == LayerNode)
+        {
+            menu.addSeparator();
+            QAction *copy = menu.addAction(tr("Copy"), this, [this]() { copySelection(); });
+            copy->setShortcut(QKeySequence::Copy);
+            QAction *paste = menu.addAction(m_commander->clipboard.cues.isEmpty() ? tr("Paste into this cue")
+                                                                                 : tr("Paste after this cue"),
+                                            this, [this]() { pasteClipboard(); });
+            paste->setShortcut(QKeySequence::Paste);
+            paste->setEnabled(!m_commander->clipboard.isEmpty());
+            QAction *dup = menu.addAction(tr("Duplicate"), this, [this]() { duplicateSelection(); });
+            dup->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
+        }
         if (kind != TrackedLayerNode)
         {
             menu.addSeparator();
@@ -4427,6 +4475,73 @@ void ShowTreeView::focusCommandLine()
     m_command->setFocus(Qt::ShortcutFocusReason);
 }
 
+QString ShowTreeView::helpOutput() const
+{
+    return m_commandHelp->toPlainText();
+}
+
+bool ShowTreeView::isHelpShown() const
+{
+    return !m_commandHelp->isHidden();
+}
+
+bool ShowTreeView::copySelection()
+{
+    // Cues in list order, else the cue's own layers selected.
+    QList<quint32> cues;
+    QList<QPair<quint32, quint32>> layers;
+    for (QTreeWidgetItemIterator it(m_tree); *it; ++it)
+    {
+        if (!(*it)->isSelected())
+            continue;
+        const int kind = (*it)->data(0, KindRole).toInt();
+        if (kind == CueNode)
+            cues << (*it)->data(0, IdRole).toUInt();
+        else if (kind == LayerNode)
+            layers << qMakePair((*it)->data(0, CueRole).toUInt(), (*it)->data(0, IdRole).toUInt());
+    }
+    if (cues.isEmpty() && layers.isEmpty())
+        return false;
+    ShowTreeCommand::Clipboard clip;
+    if (!cues.isEmpty())
+        clip.cues = cues;
+    else
+        clip.layers = layers;
+    m_commander->clipboard = clip;
+    m_hint->setText(!cues.isEmpty() ? tr("Copied %1 cue(s): ⌘V pastes after the selected cue").arg(cues.count())
+                                    : tr("Copied %1 layer(s): ⌘V pastes into the selected cue").arg(layers.count()));
+    return true;
+}
+
+bool ShowTreeView::pasteClipboard()
+{
+    const ShowTreeCommand::Clipboard &clip = m_commander->clipboard;
+    const quint32 cueId = currentCueId();
+    if (clip.isEmpty() || cueId == invalidId())
+        return false;
+    if (!clip.cues.isEmpty())
+    {
+        const QList<quint32> made = m_st->pasteCues(clip.cues, cueId);
+        if (made.isEmpty())
+            return false;
+        selectNode(made.last());
+        return true;
+    }
+    const QList<quint32> made = m_st->pasteLayers(clip.layers, cueId);
+    if (made.isEmpty())
+        return false;
+    selectNode(made.last(), cueId);
+    return true;
+}
+
+bool ShowTreeView::duplicateSelection()
+{
+    const ShowTreeCommand::Clipboard keep = m_commander->clipboard;
+    const bool ok = copySelection() && pasteClipboard();
+    m_commander->clipboard = keep;          // ⌘D leaves what ⌘C took
+    return ok;
+}
+
 bool ShowTreeView::isCommandLineVisible() const
 {
     return !m_commandBar->isHidden();
@@ -4452,6 +4567,11 @@ bool ShowTreeView::runCommand(const QString &line)
 
     const ShowTreeCommand::Result r = m_commander->run(line, ctx);
     m_commandMsg->setText(r.message);
+    if (!r.help.isEmpty())
+    {
+        m_commandHelp->setHtml(r.help);
+        m_commandHelp->show();
+    }
     QPalette pal = m_commandMsg->palette();
     pal.setColor(QPalette::WindowText, r.ok ? palette().color(QPalette::WindowText) : QColor(Qt::red));
     m_commandMsg->setPalette(pal);
@@ -4509,7 +4629,11 @@ bool ShowTreeView::eventFilter(QObject *obj, QEvent *ev)
         }
         if (ke->key() == Qt::Key_Escape)
         {
-            m_tree->setFocus(Qt::ShortcutFocusReason);
+            // The help first, then back to the tree.
+            if (m_commandHelp->isVisible())
+                m_commandHelp->hide();
+            else
+                m_tree->setFocus(Qt::ShortcutFocusReason);
             return true;
         }
         if ((ke->key() == Qt::Key_Up || ke->key() == Qt::Key_Down) && !m_commandHistory.isEmpty())

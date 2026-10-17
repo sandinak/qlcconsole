@@ -3961,4 +3961,177 @@ void ShowTree_Test::aSpreadChangeFadesOverTheCueFade()
     stopAll();
 }
 
+/****************************************************************************
+ * The command line's language: help from the parser's own table
+ ****************************************************************************/
+
+/* Every word the parser takes has help -- syntax, what it does, at least
+   one example -- and every example reads (Tab's parser takes it to its
+   end), in a show with the names the examples use. `help`, `help <word>`
+   and "did you mean" come from the same table. */
+void ShowTree_Test::everyCommandWordHasHelpAndItsExamplesParse()
+{
+    for (const char *g : { "Towers", "USTs", "Steps", "US", "SL", "SR" })
+        group(g, { m_fixtures[0] });
+    colour("Blue");
+    colour("Red");
+    dimmer(255, "Full");
+    QLCPalette *fx = new QLCPalette(QLCPalette::Effect, m_doc);
+    fx->setName("Sinelon");
+    m_doc->addPalette(fx);
+    QLCPalette *gobo = new QLCPalette(QLCPalette::Gobo, m_doc);
+    gobo->setName("Breakup");
+    m_doc->addPalette(gobo);
+    StageTarget *edge = m_doc->monitorProperties()->addStageTarget();
+    edge->setName("DS-Edge");
+    edge->makeLine();
+    Scene *haze = new Scene(m_doc);
+    haze->setName("Haze");
+    m_doc->addFunction(haze);
+    ShowTreeController *st = m_doc->showTree();
+    st->aimPaletteFor(edge->id());                    // "Aim DS-Edge"
+    ShowTreeCommand::Context ctx;
+    ctx.production = st->addProduction("P");
+    ctx.list = st->addCueList(ctx.production, "L");
+    st->addCueNumbered(ctx.list, "0.0.3", "Announcer");
+    ctx.cue = st->addCueNumbered(ctx.list, "1.0.1", "Verse");
+    ShowTreeCommand cmd(m_doc, st);
+
+    // The words run() dispatches on, and the ones after a group.
+    const QStringList parsed = { "cue", "list", "track", "block", "cueonly", "default", "base", "release",
+                                 "include", "function", "fn", "record", "dup", "undo", "redo", "set", "name",
+                                 "layer", "copy", "paste", "help", "?", "in", "none", "off", "clear",
+                                 "colour", "color", "dimmer", "dim", "level", "position", "pos", "aim", "spread",
+                                 "group", "grouping", "cross", "gobo", "zoom", "beam", "focus", "frost", "iris",
+                                 "shutter", "strobe", "effect", "fx" };
+    for (const QString &w : parsed)
+        QVERIFY2(ShowTreeCommand::word(w) != nullptr, qPrintable(QString("no help for “%1”").arg(w)));
+    int examples = 0;
+    for (const ShowTreeCommand::Word &w : ShowTreeCommand::words())
+    {
+        QVERIFY2(!w.syntax.isEmpty() && !w.what.isEmpty(), qPrintable(w.word));
+        QVERIFY2(!w.examples.isEmpty(), qPrintable(QString("“%1” has no example").arg(w.word)));
+        for (const QString &ex : w.examples)
+        {
+            QStringList next;
+            QVERIFY2(cmd.candidates(ex, ctx, &next), qPrintable(QString("example “%1” of “%2” doesn't read")
+                                                                .arg(ex, w.word)));
+            ++examples;
+        }
+        for (const QString &r : w.related)
+            QVERIFY2(ShowTreeCommand::word(r) != nullptr, qPrintable(QString("%1 → %2").arg(w.word, r)));
+        // Every word is in what Tab offers at the start or after a group.
+        if (w.word != "in" && w.word != "none")
+            QVERIFY2(ShowTreeCommand::word(w.word) == &w, qPrintable(w.word));
+    }
+    QVERIFY(examples >= 50);
+
+    // help, help <word>, did you mean.
+    ShowTreeCommand::Result r = cmd.run("help", ctx);
+    QVERIFY(r.ok);
+    for (const char *heading : { "Navigate", "Build", "Looks", "Tracking", "Record and copy", "Undo" })
+        QVERIFY2(r.help.contains(heading), heading);
+    r = cmd.run("help spread", ctx);
+    QVERIFY(r.ok && r.help.contains("-5…+5") && r.help.contains("ex:cue%20look%20spread%20%2B5"));
+    QVERIFY(cmd.run("?", ctx).help.contains("Navigate"));
+    QVERIFY(cmd.run("help sprad", ctx).help.contains("Did you mean <b>spread</b>"));
+    r = cmd.run("recrod", ctx);
+    QVERIFY(!r.ok);
+    QVERIFY2(r.message.contains("Did you mean “record”"), qPrintable(r.message));
+    r = cmd.run("Towers colr Blue", ctx);
+    QVERIFY2(r.message.contains("Did you mean “colour”"), qPrintable(r.message));
+    // Tab completes the word after help.
+    QStringList options;
+    QCOMPARE(cmd.complete("help spr", ctx, &options), QString("help spread "));
+}
+
+/* ⌘C / ⌘V (and copy / paste typed): a copy of a cue goes right after the
+   selected one, numbered by D23 (the next whole number if free, else a
+   point cue; never renumbering); several as a run, in order; into another
+   list too; one undo step. Layers paste into a cue. */
+void ShowTree_Test::copyAndPasteCues()
+{
+    FixtureGroup *steps = group("Steps", { m_fixtures[0], m_fixtures[1] });
+    FixtureGroup *us = group("US", { m_fixtures[1] });
+    const quint32 full = dimmer(255, "Full");
+    const quint32 half = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 listId = st->addCueList(prod, "L");
+    const quint32 c1 = st->addCueNumbered(listId, "1", "One");
+    const quint32 c2 = st->addCueNumbered(listId, "2", "Two");
+    const quint32 c3 = st->addCueNumbered(listId, "3", "Three");
+    const quint32 p1 = st->addLayer(c1, groupTarget(steps->id()));
+    st->setLayerLook(c1, p1, st->lookForPalette(full));
+    const quint32 ch1 = st->addChildLayer(c1, p1, groupTarget(us->id()));
+    st->setLayerLook(c1, ch1, st->lookForPalette(half));
+    st->addInclude(c3, c1);
+
+    // After 1 (2 taken): a point cue; the copy carries its layers, the
+    // child's parent its own copy; never the same ids.
+    QList<quint32> made = st->pasteCues({ c1 }, c1);
+    QCOMPARE(made.count(), 1);
+    const Cue *copy = st->cue(made.first());
+    QCOMPARE(copy->number, QString("1.5"));
+    QCOMPARE(copy->name, QString("One"));
+    QCOMPARE(copy->layers.count(), 2);
+    QVERIFY(copy->layers.at(0).id != p1);
+    QCOMPARE(copy->layers.at(1).parent, copy->layers.at(0).id);
+    QCOMPARE(st->cueList(listId)->indexOf(made.first()), 1);
+    QCOMPARE(st->undoText(), QString("Paste cue"));
+    // After the last: the next whole number.
+    made = st->pasteCues({ c3 }, c3);
+    QCOMPARE(st->cue(made.first())->number, QString("4"));
+    QCOMPARE(st->cue(made.first())->includes, QList<quint32>({ c1 }));
+    // Several: a run after 2, in their order (2.5, 2.6), one undo step.
+    made = st->pasteCues({ c1, c3 }, c2);
+    QCOMPARE(made.count(), 2);
+    QCOMPARE(st->cue(made.at(0))->number, QString("2.5"));
+    QCOMPARE(st->cue(made.at(1))->number, QString("2.6"));
+    QCOMPARE(st->cueList(listId)->indexOf(made.at(1)), st->cueList(listId)->indexOf(c2) + 2);
+    const int count = int(st->cueList(listId)->cues.count());
+    QVERIFY(st->undo());
+    QCOMPARE(int(st->cueList(listId)->cues.count()), count - 2);
+    // Never renumbers the others.
+    QCOMPARE(st->cue(c2)->number, QString("2"));
+
+    // Into another list: after its cue; an include of the other list's cue
+    // is dropped.
+    const quint32 other = st->addCueList(prod, "M");
+    const quint32 m1 = st->addCueNumbered(other, "10", "Ten");
+    made = st->pasteCues({ c3 }, m1);
+    QCOMPARE(st->cue(made.first())->number, QString("11"));
+    QVERIFY(st->cue(made.first())->includes.isEmpty());
+    QCOMPARE(st->listOfCue(made.first())->id, other);
+    // The copy plays as the original: the same layers' scenes.
+    QCOMPARE(st->layerScene(made.first(), groupTarget(steps->id())), Function::invalidId());   // c3 has none
+    made = st->pasteCues({ c1 }, m1);
+    QCOMPARE(st->layerScene(made.first(), groupTarget(steps->id())), st->layerScene(c1, groupTarget(steps->id())));
+
+    // Layers: into a cue; onto a cue with that target, its looks set there.
+    const QList<quint32> ls = st->pasteLayers({ qMakePair(c1, p1), qMakePair(c1, ch1) }, c2);
+    QCOMPARE(ls.count(), 2);
+    QCOMPARE(st->cue(c2)->layers.count(), 2);
+    QCOMPARE(st->cue(c2)->layers.at(1).parent, st->cue(c2)->layers.at(0).id);
+    QVERIFY(st->setLayerLook(c2, st->cue(c2)->layers.at(0).id, st->lookForPalette(half)));
+    QCOMPARE(st->pasteLayers({ qMakePair(c1, p1) }, c2).count(), 1);
+    QCOMPARE(st->cue(c2)->layers.count(), 2);
+    QCOMPARE(st->cue(c2)->layers.at(0).look(KeyDimmer)->palettes, QList<quint32>({ full }));
+
+    // Typed: copy cue / paste, one undo step each.
+    ShowTreeCommand cmd(m_doc, st);
+    ShowTreeCommand::Context ctx;
+    ctx.production = prod;
+    ctx.list = listId;
+    ctx.cue = c3;
+    QVERIFY(cmd.run("copy cue 1 2", ctx).ok);
+    QCOMPARE(cmd.clipboard.cues, QList<quint32>({ c1, c2 }));
+    const QString before = st->undoText();
+    ShowTreeCommand::Result r = cmd.run("paste", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(st->cue(r.context.cue)->name, QString("Two"));
+    QVERIFY(st->undo());
+    QCOMPARE(st->undoText(), before);
+}
+
 QTEST_MAIN(ShowTree_Test)

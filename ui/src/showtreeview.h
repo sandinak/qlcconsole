@@ -45,6 +45,7 @@ class QLineEdit;
 class QMimeData;
 class QTimer;
 class QCheckBox;
+class QTextBrowser;
 class QLabel;
 class QMenu;
 class Doc;
@@ -266,6 +267,17 @@ public:
     /** What the line under the command line says now. */
     QString commandMessage() const;
     QLineEdit *commandLine() const { return m_command; }
+    /** The help output over the command line (`help`, `?`), hidden until
+     *  asked for; Esc closes it. Its text, plain (tests). */
+    QString helpOutput() const;
+    bool isHelpShown() const;
+
+    /** ⌘C / ⌘V / ⌘D in the tree (Copy / Paste / Duplicate in its menu):
+     *  the selected cues (in list order) or own layers; paste puts cues as
+     *  a run after the selected cue, layers into it. One undo step. */
+    bool copySelection();
+    bool pasteClipboard();
+    bool duplicateSelection();
 
     /** Open @a paletteId in the Look Editor under the tree. */
     void editPalette(quint32 paletteId);
@@ -462,6 +474,7 @@ private:
     QWidget *m_commandBar = nullptr;
     QLineEdit *m_command = nullptr;
     QLabel *m_commandMsg = nullptr;
+    QTextBrowser *m_commandHelp = nullptr;
     ShowTreeCommand *m_commander = nullptr;
     QStringList m_commandHistory;
     RecordAsker m_recordAsker;

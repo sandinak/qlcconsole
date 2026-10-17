@@ -33,6 +33,7 @@
 #include <QLineEdit>
 #include <QLabel>
 #include <QCheckBox>
+#include <QTextBrowser>
 #include <QListWidget>
 #include <QToolButton>
 #include <QMimeData>
@@ -3122,6 +3123,84 @@ void ShowTreeView_Test::lineAimsInTheTab()
     QVERIFY2(view.runCommand("Left aim DS-Edge"), qPrintable(view.commandMessage()));
     QVERIFY(!view.runCommand("Left spread 9"));
     QVERIFY(view.commandMessage().contains("spread -5"));
+}
+
+/* ⌘C / ⌘V / ⌘D in the tree: cues (as a run, after the selected cue) and
+   layers (into the selected cue), one undo step each; the command line's
+   own ⌘C / ⌘V are left alone. `help` shows over the command line, Esc
+   closes it, a click on an example puts it in the line. */
+void ShowTreeView_Test::copyPasteAndHelp()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCueNumbered(list, "1", "One");
+    const quint32 c2 = st->addCueNumbered(list, "2", "Two");
+    Target t;
+    t.groups << towers->id();
+    st->setLayerLook(c1, st->addLayer(c1, t), st->lookForPalette(full));
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *tree = view.tree();
+    QVERIFY(view.selectNode(c1));
+    tree->setFocus();
+    QTest::keySequence(tree, QKeySequence::Copy);
+    QVERIFY(view.selectNode(c2));
+    tree->setFocus();
+    QTest::keySequence(tree, QKeySequence::Paste);
+    QCOMPARE(st->cueList(list)->cues.count(), 3);
+    QCOMPARE(st->cueList(list)->cues.last().number, QString("3"));
+    QCOMPARE(st->cueList(list)->cues.last().name, QString("One"));
+    QCOMPARE(view.currentId(), st->cueList(list)->cues.last().id);
+    QVERIFY(st->undo());
+    QCOMPARE(st->cueList(list)->cues.count(), 2);
+    // ⌘D: right after, as a point cue between 1 and 2.
+    QVERIFY(view.selectNode(c1));
+    tree->setFocus();
+    QTest::keySequence(tree, QKeySequence(Qt::CTRL | Qt::Key_D));
+    QCOMPARE(st->cueList(list)->cues.at(1).number, QString("1.5"));
+    // A layer copied, pasted into another cue.
+    const quint32 layer = st->cue(c1)->layers.first().id;
+    QVERIFY(view.selectNode(layer, c1));
+    tree->setFocus();
+    QTest::keySequence(tree, QKeySequence::Copy);
+    QVERIFY(view.selectNode(c2));
+    tree->setFocus();
+    QTest::keySequence(tree, QKeySequence::Paste);
+    QCOMPARE(st->cue(c2)->layers.count(), 1);
+    QVERIFY(st->cue(c2)->layers.first().target == t);
+
+    // The command line keeps its own copy and paste.
+    QLineEdit *line = view.commandLine();
+    line->setFocus();
+    line->setText("Towers dimmer");
+    line->selectAll();
+    const int cues = int(st->cueList(list)->cues.count());
+    QTest::keySequence(line, QKeySequence::Copy);
+    QTest::keySequence(line, QKeySequence::Paste);
+    QCOMPARE(int(st->cueList(list)->cues.count()), cues);
+    QCOMPARE(st->cue(c2)->layers.count(), 1);
+
+    // help: shown, Esc closes it; an example clicked goes in the line.
+    QVERIFY(!view.isHelpShown());
+    QVERIFY(view.runCommand("help"));
+    QVERIFY(view.isHelpShown());
+    QVERIFY(view.helpOutput().contains("Record and copy"));
+    QVERIFY(view.runCommand("help paste"));
+    QVERIFY2(view.helpOutput().contains("after the selected cue"), qPrintable(view.helpOutput()));
+    QTextBrowser *out = view.findChild<QTextBrowser *>("stCommandHelp");
+    emit out->anchorClicked(QUrl("ex:" + QString::fromUtf8(QUrl::toPercentEncoding("Towers dimmer 45"))));
+    QCOMPARE(line->text(), QString("Towers dimmer 45"));
+    line->setFocus();
+    QTest::keyClick(line, Qt::Key_Escape);
+    QVERIFY(!view.isHelpShown());
+    // A misspelling says what was meant.
+    QVERIFY(!view.runCommand("recrod"));
+    QVERIFY2(view.commandMessage().contains("record"), qPrintable(view.commandMessage()));
 }
 
 QTEST_MAIN(ShowTreeView_Test)

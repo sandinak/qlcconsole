@@ -799,8 +799,16 @@ quint32 ShowTreeController::duplicateCue(quint32 cueId)
     copy.id = newId();
     copy.collection = invalidId();
     copy.number = numberForInsert(*have, at);
+    QHash<quint32, quint32> ids;
     for (Layer &l : copy.layers)
-        l.id = newId();
+    {
+        const quint32 nid = newId();
+        ids.insert(l.id, nid);
+        l.id = nid;
+    }
+    for (Layer &l : copy.layers)
+        if (l.parent != invalidId())
+            l.parent = ids.value(l.parent, invalidId());     // the copy's own parent
     const quint32 listId = have->id;
     const bool ok = edit(tr("Duplicate cue"), [&](QList<Production> &ps) {
         CueList *l = listIn(ps, listId);
@@ -810,6 +818,144 @@ quint32 ShowTreeController::duplicateCue(quint32 cueId)
         return true;
     });
     return ok ? copy.id : invalidId();
+}
+
+QList<quint32> ShowTreeController::pasteCues(const QList<quint32> &cueIds, quint32 afterCueId)
+{
+    const CueList *dest = listOfCue(afterCueId);
+    if (dest == nullptr || cueIds.isEmpty())
+        return {};
+    const quint32 destId = dest->id;
+    // Copies made up front (ids from the counter); numbered in the edit,
+    // one after the other.
+    QList<Cue> copies;
+    for (quint32 cid : cueIds)
+    {
+        const CueList *from = listOfCue(cid);
+        const Cue *src = from == nullptr ? nullptr : from->cue(cid);
+        if (src == nullptr)
+            continue;
+        Cue copy = *src;
+        copy.id = newId();
+        copy.collection = invalidId();
+        if (from->id != destId)
+            copy.includes.clear();          // a cue of another list
+        QHash<quint32, quint32> ids;
+        for (Layer &l : copy.layers)
+        {
+            const quint32 nid = newId();
+            ids.insert(l.id, nid);
+            l.id = nid;
+        }
+        for (Layer &l : copy.layers)
+            if (l.parent != invalidId())
+                l.parent = ids.value(l.parent, invalidId());
+        copies << copy;
+    }
+    if (copies.isEmpty())
+        return {};
+    QList<quint32> made;
+    const bool ok = edit(copies.count() == 1 ? tr("Paste cue") : tr("Paste %1 cues").arg(copies.count()),
+                         [&](QList<Production> &ps) {
+        CueList *l = listIn(ps, destId);
+        if (l == nullptr)
+            return false;
+        int at = l->indexOf(afterCueId);
+        if (at < 0)
+            return false;
+        for (Cue c : copies)
+        {
+            c.number = numberForInsert(*l, at);
+            if (c.number.isEmpty())
+                return false;
+            // An include of a cue that isn't there, or would loop: dropped.
+            const QList<quint32> wanted = c.includes;
+            c.includes.clear();
+            l->cues.insert(at + 1, c);
+            for (quint32 inc : wanted)
+                if (canInclude(*l, c.id, inc))
+                    l->cues[at + 1].includes << inc;
+            made << c.id;
+            ++at;
+        }
+        return true;
+    });
+    return ok ? made : QList<quint32>();
+}
+
+QList<quint32> ShowTreeController::pasteLayers(const QList<QPair<quint32, quint32>> &layers, quint32 toCueId)
+{
+    if (cue(toCueId) == nullptr)
+        return {};
+    QList<Layer> copies;
+    QList<Target> parentTargets;            // per copy: its parent's target, if any
+    QHash<quint32, int> copyOf;             // original layer id -> copy index
+    for (const QPair<quint32, quint32> &ref : layers)
+    {
+        const Cue *c = cue(ref.first);
+        const Layer *l = c == nullptr ? nullptr : c->layer(ref.second);
+        if (l == nullptr || copyOf.contains(l->id))
+            continue;
+        Layer copy = *l;
+        copy.continues = Target();
+        copy.continuesAlso.clear();
+        const Layer *up = l->parent == invalidId() ? nullptr : c->layer(l->parent);
+        parentTargets << (up == nullptr ? Target() : up->target);
+        copyOf.insert(l->id, int(copies.count()));
+        copy.id = newId();
+        copies << copy;
+    }
+    if (copies.isEmpty())
+        return {};
+    // A parent copied too: the copy's parent.
+    for (int i = 0; i < copies.count(); ++i)
+    {
+        const quint32 orig = copies.at(i).parent;
+        copies[i].parent = copyOf.contains(orig) ? copies.at(copyOf.value(orig)).id : invalidId();
+    }
+    QList<quint32> made;
+    const bool ok = edit(copies.count() == 1 ? tr("Paste layer") : tr("Paste %1 layers").arg(copies.count()),
+                         [&](QList<Production> &ps) {
+        Cue *c = cueIn(ps, toCueId);
+        if (c == nullptr)
+            return false;
+        for (int i = 0; i < copies.count(); ++i)
+        {
+            Layer l = copies.at(i);
+            if (l.parent == invalidId() && !parentTargets.at(i).isEmpty())
+                for (const Layer &have : c->layers)
+                    if (have.target == parentTargets.at(i))
+                        l.parent = have.id;
+            Layer *same = nullptr;
+            for (Layer &have : c->layers)
+                if (have.target == l.target && have.parent == l.parent)
+                    same = &have;
+            if (same != nullptr)
+            {
+                // One layer per target: the pasted looks set there.
+                for (const Look &look : l.looks)
+                    same->setLook(look);
+                same->release = l.release;
+                made << same->id;
+                continue;
+            }
+            if (l.parent != invalidId())
+            {
+                // After its parent's children.
+                const QList<quint32> under = withChildren(*c, l.parent);
+                int at = 0;
+                for (int k = 0; k < c->layers.count(); ++k)
+                    if (under.contains(c->layers.at(k).id))
+                        at = k + 1;
+                c->layers.insert(at, l);
+            }
+            else
+                c->layers << l;
+            made << l.id;
+        }
+        return true;
+    });
+    return ok ? made : QList<quint32>();
 }
 
 quint32 ShowTreeController::recordCue(quint32 cueId)

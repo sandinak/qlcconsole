@@ -94,6 +94,9 @@ public:
     {
         bool ok = false;
         QString message;
+        /** `help`: the text to show (rich text; an example is a link
+         *  "ex:<command>"). Empty for other commands. */
+        QString help;
         /** Where the command leaves the selection. */
         Context context;
         /** The layer it set last (invalid: none), to select. */
@@ -121,6 +124,40 @@ public:
 
     /** The one-line grammar for the hint under the command line. */
     static QString grammar();
+
+    /** One word of the language, as `help` explains it -- the table the
+     *  parser's words come from (keywords(), attributeWords()), so help
+     *  can't drift from the grammar. */
+    struct Word
+    {
+        QString word;
+        QStringList aliases;
+        QString group;          //!< navigate, build, looks, tracking, record, undo, help
+        bool attribute = false; //!< after a target: an attribute word
+        QString syntax;         //!< optional parts in [ ], alternatives with |
+        QString what;
+        QStringList examples;   //!< each a whole command that parses
+        QStringList related;
+    };
+    static const QList<Word> &words();
+    /** The entry for @a word (or an alias); null: none. */
+    static const Word *word(const QString &word);
+    /** `help`: every word, grouped, a line each; `help <word>`: its syntax,
+     *  what it does, examples (links "ex:…") and related words. Rich text. */
+    static QString helpText(const QString &word = QString());
+    /** The word nearest @a typed (a misspelling, a prefix): empty when none
+     *  is near. For "did you mean". */
+    static QString nearestWord(const QString &typed, bool attributesOnly = false);
+
+    /** What ⌘C / `copy` holds: cues, or layers (cue, layer). Shared by the
+     *  tab's keys and the command line. */
+    struct Clipboard
+    {
+        QList<quint32> cues;
+        QList<QPair<quint32, quint32>> layers;
+        bool isEmpty() const { return cues.isEmpty() && layers.isEmpty(); }
+    };
+    Clipboard clipboard;
 
     /** How a bare "record" picks what to record when the choices differ
      *  (@a choices: ShowTreeController::recordChoices, two or more): the
