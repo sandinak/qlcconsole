@@ -205,13 +205,77 @@ void ShowTreeView_Test::groupsDroppedOnACueBecomeLayers()
     const quint32 c1 = st->addCue(list, -1, "One");
 
     ShowTreeView view(nullptr, m_doc);
+    // Several groups dropped together: one layer on all of them.
     QVERIFY(view.dropTargets(c1, { towers->id(), usts->id() }, {}));
-    QCOMPARE(st->cue(c1)->layers.count(), 2);
+    QCOMPARE(st->cue(c1)->layers.count(), 1);
+    QCOMPARE(st->cue(c1)->layers.first().target.groups, QList<quint32>({ towers->id(), usts->id() }));
     QCOMPARE(view.currentKind(), ShowTreeView::LayerNode);      // the new layer is selected
-    QVERIFY(view.dropTargets(c1, {}, { m_fixtures[4], m_fixtures[5] }));
+    QCOMPARE(view.tree()->currentItem()->text(0), QString("Towers + USTs"));
+    // ⌥: one layer per group, as it was.
+    QVERIFY(view.dropTargets(c1, { towers->id(), usts->id() }, {}, true));
     QCOMPARE(st->cue(c1)->layers.count(), 3);
+    QVERIFY(view.dropTargets(c1, {}, { m_fixtures[4], m_fixtures[5] }));
+    QCOMPARE(st->cue(c1)->layers.count(), 4);
     QCOMPARE(st->cue(c1)->layers.last().target.fixtures.count(), 2);
     QVERIFY(view.recentItems().first().startsWith("USTs"));
+}
+
+void ShowTreeView_Test::groupsDroppedOnALayerJoinIt()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    FixtureGroup *usts = group("USTs", 2, 2);
+    FixtureGroup *spots = group("Spots", 4, 2);
+    const quint32 d50 = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(list, -1, "One");
+    Target t;
+    t.groups << towers->id();
+    const quint32 l1 = st->addLayer(c1, t);
+    st->setLayerLook(c1, l1, st->lookForPalette(d50));
+
+    ShowTreeView view(nullptr, m_doc);
+    auto groupMime = [](QList<quint32> ids) {
+        QMimeData *mime = new QMimeData();
+        QByteArray data;
+        QDataStream s(&data, QIODevice::WriteOnly);
+        for (quint32 id : ids)
+            s << id;
+        mime->setData(FixtureGroupSource::fixtureGroupMimeType(), data);
+        return mime;
+    };
+    QScopedPointer<QMimeData> one(groupMime({ usts->id() }));
+    QScopedPointer<QMimeData> two(groupMime({ usts->id(), spots->id() }));
+
+    // The hint says which will happen before the drop.
+    QCOMPARE(view.dropHint(c1, invalidId(), one.data()), QString("a new layer on USTs in 1 One"));
+    QCOMPARE(view.dropHint(c1, invalidId(), two.data()),
+             QString("one layer on USTs + Spots in 1 One (⌥: a layer for each group)"));
+    QCOMPARE(view.dropHint(c1, invalidId(), two.data(), true),
+             QString("2 new layers in 1 One, one for each group"));
+    QVERIFY(view.acceptsDrop(c1, l1, one.data()));
+    QCOMPARE(view.dropHint(c1, l1, two.data()), QString("add USTs + Spots to layer Towers in 1 One"));
+
+    // Dropped on the layer: it lights all three, one layer, one scene.
+    QVERIFY(view.dropTargetsOnLayer(c1, l1, { usts->id(), spots->id() }, {}));
+    QCOMPARE(st->cue(c1)->layers.count(), 1);
+    QCOMPARE(st->cue(c1)->layers.first().target.groups.count(), 3);
+    const Collection *coll = qobject_cast<const Collection *>(m_doc->function(st->cue(c1)->collection));
+    QCOMPARE(coll->functions().count(), 1);
+    const Scene *scene = qobject_cast<const Scene *>(m_doc->function(coll->functions().first()));
+    QCOMPARE(scene->fixtureGroups().count(), 3);
+    QCOMPARE(view.currentId(), l1);
+    QVERIFY(st->undoText().startsWith("Add USTs, Spots to layer"));
+
+    // Undo, and it is Towers alone again.
+    view.slotUndo();
+    QCOMPARE(st->cue(c1)->layers.first().target.groups, QList<quint32>({ towers->id() }));
+
+    // An opaque layer takes no groups.
+    Target fn;
+    fn.function = scene->id();
+    const quint32 opaque = st->addLayer(c1, fn);
+    QVERIFY(!view.acceptsDrop(c1, opaque, one.data()));
 }
 
 void ShowTreeView_Test::aPaletteOnTheCueIsACueLookAndTheHintSaysWhatItReaches()
@@ -244,14 +308,14 @@ void ShowTreeView_Test::aPaletteOnTheCueIsACueLookAndTheHintSaysWhatItReaches()
     QCOMPARE(st->cue(c1)->looks.count(), 1);
     QCOMPARE(st->cue(c1)->looks.first().palettes, QList<quint32>({ blue }));
 
-    // Groups don't go on a layer.
+    // Groups go on a cue (a new layer) and on a layer (they join it).
     QMimeData groups;
     QByteArray g;
     QDataStream gs(&g, QIODevice::WriteOnly);
     gs << towers->id();
     groups.setData(FixtureGroupSource::fixtureGroupMimeType(), g);
     QVERIFY(view.acceptsDrop(c1, invalidId(), &groups));
-    QVERIFY(!view.acceptsDrop(c1, l2, &groups));
+    QVERIFY(view.acceptsDrop(c1, l2, &groups));
 }
 
 void ShowTreeView_Test::layerRowsShowOwnAndInheritedValues()
@@ -512,12 +576,57 @@ void ShowTreeView_Test::dropsOnTheTreeWidget()
     QCoreApplication::sendEvent(tree->viewport(), &move);
     QVERIFY(move.isAccepted());
     QLabel *hint = view.findChild<QLabel *>("stDropHint");
-    QCOMPARE(hint->text(), QString("1 new layer(s) in 1 One"));
+    QCOMPARE(hint->text(), QString("a new layer on Towers in 1 One"));
     QDropEvent drop(at, Qt::CopyAction, mime, Qt::LeftButton, Qt::NoModifier);
     QCoreApplication::sendEvent(tree->viewport(), &drop);
     QCOMPARE(st->cue(c1)->layers.count(), 1);
     QCOMPARE(hint->text(), QString());
     delete mime;
+
+    // Two groups with ⌥ held: the hint says a layer each, and so it is.
+    FixtureGroup *usts = group("USTs", 2, 2);
+    FixtureGroup *spots = group("Spots", 4, 2);
+    QMimeData *two = new QMimeData();
+    QByteArray g2;
+    QDataStream gs2(&g2, QIODevice::WriteOnly);
+    gs2 << usts->id() << spots->id();
+    two->setData(FixtureGroupSource::fixtureGroupMimeType(), g2);
+    for (QTreeWidgetItemIterator it(tree); *it; ++it)
+        if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::CueNode)
+            cueItem = *it;
+    tree->doItemsLayout();
+    tree->scrollToItem(cueItem);
+    const QPoint at2 = tree->visualItemRect(cueItem).center();
+    QDragEnterEvent enter2(at2, Qt::CopyAction, two, Qt::LeftButton, Qt::AltModifier);
+    QCoreApplication::sendEvent(tree->viewport(), &enter2);
+    QDragMoveEvent altMove(at2, Qt::CopyAction, two, Qt::LeftButton, Qt::AltModifier);
+    QCoreApplication::sendEvent(tree->viewport(), &altMove);
+    QCOMPARE(hint->text(), QString("2 new layers in 1 One, one for each group"));
+    QDropEvent altDrop(at2, Qt::CopyAction, two, Qt::LeftButton, Qt::AltModifier);
+    QCoreApplication::sendEvent(tree->viewport(), &altDrop);
+    QCOMPARE(st->cue(c1)->layers.count(), 3);
+
+    // ...and onto a layer row: it joins that layer.
+    QTreeWidgetItem *layerItem = nullptr;
+    for (QTreeWidgetItemIterator it(tree); *it; ++it)
+        if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::LayerNode
+            && (*it)->text(0) == "Towers")
+            layerItem = *it;
+    QVERIFY(layerItem != nullptr);
+    tree->doItemsLayout();
+    tree->scrollToItem(layerItem);
+    const QPoint at3 = tree->visualItemRect(layerItem).center();
+    QDragEnterEvent enter3(at3, Qt::CopyAction, two, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(tree->viewport(), &enter3);
+    QDragMoveEvent onLayer(at3, Qt::CopyAction, two, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(tree->viewport(), &onLayer);
+    QVERIFY(onLayer.isAccepted());
+    QCOMPARE(hint->text(), QString("add USTs + Spots to layer Towers in 1 One"));
+    QDropEvent layerDrop(at3, Qt::CopyAction, two, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(tree->viewport(), &layerDrop);
+    QCOMPARE(st->cue(c1)->layers.count(), 3);
+    QCOMPARE(st->cue(c1)->layers.first().target.groups.count(), 3);
+    delete two;
 }
 
 void ShowTreeView_Test::anEffectGetsLooksOfItsOwn()

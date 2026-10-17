@@ -47,6 +47,9 @@ private slots:
     void numbering();
     void numberedNames();
     void xmlRoundTrip();
+    void aLayerWithTwoGroupsTracksAcrossCues();
+    void addingAGroupToATrackedLayer();
+    void aBlockCueKeepsItsOwnLayerWhenAGroupIsAdded();
 
     // Baking (§4)
     void bakeMakesAChaserCollectionsAndScenes();

@@ -102,6 +102,19 @@ public:
      *  the layer is only carried in (tracked, included): one undo step. */
     bool setTargetLook(quint32 cueId, const ShowTree::Target &target, const ShowTree::Look &look);
     bool setLayerRelease(quint32 cueId, quint32 layerId, bool release);
+    /** Give a layer another target (groups and fixtures): one undo step.
+     *  The layer stays the same layer -- a layer it carried on from (tracked,
+     *  included) keeps giving it its values, and the same layer set again in
+     *  the following cues it tracks into is changed with it, so nothing
+     *  lights the old target beside the new one. */
+    bool setLayerTarget(quint32 cueId, quint32 layerId, const ShowTree::Target &target,
+                        const QString &label = QString());
+    /** Add groups / fixtures to a layer's target (dropped onto it). */
+    bool addToLayer(quint32 cueId, quint32 layerId, const QList<quint32> &groups,
+                    const QList<quint32> &fixtures);
+    /** Take a group (or a fixture) out of a layer's target; never its last. */
+    bool removeGroupFromLayer(quint32 cueId, quint32 layerId, quint32 groupId);
+    bool removeFixtureFromLayer(quint32 cueId, quint32 layerId, quint32 fixtureId);
     bool setListMode(quint32 listId, ShowTree::ListMode mode);
     bool setBaseCue(quint32 listId, quint32 cueId);
     bool renameNode(quint32 nodeId, const QString &name);

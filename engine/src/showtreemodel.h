@@ -129,6 +129,11 @@ namespace ShowTree
         /** Leaving the cue it is set in, this layer is dropped from what
          *  passes on: the base cue's values, else dark (D7). */
         bool release = false;
+        /** The carried-in layer this one carries on from although its target
+         *  differs (a group was added to it, or taken away, in this cue): it
+         *  takes that layer's place and tracked values instead of lighting
+         *  beside it. Empty: none (the usual case, the same target). */
+        Target continues;
 
         const Look *look(const QString &key) const;
         /** Set (replace) the look for its key; an empty, non-None look
@@ -214,6 +219,9 @@ namespace ShowTree
         bool release = false;
         Origin origin = Origin::Own;    //!< how the layer itself got here
         quint32 fromCue = 0xFFFFFFFF;
+        /** An own layer that took a carried-in (tracked, included) layer's
+         *  place: that layer's target. Empty when it came in fresh. */
+        Target tookOver;
         QMap<QString, ResolvedValue> values;
 
         /** The looks a generated scene plays, in look-stack order: None

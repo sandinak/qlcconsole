@@ -104,8 +104,13 @@ public:
      * What the mouse does (drops, pickers) -- public for the tests
      ************************************************************************/
 public:
-    /** Groups / fixtures dropped on a cue: one layer each. */
-    bool dropTargets(quint32 cueId, const QList<quint32> &groups, const QList<quint32> &fixtures);
+    /** Groups / fixtures dropped on a cue: one layer on all of them, or
+     *  (@a separate, ⌥ held) one layer per group (and one on the fixtures). */
+    bool dropTargets(quint32 cueId, const QList<quint32> &groups, const QList<quint32> &fixtures,
+                     bool separate = false);
+    /** Groups / fixtures dropped on a layer: added to its target. */
+    bool dropTargetsOnLayer(quint32 cueId, quint32 layerId, const QList<quint32> &groups,
+                            const QList<quint32> &fixtures);
     /** Functions dropped on a cue: opaque function layers. */
     bool dropFunctions(quint32 cueId, const QList<quint32> &functions);
     /** Palettes dropped on a layer (or, with no layer, on the cue's looks;
@@ -115,7 +120,8 @@ public:
                       const ShowTree::Target &target = ShowTree::Target());
     /** What a drop of @a mime on (@a cueId, @a layerId) would do, before it
      *  is let go of: "Blue → cue look: reaches 2 of 3 layers". */
-    QString dropHint(quint32 cueId, quint32 layerId, const QMimeData *mime) const;
+    QString dropHint(quint32 cueId, quint32 layerId, const QMimeData *mime,
+                     bool separate = false) const;
     bool acceptsDrop(quint32 cueId, quint32 layerId, const QMimeData *mime) const;
 
     /** MIME type of cues dragged within the tree (a stream of cue ids). */

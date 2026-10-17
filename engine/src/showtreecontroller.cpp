@@ -369,6 +369,121 @@ bool ShowTreeController::setLayerRelease(quint32 cueId, quint32 layerId, bool re
     });
 }
 
+bool ShowTreeController::setLayerTarget(quint32 cueId, quint32 layerId, const Target &target,
+                                        const QString &label)
+{
+    Target to;
+    for (quint32 g : target.groups)
+        if (!to.groups.contains(g))
+            to.groups << g;
+    for (quint32 f : target.fixtures)
+        if (!to.fixtures.contains(f))
+            to.fixtures << f;
+    if (to.isEmpty())
+        return false;
+
+    return edit(label.isEmpty() ? tr("Change layer") : label, [&](QList<Production> &ps) {
+        CueList *list = nullptr;
+        Cue *c = cueIn(ps, cueId, &list);
+        Layer *l = c == nullptr ? nullptr : c->layer(layerId);
+        if (l == nullptr || l->target.isOpaque() || l->target == to)
+            return false;
+
+        const Target from = l->target;
+        const int at = list->indexOf(cueId);
+        const QList<ResolvedCue> before = resolve(*list);
+
+        // In this cue: if it carried on from a layer (tracked, included),
+        // it still does, under its new target.
+        const ResolvedLayer *rl = before.at(at).layer(from);
+        const Target carried = rl == nullptr ? Target() : rl->tookOver;
+        l->target = to;
+        l->continues = (!carried.isEmpty() && !(carried == to)) ? carried : Target();
+
+        // Onwards, while the layer tracks: the same layer set again in a
+        // later cue (it took the tracked one's place) follows the change.
+        for (int j = at + 1; j < list->cues.count(); ++j)
+        {
+            const ResolvedLayer *next = before.at(j).layer(from);
+            if (next == nullptr)
+            {
+                // A layer there that carried on from it under a target of
+                // its own carries on from the new one.
+                for (Layer &other : list->cues[j].layers)
+                    if (!other.continues.isEmpty() && other.continues == from)
+                        other.continues = to;
+                break;                      // released, a Block cue, or taken over
+            }
+            if (!next->own)
+                continue;                   // carried through: follows by itself
+            if (!(next->tookOver == from))
+                break;                      // a fresh layer on that target
+            Layer *again = list->cues[j].layer(next->layerId);
+            if (again == nullptr)
+                break;
+            again->target = to;
+            again->continues = Target();
+        }
+        return true;
+    });
+}
+
+bool ShowTreeController::addToLayer(quint32 cueId, quint32 layerId, const QList<quint32> &groups,
+                                    const QList<quint32> &fixtures)
+{
+    const Cue *c = cue(cueId);
+    const Layer *l = c == nullptr ? nullptr : c->layer(layerId);
+    if (l == nullptr || l->target.isOpaque())
+        return false;
+    Target t = l->target;
+    QStringList names;
+    for (quint32 g : groups)
+        if (!t.groups.contains(g))
+        {
+            t.groups << g;
+            Target one;
+            one.groups << g;
+            names << targetLabel(one);
+        }
+    for (quint32 f : fixtures)
+        if (!t.fixtures.contains(f))
+        {
+            t.fixtures << f;
+            Target one;
+            one.fixtures << f;
+            names << targetLabel(one);
+        }
+    if (names.isEmpty())
+        return false;
+    return setLayerTarget(cueId, layerId, t, tr("Add %1 to layer").arg(names.join(QStringLiteral(", "))));
+}
+
+bool ShowTreeController::removeGroupFromLayer(quint32 cueId, quint32 layerId, quint32 groupId)
+{
+    const Cue *c = cue(cueId);
+    const Layer *l = c == nullptr ? nullptr : c->layer(layerId);
+    if (l == nullptr || !l->target.groups.contains(groupId))
+        return false;
+    Target t = l->target;
+    t.groups.removeAll(groupId);
+    Target one;
+    one.groups << groupId;
+    return setLayerTarget(cueId, layerId, t, tr("Remove %1 from layer").arg(targetLabel(one)));
+}
+
+bool ShowTreeController::removeFixtureFromLayer(quint32 cueId, quint32 layerId, quint32 fixtureId)
+{
+    const Cue *c = cue(cueId);
+    const Layer *l = c == nullptr ? nullptr : c->layer(layerId);
+    if (l == nullptr || !l->target.fixtures.contains(fixtureId))
+        return false;
+    Target t = l->target;
+    t.fixtures.removeAll(fixtureId);
+    Target one;
+    one.fixtures << fixtureId;
+    return setLayerTarget(cueId, layerId, t, tr("Remove %1 from layer").arg(targetLabel(one)));
+}
+
 bool ShowTreeController::setListMode(quint32 listId, ListMode mode)
 {
     return edit(tr("Cue list mode"), [&](QList<Production> &ps) {

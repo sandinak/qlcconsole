@@ -310,6 +310,7 @@ QList<ResolvedLayer> carried(const QList<ResolvedLayer> &from)
     for (ResolvedLayer &l : out)
     {
         l.own = false;
+        l.tookOver = Target();
         if (l.origin == Origin::Base)
             continue;
         l.origin = Origin::Tracked;
@@ -409,9 +410,16 @@ struct Resolver
                 continue;
             const QString sig = layer.target.signature();
             ResolvedLayer r;
-            const int k = indexOfTarget(layers, sig);
+            int k = indexOfTarget(layers, sig);
+            // A layer whose groups changed here carries on from the one it
+            // was: it takes that one's place and values.
+            if (k < 0 && !layer.continues.isEmpty() && !layer.target.isOpaque())
+                k = indexOfTarget(layers, layer.continues.signature());
             if (k >= 0)
+            {
                 r = layers.takeAt(k);
+                r.tookOver = r.target;
+            }
             else
             {
                 const int ko = indexOfTarget(own, sig);
@@ -705,6 +713,11 @@ void saveXML(QXmlStreamWriter *doc, const Production &production)
                 writeId(doc, QStringLiteral("Function"), layer.target.function);
                 if (layer.release)
                     doc->writeAttribute(QStringLiteral("Release"), QStringLiteral("1"));
+                if (!layer.continues.groups.isEmpty())
+                    doc->writeAttribute(QStringLiteral("ContinuesGroups"), idsToString(layer.continues.groups));
+                if (!layer.continues.fixtures.isEmpty())
+                    doc->writeAttribute(QStringLiteral("ContinuesFixtures"),
+                                        idsToString(layer.continues.fixtures));
                 saveLooks(doc, layer.looks);
                 doc->writeEndElement();
             }
@@ -778,6 +791,8 @@ bool loadXML(QXmlStreamReader &root, Production &production)
                     layer.target.fixtures = stringToIds(a.value(QStringLiteral("Fixtures")).toString());
                     layer.target.function = readId(a, QStringLiteral("Function"));
                     layer.release = a.value(QStringLiteral("Release")).toString() == QLatin1String("1");
+                    layer.continues.groups = stringToIds(a.value(QStringLiteral("ContinuesGroups")).toString());
+                    layer.continues.fixtures = stringToIds(a.value(QStringLiteral("ContinuesFixtures")).toString());
                     while (root.readNextStartElement())
                     {
                         if (root.name() == KXMLShowTreeLook)

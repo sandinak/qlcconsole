@@ -187,7 +187,8 @@ protected:
         {
             e->acceptProposedAction();
             if (m_hint != nullptr)
-                m_hint->setText(m_view->dropHint(cue, layer, e->mimeData()));
+                m_hint->setText(m_view->dropHint(cue, layer, e->mimeData(),
+                                                 e->modifiers() & Qt::AltModifier));
         }
         else
         {
@@ -240,8 +241,10 @@ protected:
         bool done = false;
         if (!pals.isEmpty())
             done = m_view->dropPalettes(cue, layer, pals);
+        else if ((!groups.isEmpty() || !fixtures.isEmpty()) && layer != ShowTree::invalidId())
+            done = m_view->dropTargetsOnLayer(cue, layer, groups, fixtures);
         else if (!groups.isEmpty() || !fixtures.isEmpty())
-            done = m_view->dropTargets(cue, groups, fixtures);
+            done = m_view->dropTargets(cue, groups, fixtures, e->modifiers() & Qt::AltModifier);
         else if (!funcs.isEmpty())
             done = m_view->dropFunctions(cue, funcs);
         if (done)
@@ -316,13 +319,21 @@ public:
 protected:
     void dragEnterEvent(QDragEnterEvent *e) override
     {
-        if (cue != ShowTree::invalidId() && m_view->acceptsDrop(cue, layer, e->mimeData()))
+        // Palettes anywhere; groups only onto a layer of the cue's own.
+        const bool palettes = e->mimeData()->hasFormat(QLatin1String(FunctionsTreeWidget::paletteDragMimeType()));
+        if (cue != ShowTree::invalidId() && (palettes || layer != ShowTree::invalidId())
+            && m_view->acceptsDrop(cue, layer, e->mimeData()))
             e->acceptProposedAction();
     }
     void dropEvent(QDropEvent *e) override
     {
         const QList<quint32> pals = idsFromMime(e->mimeData(), FunctionsTreeWidget::paletteDragMimeType());
+        const QList<quint32> groups = idsFromMime(e->mimeData(), FixtureGroupSource::fixtureGroupMimeType());
+        const QList<quint32> fixtures = idsFromMime(e->mimeData(), FixtureGroupSource::fixtureMimeType());
         if (!pals.isEmpty() && m_view->dropPalettes(cue, layer, pals, target))
+            e->acceptProposedAction();
+        else if (pals.isEmpty() && (!groups.isEmpty() || !fixtures.isEmpty())
+                 && m_view->dropTargetsOnLayer(cue, layer, groups, fixtures))
             e->acceptProposedAction();
     }
 
@@ -555,7 +566,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_rows->setColumnStretch(1, 1);
         scroll->setWidget(m_rowsHost);
         v->addWidget(scroll, 1);
-        QLabel *tip = new QLabel(tr("Drop a palette here (or on the layer in the tree) to set it. "
+        QLabel *tip = new QLabel(tr("Drop a palette here (or on the layer in the tree) to set it, a group to add it to the layer. "
                                     "Grey values come from the cue or an earlier cue; ⋯ sets one here."),
                                  m_layerPage);
         tip->setWordWrap(true);
@@ -1545,25 +1556,50 @@ void ShowTreeView::slotRedo()
     m_st->redo();
 }
 
-bool ShowTreeView::dropTargets(quint32 cueId, const QList<quint32> &groups, const QList<quint32> &fixtures)
+bool ShowTreeView::dropTargets(quint32 cueId, const QList<quint32> &groups, const QList<quint32> &fixtures,
+                               bool separate)
 {
     quint32 last = invalidId();
-    for (quint32 g : groups)
+    if (separate)
     {
-        Target t;
-        t.groups << g;
-        last = m_st->addLayer(cueId, t);
-        noteRecent(LibGroup, g);
+        // ⌥: one layer per group, as before (and one on the fixtures).
+        for (quint32 g : groups)
+        {
+            Target t;
+            t.groups << g;
+            last = m_st->addLayer(cueId, t);
+        }
+        if (!fixtures.isEmpty())
+        {
+            Target t;
+            t.fixtures = fixtures;
+            last = m_st->addLayer(cueId, t);
+        }
     }
-    if (!fixtures.isEmpty())
+    else if (!groups.isEmpty() || !fixtures.isEmpty())
     {
+        // One layer on everything dropped together.
         Target t;
+        t.groups = groups;
         t.fixtures = fixtures;
         last = m_st->addLayer(cueId, t);
     }
+    for (quint32 g : groups)
+        noteRecent(LibGroup, g);
     if (last != invalidId())
         selectNode(last, cueId);
     return last != invalidId();
+}
+
+bool ShowTreeView::dropTargetsOnLayer(quint32 cueId, quint32 layerId, const QList<quint32> &groups,
+                                      const QList<quint32> &fixtures)
+{
+    if (!m_st->addToLayer(cueId, layerId, groups, fixtures))
+        return false;
+    for (quint32 g : groups)
+        noteRecent(LibGroup, g);
+    selectNode(layerId, cueId);
+    return true;
 }
 
 bool ShowTreeView::dropFunctions(quint32 cueId, const QList<quint32> &functions)
@@ -1629,13 +1665,20 @@ bool ShowTreeView::acceptsDrop(quint32 cueId, quint32 layerId, const QMimeData *
     if (mime->hasFormat(QLatin1String(FunctionsTreeWidget::paletteDragMimeType())))
         return true;
     if (layerId != invalidId())
-        return false;           // targets and functions go on a cue
+    {
+        // Groups and fixtures join a layer's target; functions go on a cue.
+        const Cue *cue = m_st->cue(cueId);
+        const Layer *l = cue == nullptr ? nullptr : cue->layer(layerId);
+        return l != nullptr && !l->target.isOpaque()
+               && (mime->hasFormat(QLatin1String(FixtureGroupSource::fixtureGroupMimeType()))
+                   || mime->hasFormat(QLatin1String(FixtureGroupSource::fixtureMimeType())));
+    }
     return mime->hasFormat(QLatin1String(FixtureGroupSource::fixtureGroupMimeType()))
            || mime->hasFormat(QLatin1String(FixtureGroupSource::fixtureMimeType()))
            || mime->hasFormat(QLatin1String(FunctionsTreeWidget::functionDragMimeType()));
 }
 
-QString ShowTreeView::dropHint(quint32 cueId, quint32 layerId, const QMimeData *mime) const
+QString ShowTreeView::dropHint(quint32 cueId, quint32 layerId, const QMimeData *mime, bool separate) const
 {
     const CueList *list = m_st->listOfCue(cueId);
     const Cue *cue = m_st->cue(cueId);
@@ -1670,10 +1713,27 @@ QString ShowTreeView::dropHint(quint32 cueId, quint32 layerId, const QMimeData *
         return tr("%1 → cue look on %2: reaches %3 of %4 layers").arg(what, cueText).arg(reach).arg(total);
     }
     const QList<quint32> groups = idsFromMime(mime, FixtureGroupSource::fixtureGroupMimeType());
-    if (!groups.isEmpty())
-        return tr("%n new layer(s) in %1", "", int(groups.count())).arg(cueText);
-    if (!idsFromMime(mime, FixtureGroupSource::fixtureMimeType()).isEmpty())
-        return tr("a new layer on these fixtures in %1").arg(cueText);
+    const QList<quint32> fixtures = idsFromMime(mime, FixtureGroupSource::fixtureMimeType());
+    if (!groups.isEmpty() || !fixtures.isEmpty())
+    {
+        Target t;
+        t.groups = groups;
+        t.fixtures = fixtures;
+        const QString what = groups.isEmpty() ? tr("these fixtures") : m_st->targetLabel(t);
+        if (layerId != invalidId())
+        {
+            const Layer *l = cue->layer(layerId);
+            return tr("add %1 to layer %2 in %3")
+                   .arg(what, l == nullptr ? QString()
+                              : (l->name.isEmpty() ? m_st->targetLabel(l->target) : l->name), cueText);
+        }
+        const int pieces = int(groups.count()) + (fixtures.isEmpty() ? 0 : 1);
+        if (pieces < 2)
+            return tr("a new layer on %1 in %2").arg(what, cueText);
+        if (separate)
+            return tr("%1 new layers in %2, one for each group").arg(pieces).arg(cueText);
+        return tr("one layer on %1 in %2 (⌥: a layer for each group)").arg(what, cueText);
+    }
     if (!idsFromMime(mime, FunctionsTreeWidget::functionDragMimeType()).isEmpty())
         return tr("played as it is in %1").arg(cueText);
     return QString();
@@ -1913,6 +1973,32 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
             menu.addAction(tr("Detach to plain scene"), this, [this, cueId, layerId]() {
                 m_st->detachLayer(cueId, layerId);
             });
+            // A layer on several groups can lose one (never its last).
+            const Cue *cue = m_st->cue(cueId);
+            const Layer *layer = cue == nullptr ? nullptr : cue->layer(layerId);
+            if (layer != nullptr && !layer->target.isOpaque()
+                && layer->target.groups.count() + layer->target.fixtures.count() > 1)
+            {
+                menu.addSeparator();
+                for (quint32 g : layer->target.groups)
+                {
+                    Target one;
+                    one.groups << g;
+                    menu.addAction(tr("Remove %1 from layer").arg(m_st->targetLabel(one)), this,
+                                   [this, cueId, layerId, g]() {
+                        m_st->removeGroupFromLayer(cueId, layerId, g);
+                    });
+                }
+                for (quint32 f : layer->target.fixtures)
+                {
+                    Target one;
+                    one.fixtures << f;
+                    menu.addAction(tr("Remove %1 from layer").arg(m_st->targetLabel(one)), this,
+                                   [this, cueId, layerId, f]() {
+                        m_st->removeFixtureFromLayer(cueId, layerId, f);
+                    });
+                }
+            }
         }
         if (kind == ProductionNode || kind == ListNode)
         {

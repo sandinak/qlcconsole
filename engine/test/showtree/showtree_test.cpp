@@ -515,6 +515,8 @@ void ShowTree_Test::xmlRoundTrip()
     c.fadeOut = 0;
     c.hold = Function::infiniteSpeed();
     c.collection = 88;
+    c.layers[1].target.fixtures << 12;
+    c.layers[1].continues.groups << BackStage;
     Layer opaque;
     opaque.id = 6;
     opaque.target.function = 42;
@@ -535,12 +537,141 @@ void ShowTree_Test::xmlRoundTrip()
     QCOMPARE(bc.layers.count(), 3);
     QVERIFY(bc.layers.at(0).release);
     QVERIFY(bc.layers.at(1).looks.first().none);
+    QCOMPARE(bc.layers.at(1).continues.groups, QList<quint32>({ BackStage }));
+    QCOMPARE(bc.layers.at(1).target.fixtures, QList<quint32>({ 12 }));
     QVERIFY(bc.layers.at(2).target.isOpaque());
     QCOMPARE(bc.layers.at(2).target.function, quint32(42));
     QCOMPARE(bc.looks.first().palettes, QList<quint32>({ Blue, Green }));
     QCOMPARE(bc.includes, QList<quint32>({ 9 }));
     QCOMPARE(back.lists.first().baseCue, quint32(3));
     QCOMPARE(back.lists.first().chaser, quint32(77));
+}
+
+/* A layer on two groups is one layer: it tracks as one, whatever order the
+   groups were given in. */
+void ShowTree_Test::aLayerWithTwoGroupsTracksAcrossCues()
+{
+    CueList list;
+    list.mode = ListMode::Tracking;
+    Layer both = layer(11, Towers, { look(KeyColour, { Blue }), look(KeyDimmer, { Full }) });
+    both.target.groups << USTs;
+    Layer again = layer(31, USTs, { look(KeyDimmer, { D45 }) });
+    again.target.groups << Towers;          // the other order
+    list.cues << cue(1, "1", CueMode::ListDefault, { both });
+    list.cues << cue(2, "2", CueMode::ListDefault, {});
+    list.cues << cue(3, "3", CueMode::ListDefault, { again });
+
+    const QList<ResolvedCue> r = resolve(list);
+    Target t;
+    t.groups << USTs << Towers;
+    QCOMPARE(r[1].layers.count(), 1);
+    QCOMPARE(r[1].layers.first().values.value(KeyColour).look.palettes.value(0), quint32(Blue));
+    QCOMPARE(int(r[1].layers.first().origin), int(Origin::Tracked));
+    QCOMPARE(r[2].layers.count(), 1);
+    const ResolvedLayer *l3 = r[2].layer(t);
+    QVERIFY(l3 != nullptr);
+    QVERIFY(l3->own);
+    QCOMPARE(l3->values.value(KeyColour).look.palettes.value(0), quint32(Blue));
+    QCOMPARE(int(l3->values.value(KeyColour).origin), int(Origin::Tracked));
+    QCOMPARE(l3->values.value(KeyDimmer).look.palettes.value(0), quint32(D45));
+    QCOMPARE(int(l3->values.value(KeyDimmer).origin), int(Origin::Own));
+}
+
+void ShowTree_Test::addingAGroupToATrackedLayer()
+{
+    FixtureGroup *a = group("Towers", { m_fixtures[0] });
+    FixtureGroup *b = group("USTs", { m_fixtures[1] });
+    const quint32 d50 = dimmer(127, "Half");
+    const quint32 d100 = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    const quint32 c3 = st->addCue(listId, 1, "Three");
+    st->setLayerLook(c1, st->addLayer(c1, groupTarget(a->id())), st->lookForPalette(d50));
+    // Two sets Towers' colour of its own: it takes the tracked layer's place.
+    const quint32 blue = colour("Blue");
+    QVERIFY(st->setTargetLook(c2, groupTarget(a->id()), st->lookForPalette(blue)));
+    const quint32 l2 = st->cue(c2)->layers.first().id;
+
+    // USTs joins the layer in Two: one layer on both, still with the
+    // dimmer tracked from One, and that is what Three receives.
+    QVERIFY(st->addToLayer(c2, l2, { b->id() }, {}));
+    QCOMPARE(st->undoText(), QString("Add USTs to layer"));
+    Target both;
+    both.groups << a->id() << b->id();
+    QList<ResolvedCue> r = resolve(*st->cueList(listId));
+    QCOMPARE(r[0].layers.count(), 1);
+    QVERIFY(r[0].layer(groupTarget(a->id())) != nullptr);   // One is as it was
+    QCOMPARE(r[1].layers.count(), 1);
+    const ResolvedLayer *l = r[1].layer(both);
+    QVERIFY(l != nullptr);
+    QCOMPARE(l->values.value(KeyDimmer).look.palettes.value(0), d50);
+    QCOMPARE(int(l->values.value(KeyDimmer).origin), int(Origin::Tracked));
+    QCOMPARE(l->values.value(KeyColour).look.palettes.value(0), blue);
+    QCOMPARE(r[2].layers.count(), 1);
+    QVERIFY(r[2].layer(both) != nullptr);
+
+    // It plays: both groups at half in Two, none of the layer twice.
+    const Collection *two = qobject_cast<const Collection *>(m_doc->function(st->cue(c2)->collection));
+    QCOMPARE(two->functions().count(), 1);
+    st->previewCue(c2);
+    QHash<quint32, uchar> v = settle();
+    QCOMPARE(int(v[0]), 127);
+    QCOMPARE(int(v[1]), 127);
+
+    // Taking USTs away again is the tracked layer once more.
+    QVERIFY(st->removeGroupFromLayer(c2, l2, b->id()));
+    QVERIFY(st->cue(c2)->layers.first().continues.isEmpty());
+    r = resolve(*st->cueList(listId));
+    QCOMPARE(r[1].layers.count(), 1);
+    QVERIFY(r[1].layer(groupTarget(a->id())) != nullptr);
+    v = settle();
+    QCOMPARE(int(v[1]), 0);
+    // ...the last group never goes (that is Delete).
+    QVERIFY(!st->removeGroupFromLayer(c2, l2, a->id()));
+
+    // Undo brings USTs back, redo takes it away.
+    QVERIFY(st->undo());
+    QCOMPARE(st->cue(c2)->layers.first().target.groups.count(), 2);
+    QVERIFY(st->redo());
+    QCOMPARE(st->cue(c2)->layers.first().target.groups.count(), 1);
+
+    // Where the layer starts, the change carries on through the cues it
+    // tracks into, and the same layer set again later follows it.
+    const quint32 l1 = st->cue(c1)->layers.first().id;
+    QVERIFY(st->setLayerLook(c3, st->addLayer(c3, groupTarget(a->id())), st->lookForPalette(d100)));
+    QVERIFY(st->addToLayer(c1, l1, { b->id() }, {}));
+    QCOMPARE(st->cue(c2)->layers.first().target.signature(), both.signature());
+    QCOMPARE(st->cue(c3)->layers.first().target.signature(), both.signature());
+    r = resolve(*st->cueList(listId));
+    for (int i = 0; i < 3; ++i)
+    {
+        QCOMPARE(r[i].layers.count(), 1);
+        QVERIFY(r[i].layer(both) != nullptr);
+    }
+    QCOMPARE(r[2].layer(both)->values.value(KeyColour).look.palettes.value(0), blue);
+    QCOMPARE(r[2].layer(both)->values.value(KeyDimmer).look.palettes.value(0), d100);
+    st->stopPreview();
+}
+
+void ShowTree_Test::aBlockCueKeepsItsOwnLayerWhenAGroupIsAdded()
+{
+    FixtureGroup *a = group("Towers", { m_fixtures[0] });
+    FixtureGroup *b = group("USTs", { m_fixtures[1] });
+    const quint32 d50 = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    // Non-tracking (every cue a Block, as an import): only that cue changes.
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    const quint32 l1 = st->addLayer(c1, groupTarget(a->id()));
+    st->setLayerLook(c1, l1, st->lookForPalette(d50));
+    st->setLayerLook(c2, st->addLayer(c2, groupTarget(a->id())), st->lookForPalette(d50));
+    QVERIFY(st->addToLayer(c1, l1, { b->id() }, {}));
+    QCOMPARE(st->cue(c1)->layers.first().target.groups.count(), 2);
+    QCOMPARE(st->cue(c2)->layers.first().target.groups.count(), 1);
+    QVERIFY(st->cue(c1)->layers.first().continues.isEmpty());
 }
 
 /****************************************************************************

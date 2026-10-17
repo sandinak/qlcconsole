@@ -36,6 +36,7 @@ private slots:
     void theTreeShowsProductionsListsCuesAndLayers();
     void trackedLayersShowGreyWithWhereTheyCameFrom();
     void groupsDroppedOnACueBecomeLayers();
+    void groupsDroppedOnALayerJoinIt();
     void aPaletteOnTheCueIsACueLookAndTheHintSaysWhatItReaches();
     void layerRowsShowOwnAndInheritedValues();
     void beamRowsSayWhatTheyApplyTo();
