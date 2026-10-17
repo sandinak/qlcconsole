@@ -6,7 +6,302 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
-### 2026-10-16 — Fixture sizes and weights in your own units *(on feat/unit-aware-dimensions, not merged)*
+### 2026-10-17 — Rig Overview: dimmed RGB without a dimmer channel drew black
+
+`channelSetLiveState()` (`ui/src/monitor/fixturevisualtraits.cpp`) handed back the raw, already-dimmed colour *and* a level of max(R,G,B) for fixtures with no dimmer channel; every reader draws colour × level, so Blue at 19% (0,1,48) drew at 9/255. It now returns the hue at full and the level once. Fixtures with a dimmer channel are unchanged. Found from a Show Tree preview (feat/show-tree d8664080a); backported with its `monitor_test` case.
+### 2026-10-17 — macOS: no image-based cursors (crash orbiting the Angled view) *(fix/macos-native-cursors)*
+
+Crash report 2026-10-17 15:36 (macOS 27.0, Homebrew Qt 6.11.1): pressing the
+empty canvas in Structure Studio's Angled view to orbit called
+`setCursor(Qt::SizeAllCursor)` and died in `CGColorSpaceGetType` under
+`QImage::toCGImage()` ← `QCocoaCursor::createCursorData()`.
+
+- **Root cause (Qt):** cursors with no native NSCursor are built from PNGs;
+  `sizeallcursor.png`, `spincursor.png` and `waitcursor.png` all carry an
+  `iCCP` profile, so the QImage has a custom colour space. In Qt 6.11.x
+  `qt_mac_cgImageFormatForImage()` returns a raw `CGColorSpaceRef` whose
+  `QCFType` owner has already released it -- a use-after-free that only
+  survives for the system sRGB space. QTBUG-147602, fixed upstream in qtbase
+  a481ede673 (picked to 6.11/6.12), not yet in the Homebrew 6.11.1 here.
+- **Fix:** `AppUtil::nativeCursorShape()` -- on macOS SizeAll → OpenHand
+  (ClosedHand while dragging), Wait/Busy → Arrow; everything else (and every
+  shape on Linux/Windows) passes through. In Qt 6.11 Forbidden, WhatsThis,
+  Drag*, the four resize arrows and the hands are native NSCursors already,
+  and Blank is a profile-less pixmap, so they stay. All 21 SizeAll call
+  sites (Structure Studio view and its items, path draw widget, VC widget
+  move) and the VC widget's FDiag resize go through it.
+- **Residual risk:** any other QImage with an embedded profile that reaches
+  `toCGImage()` (e.g. a drag pixmap made from a profiled PNG) can hit the same
+  Qt bug until Qt is upgraded.
+- **Test:** `ui/test/nativecursor` -- the mapping, that no shape maps to a
+  PNG-backed one, pass-through off macOS, and a source guard that no
+  `Qt::SizeAll/Wait/BusyCursor` in `ui/src`, `main`, `fixtureeditor` or
+  `webaccess/src` bypasses the helper. The CoreGraphics crash itself cannot be
+  reproduced offscreen.
+
+### 2026-10-17 — Engine: fader priority moves both ways; an Override 16-bit channel writes both bytes *(fix/fader-priority-16bit)*
+
+Backported from `feat/show-tree` (4973a8d43), the two engine fixes only.
+
+- **`Universe::requestFaderPriority()`** searched for a slot with the fader
+  still in the list, so a priority lower than its own never found one: the
+  fader stayed put and kept its old priority. It now takes the fader out,
+  sets the priority and puts it back where `requestFader()` would place a
+  new fader of that priority (after the last one at or below it).
+- **`GenericFader::write()`, `FadeChannel::Override`**: a fader handling
+  secondary channels holds a 16-bit channel (coarse + fine) in one
+  FadeChannel; Override wrote one byte -- the low one, at the coarse
+  address. It now writes every byte, MSB first, like the Flashing branch.
+- **User-visible on 0.1.0: nothing.** No code on the release branch calls
+  `requestFaderPriority()`, and the Override flag is only set on faders
+  without secondary handling (Simple Desk, VC slider override, power
+  measuring, effect-script `replace`), whose channels are always one byte.
+  Both were latent; Show Tree's edit override is the first user of either.
+- **Tests**: `Universe_Test::faderPriorityMovesBothWays`,
+  `GenericFader_Test::anOverride16BitChannelWritesBothBytes` -- each fails
+  on the unfixed code and passes with the fix.
+
+### 2026-10-16 — A look's Speed and Spread survive picking an effect; Speed Masters window closes cleanly *(fix/speedmaster-dblclick-reset)*
+
+Branson: "when I set something on the speed masters .. and then double click
+on the icon it resets those."
+
+- **What reset**: a look's *Speed:* (`__speedMaster`) and its host Spread
+  (`__spread*`) live in the effect palette's param map beside the script's
+  own params. `LookEditor::slotEffectScriptChanged()` clears that map on
+  every effect change and carries back only params the **new script
+  declares** (`carryOverParams()`); no script declares the look-level ones,
+  so clicking or double-clicking another effect's tile (icon) in the effect
+  picker -- the picker applies each pick at once, to preview it -- put the
+  look back on *As the look* with no spread. Going back to the first effect
+  didn't bring them back; only Cancel did. Now both are carried across an
+  effect change (a preset that pins one still wins). The one-shot length
+  (`__durationMs`) deliberately stays with the effect it was set for.
+- **Not the cause, checked**: double-clicking a footer speed-master button
+  (two clicks, opens/raises the window twice), the window's beat lights,
+  names, tempo fields, or the look itself (re-opened in the editor), and
+  re-picking the **same** effect in the picker change nothing. The
+  masters themselves (count, names, follow/ratio, BPM, rate, pause, inputs)
+  are saved with the show (`SpeedMasters::saveXML`, engine test
+  `mastersAreSavedWithTheShow`); the footer's beat style/when are in
+  QSettings (`workspace/speedFooterBeat*`), read once at start and on the
+  View menu -- nothing re-reads defaults over them. A look's Speed/Spread
+  save with the palette (now also checked in the new test).
+- **Found on the way** (Speed Masters window): a name typed but not yet
+  left when the window went (with the main window) fired `editingFinished`
+  into a half-destroyed panel -- a Qt assertion, a crash without one. The
+  destructor now keeps the typed name and disconnects the fields. Leaving a
+  name field without changing it no longer marks the show modified.
+- **Tests**: `LookEditor_Test::aLooksSpeedMasterAndSpreadSurviveADoubleClick`
+  (look re-opened; the current effect's tile double-clicked; another effect
+  tried and back; Done; palette XML round trip -- fails without the fix);
+  `SpeedMastersPanel_Test::doubleClickingAMasterChangesNothing` (every
+  setting incl. 6 masters, follow, pause, rate, tapped and fractional BPM,
+  an input, beat style/when; footer buttons and panel widgets
+  double-clicked; no modified flag; the close-with-a-typed-name crash).
+### 2026-10-16 — Programming tab: drag scenes/palettes/folders into folders; folder menu *(fix/programming-drag-to-folder)*
+
+Branson: "I can't seem to drag a scene to a folder in the programming view";
+"I can't right click on an empty folder to delete it"; "when I first tried ..
+it was drag selecting other things vs dragging to folder."
+
+- **Why**: the nav tree (`m_funcTree`) was never given a drag mode at
+  construction (`programmingmanager.cpp` ~L117-136 on release/0.1.0), so until
+  a function was opened it was `NoDragDrop`: press-and-move rubber-band
+  selected rows. Opening a scene/EFX/matrix switched it to Qt `InternalMove`
+  (L916/L1047), and opening a collection/chaser/show to external mode, whose
+  `FunctionsTreeWidget::dragMoveEvent/dropEvent` (functionstreewidget.cpp
+  L1099-1108 / L1125-1131) only accepted functions on a *Collection* row —
+  never on a folder. Palette drops worked but palette *folders* weren't
+  draggable, and an empty palette folder made via "New folder…" in the
+  palettes-only tree was tagged FunctionNode (invisible root has no kind), so
+  it refused palette drops.
+- **Fix**: the nav tree is in external drag mode from the start and always;
+  `FunctionsTreeWidget::canDropMimeOn()/dropMimeOn()` (used by
+  dragMove/drop) take functions, palettes and folders (new
+  `application/x-qlcconsole-folders` payload) onto a folder / a row (joins its
+  folder) / the category or empty space (top level), type-checked, never a
+  folder into itself; sets paths, `Doc::setModified()`, rebuilds the tree on
+  the next turn (re-creating empty sub-folders) and emits
+  `folderContentsMoved()` (Programming re-nests collection member rows). A
+  Collection row still takes dropped functions as members; payload for the
+  collection/chaser/show editors and the looks canvas unchanged. Drop target
+  outlined (custom paint), autoscroll + hover-to-open (autoExpandDelay 600).
+  `folderItem()` gives invisible-root folders PaletteNode. Function Manager
+  rebuilds its tree on show (keeps selection) so moves made here appear there.
+- **Folder menu** (both trees): Rename / Delete Folder; Delete on an empty
+  folder is immediate, with contents asks and moves them up a level
+  (`removeFolderKeepContents`, nothing deleted). "New Folder" now creates
+  under the right-clicked row (it used the selection).
+- No undo for folder moves (the tab's undo is per-scene look edits; Function
+  Manager has none for moves either).
+- Tests (programmingmanager_test): `scenesDragIntoAFolderAndBackOut`
+  (incl. save/load round-trip, collection open, collection-row membership),
+  `aFolderDragsIntoAnotherFolder`, `palettesAndTheirFoldersDragIntoFolders`,
+  `deletingAFolderKeepsWhatIsInIt`, `pressAndMoveOnARowDragsIt` (QTest press
+  + move on an unselected row starts a QDrag carrying only that row). The
+  first and last fail with the old construction. Help: programming-tab.md
+  "Filing into folders", whats-new.
+- **Remove from container** (Branson: "No ability to remove from side
+  menu", 3 rows under a collection offered only Duplicate/Delete): nested
+  member rows now carry their index (chaser step / collection member) and,
+  for shows, track + ShowFunction ids; the menu offers **Remove from “X”** /
+  **Remove N from “X”** / **Remove N from their K containers** (per
+  container). `removeMembers()` takes out exactly that membership
+  (collection `removeFunction`, chaser `removeStep` by index, show
+  `removeShowFunction`; a running show is left alone with a note), asks
+  first for chaser steps/show items, re-nests the rows and refreshes the open
+  editor. Delete on such rows reads **Delete Function Everywhere…** and the
+  question lists every collection/chaser/show using each function. No undo
+  (the tab's undo is scene look edits only). Test
+  `rowsUnderAContainerComeOutOfIt`.
+- **Delete with "where is it used"** (Branson: "can't remove anything here ..
+  no delete .. AND delete should check for usage and warn"): one helper,
+  `ProgrammerController::paletteUsage()/functionUsage()/usageLines()` (scene
+  look rows, effect-look palette-slot bindings; collections, chaser steps,
+  show tracks), used by the palette and function delete questions and the
+  look editor's "used by N scene(s)". Palettes can't be referenced by VC
+  widgets / cue lists, so none listed. `Doc::deletePalette()` now also clears
+  effect-look slot bindings to it (before: a dangling id, which a later
+  palette reusing the id would have been picked up by). ⌫/Delete on either
+  tree deletes the selection (or the selected folder). No undo. Test
+  `deletingAPaletteSaysWhereItIsUsed`.
+
+---
+### 2026-10-16 — Fixture Manager: patch a universe from its row *(feat/fixtures-universe-patch)*
+
+Branson: "right click on universe in fixtures list should let me patch".
+
+- **Shared, not copied**: the Connections tab's patch logic moved out of
+  `ConnectionsTree` into `UniversePatcher` (`ui/src/universepatcher.{h,cpp}`,
+  a QObject with no view): `pickPluginLine`, `askTargetPort` (free ports
+  first, held ports refused, Another address…, Broadcast),
+  `visibleTargets`/`targetPortChoices`, `patchTarget`/`applyTarget`/
+  `universeOnTarget`, `retargetPatch`, `planOrderedPatch`/
+  `applyOrderedPatch`/`patchSelectionTo`, `unpatchLegs`, and the
+  "Art-Net → CS1 (ip) · port N · universe n:s:u" leg text the By-universe
+  list shows. Every change emits `patchChanged()` once; `ConnectionsTree`
+  keeps its private methods as forwarders (and `using` aliases for the
+  structs), and rebuilds on that signal — `connectionstree_test` unchanged,
+  57/57.
+- **`patchUniverse(u)`** (was `ConnectionsTree::patchUnpatchedUniverseTo`):
+  protocol → interface → port, each opened on the current patch, applied as
+  a one-universe `applyOrderedPatch` — so it now replaces patch 0 and is ONE
+  undo step (Connections' "Patch to…" on an unpatched universe had no undo
+  capture before; it does now).
+- **Universe row menu** (`FixtureManager::slotContextMenuRequested`):
+  unpatched → **Patch output…**; patched → a disabled **Output: …** line,
+  **Change interface / target…** (`retargetPatch`; for a target-less
+  protocol, **Patch output…** instead) and **Unpatch output**; several
+  universe rows selected → **Patch N selected universes to…** / **Unpatch
+  N selected universes** (shared wording, `UniversePatcher::patchSelectionText()`
+  etc.) in click order (`m_universePickOrder`, the Connections rule);
+  **Show in Connections** via a new `ShowStatus` action
+  `connections.universe` (App registers it with the existing
+  open-Connections lambda). Fixture rows' menu is unchanged.
+- **Row label**: `FixtureTreeWidget::updateUniverseLabels()` rewrites the
+  "— destination" suffix in place (no rebuild, the selection stays) on
+  `patchChanged()` and, a zero-delay hop later, on `PatchUndo::changed()` —
+  so Undo Patch Change in Connections shows here too.
+- **Fixed on the way**: *Delete Universe…* from this menu did nothing —
+  `m_ctxUniverse` is cleared as soon as the menu closes, before the action
+  read it. Now read from a local taken before.
+- Tests: `ui/test/fixtureuniversepatch` (offscreen, I/O plugin stub, no
+  network): menu offers, patch to a picked port + label + one-step undo,
+  change target, unpatch + undo, 4 picked out of order onto a 4-port node,
+  plural unpatch counts only the patched ones, fixture row menu untouched,
+  Show in Connections hands over the universe. Help: fixture-manager.md
+  "Patching a universe's output", whats-new, other-improvements.
+
+### 2026-10-16 — Connections: patch / unpatch several universes at once *(fix/connections-multipatch)*
+
+Branson: "when I select a group to patch or unpatch from the universes
+listing in connection it doesn't work — 4 U patched to a 4-port Art-Net
+device should go onto those ports in selected order; 4 U unpatched should
+all go at the same time."
+
+- **Why it didn't work**: every universe-row action in
+  `ConnectionsTree::slotContextMenu()` acted on the row under the pointer
+  only (by design: "right-clicking one row while twelve are selected must
+  not quietly act on twelve"). The one plural action, *Retarget N selected
+  universes…*, only counted already-patched output rows, so a selection of
+  unpatched universes got the single-row *Patch to…* and a multi-select
+  *Unpatch from this interface* removed one patch.
+- **Selection order**: `m_selectionOrder`, kept from `itemSelectionChanged`
+  (not during a rebuild): what is still selected keeps its place, new picks
+  append — one per ctrl-click, a shift-click range in list order.
+- **Patch N selected universes to…** (both views, any mix of patched /
+  unpatched / pending): protocol → interface → device (discovered or
+  declared on that interface, with its ports; or *Another address…* +
+  first port address; or *Broadcast*) → starting port. Universe k goes to
+  port k. `planOrderedPatch()` works it out first and the plan is shown to
+  confirm: overflow (more universes than ports) is named and left alone —
+  no wrap, no silent drop; a port held by an UNSELECTED universe is skipped
+  with the owner named (the one-port-one-universe rule `applyTarget()`
+  already enforces), while universes in the same run may swap ports.
+  `applyOrderedPatch()`: one undo capture, patch 0 replaced (as
+  `patchUniverseTo()` does), two passes so a universe moving off a port
+  frees it first, one rebuild. Protocols without targets (DMX USB) use
+  consecutive lines as the ports.
+- **Unpatch N selected universes**: what each row's own Unpatch removes
+  (output leg, input, or a pending patch; feedback rows skipped), one undo
+  step, one rebuild.
+- *Retarget N selected universes…* now numbers in picked order too.
+- Plural actions are handled in `handleUniversalMenuAction()`, so every
+  per-kind branch honours them; single-row actions unchanged.
+- Tests (`connectionstree_test`): picked order incl. rebuild / ctrl-deselect
+  / shift range; 5 picked onto a 4-port node out of list order (overflow,
+  untouched unselected universe, swap, one undo, one rebuild; menu offers
+  it); a held port skipped; 4 unpatched from the real context menu in one
+  step and one rebuild. Help: other-improvements.md (Connections &amp;
+  patch), whats-new.md, the Devices hint tooltip.
+### 2026-10-16 — Art-Net: new nodes without an address are found, flagged, and can be given one *(fix/artnet-unconfigured-nodes — NOT yet verified on a real node)*
+
+Branson put a new node on the show network and it didn't appear until its IP
+was set. The "DMX-Workshop configure" tooling was only ever `artnet-config.py`
+(ArtAddress: names / port addresses, unicast to a known IP); nothing in the app
+could see or address a node off this computer's subnets.
+
+**Why it didn't appear** (any of these is enough):
+- The periodic poll (`ArtNetController::slotSendPoll`) goes only to the line's
+  subnet broadcast (172.18.2.255), every 3 s, and only on lines with an output
+  open; Rescan sent the same. A node on 2.x.x.x may ignore a broadcast for a
+  subnet it isn't on.
+- A node that answers to its *own* subnet broadcast (2.255.255.255 — Art-Net 3
+  behaviour, and what the CR041R does with .255) is dropped by the host's IP
+  stack: the address isn't a broadcast address of any local interface. No
+  socket option changes that; only an address on that network does.
+- If an answer did arrive, it was listed like any other node — nothing said it
+  was unusable, and there was no way to set its IP (ArtIpProg was defined,
+  never built).
+
+**Changed**
+- Rescan also sends one ArtPoll to 255.255.255.255 per physical interface,
+  named via IP_PKTINFO (`QNetworkDatagram::setInterfaceIndex`) so it leaves by
+  that cable. The 3 s poll is unchanged (one datagram, to the subnet broadcast).
+- `Device::attention`: a node whose IP is in no line's subnet is listed amber
+  with "on its factory Art-Net address, not this network: set its IP" (or the
+  169.254 / 0.0.0.0 / other-network variants).
+- ArtIpProg / ArtIpProgReply (0xf800 / 0xf900, 34 bytes, Art-Net 4 incl.
+  gateway) in `ArtNetPacketizer`; `ArtNetPlugin::sendIpProg` sends it **unicast
+  only, through the line whose subnet holds the node**, and refuses otherwise —
+  it carries no MAC, so a broadcast one would re-address every node.
+- `ArtNetNodeSetup` dialog (right-click a node → **Set node IP address…**,
+  through new `QLCIOPlugin::canConfigureDevice/configureDevice`): fixed / DHCP /
+  factory default, "Ask the node" query, confirm before any write, shows the
+  reply. For an unreachable node: explains, and shows the temporary-alias
+  command (macOS `ifconfig alias`, Linux `ip addr add`, Windows `netsh`) — shown,
+  never run.
+- Status2 DHCP bits were swapped (bit 1 is "using DHCP", bit 2 "capable").
+- Controller sends go through a test sink (`m_testSink`); 16 new artnet tests
+  + 1 connectionstree test, none touch a network.
+
+**To verify on the rig:** the limited-broadcast poll actually leaving by vlan0
+(not the default route), a factory node answering it, and a real node applying
+ArtIpProg. Passive capture on vlan0 wasn't possible from the agent (BPF is
+root-only).
+
+### 2026-10-16 — Fixture sizes and weights in your own units *(feat/unit-aware-dimensions)*
 
 - **One preference: Settings → Units** (`units/length` in qlcconsole's
   settings: mm / cm / m / in / ft; weight follows, kg for the metric ones,

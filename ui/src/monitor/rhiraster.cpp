@@ -120,7 +120,7 @@ bool RhiRaster::ensureRhi()
     {
         told = true;
         const QRhiDriverInfo info = m_rhi->driverInfo();
-        qInfo().noquote() << "[RhiRaster]" << m_rhi->backendName() << "on"
+        qDebug().noquote() << "[RhiRaster]" << m_rhi->backendName() << "on"
                           << QString::fromUtf8(info.deviceName)
                           << QStringLiteral("(%1)").arg(int(info.deviceType));
     }

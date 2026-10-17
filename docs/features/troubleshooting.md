@@ -26,6 +26,14 @@ connectors, terminator, a failed fixture. Each clears by itself once fixed
 clean). See
 [When an output is in trouble](other-improvements.md#when-an-output-is-in-trouble).
 
+**A new Art-Net node doesn't show up, or shows amber "set its IP".** It's
+still on its factory address (2.x.x.x, 10.x.x.x, its maker's default) or
+self-assigned (169.254.x.x), not on your network. Press **Rescan**; if it
+appears, right-click it → **Set node IP address…**. If it doesn't, or the
+dialog says it can't be sent to, give this computer a temporary address on
+the node's network first. See
+[Setting up a new Art-Net node](other-improvements.md#setting-up-a-new-art-net-node).
+
 **A look stays on the fixtures after its function is removed.** Fixed — a
 function deleted while it runs now lets go of its channels. On an older
 build, stop the function before deleting it.

@@ -57,6 +57,7 @@
 #include "zraster.h"
 #include "rhiraster.h"
 #include "aimsolver.h"
+#include "apputil.h"
 #include <QScopedValueRollback>
 #include <array>
 #include <QVarLengthArray>
@@ -4733,9 +4734,20 @@ void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
        And not for a free-placed fixture either: there is no surface under it to
        stand on, and its plotted position is its CENTRE -- which is what the 2D
        plot, the hit test and every other view already agree it is. Seating one
-       just shifts it half a body off the spot it was put on. */
+       just shifts it half a body off the spot it was put on.
+
+       And not on a truss or pipe. The elevations draw a mover there CENTRED
+       on its rig point (and the hit test agrees), so that is where a rigger
+       drags one to sit it just under the bar, and the drop (mountZOffset)
+       records it. Seating it here as well hung every such head half a body
+       lower in the rig view than in the truss editor, clear of the bar it is
+       clamped to ("the truss editor shows the fixtures just under the cross
+       member .. but the rig view shows them down a bit"). Only what the
+       elevations seat is seated: a tower shelf (towerFixtureBodyRect()), a
+       deck, a riser -- surfaces a body really stands on or hangs flush from. */
+    const bool seatsOnSurface = rp.onTower() || rp.onDeck() || rp.onRiser();
     const double seat = (rp.placement == FixtureRigProps::Inside
-                         || hasStructuralMount(rp) == false) ? 0.0 : 0.5;
+                         || seatsOnSurface == false) ? 0.0 : 0.5;
     const QVector3D seated = c + H * float(h * seat);
 
     for (int u = 0; u < units; ++u)
@@ -8544,7 +8556,7 @@ void StructureStudioView::mousePressEvent(QMouseEvent *e)
             {
                 m_orbiting = true;
                 m_orbitLast = e->pos();
-                setCursor(Qt::SizeAllCursor);
+                setCursor(AppUtil::nativeCursorShape(Qt::SizeAllCursor, true));
             }
             else
             {

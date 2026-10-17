@@ -231,6 +231,39 @@ namespace AppUtil
      *  Local (and "replaces the included one") in blue, Downloadable in
      *  italics -- the same everywhere a definition is picked. */
     void showDefinitionSource(QTreeWidgetItem *item, int column, const QLCFixtureDef *def);
+
+    /*********************************************************************
+     * Cursors
+     *********************************************************************/
+    /**
+     * The cursor to use for @p shape on this platform: always call setCursor()
+     * through this instead of naming Qt::SizeAllCursor (or Wait/Busy) directly.
+     *
+     * On macOS, Qt 6.11.x builds the cursors that have no native NSCursor
+     * from PNGs with an embedded colour profile (sizeallcursor.png,
+     * spincursor.png, waitcursor.png). QImage::toCGImage() frees that colour
+     * space before CGImageCreate() reads it (QTBUG-147602, fixed upstream in
+     * qtbase a481ede673), so the first setCursor(Qt::SizeAllCursor) crashed
+     * the app inside CoreGraphics. Those shapes are swapped for native ones
+     * with the same meaning:
+     *   - SizeAll  -> OpenHand (it can be grabbed and moved), ClosedHand when
+     *                 @p dragging (it is being moved/orbited right now);
+     *   - Wait     -> Arrow (macOS shows its own spinning cursor when the app
+     *                 really stops; there is no native "wait" NSCursor);
+     *   - Busy     -> Arrow (native only through a private AppKit selector;
+     *                 if that is missing Qt falls back to waitcursor.png).
+     * Everything else passes through: Forbidden, WhatsThis, Drag*, the
+     * Size{Ver,Hor,BDiag,FDiag} resize arrows, Split* and the hands are
+     * native NSCursors in Qt 6.11; Blank is a profile-less transparent
+     * pixmap, which the bug does not touch.
+     *
+     * Elsewhere (Linux, Windows) @p shape is returned unchanged.
+     */
+    Qt::CursorShape nativeCursorShape(Qt::CursorShape shape, bool dragging = false);
+
+    /** The macOS mapping nativeCursorShape() applies, on every platform
+     *  (so it can be tested anywhere). */
+    Qt::CursorShape macSafeCursorShape(Qt::CursorShape shape, bool dragging = false);
 };
 
 /*****************************************************************************

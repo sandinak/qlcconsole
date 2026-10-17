@@ -221,6 +221,29 @@ void FixtureTreeWidget::keyPressEvent(QKeyEvent* event)
     QTreeWidget::keyPressEvent(event);
 }
 
+void FixtureTreeWidget::updateUniverseLabels()
+{
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    if (iomap == NULL)
+        return;
+    blockSignals(true);
+    for (QTreeWidgetItemIterator it(this); *it != NULL; ++it)
+    {
+        QTreeWidgetItem *item = *it;
+        const QVariant uv = item->data(KColumnName, PROP_UNIVERSE);
+        // A row being renamed shows its bare name on purpose; leave it be.
+        if (uv.isValid() == false || (item->flags() & Qt::ItemIsEditable))
+            continue;
+        const quint32 uni = uv.toUInt();
+        QString uniLabel = iomap->getUniverseNameByID(uni);
+        const QString dest = universeDestination(m_doc, uni);
+        if (!dest.isEmpty())
+            uniLabel += QString("   —   %1").arg(dest);
+        item->setText(KColumnName, uniLabel);
+    }
+    blockSignals(false);
+}
+
 void FixtureTreeWidget::slotItemChanged(QTreeWidgetItem* item, int column)
 {
     if (column != KColumnName || !item)

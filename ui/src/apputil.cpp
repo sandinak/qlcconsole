@@ -1043,3 +1043,31 @@ bool AppUtil::patchAllowed(Doc *doc, const QList<quint32> &fixtureIds)
     }
     return true;
 }
+
+/*********************************************************************
+ * Cursors
+ *********************************************************************/
+
+Qt::CursorShape AppUtil::macSafeCursorShape(Qt::CursorShape shape, bool dragging)
+{
+    switch (shape)
+    {
+        case Qt::SizeAllCursor:
+            return dragging ? Qt::ClosedHandCursor : Qt::OpenHandCursor;
+        case Qt::WaitCursor:
+        case Qt::BusyCursor:
+            return Qt::ArrowCursor;
+        default:
+            return shape;
+    }
+}
+
+Qt::CursorShape AppUtil::nativeCursorShape(Qt::CursorShape shape, bool dragging)
+{
+#if defined(Q_OS_MACOS)
+    return macSafeCursorShape(shape, dragging);
+#else
+    Q_UNUSED(dragging)
+    return shape;
+#endif
+}

@@ -285,6 +285,10 @@ private slots:
     /** ...and one standing on a DECK is not buried in it by a mountingType
      *  that defaults to "hung" when nothing set it. */
     void aMoverOnADeckIsNotBuriedInIt();
+    /** "the truss editor shows the fixtures just under the cross member .. but
+     *  the rig view shows them down a bit": a mover hung on a truss is drawn
+     *  at the same height in the elevation and in the 3D rig view. */
+    void aMoverHungOnATrussIsAtTheSameHeightInEveryView();
     /** "fixture set as underhung .. visually upright": a mover mounted on a
      *  horizontal TRUSS/bar (not a tower shelf) must also flip in its own
      *  Front/Side elevation -- the generic (non-tower) mover branch used to

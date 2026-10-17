@@ -24,6 +24,7 @@
 #include <QSet>
 #include <QElapsedTimer>
 #include "function.h"
+#include "powerdistribution.h"
 
 class QTreeWidgetItem;
 class Scene;
@@ -239,9 +240,51 @@ private:
     void saveBundleFromPalettes(const QList<quint32> &paletteIds, Scene *sourceScene = nullptr);
     /** Duplicate each function (smart-incremented name), select the last copy. */
     void duplicateFunctions(const QList<quint32> &fids);
+
+    /** A function row shown nested under a collection / chaser / show track
+     *  in the nav tree: which container it belongs to and where in it. */
+    struct MemberRef
+    {
+        quint32 container = 0;   ///< Collection / Chaser / Show id
+        quint32 fid = 0;         ///< the member function
+        int stepIndex = -1;      ///< Collection member / Chaser step index
+        quint32 trackId = 0;     ///< Show: the track
+        quint32 showFuncId = 0;  ///< Show: the placed ShowFunction
+    };
+
+    /** Member rows among the rows a context-menu click on $clicked acts on
+     *  (the selection if $clicked is in it). */
+    QList<MemberRef> funcTreeMemberTargets(QTreeWidgetItem *clicked) const;
+
+    /** Take the $refs out of their containers — the membership only, the
+     *  functions stay. Asks first for chaser steps / show items (they lose
+     *  their timing) unless $confirm is false. Returns how many were removed. */
+    int removeMembers(const QList<MemberRef> &refs, bool confirm = true);
+
+    /** The confirmation text for deleting palettes $pids: where each is used
+     *  (scene looks, effect-look slots) and what deleting does to them. */
+    QString deletePalettesMessage(const QList<quint32> &pids) const;
+
+    /** Delete palettes $pids after asking (unless $confirm is false). */
+    bool deletePalettes(const QList<quint32> &pids, bool confirm = true);
+
+    /** Delete/Backspace on a tree: the selection's functions or palettes, or
+     *  the selected folder. */
+    void deleteTreeSelection(FunctionsTreeWidget *tree);
+
+    /** The confirmation text for deleting $fids (says it is the function
+     *  itself, everywhere, and where else each one is used). */
+    QString deleteFunctionsMessage(const QList<quint32> &fids) const;
     /** Delete each function after confirmation. Collects by id first, since the
      *  first deletion rebuilds the tree and invalidates every item pointer. */
     void deleteFunctions(const QList<quint32> &fids);
+
+    /** Delete the user folder $item of $tree. Its functions/palettes and
+     *  sub-folders move up into the parent folder — nothing is deleted. A
+     *  folder with something in it asks first (unless $confirm is false).
+     *  Returns true if the folder was removed. */
+    bool deleteTreeFolder(FunctionsTreeWidget *tree, QTreeWidgetItem *item,
+                          bool confirm = true);
 
     /** Add @p fids to collection @p containerId (skipping self / duplicates /
      *  cycles) and refresh the nav tree + canvas editor if they show it. Called
@@ -396,6 +439,12 @@ private:
     // the show goes live, so Run mode pays nothing.
     QTimer      *m_powerTimer = nullptr;
 
+public:
+    /** The chip's tooltip: the biggest draws by fixture type, where each
+     *  figure comes from, and what the estimate assumes. */
+    static QString powerDetailText(const QList<PowerEstimator::TypeLoad> &rows,
+                                   double amps, double kw, double defaultVoltage);
+private:
     /** Start the periodic re-estimate timer. */
     void initPowerTimer();
     /** Start/stop the periodic re-estimate per mode; clears the status-bar
@@ -410,8 +459,9 @@ signals:
      *  what's "in use right now" (e.g. LED highlighting) without polling. */
     void currentPaletteIdChanged(quint32 paletteId);
     /** Live power estimate for the app status-bar chip (Design mode). Amps, kW,
-     *  and whether any circuit/source is overloaded. */
-    void powerEstimateChanged(double amps, double kw, bool overload);
+     *  whether any circuit/source is overloaded, and what it is made of (the
+     *  biggest draws and what the figure assumes -- the chip's tooltip). */
+    void powerEstimateChanged(double amps, double kw, bool overload, const QString &detail);
 };
 
 /** @} */

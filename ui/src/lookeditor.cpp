@@ -38,6 +38,7 @@
 #include <QTextBrowser>
 #include <QDialog>
 #include "lookeditor.h"
+#include "programmercontroller.h"
 #include "fadetimespin.h"
 #include "effectbrowser.h"
 #include "qlcfixturedefcache.h"
@@ -1038,13 +1039,13 @@ void LookEditor::setPalette(quint32 paletteId)
     if (folder.endsWith('/'))
         folder.chop(1);
 
-    int uses = 0;
-    foreach (Function *fn, m_doc->functions())
-    {
-        Scene *s = qobject_cast<Scene*>(fn);
-        if (s != NULL && s->palettes().contains(paletteId))
-            uses++;
-    }
+    // Same "where is it used" as the delete question (ProgrammerController).
+    QSet<quint32> usingScenes;
+    if (ProgrammerController *pc = m_doc->programmer())
+        for (const ProgrammerController::Usage &u : pc->paletteUsage(paletteId))
+            if (u.kind == ProgrammerController::Usage::SceneLook)
+                usingScenes.insert(u.ownerId);
+    const int uses = usingScenes.size();
     QString info = folder.isEmpty() ? QString() : folder + "  •  ";
     info += tr("used by %n scene(s)", "", uses);
     m_title->setText(info);
@@ -2934,6 +2935,20 @@ void LookEditor::slotEffectScriptChanged(int /*index*/)
         p->setWledEffect(QString());
         p->clearEffectParamValues();
         carryOverParams(p, path);
+    }
+    /* What the look keeps time with and how it spreads are the look's, not
+       the effect's: no script declares them, so carryOverParams() never
+       does, and trying another effect in the picker put the look back on
+       "As the look" with no spread ("when I set something on the speed
+       masters .. and then double click on the icon it resets those"). A
+       preset that pins one of them still wins. The one-shot length stays
+       with the effect it was set for. */
+    for (auto it = prevParams.constBegin(); it != prevParams.constEnd(); ++it)
+    {
+        const bool lookLevel = it.key() == QLatin1String("__speedMaster")
+                               || it.key().startsWith(SpreadLayer::paramName(""));
+        if (lookLevel && !p->effectParamValues().contains(it.key()))
+            p->setEffectParamValue(it.key(), it.value());
     }
     // Wipe old input bindings since the effect changed.
     p->clearEffectInputBindings();

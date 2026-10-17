@@ -45,6 +45,10 @@ built on Qt 6.9.
   why.
 - **Patch list** — every fixture's patch, where its universe goes and what
   it hangs on, as CSV or a printable PDF (Fixtures → Patch List…).
+- **Units** — Settings → Units picks mm, cm, m, inches or feet (kg or lb
+  to match); fixture sizes and weights show in it and take any unit typed
+  with the number (`7.5"`, `6' 3"`, `26.5 lb`), and the Studio's grid
+  follows it. Files still store millimetres and kilograms.
 - **In-app pictures** — the guides show the main window, footer,
   Programming tab, effect browser, Patch dialog and more with numbered
   marks; click one for full size.
@@ -312,5 +316,16 @@ built on Qt 6.9.
 - The speed master's beat blinked in the footer with nothing playing.
 - The Xbox controller profile was installed where the HID plugin never
   looked.
+- Engine: a fader's priority could be raised but never lowered, and an
+  overriding 16-bit channel wrote only its low byte, to the coarse address.
+  Nothing in 0.1.0 hit either yet; fixed ahead of the features that will.
+- Rig Overview: an RGB fixture with no dimmer channel (pixel bars, many
+  par cans) drew far too dark, or black, when dimmed: its level was counted
+  twice.
+- macOS: pressing the empty canvas in Structure Studio's Angled view to orbit
+  crashed the app. Qt 6.11 draws its move cursor (and the wait/busy ones)
+  from a colour-profiled picture that it frees too early (QTBUG-147602); the
+  move cursor is now the open hand (closed while dragging) on macOS, and
+  wait/busy the arrow. Linux and Windows are unchanged.
 
 [0.1.0]: https://github.com/sandinak/qlcconsole/releases/tag/v0.1.0

@@ -20,7 +20,9 @@ Because Devices follows the wiring, a patched universe appears only under
 the output it goes to, and only unpatched ones gather in their own
 **Unpatched** folder. Tick **By universe** for the other way round: every
 universe in number order, each with where it goes ("Art-Net → CS1
-(172.18.2.211) port 1", "WLED → 172.18.2.55", or "not patched") and what it
+(172.18.2.211) · port 1 · universe 0:0:0", "WLED → 172.18.2.55", or "not
+patched"; with more than one interface, "· via" the one it leaves by) and
+what it
 carries — same right-click actions, renamed inline the same way. The choice
 is remembered. By universe, only the universes **in use** are listed — a
 fixture patched into it, an output or an input — with a line at the foot
@@ -44,7 +46,34 @@ it is ("Front Par, channel 1 — Dimmer").
 
 Right-click an interface to patch a universe to it or configure the
 protocol; right-click a universe to rename it, set its feedback line or
-input profile, unpatch it, or delete it. (The Devices tab keeps all of this
+input profile, unpatch it, or delete it. Those act on the one row you
+right-clicked.
+
+**Several universes at once.** Ctrl-click (⌘-click on a Mac) universes —
+in either view, patched or not — and right-click one of them:
+
+- **Patch N selected universes to…** asks the protocol, the interface and
+  the device, then the port to start from. The universes go onto the ports
+  **in the order you clicked them**, not the order they are listed: the
+  first one you picked on the starting port, the second on the next, and so
+  on (a shift-click range counts in list order). Before anything changes it
+  shows the whole plan to confirm. If there are more universes than ports,
+  the ones that fit are patched and the rest are named and left as they
+  were. A port another universe already sends to is skipped (one port, one
+  universe) and the plan says whose it is; universes in the same selection
+  can swap ports freely. Choose **Broadcast** to put them all on the
+  interface with no target, or **Another address…** to number up from a
+  port address you type. On a protocol without devices (a multi-universe
+  USB widget) they go onto consecutive interfaces.
+- **Unpatch N selected universes** removes the patch from every one of them
+  at once.
+- **Retarget N selected universes…** re-aims already-patched universes at
+  one node on consecutive port addresses, also in clicked order.
+
+Each is one step for **Undo Patch Change**. The Fixture Manager's universe
+rows offer the same patching, through the same code — see
+[Patching a universe's output](fixture-manager.md#patching-a-universes-output).
+(The Devices tab keeps all of this
 to one row over the list — **By universe**, **Show unused…**, a one-line
 "Right-click a row for what it can do" whose tooltip has the whole
 explanation, the search status, **Undo Patch Change** and **Rescan** — so
@@ -99,6 +128,65 @@ Art-Net plugin already polls each interface it outputs on every 3 seconds
 on **another** subnet never hears that broadcast, so it gets one unicast
 ArtPoll every 3 seconds as well. E1.31 has no reply from a receiver, so
 for E1.31 only "can't send" is shown.
+
+### Setting up a new Art-Net node
+
+A node fresh out of the box usually isn't on your network yet: Art-Net
+nodes ship on a **2.x.x.x** or **10.x.x.x** address, some on their maker's
+own default (192.168.0.x, say), and one set to DHCP with no DHCP server
+gives itself **169.254.x.x**. Connections lists such a node **amber**, with
+what to do first in its detail — "on its factory Art-Net address, not this
+network: set its IP" — instead of as a usable green node.
+
+**Rescan** (Connections, or the patch grid's **Rescan Devices**) is what
+finds one: on top of the usual poll to each interface's own broadcast
+address, it sends one ArtPoll to the **limited broadcast**
+(255.255.255.255) out of each interface — one small datagram per interface,
+only when you press it. A node on a foreign address may ignore the usual
+poll, but every network stack takes that one.
+
+Whether its answer gets back depends on the node. If it answers to this
+computer's address or to 255.255.255.255, it appears. If it answers to its
+**own** network's broadcast (2.255.255.255) — as Art-Net 3 nodes do — the
+operating system throws the answer away before any program sees it, and the
+node can't appear until this computer has an address on that network too
+(below).
+
+To set its address: right-click the node → **Set node IP address…**. The
+dialog shows the node (name, address, MAC, interface), and:
+
+- **Fixed address** (IP, subnet mask, optionally a gateway), **DHCP** (if
+  the node says it supports it) or **Factory default address**.
+- **Ask the node** asks for its current settings and changes nothing.
+- **Apply to node…** asks you to confirm — node, MAC, old and new
+  settings, the interface it goes out of — and only then sends. It's sent
+  **once**, as an ArtIpProg, to the node's **current** address. The node's
+  answer (or "no answer within 3 s") is shown underneath. Anything patched
+  to the old address stops reaching the node; re-point it afterwards.
+- It won't send an address that's this computer's own, another node's, a
+  network or broadcast address, or a broken mask.
+
+**A node not on any of this computer's networks can't be sent to.** The
+dialog says so and doesn't offer **Apply**. ArtIpProg has to go to the
+node's own address, and it doesn't say which node it is for — broadcast, it
+would re-address **every** node on the cable that accepts it — so the
+console never broadcasts it. Instead, give this computer a temporary
+address on the node's network. The dialog shows the exact command for the
+interface the node was heard on, for example on a Mac:
+
+    sudo ifconfig vlan0 alias 2.255.255.250 netmask 255.0.0.0
+
+(Linux: `sudo ip addr add 2.255.255.250/8 dev vlan0`; Windows, as
+administrator: `netsh interface ipv4 add address "Ethernet" 2.255.255.250
+255.0.0.0`.) Then **Rescan**: the node answers, is no longer amber, and
+**Set node IP address…** can send to it.
+When it's done, remove the address (the dialog shows that command too) and
+**Rescan** again to find the node at its new address.
+
+Nothing about a node is ever changed without that confirmation; hearing a
+node, Rescan and opening the dialog send nothing to it. Nodes set from a
+front panel or a web page may ignore ArtIpProg — the dialog then says it
+got no answer.
 
 ### WLED output
 
@@ -326,6 +414,16 @@ A model of real electrical circuits sitting underneath the rig: a
 each carrying a set of fixtures. A live amperage/wattage estimate appears in
 the footer in Design mode; a circuit-assignment dialog can auto-bin-pack
 fixtures onto circuits, and UPS/battery entries get a runtime estimate.
+
+Each fixture counts as its full power times its level (dimmer times the
+average of its colours), before the Grand Master; dark, a mover idles at 15%
+of it and anything else at 2 W. Full power is the fixture's own readings if
+it has been measured, else its definition's power. A definition that gives
+none is guessed at per fixture — 150 W a mover, 50 W anything else, 40 W a
+channel for a dimmer pack — never per channel for LED gear, where a 40-pixel
+bar's 120 colour channels once read 4.8 kW. Hover the footer's figure for
+the biggest draws, where each comes from, and which definitions have no
+power to go on.
 
 ### A fixture's maximum draw
 

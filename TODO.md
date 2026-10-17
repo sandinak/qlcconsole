@@ -49,6 +49,13 @@ On `release/0.1.0`. Universal (Apple silicon + Intel), macOS 12+.
 
 ## Needs the real rig / hardware
 
+- **Re-check the Oppsk wall-washer readings (2026-10-16)** — the 24 bars in
+  DanceHysteria-0.4 carry Full 12.3 A / Half 2.7 / Standby 0.4 (White 6.6,
+  R/G/B 2.3) against a definition rated 100 W: at 120 V that is 1.48 kW a
+  bar at full and 48 W dark, 9.6 A for the 24 doing nothing. A DC-side or
+  whole-chain reading would explain it; re-measure one bar on its mains lead.
+  The V-Show PL-4003 definition has no power at all (now guessed at 50 W).
+
 - **Rig test pass** — run `RIG_TEST_PLAN.md`, fix any ❌ (the gate on the
   freeze list).
 - **WLED on a real device** — Branson tested some 2026-10-11: hit or miss,
@@ -656,6 +663,16 @@ rig edits, bulk repatching, cross-show consistency checks.
   the existing readiness indicator (`daeeb97d7`), or a footer chip. Probably
   the first — it is a per-patch-row fact.
 
+
+- **Verify node IP setting (ArtIpProg) on a real node (2026-10-16)** — built on
+  `fix/artnet-unconfigured-nodes` (see DONE.md 2026-10-16), tested only against
+  a sink. On the rig: a factory-fresh node, Connections → **Rescan** (does it
+  appear amber? if not, add the alias the docs give and Rescan again) →
+  right-click → **Set node IP address…** → Ask the node, then Apply. Watch
+  with `tools/artnetprobe --listen` from another machine if it misbehaves.
+  Open: whether the limited-broadcast poll really leaves by the named
+  interface on macOS/Windows (IP_PKTINFO), and whether nodes answer
+  ArtIpProg from the old or new address (both are accepted).
 
 - **Art-Net node configuration (ArtAddress) — send path built and proven, but
   no node here applies it (2026-08-26)** — `artnet-config.py` at the repo root
