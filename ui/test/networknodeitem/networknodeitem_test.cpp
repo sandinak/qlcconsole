@@ -33,6 +33,7 @@
 #include "networktopology.h"
 
 #include "networknodeitem_test.h"
+#include "apputil.h"
 
 /* Paint @p item alone into an image, the item's local origin at @p origin,
  * optionally selected and turned by @p turnDeg (as a rotated Studio view does). */
@@ -94,7 +95,7 @@ void NetworkNodeItem_Test::aLockedNodeHasARedBorderAndCannotMove()
     QCOMPARE(open.cursor().shape(), Qt::ArrowCursor);
     open.setMovable(true);
     QVERIFY(open.flags() & QGraphicsItem::ItemIsMovable);
-    QCOMPARE(open.cursor().shape(), Qt::SizeAllCursor);
+    QCOMPARE(open.cursor().shape(), AppUtil::nativeCursorShape(Qt::SizeAllCursor));
 }
 
 void NetworkNodeItem_Test::labelsStayUprightInARotatedView()

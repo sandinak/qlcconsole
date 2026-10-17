@@ -315,5 +315,10 @@ built on Qt 6.9.
 - Engine: a fader's priority could be raised but never lowered, and an
   overriding 16-bit channel wrote only its low byte, to the coarse address.
   Nothing in 0.1.0 hit either yet; fixed ahead of the features that will.
+- macOS: pressing the empty canvas in Structure Studio's Angled view to orbit
+  crashed the app. Qt 6.11 draws its move cursor (and the wait/busy ones)
+  from a colour-profiled picture that it frees too early (QTBUG-147602); the
+  move cursor is now the open hand (closed while dragging) on macOS, and
+  wait/busy the arrow. Linux and Windows are unchanged.
 
 [0.1.0]: https://github.com/sandinak/qlcconsole/releases/tag/v0.1.0

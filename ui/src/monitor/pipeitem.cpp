@@ -22,6 +22,7 @@
 #include "pipe.h"
 #include "monitorproperties.h"
 #include "doc.h"
+#include "apputil.h"
 
 PipeItem::PipeItem(Pipe *pipe, Doc *doc,
                                  float pxX, float pxY, float pxBaseR, float pxPipe,
@@ -46,7 +47,7 @@ PipeItem::PipeItem(Pipe *pipe, Doc *doc,
                          || m_pipe->isBarOnPipe();
     // Elevation views are display-only (no dragging); top view drags to reposition.
     setFlag(ItemIsMovable, !elevation && !pipe->locked() && !derived);
-    setCursor((elevation || pipe->locked() || derived) ? Qt::ArrowCursor : Qt::SizeAllCursor);
+    setCursor((elevation || pipe->locked() || derived) ? Qt::ArrowCursor : AppUtil::nativeCursorShape(Qt::SizeAllCursor));
     setPos(pxX, pxY);
 
     const bool isFeet = doc->monitorProperties()->gridUnits() == MonitorProperties::Feet;
@@ -81,7 +82,7 @@ void PipeItem::setMovable(bool movable)
                          || m_pipe->isBarOnPipe();
     const bool canMove = movable && !derived;
     setFlag(ItemIsMovable, canMove);
-    setCursor(canMove ? Qt::SizeAllCursor : Qt::ArrowCursor);
+    setCursor(canMove ? AppUtil::nativeCursorShape(Qt::SizeAllCursor) : Qt::ArrowCursor);
 }
 
 void PipeItem::showLabel(bool visible)
@@ -234,7 +235,7 @@ void PipeItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
         m_pipe->setLocked(!m_pipe->locked());
         const bool canMove = !m_pipe->locked();
         setFlag(ItemIsMovable, canMove);
-        setCursor(canMove ? Qt::SizeAllCursor : Qt::ArrowCursor);
+        setCursor(canMove ? AppUtil::nativeCursorShape(Qt::SizeAllCursor) : Qt::ArrowCursor);
         update();
         if (m_doc)
             m_doc->setModified();

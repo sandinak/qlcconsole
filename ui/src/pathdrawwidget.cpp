@@ -6,6 +6,7 @@
 */
 
 #include "pathdrawwidget.h"
+#include "apputil.h"
 
 #include <QPainter>
 #include <QPainterPath>
@@ -363,7 +364,7 @@ void PathDrawWidget::mouseMoveEvent(QMouseEvent *e)
         if (h != m_hover)
         {
             m_hover = h;
-            setCursor(h >= 0 ? Qt::SizeAllCursor : Qt::CrossCursor);
+            setCursor(h >= 0 ? AppUtil::nativeCursorShape(Qt::SizeAllCursor) : Qt::CrossCursor);
             update();
         }
     }
