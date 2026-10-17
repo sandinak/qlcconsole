@@ -23,6 +23,7 @@
 #include <QWidget>
 #include <QPair>
 #include <QList>
+#include <QSet>
 
 #include "showtreemodel.h"
 #include "qlcpalette.h"
@@ -85,7 +86,8 @@ public:
         KindRole = Qt::UserRole,
         IdRole = Qt::UserRole + 1,
         CueRole = Qt::UserRole + 2,     //!< a layer row's cue
-        TargetRole = Qt::UserRole + 3   //!< a tracked layer's target signature
+        TargetRole = Qt::UserRole + 3,  //!< a tracked layer's target signature
+        PathRole = Qt::UserRole + 4     //!< a Library folder's path ("Groups/Movers/Front")
     };
 
     /** Library item kinds. */
@@ -264,6 +266,9 @@ private:
     QTreeWidget *m_library;
     QList<QPair<int, quint32>> m_recent;
     QList<QPair<int, quint32>> m_pinned;
+    /** Library folders open before a filter was typed (it opens more). */
+    QSet<QString> m_openWithoutFilter;
+    bool m_filtering = false;
 
     QTimer *m_libraryTimer = nullptr;
     QList<quint32> m_expanded;

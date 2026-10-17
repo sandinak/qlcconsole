@@ -2111,11 +2111,20 @@ void ShowTreeView::setPinned(int kind, quint32 id, bool pinned)
 
 void ShowTreeView::reloadLibrary()
 {
-    // Remembered: which folders were open.
+    // Remembered: which folders were open (a group folder by its path, so
+    // two "Front" folders in different places are told apart).
+    auto openKey = [](const QTreeWidgetItem *item) {
+        const QString path = item->data(0, PathRole).toString();
+        return path.isEmpty() ? item->text(0) + QLatin1Char('/') + QString::number(item->data(0, KindRole).toInt())
+                              : path;
+    };
     QSet<QString> open;
     for (QTreeWidgetItemIterator it(m_library); *it; ++it)
         if ((*it)->isExpanded())
-            open.insert((*it)->text(0) + QLatin1Char('/') + QString::number((*it)->data(0, KindRole).toInt()));
+            open.insert(openKey(*it));
+    // A filter opens folders to show what matches: not "open" to remember.
+    if (!m_filter->text().isEmpty())
+        open = m_openWithoutFilter;
     const bool first = m_library->topLevelItemCount() == 0;
 
     m_library->clear();
@@ -2198,13 +2207,46 @@ void ShowTreeView::reloadLibrary()
         return f;
     };
 
+    // Groups in the Fixture Manager's folders (FixtureGroup::path), nested
+    // the same way: folders first, then the groups, each by name.
     QTreeWidgetItem *groups = folder(all, tr("Groups"));
+    groups->setData(0, PathRole, QStringLiteral("Groups"));
+    QHash<QString, QTreeWidgetItem *> groupFolders;
+    std::function<QTreeWidgetItem *(const QString &)> groupFolder = [&](const QString &path) {
+        if (path.isEmpty())
+            return groups;
+        if (QTreeWidgetItem *have = groupFolders.value(path))
+            return have;
+        const int slash = path.lastIndexOf(QLatin1Char('/'));
+        QTreeWidgetItem *f = folder(groupFolder(slash < 0 ? QString() : path.left(slash)),
+                                    slash < 0 ? path : path.mid(slash + 1));
+        f->setIcon(0, QIcon(":/folder.png"));
+        f->setData(0, PathRole, QStringLiteral("Groups/") + path);
+        groupFolders.insert(path, f);
+        return f;
+    };
+    auto groupPath = [](const FixtureGroup *g) {
+        QStringList parts = g->path().split(QLatin1Char('/'), Qt::SkipEmptyParts);
+        for (QString &part : parts)
+            part = part.trimmed();
+        parts.removeAll(QString());
+        return parts.join(QLatin1Char('/'));
+    };
     QList<FixtureGroup *> gl = m_doc->fixtureGroups();
+    QStringList paths;
+    for (const FixtureGroup *g : gl)
+        if (!groupPath(g).isEmpty() && !paths.contains(groupPath(g)))
+            paths << groupPath(g);
+    std::sort(paths.begin(), paths.end(), [](const QString &a, const QString &b) {
+        return a.compare(b, Qt::CaseInsensitive) < 0;
+    });
+    for (const QString &path : paths)
+        groupFolder(path);
     std::sort(gl.begin(), gl.end(), [](const FixtureGroup *a, const FixtureGroup *b) {
         return a->name().compare(b->name(), Qt::CaseInsensitive) < 0;
     });
     for (const FixtureGroup *g : gl)
-        add(groups, LibGroup, g->id());
+        add(groupFolder(groupPath(g)), LibGroup, g->id());
 
     const QList<QPair<QString, QString>> kinds = {
         { KeyColour, tr("Colour") }, { KeyDimmer, tr("Dimmer") }, { KeyPosition, tr("Position") },
@@ -2246,7 +2288,7 @@ void ShowTreeView::reloadLibrary()
     {
         QTreeWidgetItem *item = *it;
         const int kind = item->data(0, KindRole).toInt();
-        const QString key = item->text(0) + QLatin1Char('/') + QString::number(kind);
+        const QString key = openKey(item);
         if (first)
             item->setExpanded(kind == LibSection);
         else
@@ -2259,14 +2301,35 @@ void ShowTreeView::reloadLibrary()
 
 void ShowTreeView::slotFilterChanged(const QString &text)
 {
-    // A row stays when it matches or anything under it does.
-    std::function<bool(QTreeWidgetItem *)> apply = [&](QTreeWidgetItem *item) {
+    // Starting to filter: remember which folders were open, to go back to
+    // when the filter is cleared (filtering opens what it finds).
+    if (!text.isEmpty() && !m_filtering)
+    {
+        m_openWithoutFilter.clear();
+        for (QTreeWidgetItemIterator it(m_library); *it; ++it)
+            if ((*it)->isExpanded())
+            {
+                const QString path = (*it)->data(0, PathRole).toString();
+                m_openWithoutFilter.insert(path.isEmpty() ? (*it)->text(0) + QLatin1Char('/')
+                                                            + QString::number((*it)->data(0, KindRole).toInt())
+                                                          : path);
+            }
+    }
+    const bool wasFiltering = m_filtering;
+    m_filtering = !text.isEmpty();
+
+    // A row stays when it matches or anything under it does; a folder
+    // whose name matches ("Movers") shows everything in it, at any depth.
+    std::function<bool(QTreeWidgetItem *, bool)> apply = [&](QTreeWidgetItem *item, bool inMatch) {
+        const int kind = item->data(0, KindRole).toInt();
+        const bool folder = kind == LibFolder && !item->data(0, PathRole).toString().isEmpty()
+                            && item->data(0, PathRole).toString() != QLatin1String("Groups");
+        const bool leaf = kind != LibSection && kind != LibFolder;
+        const bool match = text.isEmpty() || inMatch
+                           || ((leaf || folder) && item->text(0).contains(text, Qt::CaseInsensitive));
         bool any = false;
         for (int i = 0; i < item->childCount(); ++i)
-            any |= apply(item->child(i));
-        const int kind = item->data(0, KindRole).toInt();
-        const bool leaf = kind != LibSection && kind != LibFolder;
-        const bool match = text.isEmpty() || (leaf && item->text(0).contains(text, Qt::CaseInsensitive));
+            any |= apply(item->child(i), match && !text.isEmpty());
         const bool show = match || any || kind == LibSection;
         item->setHidden(!show);
         if (!text.isEmpty() && any)
@@ -2274,7 +2337,19 @@ void ShowTreeView::slotFilterChanged(const QString &text)
         return match || any;
     };
     for (int i = 0; i < m_library->topLevelItemCount(); ++i)
-        apply(m_library->topLevelItem(i));
+        apply(m_library->topLevelItem(i), false);
+
+    // Cleared: the folders the filter opened close again.
+    if (text.isEmpty() && wasFiltering)
+        for (QTreeWidgetItemIterator it(m_library); *it; ++it)
+        {
+            QTreeWidgetItem *item = *it;
+            if (item->data(0, KindRole).toInt() != LibFolder)
+                continue;
+            const QString path = item->data(0, PathRole).toString();
+            item->setExpanded(m_openWithoutFilter.contains(
+                path.isEmpty() ? item->text(0) + QLatin1Char('/') + QString::number(LibFolder) : path));
+        }
 }
 
 void ShowTreeView::slotLibraryContextMenu(const QPoint &pos)

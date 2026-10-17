@@ -45,6 +45,7 @@ private slots:
     void cueFieldsEditTheCue();
     void undoAndRedoFromTheView();
     void theLibraryFilters();
+    void theLibraryShowsGroupsInTheirFolders();
     void importingAChaserSelectsTheNewList();
     void inlinePalettesStayOutOfThePaletteTree();
     void dropsOnTheTreeWidget();

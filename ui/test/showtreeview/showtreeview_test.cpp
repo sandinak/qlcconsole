@@ -503,6 +503,73 @@ void ShowTreeView_Test::theLibraryFilters()
     QCOMPARE(groups, 2);
 }
 
+static QTreeWidgetItem *libraryItem(QTreeWidget *lib, const QString &text)
+{
+    for (QTreeWidgetItemIterator it(lib); *it; ++it)
+        if ((*it)->text(0) == text)
+            return *it;
+    return nullptr;
+}
+
+void ShowTreeView_Test::theLibraryShowsGroupsInTheirFolders()
+{
+    group("Towers", 0, 1);
+    group("AT-Spots", 1, 1)->setPath("Movers/Front");
+    group("AT-Wash", 2, 1)->setPath("Movers/Back");
+    group("Truss", 3, 1)->setPath("Movers");
+    group("Floor", 4, 1)->setPath("Practicals");
+    ShowTreeView view(nullptr, m_doc);
+    QTreeWidget *lib = view.library();
+
+    // Nested as in the Fixture Manager: folders first, then groups.
+    QTreeWidgetItem *groups = libraryItem(lib, "Groups");
+    QVERIFY(groups != nullptr);
+    QStringList top;
+    for (int i = 0; i < groups->childCount(); ++i)
+        top << groups->child(i)->text(0);
+    QCOMPARE(top, QStringList({ "Movers", "Practicals", "Towers (1)" }));
+    QTreeWidgetItem *movers = groups->child(0);
+    QStringList inMovers;
+    for (int i = 0; i < movers->childCount(); ++i)
+        inMovers << movers->child(i)->text(0);
+    QCOMPARE(inMovers, QStringList({ "Back", "Front", "Truss (1)" }));
+    QTreeWidgetItem *front = movers->child(1);
+    QCOMPARE(front->child(0)->text(0), QString("AT-Spots (1)"));
+    QCOMPARE(front->data(0, ShowTreeView::PathRole).toString(), QString("Groups/Movers/Front"));
+
+    // An open folder stays open when the Library rebuilds (a group added).
+    groups->setExpanded(true);
+    movers->setExpanded(true);
+    front->setExpanded(true);
+    group("Spare", 5, 1);
+    QCoreApplication::processEvents();
+    QVERIFY(libraryItem(lib, "Spare (1)") != nullptr);
+    QVERIFY(libraryItem(lib, "Front")->isExpanded());
+    QVERIFY(!libraryItem(lib, "Back")->isExpanded());
+
+    // The filter finds a group at any depth, and opens the way to it...
+    QLineEdit *filter = view.findChild<QLineEdit *>("stLibraryFilter");
+    filter->setText("wash");
+    QStringList visible;
+    for (QTreeWidgetItemIterator it(lib); *it; ++it)
+        if (!(*it)->isHidden() && (*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::LibGroup)
+            visible << (*it)->text(0);
+    QCOMPARE(visible, QStringList({ "AT-Wash (1)" }));
+    QVERIFY(libraryItem(lib, "Back")->isExpanded());
+    // ...a folder's name shows what is in it...
+    filter->setText("movers");
+    visible.clear();
+    for (QTreeWidgetItemIterator it(lib); *it; ++it)
+        if (!(*it)->isHidden() && (*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::LibGroup)
+            visible << (*it)->text(0);
+    QCOMPARE(visible, QStringList({ "AT-Wash (1)", "AT-Spots (1)", "Truss (1)" }));
+    // ...and clearing it puts the folders back as they were.
+    filter->clear();
+    QVERIFY(libraryItem(lib, "Front")->isExpanded());
+    QVERIFY(!libraryItem(lib, "Back")->isExpanded());
+    QVERIFY(!libraryItem(lib, "Practicals")->isExpanded());
+}
+
 void ShowTreeView_Test::importingAChaserSelectsTheNewList()
 {
     FixtureGroup *towers = group("Towers", 0, 2);
