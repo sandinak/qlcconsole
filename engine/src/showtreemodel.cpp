@@ -21,6 +21,7 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QVector>
+#include <QHash>
 #include <QDebug>
 #include <algorithm>
 
@@ -31,6 +32,7 @@
 #define KXMLShowTreeCue         QStringLiteral("Cue")
 #define KXMLShowTreeLayer       QStringLiteral("Layer")
 #define KXMLShowTreeLook        QStringLiteral("Look")
+#define KXMLShowTreeContinues   QStringLiteral("Continues")
 
 namespace ShowTree
 {
@@ -122,6 +124,26 @@ static QList<quint32> sortedIds(QList<quint32> ids)
     std::sort(ids.begin(), ids.end());
     ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
     return ids;
+}
+
+QList<Target> Layer::pieces() const
+{
+    QList<Target> out;
+    if (target.isOpaque())
+        return out;
+    for (quint32 g : target.groups)
+    {
+        Target t;
+        t.groups << g;
+        out << t;
+    }
+    if (!target.fixtures.isEmpty())
+    {
+        Target t;
+        t.fixtures = target.fixtures;
+        out << t;
+    }
+    return out;
 }
 
 QString Target::signature() const
@@ -457,23 +479,59 @@ struct Resolver
 
         // This cue's own layers: the layer's looks, else the cue's (D5, D6).
         QList<ResolvedLayer> own;
+        QHash<QString, ResolvedLayer> taken;    // carried-in layers taken over, as they came in
         for (const Layer &layer : cue.layers)
         {
             if (layer.target.isEmpty())
                 continue;
             const QString sig = layer.target.signature();
             ResolvedLayer r;
-            int k = indexOfTarget(layers, sig);
+            bool took = false;
+            // Take a carried-in layer's place: one still there, or (a split)
+            // one an earlier own layer of this cue already took -- each piece
+            // starts from it.
+            auto take = [&](const Target &t, ResolvedLayer *into) -> bool {
+                const QString tsig = t.signature();
+                const int at = indexOfTarget(layers, tsig);
+                if (at >= 0)
+                {
+                    *into = layers.takeAt(at);
+                    into->tookOver = into->target;
+                    taken.insert(tsig, *into);
+                    return true;
+                }
+                if (taken.contains(tsig) && !(t == layer.target))
+                {
+                    *into = taken.value(tsig);
+                    return true;
+                }
+                return false;
+            };
+            took = take(layer.target, &r);
             // A layer whose groups changed here carries on from the one it
             // was: it takes that one's place and values.
-            if (k < 0 && !layer.continues.isEmpty() && !layer.target.isOpaque())
-                k = indexOfTarget(layers, layer.continues.signature());
-            if (k >= 0)
+            if (!took && !layer.continues.isEmpty() && !layer.target.isOpaque())
+                took = take(layer.continues, &r);
+            if (!layer.target.isOpaque())
             {
-                r = layers.takeAt(k);
-                r.tookOver = r.target;
+                // A merged layer also stands for the others it was made of.
+                for (const Target &also : layer.continuesAlso)
+                {
+                    ResolvedLayer extra;
+                    if (!take(also, &extra))
+                        continue;
+                    if (!took)
+                    {
+                        r = extra;
+                        took = true;
+                        continue;
+                    }
+                    for (auto it = extra.values.constBegin(); it != extra.values.constEnd(); ++it)
+                        if (!r.values.contains(it.key()))
+                            r.values.insert(it.key(), it.value());
+                }
             }
-            else
+            if (!took)
             {
                 const int ko = indexOfTarget(own, sig);
                 if (ko >= 0)
@@ -625,6 +683,87 @@ QList<ResolvedCue> resolve(const CueList &list)
     for (int i = 0; i < list.cues.count(); ++i)
         r.resolveAt(i);
     return QList<ResolvedCue>(r.out.begin(), r.out.end());
+}
+
+Stage stageOf(const ResolvedCue &cue)
+{
+    Stage stage;
+    for (const ResolvedLayer &l : cue.layers)
+    {
+        if (l.target.isOpaque())
+        {
+            stage[l.target.signature()][QStringLiteral("Function")] = { QStringLiteral("plays") };
+            continue;
+        }
+        QStringList units;
+        for (quint32 g : l.target.groups)
+            units << QStringLiteral("g:%1").arg(g);
+        for (quint32 f : l.target.fixtures)
+            units << QStringLiteral("f:%1").arg(f);
+        for (const Look &look : l.playedLooks())
+        {
+            const QString value = QStringLiteral("%1/%2").arg(idsToString(look.palettes),
+                                                              idsToString(look.own));
+            for (const QString &u : units)
+            {
+                QStringList &have = stage[u][look.key];
+                if (look.key != KeyDimmer)
+                {
+                    have = QStringList { value };       // LTP: the later layer wins
+                }
+                else if (!have.contains(value))
+                {
+                    have << value;                      // HTP: every level plays
+                    have.sort();
+                }
+            }
+        }
+    }
+    return stage;
+}
+
+bool stageDiffers(const CueList &before, const CueList &after, quint32 *cueId, QString *unit, QString *key)
+{
+    const QList<ResolvedCue> a = resolve(before);
+    const QList<ResolvedCue> b = resolve(after);
+    for (const ResolvedCue &rb : b)
+    {
+        Stage sa;
+        for (const ResolvedCue &ra : a)
+            if (ra.cueId == rb.cueId)
+                sa = stageOf(ra);
+        const Stage sb = stageOf(rb);
+        if (sa == sb)
+            continue;
+        if (cueId != nullptr)
+            *cueId = rb.cueId;
+        QStringList units = sa.keys();
+        for (const QString &u : sb.keys())
+            if (!units.contains(u))
+                units << u;
+        for (const QString &u : units)
+        {
+            const QMap<QString, QStringList> ka = sa.value(u), kb = sb.value(u);
+            if (ka == kb)
+                continue;
+            if (unit != nullptr)
+                *unit = u;
+            QStringList keys = ka.keys();
+            for (const QString &k : kb.keys())
+                if (!keys.contains(k))
+                    keys << k;
+            for (const QString &k : keys)
+                if (ka.value(k) != kb.value(k))
+                {
+                    if (key != nullptr)
+                        *key = k;
+                    break;
+                }
+            break;
+        }
+        return true;
+    }
+    return false;
 }
 
 /****************************************************************************
@@ -867,6 +1006,15 @@ void saveXML(QXmlStreamWriter *doc, const Production &production)
                 if (!layer.continues.fixtures.isEmpty())
                     doc->writeAttribute(QStringLiteral("ContinuesFixtures"),
                                         idsToString(layer.continues.fixtures));
+                for (const Target &also : layer.continuesAlso)
+                {
+                    doc->writeStartElement(KXMLShowTreeContinues);
+                    if (!also.groups.isEmpty())
+                        doc->writeAttribute(QStringLiteral("Groups"), idsToString(also.groups));
+                    if (!also.fixtures.isEmpty())
+                        doc->writeAttribute(QStringLiteral("Fixtures"), idsToString(also.fixtures));
+                    doc->writeEndElement();
+                }
                 saveLooks(doc, layer.looks);
                 doc->writeEndElement();
             }
@@ -945,9 +1093,23 @@ bool loadXML(QXmlStreamReader &root, Production &production)
                     while (root.readNextStartElement())
                     {
                         if (root.name() == KXMLShowTreeLook)
+                        {
                             layer.looks << loadLook(root);
-                        else
+                        }
+                        else if (root.name() == KXMLShowTreeContinues)
+                        {
+                            const QXmlStreamAttributes ca = root.attributes();
+                            Target also;
+                            also.groups = stringToIds(ca.value(QStringLiteral("Groups")).toString());
+                            also.fixtures = stringToIds(ca.value(QStringLiteral("Fixtures")).toString());
+                            if (!also.isEmpty())
+                                layer.continuesAlso << also;
                             root.skipCurrentElement();
+                        }
+                        else
+                        {
+                            root.skipCurrentElement();
+                        }
                     }
                     cue.layers << layer;
                 }

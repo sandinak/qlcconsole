@@ -92,6 +92,13 @@ private slots:
     void commandLineFailsAsAWhole();
     void commandLineCompletes();
 
+    // P2 answers (2026-10-17)
+    void recordTheRunningCueOrEverythingLit();
+    void splitALayerKeepsTracking();
+    void mergeLayersKeepsTracking();
+    void aTypedValueReusesAPalette();
+    void aNewPaletteIsNamedAsTheShowsAre();
+
 private:
     quint32 dimmer(int level, const QString &name);
     quint32 colour(const QString &name);

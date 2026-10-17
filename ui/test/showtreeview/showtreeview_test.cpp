@@ -19,6 +19,12 @@
 
 #include <QTreeWidgetItemIterator>
 #include <QDoubleSpinBox>
+#include <QMenu>
+#include <QTimer>
+#include <QDialog>
+#include <QSettings>
+#include <QApplication>
+#include <QRadioButton>
 #include <QDataStream>
 #include <QTreeWidget>
 #include <QDropEvent>
@@ -1396,7 +1402,10 @@ void ShowTreeView_Test::theCommandLine()
     QTest::keyClicks(line, "dimmer 40");
     QTest::keyClick(line, Qt::Key_Return);
     QCOMPARE(st->cue(c2)->layers.count(), 1);
-    QVERIFY(st->isInlinePalette(st->cue(c2)->layers.first().look(KeyDimmer)->palettes.first()));
+    // A level typed: a named palette (none played 40 %), not a one-off.
+    const quint32 d40 = st->cue(c2)->layers.first().look(KeyDimmer)->palettes.first();
+    QVERIFY(!st->isInlinePalette(d40));
+    QCOMPARE(m_doc->palette(d40)->name(), QString("Dimmer 40%"));
     // ↑ recalls.
     QTest::keyClick(line, Qt::Key_Up);
     QCOMPARE(line->text(), QString("Towers dimmer 40"));
@@ -1473,6 +1482,251 @@ void ShowTreeView_Test::pictureOfARealShow()
     QVERIFY(view.grab().save(QString(shot).replace(".png", "-cue.png")));
     if (tracking)
         view.setCommandLineVisible(false);
+}
+
+/****************************************************************************
+ * P2 answers (2026-10-17)
+ ****************************************************************************/
+
+/* Record asks which stage when the choices differ; "Don't ask again" (or
+   Settings → Show Tree) sets the default per mode, which the command line
+   uses too; a word on the command line overrides it. */
+void ShowTreeView_Test::recordAsksWhenTheChoicesDiffer()
+{
+    QSettings settings;
+    const QVariant wasDesign = settings.value(ShowTreeView::recordSettingKey(false));
+    const QVariant wasPerform = settings.value(ShowTreeView::recordSettingKey(true));
+    settings.remove(ShowTreeView::recordSettingKey(false));
+    settings.remove(ShowTreeView::recordSettingKey(true));
+    QCOMPARE(ShowTreeView::recordSetting(false), QString("ask"));
+
+    FixtureGroup *towers = group("Towers", 0, 2);
+    FixtureGroup *usts = group("USTs", 2, 2);
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 c2 = st->addCue(list, 0, "Two");
+    st->setLayerLook(c1, st->addLayer(c1, groupTarget(towers->id())), st->lookForPalette(full));
+    st->setLayerLook(c2, st->addLayer(c2, groupTarget(usts->id())), st->lookForPalette(full));
+
+    ShowTreeView view(nullptr, m_doc);
+    QList<QList<ShowTreeView::RecordSource>> asked;
+    ShowTreeView::RecordSource answer = ShowTreeView::RecordSource::Running;
+    bool remember = false;
+    view.setRecordAsker([&](const QList<ShowTreeView::RecordSource> &choices, ShowTreeView::RecordSource *chosen,
+                            bool *dontAsk) {
+        asked << choices;
+        *chosen = answer;
+        *dontAsk = remember;
+        return true;
+    });
+    QToolButton *record = view.findChild<QToolButton *>("stRecord");
+
+    // Nothing running: one choice, no question.
+    QVERIFY(view.selectNode(c2));
+    record->click();
+    QVERIFY(asked.isEmpty());
+    QCOMPARE(st->cueList(list)->cues.count(), 3);
+    QCOMPARE(st->cueList(list)->cues.at(2).name, QString("Two (recorded)"));
+    QVERIFY(st->undo());
+
+    // The list runs cue One: asked, the selected and the running cue.
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(list)->chaser));
+    goList(m_doc, chaser);
+    settleDmx(m_doc, 3);
+    QVERIFY(view.selectNode(c2));
+    record->click();
+    QCOMPARE(asked.count(), 1);
+    QCOMPARE(asked.first(), QList<ShowTreeView::RecordSource>({ ShowTreeView::RecordSource::Selected,
+                                                                ShowTreeView::RecordSource::Running }));
+    QCOMPARE(st->cueList(list)->cues.at(2).name, QString("One (recorded)"));
+    QCOMPARE(view.currentId(), st->cueList(list)->cues.at(2).id);
+    QVERIFY(st->undo());
+
+    // "Don't ask again": the Design default is written, and used.
+    remember = true;
+    QVERIFY(view.selectNode(c2));
+    record->click();
+    QCOMPARE(asked.count(), 2);
+    QCOMPARE(ShowTreeView::recordSetting(false), QString("running"));
+    QCOMPARE(ShowTreeView::recordSetting(true), QString("ask"));        // Perform's is its own
+    QVERIFY(st->undo());
+    QVERIFY(view.selectNode(c2));
+    record->click();
+    QCOMPARE(asked.count(), 2);                                         // not asked
+    QCOMPARE(st->cueList(list)->cues.at(2).name, QString("One (recorded)"));
+    QVERIFY(st->undo());
+
+    // The command line uses the same setting; a word overrides it.
+    view.setCommandLineVisible(true);
+    QVERIFY(view.selectNode(c2));
+    QVERIFY(view.runCommand("record"));
+    QCOMPARE(asked.count(), 2);
+    QCOMPARE(st->cue(view.currentCueId())->name, QString("One (recorded)"));
+    QVERIFY(view.runCommand("undo"));
+    QVERIFY(view.selectNode(c2));
+    QVERIFY(view.runCommand("record selected"));
+    QCOMPARE(st->cue(view.currentCueId())->name, QString("Two (recorded)"));
+    QVERIFY(view.runCommand("undo"));
+
+    // Perform (Operate): its own setting -- still Ask.
+    chaser->stop(FunctionParent::master());
+    settleDmx(m_doc, 3);
+    m_doc->setMode(Doc::Operate);
+    goList(m_doc, chaser);
+    settleDmx(m_doc, 3);
+    QVERIFY(view.selectNode(c2));
+    record->click();
+    QCOMPARE(asked.count(), 3);
+    QCOMPARE(ShowTreeView::recordSetting(true), QString("running"));
+    QVERIFY(st->undo());
+
+    // The dialog itself: the choices as radio buttons, Perform's preselected
+    // the running cue; Cancel records nothing.
+    settings.remove(ShowTreeView::recordSettingKey(true));
+    view.setRecordAsker(ShowTreeView::RecordAsker());
+    QStringList seen;
+    bool preRunning = false;
+    QTimer::singleShot(0, [&]() {
+        QWidget *dlg = QApplication::activeModalWidget();
+        if (dlg == nullptr || dlg->objectName() != "stRecordDialog")
+            return;
+        for (QRadioButton *rb : dlg->findChildren<QRadioButton *>())
+            seen << rb->objectName();
+        if (QRadioButton *rb = dlg->findChild<QRadioButton *>("stRecord:running"))
+            preRunning = rb->isChecked();
+        QVERIFY(dlg->findChild<QCheckBox *>("stRecordDontAsk") != nullptr);
+        static_cast<QDialog *>(dlg)->reject();
+    });
+    QVERIFY(view.selectNode(c2));
+    record->click();
+    QCOMPARE(seen, QStringList({ "stRecord:selected", "stRecord:running" }));
+    QVERIFY(preRunning);
+    QCOMPARE(st->cueList(list)->cues.count(), 2);
+
+    chaser->stop(FunctionParent::master());
+    m_doc->setMode(Doc::Design);
+    view.setCommandLineVisible(false);
+    for (bool perform : { false, true })
+    {
+        const QVariant was = perform ? wasPerform : wasDesign;
+        if (was.isValid())
+            settings.setValue(ShowTreeView::recordSettingKey(perform), was);
+        else
+            settings.remove(ShowTreeView::recordSettingKey(perform));
+    }
+}
+
+/* Several groups: ONE layer by default, a layer each as the explicit
+   alternative -- dropped, from + Layer, or typed. */
+void ShowTreeView_Test::severalGroupsOneLayerOrEach()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    FixtureGroup *usts = group("USTs", 2, 2);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(list, -1, "One");
+
+    ShowTreeView view(nullptr, m_doc);
+    // Both groups selected in the Library (a Library rebuild clears it).
+    auto selectGroups = [&view]() {
+        view.library()->clearSelection();
+        for (QTreeWidgetItemIterator it(view.library()); *it; ++it)
+            if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::LibGroup)
+                (*it)->setSelected(true);
+    };
+    QVERIFY(view.selectNode(c1));
+    selectGroups();
+    QToolButton *add = view.findChild<QToolButton *>("stAddLayer");
+    QVERIFY(add->menu() != nullptr);
+    QCOMPARE(add->menu()->actions().count(), 2);
+    QVERIFY(add->toolTip().contains("ONE layer"));
+
+    QVERIFY(view.addLayersFromLibrary(false));
+    QCOMPARE(st->cue(c1)->layers.count(), 1);
+    QCOMPARE(st->cue(c1)->layers.first().target.groups.count(), 2);
+    QVERIFY(view.selectNode(c1));
+    selectGroups();
+    QVERIFY(view.addLayersFromLibrary(true));
+    QCOMPARE(st->cue(c1)->layers.count(), 3);
+
+    // The drop hint says which.
+    QMimeData mime;
+    QByteArray data;
+    {
+        QDataStream ds(&data, QIODevice::WriteOnly);
+        ds << towers->id() << usts->id();
+    }
+    mime.setData(FixtureGroupSource::fixtureGroupMimeType(), data);
+    QVERIFY(view.dropHint(c1, invalidId(), &mime).contains("⌥: a layer for each group"));
+    QVERIFY(view.dropHint(c1, invalidId(), &mime, true).contains("one for each group"));
+
+    // Split from the tree: one per group; then merge the two selected.
+    const quint32 both = st->cue(c1)->layers.first().id;
+    QString why;
+    QVERIFY2(view.splitLayer(c1, both, &why), qPrintable(why));
+    QCOMPARE(st->cue(c1)->layers.count(), 4);
+    view.tree()->clearSelection();
+    QList<quint32> want;
+    for (const Layer &l : st->cue(c1)->layers)
+        if (l.target.groups == QList<quint32>({ towers->id() }))
+        {
+            want << l.id;
+            break;
+        }
+    for (const Layer &l : st->cue(c1)->layers)
+        if (l.target.groups == QList<quint32>({ usts->id() }))
+        {
+            want << l.id;
+            break;
+        }
+    for (QTreeWidgetItemIterator it(view.tree()); *it; ++it)
+        if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::LayerNode
+            && want.contains((*it)->data(0, ShowTreeView::IdRole).toUInt()))
+            (*it)->setSelected(true);
+    quint32 cue = invalidId();
+    const QList<quint32> sel = view.selectedLayers(&cue);
+    QCOMPARE(cue, c1);
+    QCOMPARE(QSet<quint32>(sel.begin(), sel.end()), QSet<quint32>(want.begin(), want.end()));
+    const quint32 merged = view.mergeLayers(cue, sel, &why);
+    QVERIFY2(merged != invalidId(), qPrintable(why));
+    QCOMPARE(st->cue(c1)->layers.count(), 3);
+    QCOMPARE(view.currentId(), merged);
+}
+
+/* A value picked reuses the palette playing exactly it; else a one-off with
+   "Make reusable" right on its row -- one click names and files it. */
+void ShowTreeView_Test::aPickedValueReusesAPalette()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    const quint32 i30 = dimmer(77, "Intensity 30%");
+    m_doc->palette(i30)->setPath("Palettes/Dimmer");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 l1 = st->addLayer(c1, groupTarget(towers->id()));
+
+    ShowTreeView view(nullptr, m_doc);
+    QVERIFY(view.setOneOffDimmer(c1, l1, 30));
+    QCOMPARE(st->cue(c1)->layer(l1)->look(KeyDimmer)->palettes, QList<quint32>({ i30 }));
+    QCOMPARE(view.recentPalettes().first(), i30);
+
+    // 31 %: none plays it -- a one-off, with Make reusable by it.
+    QVERIFY(view.setOneOffDimmer(c1, l1, 31));
+    const quint32 pid = st->cue(c1)->layer(l1)->look(KeyDimmer)->palettes.first();
+    QVERIFY(st->isInlinePalette(pid));
+    QVERIFY(view.selectNode(l1, c1));
+    QLabel *reuse = view.findChild<QLabel *>("stReuse:Dimmer");
+    QVERIFY(reuse != nullptr);
+    QVERIFY(reuse->toolTip().contains("Intensity 31%"));
+    emit reuse->linkActivated("reuse");
+    QVERIFY(!st->isInlinePalette(pid));
+    QCOMPARE(m_doc->palette(pid)->name(), QString("Intensity 31%"));
+    QCOMPARE(m_doc->palette(pid)->path(), QString("Palettes/Dimmer"));
+    QVERIFY(view.selectNode(l1, c1));
+    QVERIFY(view.findChild<QLabel *>("stReuse:Dimmer") == nullptr
+            || !view.findChild<QLabel *>("stReuse:Dimmer")->isVisibleTo(&view));
 }
 
 QTEST_MAIN(ShowTreeView_Test)

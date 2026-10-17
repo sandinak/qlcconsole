@@ -142,6 +142,56 @@ public:
      *  values it has there. */
     quint32 recordCue(quint32 cueId);
 
+    /** What Record as new cue records (D22, open question 9): */
+    enum class RecordSource
+    {
+        Selected,   //!< the selected cue's resolved stage (what Design previews)
+        Running,    //!< the current cue of the selected cue's list, running for real
+        Lit         //!< everything on stage: every list running for real, the
+                    //!< Design preview on top, and any other scene / EFX / RGB
+                    //!< matrix running (as opaque function layers)
+    };
+    static QString recordSourceToString(RecordSource source);   //!< "selected", "running", "lit"
+    static bool stringToRecordSource(const QString &str, RecordSource *source);
+
+    /** Record @a source as a new Block cue after cue @a cueId (numbered per
+     *  D23), one undo step. Invalid when @a source isn't available (nothing
+     *  running) or the list is gone. */
+    quint32 recordCue(quint32 cueId, RecordSource source);
+    /** The layers @a source would record with cue @a cueId selected;
+     *  @a available false when there is nothing of that kind (no list
+     *  running). */
+    QList<ShowTree::Layer> recordLayers(quint32 cueId, RecordSource source, bool *available = nullptr) const;
+    /** The choices that are meaningful now, in order: available, putting
+     *  something on stage, and each different from the ones before it (the
+     *  running cue when it is the selected one is not offered twice). One
+     *  or none: nothing to ask. */
+    QList<RecordSource> recordChoices(quint32 cueId) const;
+    /** Whether @a source may be recorded now: it is available and puts
+     *  something on stage (it may be the same as another choice). */
+    bool canRecord(quint32 cueId, RecordSource source) const;
+    /** The cue a list's chaser is playing now, running for real (invalid:
+     *  not running). */
+    quint32 runningCue(quint32 listId) const;
+
+    /** Split a layer on several groups into one layer per group (and one on
+     *  its fixtures), each with its looks: one undo step. The layer keeps
+     *  tracking as before -- the pieces carry on from what it carried on
+     *  from, and where the same layer is set again in the following cues it
+     *  tracks into, it is split there too. Refused (@a why) when it would
+     *  change what any cue plays. */
+    bool splitLayer(quint32 cueId, quint32 layerId, QList<quint32> *made = nullptr, QString *why = nullptr);
+    /** Merge layers of one cue into one layer on all their groups: one undo
+     *  step. Refused (@a why) when they set an attribute differently
+     *  ("Towers sets Colour Blue, USTs Red"), one is released and another
+     *  not, or the merge would change what any cue plays (a following cue
+     *  sets one of them on its own). The same layers set again in the
+     *  following cues they track into are merged there too. Returns the
+     *  merged layer (invalid: refused). */
+    quint32 mergeLayers(quint32 cueId, const QList<quint32> &layerIds, QString *why = nullptr);
+    /** What a person reads for a stage unit ("g:12" -> the group's name). */
+    QString unitLabel(const QString &unit) const;
+
     /** Where the value of @a key on @a target in cue @a cueId was set (D22):
      *  the cue, and the layer there (invalid: the cue's own look). False
      *  when it is set in this cue itself, or nowhere. Follows tracking,
@@ -198,6 +248,33 @@ public:
     bool isInlinePalette(quint32 paletteId) const { return m_inlinePalettes.contains(paletteId); }
     /** Make an inline palette an ordinary named one (Make reusable). */
     bool makeReusable(quint32 paletteId, const QString &name, const QString &path);
+    /** Make reusable in one click: named and filed as the show's own
+     *  palettes of that type are (suggestPaletteName/-Folder). */
+    bool makeReusable(quint32 paletteId);
+
+    /** A named palette of @a type that plays exactly @a values (a Dimmer
+     *  level 0..255, a Colour string), to reuse instead of making another
+     *  (D11/D21 as changed 2026-10-17): first one already used in list
+     *  @a listId (most used, then lowest id), then the most recent of
+     *  @a recent, then any (by name, then id). One-off (inline) palettes and
+     *  fanned ones never match. Dimmer and Colour only. Invalid: none. */
+    quint32 findPalette(QLCPalette::PaletteType type, const QVariantList &values,
+                        quint32 listId = ShowTree::invalidId(),
+                        const QList<quint32> &recent = QList<quint32>()) const;
+    /** A name for a new palette of @a type playing @a values, learned from
+     *  the show's named palettes of that type: one whose name holds its own
+     *  value ("Intensity 45%" at 115, "Colour #ff0000") gives the pattern
+     *  ("Intensity 30%"); else Dimmer "Dimmer 30%", Colour the colour's
+     *  name ("Red", "Sea Green") as palettes named by colour are, or its
+     *  hex. Never a name already taken by that type. */
+    QString suggestPaletteName(QLCPalette::PaletteType type, const QVariantList &values) const;
+    /** Where the show keeps named palettes of @a type: their most common
+     *  folder ("Palettes/Dimmer"); "Palettes/<Type>" when there are none. */
+    QString suggestPaletteFolder(QLCPalette::PaletteType type) const;
+    /** A new named, reusable palette, named and filed per the show's own
+     *  pattern. In a batch (a command) it is made reusable only when the
+     *  command succeeds: a failed one leaves no palette behind. */
+    quint32 createNamedPalette(QLCPalette::PaletteType type, const QVariantList &values);
 
     /** How many of @a target's fixtures a look of @a key can reach ("applies
      *  to 4 of 8 fixtures", §3A): @a reach of @a total. */
@@ -397,6 +474,8 @@ private:
 
     ShowTree::Cue *findCue(quint32 cueId, ShowTree::CueList **list = nullptr);
 
+    /** Named palettes a command made: reusable once it succeeds. */
+    QList<quint32> m_batchNamed;
     int m_batchDepth = 0;
     QString m_batchLabel;
     QByteArray m_batchBefore;

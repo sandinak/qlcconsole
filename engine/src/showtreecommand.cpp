@@ -44,9 +44,9 @@ ShowTreeCommand::ShowTreeCommand(Doc *doc, ShowTreeController *controller)
 QString ShowTreeCommand::grammar()
 {
     return tr("cue 1.0.1 \"name\" · cue + \"name\" · track | block | cueonly | base · "
-              "Towers colour Blue dimmer 45 · Towers+Steps … (one layer) · cue look colour Red · "
-              "Steps effect Sinelon colour Red · gobo none · release Towers · include 0.0.3 · "
-              "record · dup · undo — Tab completes, ↑ recalls");
+              "Towers colour Blue dimmer 45 · Towers USTs … = one layer · Towers, USTs … = a layer each · "
+              "cue look colour Red · Steps effect Sinelon colour Red · gobo none · release Towers · "
+              "include 0.0.3 · record [selected|running|lit] · dup · undo — Tab completes, ↑ recalls");
 }
 
 QStringList ShowTreeCommand::keywords()
@@ -175,7 +175,7 @@ struct Reader
         return s.isNull() ? QStringLiteral("") : s;
     }
     /** The longest of @a names the text goes on with (whole words; a '+'
-     *  also ends one), or quoted; empty: none. */
+     *  or ',' also ends one), or quoted; empty: none. */
     QString name(const QStringList &names)
     {
         ws();
@@ -196,7 +196,7 @@ struct Reader
             if (n.isEmpty() || !rest.startsWith(n, Qt::CaseInsensitive))
                 continue;
             if (rest.length() > n.length() && rest.at(n.length()) != QLatin1Char(' ')
-                && rest.at(n.length()) != QLatin1Char('+'))
+                && rest.at(n.length()) != QLatin1Char('+') && rest.at(n.length()) != QLatin1Char(','))
                 continue;
             if (n.length() > best.length())
                 best = n;
@@ -204,11 +204,20 @@ struct Reader
         i += best.length();
         return best;
     }
-    /** A '+' joining two names into one layer. */
+    /** A '+' joining two names into one layer (as a space does). */
     bool plus()
     {
+        return symbol(QLatin1Char('+'));
+    }
+    /** A ',' ending one layer's names: the next name starts another. */
+    bool comma()
+    {
+        return symbol(QLatin1Char(','));
+    }
+    bool symbol(QChar c)
+    {
         ws();
-        if (i < src.length() && src.at(i) == QLatin1Char('+'))
+        if (i < src.length() && src.at(i) == c)
         {
             ++i;
             return true;
@@ -244,6 +253,67 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
 
     Context ctx = context;
     QString error;
+
+    if (w0 == QLatin1String("record"))
+    {
+        // One edit of its own (Record is one undo step); what it records is
+        // said, or the setting / a dialog picks when the choices differ.
+        r.word();
+        const QString what = r.word();
+        const CueList *l = m_st->cueList(ctx.list);
+        if (l == nullptr || l->indexOf(ctx.cue) < 0)
+        {
+            res.message = tr("Select a cue first (or: cue 1.0.0 \"name\").");
+            return res;
+        }
+        using RS = ShowTreeController::RecordSource;
+        RS src = RS::Selected;
+        if (!what.isEmpty())
+        {
+            if (!ShowTreeController::stringToRecordSource(what, &src) || !r.atEnd())
+            {
+                res.message = tr("record · record selected · record running · record lit");
+                return res;
+            }
+            if (src != RS::Selected && !m_st->canRecord(ctx.cue, src))
+            {
+                res.message = src == RS::Running ? tr("Nothing of this cue list is running.")
+                                                 : tr("Nothing is lit.");
+                return res;
+            }
+        }
+        else
+        {
+            const QList<RS> choices = m_st->recordChoices(ctx.cue);
+            if (choices.count() == 1)
+                src = choices.first();
+            else if (choices.count() > 1 && m_recordChooser)
+            {
+                if (!m_recordChooser(ctx.cue, choices, &src))
+                {
+                    res.message = tr("Not recorded.");
+                    return res;
+                }
+            }
+            else if (choices.count() > 1)
+                src = choices.first();
+        }
+        const quint32 id = m_st->recordCue(ctx.cue, src);
+        if (id == invalidId())
+        {
+            res.message = tr("Couldn't record.");
+            return res;
+        }
+        ctx.cue = id;
+        res.ok = true;
+        res.message = QStringLiteral("✓ record %1").arg(ShowTreeController::recordSourceToString(src));
+        res.context = ctx;
+        return res;
+    }
+
+    // Values typed as a level or a hex: the palettes they came to (reused
+    // or new), to say so.
+    QList<quint32> valuePalettes, madeNew;
     m_st->beginBatch(r.src);
 
     // The selected cue's mode words, after "cue …" or on their own.
@@ -275,39 +345,44 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
         return QString();
     };
 
-    // Groups named one after another: a layer each; joined with '+', one.
+    // Groups named one after another (or joined with '+') make ONE layer,
+    // as a drop of several does; a ',' starts another layer, as an ⌥-drop
+    // makes one per group.
     auto targets = [&]() {
         QList<Target> out;
         const QStringList names = groupNames();
-        for (;;)
-        {
-            QString n = r.name(names);
-            if (n.isEmpty())
-                break;
-            Target t;
-            for (;;)
-            {
-                // The first group of that name (by id, as Doc lists them).
-                for (const FixtureGroup *g : m_doc->fixtureGroups())
-                    if (g->name().compare(n, Qt::CaseInsensitive) == 0)
-                    {
-                        if (!t.groups.contains(g->id()))
-                            t.groups << g->id();
-                        break;
-                    }
-                const int save = r.i;
-                if (!r.plus())
-                    break;
-                n = r.name(names);
-                if (n.isEmpty())
+        Target t;
+        auto addName = [&](const QString &n) {
+            // The first group of that name (by id, as Doc lists them).
+            for (const FixtureGroup *g : m_doc->fixtureGroups())
+                if (g->name().compare(n, Qt::CaseInsensitive) == 0)
                 {
-                    r.i = save;
+                    if (!t.groups.contains(g->id()))
+                        t.groups << g->id();
                     break;
                 }
-            }
-            if (!t.isEmpty())
+        };
+        for (;;)
+        {
+            const int save = r.i;
+            const bool comma = r.comma();
+            if (comma && !t.isEmpty())
+            {
                 out << t;
+                t = Target();
+            }
+            if (!comma)
+                r.plus();
+            const QString n = r.name(names);
+            if (n.isEmpty())
+            {
+                r.i = save;
+                break;
+            }
+            addName(n);
         }
+        if (!t.isEmpty())
+            out << t;
         return out;
     };
 
@@ -432,18 +507,29 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
                 if (key == KeyDimmer && m.hasMatch() && m.captured(1).toInt() <= 100)
                 {
                     r.word();
-                    const int pc = m.captured(1).toInt();
-                    pid = m_st->createInlinePalette(QLCPalette::Dimmer, { qRound(pc * 255.0 / 100.0) },
-                                                    QStringLiteral("%1% · %2 %3")
-                                                    .arg(pc).arg(where, layerText()));
+                    // The palette that plays exactly that, else a new named
+                    // one (D11/D21 as changed 2026-10-17): adjusting it later
+                    // adjusts every cue that uses it.
+                    const QVariantList v { qRound(m.captured(1).toInt() * 255.0 / 100.0) };
+                    pid = m_st->findPalette(QLCPalette::Dimmer, v, ctx.list, ctx.recentPalettes);
+                    if (pid == QLCPalette::invalidId())
+                    {
+                        pid = m_st->createNamedPalette(QLCPalette::Dimmer, v);
+                        madeNew << pid;
+                    }
+                    valuePalettes << pid;
                 }
                 else if (key == KeyColour && hex.match(w).hasMatch())
                 {
                     r.word();
-                    pid = m_st->createInlinePalette(QLCPalette::Color,
-                                                    { QLCPalette::colorToString(QColor(w), QColor(Qt::black)) },
-                                                    QStringLiteral("%1-ish · %2 %3")
-                                                    .arg(w.toLower(), where, layerText()));
+                    const QVariantList v { QLCPalette::colorToString(QColor(w), QColor(Qt::black)) };
+                    pid = m_st->findPalette(QLCPalette::Color, v, ctx.list, ctx.recentPalettes);
+                    if (pid == QLCPalette::invalidId())
+                    {
+                        pid = m_st->createNamedPalette(QLCPalette::Color, v);
+                        madeNew << pid;
+                    }
+                    valuePalettes << pid;
                 }
                 else
                 {
@@ -560,15 +646,6 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
     {
         error = tr("Select a cue first (or: cue 1.0.0 \"name\").");
     }
-    else if (w0 == QLatin1String("record"))
-    {
-        r.word();
-        const quint32 id = m_st->recordCue(ctx.cue);
-        if (id == invalidId())
-            error = tr("Couldn't record.");
-        else
-            ctx.cue = id;
-    }
     else if (w0 == QLatin1String("dup"))
     {
         r.word();
@@ -647,6 +724,13 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
     }
     res.ok = true;
     res.message = QStringLiteral("✓ %1").arg(r.src);
+    QStringList said;
+    for (quint32 pid : valuePalettes)
+        if (const QLCPalette *p = m_doc->palette(pid))
+            said << (madeNew.contains(pid) ? tr("new palette “%1” in %2").arg(p->name(), p->path())
+                                           : tr("reused “%1”").arg(p->name()));
+    if (!said.isEmpty())
+        res.message += QStringLiteral(" — ") + said.join(QStringLiteral(", "));
     res.context = ctx;
     return res;
 }
@@ -666,7 +750,9 @@ QString ShowTreeCommand::complete(const QString &line, const Context &context, Q
         const QString key = attributeKey(prev);
 
         QStringList cands;
-        if (prev == QLatin1String("cue") && words.count() - n == 1)
+        if (prev == QLatin1String("record") && words.count() - n == 1)
+            cands = QStringList({ QStringLiteral("selected"), QStringLiteral("running"), QStringLiteral("lit") });
+        else if (prev == QLatin1String("cue") && words.count() - n == 1)
             cands = QStringList({ QStringLiteral("look"), QStringLiteral("+") }) + cueNumbers(context);
         else if (prev == QLatin1String("include"))
             cands = cueNumbers(context);
@@ -687,9 +773,24 @@ QString ShowTreeCommand::complete(const QString &line, const Context &context, Q
                 *options = cands.mid(0, 10);
             return line;
         }
+        // "Towers,US" / "Towers+US": complete the name after the ',' or '+'.
+        QString lead;
+        QString part = pre;
+        if (n == 1)
+        {
+            const int cut = qMax(pre.lastIndexOf(QLatin1Char(',')), pre.lastIndexOf(QLatin1Char('+')));
+            if (cut >= 0)
+            {
+                lead = pre.left(cut + 1);
+                part = pre.mid(cut + 1);
+                if (part.isEmpty())
+                    continue;
+                cands = groupNames();
+            }
+        }
         QStringList match;
         for (const QString &c : cands)
-            if (c.startsWith(pre, Qt::CaseInsensitive) && !match.contains(c))
+            if (c.startsWith(part, Qt::CaseInsensitive) && !match.contains(c))
                 match << c;
         if (match.isEmpty())
             continue;
@@ -709,9 +810,10 @@ QString ShowTreeCommand::complete(const QString &line, const Context &context, Q
             for (const QString &m : match)
                 while (!m.startsWith(rep, Qt::CaseInsensitive))
                     rep.chop(1);
-            if (rep.length() < pre.length())
-                rep = pre;
+            if (rep.length() < part.length())
+                rep = part;
         }
+        rep = lead + rep;
         const QString base = words.mid(0, words.count() - n).join(QLatin1Char(' '));
         return base.isEmpty() ? rep : base + QLatin1Char(' ') + rep;
     }

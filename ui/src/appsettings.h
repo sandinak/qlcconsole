@@ -52,6 +52,10 @@ private:
     // Tab label mode
     QComboBox *m_tabLabelModeCombo;
     QComboBox *m_scriptEditorCombo;
+
+    // Show Tree: Record as new cue, when the choices differ
+    QComboBox *m_recordDesignCombo;
+    QComboBox *m_recordPerformCombo;
 };
 
 /** @} */

@@ -2188,16 +2188,32 @@ void ShowTree_Test::commandLine()
     QCOMPARE(st->cueList(ctx.list)->baseCue, c1);
     QCOMPARE(st->undoText(), QString("cue 1.0.0 \"base\" block base"));   // one step for all of it
 
-    // Names with spaces, a level as a number, a cue look.
+    // Names with spaces, a level as a number, a cue look. Two groups named
+    // one after the other: ONE layer, as a drop of both is.
     r = cmd.run("Towers US Truss colour Blue dimmer 45", ctx);
     QVERIFY2(r.ok, qPrintable(r.message));
-    QCOMPARE(st->cue(c1)->layers.count(), 2);
-    for (const Layer &l : st->cue(c1)->layers)
-    {
-        QCOMPARE(l.look(KeyColour)->palettes, QList<quint32>({ blue }));
-        QVERIFY(st->isInlinePalette(l.look(KeyDimmer)->palettes.first()));
-    }
-    QVERIFY(r.layer == ownLayer(st, c1, us->id()));
+    QCOMPARE(st->cue(c1)->layers.count(), 1);
+    const Layer &both = st->cue(c1)->layers.first();
+    QCOMPARE(both.target.groups, QList<quint32>({ tw->id(), us->id() }));
+    QCOMPARE(both.look(KeyColour)->palettes, QList<quint32>({ blue }));
+    // 45 made a named, reusable palette (no palette played 45 %).
+    const quint32 d45 = both.look(KeyDimmer)->palettes.first();
+    QVERIFY(!st->isInlinePalette(d45));
+    QCOMPARE(m_doc->palette(d45)->name(), QString("Dimmer 45%"));
+    QCOMPARE(m_doc->palette(d45)->path(), QString("Palettes/Dimmer"));
+    QVERIFY(r.message.contains("new palette"));
+    QVERIFY(r.layer == both.id);
+    // A comma: a layer each, as an ⌥-drop; 45 again reuses the palette.
+    r = cmd.run("Towers, US Truss dimmer 45", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(st->cue(c1)->layers.count(), 3);
+    QCOMPARE(st->cue(c1)->layer(ownLayer(st, c1, tw->id()))->look(KeyDimmer)->palettes,
+             QList<quint32>({ d45 }));
+    QCOMPARE(st->cue(c1)->layer(ownLayer(st, c1, us->id()))->look(KeyDimmer)->palettes,
+             QList<quint32>({ d45 }));
+    QVERIFY(r.message.contains("reused"));
+    QVERIFY(st->removeLayer(c1, ownLayer(st, c1, tw->id())));
+    QVERIFY(st->removeLayer(c1, ownLayer(st, c1, us->id())));
     r = cmd.run("cue look dimmer Full", ctx);
     QVERIFY2(r.ok, qPrintable(r.message));
     QCOMPARE(st->cue(c1)->look(KeyDimmer)->palettes, QList<quint32>({ full }));
@@ -2237,6 +2253,10 @@ void ShowTree_Test::commandLine()
     ShowTreeCommand::Result loop = cmd.run("include 1.0.1", r.context);
     QVERIFY(!loop.ok);                          // 1.0.1 includes 1.0.0
     QVERIFY(loop.message.contains("loop"));
+    ShowTreeCommand::Result notRunning = cmd.run("record running", r.context);
+    QVERIFY(!notRunning.ok);                    // nothing of the list runs
+    QVERIFY(notRunning.message.contains("running"));
+    QVERIFY(!cmd.run("record sideways", r.context).ok);
     r = cmd.run("record", r.context);
     QVERIFY2(r.ok, qPrintable(r.message));
     QCOMPARE(st->cue(r.context.cue)->number, QString("1.0.0.5"));
@@ -2267,13 +2287,14 @@ void ShowTree_Test::commandLineFailsAsAWhole()
     const QString undo = st->undoText();
     const int palettes = m_doc->palettes().count();
 
-    // The layer was added, a one-off level made, then "Nope" isn't a colour.
+    // The layer was added, a palette at 30 % made, then "Nope" isn't a
+    // colour: the new palette goes too.
     ShowTreeCommand::Result r = cmd.run("Towers dimmer 30 colour Nope", ctx);
     QVERIFY(!r.ok);
     QVERIFY(r.message.contains("Nope"));
     QVERIFY(st->cue(ctx.cue)->layers.isEmpty());
     QCOMPARE(st->undoText(), undo);
-    QCOMPARE(m_doc->palettes().count(), palettes);      // the one-off went too
+    QCOMPARE(m_doc->palettes().count(), palettes);
 
     // A one-off made on the way goes too when a later word fails.
     const quint32 layer = st->addLayer(ctx.cue, groupTarget(m_doc->fixtureGroups().first()->id()));
@@ -2316,11 +2337,466 @@ void ShowTree_Test::commandLineCompletes()
     QCOMPARE(options, QStringList({ "Blue", "Blush" }));
     QCOMPARE(cmd.complete("Towers col", ctx), QString("Towers colour "));
     QCOMPARE(cmd.complete("rec", ctx), QString("record "));
+    QCOMPARE(cmd.complete("record ru", ctx), QString("record running "));
+    // After a ',' or a '+': the next group's name.
+    QCOMPARE(cmd.complete("Towers,To", ctx, &options), QString("Towers,To"));
+    QCOMPARE(options, QStringList({ "Tops", "Towers" }));
+    QCOMPARE(cmd.complete("Towers+Top", ctx), QString("Towers+Tops "));
     QCOMPARE(cmd.complete("cue ", ctx, &options), QString("cue "));
     QVERIFY(options.contains("1"));
     QCOMPARE(cmd.complete("zzz", ctx, &options), QString("zzz"));
     QVERIFY(options.isEmpty());
     QVERIFY(!ShowTreeCommand::grammar().isEmpty());
+}
+
+/****************************************************************************
+ * P2 answers (2026-10-17): Record which stage, split/merge, reused values
+ ****************************************************************************/
+
+/* Record as new cue: the selected cue, the list's running cue, or
+   everything lit -- offered only when they differ. */
+void ShowTree_Test::recordTheRunningCueOrEverythingLit()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    FixtureGroup *b = group("B", { m_fixtures[1] });
+    const quint32 full = dimmer(255, "Full");
+    const quint32 half = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    QVERIFY(st->setLayerLook(c1, st->addLayer(c1, groupTarget(a->id())), st->lookForPalette(full)));
+    QVERIFY(st->setLayerLook(c2, st->addLayer(c2, groupTarget(b->id())), st->lookForPalette(half)));
+    using RS = ShowTreeController::RecordSource;
+
+    // Nothing runs: the selected cue is the only choice -- nothing to ask.
+    QCOMPARE(st->runningCue(listId), invalidId());
+    QCOMPARE(st->recordChoices(c2), QList<RS>({ RS::Selected }));
+    QVERIFY(!st->canRecord(c2, RS::Running));
+    QVERIFY(!st->canRecord(c2, RS::Lit));
+    QCOMPARE(st->recordCue(c2, RS::Running), invalidId());
+
+    // The list runs cue One for real; Two is selected. Everything lit is
+    // the running cue here: offered once.
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    go(chaser);
+    tick(3);
+    QCOMPARE(st->runningCue(listId), c1);
+    QCOMPARE(st->recordChoices(c2), QList<RS>({ RS::Selected, RS::Running }));
+    QVERIFY(st->canRecord(c2, RS::Lit));
+    // Selecting the running cue: one choice again.
+    QCOMPARE(st->recordChoices(c1), QList<RS>({ RS::Selected }));
+
+    // A scene lit from elsewhere (a VC button): only "everything lit" has it.
+    Scene *other = new Scene(m_doc);
+    other->setValue(SceneValue(m_fixtures[3], 0, 200));
+    QVERIFY(m_doc->addFunction(other));
+    other->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(3);
+    QCOMPARE(st->recordChoices(c2), QList<RS>({ RS::Selected, RS::Running, RS::Lit }));
+
+    // The running cue: One's stage, after the selected cue, one undo step.
+    const quint32 run = st->recordCue(c2, RS::Running);
+    QVERIFY(run != invalidId());
+    const CueList *list = st->cueList(listId);
+    QCOMPARE(list->indexOf(run), 2);
+    QCOMPARE(list->cue(run)->name, QString("One (recorded)"));
+    QCOMPARE(list->cue(run)->mode, CueMode::Block);
+    QCOMPARE(list->cue(run)->layers.count(), 1);
+    QCOMPARE(list->cue(run)->layers.first().target, groupTarget(a->id()));
+    QVERIFY(st->undoText().contains("running"));
+    QVERIFY(st->undo());
+    QCOMPARE(st->cueList(listId)->cues.count(), 2);
+
+    // Everything lit: the running cue, and the other scene as it is.
+    const quint32 lit = st->recordCue(c2, RS::Lit);
+    QVERIFY(lit != invalidId());
+    list = st->cueList(listId);
+    QCOMPARE(list->cue(lit)->layers.count(), 2);
+    QCOMPARE(list->cue(lit)->layers.at(0).target, groupTarget(a->id()));
+    QCOMPARE(list->cue(lit)->layers.at(1).target.function, other->id());
+    QVERIFY(st->undo());
+
+    // In Design the preview is on stage too, on top: Two's B joins.
+    st->previewCue(c2);
+    QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Playing));
+    bool available = false;
+    const QList<Layer> layers = st->recordLayers(c2, RS::Lit, &available);
+    QVERIFY(available);
+    QStringList sigs;
+    for (const Layer &l : layers)
+        sigs << l.target.signature();
+    QVERIFY(sigs.contains(groupTarget(a->id()).signature()));
+    QVERIFY(sigs.contains(groupTarget(b->id()).signature()));
+    st->stopPreview();
+    other->stop(FunctionParent::master());
+    tick(5);
+
+    // The command line: the chooser decides when they differ; a word says.
+    ShowTreeCommand cmd(m_doc, st);
+    ShowTreeCommand::Context ctx;
+    ctx.list = listId;
+    ctx.cue = c2;
+    QList<RS> offered;
+    cmd.setRecordChooser([&offered](quint32, const QList<RS> &choices, RS *chosen) {
+        offered = choices;
+        *chosen = RS::Running;
+        return true;
+    });
+    ShowTreeCommand::Result r = cmd.run("record", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(offered, QList<RS>({ RS::Selected, RS::Running }));
+    QCOMPARE(st->cue(r.context.cue)->name, QString("One (recorded)"));
+    QVERIFY(st->undo());
+    r = cmd.run("record selected", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(st->cue(r.context.cue)->name, QString("Two (recorded)"));
+    QVERIFY(st->undo());
+    cmd.setRecordChooser([](quint32, const QList<RS> &, RS *) { return false; });
+    r = cmd.run("record", ctx);
+    QVERIFY(!r.ok);                             // cancelled: nothing recorded
+    QCOMPARE(st->cueList(listId)->cues.count(), 2);
+}
+
+namespace
+{
+/** The layers of a cue on @a target. */
+QList<const Layer *> layersOn(const ShowTreeController *st, quint32 cueId, const Target &target)
+{
+    QList<const Layer *> out;
+    if (const Cue *c = st->cue(cueId))
+        for (const Layer &l : c->layers)
+            if (l.target == target)
+                out << &l;
+    return out;
+}
+
+Target groupsTarget(const QList<quint32> &groups)
+{
+    Target t;
+    t.groups = groups;
+    return t;
+}
+}
+
+/* Split a layer on two groups: one layer each, tracking as before -- where
+   the same layer is set again later it is split there too, and a layer
+   that took a tracked one's place carries on from it in every piece. */
+void ShowTree_Test::splitALayerKeepsTracking()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    FixtureGroup *b = group("B", { m_fixtures[1] });
+    const quint32 full = dimmer(255, "Full");
+    const quint32 half = dimmer(127, "Half");
+    const quint32 blue = colour("Blue");
+    const quint32 red = colour("Red");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    const quint32 c3 = st->addCue(listId, 1, "Three");
+    const quint32 c4 = st->addCue(listId, 2, "Four");
+    const Target ab = groupsTarget({ a->id(), b->id() });
+    const quint32 lab = st->addLayer(c1, ab);
+    QVERIFY(st->setLayerLook(c1, lab, st->lookForPalette(full)));
+    QVERIFY(st->setLayerLook(c1, lab, st->lookForPalette(blue)));
+    QVERIFY(st->setTargetLook(c3, ab, st->lookForPalette(half)));      // set again in 3
+    const CueList before = *st->cueList(listId);
+
+    // One group: nothing to split.
+    QString why;
+    const quint32 la = st->addLayer(c2, groupTarget(a->id()));
+    QVERIFY(!st->splitLayer(c2, la, nullptr, &why));
+    QVERIFY(why.contains("one group"));
+    QVERIFY(st->removeLayer(c2, la));
+
+    QList<quint32> made;
+    QVERIFY2(st->splitLayer(c1, lab, &made, &why), qPrintable(why));
+    QCOMPARE(made.count(), 2);
+    QCOMPARE(made.first(), lab);                 // the first piece keeps the layer's id
+    QVERIFY(st->undoText().startsWith("Split layer"));
+    const CueList *list = st->cueList(listId);
+    QVERIFY(!stageDiffers(before, *list));       // nothing on stage changes
+    QCOMPARE(st->cue(c1)->layers.count(), 2);
+    QCOMPARE(layersOn(st, c1, groupTarget(a->id())).count(), 1);
+    QCOMPARE(layersOn(st, c1, groupTarget(b->id())).first()->look(KeyColour)->palettes, QList<quint32>({ blue }));
+    // Set again in 3: split there too, each with its level.
+    QCOMPARE(st->cue(c3)->layers.count(), 2);
+    QCOMPARE(layersOn(st, c3, groupTarget(b->id())).first()->look(KeyDimmer)->palettes, QList<quint32>({ half }));
+    QList<ResolvedCue> r = resolve(*list);
+    CHECK_VALUE(r[1], a->id(), KeyDimmer, full, Origin::Tracked, c1);
+    CHECK_VALUE(r[3], b->id(), KeyDimmer, half, Origin::Tracked, c3);
+    CHECK_VALUE(r[3], b->id(), KeyColour, blue, Origin::Tracked, c1);
+
+    // Now each is its own: A red in 2 leaves B blue, there and onwards.
+    QVERIFY(st->setTargetLook(c2, groupTarget(a->id()), st->lookForPalette(red)));
+    r = resolve(*st->cueList(listId));
+    CHECK_VALUE(r[3], a->id(), KeyColour, red, Origin::Tracked, c2);
+    CHECK_VALUE(r[3], b->id(), KeyColour, blue, Origin::Tracked, c1);
+    // Update cue: B's level in 4 was set in 3, on B's piece.
+    quint32 src = invalidId(), srcLayer = invalidId();
+    QVERIFY(st->valueSource(c4, groupTarget(b->id()), KeyDimmer, &src, &srcLayer));
+    QCOMPARE(src, c3);
+    QCOMPARE(srcLayer, layersOn(st, c3, groupTarget(b->id())).first()->id);
+    QVERIFY(st->undo());
+    QVERIFY(st->undo());
+    QCOMPARE(st->cue(c1)->layers.count(), 1);
+    QCOMPARE(st->cue(c3)->layers.count(), 1);
+
+    // Split where it is set again (3): the pieces both carry on from the
+    // tracked layer -- each keeps its colour from 1, nothing lights twice.
+    const quint32 l3 = st->cue(c3)->layers.first().id;
+    QVERIFY2(st->splitLayer(c3, l3, &made, &why), qPrintable(why));
+    QVERIFY(!stageDiffers(before, *st->cueList(listId)));
+    QCOMPARE(st->cue(c1)->layers.count(), 1);
+    r = resolve(*st->cueList(listId));
+    CHECK_VALUE(r[2], a->id(), KeyColour, blue, Origin::Tracked, c1);
+    CHECK_VALUE(r[2], b->id(), KeyColour, blue, Origin::Tracked, c1);
+    CHECK_VALUE(r[2], b->id(), KeyDimmer, half, Origin::Own, c3);
+    QVERIFY(r[2].layer(ab) == nullptr);          // the tracked one was taken over, not lit beside
+    CHECK_VALUE(r[3], b->id(), KeyDimmer, half, Origin::Tracked, c3);
+
+    // Saved and loaded, the pieces still carry on from it.
+    QBuffer buf;
+    buf.open(QIODevice::WriteOnly);
+    {
+        QXmlStreamWriter w(&buf);
+        saveXML(&w, st->productions().first());
+    }
+    buf.close();
+    buf.open(QIODevice::ReadOnly);
+    QXmlStreamReader xr(&buf);
+    xr.readNextStartElement();
+    Production loaded;
+    QVERIFY(loadXML(xr, loaded));
+    QVERIFY(!stageDiffers(before, loaded.lists.first()));
+}
+
+/* Merge layers: one layer on all their groups. Refused when they set an
+   attribute differently, or when the merge would change a later cue. */
+void ShowTree_Test::mergeLayersKeepsTracking()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    FixtureGroup *b = group("B", { m_fixtures[1] });
+    const quint32 full = dimmer(255, "Full");
+    const quint32 half = dimmer(127, "Half");
+    const quint32 blue = colour("Blue");
+    const quint32 red = colour("Red");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    const quint32 c3 = st->addCue(listId, 1, "Three");
+    st->addCue(listId, 2, "Four");
+    const quint32 la = st->addLayer(c1, groupTarget(a->id()));
+    const quint32 lb = st->addLayer(c1, groupTarget(b->id()));
+    for (quint32 l : { la, lb })
+    {
+        QVERIFY(st->setLayerLook(c1, l, st->lookForPalette(full)));
+        QVERIFY(st->setLayerLook(c1, l, st->lookForPalette(blue)));
+    }
+    QVERIFY(st->setTargetLook(c3, groupTarget(a->id()), st->lookForPalette(half)));
+    QVERIFY(st->setTargetLook(c3, groupTarget(b->id()), st->lookForPalette(half)));
+    const CueList before = *st->cueList(listId);
+    const Target ab = groupsTarget({ a->id(), b->id() });
+
+    QString why;
+    QCOMPARE(st->mergeLayers(c1, { la }, &why), invalidId());
+    QVERIFY(why.contains("two or more"));
+
+    const quint32 m = st->mergeLayers(c1, { la, lb }, &why);
+    QVERIFY2(m == la, qPrintable(why));
+    QVERIFY(st->undoText().startsWith("Merge layers"));
+    QVERIFY(!stageDiffers(before, *st->cueList(listId)));
+    QCOMPARE(st->cue(c1)->layers.count(), 1);
+    QCOMPARE(st->cue(c1)->layers.first().target, ab);
+    QCOMPARE(st->cue(c3)->layers.count(), 1);      // set again together in 3: merged there too
+    QCOMPARE(st->cue(c3)->layers.first().target, ab);
+    QList<ResolvedCue> r = resolve(*st->cueList(listId));
+    QCOMPARE(r[3].layer(ab)->values.value(KeyDimmer).look.palettes, QList<quint32>({ half }));
+    QCOMPARE(r[3].layer(ab)->values.value(KeyColour).fromCue, c1);
+    QVERIFY(st->undo());
+    QCOMPARE(st->cue(c1)->layers.count(), 2);
+
+    // They set Colour differently: refused, nothing changed, no undo step.
+    QVERIFY(st->setLayerLook(c1, lb, st->lookForPalette(red)));
+    const QString undo = st->undoText();
+    QCOMPARE(st->mergeLayers(c1, { la, lb }, &why), invalidId());
+    QVERIFY2(why.contains("Colour") && why.contains("Blue") && why.contains("Red"), qPrintable(why));
+    QCOMPARE(st->undoText(), undo);
+    QVERIFY(st->undo());
+
+    // In 3 only A changes: merged, B would light twice there -- refused.
+    QVERIFY(st->removeLayer(c3, ownLayer(st, c3, b->id())));
+    const CueList partial = *st->cueList(listId);
+    QCOMPARE(st->mergeLayers(c1, { la, lb }, &why), invalidId());
+    QVERIFY2(why.contains("Three") && why.contains("A"), qPrintable(why));
+    QVERIFY(!stageDiffers(partial, *st->cueList(listId)));
+    QVERIFY(st->undo());
+
+    // Merged where both took tracked layers' places (3): it carries on from
+    // both, also after a save and load.
+    const quint32 m3 = st->mergeLayers(c3, { ownLayer(st, c3, a->id()), ownLayer(st, c3, b->id()) }, &why);
+    QVERIFY2(m3 != invalidId(), qPrintable(why));
+    QCOMPARE(st->cue(c1)->layers.count(), 2);
+    const Layer &merged = st->cue(c3)->layers.first();
+    QCOMPARE(merged.continues.isEmpty() ? 0 : 1 + int(merged.continuesAlso.count()), 2);
+    QVERIFY(!stageDiffers(before, *st->cueList(listId)));
+    r = resolve(*st->cueList(listId));
+    QCOMPARE(r[2].layers.count(), 1);            // A and B taken over, not lit beside it
+    QCOMPARE(r[2].layer(ab)->values.value(KeyColour).fromCue, c1);
+
+    QBuffer buf;
+    buf.open(QIODevice::WriteOnly);
+    {
+        QXmlStreamWriter w(&buf);
+        saveXML(&w, st->productions().first());
+    }
+    buf.close();
+    QVERIFY(buf.data().contains("<Continues"));
+    buf.open(QIODevice::ReadOnly);
+    QXmlStreamReader xr(&buf);
+    xr.readNextStartElement();
+    Production loaded;
+    QVERIFY(loadXML(xr, loaded));
+    QVERIFY(!stageDiffers(before, loaded.lists.first()));
+    Q_UNUSED(c2)
+}
+
+/* A value typed (or picked) reuses the palette that plays exactly it: one in
+   this cue list first, then a recent one, then any -- so editing that
+   palette adjusts every cue that uses it. */
+void ShowTree_Test::aTypedValueReusesAPalette()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    FixtureGroup *b = group("B", { m_fixtures[1] });
+    group("C", { m_fixtures[2] });
+    const quint32 i45 = dimmer(115, "Intensity 45%");
+    m_doc->palette(i45)->setPath("Palettes/Dimmer");
+    const quint32 also = dimmer(115, "Also 45");
+    const quint32 zed = dimmer(115, "Zed 45");
+    ShowTreeController *st = m_doc->showTree();
+    const QVariantList v45 { 115 };
+
+    QCOMPARE(st->findPalette(QLCPalette::Dimmer, v45), also);            // any: by name
+    QCOMPARE(st->findPalette(QLCPalette::Dimmer, v45, invalidId(), { zed }), zed);   // recent first
+    QCOMPARE(st->findPalette(QLCPalette::Dimmer, { 114 }), QLCPalette::invalidId());   // exactly
+    QCOMPARE(st->findPalette(QLCPalette::Color, v45), QLCPalette::invalidId());
+
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    QVERIFY(st->setLayerLook(c1, st->addLayer(c1, groupTarget(a->id())), st->lookForPalette(i45)));
+    // In this cue list beats recent.
+    QCOMPARE(st->findPalette(QLCPalette::Dimmer, v45, listId, { zed }), i45);
+    // A one-off at that level is never reused (it isn't in All).
+    const quint32 oneOff = st->createInlinePalette(QLCPalette::Dimmer, v45, "45% · one-off");
+    QVERIFY(oneOff != i45);
+    QCOMPARE(st->findPalette(QLCPalette::Dimmer, v45, listId), i45);
+
+    // The command line reuses it, in both cues.
+    ShowTreeCommand cmd(m_doc, st);
+    ShowTreeCommand::Context ctx;
+    ctx.list = listId;
+    ctx.recentPalettes = { zed };
+    ctx.cue = c1;
+    ShowTreeCommand::Result r = cmd.run("B dimmer 45", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    ctx.cue = c2;
+    r = cmd.run("A dimmer 45%", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(st->cue(c1)->layer(ownLayer(st, c1, b->id()))->look(KeyDimmer)->palettes, QList<quint32>({ i45 }));
+    QCOMPARE(st->cue(c2)->layer(ownLayer(st, c2, a->id()))->look(KeyDimmer)->palettes, QList<quint32>({ i45 }));
+
+    // Adjusting the palette adjusts every cue that uses it.
+    st->previewCue(c1);
+    QHash<quint32, uchar> v = settle();
+    QCOMPARE(int(v[1]), 115);
+    st->previewCue(c2);
+    QCOMPARE(int(settle()[0]), 115);
+    st->stopPreview();
+    tick(5);
+    m_doc->palette(i45)->setValue(200);
+    st->previewCue(c1);
+    v = settle();
+    QCOMPARE(int(v[0]), 200);
+    QCOMPARE(int(v[1]), 200);
+    st->stopPreview();
+    tick(5);
+    st->previewCue(c2);
+    QCOMPARE(int(settle()[0]), 200);
+    st->stopPreview();
+    m_doc->palette(i45)->setValue(115);
+    QVERIFY(st->removeLayer(c1, ownLayer(st, c1, b->id())));    // only "Intensity 45%" names a level now
+    m_doc->deletePalette(also);
+    m_doc->deletePalette(zed);
+    ctx.recentPalettes.clear();
+
+    // No palette at 30 %: a new named one, as the show names them, filed
+    // with them -- and the next 30 reuses it.
+    ctx.cue = c1;
+    r = cmd.run("C dimmer 30", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    const quint32 i30 = st->cue(c1)->layers.last().look(KeyDimmer)->palettes.first();
+    QCOMPARE(m_doc->palette(i30)->name(), QString("Intensity 30%"));
+    QCOMPARE(m_doc->palette(i30)->path(), QString("Palettes/Dimmer"));
+    QCOMPARE(m_doc->palette(i30)->values().first().toInt(), 77);
+    QVERIFY(!st->isInlinePalette(i30));
+    const int count = m_doc->palettes().count();
+    ctx.cue = c2;
+    r = cmd.run("C dimmer 30", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(m_doc->palettes().count(), count);
+    QCOMPARE(st->cue(c2)->layers.last().look(KeyDimmer)->palettes, QList<quint32>({ i30 }));
+}
+
+/* A new palette is named from its siblings: one whose name holds its own
+   value gives the pattern; colours by name (or hex, as siblings are). */
+void ShowTree_Test::aNewPaletteIsNamedAsTheShowsAre()
+{
+    ShowTreeController *st = m_doc->showTree();
+    // No siblings: plain names, the type's own folder.
+    QCOMPARE(st->suggestPaletteName(QLCPalette::Dimmer, { 77 }), QString("Dimmer 30%"));
+    QCOMPARE(st->suggestPaletteFolder(QLCPalette::Dimmer), QString("Palettes/Dimmer"));
+    const QVariantList red { QLCPalette::colorToString(QColor("#ff0000"), QColor(Qt::black)) };
+    const QVariantList green { QLCPalette::colorToString(QColor("#33aa55"), QColor(Qt::black)) };
+    QCOMPARE(st->suggestPaletteName(QLCPalette::Color, red), QString("Red"));
+    QVERIFY(st->suggestPaletteName(QLCPalette::Color, green).endsWith(" #33aa55"));
+
+    // DanceHysteria's: "Intensity 45%" (115), "Full", "Candle Intensity".
+    const quint32 i45 = dimmer(115, "Intensity 45%");
+    m_doc->palette(i45)->setPath("Palettes/Dimmer/");
+    m_doc->palette(dimmer(255, "Full"))->setPath("Palettes/Dimmer");
+    m_doc->palette(dimmer(242, "Candle Intensity"))->setPath("Palettes/Dimmer");
+    QCOMPARE(st->suggestPaletteName(QLCPalette::Dimmer, { 77 }), QString("Intensity 30%"));
+    QCOMPARE(st->suggestPaletteFolder(QLCPalette::Dimmer), QString("Palettes/Dimmer"));
+    QCOMPARE(st->suggestPaletteName(QLCPalette::Dimmer, { 115 }), QString("Intensity 45% (2)"));   // never taken
+
+    // Colours named by colour: by name; one already called that, numbered.
+    QLCPalette *r = new QLCPalette(QLCPalette::Color, m_doc);
+    r->setName("Red");
+    r->setPath("Palettes/Color");
+    r->setValue(QLCPalette::colorToString(QColor("#ff0331"), QColor(Qt::black)));
+    m_doc->addPalette(r);
+    QCOMPARE(st->suggestPaletteName(QLCPalette::Color, red), QString("Red (2)"));
+    QCOMPARE(st->suggestPaletteFolder(QLCPalette::Color), QString("Palettes/Color"));
+    // Colours named by hex: by hex, written as they are.
+    QLCPalette *h = new QLCPalette(QLCPalette::Color, m_doc);
+    h->setName("Col 0000ff");
+    h->setValue(QLCPalette::colorToString(QColor("#0000ff"), QColor(Qt::black)));
+    m_doc->addPalette(h);
+    QCOMPARE(st->suggestPaletteName(QLCPalette::Color, green), QString("Col 33aa55"));
+
+    // Make reusable in one click: a one-off named and filed so.
+    const quint32 one = st->createInlinePalette(QLCPalette::Dimmer, { 77 }, "30% · 1 A");
+    QVERIFY(st->makeReusable(one));
+    QVERIFY(!st->isInlinePalette(one));
+    QCOMPARE(m_doc->palette(one)->name(), QString("Intensity 30%"));
+    QCOMPARE(m_doc->palette(one)->path(), QString("Palettes/Dimmer"));
+    // A colour pick reuses an exact palette.
+    QCOMPARE(st->findPalette(QLCPalette::Color,
+                             { QLCPalette::colorToString(QColor("#0000ff"), QColor(Qt::black)) }), h->id());
+    QCOMPARE(st->findPalette(QLCPalette::Color, { QString("#0000ff") }), h->id());
 }
 
 QTEST_MAIN(ShowTree_Test)

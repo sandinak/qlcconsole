@@ -20,6 +20,9 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QBuffer>
+#include <QColor>
+#include <QRegularExpression>
+#include <climits>
 #include <QTimer>
 #include <QSet>
 #include <QDebug>
@@ -187,6 +190,7 @@ void ShowTreeController::beginBatch(const QString &label)
 {
     if (m_batchDepth++ > 0)
         return;
+    m_batchNamed.clear();
     m_batchLabel = label;
     m_batchBefore = snapshotXml();
     m_batchProductions = m_productions;
@@ -197,6 +201,16 @@ void ShowTreeController::endBatch(bool keep)
 {
     if (m_batchDepth == 0 || --m_batchDepth > 0)
         return;
+    // Named palettes the command made: reusable now it has worked, else
+    // one-offs nothing uses, dropped below with the rest.
+    const QList<quint32> named = m_batchNamed;
+    m_batchNamed.clear();
+    if (keep)
+    {
+        for (quint32 pid : named)
+            if (m_inlinePalettes.remove(pid) && !m_batchChanged)
+                m_doc->setModified();
+    }
     if (!m_batchChanged)
     {
         // Nothing in the tree changed, but a failed command may have made
@@ -704,37 +718,247 @@ quint32 ShowTreeController::duplicateCue(quint32 cueId)
 
 quint32 ShowTreeController::recordCue(quint32 cueId)
 {
-    const CueList *have = listOfCue(cueId);
-    if (have == nullptr)
-        return invalidId();
-    const int at = have->indexOf(cueId);
-    const Cue &src = have->cues.at(at);
-    const QList<ResolvedCue> resolved = resolve(*have);
+    return recordCue(cueId, RecordSource::Selected);
+}
 
-    Cue rec;
-    rec.id = newId();
-    rec.number = numberForInsert(*have, at);
-    rec.name = src.name.isEmpty() ? tr("recorded") : tr("%1 (recorded)").arg(src.name);
-    rec.mode = CueMode::Block;
-    rec.fadeIn = src.fadeIn;
-    rec.fadeOut = src.fadeOut;
-    rec.hold = src.hold;
-    for (const ResolvedLayer &rl : resolved.at(at).layers)
+QString ShowTreeController::recordSourceToString(RecordSource source)
+{
+    switch (source)
+    {
+        case RecordSource::Running: return QStringLiteral("running");
+        case RecordSource::Lit: return QStringLiteral("lit");
+        case RecordSource::Selected: break;
+    }
+    return QStringLiteral("selected");
+}
+
+bool ShowTreeController::stringToRecordSource(const QString &str, RecordSource *source)
+{
+    const QString s = str.trimmed().toLower();
+    RecordSource src;
+    if (s == QLatin1String("selected") || s == QLatin1String("sel"))
+        src = RecordSource::Selected;
+    else if (s == QLatin1String("running") || s == QLatin1String("run"))
+        src = RecordSource::Running;
+    else if (s == QLatin1String("lit") || s == QLatin1String("everything") || s == QLatin1String("all"))
+        src = RecordSource::Lit;
+    else
+        return false;
+    if (source != nullptr)
+        *source = src;
+    return true;
+}
+
+quint32 ShowTreeController::runningCue(quint32 listId) const
+{
+    const CueList *list = cueList(listId);
+    if (list == nullptr || list->chaser == invalidId())
+        return invalidId();
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(list->chaser));
+    if (chaser == nullptr || !chaser->isRunning())
+        return invalidId();
+    const int idx = chaser->currentStepIndex();
+    ChaserStep *step = idx < 0 ? nullptr : chaser->stepAt(idx);
+    if (step == nullptr)
+        return invalidId();
+    for (const Cue &c : list->cues)
+        if (c.collection != invalidId() && c.collection == step->fid)
+            return c.id;
+    return invalidId();
+}
+
+/** A cue's stage as layers of its own: every layer that plays something,
+    with the looks it plays (tracked, included and its own, resolved). */
+static void stageLayers(const ResolvedCue &rc, QList<Layer> &into, const std::function<quint32()> &newId)
+{
+    for (const ResolvedLayer &rl : rc.layers)
     {
         // What is on stage: a layer that plays nothing (only None) isn't.
         if (!rl.target.isOpaque() && rl.isDark())
             continue;
+        Layer *have = nullptr;
+        for (Layer &l : into)
+            if (l.target == rl.target)
+                have = &l;
+        if (have != nullptr)
+        {
+            // On stage twice (two lists): the later one wins, attribute by
+            // attribute, as the later layer does.
+            if (!rl.target.isOpaque())
+                for (const Look &look : rl.playedLooks())
+                    have->setLook(look);
+            continue;
+        }
         Layer l;
         l.id = newId();
         l.name = rl.name;
         l.target = rl.target;
         if (!rl.target.isOpaque())
             l.looks = rl.playedLooks();
-        rec.layers << l;
+        into << l;
     }
+}
 
+QList<Layer> ShowTreeController::recordLayers(quint32 cueId, RecordSource source, bool *available) const
+{
+    QList<Layer> out;
+    if (available != nullptr)
+        *available = false;
+    const CueList *list = listOfCue(cueId);
+    if (list == nullptr)
+        return out;
+    // Ids are given when the cue is made; 0 here, as a placeholder.
+    const std::function<quint32()> noId = []() { return quint32(0); };
+
+    auto cueStage = [&](const CueList &l, quint32 cid) {
+        const int at = l.indexOf(cid);
+        if (at >= 0)
+            stageLayers(resolve(l).at(at), out, noId);
+    };
+
+    switch (source)
+    {
+        case RecordSource::Selected:
+            cueStage(*list, cueId);
+            if (available != nullptr)
+                *available = true;
+        break;
+        case RecordSource::Running:
+        {
+            const quint32 running = runningCue(list->id);
+            if (running == invalidId())
+                return out;
+            cueStage(*list, running);
+            if (available != nullptr)
+                *available = true;
+        }
+        break;
+        case RecordSource::Lit:
+        {
+            // Every list running for real, in tree order; the Design preview
+            // on top (it wins there); then anything else lit, as it is.
+            QSet<quint32> functions;
+            for (const Production &p : m_productions)
+                for (const CueList &l : p.lists)
+                {
+                    const quint32 running = runningCue(l.id);
+                    if (running != invalidId())
+                        cueStage(l, running);
+                    for (const Cue &c : l.cues)
+                        for (const Layer &layer : c.layers)
+                            if (layer.target.isOpaque())
+                                functions.insert(layer.target.function);
+                }
+            if (m_previewState == PreviewState::Playing)
+                if (const CueList *pl = listOfCue(m_previewCue))
+                    cueStage(*pl, m_previewCue);
+            for (const Layer &l : out)
+                if (l.target.isOpaque())
+                    functions.insert(l.target.function);
+            QList<quint32> others;
+            for (Function *f : m_doc->functions())
+            {
+                if (!f->isRunning() || isGenerated(f->id()) || functions.contains(f->id()))
+                    continue;
+                if (f->type() != Function::SceneType && f->type() != Function::EFXType
+                    && f->type() != Function::RGBMatrixType)
+                    continue;           // a chaser / collection / show: its steps are what's lit
+                others << f->id();
+            }
+            std::sort(others.begin(), others.end());
+            for (quint32 fid : others)
+            {
+                Layer l;
+                l.target.function = fid;
+                out << l;
+            }
+            if (available != nullptr)
+                *available = true;
+        }
+        break;
+    }
+    return out;
+}
+
+/** Two recordings are the same when they put the same layers on stage. */
+static QString layersSignature(const QList<Layer> &layers)
+{
+    QStringList parts;
+    for (const Layer &l : layers)
+    {
+        QStringList looks;
+        for (const Look &look : l.looks)
+            looks << QStringLiteral("%1=%2/%3").arg(look.key, idsToString(look.palettes), idsToString(look.own));
+        looks.sort();
+        parts << l.target.signature() + QLatin1Char('{') + looks.join(QLatin1Char(';')) + QLatin1Char('}');
+    }
+    parts.sort();
+    return parts.join(QLatin1Char(' '));
+}
+
+bool ShowTreeController::canRecord(quint32 cueId, RecordSource source) const
+{
+    bool available = false;
+    const QList<Layer> layers = recordLayers(cueId, source, &available);
+    return available && !layers.isEmpty();
+}
+
+QList<ShowTreeController::RecordSource> ShowTreeController::recordChoices(quint32 cueId) const
+{
+    QList<RecordSource> out;
+    QStringList seen;
+    for (RecordSource src : { RecordSource::Selected, RecordSource::Running, RecordSource::Lit })
+    {
+        bool available = false;
+        const QList<Layer> layers = recordLayers(cueId, src, &available);
+        if (!available || layers.isEmpty())
+            continue;
+        const QString sig = layersSignature(layers);
+        if (seen.contains(sig))
+            continue;
+        seen << sig;
+        out << src;
+    }
+    return out;
+}
+
+quint32 ShowTreeController::recordCue(quint32 cueId, RecordSource source)
+{
+    const CueList *have = listOfCue(cueId);
+    if (have == nullptr)
+        return invalidId();
+    bool available = false;
+    QList<Layer> layers = recordLayers(cueId, source, &available);
+    if (!available)
+        return invalidId();
+    const int at = have->indexOf(cueId);
+    // Named and timed after the cue it records (the running one), or the
+    // selected one for everything lit.
+    const quint32 from = source == RecordSource::Running ? runningCue(have->id) : cueId;
+    const Cue &src = *have->cue(from);
+
+    Cue rec;
+    rec.id = newId();
+    rec.number = numberForInsert(*have, at);
+    if (source == RecordSource::Lit)
+        rec.name = tr("on stage (recorded)");
+    else
+        rec.name = src.name.isEmpty() ? tr("recorded") : tr("%1 (recorded)").arg(src.name);
+    rec.mode = CueMode::Block;
+    rec.fadeIn = src.fadeIn;
+    rec.fadeOut = src.fadeOut;
+    rec.hold = src.hold;
+    for (Layer &l : layers)
+        l.id = newId();
+    rec.layers = layers;
+
+    QString label = tr("Record as new cue");
+    if (source == RecordSource::Running)
+        label = tr("Record as new cue: running %1").arg(cueLabel(*have, have->indexOf(from)));
+    else if (source == RecordSource::Lit)
+        label = tr("Record as new cue: everything lit");
     const quint32 listId = have->id;
-    const bool ok = edit(tr("Record as new cue"), [&](QList<Production> &ps) {
+    const bool ok = edit(label, [&](QList<Production> &ps) {
         CueList *l = listIn(ps, listId);
         if (l == nullptr)
             return false;
@@ -742,6 +966,373 @@ quint32 ShowTreeController::recordCue(quint32 cueId)
         return true;
     });
     return ok ? rec.id : invalidId();
+}
+
+/****************************************************************************
+ * Split and merge
+ ****************************************************************************/
+
+/** Whether two targets light a unit in common (a group or a fixture). */
+static bool overlaps(const Target &a, const Target &b)
+{
+    for (quint32 g : a.groups)
+        if (b.groups.contains(g))
+            return true;
+    for (quint32 f : a.fixtures)
+        if (b.fixtures.contains(f))
+            return true;
+    return false;
+}
+
+/** The carried-in layers an own layer stands for in its cue. */
+static QList<Target> carriedFrom(const Layer &layer, const ResolvedLayer *rl)
+{
+    QList<Target> out;
+    auto add = [&out](const Target &t) {
+        if (!t.isEmpty() && !out.contains(t))
+            out << t;
+    };
+    if (rl == nullptr || rl->tookOver.isEmpty())
+        return out;
+    add(rl->tookOver);
+    add(layer.continues);
+    for (const Target &t : layer.continuesAlso)
+        add(t);
+    return out;
+}
+
+/** In layers carrying on from @a from, carry on from @a to instead. */
+static void replaceContinues(Cue &cue, const Target &from, const QList<Target> &to)
+{
+    for (Layer &other : cue.layers)
+    {
+        QList<Target> all;
+        if (!other.continues.isEmpty())
+            all << other.continues;
+        all << other.continuesAlso;
+        const int at = all.indexOf(from);
+        if (at < 0)
+            continue;
+        all.removeAt(at);
+        for (int i = 0; i < to.count(); ++i)
+            if (!all.contains(to.at(i)) && !(to.at(i) == other.target))
+                all.insert(at + i, to.at(i));
+        other.continues = all.isEmpty() ? Target() : all.takeFirst();
+        other.continuesAlso = all;
+    }
+}
+
+QString ShowTreeController::unitLabel(const QString &unit) const
+{
+    const quint32 id = unit.mid(2).toUInt();
+    Target t;
+    if (unit.startsWith(QLatin1String("g:")))
+        t.groups << id;
+    else if (unit.startsWith(QLatin1String("f:")))
+        t.fixtures << id;
+    else
+        t.function = id;
+    return targetLabel(t);
+}
+
+bool ShowTreeController::splitLayer(quint32 cueId, quint32 layerId, QList<quint32> *made, QString *why)
+{
+    const Cue *c = cue(cueId);
+    const Layer *l = c == nullptr ? nullptr : c->layer(layerId);
+    if (l == nullptr || l->target.isOpaque())
+    {
+        if (why != nullptr)
+            *why = tr("Only a layer on groups or fixtures can be split.");
+        return false;
+    }
+    const QList<Target> pieces = l->pieces();
+    if (pieces.count() < 2)
+    {
+        if (why != nullptr)
+            *why = tr("%1 is one group already.").arg(targetLabel(l->target));
+        return false;
+    }
+    const QString label = tr("Split layer %1").arg(l->name.isEmpty() ? targetLabel(l->target) : l->name);
+    QString refusal;
+    QList<quint32> ids;
+
+    const bool ok = edit(label, [&](QList<Production> &ps) {
+        CueList *list = nullptr;
+        if (cueIn(ps, cueId, &list) == nullptr)
+            return false;
+        const CueList beforeList = *list;
+        const QList<ResolvedCue> before = resolve(beforeList);
+        const int at = list->indexOf(cueId);
+        const Target from = l->target;
+
+        // Cut the layer in @a cue into pieces, each with its looks, release
+        // and name; each carries on from what it overlaps of @a carried.
+        auto cut = [&](Cue &cue, quint32 lid, const QList<Target> &carried) {
+            int idx = -1;
+            for (int i = 0; i < cue.layers.count(); ++i)
+                if (cue.layers.at(i).id == lid)
+                    idx = i;
+            if (idx < 0)
+                return;
+            const Layer orig = cue.layers.takeAt(idx);
+            for (int p = 0; p < pieces.count(); ++p)
+            {
+                Layer piece = orig;
+                piece.id = p == 0 ? orig.id : newId();
+                piece.target = pieces.at(p);
+                QList<Target> cont;
+                for (const Target &t : carried)
+                    if (overlaps(t, piece.target) && !(t == piece.target))
+                        cont << t;
+                piece.continues = cont.isEmpty() ? Target() : cont.takeFirst();
+                piece.continuesAlso = cont;
+                cue.layers.insert(idx + p, piece);
+                if (cue.id == cueId)
+                    ids << piece.id;
+            }
+        };
+
+        cut(list->cues[at], layerId, carriedFrom(*l, before.at(at).layer(from)));
+
+        // Onwards, while it tracks: the same layer set again is split too; a
+        // layer carrying on from it under another target carries on from
+        // the pieces.
+        for (int j = at + 1; j < list->cues.count(); ++j)
+        {
+            const ResolvedLayer *next = before.at(j).layer(from);
+            if (next == nullptr)
+            {
+                replaceContinues(list->cues[j], from, pieces);
+                break;
+            }
+            if (!next->own)
+                continue;
+            if (!(next->tookOver == from))
+                break;                      // a fresh layer on that target
+            const Layer *again = list->cues.at(j).layer(next->layerId);
+            if (again == nullptr)
+                break;
+            if (again->target == from)
+            {
+                cut(list->cues[j], again->id, QList<Target>());
+                continue;
+            }
+            replaceContinues(list->cues[j], from, pieces);
+            break;
+        }
+
+        quint32 cid = invalidId();
+        QString unit, key;
+        if (stageDiffers(beforeList, *list, &cid, &unit, &key))
+        {
+            refusal = tr("Splitting would change what cue %1 plays on %2 (%3), so it was left as it is.")
+                      .arg(cueLabel(beforeList, beforeList.indexOf(cid)), unitLabel(unit), keyLabel(key));
+            return false;
+        }
+        return true;
+    });
+    if (why != nullptr)
+        *why = refusal;
+    if (ok && made != nullptr)
+        *made = ids;
+    return ok;
+}
+
+quint32 ShowTreeController::mergeLayers(quint32 cueId, const QList<quint32> &layerIds, QString *why)
+{
+    auto refuse = [why](const QString &text) {
+        if (why != nullptr)
+            *why = text;
+        return invalidId();
+    };
+    const Cue *c = cue(cueId);
+    if (c == nullptr)
+        return refuse(tr("No such cue."));
+    QList<const Layer *> layers;
+    for (quint32 lid : layerIds)
+    {
+        const Layer *l = c->layer(lid);
+        if (l == nullptr)
+            return refuse(tr("Only layers of the cue itself can be merged."));
+        if (l->target.isOpaque())
+            return refuse(tr("%1 plays a function as it is: it can't be merged.").arg(targetLabel(l->target)));
+        if (!layers.contains(l))
+            layers << l;
+    }
+    if (layers.count() < 2)
+        return refuse(tr("Select two or more layers of one cue to merge."));
+
+    auto layerName = [this](const Layer &l) { return l.name.isEmpty() ? targetLabel(l.target) : l.name; };
+    auto lookName = [this](const Look &l) {
+        if (l.none)
+            return tr("None");
+        QStringList n;
+        for (quint32 pid : l.palettes)
+            if (const QLCPalette *p = m_doc->palette(pid))
+                n << p->name();
+        return n.isEmpty() ? tr("nothing") : n.join(QStringLiteral(" + "));
+    };
+
+    // One layer from several: they must agree on what they set (the safe
+    // rule -- nothing is guessed), and on Release.
+    auto combine = [&](const QList<Layer> &from, Layer *into, QString *conflict) -> bool {
+        Layer m = from.first();
+        m.continues = Target();
+        m.continuesAlso.clear();
+        for (int i = 1; i < from.count(); ++i)
+        {
+            const Layer &o = from.at(i);
+            for (quint32 g : o.target.groups)
+                if (!m.target.groups.contains(g))
+                    m.target.groups << g;
+            for (quint32 f : o.target.fixtures)
+                if (!m.target.fixtures.contains(f))
+                    m.target.fixtures << f;
+            if (o.release != from.first().release)
+            {
+                *conflict = tr("%1 is released and %2 isn't.")
+                            .arg(layerName(from.first().release ? from.first() : o),
+                                 layerName(from.first().release ? o : from.first()));
+                return false;
+            }
+            if (o.name != m.name)
+                m.name.clear();
+            for (const Look &look : o.looks)
+            {
+                for (int k = 0; k < i; ++k)
+                {
+                    const Look *was = from.at(k).look(look.key);
+                    if (was != nullptr && *was != look)
+                    {
+                        *conflict = tr("%1 sets %2 to %3, %4 to %5.")
+                                    .arg(layerName(from.at(k)), keyLabel(look.key), lookName(*was),
+                                         layerName(o), lookName(look));
+                        return false;
+                    }
+                }
+                if (m.look(look.key) == nullptr)
+                    m.setLook(look);
+            }
+        }
+        *into = m;
+        return true;
+    };
+
+    QList<Layer> chosen;
+    for (const Layer *l : layers)
+        chosen << *l;
+    Layer merged;
+    QString conflict;
+    if (!combine(chosen, &merged, &conflict))
+        return refuse(tr("Can't merge: %1 Make them the same first.").arg(conflict));
+
+    QStringList names;
+    for (const Layer *l : layers)
+        names << layerName(*l);
+    const QString label = tr("Merge layers %1").arg(names.join(QStringLiteral(", ")));
+    QString refusal;
+    QList<Target> targets;
+    for (const Layer *l : layers)
+        targets << l->target;
+    const quint32 mergedId = layers.first()->id;
+
+    const bool ok = edit(label, [&](QList<Production> &ps) {
+        CueList *list = nullptr;
+        if (cueIn(ps, cueId, &list) == nullptr)
+            return false;
+        const CueList beforeList = *list;
+        const QList<ResolvedCue> before = resolve(beforeList);
+        const int at = list->indexOf(cueId);
+
+        // Put @a m in place of layers @a ids of @a cue (at the first one).
+        auto replace = [](Cue &cue, const QList<quint32> &ids, const Layer &m) {
+            int first = -1;
+            for (int i = cue.layers.count() - 1; i >= 0; --i)
+                if (ids.contains(cue.layers.at(i).id))
+                {
+                    first = i;
+                    cue.layers.removeAt(i);
+                }
+            cue.layers.insert(qMax(0, first), m);
+        };
+
+        // In this cue: it carries on from everything they carried on from.
+        QList<Target> carried;
+        for (const Layer *l : layers)
+            for (const Target &t : carriedFrom(*l, before.at(at).layer(l->target)))
+                if (!carried.contains(t) && !(t == merged.target))
+                    carried << t;
+        Layer m = merged;
+        m.continues = carried.isEmpty() ? Target() : carried.takeFirst();
+        m.continuesAlso = carried;
+        replace(list->cues[at], layerIds, m);
+
+        // Onwards, while they track together: set again together, merged
+        // there too; carried on from under another target, from the merge.
+        for (int j = at + 1; j < list->cues.count(); ++j)
+        {
+            QList<const ResolvedLayer *> next;
+            int missing = 0, own = 0;
+            for (const Target &t : targets)
+            {
+                const ResolvedLayer *rl = before.at(j).layer(t);
+                next << rl;
+                if (rl == nullptr)
+                    ++missing;
+                else if (rl->own)
+                    ++own;
+            }
+            if (missing == targets.count())
+            {
+                for (const Target &t : targets)
+                    replaceContinues(list->cues[j], t, { merged.target });
+                break;
+            }
+            if (missing > 0)
+                break;                      // they part here (the check says if that matters)
+            if (own == 0)
+                continue;                   // carried through together
+            if (own < targets.count())
+                break;
+            QList<Layer> again;
+            QList<quint32> againIds;
+            bool same = true;
+            for (int k = 0; k < next.count(); ++k)
+            {
+                const Layer *l = list->cues.at(j).layer(next.at(k)->layerId);
+                if (l == nullptr || !(next.at(k)->tookOver == targets.at(k)) || !(l->target == targets.at(k)))
+                {
+                    same = false;
+                    break;
+                }
+                again << *l;
+                againIds << l->id;
+            }
+            if (!same)
+                break;
+            Layer mj;
+            QString clash;
+            if (!combine(again, &mj, &clash))
+            {
+                refusal = tr("Can't merge: in cue %1 %2").arg(cueLabel(beforeList, j), clash);
+                return false;
+            }
+            replace(list->cues[j], againIds, mj);
+        }
+
+        quint32 cid = invalidId();
+        QString unit, key;
+        if (stageDiffers(beforeList, *list, &cid, &unit, &key))
+        {
+            refusal = tr("Merging would change what cue %1 plays on %2 (%3), so it was left as it is.")
+                      .arg(cueLabel(beforeList, beforeList.indexOf(cid)), unitLabel(unit), keyLabel(key));
+            return false;
+        }
+        return true;
+    });
+    if (!ok)
+        return refuse(refusal.isEmpty() ? tr("Nothing to merge.") : refusal);
+    return mergedId;
 }
 
 bool ShowTreeController::valueSource(quint32 cueId, const Target &target, const QString &key,
@@ -1004,6 +1595,294 @@ bool ShowTreeController::makeReusable(quint32 paletteId, const QString &name, co
     m_doc->setModified();
     emit changed();
     return true;
+}
+
+bool ShowTreeController::makeReusable(quint32 paletteId)
+{
+    const QLCPalette *p = m_doc->palette(paletteId);
+    if (p == nullptr || !m_inlinePalettes.contains(paletteId))
+        return false;
+    // Named as if it were new: its own one-off name is not "taken".
+    m_inlinePalettes.remove(paletteId);
+    const QString name = suggestPaletteName(p->type(), p->values());
+    m_inlinePalettes.insert(paletteId);
+    return makeReusable(paletteId, name, suggestPaletteFolder(p->type()));
+}
+
+/** The level a Dimmer value is, as the picker and "dimmer 45" say it. */
+static int levelPercent(int value)
+{
+    return qRound(value * 100.0 / 255.0);
+}
+
+/** Whether a palette of @a type plays exactly @a values. */
+static bool playsExactly(const QLCPalette *p, QLCPalette::PaletteType type, const QVariantList &values)
+{
+    if (p->type() != type || values.isEmpty() || p->values().isEmpty()
+        || p->fanningType() != QLCPalette::Flat)
+        return false;
+    if (type == QLCPalette::Dimmer)
+    {
+        bool ok1 = false, ok2 = false;
+        const int a = p->values().first().toInt(&ok1);
+        const int b = values.first().toInt(&ok2);
+        return ok1 && ok2 && a == b;
+    }
+    if (type == QLCPalette::Color)
+    {
+        QColor ra, wa, rb, wb;
+        if (!QLCPalette::stringToColor(p->values().first().toString(), ra, wa)
+            || !QLCPalette::stringToColor(values.first().toString(), rb, wb))
+            return false;
+        const QColor black(Qt::black);
+        return ra.rgb() == rb.rgb()
+               && (wa.isValid() ? wa : black).rgb() == (wb.isValid() ? wb : black).rgb();
+    }
+    return false;
+}
+
+quint32 ShowTreeController::findPalette(QLCPalette::PaletteType type, const QVariantList &values,
+                                        quint32 listId, const QList<quint32> &recent) const
+{
+    QList<const QLCPalette *> match;
+    for (const QLCPalette *p : m_doc->palettes())
+    {
+        const bool madeNow = m_batchNamed.contains(p->id());
+        if ((m_inlinePalettes.contains(p->id()) && !madeNow) || p->name().isEmpty())
+            continue;
+        if (playsExactly(p, type, values))
+            match << p;
+    }
+    if (match.isEmpty())
+        return QLCPalette::invalidId();
+
+    // 1. Already in this cue list: the most used, then the lowest id.
+    const Usage usage = usageInList(listId);
+    const QLCPalette *best = nullptr;
+    for (const QLCPalette *p : match)
+    {
+        const int n = usage.palettes.value(p->id());
+        if (n == 0)
+            continue;
+        if (best == nullptr || n > usage.palettes.value(best->id())
+            || (n == usage.palettes.value(best->id()) && p->id() < best->id()))
+            best = p;
+    }
+    if (best != nullptr)
+        return best->id();
+    // 2. Recent, newest first.
+    for (quint32 pid : recent)
+        for (const QLCPalette *p : match)
+            if (p->id() == pid)
+                return pid;
+    // 3. Any: by name, then id.
+    std::sort(match.begin(), match.end(), [](const QLCPalette *a, const QLCPalette *b) {
+        const int c = a->name().compare(b->name(), Qt::CaseInsensitive);
+        return c != 0 ? c < 0 : a->id() < b->id();
+    });
+    return match.first()->id();
+}
+
+/** "Palettes/Color/" and "Palettes/Color" are the same folder. */
+static QString cleanFolder(QString path)
+{
+    while (path.endsWith(QLatin1Char('/')))
+        path.chop(1);
+    return path;
+}
+
+QString ShowTreeController::suggestPaletteFolder(QLCPalette::PaletteType type) const
+{
+    QMap<QString, int> count;
+    for (const QLCPalette *p : m_doc->palettes())
+        if (p->type() == type && !m_inlinePalettes.contains(p->id()) && !p->name().isEmpty())
+            count[cleanFolder(p->path())]++;
+    QString best;
+    for (auto it = count.constBegin(); it != count.constEnd(); ++it)
+    {
+        // The most used; on a tie the shorter (the type's own folder over a
+        // song's sub-folder), then by name (QMap order).
+        if (best.isNull() || it.value() > count.value(best)
+            || (it.value() == count.value(best) && it.key().length() < best.length()))
+            best = it.key();
+    }
+    if (best.isEmpty())
+        return QStringLiteral("Palettes/%1").arg(QLCPalette::typeToString(type));
+    return best;
+}
+
+/** A colour's name as a person says it: "Medium Sea Green", and whether it
+    is exactly that colour (else the nearest). */
+static QString colourName(const QColor &c, bool *exact)
+{
+    QString best;
+    int bestDist = INT_MAX;
+    // Sorted, so the same colour always gets the same name ("aqua" before
+    // "cyan").
+    QStringList names = QColor::colorNames();
+    names.sort();
+    for (const QString &n : names)
+    {
+        const QColor k = QColor::fromString(n);
+        if (k.alpha() != 255)
+            continue;           // "transparent"
+        const int dr = k.red() - c.red(), dg = k.green() - c.green(), db = k.blue() - c.blue();
+        const int dist = dr * dr + dg * dg + db * db;
+        if (dist < bestDist)
+        {
+            bestDist = dist;
+            best = n;
+        }
+    }
+    if (exact != nullptr)
+        *exact = bestDist == 0;
+    // "mediumseagreen" -> "Medium Sea Green": split before the known words.
+    static const QStringList words = {
+        "alice", "antique", "aqua", "marine", "azure", "beige", "bisque", "black", "blanched", "almond",
+        "blue", "violet", "brown", "burly", "wood", "cadet", "chartreuse", "chocolate", "coral",
+        "cornflower", "cornsilk", "crimson", "cyan", "dark", "deep", "dim", "dodger", "fire", "brick",
+        "floral", "white", "forest", "green", "fuchsia", "gainsboro", "ghost", "gold", "rod", "gray",
+        "grey", "yellow", "honeydew", "hot", "pink", "indian", "red", "indigo", "ivory", "khaki",
+        "lavender", "blush", "lawn", "lemon", "chiffon", "light", "lime", "linen", "magenta", "maroon",
+        "medium", "orchid", "purple", "sea", "slate", "spring", "turquoise", "midnight", "mint", "cream",
+        "misty", "rose", "moccasin", "navajo", "navy", "old", "lace", "olive", "drab", "orange", "pale",
+        "papaya", "whip", "peach", "puff", "peru", "plum", "powder", "rebecca", "rosy", "royal", "saddle",
+        "salmon", "sandy", "shell", "sienna", "silver", "sky", "snow", "steel", "tan", "teal", "thistle",
+        "tomato", "wheat", "smoke", "goldenrod" };
+    QStringList parts;
+    QString rest = best;
+    while (!rest.isEmpty())
+    {
+        QString w;
+        for (const QString &k : words)
+            if (rest.startsWith(k) && k.length() > w.length())
+                w = k;
+        if (w.isEmpty())
+            w = rest;
+        parts << w.left(1).toUpper() + w.mid(1);
+        rest = rest.mid(w.length());
+    }
+    return parts.join(QLatin1Char(' '));
+}
+
+QString ShowTreeController::suggestPaletteName(QLCPalette::PaletteType type, const QVariantList &values) const
+{
+    QList<const QLCPalette *> siblings;
+    QStringList taken;
+    for (const QLCPalette *p : m_doc->palettes())
+    {
+        if (p->type() != type || p->name().isEmpty())
+            continue;
+        if (!m_inlinePalettes.contains(p->id()) || m_batchNamed.contains(p->id()))
+            taken << p->name();
+        if (!m_inlinePalettes.contains(p->id()) && p->fanningType() == QLCPalette::Flat && !p->values().isEmpty())
+            siblings << p;
+    }
+    std::sort(siblings.begin(), siblings.end(), [](const QLCPalette *a, const QLCPalette *b) {
+        return a->id() < b->id();
+    });
+
+    // A sibling whose name holds its own value gives the pattern, "{}" where
+    // the value goes; the most common pattern wins (ties: the oldest).
+    auto pattern = [&](const std::function<QStringList(const QLCPalette *)> &spellings) {
+        QMap<QString, int> count;
+        QStringList order;
+        for (const QLCPalette *p : siblings)
+        {
+            const QStringList spelt = spellings(p);
+            for (int si = 0; si < spelt.count(); ++si)
+            {
+                const QString &v = spelt.at(si);
+                if (v.isEmpty())
+                    continue;
+                const QRegularExpression re(QStringLiteral("(?<![0-9A-Za-z])%1(?![0-9A-Za-z])")
+                                            .arg(QRegularExpression::escape(v)),
+                                            QRegularExpression::CaseInsensitiveOption);
+                const QRegularExpressionMatch m = re.match(p->name());
+                if (!m.hasMatch())
+                    continue;
+                QString t = p->name();
+                t.replace(m.capturedStart(), m.capturedLength(), QStringLiteral("{%1}").arg(si));
+                if (!order.contains(t))
+                    order << t;
+                count[t]++;
+                break;
+            }
+        }
+        QString best;
+        for (const QString &t : order)
+            if (best.isNull() || count.value(t) > count.value(best))
+                best = t;
+        return best;
+    };
+
+    QString name;
+    if (type == QLCPalette::Dimmer)
+    {
+        const int pc = levelPercent(values.value(0).toInt());
+        const QString t = pattern([](const QLCPalette *p) {
+            return QStringList { QString::number(levelPercent(p->values().first().toInt())) };
+        });
+        name = t.isEmpty() ? QStringLiteral("Dimmer %1%").arg(pc)
+                           : QString(t).replace(QStringLiteral("{0}"), QString::number(pc));
+    }
+    else if (type == QLCPalette::Color)
+    {
+        QColor rgb, wauv;
+        QLCPalette::stringToColor(values.value(0).toString(), rgb, wauv);
+        const QString hex = rgb.name();                   // "#33aa55"
+        // Siblings write the hex with its '#' ({0}) or without ({1}).
+        const QString t = pattern([](const QLCPalette *p) {
+            QColor r, w;
+            if (!QLCPalette::stringToColor(p->values().first().toString(), r, w))
+                return QStringList();
+            return QStringList { r.name(), r.name().mid(1) };
+        });
+        if (!t.isEmpty())
+        {
+            name = QString(t).replace(QStringLiteral("{0}"), hex).replace(QStringLiteral("{1}"), hex.mid(1));
+        }
+        else
+        {
+            // Palettes named by colour ("Red", "Candle Orange"): its name, or
+            // the nearest with its hex when it is only near.
+            bool exact = false;
+            const QString nm = colourName(rgb, &exact);
+            name = exact ? nm : QStringLiteral("%1 %2").arg(nm, hex);
+        }
+    }
+    else
+    {
+        name = QLCPalette::typeToString(type);
+    }
+
+    // Never a name that type already has.
+    QString unique = name;
+    for (int n = 2; taken.contains(unique, Qt::CaseInsensitive); ++n)
+        unique = QStringLiteral("%1 (%2)").arg(name).arg(n);
+    return unique;
+}
+
+quint32 ShowTreeController::createNamedPalette(QLCPalette::PaletteType type, const QVariantList &values)
+{
+    const QString name = suggestPaletteName(type, values);
+    const QString folder = suggestPaletteFolder(type);
+    // Made the way a one-off is (so a failed command drops it), then made
+    // reusable: at once, or when the command succeeds.
+    const quint32 pid = createInlinePalette(type, values, name);
+    if (pid == QLCPalette::invalidId())
+        return pid;
+    if (QLCPalette *p = m_doc->palette(pid))
+        p->setPath(folder);
+    if (m_batchDepth > 0)
+    {
+        m_batchNamed << pid;
+        return pid;
+    }
+    m_inlinePalettes.remove(pid);
+    m_doc->setModified();
+    emit changed();
+    return pid;
 }
 
 static QList<quint32> targetFixtures(const Doc *doc, const Target &target)

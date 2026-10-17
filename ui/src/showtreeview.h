@@ -20,11 +20,13 @@
 #ifndef SHOWTREEVIEW_H
 #define SHOWTREEVIEW_H
 
+#include <functional>
 #include <QWidget>
 #include <QPair>
 #include <QList>
 #include <QSet>
 
+#include "showtreecontroller.h"
 #include "showtreemodel.h"
 #include "qlcpalette.h"
 
@@ -33,7 +35,6 @@ class QListWidget;
 class ShowTreeCommand;
 class QDoubleSpinBox;
 class QTreeWidgetItem;
-class ShowTreeController;
 class LookEditor;
 class QTreeWidget;
 class QPushButton;
@@ -135,9 +136,45 @@ public:
     bool dropCue(quint32 cueId, quint32 onCueId, bool include);
     QString cueDropHint(quint32 cueId, quint32 onCueId, bool include) const;
 
-    /** A one-off value (D21): an inline palette on the layer (or cue). */
+    /** A value picked (D21 as changed 2026-10-17): the palette that plays
+     *  exactly it (In this cue list, then Recent, then any), else a one-off
+     *  -- an inline palette on the layer (or cue), "Make reusable" a click
+     *  away on its row. */
     bool setOneOffDimmer(quint32 cueId, quint32 layerId, int percent);
     bool setOneOffColour(quint32 cueId, quint32 layerId, const QColor &colour);
+    /** The Library's Recent palettes, newest first. */
+    QList<quint32> recentPalettes() const;
+
+    /** + Layer: the groups / fixtures selected in the Library as one layer,
+     *  or (@a separate: ⌥-click, or its menu) one layer each -- as a drop. */
+    bool addLayersFromLibrary(bool separate);
+    /** Split a layer into one per group; merge layers of one cue. False /
+     *  invalid (and @a why) when refused. */
+    bool splitLayer(quint32 cueId, quint32 layerId, QString *why = nullptr);
+    quint32 mergeLayers(quint32 cueId, const QList<quint32> &layerIds, QString *why = nullptr);
+    /** The cue's own layers selected in the tree, when all are of one cue
+     *  (@a cueId); empty otherwise. */
+    QList<quint32> selectedLayers(quint32 *cueId = nullptr) const;
+
+    /************************************************************************
+     * Record as new cue: which stage (selected / running / everything lit)
+     ************************************************************************/
+public:
+    typedef ShowTreeController::RecordSource RecordSource;
+    /** QSettings key of the default for Design (@a perform false) or
+     *  Perform: "ask" (default), "selected", "running" or "lit". */
+    static QString recordSettingKey(bool perform);
+    static QString recordSetting(bool perform);
+    /** Record as new cue from @a cueId: when the choices differ the
+     *  setting picks, or the dialog asks ("Don't ask again" writes the
+     *  setting). The new cue, selected (invalid: cancelled). */
+    quint32 recordFrom(quint32 cueId);
+    /** Pick among @a choices (two or more) as recordFrom() does. */
+    bool chooseRecordSource(quint32 cueId, const QList<RecordSource> &choices, RecordSource *chosen);
+    /** In place of the dialog (tests): false cancels; @a dontAsk set writes
+     *  the choice as the default for the mode. */
+    typedef std::function<bool(const QList<RecordSource> &choices, RecordSource *chosen, bool *dontAsk)> RecordAsker;
+    void setRecordAsker(const RecordAsker &asker) { m_recordAsker = asker; }
     /** Clear an attribute on the layer/cue (it inherits again), or set it
      *  None (off here). */
     bool clearAttribute(quint32 cueId, quint32 layerId, const QString &key);
@@ -243,6 +280,11 @@ private:
                    const ShowTree::Look &look);
     quint32 inlinePalette(quint32 cueId, quint32 layerId, const ShowTree::Target &target,
                           QLCPalette::PaletteType type, const QVariantList &values, const QString &value);
+    /** The palette playing exactly @a values to reuse, else inlinePalette(). */
+    quint32 valuePalette(quint32 cueId, quint32 layerId, const ShowTree::Target &target,
+                         QLCPalette::PaletteType type, const QVariantList &values, const QString &value);
+    bool askRecordSource(quint32 cueId, const QList<RecordSource> &choices, RecordSource *chosen,
+                         bool *dontAsk);
     QString lookText(const ShowTree::Look &look) const;
     QString originText(const ShowTree::CueList &list, const ShowTree::ResolvedValue &value) const;
     QString paletteName(quint32 id) const;
@@ -326,6 +368,7 @@ private:
     QLabel *m_commandMsg = nullptr;
     ShowTreeCommand *m_commander = nullptr;
     QStringList m_commandHistory;
+    RecordAsker m_recordAsker;
     int m_historyAt = -1;
     QList<quint32> m_expanded;
     quint32 m_pageCue = 0xFFFFFFFF;      //!< the cue the cue page shows

@@ -134,6 +134,14 @@ namespace ShowTree
          *  takes that layer's place and tracked values instead of lighting
          *  beside it. Empty: none (the usual case, the same target). */
         Target continues;
+        /** More carried-in layers it takes the place of, after @a continues
+         *  (a merge: one layer now stands for several). Their values fill in
+         *  what the first one doesn't have. Several own layers in one cue may
+         *  carry on from the same layer (a split): each starts from it. */
+        QList<Target> continuesAlso;
+
+        /** The pieces a split makes: one per group, and one on the fixtures. */
+        QList<Target> pieces() const;
 
         const Look *look(const QString &key) const;
         /** Set (replace) the look for its key; an empty, non-None look
@@ -245,6 +253,21 @@ namespace ShowTree
 
     /** Resolve every cue of @a list, in list order. Pure: no Doc. */
     QLC_ENGINE_EXPORT QList<ResolvedCue> resolve(const CueList &list);
+
+    /** What a cue puts on stage, per unit -- each group, fixture and opaque
+     *  function a layer lights ("g:12", "f:3", "x:40") -- and attribute:
+     *  the value that wins there (layers later in the cue win), or for
+     *  Dimmer (HTP) every value that plays. Two lists whose cues have the
+     *  same stage play the same, however their layers are cut up. */
+    typedef QMap<QString, QMap<QString, QStringList>> Stage;
+    QLC_ENGINE_EXPORT Stage stageOf(const ResolvedCue &cue);
+
+    /** The first place where @a before and @a after (the same list, edited)
+     *  play differently: its cue, unit ("g:12") and attribute. False when
+     *  every cue plays the same. */
+    QLC_ENGINE_EXPORT bool stageDiffers(const CueList &before, const CueList &after,
+                                        quint32 *cueId = nullptr, QString *unit = nullptr,
+                                        QString *key = nullptr);
 
     /** The mode @a cue really plays in, in @a list (List default made
      *  Track or Block). */

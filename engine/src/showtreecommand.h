@@ -22,11 +22,12 @@
 
 #include <QStringList>
 #include <QString>
+#include <functional>
 
 #include "qlcengine_export.h"
+#include "showtreecontroller.h"
 #include "showtreemodel.h"
 
-class ShowTreeController;
 class Doc;
 
 /** @addtogroup engine Engine
@@ -42,14 +43,20 @@ class Doc;
  *   cue 1.0.1 "Verse"            select cue 1.0.1, or make it
  *   cue + "Verse"                a new cue after the selected one (D23)
  *   track | block | cueonly | default | base     the selected cue's mode
- *   Towers colour Blue dimmer 45 a layer per group named, then its looks
- *   Towers+Steps colour Red      one layer on both groups
+ *   Towers colour Blue dimmer 45 a layer on Towers, then its looks; a value
+ *                                typed reuses the palette that plays exactly
+ *                                that, else makes one named as the show's are
+ *   Towers Steps colour Red      ONE layer on both groups (as a drop is);
+ *   Towers+Steps colour Red      the same
+ *   Towers, Steps colour Red     a layer EACH (as an ⌥-drop is)
  *   cue look colour Red          a cue look
  *   Steps effect Sinelon colour Red              an effect with its own colour
  *   Towers gobo none             None: off here
  *   release Towers               toggle Release on the cue's Towers layer
  *   include 0.0.3                include a cue (again: take it out)
- *   record · dup · undo · redo   list "01-Opener"
+ *   record [selected|running|lit]   Record as new cue: the setting says
+ *                                which when the choices differ (or asks)
+ *   dup · undo · redo            list "01-Opener"
  *
  * Names are the Library's (groups, palettes), matched whole and ignoring
  * case; quote one with spaces ("AT W ALL") or let Tab complete it.
@@ -65,6 +72,9 @@ public:
         quint32 production = 0xFFFFFFFF;
         quint32 list = 0xFFFFFFFF;
         quint32 cue = 0xFFFFFFFF;
+        /** The Library's Recent palettes, newest first: a typed value
+         *  reuses one of these before any other (after In this cue list). */
+        QList<quint32> recentPalettes;
     };
 
     struct Result
@@ -87,6 +97,14 @@ public:
     /** The one-line grammar for the hint under the command line. */
     static QString grammar();
 
+    /** How a bare "record" picks what to record when the choices differ
+     *  (@a choices: ShowTreeController::recordChoices, two or more): the
+     *  view's setting, or its dialog. Returns false to cancel. Without one,
+     *  the first choice (the selected cue). */
+    typedef std::function<bool(quint32 cueId, const QList<ShowTreeController::RecordSource> &choices,
+                               ShowTreeController::RecordSource *chosen)> RecordChooser;
+    void setRecordChooser(const RecordChooser &chooser) { m_recordChooser = chooser; }
+
 private:
     QStringList groupNames() const;
     QStringList paletteNames(const QString &key) const;
@@ -98,6 +116,7 @@ private:
 
     Doc *m_doc;
     ShowTreeController *m_st;
+    RecordChooser m_recordChooser;
 };
 
 /** @} */

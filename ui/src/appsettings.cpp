@@ -28,7 +28,10 @@
 #include <QPushButton>
 #include <QDialogButtonBox>
 
+#include <QFormLayout>
+
 #include "appsettings.h"
+#include "showtreeview.h"
 #include "app.h"
 
 AppSettings::AppSettings(App *app, QWidget *parent)
@@ -112,6 +115,32 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     fxLayout->addStretch();
     mainLayout->addWidget(fxGroup);
 
+    // --- Show Tree ---
+    // Record as new cue: what to record when the selected cue, the list's
+    // running cue and everything lit differ. Ask, or one of them -- per mode.
+    QGroupBox *stGroup = new QGroupBox(tr("Show Tree"), this);
+    stGroup->setObjectName(QStringLiteral("settingsShowTree"));
+    stGroup->setProperty("helpTopic", QStringLiteral("show-tree.md"));
+    QFormLayout *stLayout = new QFormLayout(stGroup);
+    auto recordCombo = [this, stGroup](bool perform) {
+        QComboBox *c = new QComboBox(stGroup);
+        c->setObjectName(perform ? QStringLiteral("settingsRecordPerform") : QStringLiteral("settingsRecordDesign"));
+        c->addItem(tr("Ask"), QStringLiteral("ask"));
+        c->addItem(tr("The selected cue"), QStringLiteral("selected"));
+        c->addItem(tr("The running cue"), QStringLiteral("running"));
+        c->addItem(tr("Everything lit"), QStringLiteral("lit"));
+        c->setToolTip(tr("Record as new cue, when what is on stage differs: ask, or record this. "
+                         "When it names something not on stage (nothing running), it asks."));
+        const int idx = c->findData(ShowTreeView::recordSetting(perform));
+        c->setCurrentIndex(idx < 0 ? 0 : idx);
+        return c;
+    };
+    m_recordDesignCombo = recordCombo(false);
+    m_recordPerformCombo = recordCombo(true);
+    stLayout->addRow(tr("Record in Design:"), m_recordDesignCombo);
+    stLayout->addRow(tr("Record in Perform (Operate):"), m_recordPerformCombo);
+    mainLayout->addWidget(stGroup);
+
     // --- Show control (QLab) ---
     // Edited in one place: Connections' Show control & sync page, next to
     // the MIDI inputs MSC and timecode arrive on. This just points there.
@@ -163,6 +192,10 @@ void AppSettings::accept()
     // Apply tab label mode
     const int mode = m_tabLabelModeCombo->currentData().toInt();
     m_app->setTabLabelMode(mode);
+
+    // Show Tree: what Record records when the choices differ.
+    QSettings().setValue(ShowTreeView::recordSettingKey(false), m_recordDesignCombo->currentData().toString());
+    QSettings().setValue(ShowTreeView::recordSettingKey(true), m_recordPerformCombo->currentData().toString());
 
     // Effect script editor preference (read by the Look Editor authoring flow).
     QSettings().setValue(QStringLiteral("effectscript/editor"),

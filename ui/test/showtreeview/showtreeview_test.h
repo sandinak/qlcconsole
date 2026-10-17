@@ -63,6 +63,10 @@ private slots:
     void recordAsNewCueFromTheHeader();
     void theLibraryShowsWhatTheListUses();
     void theCommandLine();
+    // P2 answers (2026-10-17)
+    void recordAsksWhenTheChoicesDiffer();
+    void severalGroupsOneLayerOrEach();
+    void aPickedValueReusesAPalette();
     void pictureOfARealShow();
 
 private:
