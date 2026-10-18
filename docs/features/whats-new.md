@@ -6,6 +6,15 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Show Tree
 
+- **Movers with a colour ring.** A ring of LEDs round a mover's lens is a
+  head type of its own: group by head type makes **Movers** and **Ring**
+  groups, and a Colour look on each sets only the wheel or only the ring
+  (on both, each its nearest slot: black is the ring's off, any colour the
+  nearest hue). The ring's chases are picked by name — the Look Editor's
+  **Wheel / ring** list, or `Ring colour Red/Yellow-Chase`. The 2D plot
+  and the Rig Overview draw the ring, live, chases stepping round.
+  **Change Definition…** moves fixtures to a drop-in definition with the
+  ring as its own head. See [Colour rings](show-tree.md#colour-rings).
 - **Looks (busking) and palettes in the Library.** A production now has a
   **Looks** section beside its cue lists: looks built with the same layers
   and rows as cues, which never track and play from VC buttons over

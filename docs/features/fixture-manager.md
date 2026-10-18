@@ -372,7 +372,13 @@ or tilt in the head, or on the fixture's body: "RGBW movers"). Two heads
 are the same type when those match — whatever fixture model they are on,
 so the RGB pixels of a bar and of a strip share "· RGB pixels" in option
 2. Tick **Keep fixture models apart** to give each model its own group
-instead. A head with no colour, intensity or movement is "Other".
+instead. A head with no colour, intensity or movement is "Other". A
+mover's head with only a dimmer (its colour on a wheel) is just
+**Movers**. A head whose only colour is a colour wheel or colour-macro
+channel — a mover's **colour ring** round the lens — is **Ring** on a
+fixture that moves and **Colour macro** elsewhere, so a mover with a ring
+as its own head makes a "· Movers" group and a "· Ring" group (see
+[Colour rings](show-tree.md#colour-rings)).
 
 **Strobe isn't a type.** A shutter or strobe channel doesn't make a head
 a different type: the bars' white strobe cells are "White", and an RGB
@@ -441,13 +447,25 @@ source group's id. This is what lets the editor:
   by side, ordered by their position on the 2D plot. Useful for a group like
   "all step fronts" assembled from several smaller per-step groups.
 
+### Change Definition
+
+Select fixtures of one definition and right-click → **Change
+Definition…** to move them all to another definition of the same
+manufacturer that is a **drop-in**: every mode they use is there by name,
+with the same channels in the same order. Addresses, names, groups and
+everything programmed stay; only what the definition adds changes — a
+mover's colour ring made a head of its own, say. The item only shows when
+there is such a definition. Undo it the same way (the old definition is a
+drop-in for the new one).
+
 ## Context menu
 
 Right-click is laid out by what it is about, in the same order whatever is
 selected, and only offers what applies:
 
 1. **The fixture itself** — Fixture Properties…, Definition & Mode… and
-   Edit Fixture Definition… (one fixture).
+   Edit Fixture Definition… (one fixture), Change Definition… (fixtures of
+   one definition, when another is a drop-in for it).
 2. **Its address** — **Patch…** (the one name for giving an address and
    moving one, here, on the plot and in the studio; "Patch N Fixtures…" for
    several) and Return to Inventory….

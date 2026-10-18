@@ -6,6 +6,54 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-18 — Colour rings on movers *(on feat/show-tree, not merged)*
+
+Branson's "LED Movinghead+Circle" (10 fixtures in DanceHysteria): a small
+spot with a colour ring round the lens on one macro channel ("Circle
+Color": off, Red … White, two-colour chases, RGB/Random-Chase). His
+definition (left untouched) has one head -- the ring inside it in 12
+Channel, in no head in 10 Channel.
+
+- **New definition** `LED Movinghead+Circle (2 heads)` (a distinct model:
+  the cache keys definitions by manufacturer + model, so a second file of
+  the same model would be ignored as a duplicate): the same channels and
+  DMX, head 1 Spot, head 2 Ring, both modes. In the repo at
+  `engine/test/common/fixtures/` (with a copy of his original, for tests);
+  not installed into his user folder (left to him). Schema: only the
+  original's `Weight="0"` complaint.
+- **Head types** (`HeadKinds::typeOf`): a head whose only colour is a
+  Colour-group channel is `Ring` on a fixture that moves, `Macro`
+  ("Colour macro") elsewhere; a mover's dimmer-only head (`I/PT`) is named
+  "Movers". Groups by head type: "Mover · Movers" + "Mover · Ring".
+- **Colour → slot** (`QLCPalette::nearestColourValue`, wheels and rings
+  alike, replacing RGB distance): black → "off" (a wheel without one: its
+  white/open slot), white/grey → White, else nearest hue; slot colours from
+  their names (`capabilityColour`; splits and chases are no colour). Was:
+  black → Green, pink → White. A Colour look can name a slot
+  (`colourMacro`, saved as `ColourMacro`): the ring plays it, the rest the
+  colour. Channels in no head are set too on a fixture that mixes colour
+  nowhere -- so the old 10 Channel ring now follows a colour as the 12
+  Channel one did (before: untouched).
+- **Show Tree**: overlap is per head (`unitsOfTarget`), so Movers and Ring
+  layers on the same fixtures no longer exclude each other (they did: the
+  ring layer was dropped). Command line: a per-type group by its type alone
+  (`Ring colour Blue`), ring slots as colour values (`colour
+  Red/Yellow-Chase`, Tab offers them).
+- **Look Editor**: Colour page "Wheel / ring" list (slots of the targets'
+  wheels and rings, else the show's). **Fixture Manager**: Change
+  Definition… for fixtures of one definition to a drop-in one.
+- **Drawing**: `findColourRing()` (Ring head; else a Colour channel named
+  Circle/Ring/Halo; else a later Colour channel with an off and a chase),
+  `colourRingSegments()` (chases step 4/s). 2D plot: a band round the head
+  (ring head not drawn as a second head, ring channel not the head's
+  colour); Rig Overview: points round the head's face, from the frame's
+  value snapshot, chases on the optics clock. A ring head is not a mover
+  unit (`headCount`).
+- Tests: qlcpalette (mapping table, Spot/Ring/both, old def pinned, named
+  macro), showtree (ring layers, tracking, preview, command line, overlap),
+  headtypegroups (types, groups, Change Definition), lookeditor (Wheel /
+  ring), monitor (detection, segments, 2D + Rig Overview render).
+
 ### 2026-10-18 — Show Tree answer 26: deleting a palette clears every use *(on feat/show-tree, not merged)*
 
 Branson: "delete" (SHOW_TREE_DESIGN.md §10.17). Deleting a used palette —

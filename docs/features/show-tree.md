@@ -309,6 +309,13 @@ other isn't lit there for that attribute, so a lower level is never
 overridden by a higher one (no highest-wins show-through); what only one of
 them sets, it plays.
 
+Overlap is **per head**: a group made of a fixture's heads covers only
+those heads. A mover with a colour ring made into **Movers** and **Ring**
+groups (see [Colour rings](#colour-rings)) has two layers that don't
+overlap at all, though they are the same fixtures. A layer on the whole
+fixture and one on its ring do overlap on the ring: the lower layer wins
+the ring, the whole-fixture layer keeps the rest.
+
 ## Setting looks
 
 A layer's page has one row per attribute:
@@ -438,6 +445,42 @@ When no palette plays it:
   name yourself, right-click it in Recent → **Make reusable…**. Either is one
   undo step: undo makes it a one-off again. A one-off that no cue uses any
   more is deleted.
+
+### Colour rings
+
+Some movers have a **colour ring**: a ring of LEDs round the lens, driven
+by one channel of named colours and chases (off, Red … White,
+Red/Yellow-Chase … RGB/Random-Chase). With a definition that makes the
+ring a head of its own, **Create Group(s) from Selection** by head type
+makes a **Movers** group and a **Ring** group, and each is an ordinary
+layer: cascade, tracking, Release and the preview all work on it as on any
+group.
+
+- **A Colour look on the Movers group** sets only the colour wheel; **on
+  the Ring group**, only the ring; **on the whole fixture** (or a group of
+  both heads), each its nearest slot.
+- **Which slot a colour picks**, on a wheel and on a ring alike: black is
+  the ring's **off** (a wheel has no off and stays on its open/white slot —
+  the dimmer makes it dark); white or a grey is **White**; any other colour
+  the slot of the **nearest hue** (dark orange → Yellow on the ring, Orange
+  on the wheel; pink → Red; teal → Cyan). A dim colour still picks its hue:
+  the ring has no dimmer.
+- **A chase is no colour**, so it is picked by name: in the Look Editor's
+  **Wheel / ring** list, or typed — `Ring colour Red/Yellow-Chase` makes (or
+  reuses) a palette named after it. Where a wheel or ring has no slot of
+  that name it plays the look's colour instead.
+- **Typing the group:** a group made per head type is named
+  *fixtures · type* ("Mover · Ring"); the type alone (`Ring colour Blue`)
+  names it as long as only one group ends that way and nothing else is
+  called that. `"Mover · Ring"` in quotes always works.
+- **"Applies to N of M"** counts the ring like a wheel: a Colour look on a
+  Ring group applies to all of it.
+
+With a definition that keeps the ring in the spot's head (or in no head), a
+Colour look sets **both** the wheel and the ring, each to its nearest slot
+— the same in either mode. To set them apart, move the fixtures to a
+definition with the ring as a head of its own (Fixture Manager → **Change
+Definition…**).
 
 ### Gobos by name
 

@@ -599,6 +599,25 @@ step sends a sheet of **lit air rising** off it, both as bright as the
 pixels (colour × dimmer) and scaled by the haze. Lanterns have their own
 halo; movers show their beams.
 
+### Colour rings
+
+A mover with a **colour ring** round its lens (a ring of LEDs on one
+colour-macro channel) shows it, live, on the **2D plot** — a band round
+the head — and in the **Rig Overview** — a ring of points on the head's
+face, turning with pan and tilt and hidden when the face is turned away.
+Off is dark glass; a colour lights it all round; a chase
+(Red/Yellow-Chase, RGB/Random-Chase) steps its colours round four times a
+second. The ring has no dimmer: it shows whatever the spot's dimmer says.
+
+What counts as a ring, in order: a head of its own whose only colour is a
+colour wheel/macro channel, on a fixture that moves (a definition with a
+**Ring** head); else a Colour channel named "Circle", "Ring" or "Halo";
+else a Colour channel after the fixture's first whose slots include an
+off and a chase (a wheel has neither). Anything else draws no ring. A
+ring that is a head of its own is not drawn as a second mover: the
+fixture is still one head on its yoke, and the spot's colour (its wheel)
+is the beam's.
+
 ### Lasers and star projectors
 
 A fixture definition can say what its light *is* (Fixture Editor → Look in

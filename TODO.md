@@ -106,6 +106,12 @@ implementation notes and the questions below). Built: the hand-over fix,
 the engine model / cascade / bake / undo / import, the Show Tree tab and its
 help (DONE.md 2026-10-16). Handoff: SHOW_TREE_OVERNIGHT.md.
 
+- **Colour rings 2026-10-18 done** (DONE.md). Branson to do: install
+  `engine/test/common/fixtures/Branson-LED-Movinghead+Circle-2heads.qxf`
+  beside his own definition (qlcconsole fixtures folder), then select the
+  10 movers → **Change Definition…** → "LED Movinghead+Circle (2 heads)",
+  then Create Group(s) from Selection by head type. Try on the rig: does
+  the ring take the spot's dimmer (drawn as not)?; the chase step rate.
 - **Fix pass 2026-10-17 done** (DONE.md): preview of the selected cue in
   Design mode, several groups in one layer, Library group folders, gobos by
   name per fixture type.
