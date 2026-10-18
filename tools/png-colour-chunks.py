@@ -17,13 +17,15 @@
 #
 #   tools/png-colour-chunks.py [--strip] [dir-or-file ...]
 #
-# With no paths it walks the source tree this script lives in (skipping
-# build* directories and .git). Without --strip it lists every PNG that still
+# With no paths it checks the source tree this script lives in: the PNGs git
+# tracks in a checkout, else (a plain copy) every PNG outside build*, .git and
+# a top-level qt/ (where CI unpacks Qt). Without --strip it lists every PNG that still
 # carries one of the chunks and exits 1 if there is any -- unittest.sh runs it
 # that way as part of the test gate.
 
 import os
 import struct
+import subprocess
 import sys
 import zlib
 
@@ -59,14 +61,38 @@ def strip(data, path):
     return out
 
 
+def tracked_pngs(top):
+    """PNGs git tracks under top, or None if top isn't a git checkout."""
+    if not os.path.exists(os.path.join(top, '.git')):
+        return None
+    try:
+        out = subprocess.run(['git', '-C', top, 'ls-files', '-z'],
+                             capture_output=True, check=True).stdout
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return sorted(os.path.join(top, f) for f in out.decode('utf-8').split('\0')
+                  if f.lower().endswith('.png'))
+
+
 def pngs(paths):
     for p in paths:
         if os.path.isfile(p):
             yield p
             continue
+        # A checkout: only what the repo ships. CI unpacks Qt itself inside
+        # the checkout (./qt), and Qt's own PNGs are not ours to fix.
+        tracked = tracked_pngs(p)
+        if tracked is not None:
+            for f in tracked:
+                yield f
+            continue
+        # A plain copy (check-all.sh gates a git archive): walk it, skipping
+        # build trees, .git and a top-level Qt install.
         for root, dirs, files in os.walk(p):
+            top = os.path.samefile(root, p)
             dirs[:] = sorted(d for d in dirs
-                             if not d.startswith('build') and d != '.git')
+                             if not d.startswith('build') and d != '.git'
+                             and not (top and d == 'qt'))
             for f in sorted(files):
                 if f.lower().endswith('.png'):
                     yield os.path.join(root, f)
