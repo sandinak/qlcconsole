@@ -1509,6 +1509,116 @@ a base cue, a cue dropping a layer: 0 channels differ),
 compares); `showtreeview_test::reusablesInTheTreeAndTheLibrary`,
 `convertAndDetachFromTheListPage`, `everyActionIsOneUndoStep` (+13).
 
+### 10.15 R1–R3 of the Programming role (2026-10-18): Library palettes, the Looks section
+
+Built from PROGRAMMING_ROLE_DESIGN.md (P-D5…P-D8, P-D13, P-D14; §4.1, §4.2,
+§5, §7 R1–R3), approved "yes" to *Looks/busking + palettes in the Library
+next*. Merged `design/programming-role` first.
+
+**R1 — only what R2/R3 need.**
+
+- **`PaletteOps`** (`engine/src/paletteops.{h,cpp}`, owned by Doc,
+  `Doc::paletteOps()` — the design said "beside ProgrammerController"; Doc
+  owns it as it owns the tree, a thin accessor only): create by type (the
+  start values Programming used), rename, duplicate, file (`move`, raw
+  `setPath`), folders (`addFolder` kept for the session, `renameFolder`,
+  `removeFolder` moving contents up), `remove`. The tree's one-off palettes
+  are left alone (`isManaged`).
+- **One palette undo, one history (P-D14, housekeeping half).** Each
+  PaletteOps operation is a step (the palettes before/after as XML, plus
+  where a deleted one was: scene and index, effect slots). Undo of a delete
+  re-adds it **with its id**, back in every scene at its place and every
+  slot, so the cues and looks still naming it play it again. Tree snapshots
+  and palette steps carry a shared, increasing stamp
+  (`PaletteOps::nextUndoStamp`); `ShowTreeController::undoShared()/
+  redoShared()` take the newest / the one undone last, and a new step on
+  either side clears the other's redo. The tab's Undo, ⌘Z and the `undo`
+  command use them. The Programming tab's New / Duplicate / Delete / Move
+  to folder call PaletteOps, so they are on this history (the Show Tree's
+  Undo takes them back); its own ⌘Z (scene snapshots) is unchanged.
+- **One Used by (P-D13).** `PaletteOps::usage(pid)`: cues ("Cue 1.0.1 Verse
+  in Full Show — Towers", or *cue look*), looks, reusables, plain scenes
+  (never a generated one), effect slots; each with the function that plays
+  it. `ui/src/usedby.{h,cpp}` adds the VC buttons firing those, the
+  summary ("2 cue(s), 1 look(s) · 1 VC button(s)") and the delete question
+  — used by the Library, the Look Editor line, the look page, reusables'
+  Used by, and Programming's delete (which now names cues, not generated
+  scenes). `LookEditor::setUsedBy()` (a line with links) is in the class.
+- **Left for later (R1):** Look Editor **value** edits on the palette undo
+  (needs coalescing a slider drag into one step); Programming's tree folder
+  rename / delete / drag (FunctionsTreeWidget, shared with the Functions
+  tab) still set paths directly, off the history; the power estimate to the
+  app; the Stage bar (P-D10); the Used by line in Programming's editor (the
+  class has it, the host doesn't set it); Programming's ⌘Z reaching the
+  palette history.
+
+**R2 — palettes in the Library (P-D8).** All → Palettes: **by type** with
+the folders under each (default, as the Library was) or **folders first**,
+any type in each (feat/palette-folders' view; right-click → Group by type,
+remembered). + Palette by type (button beside the filter, folder menu) in the
+selected folder, else where the show keeps the type; opens in the docked
+Look Editor. F2 rename (palette or folder), New / Delete folder, drag onto a
+folder (or the *Palettes* heading: none), Move to folder menu, Duplicate,
+Edit, Used by (cues/looks jump), Delete (⌫, asks with every use and VC
+button). Command line: `palette <type> ["name"] [value] [in <folder>]`,
+`palette <name> rename|move|dup|delete [anyway]|edit`, `palette folder …`,
+with help and Tab. Not built: **Open in Palettes** (§4.2).
+
+*Palette folders and feat/palette-folders (not merged):* folders are
+type-independent as that branch makes them. Read: a path stored type-first
+(`Palettes/Color/01-Song/`) is the folder `01-Song` (its
+`migrateLegacyPath` rule, read only — nothing migrates on load). Written:
+what is filed or renamed here is stored type-independent
+(`Palettes/01-Song/`), without its `Folders="1"` marker. Merging it later:
+its loader would migrate a folder **named like a type** ("Color") stored
+here — open 25.
+
+**R3 — the Looks section (P-D5…P-D7).**
+
+- **Model: a look is a cue of a flagged list** — `CueList::looks`, one per
+  production, saved as `<Looks>` (folders: `Cue Folder=`, empty ones
+  `<Folder Path>`) — not a new node type. So every operation on a cue works
+  on a look unchanged (layers, rows, cascade, sets, child layers, effects,
+  line aims, reusable layers, copy/paste, rename, multi-select, delete,
+  undo, the Design preview, the command line). What makes it a look:
+  `effectiveMode` is Block; `edit()` keeps every look without mode,
+  includes or base (`normalizeLooks`, also clearing a folder off a look
+  pasted into a list); include, base, mode, Convert, Detach and renaming
+  the section are refused.
+- **Bake — deviation from §4.1:** a look is **always a Collection** of its
+  own (the design: a Scene when it has one layer). A layer's scene is found
+  by what it plays and changes id when the look changes; the cue's
+  Collection keeps its id, so a VC button keeps firing the look as it is
+  edited. **Shown** (the design's "Look: Hit 1" in the picker: built as the
+  look's own name under `Productions/<p>/Looks/<folder>`), locked (D13), no
+  chaser. *Open 21.*
+- **On stage (P-D6):** the engine's own merge, nothing new — tested: HTP
+  over a running list both ways, back to the list when stopped.
+- **Design preview:** selecting a look previews it as a cue (edit wins);
+  Perform: nothing. **Record → everything lit** takes a look a button fired
+  as its layers (its scenes are generated, so they were skipped before).
+- **VC (P-D7):** ordinary buttons; the look's page says *Fired by* (VC
+  buttons), the tree **VC ×N**. **Make VC page** (Looks, a folder, a look,
+  `vcpage`): a new VCFrame under what the console holds, header "Looks —
+  <folder|production>", one **Toggle** button per look (6 a row, 80 px),
+  captioned, background from the look's first resolved Colour.
+  `VirtualConsole::placeWidget()` (id, page) for widgets made outside the
+  Add menu. *Open 22.*
+- **Copy to look** (a cue's resolved stage, frozen, one step) and **Adopt as
+  look** (P-D16: `sceneToLayer` as the import reads a scene, else an opaque
+  layer; offers to re-point the VC buttons that fire the scene) — both
+  built. *Add to cue* is copy/paste of layers.
+- **Not built (R3 remainder):** per-look Fire as / fades / transition /
+  speed master (and on cue layers), a look's MIDI trigger in the tab.
+
+**Tests:** showtree_test +12 (PaletteOps folders and undo, usage, one
+history, palette commands; a look's Collection, no tracking, HTP/LTP over a
+running list, folders save/load/undo, adopt, record lit, look commands),
+showtreeview_test +6 (Library palettes, delete with Used by and undo with a
+VC button, every palette/look action one step on the shared history incl.
+the Programming tab's New palette, the Looks section in the tree, Make VC
+page and Adopt with re-pointing). programmingmanager_test unchanged, green.
+
 ### Open for Branson
 
 1. **`Generated` mark on `<Function>`** as well as in `<ShowTree>`? (10.2;
@@ -1582,3 +1692,21 @@ compares); `showtreeview_test::reusablesInTheTreeAndTheLibrary`,
     chaser is all its own from the start?
 20. **"Detached from BackStage" badge** (§1): after Unlink here a use
     doesn't say where it came from. Wanted?
+21. **A look bakes to a Collection always** (stable id for VC buttons),
+    not a Scene when it has one layer (§10.15). OK?
+22. **Make VC page** makes a new frame each time (Toggle buttons, six a row,
+    coloured by the first colour). Update the frame it made before instead?
+    Flash for some (a "Blackout Hit")?
+23. **Library palettes, default view:** by type with folders under each (as
+    built: how the Library was) or folders first (feat/palette-folders'
+    default)?
+24. **Programming's ⌘Z** stays its scene undo; its palette operations are
+    undone from the Show Tree. Should Programming's Undo reach the palette
+    history too?
+25. **feat/palette-folders:** merge it (its load migration, `Folders="1"`)?
+    Folders filed from the Library are stored its way already; one named
+    exactly like a palette type ("Color") would be stripped by its migration
+    unless PaletteOps writes the marker.
+26. **Deleting a palette cues use:** as built, the cues keep naming it
+    ("(missing)") and Undo brings it back everywhere. Or should Delete also
+    take the looks off the cues (a tree step)?

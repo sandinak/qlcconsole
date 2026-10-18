@@ -15,10 +15,16 @@ as cues. Everything is in one tree:
 - Cues have **Track / Block / Cue-only** modes, **Release**, a **base cue**
   and **includes**. Values that come from somewhere else show grey and say
   where they came from.
+- Beside its cue lists, a production has a **Looks** section: busking looks
+  built the same way, fired from Virtual Console buttons
+  ([Looks](#looks-busking)).
 
-**The Programming tab works alongside it.** You build palettes, groups,
-one-off scenes and effects there. The Show Tree uses the same palettes and
-groups, and the same Look Editor.
+**The Programming tab works alongside it.** It is the palette and effect
+workshop: effect design, `.qxfx` files, Bundles and raw-value scenes. The
+everyday palette work — new, rename, folders, delete — is also in the
+Library here ([Palettes in the Library](#palettes-in-the-library)). Both
+tabs use the same palettes, groups and Look Editor, and the same palette
+undo.
 
 **You never build the playback by hand.** Each cue list plays as a
 **chaser** of the same name, each cue as a **collection**, and each layer as
@@ -31,8 +37,9 @@ is changed only in the tree: elsewhere it is locked. See
 
 ## The tab
 
-- **Header.** It has + Production, + Cue list, + Cue, + Layer, Record,
-  Merge, Delete, Undo, Redo and Import chaser…. On the right are two pieces of
+- **Header.** It has + Production, + Cue list, + Cue (**+ Look** in a
+  Looks section), + Layer, Record, Merge, Delete, Undo, Redo and Import
+  chaser…. On the right are two pieces of
   status:
   - what the rig shows, such as *"▶ On the rig: 1.0.1 Verse"* (see
     [Seeing it on the rig](#seeing-it-on-the-rig));
@@ -50,7 +57,9 @@ from the Library lands in the tree right beside it.
   or *base*. A cue's badges are **■ base**, **⊘ block**, **◐ cue-only** and
   *includes N*. A layer that plays a function as it is shows **▣**. A use
   of a [reusable](#reusable-layers-and-cues) layer or cue shows **⟲** and
-  how many uses there are.
+  how many uses there are. Under the cue lists, **Looks** holds the
+  production's busking looks, in their folders; a look a VC button fires
+  shows **VC ×1**.
 - **Right: the page** for what is selected:
   - **A cue list** shows its mode and base cue, **Convert to tracking…**
     and **Detach to plain chaser…**.
@@ -58,7 +67,13 @@ from the Library lands in the tree right beside it.
     fade in / out, hold, cue looks, every layer on stage in it, a dashed
     drop area, and *Next cue receives*.
   - **A layer** shows what it contains, then one row per attribute.
-- **Under the page: the Look Editor**, when **✎** opens a value. At the
+  - **A look** shows its name, note, *Fired by* (the VC buttons, **Make VC
+    page**, **Move to folder…**), its looks and layers; **Looks** or a
+    look folder lists its looks and has **Make VC page**.
+- **Under the page: the Look Editor**, when **✎** opens a value or a
+  palette is edited from the Library. Its **Used by** line says where the
+  palette is used (*"Used by: 6 cue(s), 2 look(s) · 1 VC button"*); click
+  *which* for the list, and a cue or look to go there. At the
   bottom, full width, is **[the command line](#the-command-line)**, which
   is always there.
 
@@ -694,7 +709,14 @@ is always there and calls the same operations as the mouse.
 | `unlink` | **Unlink here**: the selected layer (else cue) keeps what it is, as its own |
 | `detach` · `detach list` | The selected layer to a plain scene; the selected list to a plain chaser |
 | `convert` · `convert apply` | **Convert to tracking**: what would change, in the help pane; then do it |
-| `dup` · `undo` · `redo` | As Duplicate cue, Undo and Redo |
+| `palette colour "Amber 2" #ffb000` · `palette dimmer "Half" 50 in "Levels"` | A **new palette** of that type (colour, dimmer, position, aim, beam, gobo, zoom, shutter, strobe, effect), valued and filed if you say so; it opens in the Look Editor |
+| `palette Amber rename "Amber 3"` · `move "01-Song"` · `move none` · `dup` · `edit` | Rename, file in a folder (or none), duplicate, open in the Look Editor |
+| `palette Amber delete` · `delete anyway` | Delete: refused while something uses it (it says what), unless `anyway` |
+| `palette folder "01-Song"` · `rename "02-Song"` · `delete` | A palette folder: new, renamed, deleted (what is in it moves up) |
+| `look "Hit 1"` · `look "Hit 1" in "Hits"` | Selects that **look** of the production, or makes it (and the Looks section); `in` files it. Then set its layers as on a cue |
+| `vcpage` | **Make VC page** for the selected look's folder (else every look) |
+| `adopt "Old Busk"` | **Adopt as look**: a scene becomes a look |
+| `dup` · `undo` · `redo` | As Duplicate cue, Undo and Redo (one history with the palettes, [Undo](#undo)) |
 | `help` · `help spread` · `?` | The language, with examples (see below) |
 
 **Names** are the Library's (groups, fixtures, palettes, functions), matched
@@ -707,13 +729,14 @@ with another name or holds a `,` or `+`.
 
 **Other words it takes:** `color`; `dim` and `level`; `pos`; `focus`,
 `frost` and `iris` (all Focus / Frost / Iris); `strobe` (Shutter); `fx`
-(effect); `fn` (function); `grouping`; `cue-only`; `cue new`; and `layer`
-before a group.
+(effect); `fn` (function); `grouping`; `cue-only`; `cue new`; `pal`
+(palette); and `layer` before a group.
 
 ### Help
 
 **`help`** (or **`?`**) lists every word, grouped: navigate, build, looks,
-tracking, record and copy, reuse (with detach and convert), undo. **`help <word>`** (`help record`, `help
+tracking, record and copy, reuse (with detach and convert), palettes, looks
+(busking), undo. **`help <word>`** (`help record`, `help
 spread`) shows its syntax (optional parts in [ ], alternatives with |),
 what it does, examples and related words. The help shows in a small pane
 above the line: **Esc** closes it, and a click on an example puts it in the
@@ -746,6 +769,11 @@ command line reads, so it is always right. The table above is a summary.
 | `copy` | `cue`, `layer`, then cue numbers or groups |
 | `use` | the reusable layers and cues |
 | `convert` · `detach` | `apply` · `list` |
+| `palette` | the palette types, the palettes, `folder` |
+| `palette` and a palette | `rename`, `move`, `dup`, `delete`, `edit`; after `move`, the folders and `none` |
+| `palette folder` | the palette folders, then `rename`, `delete` |
+| `look` | the production's looks; after a name, `in` and the look folders |
+| `adopt` | the functions |
 | `help` | every word |
 
 - **One match:** Tab puts it in, with a space after it.
@@ -757,7 +785,8 @@ command line reads, so it is always right. The table above is a summary.
 - **Quotes.** A name you begin with a quote is closed for you. A name with a
   `,` or `+` in it is put in quotes.
 
-In the command line, ⌘Z undoes your typing. Type `undo` to undo the tree.
+In the command line, ⌘Z undoes your typing. Type `undo` to undo the tree
+(or the last palette change).
 
 ## Undo
 
@@ -775,12 +804,21 @@ In the command line, ⌘Z undoes your typing. Type `undo` to undo the tree.
   Undoing a Detach removes the plain scene it made; Redo brings it back as
   it was. Undoing a Detach to plain chaser gives the list back on the same
   chaser and collections (locked again); Redo hands them over again.
-- **What tree undo doesn't cover:**
+- **Palettes are on the same history.** A palette made, renamed,
+  duplicated, filed or deleted — in the Library, typed, or in the
+  Programming tab's palette list — is a step too, and Undo takes back
+  whichever came last: a tree change or a palette change. Undoing a
+  palette's delete brings it back with its id, so every cue and look that
+  named it plays it again, and every scene and effect slot it was in has it
+  back in its place.
+- **What undo doesn't cover:**
   - a palette's values changed in the Look Editor (a colour dragged, a
     level moved): those are the palette's, as in the Programming tab;
   - a palette a command made (`dimmer 30` with none at 30%): undo takes the
-    value off the cue, and the palette stays, as an ordinary palette.
-- **Undo is not shared with the Programming tab.**
+    value off the cue, and the palette stays, as an ordinary palette;
+  - a VC page made by **Make VC page** (delete the frame on the console).
+- **The Programming tab's own Undo** (its scene snapshots) is unchanged; its
+  palette operations are undone from here.
 
 ## The Library
 
@@ -801,12 +839,48 @@ again what it opened.
   - **Reusable**: the [reusable layers and cues](#reusable-layers-and-cues),
     each with how many use it (hover: *Used by*);
   - **Groups**, in the Fixture Manager's folders;
-  - **Palettes**, by kind;
+  - **Palettes**, by type with your folders under each, or folders first
+    ([Palettes in the Library](#palettes-in-the-library));
   - **Functions (played as they are)**: not chasers, and not what the tree
-    made.
+    made. Right-click a scene → **Adopt as look** ([Looks](#looks-busking)).
 
 Select several items (⌘- or ⇧-click) to drag them together or use **+
 Layer**.
+
+### Palettes in the Library
+
+The everyday palette work happens here, without going to Programming. Every
+operation is one undo step on the tab's [Undo](#undo).
+
+- **+ Palette** (beside the filter, or right-click a palette folder →
+  **New palette**): pick the type — Colour, Dimmer, Pan/Tilt, Aim, Beam,
+  Gobo, Zoom, Shutter, Strobe, Effect. It is made in the folder selected in
+  the Library (else where the show keeps that type), selected, and opened
+  in the Look Editor under the page.
+- **Rename**: **F2** on a palette (or right-click → Rename) renames it in
+  place; Return keeps, Esc leaves it.
+- **Folders hold any type.** A folder per song, *01-Everybody Scream*, can
+  hold its colours, levels, positions and effects together. Right-click →
+  **New folder…**; **F2** renames a folder; right-click → **Delete folder**
+  moves what is in it up a level (nothing is deleted). Every type follows a
+  folder renamed or deleted.
+- **Move** palettes by dragging them onto a folder (the **Palettes**
+  heading itself is *no folder*), or right-click → **Move to folder**.
+- **Duplicate**, **Edit** (the Look Editor), **Used by** (every cue and
+  look by number and layer, scenes, effect slots, and the VC buttons that
+  fire them; click a cue or look to go there).
+- **Delete** (⌫, or right-click → Delete…) asks first and names everything
+  that uses it. Cues and looks that use it then show *(missing)*; Undo brings
+  it back everywhere.
+- **Two views.** Right-click the Palettes heading → **Group by type**:
+  ticked (the default), Colour, Dimmer… each with your folders under it;
+  unticked, your folders first with every type inside, and the palettes in
+  no folder below. It is remembered.
+- **Older shows** kept a folder per type (*Color › 01-Song*, *Dimmer ›
+  01-Song*). The Library reads those as one folder, *01-Song*; a palette
+  filed, or a folder renamed, from here is stored the new way.
+- **Still in Programming:** designing effects (the browser, presets, WLED),
+  `.qxfx` import and export, Bundles, and capturing.
 
 ## Editing the tree
 
@@ -818,7 +892,11 @@ layers](#editing-several-layers)), and Merge and Delete take them all.
 
 Right-click in the tree for:
 
-- **+ Production…**, **+ Cue list…**, **+ Cue**;
+- **+ Production…**, **+ Cue list…**, **+ Look**, **+ Cue**;
+- on a cue: **Copy to look** (what it puts on stage, as a new look);
+- on Looks or a look folder: **New folder…**, **Rename folder**, **Delete
+  folder**, **Make VC page**; on a look: **Move to folder**, **Make VC
+  page**;
 - on a cue: **Make the base cue**, **Include cue**, **Mode**, **Record as new
   cue**, **Duplicate cue**, **Move up** / **Move down**;
 - on a cue: **Make cue reusable…** (or, on a use, **Unlink here**);
@@ -933,6 +1011,50 @@ tracks already says *Nothing to convert*.
 It asks first, and is one undo step: undo puts the list back on the same
 chaser and collections.
 
+## Looks (busking)
+
+A **look** is a state you fire by hand from a Virtual Console button — a
+hit, a blackout, a crowd wash — rather than a cue in a list. Each
+production has a **Looks** section beside its cue lists.
+
+- **Make one.** **+ Look** (the header in a Looks section, or right-click
+  anywhere → **+ Look**), or type `look "Hit 1"`. The first look makes the
+  section. Name it on its page.
+- **Build it as a cue.** A look has the same layers, attribute rows,
+  child layers, group sets, effects, line aims and reusable layers as a cue,
+  and the same drops, pickers and commands (`Towers colour Red dimmer
+  Full`). Its page has no number, mode, includes, fades or *Next cue
+  receives*, and its layers no Release: **a look never tracks** — it plays
+  only what it has.
+- **Folders.** **New folder…** on Looks or a folder; drag looks onto a
+  folder (or onto *Looks* for none), or **Move to folder**. **F2** renames
+  a folder; **Delete** moves what is in it up.
+- **Fire it from VC.** Each look plays as a **collection** of its own,
+  named after it and shown in the function pickers under
+  `Productions/<production>/Looks/<folder>` — assign it to any VC button as
+  you would any function (Toggle or Flash). Its id stays the same as you
+  edit the look, so the button keeps firing it. **Make VC page** (on Looks,
+  a folder, a look's page, or `vcpage`) puts a frame on the Virtual Console
+  with one Toggle button per look there, captioned with its name and
+  coloured by its first colour. The look's page lists the buttons that fire
+  it (*Fired by*); the tree marks them **VC ×N**.
+- **Over a running cue list** a look mixes as any function does: the
+  highest intensity wins, and for colour, position and the rest the last
+  started wins. Stop it, and what the list plays is back.
+- **Seeing it.** Selected in Design, a look plays on the rig, as a cue does
+  (it wins over what runs); in Operate nothing previews — what runs owns the
+  stage. **Record as new cue → everything lit** records a look a button
+  fired as its layers.
+- **Copy to look** (right-click a cue) freezes what the cue puts on stage —
+  tracked, included and its own — into a new look. **Copy / Paste** move
+  layers and cues between lists and looks too.
+- **Adopt as look** (Library → Functions, right-click a scene, or `adopt`)
+  makes a look from an existing scene: its groups and palettes become a
+  layer when they play exactly the same, else the scene plays as it is
+  inside the look. The scene stays. When VC buttons fire the scene, it
+  offers to point them at the look.
+- What the tree made for a look is locked elsewhere, as for cues.
+
 ## Playing it
 
 - Each cue list plays as a chaser of the same name, at
@@ -979,15 +1101,30 @@ chaser and collections.
 | Drag a cue onto another cue | Move it there; with **⌥**, include it |
 | Click / **⌘-click** / **⇧-click** (in the tree) | Select a row / add or remove one / take the rows between |
 | Delete / Backspace (in the tree) | Delete the selected cues and layers, one undo step (a list or production asks) |
+| **F2** (in the Library) | Rename the palette or palette folder in place |
+| Delete / Backspace (in the Library) | Delete the selected palettes (asks, saying where each is used) or folder |
+| Drag palettes onto a Library folder | File them there (onto *Palettes*: no folder) |
+| Drag looks onto a look folder | File them there (onto *Looks*: no folder) |
 | **:** (in the tree) | To the command line |
 | **Esc** (in the command line) | Close the help, then back to the tree |
 | **Tab** (in the command line) | Complete the word; again, the next match |
 | ↑ / ↓ (in the command line) | Earlier / later commands |
 | Enter (in the command line) | Run it |
-| ⌘Z / ⇧⌘Z | Undo / Redo in the tree (in the command line: type `undo`) |
+| ⌘Z / ⇧⌘Z | Undo / Redo the last change, to the tree or a palette (in the command line: type `undo`) |
 | F1 | This guide |
 
 ## Limits and not yet
+
+- **A look has no fade, transition or speed master of its own** yet; a VC
+  button's Flash and the look's scenes' own settings are what there is. A
+  look's MIDI trigger is set on its VC button.
+- **Make VC page** always makes a new frame; it doesn't update one it made
+  before. VC isn't on the tab's Undo.
+- **The Look Editor's value changes** (a colour dragged) are not on Undo, in
+  either tab.
+- **The Programming tab's palette list** still shows the paths as stored: a
+  palette filed from the Library shows in a folder of its own name there,
+  one from an older show under its type.
 
 - **An unlinked use** doesn't say what it was linked to (no *"detached
   from BackStage"* badge).

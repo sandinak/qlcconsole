@@ -6,6 +6,18 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Show Tree
 
+- **Looks (busking) and palettes in the Library.** A production now has a
+  **Looks** section beside its cue lists: looks built with the same layers
+  and rows as cues, which never track and play from VC buttons over
+  whatever runs. **Make VC page** puts a button for each on the Virtual
+  Console; **Adopt as look** turns an existing scene into one; **Copy to
+  look** freezes a cue. The Library's **Palettes** gain the everyday work —
+  **+ Palette** by type, rename with **F2**, folders that hold any type,
+  drag to file, duplicate, delete that names every cue, look and VC button
+  using it — on one **Undo** with the tree (and with the Programming tab's
+  palette list). Typed: `palette …`, `look …`, `vcpage`, `adopt`. See
+  [Looks](show-tree.md#looks-busking) and
+  [Palettes in the Library](show-tree.md#palettes-in-the-library).
 - **Show Tree P4: reusable layers and cues, Convert to tracking, Detach a
   list.** Right-click a layer or a cue → **Make reusable…**: it goes into
   the Library (All → Reusable) and can be dropped into any cue of any list

@@ -109,6 +109,21 @@ that look (their other looks and values stay), effect looks lose that slot's
 palette and use their look's colours, collections/chasers/shows lose it. With
 a folder selected, ⌫ deletes the folder the same way as its menu item.
 
+A palette the Show Tree uses is named by its **cues and looks** ("Cue 1.0.1
+Verse in Full Show — Towers"), not by the scenes the tree made for them, and
+the **VC buttons** that fire those are listed too.
+
+### Palettes here and in the Show Tree
+
+New, Duplicate, Delete and Move to folder of a palette are the same
+operations as in the Show Tree's Library ([Palettes in the
+Library](show-tree.md#palettes-in-the-library)), and each is one step on the
+**one palette undo** the two tabs share: the Show Tree's **Undo** (⌘Z there)
+takes back the last palette made, renamed, filed or deleted in either tab,
+and a deleted palette comes back with its id, in every scene and effect slot
+it was in. This tab's own Undo (scene snapshots) is unchanged. Effect design,
+`.qxfx` files and Bundles stay here.
+
 ## Building a look, step by step
 
 1. Open the **Programming** tab.

@@ -1,8 +1,9 @@
 # Programming tab — its role next to the Show Tree
 
-*Status: proposal for review (2026-10-17). Branch `design/programming-role`,
-cut from `release/0.1.0`. Docs only. Companion to SHOW_TREE_DESIGN.md (on
-`feat/show-tree`).*
+*Status: decisions approved (P-D1…P-D16 "ok", 2026-10-17). **R1 (the parts
+R2/R3 need), R2 and R3 built 2026-10-18 on `feat/show-tree`** — notes,
+deviations and what was left in SHOW_TREE_DESIGN.md §10.15. Companion to
+SHOW_TREE_DESIGN.md.*
 
 The Show Tree is becoming the day-to-day programming surface: Branson built
 DanceHysteria's preshow in it and it "went well". SHOW_TREE_DESIGN.md §9 kept
@@ -357,9 +358,9 @@ M ≈ 2–4 days, L ≈ a week.
 
 | Phase | Slice | Size | Slots |
 |---|---|---|---|
-| **R1** | **Shared pieces**: `PaletteOps` out of `ProgrammingManager`, palette undo, one `usage()` incl. VC, power estimate to the app, **Stage bar** (P-D10) | M | alongside **P4** (no overlap in code) |
-| **R2** | **Library palette management** (§4.2) + Used by line in the Look Editor; palette verbs in the command line | M | right after R1, before P5 |
-| **R3** | **Looks section** (§4.1): model, bake, VC binding and Make VC page, transitions / speed master on looks *and* cue layers, Copy to look / Add to cue, **Adopt as look** (§6) | L | after **P4** (a look can use reusable layers), with or just before **P5** (a looks section belongs to a production) |
+| **R1** | **Shared pieces**: `PaletteOps` out of `ProgrammingManager`, palette undo, one `usage()` incl. VC, power estimate to the app, **Stage bar** (P-D10) | M | alongside **P4** (no overlap in code) — *partly built 2026-10-18: PaletteOps, one undo history for housekeeping, one Used by incl. VC; value-edit undo, power estimate, Stage bar left (§10.15 there)* |
+| **R2** | **Library palette management** (§4.2) + Used by line in the Look Editor; palette verbs in the command line | M | right after R1, before P5 — *built 2026-10-18 (not Open in Palettes)* |
+| **R3** | **Looks section** (§4.1): model, bake, VC binding and Make VC page, transitions / speed master on looks *and* cue layers, Copy to look / Add to cue, **Adopt as look** (§6) | L | after **P4** (a look can use reusable layers), with or just before **P5** (a looks section belongs to a production) — *built 2026-10-18 but transitions / speed master / fades and Fire as (left); a look bakes to a Collection always* |
 | **R4** | **Capture** into palettes, cue, layer or look (§4.3); controller-programmer Save gains the target | M | after R3 |
 | **R5** | **Palettes tab refinement** (§3): layout flip, test bench, Used by panel, Scenes mode, removals, rename (P-D1), help rewrite | M–L | after R2 (needs `PaletteOps`); before or with **P7** so the runner ships with a tab set that makes sense |
 | **R6** | **Blind** — after the discussion (P-D15); depends on how P7's Live/Design split feels on the rig | ? | after P7 |

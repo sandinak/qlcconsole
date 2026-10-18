@@ -6,6 +6,35 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-18 — Show Tree R1–R3: palettes in the Library, the Looks section (busking), one undo history *(on feat/show-tree, not merged)*
+
+PROGRAMMING_ROLE_DESIGN.md R1 (the parts R2/R3 need), R2, R3; notes in
+SHOW_TREE_DESIGN.md §10.15, open 21–26.
+
+- **PaletteOps** (engine, owned by Doc): create by type, rename,
+  duplicate, file, folders of any type, delete — each one step on one
+  palette undo; Undo of a delete brings the palette back with its id in
+  every scene and effect slot. **One history:** tree and palette steps are
+  stamped; the tab's Undo takes back whichever came last. The Programming
+  tab's New / Duplicate / Delete / Move to folder go through it too.
+- **One Used by** (P-D13): cues and looks by number and layer, reusables,
+  plain scenes, effect slots, and the VC buttons firing them — in the
+  Library, the Look Editor's new Used by line, the delete questions of both
+  tabs (never a generated scene's name).
+- **Library palettes** (P-D8): by type with folders under each, or folders
+  first (remembered); + Palette (opens in the Look Editor), F2 rename,
+  New / rename / delete folder, drag to file, Move to folder, Duplicate,
+  Used by, Delete that asks. Older type-first folders read as one folder.
+- **Looks section** (P-D5…P-D7): looks built as cues, never tracking, each
+  a visible locked Collection whose id survives edits; folders; + Look;
+  Fired by on the page and VC ×N in the tree; **Make VC page** (a frame, a
+  Toggle button per look, coloured); **Copy to look**; **Adopt as look**
+  (re-points VC buttons if asked); Record lit takes a running look's
+  layers. Plays over a list with HTP/LTP (tested).
+- Command line: `palette …`, `palette folder …`, `look "name" [in …]`,
+  `vcpage`, `adopt`, `undo`/`redo` shared; help and Tab.
+- Tests: showtree_test +12, showtreeview_test +6.
+
 ### 2026-10-17 — Show Tree P4: reusable layers and cues, Convert to tracking, Detach to plain chaser *(on feat/show-tree, not merged)*
 
 - **Reusable layers and cues** (§1, SHOW_TREE_DESIGN.md §10.14): Make

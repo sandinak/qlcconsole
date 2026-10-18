@@ -99,7 +99,7 @@ written, known issues included.
   the main window's outer edges resizing, audio, DMX USB/D2XX, the file
   associations, and opening a .qlcc whose definitions the VM lacks.
 
-## Show Tree (feat/show-tree, P1 built 2026-10-16 overnight, P2–P4 2026-10-17 — not merged)
+## Show Tree (feat/show-tree, P1 built 2026-10-16 overnight, P2–P4 2026-10-17, R1–R3 2026-10-18 — not merged)
 
 [SHOW_TREE_DESIGN.md](SHOW_TREE_DESIGN.md) (D1–D27 approved; §10 has the
 implementation notes and the questions below). Built: the hand-over fix,
@@ -177,10 +177,21 @@ help (DONE.md 2026-10-16). Handoff: SHOW_TREE_OVERNIGHT.md.
   locked until the tree lets go; "detached from X" badge not built.
   **Try:** make a layer reusable, drop it in another list's cue, change it
   there; Convert to tracking on an imported list and GO through it.
-- **R1 (PROGRAMMING_ROLE_DESIGN.md) not taken in P4:** P4 needed none of
-  its shared pieces (palette undo, one `usage()`, power estimate to the
-  app, the Stage bar). "Used by" for reusables is the tree's own
-  (`reusableUses()` + VC buttons); R1's `usage()` can absorb it.
+- **R1–R3 (PROGRAMMING_ROLE_DESIGN.md) done 2026-10-18** (DONE.md,
+  §10.15): PaletteOps + one undo history (tree + palette steps, the
+  Programming tab's palette list on it too) + one Used by incl. VC;
+  Library palettes (+ Palette, F2, folders of any type, drag to file,
+  delete naming every use); the Looks section (looks as cues that never
+  track, a Collection each fired from VC, Make VC page, Copy to look, Adopt
+  as look). **Left of R1:** Look Editor value edits on the palette undo;
+  Programming's tree folder rename/delete/drag through PaletteOps; its ⌘Z
+  reaching the palette history; power estimate to the app; Stage bar
+  (P-D10). **Left of R2:** Open in Palettes. **Left of R3:** per-look fades /
+  transition / speed master (and on cue layers), Fire as, a look's MIDI
+  trigger in the tab. **Open (§10, 21–26).** **Try:** + Look on a
+  production, drop groups and palettes on it, Make VC page, press the
+  button over a running list; + Palette in a Library folder, F2, drag,
+  delete one a cue uses and ⌘Z.
 - **P5 next:** multiple productions (switcher, current production for VC /
   footer GO / show control, per-production timecode).
 
