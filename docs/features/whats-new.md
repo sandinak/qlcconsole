@@ -158,6 +158,18 @@ The latest changes, newest first. Each links to the guide with the detail.
   A pixel box in a look with no group is now drawn on as its own grid.
   See [Matrix effects](effects.md#matrix-effects).
 
+### Lighting Studio
+
+- **Curtains that open in the show.** A main drape or traveler can be
+  **Driven by** a curtain fixture (**Add curtain fixture** in its editor):
+  as the fixture's **Open** channel goes from 0 to 255 the drape opens, and
+  **Fly** takes a main drape up and out. The plot and the Rig Overview follow
+  it while it fades. Use it in scenes, chasers and the Show Tree like any
+  fixture; the fade time is how long the move takes. The curtain fixture
+  isn't a light, so it draws no power and doesn't show in Inventory. Patch it
+  to a curtain controller or relay box to move the real one. See
+  [Curtains that move](lighting-studio.md#curtains-that-move).
+
 ### Programming
 
 - **Palette folders hold any type.** A song's folder can hold its colours,

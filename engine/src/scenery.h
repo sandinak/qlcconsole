@@ -35,6 +35,8 @@
 
 class QXmlStreamReader;
 class QXmlStreamWriter;
+class QLCFixtureMode;
+class Fixture;
 
 /** @addtogroup engine Engine
  * @{
@@ -138,6 +140,44 @@ public:
     /** Whether it is a curtain that opens and flies. */
     bool hasState() const { return m_kind == MainDrape || m_kind == Traveler; }
 
+    /*********************************************************************
+     * Driven by a fixture
+     *********************************************************************/
+    /** Where a curtain is between its fixed states: @p open from 0 (closed)
+     *  to 1 (open by its opening), @p fly from 0 (in, hanging at its trim)
+     *  to 1 (flown out of sight). Closed, Open and Flown are three of these;
+     *  a curtain driven by a fixture can be anywhere in between. */
+    struct Pose
+    {
+        double open = 0.0;
+        double fly = 0.0;
+        bool operator==(const Pose &o) const { return open == o.open && fly == o.fly; }
+        bool operator!=(const Pose &o) const { return !(*this == o); }
+    };
+
+    /** The pose its fixed state() stands for. */
+    Pose staticPose() const;
+
+    /** The curtain fixture that moves it (Fixture::invalidId() when none):
+     *  as that fixture's channels move, the curtain opens and flies -- a
+     *  scene, a chaser step or a fader moves it, its fade time is how long
+     *  the move takes. Only a curtain (hasState()) is ever driven. */
+    quint32 driverFixture() const { return m_driver; }
+    void setDriverFixture(quint32 fid) { m_driver = fid; }
+    bool isDriven() const { return hasState() && m_driver != invalidId(); }
+
+    /** Which channel of a curtain fixture does what: Open (and its fine
+     *  byte) and Fly, by name -- "Open", "Open fine", "Fly"; "Position" is
+     *  taken for Open too. -1 when it has none. A fixture with no channel
+     *  named for opening opens on its first one. */
+    enum CurtainChannel { OpenChannel = 0, OpenFineChannel, FlyChannel };
+    static int curtainChannel(const QLCFixtureMode *mode, CurtainChannel which);
+    /** Where @p values (a fixture's channel values) put a curtain. */
+    static Pose poseFromValues(const QLCFixtureMode *mode, const QByteArray &values);
+    /** A curtain fixture: one that lights nothing and has a channel to open
+     *  a curtain by (the bundled Generic > Stage Curtain). */
+    static bool isCurtainFixture(const Fixture *fx);
+
     /** Cloth: soft goods, drawn as fabric. */
     bool isCloth() const { return !isBuilt(); }
     /** A scrim: seen through, though it still catches the light thrown on it. */
@@ -165,6 +205,8 @@ public:
      *  ends of an open curtain, nothing when flown, a proscenium's two piers
      *  and its header. */
     QList<Piece> pieces() const;
+    /** ...as it is at @p pose: a curtain part open, part flown. */
+    QList<Piece> pieces(const Pose &pose) const;
 
     QColor color() const { return m_color; }
     void   setColor(const QColor &c) { m_color = c; }
@@ -199,6 +241,7 @@ public:
      *  all of it, both gathered ends of an open curtain, or nothing when
      *  it is flown. */
     QList<QPair<double, double> > spans() const;
+    QList<QPair<double, double> > spans(const Pose &pose) const;
 
     /** How many flat panels draw its whole line: 1 straight, more curved. */
     int segments() const;
@@ -212,9 +255,11 @@ public:
      *  when it is a U); a wall is met on either face or on its top, and an
      *  open curtain only where it hangs.
      *  @p normal, when given, receives the (horizontal, unit) normal of the
-     *  panel hit, turned to face the ray -- the surface a pool lies on. */
+     *  panel hit, turned to face the ray -- the surface a pool lies on.
+     *  @p pose, when given, is where a curtain is instead of its state(). */
     bool rayHit(const QVector3D &origin, const QVector3D &dir, double &t,
-                double maxT = 1e9, int segments = 16, QVector3D *normal = nullptr) const;
+                double maxT = 1e9, int segments = 16, QVector3D *normal = nullptr,
+                const Pose *pose = nullptr) const;
 
     bool loadXML(QXmlStreamReader &root);
     bool saveXML(QXmlStreamWriter *doc) const;
@@ -240,6 +285,7 @@ private:
     bool    m_locked   = false;
     quint32 m_layerId  = 0;
     quint32 m_groupId  = 0;
+    quint32 m_driver   = UINT_MAX;
 };
 
 /** @} */

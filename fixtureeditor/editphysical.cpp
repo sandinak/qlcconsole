@@ -86,6 +86,7 @@ EditPhysical::EditPhysical(QLCPhysical physical, QWidget *parent)
     m_emissionCombo->addItem(tr("Laser beam"), int(QLCPhysical::LaserEmission));
     m_emissionCombo->addItem(tr("Star field"), int(QLCPhysical::StarEmission));
     m_emissionCombo->addItem(tr("Silk flame"), int(QLCPhysical::FlameEmission));
+    m_emissionCombo->addItem(tr("None (not a light)"), int(QLCPhysical::NoEmission));
     m_emissionCombo->setCurrentIndex(qMax(0, m_emissionCombo->findData(int(m_physical.emission()))));
     m_emissionCombo->setToolTip(tr("Beam: a cone at the lens's angle. All round: a bare "
                                    "source -- a lantern, a bulb -- lighting what is near it. "

@@ -1653,6 +1653,9 @@ int Doc::totalPowerConsumption(int& fuzzy) const
         if (fxi->fixtureMode() != NULL)
         {
             QLCPhysical phys = fxi->fixtureMode()->physical();
+            // Not a light (a curtain): no load, and nothing missing either.
+            if (!phys.emitsLight())
+                continue;
             if (phys.powerConsumption() > 0)
                 totalPowerConsumption += phys.powerConsumption();
             else

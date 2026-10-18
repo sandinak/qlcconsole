@@ -13891,6 +13891,195 @@ void Monitor_Test::aTurnedDeckIsDrawnAndLitWhereItIs()
     delete doc;
 }
 
+/* The bundled curtain, read from its file as the app would. */
+static QLCFixtureDef *curtainDef()
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    const QString path = QFileInfo(QStringLiteral(__FILE__)).dir().absoluteFilePath(
+        QStringLiteral("../../../resources/fixtures/Generic/Generic-Stage-Curtain.qxf"));
+    if (def->loadXML(path) != QFile::NoError)
+    {
+        delete def;
+        return nullptr;
+    }
+    return def;
+}
+
+/* A 10 m main drape across the front of a 12 x 8 m stage, opening 8 m. */
+static Scenery *frontDrape(Doc *doc)
+{
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Meters);
+    props->setGridSize(QVector3D(12, 6, 8));
+    Scenery *sc = props->addScenery();
+    sc->setKind(Scenery::MainDrape);
+    sc->setName("Main drape");
+    sc->setOriginX(6.0f);
+    sc->setOriginY(7.5f);
+    sc->setWidth(10.0f);
+    sc->setHeight(6.0f);
+    sc->setOpeningWidth(8.0f);
+    return sc;
+}
+
+/* How wide the gap between a curtain's two halves is in the plot, in
+   scene pixels: 0 when it is one sheet. */
+static double plotGap(SceneryItem *sci)
+{
+    const QList<QPolygonF> parts = sci->parts();
+    if (parts.size() < 2)
+        return 0.0;
+    const QRectF a = parts.at(0).boundingRect(), b = parts.at(1).boundingRect();
+    return qMax(a.left(), b.left()) - qMin(a.right(), b.right());
+}
+
+void Monitor_Test::aDrapeDrivenByACurtainFixtureOpensAsItsChannelMoves()
+{
+    Doc *doc = new Doc(this);
+    QLCFixtureDef *def = curtainDef();
+    QVERIFY(def != nullptr);
+    QVERIFY(doc->fixtureDefCache()->addFixtureDef(def));
+    Scenery *sc = frontDrape(doc);
+    // A second drape, never linked: it stays exactly as it was set.
+    Scenery *fixed = doc->monitorProperties()->addScenery();
+    fixed->setKind(Scenery::Traveler);
+    fixed->setOriginX(6.0f);
+    fixed->setOriginY(3.0f);
+    fixed->setWidth(10.0f);
+    fixed->setState(Scenery::Open);
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        mon.m_graphicsView->updatePlatforms();
+
+        // The drape's dialog adds its curtain fixture, and is driven by it.
+        bool rowShown = false;
+        driveDialog([&](QWidget *dlg) {
+            QWidget *row = dlg->findChild<QWidget *>("sceneryDriver");
+            rowShown = row != nullptr && row->isVisibleTo(dlg);
+            QPushButton *add = dlg->findChild<QPushButton *>("sceneryAddCurtain");
+            if (add == nullptr)
+                return false;
+            add->click();
+            QComboBox *drv = dlg->findChild<QComboBox *>("sceneryDriver");
+            return drv != nullptr && drv->currentData().toUInt() != Fixture::invalidId();
+        });
+        mon.slotEditScenery(sc->id());
+        QVERIFY(rowShown);
+        QVERIFY(sc->isDriven());
+        Fixture *fx = doc->fixture(sc->driverFixture());
+        QVERIFY(fx != nullptr);
+        QVERIFY(Scenery::isCurtainFixture(fx));
+        QVERIFY(!fx->isPatched());
+        QCOMPARE(fx->fixtureMode()->name(), QString("Open + Fly"));
+        QCOMPARE(fx->name(), QString("Main drape curtain"));
+        // A curtain is not something waiting to be placed.
+        QVERIFY(!doc->monitorProperties()->fixtureItemsID().contains(fx->id()));
+
+        SceneryItem *sci = mon.m_graphicsView->m_sceneryItems.value(sc->id());
+        QVERIFY(sci != nullptr);
+        // Nothing driving it yet: closed, whatever its fixed state.
+        QCOMPARE(sci->parts().size(), 1);
+
+        // The channel moves: the halves part, as far as it says.
+        fx->setPreviewValue(0, 255);
+        QApplication::processEvents();
+        sci = mon.m_graphicsView->m_sceneryItems.value(sc->id());
+        QCOMPARE(sci->parts().size(), 2);
+        const double fullGap = plotGap(sci);
+        QVERIFY(fullGap > 0.0);
+        fx->setPreviewValue(0, 128);
+        QApplication::processEvents();
+        const double halfGap = plotGap(mon.m_graphicsView->m_sceneryItems.value(sc->id()));
+        QVERIFY2(qAbs(halfGap / fullGap - 128.0 / 255.0) < 0.03,
+                 qPrintable(QString("%1 of %2").arg(halfGap).arg(fullGap)));
+        // The geometry is the engine's: half open is half the opening.
+        Scenery::Pose half;
+        half.open = 128.0 / 255.0;
+        QVERIFY(qAbs(sc->spans(half).at(1).first - 0.8 * half.open) < 1e-6);
+        // Flown out: dashed where it hangs.
+        fx->setPreviewValue(1, 255);
+        QApplication::processEvents();
+        QVERIFY(mon.m_graphicsView->m_sceneryItems.value(sc->id())->isFlown());
+        fx->setPreviewValue(1, 0);
+        QApplication::processEvents();
+        QVERIFY(!mon.m_graphicsView->m_sceneryItems.value(sc->id())->isFlown());
+
+        // The unlinked one never moved.
+        SceneryItem *fi = mon.m_graphicsView->m_sceneryItems.value(fixed->id());
+        QVERIFY(fi != nullptr);
+        QCOMPARE(fi->parts().size(), 2);
+        QVERIFY(!fi->isFlown());
+
+        // The rig overview: where the channel is with Live on, its fixed state with it off.
+        StructureStudioView view(doc, StructureStudioView::StageKind, 0);
+        fx->setPreviewValue(0, 255);
+        view.setLiveValues(true);
+        QCOMPARE(view.drapePose(sc).open, 1.0);
+        view.updateDrapePoses();
+        QCOMPARE(view.drapePose(sc).open, 1.0);
+        fx->setPreviewValue(0, 0);
+        view.updateDrapePoses();
+        QCOMPARE(view.drapePose(sc).open, 0.0);
+        view.setLiveValues(false);
+        sc->setState(Scenery::Open);
+        view.updateDrapePoses();         // (worked out once a frame)
+        QCOMPARE(view.drapePose(sc), sc->staticPose());
+        QCOMPARE(view.drapePose(fixed), fixed->staticPose());
+        // Its throw scene (what a ray can land on) follows the curtain.
+        view.setLiveValues(true);
+        fx->setPreviewValue(0, 0);
+        view.updateDrapePoses();
+        const quint64 closedScene = view.throwScene();
+        fx->setPreviewValue(0, 200);
+        view.updateDrapePoses();
+        QVERIFY(view.throwScene() != closedScene);
+        view.setLiveValues(false);
+
+        // Its fixture gone: back to its fixed state.
+        sc->setState(Scenery::Flown);
+        QVERIFY(doc->deleteFixture(fx->id()));
+        mon.m_graphicsView->updatePlatforms();
+        QVERIFY(mon.m_graphicsView->m_sceneryItems.value(sc->id())->isFlown());
+    }
+    delete doc;
+}
+
+void Monitor_Test::cancellingTheDrapeDialogTakesItsNewCurtainAway()
+{
+    Doc *doc = new Doc(this);
+    QLCFixtureDef *def = curtainDef();
+    QVERIFY(def != nullptr);
+    QVERIFY(doc->fixtureDefCache()->addFixtureDef(def));
+    Scenery *sc = frontDrape(doc);
+    sc->setKind(Scenery::Traveler);
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        mon.m_graphicsView->updatePlatforms();
+        driveDialog([&](QWidget *dlg) {
+            QPushButton *add = dlg->findChild<QPushButton *>("sceneryAddCurtain");
+            if (add == nullptr)
+                return false;
+            add->click();
+            return doc->fixtures().size() == 1;
+        }, false);
+        mon.slotEditScenery(sc->id());
+        QCOMPARE(doc->fixtures().size(), 0);
+        sc = doc->monitorProperties()->sceneries().first();
+        QVERIFY(!sc->isDriven());
+
+        // A traveler's curtain opens; it does not fly.
+        Fixture *fx = mon.addCurtainFixture(sc->id());
+        QVERIFY(fx != nullptr);
+        QCOMPARE(fx->fixtureMode()->name(), QString("Open"));
+        // Not a curtain: no curtain fixture.
+        Scenery *cyc = doc->monitorProperties()->addScenery();
+        QVERIFY(mon.addCurtainFixture(cyc->id()) == nullptr);
+    }
+    delete doc;
+}
+
 /* The bundled silk flame, read from its file as the app would. */
 static QLCFixtureDef *silkFlameDef()
 {

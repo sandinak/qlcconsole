@@ -43,6 +43,7 @@
 #include "beamoptics.h"
 #include "rhiraster.h"
 #include "stageplatform.h"
+#include "scenery.h"
 
 #include "fixture.h"   // Fixture::invalidId() -- the "no fixture" marker
 #include "truss.h"     // FixtureRigProps::Face
@@ -528,6 +529,18 @@ private:
      *  it, otherwise the selected look. */
     QByteArray valuesForDrawing(class Fixture *fx, bool *complete = nullptr) const;
     mutable QHash<quint32, QByteArray> m_liveSnapshot;
+
+public:
+    /** Where a curtain is drawn this frame: with Live on, a curtain driven
+     *  by a fixture where that fixture's channels put it; otherwise (Live
+     *  off, not driven, its fixture gone) its fixed state. */
+    Scenery::Pose drapePose(const Scenery *sc) const;
+private:
+    /** Works out drapePose() for every driven curtain, once a frame, before
+     *  anything is drawn: the drawing threads only read it. */
+    void updateDrapePoses() const;
+    Scenery::Pose computeDrapePose(const Scenery *sc) const;
+    mutable QHash<quint32, Scenery::Pose> m_drapePoses;
 
     /** Fixtures whose physical body overlaps another fixture's -- rigged in
      *  the same physical space, whether that is two heads stacked on the same

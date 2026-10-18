@@ -14,6 +14,9 @@
 #include <QtMath>
 
 #include "scenery.h"
+#include "qlcfixturemode.h"
+#include "qlcchannel.h"
+#include "fixture.h"
 
 #define KXMLSceneryID       QStringLiteral("ID")
 #define KXMLSceneryName     QStringLiteral("Name")
@@ -35,6 +38,7 @@
 #define KXMLSceneryLocked   QStringLiteral("Locked")
 #define KXMLSceneryLayerId  QStringLiteral("LayerId")
 #define KXMLSceneryGroupId  QStringLiteral("GroupId")
+#define KXMLSceneryFixture  QStringLiteral("Fixture")
 
 Scenery::Scenery(quint32 id, QObject *parent)
     : QObject(parent)
@@ -169,18 +173,90 @@ QPointF Scenery::normalAt(double u) const
     return QPointF(-ty, tx);
 }
 
+Scenery::Pose Scenery::staticPose() const
+{
+    Pose p;
+    if (m_state == Open)
+        p.open = 1.0;
+    else if (m_state == Flown)
+        p.fly = 1.0;
+    return p;
+}
+
+int Scenery::curtainChannel(const QLCFixtureMode *mode, CurtainChannel which)
+{
+    if (mode == nullptr)
+        return -1;
+    const QVector<QLCChannel *> chans = mode->channels();
+    for (int i = 0; i < chans.size(); ++i)
+    {
+        const QLCChannel *ch = chans.at(i);
+        if (ch == nullptr)
+            continue;
+        const QString n = ch->name().toLower();
+        const bool fine = n.contains(QLatin1String("fine"));
+        const bool fly = n.contains(QLatin1String("fly"));
+        const bool open = !fly && (n.contains(QLatin1String("open")) || n.contains(QLatin1String("position")));
+        if ((which == OpenChannel && open && !fine) || (which == OpenFineChannel && open && fine)
+            || (which == FlyChannel && fly && !fine))
+            return i;
+    }
+    // Something not made for it (a relay, a dimmer channel): its first channel opens it.
+    if (which == OpenChannel && !chans.isEmpty() && curtainChannel(mode, FlyChannel) != 0)
+        return 0;
+    return -1;
+}
+
+Scenery::Pose Scenery::poseFromValues(const QLCFixtureMode *mode, const QByteArray &values)
+{
+    Pose p;
+    auto at = [&values](int ch) { return (ch >= 0 && ch < values.size()) ? int(uchar(values.at(ch))) : -1; };
+    const int open = at(curtainChannel(mode, OpenChannel));
+    const int fine = at(curtainChannel(mode, OpenFineChannel));
+    const int fly = at(curtainChannel(mode, FlyChannel));
+    if (open >= 0)
+        p.open = (fine >= 0) ? double(open * 256 + fine) / 65535.0 : double(open) / 255.0;
+    if (fly >= 0)
+        p.fly = double(fly) / 255.0;
+    return p;
+}
+
+bool Scenery::isCurtainFixture(const Fixture *fx)
+{
+    if (fx == nullptr || fx->fixtureMode() == nullptr)
+        return false;
+    const QLCFixtureMode *mode = fx->fixtureMode();
+    if (mode->physical().emission() != QLCPhysical::NoEmission)
+        return false;
+    // Named for it, not the first-channel fallback.
+    foreach (const QLCChannel *ch, mode->channels())
+    {
+        const QString n = (ch != nullptr) ? ch->name().toLower() : QString();
+        if (n.contains(QLatin1String("open")) || n.contains(QLatin1String("position"))
+            || n.contains(QLatin1String("fly")))
+            return true;
+    }
+    return false;
+}
+
 QList<QPair<double, double> > Scenery::spans() const
 {
+    return spans(staticPose());
+}
+
+QList<QPair<double, double> > Scenery::spans(const Pose &pose) const
+{
     QList<QPair<double, double> > out;
-    if (hasState() && m_state == Flown)
+    if (hasState() && pose.fly >= 1.0)
         return out;
-    if (hasState() && m_state == Open)
+    if (hasState() && pose.open > 0.0)
     {
         /* Open by its opening, centred; each half gathered into what is left
            at its end. An opening as wide as the curtain (never set for it)
-           leaves about a sixth of the width each side. */
+           leaves about a sixth of the width each side. Part open, the halves
+           have drawn part of the way off from the middle. */
         const double gap = (m_openWidth < m_width) ? double(m_openWidth) : 0.68 * double(m_width);
-        const double f = qBound(0.0, gap / double(m_width), 0.98);
+        const double f = qBound(0.0, qMin(1.0, pose.open) * gap / double(m_width), 0.98);
         out << qMakePair(-1.0, -f) << qMakePair(f, 1.0);
         return out;
     }
@@ -190,8 +266,19 @@ QList<QPair<double, double> > Scenery::spans() const
 
 QList<Scenery::Piece> Scenery::pieces() const
 {
+    return pieces(staticPose());
+}
+
+QList<Scenery::Piece> Scenery::pieces(const Pose &pose) const
+{
     QList<Piece> out;
-    const float lo = m_bottom, hi = m_bottom + m_height;
+    float lo = m_bottom, hi = m_bottom + m_height;
+    // Flying out: going up by as much as it is high, until it is gone.
+    if (hasState() && pose.fly > 0.0 && pose.fly < 1.0)
+    {
+        lo += float(pose.fly) * m_height;
+        hi += float(pose.fly) * m_height;
+    }
     if (m_kind == Proscenium)
     {
         // The opening, centred: the piers are what is left either side.
@@ -203,7 +290,7 @@ QList<Scenery::Piece> Scenery::pieces() const
         return out;
     }
     typedef QPair<double, double> Span;
-    foreach (const Span &sp, spans())
+    foreach (const Span &sp, spans(pose))
         out << Piece{ sp.first, sp.second, lo, hi };
     return out;
 }
@@ -228,7 +315,7 @@ QList<QPointF> Scenery::baseLine(int segments) const
 }
 
 bool Scenery::rayHit(const QVector3D &origin, const QVector3D &dir, double &t,
-                     double maxT, int segments, QVector3D *normal) const
+                     double maxT, int segments, QVector3D *normal, const Pose *pose) const
 {
     const int own = this->segments();
     const int full = (own == 1) ? 1 : qMax(segments, own);
@@ -242,7 +329,7 @@ bool Scenery::rayHit(const QVector3D &origin, const QVector3D &dir, double &t,
     bool hit = false;
     double best = maxT;
     QVector3D bestN;
-    foreach (const Piece &pc, pieces())
+    foreach (const Piece &pc, pose != nullptr ? pieces(*pose) : pieces())
     {
         const double zLo = double(pc.z0), zHi = double(pc.z1);
         const QPair<double, double> sp(pc.u0, pc.u1);
@@ -359,6 +446,7 @@ bool Scenery::loadXML(QXmlStreamReader &root)
     if (a.hasAttribute(KXMLSceneryLocked))   m_locked = (a.value(KXMLSceneryLocked).toString() == "true");
     if (a.hasAttribute(KXMLSceneryLayerId))  m_layerId = a.value(KXMLSceneryLayerId).toUInt();
     if (a.hasAttribute(KXMLSceneryGroupId))  m_groupId = a.value(KXMLSceneryGroupId).toUInt();
+    if (a.hasAttribute(KXMLSceneryFixture))  m_driver = a.value(KXMLSceneryFixture).toUInt();
 
     root.skipCurrentElement();
     return true;
@@ -404,6 +492,8 @@ bool Scenery::saveXML(QXmlStreamWriter *doc) const
         doc->writeAttribute(KXMLSceneryLayerId, QString::number(m_layerId));
     if (m_groupId != 0)
         doc->writeAttribute(KXMLSceneryGroupId, QString::number(m_groupId));
+    if (isDriven())
+        doc->writeAttribute(KXMLSceneryFixture, QString::number(m_driver));
     doc->writeEndElement();
     return true;
 }

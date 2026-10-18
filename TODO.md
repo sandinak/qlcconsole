@@ -289,6 +289,15 @@ help (DONE.md 2026-10-16). Handoff: SHOW_TREE_OVERNIGHT.md.
 
 ## Backlog — asked for, not started
 
+- **Signalling system (cue lights / stand-by / go signals to crew, house
+  curtain controller)** — Branson, 2026-10-17: "eventually we'll need a
+  signaling system". Drapes can now be driven by a curtain fixture
+  (feat/drape-curtain; Lighting Studio "Curtains that move"): patching that
+  fixture to a curtain motor controller or a DMX relay box is how a real
+  curtain gets cued today. Still to come: stand-by/go cue lights for the
+  fly floor and the curtain operator, warn/go timing in the show, and a
+  house-curtain controller that is more than a channel.
+
 Effects and playback (from Branson, 2026-10-11, in this order; scope each
 before building):
 

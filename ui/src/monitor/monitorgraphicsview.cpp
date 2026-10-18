@@ -4607,44 +4607,24 @@ void MonitorGraphicsView::updatePlatforms()
     {
         const QPointF anchor = projectMm(sc->originX() * 1000.0, sc->originY() * 1000.0,
                                          sc->bottom() * 1000.0);
-        auto at = [&](double u, double z, double off) {
-            const QVector3D p = sc->pointAt(u, z, off);
-            return projectMm(p.x() * 1000.0, p.y() * 1000.0, p.z() * 1000.0);
-        };
-        const double half = double(sc->thickness()) / 2.0;
-        QList<Scenery::Piece> pieces = sc->pieces();
-        if (pieces.isEmpty())                    // flown out: where it hangs, dashed
-            pieces << Scenery::Piece{ -1.0, 1.0, sc->bottom(), sc->bottom() + sc->height() };
-        QList<QPolygonF> parts;
-        for (const Scenery::Piece &pc : pieces)
-        {
-            const QPair<double, double> sp(pc.u0, pc.u1);
-            const float lo = pc.z0, hi = pc.z1;
-            const int segs = qMax(1, int(qCeil(qMax(16, sc->segments()) * (sp.second - sp.first) / 2.0)));
-            QPolygonF part;
-            if (m_pov == PovTop)
-            {
-                // Its line; a wall's footprint, out along one face and back along the other.
-                for (int i = 0; i <= segs; ++i)
-                    part << at(sp.first + (sp.second - sp.first) * i / segs, lo, -half);
-                if (half > 0.0)
-                    for (int i = segs; i >= 0; --i)
-                        part << at(sp.first + (sp.second - sp.first) * i / segs, lo, half);
-            }
-            else
-            {
-                for (int i = 0; i <= segs; ++i)
-                    part << at(sp.first + (sp.second - sp.first) * i / segs, lo, 0.0);
-                for (int i = segs; i >= 0; --i)
-                    part << at(sp.first + (sp.second - sp.first) * i / segs, hi, 0.0);
-            }
-            parts << part;
-        }
+        bool flown = false;
+        const Scenery::Pose pose = sceneryPose(sc);
+        const QList<QPolygonF> parts = sceneryParts(sc, pose, &flown);
         SceneryItem *sci = new SceneryItem(sc, m_doc, anchor, parts, m_pov != PovTop);
+        sci->setParts(anchor, parts, flown, pose);
         sci->setMovable(!m_layoutLocked);
         m_scene->addItem(sci);
         m_sceneryItems.insert(sc->id(), sci);
         connect(sci, &SceneryItem::itemDropped, this, &MonitorGraphicsView::slotSceneryMoved);
+        /* A curtain driven by a fixture opens as its channel moves. The values
+           change on the engine's thread; the item, the receiver, takes them on
+           this one -- and goes with the item. */
+        if (sc->isDriven())
+            if (Fixture *drv = m_doc->fixture(sc->driverFixture()))
+            {
+                const quint32 sid = sc->id();
+                connect(drv, &Fixture::valuesChanged, sci, [this, sid]() { refreshScenery(sid); });
+            }
     }
 
     // Towers: footprint square in Top; box + shelf lines in the elevations.
@@ -4808,6 +4788,77 @@ void MonitorGraphicsView::slotStandMoved(StandItem *item)
     m_doc->monitorProperties()->recomputeStandMounts();   // pipes on it follow
     m_doc->setModified();
     emit mapStructureChanged();
+}
+
+Scenery::Pose MonitorGraphicsView::sceneryPose(const Scenery *sc) const
+{
+    /* A curtain driven by a fixture is where that fixture's channels put it
+       (a patched one's last output, an unpatched one's preview) -- closed at
+       0, whatever its fixed state says. Undriven, or its fixture gone: its
+       fixed state, as it always was. */
+    if (sc == nullptr)
+        return Scenery::Pose();
+    if (sc->isDriven())
+        if (Fixture *fx = m_doc->fixture(sc->driverFixture()))
+            return Scenery::poseFromValues(fx->fixtureMode(), fx->channelValues());
+    return sc->staticPose();
+}
+
+QList<QPolygonF> MonitorGraphicsView::sceneryParts(const Scenery *sc, const Scenery::Pose &pose,
+                                                   bool *flown) const
+{
+    auto at = [&](double u, double z, double off) {
+        const QVector3D p = sc->pointAt(u, z, off);
+        return projectMm(p.x() * 1000.0, p.y() * 1000.0, p.z() * 1000.0);
+    };
+    const double half = double(sc->thickness()) / 2.0;
+    QList<Scenery::Piece> pieces = sc->pieces(pose);
+    if (flown != nullptr)
+        *flown = pieces.isEmpty();
+    if (pieces.isEmpty())                    // flown out: where it hangs, dashed
+        pieces << Scenery::Piece{ -1.0, 1.0, sc->bottom(), sc->bottom() + sc->height() };
+    QList<QPolygonF> parts;
+    for (const Scenery::Piece &pc : pieces)
+    {
+        const QPair<double, double> sp(pc.u0, pc.u1);
+        const float lo = pc.z0, hi = pc.z1;
+        const int segs = qMax(1, int(qCeil(qMax(16, sc->segments()) * (sp.second - sp.first) / 2.0)));
+        QPolygonF part;
+        if (m_pov == PovTop)
+        {
+            // Its line; a wall's footprint, out along one face and back along the other.
+            for (int i = 0; i <= segs; ++i)
+                part << at(sp.first + (sp.second - sp.first) * i / segs, lo, -half);
+            if (half > 0.0)
+                for (int i = segs; i >= 0; --i)
+                    part << at(sp.first + (sp.second - sp.first) * i / segs, lo, half);
+        }
+        else
+        {
+            for (int i = 0; i <= segs; ++i)
+                part << at(sp.first + (sp.second - sp.first) * i / segs, lo, 0.0);
+            for (int i = segs; i >= 0; --i)
+                part << at(sp.first + (sp.second - sp.first) * i / segs, hi, 0.0);
+        }
+        parts << part;
+    }
+    return parts;
+}
+
+void MonitorGraphicsView::refreshScenery(quint32 sceneryId)
+{
+    SceneryItem *sci = m_sceneryItems.value(sceneryId, nullptr);
+    Scenery *sc = m_doc->monitorProperties()->scenery(sceneryId);
+    if (sci == nullptr || sc == nullptr)
+        return;
+    const Scenery::Pose pose = sceneryPose(sc);
+    if (sci->hasPose() && sci->pose() == pose)
+        return;
+    bool flown = false;
+    const QList<QPolygonF> parts = sceneryParts(sc, pose, &flown);
+    const QPointF anchor = projectMm(sc->originX() * 1000.0, sc->originY() * 1000.0,
+                                     sc->bottom() * 1000.0);
+    sci->setParts(anchor, parts, flown, pose);
 }
 
 void MonitorGraphicsView::slotSceneryMoved(SceneryItem *item)

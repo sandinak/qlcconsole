@@ -252,7 +252,10 @@ for some kinds show only there:
   half gathered at its end, with **Opening width** for how wide the gap
   between them is) or **Flown out** (taken up out of the way: not
   drawn, and the light goes through; the plot shows where it hangs from,
-  dashed). Set while designing; it isn't cued.
+  dashed). On its own it is set while designing; to move it in the show,
+  drive it by a curtain fixture (below).
+- **Driven by** (main drape, traveler) — the curtain fixture that moves it;
+  see [Curtains that move](#curtains-that-move).
 - **Opening width** and **Opening height** (proscenium) — the opening,
   centred; the piers are the rest of the width and the header the rest of
   the height. Light goes through the opening and lands on the piers, the
@@ -271,6 +274,45 @@ drapes hang in folds, a scrim is seen through, and a wall has its faces, top
 and ends. Everything but a flown curtain stops the
 light that reaches it and takes its pool — a beam coming down on a wall lands
 on its top — and hides what is behind it.
+
+#### Curtains that move
+
+A main drape or a traveler can open and close in the show, because a fixture
+moves it. In its editor, **Driven by → Add curtain fixture** adds a
+**Generic → Stage Curtain** fixture named after it (*Main drape curtain*) and links
+the two; or pick a curtain fixture you already have. It's saved with the
+show. The curtain fixture is an ordinary fixture with no light and no power
+draw: it isn't counted in power estimates and isn't listed in Inventory as
+something to place, and colour, dimmer and position palettes don't touch it.
+
+| Channel | 0 | 255 |
+|---|---|---|
+| **Open** | closed | open by its **Opening width** |
+| **Open fine** (16-bit modes) | finer steps for Open | |
+| **Fly** (main drape) | in, at its trim | flown out |
+
+A main drape gets the **Open + Fly** mode, a traveler **Open**; change the
+mode in the Fixture Manager if you need to (**Open 16-bit**, **Open 16-bit +
+Fly**). Put the channel in a scene, chaser step, palette or Show Tree layer
+like any other. The **fade time is how long the move takes**: a scene that
+sets Open to 255 with a 6 s fade opens the curtain over six seconds. There's
+no special curtain cue.
+
+**What you see.** The plot and the Rig Overview draw a driven curtain where
+its channel puts it, and follow it smoothly while it fades. The halves part
+from the centre, out to the opening width, and Fly lifts it until it's gone. A
+driven curtain follows its channel and **0 means closed**, so it's closed
+until a look opens it, whatever **Curtain** says. When the look holding the
+channel is released, the channel goes back to 0 and the curtain closes,
+the same as any other channel. **Curtain** still counts in two cases: when
+the Rig Overview's **Live** is off (it shows the design, not the DMX), and
+when the curtain fixture has been deleted. A drape that isn't driven
+looks and behaves exactly as before.
+
+**Moving the real one.** An unpatched curtain fixture moves only the drawing.
+To have a cue move the real curtain, patch the curtain fixture to the address
+of the curtain's motor controller, or to a DMX relay box that runs it.
+Signals to the crew (standby and go cue lights) aren't built yet.
 
 ### Fountains
 

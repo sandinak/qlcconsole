@@ -1030,6 +1030,7 @@
     <F n="Generic-Generic-RGBW" m="Generic RGBW"/>
     <F n="Generic-Generic-Smoke" m="Generic Smoke"/>
     <F n="Generic-Silk-Flame" m="Silk Flame (relay)"/>
+    <F n="Generic-Stage-Curtain" m="Stage Curtain"/>
   </M>
   <M n="Geni">
     <F n="Geni-Mojo-Color-Moc" m="Mojo Color Moc"/>

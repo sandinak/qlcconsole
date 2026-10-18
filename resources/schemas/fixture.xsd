@@ -389,6 +389,7 @@ when changing this list -->
                 <xs:enumeration value="Laser"/>
                 <xs:enumeration value="Star"/>
                 <xs:enumeration value="Flame"/>
+                <xs:enumeration value="None"/>
             </xs:restriction>
         </xs:simpleType>
     </xs:attribute>

@@ -173,9 +173,15 @@ public:
     /** FlameEmission: a silk flame -- a fan under a sheet of silk lit from
      *  below, switched on and off (a relay): tongues of orange and yellow
      *  rising off it, whatever colour the show asks for. */
-    enum Emission { BeamEmission = 0, OmniEmission, LaserEmission, StarEmission, FlameEmission };
+    /** NoEmission: not a light at all -- a curtain, a motor, a relay for
+     *  something that is not lit. It draws no power estimate, counts in no
+     *  tally of lights and throws nothing in the rig view. */
+    enum Emission { BeamEmission = 0, OmniEmission, LaserEmission, StarEmission, FlameEmission,
+                    NoEmission };
     void setEmission(Emission emission) { m_emission = emission; }
     Emission emission() const { return m_emission; }
+    /** Whether it gives any light (see NoEmission). */
+    bool emitsLight() const { return m_emission != NoEmission; }
 
     /** What makes the light: one point (0, the default) or that many LEDs --
      *  a lantern's sixteen on a wire, whose effects run along them. */
