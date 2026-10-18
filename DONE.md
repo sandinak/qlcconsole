@@ -6,6 +6,40 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-18 — Show Tree answers 12–25: one precedence rule, the plan view, preview = GO, palette folders merged *(on feat/show-tree, not merged)*
+
+Branson's answers to SHOW_TREE_DESIGN.md §10 open 12–25 (26 still open);
+notes in §10.16.
+
+- **13 one rule:** for a fixture × attribute the most specific source wins
+  (tracked < included < cue look < layer < child layer < an effect's own),
+  then the deeper, then the lower layer. Convert to tracking puts imported
+  Mix cues on it where the static output (`staticCueOutput`) and effect
+  placement are identical, else lists them; the tree marks them **≈ mix**.
+  DanceHysteria-0.5 copy: 2 Mix cues converted, 1 kept; 0 channels differ
+  in all 11 cues.
+- **14 plan view** (`LinePlanView`) under a line aim's order strip: beams,
+  the previous cue's points as rings.
+- **15 preview = GO:** the Design preview's scenes are HTP among themselves
+  (`Universe::writeOverride`, `FadeChannel::EditOverride`).
+- **16** a Dimmer dims the colour it doesn't own on no-dimmer fixtures (the
+  Dimmer's layer plays the colour there).
+- **18** Convert tries Cue-only; **19** Detach copies shared scenes; **20**
+  "Unlinked from <name>" tooltip; **17, 21, 23** as built.
+- **22** Make VC page updates the frame it made; **24** Programming's ⌘Z /
+  ⇧⌘Z on the one history, Edit menu names the step; **25**
+  feat/palette-folders merged, its migration strips only the genuine old
+  layout (own type always; any type only when the whole show is old).
+- Tests: showtree_test `oneRuleUpAndDownTheChain`,
+  `aChildDimmerDimsItsParentsColourWithoutADimmer`,
+  `previewPlaysWhatGoPlays`, convert/detach tests extended;
+  showtreeview_test `planViewOfALineAim`, `makeVcPageUpdatesItsFrame`,
+  unlink tooltip; qlcpalette_test `aUserFolderNamedLikeATypeIsKept`;
+  programmingmanager_test `libraryAndProgrammingAgreeOnFolders`,
+  `undoHereReachesTheSharedHistory`.
+
+---
+
 ### 2026-10-18 — Show Tree R1–R3: palettes in the Library, the Looks section (busking), one undo history *(on feat/show-tree, not merged)*
 
 PROGRAMMING_ROLE_DESIGN.md R1 (the parts R2/R3 need), R2, R3; notes in

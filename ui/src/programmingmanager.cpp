@@ -889,10 +889,14 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     pasteSc->setContext(Qt::WidgetWithChildrenShortcut);
     connect(pasteSc, SIGNAL(activated()), this, SLOT(slotPaste()));
 
-    // Ctrl-Z undoes the last bundle stamp.
+    // ⌘Z / ⇧⌘Z: canvas edits, a bundle stamp and the shared history
+    // (the Show Tree's and the palette operations'), newest first.
     QShortcut *undoSc = new QShortcut(QKeySequence::Undo, this);
     undoSc->setContext(Qt::WidgetWithChildrenShortcut);
     connect(undoSc, &QShortcut::activated, this, &ProgrammingManager::slotUndo);
+    QShortcut *redoSc = new QShortcut(QKeySequence::Redo, this);
+    redoSc->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(redoSc, &QShortcut::activated, this, &ProgrammingManager::slotRedo);
 
     // Delete / Backspace (⌫ on a Mac) on either tree: delete what's selected —
     // asking first, with where it's used.
@@ -3652,6 +3656,7 @@ void ProgrammingManager::slotStampBundle(const QString &bundleName)
 
     // Save undo snapshot before replacing (palette list + per-look fades)
     m_stampUndoSceneId   = scene->id();
+    m_stampUndoStamp     = PaletteOps::nextUndoStamp();
     m_stampUndoPalettes  = scene->palettes();
     m_stampUndoFades.clear();
     for (quint32 pid : m_stampUndoPalettes)
@@ -3841,6 +3846,7 @@ void ProgrammingManager::resetUndoFor(quint32 sceneId)
 {
     qDeleteAll(m_undoStack);
     m_undoStack.clear();
+    m_undoStamps.clear();
     delete m_undoBaseline;
     m_undoBaseline = NULL;
     m_undoSceneId = sceneId;
@@ -3864,19 +3870,87 @@ void ProgrammingManager::pushUndoSnapshot()
     // The baseline is the pre-edit state — push it; the edit is now current, so
     // re-capture the baseline as the current state for the next edit.
     m_undoStack.append(m_undoBaseline);
+    m_undoStamps.append(PaletteOps::nextUndoStamp());
     const int kMaxUndo = 25;
     while (m_undoStack.size() > kMaxUndo)
+    {
         delete m_undoStack.takeFirst();
+        m_undoStamps.removeFirst();
+    }
     m_undoBaseline = snapshotScene(scene);
+}
+
+/* What ⌘Z here takes back: the newest of the canvas edit (this scene's),
+   the bundle stamp and the shared history, by their stamps. */
+namespace
+{
+enum class UndoFrom { Nothing, Canvas, Stamp, Shared };
+}
+
+static quint64 sharedUndoStampOf(Doc *doc)
+{
+    quint64 st = 0;
+    if (doc->showTree() != nullptr && doc->showTree()->canUndoShared())
+        st = qMax(doc->showTree()->undoStamp(),
+                  doc->paletteOps() != nullptr ? doc->paletteOps()->undoStamp() : quint64(0));
+    if (st == 0 && doc->showTree() != nullptr && doc->showTree()->canUndoShared())
+        st = 1;     // a step with no stamp (older): still there to undo
+    return st;
+}
+
+QString ProgrammingManager::undoText() const
+{
+    const quint64 canvas = (!m_undoStack.isEmpty() && m_currentScene == m_undoSceneId && !m_undoStamps.isEmpty())
+                           ? m_undoStamps.last() : 0;
+    const quint64 stamp = m_stampUndoSceneId != quint32(-1) ? qMax<quint64>(m_stampUndoStamp, 1) : 0;
+    const quint64 shared = sharedUndoStampOf(m_doc);
+    if (canvas == 0 && stamp == 0 && shared == 0)
+        return QString();
+    if (canvas >= stamp && canvas >= shared)
+    {
+        const Scene *scene = qobject_cast<const Scene *>(m_doc->function(m_currentScene));
+        return tr("edit to %1").arg(scene != nullptr ? scene->name() : tr("the look"));
+    }
+    if (stamp >= shared)
+        return tr("Bundle stamp");
+    return m_doc->showTree()->sharedUndoText();
+}
+
+QString ProgrammingManager::redoText() const
+{
+    ShowTreeController *st = m_doc->showTree();
+    return st != nullptr && st->canRedoShared() ? st->sharedRedoText() : QString();
+}
+
+void ProgrammingManager::slotRedo()
+{
+    if (ShowTreeController *st = m_doc->showTree())
+        if (st->canRedoShared() && st->redoShared())
+        {
+            m_paletteTree->updateTree();
+            if (m_canvas != NULL)
+                m_canvas->reload();
+        }
 }
 
 void ProgrammingManager::slotUndo()
 {
-    // General scene undo first; fall back to the bundle-stamp undo when there's
-    // no scene-edit history to unwind.
-    if (m_undoStack.isEmpty() || m_currentScene != m_undoSceneId)
+    const quint64 canvas = (!m_undoStack.isEmpty() && m_currentScene == m_undoSceneId && !m_undoStamps.isEmpty())
+                           ? m_undoStamps.last() : 0;
+    const quint64 stamp = m_stampUndoSceneId != quint32(-1) ? qMax<quint64>(m_stampUndoStamp, 1) : 0;
+    const quint64 shared = sharedUndoStampOf(m_doc);
+    if (canvas == 0 && stamp == 0 && shared == 0)
+        return;
+    if (!(canvas >= stamp && canvas >= shared))
     {
-        slotUndoStamp();
+        if (stamp >= shared)
+            slotUndoStamp();
+        else if (m_doc->showTree()->undoShared())
+        {
+            m_paletteTree->updateTree();
+            if (m_canvas != NULL)
+                m_canvas->reload();
+        }
         return;
     }
     Scene *scene = qobject_cast<Scene*>(m_doc->function(m_currentScene));
@@ -3887,6 +3961,7 @@ void ProgrammingManager::slotUndo()
     }
 
     Scene *snap = m_undoStack.takeLast();
+    m_undoStamps.removeLast();
     const QString keepName = scene->name(); // undo canvas edits, not a tree rename
     scene->copyFrom(snap);   // restore the pre-edit state
     scene->setName(keepName);
@@ -3920,6 +3995,7 @@ void ProgrammingManager::slotUndoStamp()
 
     // Consume the undo entry so a second Ctrl-Z won't repeat
     m_stampUndoSceneId  = quint32(-1);
+    m_stampUndoStamp    = 0;
     m_stampUndoPalettes.clear();
     m_stampUndoFades.clear();
 

@@ -184,14 +184,26 @@ help (DONE.md 2026-10-16). Handoff: SHOW_TREE_OVERNIGHT.md.
   delete naming every use); the Looks section (looks as cues that never
   track, a Collection each fired from VC, Make VC page, Copy to look, Adopt
   as look). **Left of R1:** Look Editor value edits on the palette undo;
-  Programming's tree folder rename/delete/drag through PaletteOps; its ⌘Z
-  reaching the palette history; power estimate to the app; Stage bar
+  Programming's tree folder rename/delete/drag through PaletteOps; power
+  estimate to the app; Stage bar
   (P-D10). **Left of R2:** Open in Palettes. **Left of R3:** per-look fades /
   transition / speed master (and on cue layers), Fire as, a look's MIDI
-  trigger in the tab. **Open (§10, 21–26).** **Try:** + Look on a
+  trigger in the tab. **Open (§10): 26.** **Try:** + Look on a
   production, drop groups and palettes on it, Make VC page, press the
   button over a running list; + Palette in a Library folder, F2, drag,
   delete one a cue uses and ⌘Z.
+- **Answers 12–25 done 2026-10-18** (DONE.md, §10.16; open 12–25
+  resolved, 26 still open): one precedence rule (Convert puts Mix cues on
+  it where every channel plays the same, ≈ mix marks the rest); the plan
+  view of a line aim; the Design preview = GO (also in a Mix cue); a
+  Dimmer dims the colour it doesn't own on no-dimmer fixtures; Convert
+  tries Cue-only; Detach copies shared scenes; "Unlinked from" tooltip;
+  Make VC page updates its frame; Programming's ⌘Z / ⇧⌘Z on the one
+  history + Edit menu; feat/palette-folders merged with the legacy-layout
+  detection fixed. **Try:** Convert on DanceHysteria's New Chaser 8 (its
+  cue 1 stays ≈ mix); a line aim's plan view while sliding Spread; Make VC
+  page twice after adding a look; Programming → New palette, ⌘Z there;
+  open an older show and check its palette folders.
 - **P5 next:** multiple productions (switcher, current production for VC /
   footer GO / show control, per-production timecode).
 

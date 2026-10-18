@@ -59,6 +59,11 @@ class ProgrammingManager final : public QWidget
     friend class HelpShots;     // opens scenes for the help's pictures
 
 public:
+    /** What ⌘Z / ⇧⌘Z here would undo / redo, named (the Edit menu); empty:
+     *  nothing. */
+    QString undoText() const;
+    QString redoText() const;
+
     ProgrammingManager(QWidget *parent, Doc *doc);
     ~ProgrammingManager();
 
@@ -120,9 +125,14 @@ private slots:
     void slotSaveAsBundle();
     void slotUndoStamp();
 
-    /** General canvas undo (Ctrl+Z): revert the open scene one edit. Falls back
-     *  to the bundle-stamp undo when there's no scene-edit history. */
+    /** Undo (⌘Z): whichever was done last of the open scene's canvas edits,
+     *  a bundle stamp, and the shared history (open 24: the Show Tree's
+     *  steps and the palette operations -- New / Duplicate / Delete / Move
+     *  to folder here, the Library there -- are one history, so ⌘Z in
+     *  either tab undoes whatever was done last in it). */
     void slotUndo();
+    /** Redo (⇧⌘Z): the shared history's (canvas edits have no redo). */
+    void slotRedo();
 
     // Power/amperage estimate (Design mode only)
     /** Re-estimate the load of the previewed look and refresh the footer. */
@@ -371,6 +381,10 @@ private:
     QHash<quint32, QPair<int, int> > m_stampUndoFades;
     quint32              m_stampUndoSceneId = quint32(-1);
 
+    /** When each canvas snapshot / the bundle stamp was taken
+     *  (PaletteOps::nextUndoStamp()), against the shared history. */
+    QList<quint64>       m_undoStamps;
+    quint64              m_stampUndoStamp = 0;
     // General per-scene undo: detached Scene copies of the pre-edit state.
     // m_undoBaseline holds the state as of the last load/undo; on each canvas
     // edit it is pushed to m_undoStack and re-captured. Scene-canvas only.

@@ -145,8 +145,11 @@ Then, leaving a cue, each layer marked **Release** is dropped from what passes
 on and goes to the base cue's values, else dark (D7).
 
 **Overlap between layers** (Steps, and US inside it, in the same cue): the
-lower layer in the cue wins on what both set, the same "lower wins" as the look
-stack; tracked layers sit under all of the cue's own.
+same rule as above, one rule up and down the chain (Branson, open 13, 2026-10-18,
+§10.16): for a fixture and an attribute the most specific source wins --
+tracked < included < cue look < layer < child layer < an effect's own looks
+-- and between layers at the same level the deeper (a child) and then the
+lower one in the cue. Tracked layers sit under all of the cue's own.
 
 The editor marks every value with its origin: own values plain; inherited ones
 greyed with the source — *"Blue — from Cue 0.1"*, *"45% — tracked from
@@ -1619,6 +1622,147 @@ VC button, every palette/look action one step on the shared history incl.
 the Programming tab's New palette, the Looks section in the tree, Make VC
 page and Adopt with re-pointing). programmingmanager_test unchanged, green.
 
+### 10.16 Answers 12–25 (2026-10-18)
+
+Branson's answers to open 12–20, then 21–25 (26 still open).
+
+**One precedence rule (13).** The bake already ranked a fixture's
+attribute by (source, recency, depth, position): tracked 0 (a later cue's
+over an earlier's) < included 1 < cue look 2 < a layer's own 3, then the
+deeper layer, then the lower; an effect's own looks live inside its effect
+palette and win there. That *is* D5's chain read per fixture: the most
+specific source first, and between layers at the same level the deeper
+(a child is more specific than its parent wherever it sits) and then the
+lower (further down the cue is nearer the point of use, as a child under
+its parent). So an overlapping layer's own value beats a cue look reaching
+a lower layer, by the same rule, not as an exception. The one exception
+was Mix (`Cue::mixOverlap`, imports); it stays only where the rule would
+change the output:
+
+- `ShowTreeController::staticCueOutput()` (showtreeconvert.cpp): what a
+  cue puts out, statically, per fixture and channel -- its planned scenes
+  built as transient Scenes (never added to the Doc) and laid out as
+  `Scene::write` does (left-out fixtures, colour-set offsets, the look's
+  dimmer on a no-dimmer fixture), merged as a Collection plays them (HTP on
+  intensity channels, else the later scene), opaque functions by
+  `CueOutput`. Effects are dynamic: each effect palette's played fixtures
+  and span are compared instead.
+- Convert, step 0: each Mix cue (not a reusable use) is tried without Mix;
+  kept when the static output, the effect placement and the stage are the
+  same; its plays baseline is then the new bake. Else `plan.mixKept` says
+  "stays Mix — the one rule would change N channel(s) on M fixture(s)".
+- The tree marks a Mix cue **≈ mix** with a tooltip; the cue page's box
+  and the help say the same.
+- The importer also mixes a cue where one scene's Colour and another's
+  Dimmer meet on a no-dimmer fixture (they used to scale independently).
+
+DanceHysteria-0.5 (a COPY): Full Show's 0.0.6 and 0.0.7 (Colour, Position
+overlap) are put on the rule, New Chaser 8's cue 1 (White under Red,
+1056 channels) stays Mix; **0 channels differ** in all 11 cues of the
+three lists, imported vs chaser and converted vs imported. Table test
+`oneRuleUpAndDownTheChain` (tracked < included < cue look < layer < child,
+later tracked over earlier, lower sibling, deeper over lower, own over a
+cue look on a lower layer, Mix = HTP), played by GO.
+
+**Preview = GO (15).** The preview's scenes run with `Scene::setEditOverride`
+(LTP over everything). Their channels now carry
+`FadeChannel::EditOverride` as well, and `GenericFader` writes them with
+`Universe::writeOverride()`: on an HTP channel a second edit-override
+writer in the same frame takes the higher (a per-frame bitmap reset in
+`processFaders`), so the cue's own scenes mix among themselves as at Auto
+while still overriding a running list. Other overrides (an effect owning a
+channel, `replace`) write verbatim as before. Test
+`previewPlaysWhatGoPlays`: every cue (overlap, child, Mix) previewed
+equals GO on every channel; it fails without the HTP step.
+
+**A Dimmer dims the colour it doesn't own (16).** In `planCue()`, for a
+fixture with no dimmer channel whose Dimmer winner isn't its Colour winner
+(a child under its parent's colour; a lower sibling's level), the Dimmer's
+layer plays the winning colour palettes on that fixture (first in its
+palette list, only there) and the colour's layer leaves it out; the
+scene's look dimmer then scales it (`dimScaleWithoutDimmer`). Only into a
+layer with no Colour of its own and one colour look per layer (else each
+layer's own Dimmer scales its own colour, as before; a limit in the help).
+Not in a Mix cue unless the Dimmer's layer is deeper. Test with RGB bars
+(`genericRGBPanelDef`, no dimmer): child Half dims the parent's Blue to
+127, and a lower sibling's does the same.
+
+**Timing per use (17).** As built (§10.14); nothing changed.
+
+**Convert tries Cue-only (18).** Step 3, after taking out repeats: a Track
+cue whose next cue undoes it is tried Cue-only (and, when the next cue
+stayed Block, that one tracking); releases in it that are no longer needed
+go; the next cue's repeats are taken out; kept only if every cue plays the
+same and the list holds less (layers + looks + releases + includes). The
+plan says "0.0.6 STOMP: Cue-only (0.0.7 After starts from what 0.0.6 STOMP
+started from), 1 release(s) no longer needed". Clearing Mix is step 0
+above.
+
+**Detach copies (19).** `copySharedScenes()`: a scene of the detached
+list's collections another list still plays is copied (`createCopy`,
+named and filed as it was) and the copy put in its place, then handed
+over; the tree keeps its own. Undo sweeps the copies (they become
+generated again and unused); redo (`applyDetachedLists`) copies again.
+
+**Unlinked from (20).** `Layer::unlinkedFrom` / `Cue::unlinkedFrom`
+(saved as `UnlinkedFrom`), set by Unlink here and by deleting a used
+reusable; the tree's tooltip starts "Unlinked from <name>". No badge.
+
+**Plan view (14).** `LinePlanView` (ui/src/lineplanview.*) under the
+order strip of a line aim's Position row: the line from above (x across,
+z up/downstage; `MonitorProperties::targetLinePoints` through `LineCurve`),
+each head where it hangs (`AimSolver::frameFor`), its beam to its point
+(`AimSolver::linePoints`, numbered by `orderedLineHeads` as the strip),
+and the previous cue's points for the same layer (its scene there) as
+rings, the sweep dashed. Rebuilt with the page, so it follows Spread /
+Grouping / Cross at once. Offscreen render test.
+
+**21, 23** kept as built (a look a Collection; Library palettes by type).
+
+**Make VC page updates its frame (22).** The tree remembers the frame it
+made per Looks section and folder, and the buttons it made in it
+(`lookVcFrame` / `lookVcButtons`, saved as `<LookVCPage List Folder Frame
+Buttons>` in `<ShowTree>`, not on undo). Again: a button for each look with
+none (placed in the first free grid cell, the frame grows), the buttons it
+made whose look is gone (deleted, or filed elsewhere) taken off
+(`VirtualConsole::removeWidget`, as Delete without asking); everything
+else in the frame -- buttons moved or resized, the user's own widgets --
+untouched. The frame deleted on the console: a new one.
+
+**Programming's ⌘Z on the one history (24).** The canvas snapshots and
+the Bundle stamp are stamped by `PaletteOps::nextUndoStamp()`; ⌘Z there
+takes the newest of them and the shared history (tree or palette step,
+either tab); ⇧⌘Z redoes the shared history (canvas edits have no redo).
+`ProgrammingManager::undoText()/redoText()`; an **Edit** menu (Undo / Redo,
+named for the tab in front; no key binding of its own -- ⌘Z stays each
+tab's, a second binding would be ambiguous).
+
+**feat/palette-folders merged (25).** Its `migrateLegacyPath` dropped a
+first folder named like *any* palette type, so a user folder "Color" in a
+show saved without the marker lost its name. The detection now:
+
+- on load, a palette **without** `Folders="1"` loses a first folder that is
+  **its own type's name** (the old layout filed each palette under its own
+  type) -- always;
+- **another** type's name first (an effect dragged under *Color/01-Song*)
+  is dropped only when the whole show is in the old layout: no palette
+  carries the marker and every unmarked folder starts with a type's name
+  (`QLCPalette::migrateLegacyPaths`, from `Doc::loadXML`); otherwise it is
+  the user's folder and stays;
+- a name that isn't a type's ("Colour", "Warm") is never touched; marked
+  paths never migrate (every saved path is marked now).
+
+Left ambiguous: a show saved by a shared-folder build before the marker
+(this branch's R2 window) with a folder named exactly like its own
+palettes' type -- read as the old layout. With the load doing the
+migration, `PaletteOps::folderOfPath` is just the path under *Palettes*
+(the Library's copy of the rule is gone), as the Programming tab's tree
+reads it; `suggestPaletteFolder` and the Lighting Studio's new Aim /
+Pan-Tilt palettes start unfiled instead of in a type-named folder (which
+would now be a real folder). Tests: `qlcpalette_test::
+aUserFolderNamedLikeATypeIsKept`, `programmingmanager_test::
+libraryAndProgrammingAgreeOnFolders`, `undoHereReachesTheSharedHistory`.
+
 ### Open for Branson
 
 1. **`Generated` mark on `<Function>`** as well as in `<ShowTree>`? (10.2;
@@ -1661,52 +1805,43 @@ page and Adopt with re-pointing). programmingmanager_test unchanged, green.
     exact palette is reused (In this cue list → Recent → any); the command
     line otherwise makes a named one per the show's pattern; the picker a
     one-off with one-click Make reusable. D11/D21 updated.
-12. **D10/D17 as a shared layout span** rather than one extra scene over the
-    union (§10.13: the effect keeps each layer's own base under it). OK?
-13. **Overlap rule:** a layer's own value beats a cue look reaching a lower
-    layer on the fixtures they share (D5's "nearer scope"), rather than
-    "the lower layer wins" whatever the source. OK? And imported cues keep
-    mixing (Overlap: Mix) — fine, or should Convert to tracking (P4) clear
-    it?
-14. **The plan view** (top view, beams, the previous cue's points as rings)
-    is not built; the order strip is. Wanted for P3, or later?
-15. **A Mix cue in the Design preview** shows the lower layer where they
-    overlap (the preview writes on top to win over a running list). Accept,
-    or preview such cues without the edit override?
-16. **A child's Dimmer on fixtures without a dimmer channel** doesn't dim
-    the colour its parent gives them (the parent's scene scales by its own
-    look dimmer). Fill the parent's colour into the child there (more
-    scenes), or leave it as a known limit?
-17. **What a reusable cue shares** (§10.14): built -- name, mode, overlap,
-    cue looks and layers (with their Release) are shared; number, timing,
-    note and includes are each use's (a new use starts with the timing it
-    was made with). Should timing be shared too (a "Blackout" always 0 s),
-    or mode be each use's?
-18. **Convert to tracking's choices** (§10.14): a layer the next cue
-    doesn't light is *released* (not a Cue-only cue), cue looks are never
-    taken out, and Mix cues keep mixing (open 13). OK, or should it also
-    try Cue-only and clear Mix where nothing would change?
-19. **Detach to plain chaser and shared scenes** (§10.14): a scene another
-    list still plays stays the tree's (locked) until the tree lets go of
-    it, then is handed over. Or copy such scenes at once, so the detached
-    chaser is all its own from the start?
-20. **"Detached from BackStage" badge** (§1): after Unlink here a use
-    doesn't say where it came from. Wanted?
-21. **A look bakes to a Collection always** (stable id for VC buttons),
-    not a Scene when it has one layer (§10.15). OK?
-22. **Make VC page** makes a new frame each time (Toggle buttons, six a row,
-    coloured by the first colour). Update the frame it made before instead?
-    Flash for some (a "Blackout Hit")?
-23. **Library palettes, default view:** by type with folders under each (as
-    built: how the Library was) or folders first (feat/palette-folders'
-    default)?
-24. **Programming's ⌘Z** stays its scene undo; its palette operations are
-    undone from the Show Tree. Should Programming's Undo reach the palette
-    history too?
-25. **feat/palette-folders:** merge it (its load migration, `Folders="1"`)?
-    Folders filed from the Library are stored its way already; one named
-    exactly like a palette type ("Color") would be stripped by its migration
-    unless PaletteOps writes the marker.
+12. ~~**D10/D17 as a shared layout span**~~ — **resolved 2026-10-18:** "ok".
+    Kept as built (§10.13).
+13. ~~**Overlap rule**~~ — **resolved 2026-10-18:** "we should be consistent
+    in precedence up and down the chain." One rule (§2, §10.16): the most
+    specific source wins, then the deeper, then the lower layer; Convert to
+    tracking puts Mix cues on it wherever every channel plays the same and
+    lists (≈ mix in the tree) the ones it would change.
+14. ~~**The plan view**~~ — **resolved 2026-10-18:** build it now. Built
+    (§10.16): under the order strip.
+15. ~~**A Mix cue in the Design preview**~~ — **resolved 2026-10-18:** the
+    Design preview must match playback. Built (§10.16): the preview's
+    scenes are HTP among themselves, over everything else; tested equal to
+    GO cue by cue.
+16. ~~**A child's Dimmer on fixtures without a dimmer channel**~~ —
+    **resolved 2026-10-18:** "it should". Built (§10.16): the layer whose
+    Dimmer wins there plays the winning colour itself.
+17. ~~**What a reusable cue shares**~~ — **resolved 2026-10-18:** "each
+    use" — timing is each use's, as built (§10.14).
+18. ~~**Convert to tracking's choices**~~ — **resolved 2026-10-18:** "yes"
+    — it also tries Cue-only where that removes repetition and clears Mix
+    where nothing would change. Built (§10.16).
+19. ~~**Detach to plain chaser and shared scenes**~~ — **resolved
+    2026-10-18:** "copy". Built (§10.16).
+20. ~~**"Detached from BackStage" badge**~~ — **resolved 2026-10-18:**
+    Branson "IDK"; decided: no badge, the tooltip says "Unlinked from
+    <reusable name>" (§10.16).
+21. ~~**A look bakes to a Collection always**~~ — **resolved 2026-10-18:**
+    "ok"; kept.
+22. ~~**Make VC page**~~ — **resolved 2026-10-18:** "ok" — it updates the
+    frame it made before. Built (§10.16).
+23. ~~**Library palettes, default view**~~ — **resolved 2026-10-18:** "ok"
+    — by type, as built.
+24. ~~**Programming's ⌘Z**~~ — **resolved 2026-10-18:** "yes". Built
+    (§10.16): ⌘Z / ⇧⌘Z there reach the one history; the Edit menu names
+    the step.
+25. ~~**feat/palette-folders**~~ — **resolved 2026-10-18:** "yes" — merged,
+    with its migration fixed to strip only the genuine old layout (§10.16).
 26. **Deleting a palette cues use:** as built, the cues keep naming it
     ("(missing)") and Undo brings it back everywhere. Or should Delete also
     take the looks off the cues (a tree step)?

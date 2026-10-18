@@ -357,6 +357,9 @@ public:
      *  page), in @a parent: its id, its page in a multipage frame, shown.
      *  Placing and selecting it is the caller's. */
     void placeWidget(VCWidget *widget, VCWidget *parent);
+    /** Take @a widget (and its children) off the console as Delete does,
+     *  without asking (the Show Tree's Make VC page, a look gone). */
+    void removeWidget(VCWidget *widget);
 
     VCWidget *widget(quint32 id);
 

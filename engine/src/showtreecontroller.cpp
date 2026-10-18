@@ -4380,6 +4380,18 @@ void ShowTreeController::saveState(QXmlStreamWriter *doc, bool snapshot) const
         doc->writeStartElement(KXMLShowTreeInline);
         doc->writeAttribute(QStringLiteral("IDs"), idsToString(inl));
         doc->writeEndElement();
+
+        QStringList pages = m_lookVcFrames.keys();
+        std::sort(pages.begin(), pages.end());
+        for (const QString &k : pages)
+        {
+            doc->writeStartElement(QStringLiteral("LookVCPage"));
+            doc->writeAttribute(QStringLiteral("List"), k.section(QLatin1Char('\n'), 0, 0));
+            doc->writeAttribute(QStringLiteral("Folder"), k.section(QLatin1Char('\n'), 1));
+            doc->writeAttribute(QStringLiteral("Frame"), QString::number(m_lookVcFrames.value(k)));
+            doc->writeAttribute(QStringLiteral("Buttons"), idsToString(m_lookVcButtons.value(k)));
+            doc->writeEndElement();
+        }
     }
     else
     {
@@ -4475,6 +4487,18 @@ void ShowTreeController::loadState(QXmlStreamReader &root, bool snapshot)
             m_snapshotHasDetachedLists = true;
             for (quint32 id : stringToIds(root.attributes().value(QStringLiteral("IDs")).toString()))
                 m_snapshotDetachedLists.insert(id);
+            root.skipCurrentElement();
+        }
+        else if (root.name() == QLatin1String("LookVCPage"))
+        {
+            if (!snapshot)
+            {
+                const QXmlStreamAttributes a = root.attributes();
+                const QString k = a.value(QStringLiteral("List")).toString() + QLatin1Char('\n')
+                                  + a.value(QStringLiteral("Folder")).toString();
+                m_lookVcFrames.insert(k, a.value(QStringLiteral("Frame")).toString().toUInt());
+                m_lookVcButtons.insert(k, stringToIds(a.value(QStringLiteral("Buttons")).toString()));
+            }
             root.skipCurrentElement();
         }
         else if (root.name() == KXMLShowTreeGenerated && !snapshot)
@@ -4652,6 +4676,33 @@ void ShowTreeController::saveXML(QXmlStreamWriter *doc) const
     saveState(doc, false);
 }
 
+quint32 ShowTreeController::lookVcFrame(quint32 listId, const QString &folder) const
+{
+    return m_lookVcFrames.value(QString::number(listId) + QLatin1Char('\n') + folder, invalidId());
+}
+
+QList<quint32> ShowTreeController::lookVcButtons(quint32 listId, const QString &folder) const
+{
+    return m_lookVcButtons.value(QString::number(listId) + QLatin1Char('\n') + folder);
+}
+
+void ShowTreeController::setLookVcFrame(quint32 listId, const QString &folder, quint32 frameId,
+                                        const QList<quint32> &buttons)
+{
+    const QString k = QString::number(listId) + QLatin1Char('\n') + folder;
+    if (frameId == invalidId())
+    {
+        m_lookVcFrames.remove(k);
+        m_lookVcButtons.remove(k);
+    }
+    else
+    {
+        m_lookVcFrames.insert(k, frameId);
+        m_lookVcButtons.insert(k, buttons);
+    }
+    m_doc->setModified();
+}
+
 void ShowTreeController::reset()
 {
     // The show is going: let go of what the preview plays (the functions
@@ -4666,6 +4717,8 @@ void ShowTreeController::reset()
     m_generatedScenes.clear();
     m_generatedCollections.clear();
     m_generatedChasers.clear();
+    m_lookVcFrames.clear();
+    m_lookVcButtons.clear();
     m_inlinePalettes.clear();
     m_layerScenes.clear();
     m_spanMembers.clear();

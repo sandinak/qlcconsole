@@ -712,3 +712,60 @@ cp ~/git/qlcconsole/test-workspaces/DanceHysteria-0.5.qlcc /tmp/dh-looks.qlcc
   also take it off the cues?
 - Unchanged: 1, 3 (now partly answered by the shared history), 4, 5, 8,
   12–20.
+
+---
+
+## Answers 12–20 (2026-10-18)
+
+Branson's answers to §10 open 12–20, and then 21–25 in the same pass (26
+is still open). Notes in SHOW_TREE_DESIGN.md §10.16; help updated
+(show-tree.md "Who wins", the plan view, Convert, Detach, Make VC page,
+Undo; programming-tab.md).
+
+| # | Answer | What changed |
+|---|---|---|
+| 12 | ok | D10/D17 stay a shared layout span |
+| 13 | "consistent in precedence up and down the chain" | One rule: most specific source (tracked < included < cue look < layer < child < effect's own), then deeper, then lower. Convert puts Mix cues on it where every channel is the same; the rest stay **≈ mix** (tree marker + tooltip) and the plan lists them |
+| 14 | build it now | Plan view under the order strip: line from above, beams, previous cue's points as rings |
+| 15 | preview must match playback | Preview scenes HTP among themselves, over everything else; tested equal to GO |
+| 16 | it should | The Dimmer's layer plays the winning colour on no-dimmer fixtures |
+| 17 | each use | Timing per use, as built |
+| 18 | yes | Convert tries Cue-only (and clears Mix, 13) |
+| 19 | copy | Detach copies scenes another list plays |
+| 20 | IDK → no badge | Tooltip "Unlinked from <name>" |
+| 21 | ok | A look stays a Collection |
+| 22 | ok → update | Make VC page updates its own frame (adds/removes its buttons, leaves the user's) |
+| 23 | ok | Library palettes by type by default |
+| 24 | yes | Programming ⌘Z / ⇧⌘Z on the one history; Edit menu names the step |
+| 25 | yes | feat/palette-folders merged (--no-ff); migration strips only the genuine old layout |
+
+**DanceHysteria-0.5 dry run (a COPY):** Full Show 0.0.6 / 0.0.7 Mix → the
+rule; New Chaser 8 cue 1 stays Mix ("would change 1056 channel(s) on 22
+fixture(s)"); 0 channels differ in all 11 cues, chaser vs list and
+converted vs imported.
+
+### Try in the app (on a COPY)
+
+```sh
+cp ~/git/qlcconsole/test-workspaces/DanceHysteria-0.5.qlcc /tmp/dh-answers.qlcc
+~/git/qlcconsole-showtree/build/main/qlcconsole -o /tmp/dh-answers.qlcc
+```
+
+1. Import New Chaser 8 → Convert to tracking: the plan says cue 1 stays
+   Mix; the tree shows **≈ mix** on it (hover). Import Full Show: its
+   0.0.6 / 0.0.7 follow the rule after Convert.
+2. A layer aimed at a line: under the order strip, the plan view; set
+   Spread in the next cue — the rings are the cue before.
+3. A child layer on RGB bars with a lower Dimmer than its parent: the
+   bars dim.
+4. Looks → Make VC page; add a look, delete one, move a button; Make VC
+   page again — the same frame, updated.
+5. Programming → New palette, then a Show Tree change, then ⌘Z twice in
+   Programming; Edit menu shows what Undo will take back.
+6. Open an older show: palette folders per type become one folder per
+   name; a folder named "Colour" stays.
+
+### Open for Branson
+
+- 26 (deleting a palette cues use) — unanswered.
+- Unchanged: 1, 3, 4, 5, 8.

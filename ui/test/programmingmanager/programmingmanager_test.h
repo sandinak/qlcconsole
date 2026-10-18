@@ -140,6 +140,7 @@ private slots:
      *  moving into and deleting a folder act on it for every type. */
     void paletteFoldersHoldAnyTypeInBothViews();
     void libraryAndProgrammingAgreeOnFolders();
+    void undoHereReachesTheSharedHistory();
 
 private:
     Doc* m_doc;

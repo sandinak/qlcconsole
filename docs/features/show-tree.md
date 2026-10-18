@@ -303,20 +303,11 @@ Red* — US is Red and still at Base; the rest of Steps stays White.
 ### Where layers overlap
 
 Two layers of one cue on fixtures in common (*All* and *Some* inside it)
-don't fight:
-
-- on each fixture, for each attribute, **the value set nearest wins**: this
-  cue over earlier cues (a layer's own over a cue look, over an include,
-  over what tracked in); then the **child** over its parent; then the
-  **lower** layer;
-- the other layer isn't lit there for that attribute, so a lower intensity
-  is never overridden by a higher one (no highest-wins show-through);
-- what only one of them sets, it plays.
-
-A cue made by **Import chaser** whose scenes overlap like this keeps
-playing as the chaser did, both at once with the highest intensity
-winning. Its page has **Overlapping layers mix (as a chaser)** ticked, and
-the import report says which cues. Untick it for the tree's rule.
+don't fight: on each fixture, for each attribute, one of them sets it — the
+same rule as everywhere else in the tree, see [Who wins](#who-wins). The
+other isn't lit there for that attribute, so a lower level is never
+overridden by a higher one (no highest-wins show-through); what only one of
+them sets, it plays.
 
 ## Setting looks
 
@@ -372,18 +363,53 @@ reaches 2 of 3 layers"*.
 dims their colour: Blue at 19% goes out as a dim blue, and the Rig Overview
 shows it that way.
 
-### What wins
+### Who wins
 
-Inside a cue, for each layer and attribute, the first of these that sets it
-wins:
+**One rule, up and down the tree: for each fixture and attribute, the most
+specific source wins.** From least to most specific:
 
-1. the effect's own looks (inside that effect only)
-2. the layer's own looks
-3. the cue's looks
-4. included cues (the later include first)
-5. what tracked in from the cue before
+1. what **tracked in** from earlier cues — a later cue's value over an
+   earlier one's;
+2. an **included** cue (the later include first);
+3. the **cue's looks**;
+4. the **layer's** own looks;
+5. a **child layer's** own looks;
+6. an **effect's own** looks (they belong to that effect, inside it only).
 
-**This cue beats earlier cues; inside a cue, the nearer source wins.**
+Where two layers of a cue set the same thing from the same level of that
+list — two layers' own values, two cue looks reaching them, two tracked
+values from the same cue — the **deeper** one wins (a child, wherever it
+sits, as a child beats its parent), then the **lower** one in the cue. That
+is the same rule read along the cue: further down is nearer the point of
+use, as a child is under its parent and a later cue after an earlier one.
+There are no exceptions to it for overlaps: an overlapping layer's own
+value beats a cue look reaching a lower layer, because a layer's own is
+more specific than a cue look.
+
+*Example.* Cue 2 has a cue look **Blue**, a layer **Steps** at *Full* with
+a child **US** (a group inside Steps) at *20%*, and below them a layer
+**Floor** at *50%* that overlaps US and part of Steps. Cue 1 left **Red**
+on Steps.
+
+| Fixtures | Colour | Dimmer | why |
+|---|---|---|---|
+| US | Blue | 20% | Blue: the cue look reaches Steps, and US is lit by its parent for what it doesn't set. 20%: a child beats its parent, and is deeper than Floor |
+| Steps in Floor | Blue | 50% | Floor is lower than Steps, and both are layers' own |
+| the rest of Steps | Blue | Full | the cue look beats the Red tracked in from cue 1 |
+
+**Fixtures with no dimmer channel** (RGB bars, pixel heads) show a Dimmer
+as their colour scaled. There the Dimmer that wins dims the colour that
+wins: a child's 20% dims the Blue its parent gives, and so does a lower
+layer's level. (The layer whose Dimmer wins plays that colour on those
+fixtures itself.)
+
+**The one place it doesn't apply: a cue that mixes.** A cue made by
+**Import chaser** whose scenes overlap plays them both at once, as the
+chaser did (the highest intensity wins). Its page has **Overlapping layers
+mix (as a chaser)** ticked and the tree marks it **≈ mix**, with a tooltip.
+**Convert to tracking** puts every such cue on the rule where that plays
+exactly the same, and lists the ones where it would not, which keep mixing.
+Untick the box to put one on the rule anyway.
 
 ### Values you pick or type
 
@@ -500,6 +526,11 @@ of its own.
   a later cue changes some of its layers.
 - **The order strip** under Position shows where each light lands: numbered
   dots along the line, 1 nearest its start, across the whole formation.
+- **The plan view** under it shows the same from above: the line, each
+  light where it hangs with its beam to its point (numbered as the strip),
+  and, as **rings**, where the cue before put the same lights, with the
+  sweep between them dashed. It follows Spread, Grouping and Cross as you
+  change them.
 - **Between cues** a Spread change fades over the cue's fade time, so the
   beams sweep.
 
@@ -643,6 +674,11 @@ number. You can type a number into a cue's **Number** field yourself.
   you are on takes precedence on every channel it sets, so a dimmer you edit
   down shows even over a running cue at full. The running list keeps going
   underneath.
+- **What you see is what GO plays.** The preview puts out what the cue puts
+  out when it is played — the same values on every channel, also where
+  layers overlap and in a cue that mixes (its own layers mix with each
+  other there as they do on GO, highest intensity winning, while together
+  they still take precedence over a running list).
 - When the preview stops, the stage is what really runs again. Nothing a
   chaser or the Virtual Console started is stopped.
 
@@ -817,8 +853,11 @@ In the command line, ⌘Z undoes your typing. Type `undo` to undo the tree
   - a palette a command made (`dimmer 30` with none at 30%): undo takes the
     value off the cue, and the palette stays, as an ordinary palette;
   - a VC page made by **Make VC page** (delete the frame on the console).
-- **The Programming tab's own Undo** (its scene snapshots) is unchanged; its
-  palette operations are undone from here.
+- **The Programming tab is on the same history.** ⌘Z / ⇧⌘Z there take
+  back whatever was done last: an edit to the look open on its canvas, a
+  Bundle stamp, or a step of this one history (a tree change or a palette
+  operation, from either tab). The **Edit** menu's Undo / Redo name the
+  step the tab you are in would take back.
 
 ## The Library
 
@@ -876,9 +915,13 @@ operation is one undo step on the tab's [Undo](#undo).
   ticked (the default), Colour, Dimmer… each with your folders under it;
   unticked, your folders first with every type inside, and the palettes in
   no folder below. It is remembered.
+- **One folder model** with the Programming tab's palette list: the same
+  folders, the same palettes in them, whichever tab files them.
 - **Older shows** kept a folder per type (*Color › 01-Song*, *Dimmer ›
-  01-Song*). The Library reads those as one folder, *01-Song*; a palette
-  filed, or a folder renamed, from here is stored the new way.
+  01-Song*). Opening one makes those one folder, *01-Song*. Only what is
+  really that old layout changes: a folder you made that happens to be
+  called like a type (*Color* holding levels) or *Colour* stays as it is.
+  Saved, every path says it is the new kind, and is never changed again.
 - **Still in Programming:** designing effects (the browser, presets, WLED),
   `.qxfx` import and export, Bundles, and capturing.
 
@@ -954,7 +997,9 @@ reusables are reusable *arrangements*.
   the next cues as any layer does, and a tracked value set with *Update cue
   X* sets it in the use it came from — that is, in all of them.
 - **Unlink here** (the page's link, right-click, or `unlink`) makes this use
-  a plain copy of its own, as it is now. The other uses stay linked.
+  a plain copy of its own, as it is now. The other uses stay linked. No
+  badge stays on it; its tooltip says *"Unlinked from Back Wash"*. A
+  reusable deleted while used leaves the same on each use.
 - **Used by.** Right-click it in the Library → **Used by** lists every use
   by list and cue (click one to go there), the reusable cues it is part of,
   and any VC button that plays one of its uses' cues or layers. The page's
@@ -980,7 +1025,15 @@ right-click the list, or `convert`) makes it a Tracking list that plays
 - a value a layer only **repeats** (the same as what tracks in) is taken
   out, and a layer left with nothing of its own goes too;
 - a cue that can't track without changing (it plays something else, a base
-  cue would bring a value back) **stays Block**.
+  cue would bring a value back) **stays Block**;
+- a cue whose changes the next cue undoes (*0.0.6 STOMP* adds FlashWashes,
+  *0.0.7* goes back to 0.0.5) is made **Cue-only** where that takes
+  repetition out: the next cue starts from what it started from, so no
+  Release is needed and what would only repeat goes;
+- a cue that **mixes** (an import, *≈ mix*) is put on the tree's one rule
+  ([Who wins](#who-wins)) where every channel plays the same; where it
+  wouldn't, the plan says so (*"1 Red-Base: stays Mix — the one rule would
+  change 1056 channel(s) on 22 fixture(s)"*) and it keeps mixing.
 
 Before anything changes it shows the plan, one line per change (*"0.0.5
 WHO ARE WE: tracks from 0.0.4 SHOUT (its include of 0.0.4 SHOUT taken
@@ -989,9 +1042,9 @@ cue still puts the same looks on the same fixtures; on DanceHysteria's
 Full Show, 0 channels differ in any cue before and after. Typed: `convert`
 shows the plan in the help pane, `convert apply` does it.
 
-It leaves alone what it can't prove plays the same: cue looks, cues whose
-layers mix (*Overlapping layers mix*), and reusable uses. A list that
-tracks already says *Nothing to convert*.
+It leaves alone what it can't prove plays the same: cue looks, a mixing cue
+the rule would change, and reusable uses. A list that tracks already says
+*Nothing to convert*.
 
 ## Detach to plain chaser
 
@@ -1002,8 +1055,8 @@ tracks already says *Nothing to convert*.
   functions, unlocked and shown in the Functions window where they are
   (`Productions/<production>/…`), to edit as any chaser;
 - the **scenes** only this list plays go with them; a scene another list
-  still plays stays the tree's (locked) until the tree no longer needs it,
-  and is then handed over too — never deleted from under the chaser;
+  still plays is **copied**, and the chaser plays the copy, so it is all
+  its own from the start (the tree keeps its scene for the other list);
 - one-off values those scenes play become ordinary palettes;
 - the list **leaves the tree**. VC widgets and show control that play the
   chaser keep playing it, unchanged.
@@ -1036,7 +1089,11 @@ production has a **Looks** section beside its cue lists.
   edit the look, so the button keeps firing it. **Make VC page** (on Looks,
   a folder, a look's page, or `vcpage`) puts a frame on the Virtual Console
   with one Toggle button per look there, captioned with its name and
-  coloured by its first colour. The look's page lists the buttons that fire
+  coloured by its first colour. **Again**, it updates that frame: a button
+  for each look added since, the buttons it made for looks since deleted (or
+  filed elsewhere) taken away; buttons you moved or resized and widgets of
+  your own in the frame stay as they are. Delete the frame on the console
+  and the next Make VC page makes a new one. The look's page lists the buttons that fire
   it (*Fired by*); the tree marks them **VC ×N**.
 - **Over a running cue list** a look mixes as any function does: the
   highest intensity wins, and for colour, position and the rest the last
@@ -1118,19 +1175,15 @@ production has a **Looks** section beside its cue lists.
 - **A look has no fade, transition or speed master of its own** yet; a VC
   button's Flash and the look's scenes' own settings are what there is. A
   look's MIDI trigger is set on its VC button.
-- **Make VC page** always makes a new frame; it doesn't update one it made
-  before. VC isn't on the tab's Undo.
 - **The Look Editor's value changes** (a colour dragged) are not on Undo, in
-  either tab.
-- **The Programming tab's palette list** still shows the paths as stored: a
-  palette filed from the Library shows in a folder of its own name there,
-  one from an older show under its type.
+  either tab. **Make VC page** isn't on Undo either (the console has its
+  own Delete).
+- **A Dimmer dims a colour it doesn't own** (no dimmer channel) only when
+  the Dimmer's layer has no Colour of its own, and one colour look per
+  layer; otherwise each layer's colour is scaled by its own Dimmer.
+- **Convert to tracking** leaves cue looks alone (taking one out could
+  change which value wins where layers overlap).
 
-- **An unlinked use** doesn't say what it was linked to (no *"detached
-  from BackStage"* badge).
-- **Convert to tracking** releases a layer the next cue doesn't light; it
-  doesn't make cues Cue-only, and leaves cue looks, mixing cues and reusable
-  uses as they are.
 - **Effects in the cue don't take precedence in the Design preview.** The
   cue's looks win over a running list, but an EFX, RGB Matrix or other
   function played as it is mixes with what runs, as it normally would.
@@ -1146,18 +1199,9 @@ production has a **Looks** section beside its cue lists.
 - **Edits in Operate are blind** and reach the stage on the cue's next GO.
 - **Import** doesn't carry a step's skip flag, its own speed master or Sub GO
   steps.
-- **A cue whose layers mix** (*Overlapping layers mix*, an imported cue)
-  shows the lower layer's level where they overlap in the Design preview:
-  the preview's edit wins by writing its own values on top. Played for real
-  (GO), they mix as the chaser did.
-- **A child layer's Dimmer on fixtures with no dimmer channel** (RGB bars,
-  pixel heads) doesn't dim the colour its parent gives them. Set the colour
-  on the child too.
 - **An effect laid out over several layers** writes each layer's part from
   its own scene. A script that looks at its neighbours' base colour sees
   only its own layer's.
-- **The plan view** of a line aim (a top view with beams, the previous
-  cue's points as rings) isn't there yet: the order strip is.
 - **Later:**
   - sub-cues in the tree;
   - the cue runner (a Run tab and a VC widget);

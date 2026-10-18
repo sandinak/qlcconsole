@@ -41,6 +41,7 @@
 #include "functionselection.h"
 #include "functionmanager.h"
 #include "programmingmanager.h"
+#include "showtreecontroller.h"
 #include "showtreeview.h"
 #include "inputoutputmap.h"
 #include "inputpatch.h"
@@ -1912,6 +1913,65 @@ void App::initMenuBar()
         // Same reasoning as Save: quitting is an application-level act.
         quitAction->setShortcutContext(Qt::ApplicationShortcut);
         fileMenu->addAction(quitAction);
+    }
+
+    /* ---- Edit: Undo / Redo, named (open 24) ---- */
+    {
+        // One history for the Show Tree's steps and the palette operations
+        // (either tab), plus Programming's own canvas edits. The menu names
+        // the step; ⌘Z / ⇧⌘Z stay each tab's own shortcuts (a second
+        // binding here would make them ambiguous), shown beside the text.
+        QMenu *editMenu = mb->addMenu(tr("&Edit"));
+        QAction *undo = editMenu->addAction(tr("Undo"));
+        undo->setObjectName(QStringLiteral("editUndo"));
+        QAction *redo = editMenu->addAction(tr("Redo"));
+        redo->setObjectName(QStringLiteral("editRedo"));
+        auto current = [this]() -> QWidget * {
+            return m_tab != nullptr ? m_tab->currentWidget() : nullptr;
+        };
+        auto programming = [current]() -> ProgrammingManager * {
+            QWidget *w = current();
+            ProgrammingManager *pm = qobject_cast<ProgrammingManager *>(w);
+            return pm != nullptr ? pm : (w != nullptr ? w->findChild<ProgrammingManager *>() : nullptr);
+        };
+        auto treeView = [current]() -> ShowTreeView * {
+            QWidget *w = current();
+            ShowTreeView *v = qobject_cast<ShowTreeView *>(w);
+            return v != nullptr ? v : (w != nullptr ? w->findChild<ShowTreeView *>() : nullptr);
+        };
+        connect(editMenu, &QMenu::aboutToShow, this, [this, undo, redo, programming]() {
+            QString u, r;
+            if (ProgrammingManager *pm = programming())
+            {
+                u = pm->undoText();
+                r = pm->redoText();
+            }
+            else if (ShowTreeController *st = m_doc->showTree())
+            {
+                u = st->canUndoShared() ? st->sharedUndoText() : QString();
+                r = st->canRedoShared() ? st->sharedRedoText() : QString();
+            }
+            undo->setText(u.isEmpty() ? tr("Undo") : tr("Undo %1").arg(u));
+            undo->setEnabled(!u.isEmpty());
+            redo->setText(r.isEmpty() ? tr("Redo") : tr("Redo %1").arg(r));
+            redo->setEnabled(!r.isEmpty());
+        });
+        connect(undo, &QAction::triggered, this, [this, programming, treeView]() {
+            if (ProgrammingManager *pm = programming())
+                QMetaObject::invokeMethod(pm, "slotUndo");
+            else if (ShowTreeView *v = treeView())
+                QMetaObject::invokeMethod(v, "slotUndo");
+            else if (m_doc->showTree() != nullptr)
+                m_doc->showTree()->undoShared();
+        });
+        connect(redo, &QAction::triggered, this, [this, programming, treeView]() {
+            if (ProgrammingManager *pm = programming())
+                QMetaObject::invokeMethod(pm, "slotRedo");
+            else if (ShowTreeView *v = treeView())
+                QMetaObject::invokeMethod(v, "slotRedo");
+            else if (m_doc->showTree() != nullptr)
+                m_doc->showTree()->redoShared();
+        });
     }
 
     /* ---- View: tools + jump to a workspace tab ---- */

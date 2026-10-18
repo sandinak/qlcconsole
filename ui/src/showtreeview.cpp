@@ -6485,37 +6485,8 @@ bool ShowTreeView::makeVcPage(quint32 listId, const QString &folder, QString *me
     const Production *prod = m_st->production(prodId);
     const QList<ResolvedCue> resolved = m_st->resolved(*list);
 
-    // Below what the console already holds, at its left.
-    VCFrame *contents = vc->contents();
-    int y = 10;
-    for (QObject *o : contents->children())
-        if (VCWidget *w = qobject_cast<VCWidget *>(o))
-            y = qMax(y, w->geometry().bottom() + 10);
-    const int size = 80, gap = 6, header = 36, cols = qMin(6, int(looks.count()));
-    const int rows = (int(looks.count()) + cols - 1) / cols;
-
-    VCFrame *frame = new VCFrame(contents, m_doc, true);
-    vc->placeWidget(frame, contents);
-    frame->setCaption(folder.isEmpty() ? tr("Looks — %1").arg(prod == nullptr ? QString() : prod->name)
-                                       : tr("Looks — %1").arg(folder));
-    frame->setHeaderVisible(true);
-    frame->move(QPoint(10, y));
-    frame->resize(QSize(10 + cols * (size + gap), header + rows * (size + gap) + 4));
-
-    int n = 0;
-    for (quint32 lookId : looks)
-    {
-        const int at = list->indexOf(lookId);
-        const quint32 fid = m_st->lookFunction(lookId);
-        if (at < 0 || fid == invalidId())
-            continue;
-        VCButton *b = new VCButton(frame, m_doc);
-        vc->placeWidget(b, frame);
-        b->setFunction(fid);
-        b->setCaption(m_st->cueLabel(*list, at));
-        b->setAction(VCButton::Toggle);
-        b->move(QPoint(5 + (n % cols) * (size + gap), header + (n / cols) * (size + gap)));
-        b->resize(QSize(size, size));
+    const int size = 80, gap = 6, header = 36;
+    auto colourOf = [&](VCButton *b, int at) {
         // Its colour: the look's first Colour (as it plays).
         for (const ResolvedLayer &rl : resolved.value(at).layers)
         {
@@ -6528,9 +6499,123 @@ bool ShowTreeView::makeVcPage(quint32 listId, const QString &folder, QString *me
             b->setForegroundColor(qGray(c.rgb()) > 140 ? QColor(Qt::black) : QColor(Qt::white));
             break;
         }
-        ++n;
+    };
+    auto makeButton = [&](VCFrame *frame, quint32 lookId, const QPoint &at) -> VCButton * {
+        const int i = list->indexOf(lookId);
+        const quint32 fid = m_st->lookFunction(lookId);
+        if (i < 0 || fid == invalidId())
+            return nullptr;
+        VCButton *b = new VCButton(frame, m_doc);
+        vc->placeWidget(b, frame);
+        b->setFunction(fid);
+        b->setCaption(m_st->cueLabel(*list, i));
+        b->setAction(VCButton::Toggle);
+        b->move(at);
+        b->resize(QSize(size, size));
+        colourOf(b, i);
+        b->show();
+        return b;
+    };
+
+    /* Open 22: the frame it made before is updated, not added again --
+       a button for each new look, the buttons it made for looks now gone
+       taken away; every other widget in it (the user's own, moved or
+       resized buttons) left as it is. Gone (deleted on the console): a new
+       one. */
+    VCFrame *frame = qobject_cast<VCFrame *>(vc->widget(m_st->lookVcFrame(listId, folder)));
+    if (frame != nullptr)
+    {
+        QList<quint32> mine = m_st->lookVcButtons(listId, folder);
+        QSet<quint32> lookFids;
+        for (quint32 lookId : looks)
+            lookFids.insert(m_st->lookFunction(lookId));
+        QSet<quint32> have;
+        int removed = 0;
+        for (VCButton *b : frame->findChildren<VCButton *>(QString(), Qt::FindDirectChildrenOnly))
+        {
+            if (lookFids.contains(b->function()))
+            {
+                have.insert(b->function());
+                continue;
+            }
+            if (mine.contains(b->id()))
+            {
+                // One it made, for a look gone (deleted, or filed elsewhere).
+                mine.removeAll(b->id());
+                b->setProperty("stGoing", true);
+                b->hide();
+                vc->removeWidget(b);
+                ++removed;
+            }
+        }
+        // New looks: in the first free places of the grid, after what is there.
+        int added = 0, slot = 0;
+        const int cols = 6;
+        auto taken = [&](const QRect &r) {
+            for (QObject *o : frame->children())
+                if (VCWidget *w = qobject_cast<VCWidget *>(o))
+                    if (!w->property("stGoing").toBool() && w->geometry().intersects(r))
+                        return true;
+            return false;
+        };
+        for (quint32 lookId : looks)
+        {
+            if (have.contains(m_st->lookFunction(lookId)))
+                continue;
+            QRect r;
+            do
+            {
+                r = QRect(5 + (slot % cols) * (size + gap), header + (slot / cols) * (size + gap), size, size);
+                ++slot;
+            } while (taken(r) && slot < 10000);
+            if (VCButton *b = makeButton(frame, lookId, r.topLeft()))
+            {
+                mine << b->id();
+                ++added;
+                // The frame grows to hold it.
+                const QSize want(qMax(frame->width(), r.right() + gap + 5), qMax(frame->height(), r.bottom() + gap));
+                if (want != frame->size())
+                    frame->resize(want);
+            }
+        }
+        m_st->setLookVcFrame(listId, folder, frame->id(), mine);
+        m_doc->setModified();
+        buildTree();
+        updateInspector();
+        say(added == 0 && removed == 0
+            ? tr("VC page “%1” is up to date").arg(frame->caption())
+            : tr("VC page “%1” updated: %2 button(s) added, %3 taken away").arg(frame->caption()).arg(added).arg(removed));
+        return true;
     }
+
+    // Below what the console already holds, at its left.
+    VCFrame *contents = vc->contents();
+    int y = 10;
+    for (QObject *o : contents->children())
+        if (VCWidget *w = qobject_cast<VCWidget *>(o))
+            y = qMax(y, w->geometry().bottom() + 10);
+    const int cols = qMin(6, int(looks.count()));
+    const int rows = (int(looks.count()) + cols - 1) / cols;
+
+    frame = new VCFrame(contents, m_doc, true);
+    vc->placeWidget(frame, contents);
+    frame->setCaption(folder.isEmpty() ? tr("Looks — %1").arg(prod == nullptr ? QString() : prod->name)
+                                       : tr("Looks — %1").arg(folder));
+    frame->setHeaderVisible(true);
+    frame->move(QPoint(10, y));
+    frame->resize(QSize(10 + cols * (size + gap), header + rows * (size + gap) + 4));
+
+    int n = 0;
+    QList<quint32> made;
+    for (quint32 lookId : looks)
+        if (VCButton *b = makeButton(frame, lookId, QPoint(5 + (n % cols) * (size + gap),
+                                                            header + (n / cols) * (size + gap))))
+        {
+            made << b->id();
+            ++n;
+        }
     frame->show();
+    m_st->setLookVcFrame(listId, folder, frame->id(), made);
     m_doc->setModified();
     buildTree();
     updateInspector();

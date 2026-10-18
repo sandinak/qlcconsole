@@ -100,6 +100,7 @@ private slots:
     void paletteStepsAreOneUndoStepAndSharedWithProgramming();
     void looksSectionInTheTree();
     void makeVcPageAndAdoptAsLook();
+    void makeVcPageUpdatesItsFrame();
     void looksAreOneUndoStepAndTyped();
 
 private:

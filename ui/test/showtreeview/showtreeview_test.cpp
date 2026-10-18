@@ -4029,6 +4029,90 @@ void ShowTreeView_Test::paletteStepsAreOneUndoStepAndSharedWithProgramming()
     }
 }
 
+/* Open 22: Make VC page again updates the frame it made -- a button for
+   a new look, the button of a look deleted taken away, a button the user
+   moved or resized and a widget of their own left as they are; the frame
+   deleted on the console, a new one. */
+void ShowTreeView_Test::makeVcPageUpdatesItsFrame()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 a = st->addLook(prod, "Hit A", "Hits");
+    const quint32 b = st->addLook(prod, "Hit B", "Hits");
+    const quint32 section = st->looksSection(prod);
+    ScopedVc vc(m_doc);
+    VirtualConsole *console = VirtualConsole::instance();
+    auto framesCalled = [console](const QString &caption) {
+        QList<VCFrame *> out;
+        for (VCFrame *f : console->contents()->findChildren<VCFrame *>())
+            if (f->caption() == caption)
+                out << f;
+        return out;
+    };
+    auto buttonFor = [](VCFrame *f, quint32 fid) -> VCButton * {
+        for (VCButton *btn : f->findChildren<VCButton *>())
+            if (btn->function() == fid && !btn->property("stGoing").toBool())
+                return btn;
+        return nullptr;
+    };
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QString msg;
+    QVERIFY(view.makeVcPage(section, "Hits", &msg));
+    QCOMPARE(framesCalled("Looks — Hits").count(), 1);
+    VCFrame *frame = framesCalled("Looks — Hits").first();
+    QCOMPARE(st->lookVcFrame(section, "Hits"), frame->id());
+
+    // The user moves and resizes A's button and adds a widget of their own.
+    VCButton *ba = buttonFor(frame, st->lookFunction(a));
+    QVERIFY(ba != nullptr);
+    ba->move(QPoint(100, 45));
+    ba->resize(QSize(120, 50));
+    const QRect userPlace = ba->geometry();
+    VCButton *own = new VCButton(frame, m_doc);
+    console->placeWidget(own, frame);
+    own->setCaption("My Strobe");
+    own->move(QPoint(5, 36));                   // where a new look's button would go first
+    own->resize(QSize(80, 80));
+
+    // A look added, one deleted; Make VC page again.
+    const quint32 c = st->addLook(prod, "Hit C", "Hits");
+    const quint32 bFid = st->lookFunction(b);
+    QVERIFY(buttonFor(frame, bFid) != nullptr);
+    QVERIFY(st->removeCue(b));
+    QVERIFY(view.makeVcPage(section, "Hits", &msg));
+    QVERIFY2(msg.contains("1 button(s) added, 1 taken away"), qPrintable(msg));
+    QCOMPARE(framesCalled("Looks — Hits").count(), 1);       // the same frame
+    QCOMPARE(framesCalled("Looks — Hits").first(), frame);
+    QCOMPARE(ba->geometry(), userPlace);                     // left as the user put it
+    QVERIFY(buttonFor(frame, st->lookFunction(c)) != nullptr);
+    QVERIFY(!buttonFor(frame, st->lookFunction(c))->geometry().intersects(own->geometry()));
+    QCoreApplication::processEvents(QEventLoop::AllEvents);
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    int ownLeft = 0, gone = 0;
+    for (VCButton *btn : frame->findChildren<VCButton *>())
+    {
+        ownLeft += btn->caption() == "My Strobe";
+        gone += btn->caption() == "Hit B";
+    }
+    QCOMPARE(ownLeft, 1);
+    QCOMPARE(gone, 0);
+    // Nothing new: up to date.
+    QVERIFY(view.makeVcPage(section, "Hits", &msg));
+    QVERIFY2(msg.contains("up to date"), qPrintable(msg));
+
+    // The frame deleted on the console: a new one.
+    console->removeWidget(frame);
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QVERIFY(view.makeVcPage(section, "Hits", &msg));
+    QCOMPARE(framesCalled("Looks — Hits").count(), 1);
+    QVERIFY(st->lookVcFrame(section, "Hits") != invalidId());
+    QCOMPARE(framesCalled("Looks — Hits").first()->findChildren<VCButton *>().count(), 2);
+}
+
 /****************************************************************************
  * R3: the Looks section (PROGRAMMING_ROLE_DESIGN.md §4.1, P-D5..P-D7)
  ****************************************************************************/

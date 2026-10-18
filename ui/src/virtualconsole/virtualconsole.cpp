@@ -1299,6 +1299,23 @@ void VirtualConsole::slotEditDelete()
     m_doc->setModified();
 }
 
+void VirtualConsole::removeWidget(VCWidget *widget)
+{
+    if (widget == NULL)
+        return;
+    m_selectedWidgets.removeAll(widget);
+    m_widgetsMap.remove(widget->id());
+    foreach (VCWidget* child, getChildren(widget))
+        m_widgetsMap.remove(child->id());
+    VCWidget* parent = qobject_cast<VCWidget*> (widget->parentWidget());
+    widget->deleteLater();
+    if (parent != NULL)
+        disconnectWidgetFromParent(widget, parent);
+    m_clipboard.removeAll(widget);
+    updateActions();
+    m_doc->setModified();
+}
+
 void VirtualConsole::slotEditProperties()
 {
     VCWidget* widget;

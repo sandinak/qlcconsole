@@ -413,6 +413,16 @@ public:
     bool removeLookFolder(quint32 listId, const QString &folder);
     /** The looks in @a folder and under it ("": every look), in order. */
     QList<quint32> looksIn(quint32 listId, const QString &folder) const;
+    /** Make VC page (open 22): the VC frame it made for Looks section
+     *  @a listId's @a folder ("": all), so a second Make VC page updates it
+     *  instead of adding another (invalid: none yet). Saved with the show,
+     *  not an undo step (the Virtual Console has its own). */
+    quint32 lookVcFrame(quint32 listId, const QString &folder) const;
+    /** The buttons it made there (VC widget ids): only these are ever
+     *  removed, when their look is gone. */
+    QList<quint32> lookVcButtons(quint32 listId, const QString &folder) const;
+    void setLookVcFrame(quint32 listId, const QString &folder, quint32 frameId,
+                        const QList<quint32> &buttons = QList<quint32>());
     /** What a VC button fires for look @a lookId: its Collection (invalid:
      *  not baked yet). */
     quint32 lookFunction(quint32 lookId) const;
@@ -677,6 +687,9 @@ private:
     QSet<quint32> m_generatedScenes;
     QSet<quint32> m_generatedCollections;
     QSet<quint32> m_generatedChasers;
+    /** "listId\nfolder" -> the VC frame Make VC page made (open 22). */
+    QHash<QString, quint32> m_lookVcFrames;
+    QHash<QString, QList<quint32>> m_lookVcButtons;
     QSet<quint32> m_inlinePalettes;
     /** One-offs made reusable here (and palettes a command made): an undo
      *  snapshot carries them as they are, so redo can name them again. */

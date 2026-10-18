@@ -59,6 +59,7 @@
 #include <QTreeWidget>
 #include "doc.h"
 #include "paletteops.h"
+#include "showtreecontroller.h"
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
 #include "qlcphysical.h"
@@ -2479,4 +2480,41 @@ void ProgrammingManager_Test::libraryAndProgrammingAgreeOnFolders()
     QCOMPARE(PaletteOps::folderOf(all[2]), QString("01-Song"));
     QCoreApplication::processEvents();
     QCOMPARE(treeFolder(all[2]), QString("01-Song"));
+}
+
+/* Open 24: ⌘Z / ⇧⌘Z here reach the one history -- the Show Tree's steps
+   and the palette operations, whichever tab did them -- newest first; the
+   Edit menu's text names the step. */
+void ProgrammingManager_Test::undoHereReachesTheSharedHistory()
+{
+    ProgrammingManager mgr(nullptr, m_doc);
+    ShowTreeController *st = m_doc->showTree();
+    QVERIFY(mgr.undoText().isEmpty());
+
+    // A palette made here (one palette step) ...
+    const int before = m_doc->palettes().count();
+    mgr.createPalette(QLCPalette::Dimmer);
+    QCOMPARE(m_doc->palettes().count(), before + 1);
+    QCOMPARE(mgr.undoText(), m_doc->paletteOps()->undoText());
+    // ... then a Show Tree step, the newer.
+    const quint32 prod = st->addProduction("Gig");
+    QVERIFY(st->production(prod) != nullptr);
+    QCOMPARE(mgr.undoText(), st->undoText());
+
+    // ⌘Z here: the tree's step first, then the palette.
+    mgr.slotUndo();
+    QVERIFY(st->production(prod) == nullptr);
+    QCOMPARE(m_doc->palettes().count(), before + 1);
+    QCOMPARE(mgr.undoText(), m_doc->paletteOps()->undoText());
+    mgr.slotUndo();
+    QCOMPARE(m_doc->palettes().count(), before);
+    QVERIFY(mgr.undoText().isEmpty());
+
+    // ⇧⌘Z: back in the order undone (the palette, then the production).
+    QVERIFY(!mgr.redoText().isEmpty());
+    mgr.slotRedo();
+    QCOMPARE(m_doc->palettes().count(), before + 1);
+    QVERIFY(st->production(prod) == nullptr);
+    mgr.slotRedo();
+    QVERIFY(!st->productions().isEmpty());
 }
