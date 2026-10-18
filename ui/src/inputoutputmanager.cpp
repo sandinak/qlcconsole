@@ -43,6 +43,7 @@
 #include "universeitemwidget.h"
 #include "connectionstree.h"
 #include "inputoutputmanager.h"
+#include "universe.h"
 #include "apputil.h"
 #include "inputoutputmap.h"
 #include "patchundo.h"
@@ -295,6 +296,7 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
     /* Listen to plugin configuration changes */
     connect(m_ioMap, SIGNAL(pluginConfigurationChanged(const QString&, bool)),
             this, SLOT(updateList()));
+    connect(m_ioMap, SIGNAL(offlinePatchesChanged()), this, SLOT(updateList()));
 
     connect(m_ioMap, SIGNAL(universeAdded(quint32)),
             this, SLOT(slotUniverseAdded(quint32)));
@@ -407,6 +409,22 @@ void InputOutputManager::updateItem(QListWidgetItem* item, quint32 universe)
         item->setData(Qt::DisplayRole, uniName);
     item->setSizeHint(QSize(m_list->width(), 50));
     item->setData(Qt::UserRole, universe);
+    /* A patch kept offline (its interface/network is not present here) is
+       shown as such, never as unpatched: it reconnects by itself. */
+    QString offlineIn, offlineFb;
+    const QList<Universe *> unis = m_ioMap->universes();
+    if (Universe *uni = (universe < quint32(unis.count())) ? unis.at(universe) : NULL)
+    {
+        foreach (const Universe::OfflinePatch &p, uni->offlinePatches())
+        {
+            const QString what = tr("%1 — not present").arg(p.uid.isEmpty() ? p.plugin : p.uid);
+            if (p.tag == Universe::InputPatchTag)
+                offlineIn = what;
+            else if (p.tag == Universe::FeedbackPatchTag)
+                offlineFb = what;
+        }
+    }
+
     if (ip != NULL)
     {
         item->setData(Qt::UserRole + 1, ip->inputName());
@@ -414,17 +432,18 @@ void InputOutputManager::updateItem(QListWidgetItem* item, quint32 universe)
     }
     else
     {
-        item->setData(Qt::UserRole + 1, KInputNone);
+        item->setData(Qt::UserRole + 1, offlineIn.isEmpty() ? KInputNone : offlineIn);
         item->setData(Qt::UserRole + 2, KInputNone);
     }
     if (op != NULL)
-        item->setData(Qt::UserRole + 3, op->outputName());
+        item->setData(Qt::UserRole + 3, op->isPending()
+                      ? tr("%1 — not present").arg(op->outputName()) : op->outputName());
     else
         item->setData(Qt::UserRole + 3, KOutputNone);
     if (fp != NULL)
         item->setData(Qt::UserRole + 4, fp->outputName());
     else
-        item->setData(Qt::UserRole + 4, KOutputNone);
+        item->setData(Qt::UserRole + 4, offlineFb.isEmpty() ? KOutputNone : offlineFb);
 }
 
 void InputOutputManager::slotInputValueChanged(quint32 universe, quint32 channel, uchar value)

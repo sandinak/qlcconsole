@@ -31,6 +31,7 @@
 #include <qmath.h>
 
 #include "inputoutputmap.h"
+#include <QTimer>
 #include "patchundo.h"
 #include "qlcinputchannel.h"
 #include "qlcinputsource.h"
@@ -40,6 +41,7 @@
 #include "inputpatch.h"
 #include "qlcconfig.h"
 #include "universe.h"
+#include "networkroute.h"
 #include "qlcfile.h"
 #include "doc.h"
 
@@ -66,6 +68,16 @@ InputOutputMap::InputOutputMap(const Doc *doc, quint32 universes)
     connect(doc->ioPluginCache(), SIGNAL(pluginConfigurationChanged(QLCIOPlugin*)),
             this, SLOT(slotPluginConfigurationChanged(QLCIOPlugin*)));
     connect(doc->masterTimer(), SIGNAL(beat()), this, SLOT(slotMasterTimerBeat()));
+
+    /* Kept offline patches reconnect by themselves when their network shows
+       up (laptop back on the show VLAN, interface plugged in, VPN up). A
+       cheap poll rather than per-platform change notifications: the tick
+       does nothing at all unless something is being kept, and the plugins
+       already throttle their own interface walks. */
+    m_offlineRetry = new QTimer(this);
+    m_offlineRetry->setInterval(5000);
+    connect(m_offlineRetry, SIGNAL(timeout()), this, SLOT(slotRetryOfflinePatches()));
+    m_offlineRetry->start();
 }
 
 InputOutputMap::~InputOutputMap()
@@ -470,6 +482,8 @@ bool InputOutputMap::setInputPatch(quint32 universe, const QString &pluginName,
     }
 
     QMutexLocker locker(&m_universeMutex);
+    // An explicit (re)patch or unpatch replaces any input kept offline.
+    m_universeArray.at(universe)->clearOfflinePatches(Universe::InputPatchTag);
     InputPatch *currInPatch = m_universeArray.at(universe)->inputPatch();
     QLCInputProfile *currProfile = NULL;
     if (currInPatch != NULL)
@@ -563,6 +577,10 @@ bool InputOutputMap::setOutputPatch(quint32 universe, const QString &pluginName,
 
     QMutexLocker locker(&m_universeMutex);
     QLCIOPlugin *plugin = m_doc->ioPluginCache()->plugin(pluginName);
+
+    // An explicit (re)patch or unpatch replaces any feedback kept offline.
+    if (isFeedback)
+        m_universeArray.at(universe)->clearOfflinePatches(Universe::FeedbackPatchTag);
 
     /* "None" (KOutputNone) is the sentinel OutputPatch::outputName() itself
        falls back to when a patch has a plugin but no line was ever actually
@@ -705,9 +723,253 @@ QList<InputOutputMap::DanglingPatch> InputOutputMap::danglingOutputPatches() con
             bad.availableLines = available;
             problems << bad;
         }
+
+        foreach (const Universe::OfflinePatch &rec, m_universeArray.at(uni)->offlinePatches())
+        {
+            DanglingPatch bad;
+            bad.universe = uni;
+            bad.pluginName = rec.plugin;
+            bad.line = 0;
+            bad.availableLines = 0;
+            bad.missingInterface = rec.uid.isEmpty() ? rec.plugin : rec.uid;
+            bad.kind = rec.tag == Universe::InputPatchTag ? QStringLiteral("input")
+                     : rec.tag == Universe::FeedbackPatchTag ? QStringLiteral("feedback")
+                     : QStringLiteral("output");
+            bad.pluginMissing = m_doc->ioPluginCache()->plugin(rec.plugin) == NULL;
+            problems << bad;
+        }
     }
 
     return problems;
+}
+
+int InputOutputMap::resolveSavedLine(QLCIOPlugin *plugin, bool output, const QString &uid,
+                                     const QString &network, const QString &target) const
+{
+    if (plugin == NULL)
+        return -1;
+
+    const QStringList lines = output ? plugin->outputs() : plugin->inputs();
+
+    if (NetworkRoute::isAddressIdentity(uid))
+    {
+        /* A line named after a local address (Art-Net, E1.31, OSC): follow
+           the network, not the interface -- see NetworkRoute::resolve(). */
+        const NetworkRoute::Resolution r =
+                NetworkRoute::resolve(lines, uid, network, target);
+        if (r.line >= 0)
+        {
+            qDebug() << "[IOMAP]" << plugin->name() << uid << "resolved by" << r.how
+                     << "to line" << r.line << "via" << r.via << "network" << r.network;
+            return r.line;
+        }
+        return -1;
+    }
+
+    const int idx = lines.indexOf(uid);
+    if (idx != -1)
+        return idx;
+
+    return plugin->lineOnSameSubnet(uid);
+}
+
+void InputOutputMap::loadPatch(quint32 universe, const Universe::OfflinePatch &patch)
+{
+    if (universe >= universesCount())
+        return;
+
+    if (patch.plugin.isEmpty() || patch.plugin == KOutputNone || patch.plugin == KInputNone)
+        return;
+
+    const bool hasIdentity = patch.uid.isEmpty() == false && patch.uid != KOutputNone;
+    if (hasIdentity == false && patch.line == QLCIOPlugin::invalidLine())
+        return;   // nothing that could ever be opened
+
+    Universe *uni = m_universeArray.at(universe);
+    QLCIOPlugin *plugin = m_doc->ioPluginCache()->plugin(patch.plugin);
+
+    if (plugin == NULL)
+    {
+        // The whole plugin is missing on this machine. Keep the patch.
+        qDebug() << "[IOMAP] plugin" << patch.plugin << "not available - keeping universe"
+                 << universe << "patch offline";
+        uni->addOfflinePatch(patch);
+        return;
+    }
+
+    int line = int(patch.line);
+    if (hasIdentity)
+        line = resolveSavedLine(plugin, patch.tag != Universe::InputPatchTag, patch.uid,
+                                patch.network, NetworkRoute::targetFromParameters(patch.params));
+    if (line < 0)
+        qDebug() << "[IOMAP] universe" << universe + 1 << patch.plugin << patch.uid
+                 << "network" << patch.network << "- nothing here reaches it: kept offline";
+
+    QMapIterator<QString, QVariant> it(patch.params);
+
+    switch (patch.tag)
+    {
+        case Universe::InputPatchTag:
+            if (line < 0)
+            {
+                uni->addOfflinePatch(patch);
+                return;
+            }
+            setInputPatch(universe, patch.plugin, QString(), quint32(line), patch.profile);
+            if (InputPatch *ip = inputPatch(universe))
+            {
+                if (patch.hidProfile.isEmpty() == false)
+                    ip->setHidProfileName(patch.hidProfile);
+                while (it.hasNext())
+                {
+                    it.next();
+                    ip->setPluginParameter(it.key(), it.value());
+                }
+            }
+        break;
+
+        case Universe::FeedbackPatchTag:
+            if (line < 0)
+            {
+                uni->addOfflinePatch(patch);
+                return;
+            }
+            setOutputPatch(universe, patch.plugin, QString(), quint32(line), true);
+            if (OutputPatch *fb = feedbackPatch(universe))
+            {
+                while (it.hasNext())
+                {
+                    it.next();
+                    fb->setPluginParameter(it.key(), it.value());
+                }
+            }
+        break;
+
+        case Universe::OutputPatchTag:
+        {
+            const int index = uni->outputPatchesCount();
+            if (line < 0)
+            {
+                QMutexLocker locker(&m_universeMutex);
+                uni->setOutputPatchPending(plugin, patch.uid, index, patch.line, patch.network);
+            }
+            else
+            {
+                setOutputPatch(universe, patch.plugin, QString(), quint32(line), false, index);
+            }
+            if (OutputPatch *op = outputPatch(universe, index))
+            {
+                while (it.hasNext())
+                {
+                    it.next();
+                    op->setPluginParameter(it.key(), it.value());
+                }
+            }
+        }
+        break;
+    }
+}
+
+bool InputOutputMap::hasOfflinePatches() const
+{
+    for (quint32 i = 0; i < universesCount(); i++)
+    {
+        Universe *uni = m_universeArray.at(i);
+        if (uni->offlinePatches().isEmpty() == false)
+            return true;
+        for (int o = 0; o < uni->outputPatchesCount(); o++)
+        {
+            OutputPatch *op = uni->outputPatch(o);
+            if (op != NULL && op->isPending())
+                return true;
+        }
+    }
+    return false;
+}
+
+int InputOutputMap::retryOfflinePatches()
+{
+    int reconnected = 0;
+
+    for (quint32 i = 0; i < universesCount(); i++)
+    {
+        Universe *uni = m_universeArray.at(i);
+
+        for (int o = 0; o < uni->outputPatchesCount(); o++)
+        {
+            OutputPatch *op = uni->outputPatch(o);
+            if (op == NULL || op->isPending() == false)
+                continue;
+            const int line = resolveSavedLine(op->plugin(), true, op->outputName(),
+                    op->pendingNetwork(),
+                    NetworkRoute::targetFromParameters(op->getPluginParameters()));
+            if (line < 0)
+                continue;
+            qDebug() << "[IOMAP] universe" << i + 1 << "output" << op->outputName()
+                     << "reconnected on line" << line;
+            QMutexLocker locker(&m_universeMutex);
+            op->resolvePending(quint32(line));
+            reconnected++;
+        }
+
+        /* One at a time, re-reading the list after each: reconnecting an
+           input or feedback patch clears that kind's kept entries, which
+           would shift any index still to be visited. */
+        bool again = true;
+        while (again)
+        {
+            again = false;
+            const QList<Universe::OfflinePatch> kept = uni->offlinePatches();
+            for (int k = 0; k < kept.count(); k++)
+            {
+                const Universe::OfflinePatch &rec = kept.at(k);
+                QLCIOPlugin *plugin = m_doc->ioPluginCache()->plugin(rec.plugin);
+                if (plugin == NULL)
+                    continue;
+                const bool hasIdentity = rec.uid.isEmpty() == false && rec.uid != KOutputNone;
+                const int line = hasIdentity
+                        ? resolveSavedLine(plugin, rec.tag != Universe::InputPatchTag, rec.uid,
+                                           rec.network, NetworkRoute::targetFromParameters(rec.params))
+                        : int(rec.line);
+                if (line < 0)
+                    continue;
+                uni->removeOfflinePatch(k);
+                loadPatch(i, rec);
+                reconnected++;
+                again = true;
+                break;
+            }
+        }
+    }
+
+    if (reconnected > 0)
+        emit offlinePatchesChanged();
+
+    return reconnected;
+}
+
+void InputOutputMap::slotRetryOfflinePatches()
+{
+    if (hasOfflinePatches())
+        retryOfflinePatches();
+}
+
+void InputOutputMap::forgetOfflinePatches(quint32 universe)
+{
+    if (universe >= universesCount())
+        return;
+
+    Universe *uni = m_universeArray.at(universe);
+    uni->clearOfflinePatches(Universe::InputPatchTag);
+    uni->clearOfflinePatches(Universe::OutputPatchTag);
+    uni->clearOfflinePatches(Universe::FeedbackPatchTag);
+    for (int i = uni->outputPatchesCount() - 1; i >= 0; i--)
+    {
+        OutputPatch *op = uni->outputPatch(i);
+        if (op != NULL && op->isPending())
+            setOutputPatch(universe, QString(), QString(), 0, false, i);
+    }
+    emit offlinePatchesChanged();
 }
 
 OutputPatch *InputOutputMap::feedbackPatch(quint32 universe) const

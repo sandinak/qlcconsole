@@ -27,6 +27,9 @@
 #include <QByteArray>
 #include <QThread>
 #include <QSet>
+#include <QMap>
+#include <QVariant>
+#include <climits>
 
 #include "inputpatch.h"
 #include "qlcchannel.h"
@@ -67,6 +70,7 @@ class Doc;
 #define KXMLQLCUniverseProfileName      QStringLiteral("Profile")
 #define KXMLQLCUniverseHIDProfileName   QStringLiteral("HIDProfile")
 #define KXMLQLCUniversePluginParameters QStringLiteral("PluginParameters")
+#define KXMLQLCUniverseNetwork          QStringLiteral("Network")
 
 /** Universe class contains input/output data for one DMX universe
  */
@@ -228,7 +232,8 @@ public:
      *  offers -- see OutputPatch::setPending(). Never deletes: unlike
      *  setOutputPatch(), there is no "clear this patch" meaning here, only
      *  "remember it, unresolved". */
-    bool setOutputPatchPending(QLCIOPlugin *plugin, const QString &pendingUID, int index = 0);
+    bool setOutputPatchPending(QLCIOPlugin *plugin, const QString &pendingUID, int index = 0,
+                               quint32 savedLine = UINT_MAX, const QString &network = QString());
 
     /** Sets a feedback patch for this Universe */
     bool setFeedbackPatch(QLCIOPlugin *plugin, quint32 output);
@@ -639,6 +644,40 @@ public:
     bool loadXML(QXmlStreamReader &root, int index, InputOutputMap *ioMap);
 
     /**
+     * One patch exactly as a workspace described it: plugin, line UID and
+     * index, the network it was built on, profile names and every plugin
+     * parameter. Used to hand a just-parsed patch to InputOutputMap, and to
+     * KEEP one that cannot be opened on this machine -- an input or
+     * feedback patch whose interface/device is not present, or any patch
+     * whose plugin is not installed here. Kept patches are written back by
+     * saveXML() unchanged and retried by InputOutputMap until they resolve.
+     * (Output patches whose plugin IS present use OutputPatch::isPending()
+     * instead, which the Connections view already shows.)
+     */
+    struct OfflinePatch
+    {
+        PatchTagType tag = OutputPatchTag;
+        QString plugin;
+        QString uid;
+        quint32 line = UINT_MAX;
+        QString profile;
+        QString hidProfile;
+        QString network;
+        QMap<QString, QVariant> params;
+    };
+
+    QList<OfflinePatch> offlinePatches() const;
+    void addOfflinePatch(const OfflinePatch &patch);
+    void removeOfflinePatch(int index);
+    /** Drop every kept patch of @p tag (the user re-patched/unpatched it). */
+    void clearOfflinePatches(PatchTagType tag);
+
+private:
+    QList<OfflinePatch> m_offlinePatches;
+
+public:
+
+    /**
      * Load an optional tag defining the plugin specific parameters
      * @param root An XML subtree containing the plugin parameters contents
      * @param currentTag The type of Patch where the parameters should be set
@@ -672,7 +711,8 @@ public:
         quint32 line,
         QString profileName,
         QMap<QString, QVariant>parameters,
-        const QString &hidProfileName = QString()) const;
+        const QString &hidProfileName = QString(),
+        const QString &network = QString()) const;
 
     /**
      * Save a plugin custom parameters (if available) into a tag nested

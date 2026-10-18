@@ -27,11 +27,13 @@
 #include <QDir>
 
 #include "qlcinputprofile.h"
+#include "universe.h"
 #include "grandmaster.h"
 
 class QXmlStreamReader;
 class QXmlStreamWriter;
 class QElapsedTimer;
+class QTimer;
 class QLCInputSource;
 class AudioCapture;
 class QLCIOPlugin;
@@ -436,11 +438,42 @@ public:
         quint32 line;           //!< the line index the workspace asked for (out-of-range case)
         int availableLines;     //!< how many that plugin actually offers here (out-of-range case)
         QString missingInterface;   //!< the interface identity that did not resolve (pending case)
+        QString kind = QStringLiteral("output");   //!< "output", "input" or "feedback"
+        bool pluginMissing = false; //!< the plugin itself is not installed here
     };
 
     /** Output patches pointing at plugin lines this machine doesn't have.
      *  Empty means every patched universe can actually reach its output. */
     QList<DanglingPatch> danglingOutputPatches() const;
+
+    /**
+     * Apply one patch exactly as a workspace stored it (Universe::loadXML).
+     *
+     * Network lines are resolved by NETWORK, not by interface: see
+     * NetworkRoute::resolve(). A patch that cannot be opened on this
+     * machine -- interface/network not present, device unplugged, plugin
+     * not installed -- is KEPT (an output as OutputPatch::isPending(), an
+     * input/feedback or plugin-less one as a Universe::OfflinePatch), saved
+     * back unchanged, and reconnected by retryOfflinePatches() as soon as
+     * it resolves. It is never silently dropped.
+     */
+    void loadPatch(quint32 universe, const Universe::OfflinePatch &patch);
+
+    /** Try every kept (offline/pending) patch again; returns how many
+     *  reconnected. Runs by itself every few seconds while any exist. */
+    int retryOfflinePatches();
+
+    /** Are any patches being kept offline right now? */
+    bool hasOfflinePatches() const;
+
+    /** The user unpatched an offline universe: forget every kept patch on
+     *  it (pending outputs included). */
+    void forgetOfflinePatches(quint32 universe);
+
+    /** How a patch with saved identity @p uid would resolve here: a line
+     *  index, or -1 when nothing on this machine reaches it. */
+    int resolveSavedLine(QLCIOPlugin *plugin, bool output, const QString &uid,
+                         const QString &network, const QString &target) const;
 
     /**
      * Get the feedback mapping for a QLC universe.
@@ -571,6 +604,10 @@ private:
 private slots:
    /** Slot that catches plugin configuration change notifications from UIPluginCache */
     void slotPluginConfigurationChanged(QLCIOPlugin* plugin);
+    void slotRetryOfflinePatches();
+
+private:
+    QTimer *m_offlineRetry;
 
 signals:
     /** Signal emitted when a profile is changed */
@@ -578,6 +615,9 @@ signals:
 
     /** Notifies (InputOutputManager) of plugin configuration changes */
     void pluginConfigurationChanged(const QString& pluginName, bool success);
+
+    /** Kept offline patches reconnected (or were forgotten). */
+    void offlinePatchesChanged();
 
     /** Everyone interested in input data should connect to this signal */
     void inputValueChanged(quint32 universe, quint32 channel, uchar value, const QString& key = 0);

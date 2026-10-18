@@ -32,6 +32,7 @@
 #include "inputpatch.h"
 #include "qlcmacros.h"
 #include "universe.h"
+#include "networkroute.h"
 #include "function.h"
 #include "qlcfile.h"
 #include "utils.h"
@@ -716,7 +717,8 @@ bool Universe::setOutputPatch(QLCIOPlugin *plugin, quint32 output, int index)
     return false;
 }
 
-bool Universe::setOutputPatchPending(QLCIOPlugin *plugin, const QString &pendingUID, int index)
+bool Universe::setOutputPatchPending(QLCIOPlugin *plugin, const QString &pendingUID, int index,
+                                     quint32 savedLine, const QString &network)
 {
     if (index < 0 || plugin == NULL || pendingUID.isEmpty())
         return false;
@@ -727,14 +729,14 @@ bool Universe::setOutputPatchPending(QLCIOPlugin *plugin, const QString &pending
     if (index < m_outputPatchList.count())
     {
         OutputPatch *patch = m_outputPatchList.at(index);
-        patch->setPending(plugin, pendingUID);
+        patch->setPending(plugin, pendingUID, savedLine, network);
         emit outputPatchChanged();
         return true;
     }
     else
     {
         OutputPatch *patch = new OutputPatch(m_id, this);
-        patch->setPending(plugin, pendingUID);
+        patch->setPending(plugin, pendingUID, savedLine, network);
         m_outputPatchList.append(patch);
         emit outputPatchesCountChanged();
         return true;
@@ -1200,8 +1202,6 @@ bool Universe::loadXML(QXmlStreamReader &root, int index, InputOutputMap *ioMap)
         return false;
     }
 
-    int outputIndex = 0;
-
     QXmlStreamAttributes attrs = root.attributes();
 
     if (attrs.hasAttribute(KXMLQLCUniverseName))
@@ -1223,109 +1223,78 @@ bool Universe::loadXML(QXmlStreamReader &root, int index, InputOutputMap *ioMap)
     while (root.readNextStartElement())
     {
         QXmlStreamAttributes pAttrs = root.attributes();
+        OfflinePatch patch;
 
         if (root.name() == KXMLQLCUniverseInputPatch)
-        {
-            QString plugin = KInputNone;
-            quint32 inputLine = QLCIOPlugin::invalidLine();
-            QString inputUID;
-            QString profile = KInputNone;
-            QString hidProfile;
-
-            if (pAttrs.hasAttribute(KXMLQLCUniversePlugin))
-                plugin = pAttrs.value(KXMLQLCUniversePlugin).toString();
-            if (pAttrs.hasAttribute(KXMLQLCUniverseLineUID))
-                inputUID = pAttrs.value(KXMLQLCUniverseLineUID).toString();
-            if (pAttrs.hasAttribute(KXMLQLCUniverseLine))
-                inputLine = pAttrs.value(KXMLQLCUniverseLine).toString().toUInt();
-            if (pAttrs.hasAttribute(KXMLQLCUniverseProfileName))
-                profile = pAttrs.value(KXMLQLCUniverseProfileName).toString();
-            if (pAttrs.hasAttribute(KXMLQLCUniverseHIDProfileName))
-                hidProfile = pAttrs.value(KXMLQLCUniverseHIDProfileName).toString();
-
-            // apply the parameters just loaded
-            ioMap->setInputPatch(index, plugin, inputUID, inputLine, profile);
-            if (!hidProfile.isEmpty() && ioMap->inputPatch(index))
-                ioMap->inputPatch(index)->setHidProfileName(hidProfile);
-
-            QXmlStreamReader::TokenType tType = root.readNext();
-            if (tType == QXmlStreamReader::Characters)
-                tType = root.readNext();
-
-            // check if there is a PluginParameters tag defined
-            if (tType == QXmlStreamReader::StartElement)
-            {
-                if (root.name() == KXMLQLCUniversePluginParameters)
-                    loadXMLPluginParameters(root, InputPatchTag, 0);
-                root.skipCurrentElement();
-            }
-        }
+            patch.tag = InputPatchTag;
         else if (root.name() == KXMLQLCUniverseOutputPatch)
-        {
-            QString plugin = KOutputNone;
-            QString outputUID;
-            quint32 outputLine = QLCIOPlugin::invalidLine();
-
-            if (pAttrs.hasAttribute(KXMLQLCUniversePlugin))
-                plugin = pAttrs.value(KXMLQLCUniversePlugin).toString();
-            if (pAttrs.hasAttribute(KXMLQLCUniverseLineUID))
-                outputUID = pAttrs.value(KXMLQLCUniverseLineUID).toString();
-            if (pAttrs.hasAttribute(KXMLQLCUniverseLine))
-                outputLine = pAttrs.value(KXMLQLCUniverseLine).toString().toUInt();
-
-            // apply the parameters just loaded
-            ioMap->setOutputPatch(index, plugin, outputUID, outputLine, false, outputIndex);
-
-            QXmlStreamReader::TokenType tType = root.readNext();
-            if (tType == QXmlStreamReader::Characters)
-                tType = root.readNext();
-
-            // check if there is a PluginParameters tag defined
-            if (tType == QXmlStreamReader::StartElement)
-            {
-                if (root.name() == KXMLQLCUniversePluginParameters)
-                    loadXMLPluginParameters(root, OutputPatchTag, outputIndex);
-                root.skipCurrentElement();
-            }
-
-            outputIndex++;
-        }
+            patch.tag = OutputPatchTag;
         else if (root.name() == KXMLQLCUniverseFeedbackPatch)
-        {
-            QString plugin = KOutputNone;
-            QString outputUID;
-            quint32 output = QLCIOPlugin::invalidLine();
-
-            if (pAttrs.hasAttribute(KXMLQLCUniversePlugin))
-                plugin = pAttrs.value(KXMLQLCUniversePlugin).toString();
-            if (pAttrs.hasAttribute(KXMLQLCUniverseLineUID))
-                outputUID = pAttrs.value(KXMLQLCUniverseLineUID).toString();
-            if (pAttrs.hasAttribute(KXMLQLCUniverseLine))
-                output = pAttrs.value(KXMLQLCUniverseLine).toString().toUInt();
-
-            // apply the parameters just loaded
-            ioMap->setOutputPatch(index, plugin, outputUID, output, true);
-
-            QXmlStreamReader::TokenType tType = root.readNext();
-            if (tType == QXmlStreamReader::Characters)
-                tType = root.readNext();
-
-            // check if there is a PluginParameters tag defined
-            if (tType == QXmlStreamReader::StartElement)
-            {
-                if (root.name() == KXMLQLCUniversePluginParameters)
-                    loadXMLPluginParameters(root, FeedbackPatchTag, 0);
-                root.skipCurrentElement();
-            }
-        }
+            patch.tag = FeedbackPatchTag;
         else
         {
             qWarning() << Q_FUNC_INFO << "Unknown Universe tag:" << root.name();
             root.skipCurrentElement();
+            continue;
         }
+
+        patch.plugin = patch.tag == InputPatchTag ? KInputNone : KOutputNone;
+        patch.profile = KInputNone;
+        if (pAttrs.hasAttribute(KXMLQLCUniversePlugin))
+            patch.plugin = pAttrs.value(KXMLQLCUniversePlugin).toString();
+        if (pAttrs.hasAttribute(KXMLQLCUniverseLineUID))
+            patch.uid = pAttrs.value(KXMLQLCUniverseLineUID).toString();
+        if (pAttrs.hasAttribute(KXMLQLCUniverseLine))
+            patch.line = pAttrs.value(KXMLQLCUniverseLine).toString().toUInt();
+        if (pAttrs.hasAttribute(KXMLQLCUniverseNetwork))
+            patch.network = pAttrs.value(KXMLQLCUniverseNetwork).toString();
+        if (pAttrs.hasAttribute(KXMLQLCUniverseProfileName))
+            patch.profile = pAttrs.value(KXMLQLCUniverseProfileName).toString();
+        if (pAttrs.hasAttribute(KXMLQLCUniverseHIDProfileName))
+            patch.hidProfile = pAttrs.value(KXMLQLCUniverseHIDProfileName).toString();
+
+        /* The parameters are read BEFORE the patch is applied: a unicast
+           target (outputIP) is what decides which local interface reaches
+           the patch's network -- see NetworkRoute::resolve(). */
+        while (root.readNextStartElement())
+        {
+            if (root.name() == KXMLQLCUniversePluginParameters)
+            {
+                QXmlStreamAttributes pluginAttrs = root.attributes();
+                for (int i = 0; i < pluginAttrs.count(); i++)
+                    patch.params[pluginAttrs.at(i).name().toString()] =
+                            pluginAttrs.at(i).value().toString();
+            }
+            root.skipCurrentElement();
+        }
+
+        ioMap->loadPatch(index, patch);
     }
 
     return true;
+}
+
+QList<Universe::OfflinePatch> Universe::offlinePatches() const
+{
+    return m_offlinePatches;
+}
+
+void Universe::addOfflinePatch(const OfflinePatch &patch)
+{
+    m_offlinePatches.append(patch);
+}
+
+void Universe::removeOfflinePatch(int index)
+{
+    if (index >= 0 && index < m_offlinePatches.count())
+        m_offlinePatches.removeAt(index);
+}
+
+void Universe::clearOfflinePatches(PatchTagType tag)
+{
+    for (int i = m_offlinePatches.count() - 1; i >= 0; i--)
+        if (m_offlinePatches.at(i).tag == tag)
+            m_offlinePatches.removeAt(i);
 }
 
 bool Universe::loadXMLPluginParameters(QXmlStreamReader &root, PatchTagType currentTag, int patchIndex)
@@ -1375,21 +1344,53 @@ bool Universe::saveXML(QXmlStreamWriter *doc) const
     if (passthrough() == true)
         doc->writeAttribute(KXMLQLCUniversePassthrough, KXMLQLCTrue);
 
+    /* A kept (offline) patch is written back exactly as it was loaded --
+       a show saved on a machine away from its network must not lose a
+       patch it merely could not open here. */
+    auto saveOffline = [&](PatchTagType tag, const QString &xmlTag)
+    {
+        foreach (const OfflinePatch &p, m_offlinePatches)
+        {
+            if (p.tag != tag)
+                continue;
+            savePatchXML(doc, xmlTag, p.plugin, p.uid, p.line, p.profile,
+                         p.params, p.hidProfile, p.network);
+        }
+    };
+
     if (inputPatch() != NULL)
     {
         savePatchXML(doc, KXMLQLCUniverseInputPatch, inputPatch()->pluginName(), inputPatch()->inputName(),
             inputPatch()->input(), inputPatch()->profileName(), inputPatch()->getPluginParameters(),
-            inputPatch()->hidProfileName());
+            inputPatch()->hidProfileName(), NetworkRoute::networkForLine(inputPatch()->inputName()));
+    }
+    else
+    {
+        saveOffline(InputPatchTag, KXMLQLCUniverseInputPatch);
     }
     foreach (OutputPatch *op, m_outputPatchList)
     {
+        if (op->isPending())
+        {
+            // Pending: the same UID, line and network it was loaded with.
+            savePatchXML(doc, KXMLQLCUniverseOutputPatch, op->pluginName(), op->outputName(),
+                op->pendingLine(), "", op->getPluginParameters(), QString(), op->pendingNetwork());
+            continue;
+        }
         savePatchXML(doc, KXMLQLCUniverseOutputPatch, op->pluginName(), op->outputName(),
-            op->output(), "", op->getPluginParameters());
+            op->output(), "", op->getPluginParameters(), QString(),
+            NetworkRoute::networkForLine(op->outputName()));
     }
+    saveOffline(OutputPatchTag, KXMLQLCUniverseOutputPatch);
     if (feedbackPatch() != NULL)
     {
         savePatchXML(doc, KXMLQLCUniverseFeedbackPatch, feedbackPatch()->pluginName(), feedbackPatch()->outputName(),
-            feedbackPatch()->output(), "", feedbackPatch()->getPluginParameters());
+            feedbackPatch()->output(), "", feedbackPatch()->getPluginParameters(), QString(),
+            NetworkRoute::networkForLine(feedbackPatch()->outputName()));
+    }
+    else
+    {
+        saveOffline(FeedbackPatchTag, KXMLQLCUniverseFeedbackPatch);
     }
 
     /* End the <Universe> tag */
@@ -1406,7 +1407,8 @@ void Universe::savePatchXML(
     quint32 line,
     QString profileName,
     QMap<QString, QVariant> parameters,
-    const QString &hidProfileName) const
+    const QString &hidProfileName,
+    const QString &network) const
 {
     // sanity check: don't save invalid data
     if (pluginName.isEmpty() || pluginName == KInputNone || line == QLCIOPlugin::invalidLine())
@@ -1420,6 +1422,11 @@ void Universe::savePatchXML(
         doc->writeAttribute(KXMLQLCUniverseProfileName, profileName);
     if (!hidProfileName.isEmpty())
         doc->writeAttribute(KXMLQLCUniverseHIDProfileName, hidProfileName);
+    /* The network the line is on ("172.18.2.0/24") -- what loading resolves
+       by, so the show follows the network to another machine or address.
+       UID/Line stay for older builds, which ignore this attribute. */
+    if (!network.isEmpty())
+        doc->writeAttribute(KXMLQLCUniverseNetwork, network);
 
     savePluginParametersXML(doc, parameters);
     doc->writeEndElement();

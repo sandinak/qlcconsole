@@ -318,6 +318,17 @@ a shorter Windows re-soak is planned.
   the rig view about 9 ms a frame on a 200-fixture show (was 51).
 
 ### Fixed
+- **Universe patches were lost when a show was opened away from its
+  network.** Opening a show on a computer without the interface it was
+  patched to (a laptop off the show VLAN) and saving it wrote the show
+  without those patches — every Art-Net universe on that interface gone,
+  however often it was re-patched. Patches that can't be opened are now
+  kept, shown as offline ("not present — kept, will reconnect"), saved back
+  unchanged, and reconnect by themselves when the network appears; inputs,
+  feedback and patches to plugins not installed are kept the same way.
+  Art-Net, E1.31 and OSC patches also **follow the network** rather than
+  one interface address: the same show opens patched on any console on the
+  show network, through whichever interface (or route) reaches it.
 - A workspace whose last-active tab was Lighting Studio could come up with
   the whole 2D plot empty on a fresh launch — trusses, layers, and every
   fixture missing — even though the save was completely intact.

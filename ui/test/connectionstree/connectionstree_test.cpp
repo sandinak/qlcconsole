@@ -46,6 +46,7 @@
 #include "doc.h"
 #include "apputil.h"
 #include "showstatus.h"
+#include "networkroute.h"
 
 #undef private
 #undef protected
@@ -2049,4 +2050,69 @@ void ConnectionsTree_Test::bothViewsListTheSameTargets()
     }
     QCOMPARE(byDevice.value(4).section(" · via ", 0, 0), QString("T1 node (172.18.2.60)"));
     QCOMPARE(byDevice.value(7).section(" · via ", 0, 0), QString("172.18.2.60"));  // line 0: unheard
+}
+
+/* A show patched to a network this machine is not on (a laptop away from the
+   show VLAN): its patches are shown as kept, offline -- never as "not
+   patched" -- and reconnect by themselves when the network appears. */
+void ConnectionsTree_Test::offlinePatchesShowKeptNotUnpatched()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+
+    NetworkRoute::LocalAddress home;
+    home.iface = "en0"; home.ip = QHostAddress("192.168.1.5"); home.prefix = 24;
+    NetworkRoute::setResolverForTest(
+        [home]() { return QList<NetworkRoute::LocalAddress>() << home; },
+        [](const QHostAddress &) { return QHostAddress("192.168.1.5"); });
+    stub->m_lineNames = QStringList() << "192.168.1.5";
+
+    Universe::OfflinePatch out;
+    out.tag = Universe::OutputPatchTag;
+    out.plugin = stub->name();
+    out.uid = "172.18.2.219";
+    out.line = 1;
+    out.params["outputIP"] = "172.18.2.60";
+    out.params["outputUni"] = "0";
+    iom->loadPatch(0, out);
+    Universe::OfflinePatch in;
+    in.tag = Universe::InputPatchTag;
+    in.plugin = stub->name();
+    in.uid = "172.18.2.219";
+    in.line = 1;
+    iom->loadPatch(1, in);
+    QVERIFY(iom->outputPatch(0, 0)->isPending());
+    QVERIFY(iom->inputPatch(1) == NULL);
+
+    ConnectionsTree tree(m_doc);
+    QVERIFY(rowsWithText(tree.m_tree, "not present — kept, will reconnect").isEmpty() == false);
+
+    tree.m_byUniverse->setChecked(true);
+    QTreeWidgetItem *u1 = tree.m_tree->topLevelItem(0);
+    QVERIFY2(u1->text(COL_DETAIL).contains("no route (172.18.2.219 not present)"),
+             qPrintable(u1->text(COL_DETAIL)));
+    QTreeWidgetItem *u2 = tree.m_tree->topLevelItem(1);
+    QVERIFY2(u2->text(COL_DETAIL).contains("\"172.18.2.219\" not present — kept"),
+             qPrintable(u2->text(COL_DETAIL)));
+
+    // The laptop joins the show network: both reconnect, no re-patching.
+    NetworkRoute::LocalAddress show;
+    show.iface = "en5"; show.ip = QHostAddress("172.18.2.157"); show.prefix = 24;
+    NetworkRoute::setResolverForTest(
+        [home, show]() { return QList<NetworkRoute::LocalAddress>() << home << show; },
+        [](const QHostAddress &t) {
+            return t.isInSubnet(QHostAddress("172.18.2.0"), 24) ? QHostAddress("172.18.2.157")
+                                                                : QHostAddress("192.168.1.5");
+        });
+    stub->m_lineNames << "172.18.2.157";
+    QCOMPARE(iom->retryOfflinePatches(), 2);
+    QVERIFY(iom->inputPatch(1) != NULL);
+
+    tree.m_byUniverse->setChecked(false);
+    tree.m_byUniverse->setChecked(true);
+    u1 = tree.m_tree->topLevelItem(0);
+    QVERIFY2(u1->text(COL_DETAIL).contains("via en5 (172.18.2.157)"), qPrintable(u1->text(COL_DETAIL)));
+    QVERIFY(rowsWithText(tree.m_tree, "kept, will reconnect").isEmpty());
+
+    NetworkRoute::setResolverForTest(nullptr, nullptr);
 }

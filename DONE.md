@@ -6,6 +6,59 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-18 — Offline patches kept; patches follow the network *(fix/keep-offline-patches)*
+
+Release blocker from Branson's DanceHysteria 0.5: saved on the laptop off the
+show VLAN, the show lost all 68 Art-Net outputs (UID 172.18.2.219, vlan0's
+address), keeping only the 6 WLED ones; re-patching didn't stick.
+
+- **Root cause:** `Universe::savePatchXML()` skips any patch whose line is
+  `invalidLine()`, and a pending output (`OutputPatch::isPending()`, the
+  "interface not present" state added with portable patches) has exactly
+  that line. Loading kept the patch; *saving* silently dropped it. WLED
+  survived because its plugin has one static line ("WLED (JSON over
+  Wi-Fi)") that always resolves. Inputs and feedback were worse: an
+  unresolved UID fell back to the stored line index -- possibly a different
+  real interface -- and a missing plugin dropped the patch at load.
+- **Kept, saved unchanged:** pending outputs remember their saved line and
+  network and are written back as loaded. Inputs, feedback and patches to a
+  plugin not installed become `Universe::OfflinePatch` records (plugin, UID,
+  line, profile/HID profile, network, every PluginParameter) saved verbatim.
+  `InputOutputMap::loadPatch()` is the single load path; Universe::loadXML
+  reads PluginParameters *before* applying the patch so the target can
+  steer resolution.
+- **Follows the network** (`engine/src/networkroute.{h,cpp}`): for an
+  address-named line (Art-Net, E1.31, OSC) resolution is (1) the interface
+  the OS routes a unicast target through (UDP connect + localAddress, no
+  packet sent; the plain default route doesn't count unless the target is
+  on that subnet), (2) the saved UID, (3) the saved `Network` (new
+  attribute, ignored by older builds) or, for old shows, the saved
+  address's subnet via the local netmask (/24 if unknown), (4) a
+  broadcast/directed target on a local subnet. First match in plugin line
+  order wins. Saves write the live interface as UID (compat) plus Network.
+- **Reconnect:** a 5 s `InputOutputMap` tick (idle unless something is
+  kept) re-resolves; pending outputs replay their parameters on the new
+  line (`OutputPatch::resolvePending()`); `offlinePatchesChanged()` refreshes
+  the footer and universe list. Pending patches no longer push parameters
+  to the plugin on an invalid line.
+- **UI:** footer "N universes patched to interfaces not present (…) — kept,
+  will reconnect"; Devices ghost rows "not present — kept, will reconnect"
+  (+ network), line rows show their network; kept input/feedback universes
+  say "offline: …" instead of "not patched"; universe list "… — not
+  present". Forget patch / unpatch clear kept records (`forgetOfflinePatches`).
+- **Tests** (inputoutputmap_test, 11 new): the real IOMap block of the
+  backup (`dancehysteria-iomap.xml`, 74 outputs) load→save byte-identical
+  offline with nothing opened (fails with 74→6 on the old save), then all 68
+  reconnect when 172.18.2.157/24 appears; kronk-style other-address
+  machine; VPN route; default route is not the show net; stored network;
+  reconnect replays parameters; user unpatch; input+feedback kept and
+  reconnected; missing plugin; real loopback route lookup.
+- **Not done:** a *live* patch whose interface disappears mid-session stays
+  on its (dead) line rather than going offline/re-routing -- demoting live
+  output on a transient interface flap was judged riskier than it's worth
+  for 0.1.0. ManualTarget/LineAlias still key on line index (they survive
+  as saved).
+
 ### 2026-10-17 — Rig Overview: dimmed RGB without a dimmer channel drew black
 
 `channelSetLiveState()` (`ui/src/monitor/fixturevisualtraits.cpp`) handed back the raw, already-dimmed colour *and* a level of max(R,G,B) for fixtures with no dimmer channel; every reader draws colour × level, so Blue at 19% (0,1,48) drew at 9/255. It now returns the hue at full and the level once. Fixtures with a dimmer channel are unchanged. Found from a Show Tree preview (feat/show-tree d8664080a); backported with its `monitor_test` case.

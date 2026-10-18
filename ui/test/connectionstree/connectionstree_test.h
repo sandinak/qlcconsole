@@ -138,6 +138,7 @@ private slots:
 
     /* The device view and the universe list show the same patches. */
     void bothViewsListTheSameTargets();
+    void offlinePatchesShowKeptNotUnpatched();
 
 private:
     Doc *m_doc;
