@@ -174,6 +174,21 @@ LineAimTest ShowTreeController::lineAimTest() const
 
 QList<ResolvedCue> ShowTreeController::resolved(const CueList &list) const
 {
+    // Sub-cues (P6): the first starts from what its cue puts on stage.
+    if (list.isSubCues())
+    {
+        const CueList *parent = nullptr;
+        for (const Production &p : m_productions)
+            for (const CueList &l : p.lists)
+                if (!l.isSubCues() && l.indexOf(list.subOf) >= 0)
+                    parent = &l;
+        if (parent != nullptr)
+        {
+            const QList<ResolvedCue> up = resolve(*parent, lineAimTest());
+            const QList<ResolvedLayer> start = up.at(parent->indexOf(list.subOf)).layers;
+            return resolve(list, lineAimTest(), &start);
+        }
+    }
     return resolve(list, lineAimTest());
 }
 
@@ -212,9 +227,61 @@ ShowTree::Cue *ShowTreeController::findCue(quint32 cueId, CueList **list)
    folders (a look pasted into a cue list leaves its folder behind). */
 static void normalizeLooks(QList<Production> &ps)
 {
+    /* Sub-cue lists (P6), whatever an edit did: always tracking, no mode,
+       includes or base; in the production of their cue, right after its
+       list; gone with their cue, or empty -- and never of a look or of a
+       sub-cue (one level, SUBCUES §8). */
+    {
+        QHash<quint32, QPair<int, quint32>> owner;      // cue -> (production index, list id)
+        QHash<quint32, bool> ownerOk;
+        for (int pi = 0; pi < ps.count(); ++pi)
+            for (const CueList &l : ps.at(pi).lists)
+                for (const Cue &c : l.cues)
+                {
+                    owner.insert(c.id, qMakePair(pi, l.id));
+                    ownerOk.insert(c.id, !l.looks && !l.isSubCues());
+                }
+        QList<CueList> subs;
+        QSet<quint32> seenParents;
+        for (Production &p : ps)
+            for (int i = int(p.lists.count()) - 1; i >= 0; --i)
+                if (p.lists.at(i).isSubCues())
+                    subs.prepend(p.lists.takeAt(i));
+        for (CueList &s : subs)
+        {
+            if (s.cues.isEmpty() || !ownerOk.value(s.subOf, false) || seenParents.contains(s.subOf))
+                continue;
+            seenParents.insert(s.subOf);
+            s.mode = ListMode::Tracking;
+            s.baseCue = invalidId();
+            s.looks = false;
+            s.folders.clear();
+            for (Cue &c : s.cues)
+            {
+                c.mode = CueMode::ListDefault;
+                c.includes.clear();
+                c.folder.clear();
+            }
+            Production &p = ps[owner.value(s.subOf).first];
+            int at = int(p.lists.count());
+            for (int i = 0; i < p.lists.count(); ++i)
+                if (p.lists.at(i).id == owner.value(s.subOf).second)
+                    at = i + 1;
+            while (at < p.lists.count() && p.lists.at(at).isSubCues())
+                ++at;
+            p.lists.insert(at, s);
+        }
+    }
     for (Production &p : ps)
         for (CueList &l : p.lists)
         {
+            if (l.isSubCues())
+                continue;
+            for (Cue &c : l.cues)
+            {
+                c.follow = false;
+                c.wait = 0;
+            }
             if (!l.looks)
             {
                 for (Cue &c : l.cues)
@@ -374,7 +441,7 @@ quint32 ShowTreeController::addCue(quint32 listId, int afterIndex, const QString
         Cue c;
         c.id = id;
         c.name = name;
-        c.number = numberForInsert(*l, afterIndex);
+        c.number = numberForInsert(*l, afterIndex, takenNumbers(ps, *l));
         const int at = qBound(0, afterIndex + 1, int(l->cues.count()));
         l->cues.insert(at, c);
         return true;
@@ -690,7 +757,7 @@ bool ShowTreeController::setListMode(quint32 listId, ListMode mode)
 {
     return edit(tr("Cue list mode"), [&](QList<Production> &ps) {
         CueList *l = listIn(ps, listId);
-        if (l == nullptr || l->looks || l->mode == mode)
+        if (l == nullptr || l->looks || l->isSubCues() || l->mode == mode)
             return false;
         l->mode = mode;
         return true;
@@ -701,7 +768,7 @@ bool ShowTreeController::setBaseCue(quint32 listId, quint32 cueId)
 {
     return edit(tr("Base cue"), [&](QList<Production> &ps) {
         CueList *l = listIn(ps, listId);
-        if (l == nullptr || l->looks || l->baseCue == cueId)
+        if (l == nullptr || l->looks || l->isSubCues() || l->baseCue == cueId)
             return false;
         if (cueId != invalidId() && l->indexOf(cueId) < 0)
             return false;
@@ -715,7 +782,7 @@ bool ShowTreeController::setCueMode(quint32 cueId, CueMode mode)
     return edit(tr("Cue mode"), [&](QList<Production> &ps) {
         CueList *l = nullptr;
         Cue *c = cueIn(ps, cueId, &l);
-        if (c == nullptr || l->looks || c->mode == mode)
+        if (c == nullptr || l->looks || l->isSubCues() || c->mode == mode)
             return false;
         c->mode = mode;
         return true;
@@ -842,7 +909,7 @@ quint32 ShowTreeController::duplicateCue(quint32 cueId)
     Cue copy = have->cues.at(at);
     copy.id = newId();
     copy.collection = invalidId();
-    copy.number = numberForInsert(*have, at);
+    copy.number = numberForInsert(*have, at, takenNumbers(m_productions, *have));
     QHash<quint32, quint32> ids;
     for (Layer &l : copy.layers)
     {
@@ -909,7 +976,7 @@ QList<quint32> ShowTreeController::pasteCues(const QList<quint32> &cueIds, quint
             return false;
         for (Cue c : copies)
         {
-            c.number = numberForInsert(*l, at);
+            c.number = numberForInsert(*l, at, takenNumbers(ps, *l));
             if (c.number.isEmpty())
                 return false;
             // An include of a cue that isn't there, or would loop: dropped.
@@ -1234,7 +1301,7 @@ quint32 ShowTreeController::recordCue(quint32 cueId, RecordSource source)
 
     Cue rec;
     rec.id = newId();
-    rec.number = numberForInsert(*have, at);
+    rec.number = numberForInsert(*have, at, takenNumbers(m_productions, *have));
     if (source == RecordSource::Lit)
         rec.name = tr("on stage (recorded)");
     else
@@ -1751,8 +1818,18 @@ ShowTreeController::Usage ShowTreeController::usageInList(quint32 listId) const
                 u.palettes[p]++;
         }
     };
+    // Its cues' sub-cues are part of the song too (P6).
+    QList<const Cue *> cues;
     for (const Cue &c : list->cues)
+        cues << &c;
+    for (const Production &p : m_productions)
+        for (const CueList &s : p.lists)
+            if (s.isSubCues() && list->indexOf(s.subOf) >= 0)
+                for (const Cue &c : s.cues)
+                    cues << &c;
+    for (const Cue *cp : cues)
     {
+        const Cue &c = *cp;
         looks(c.looks);
         for (const Layer &l : c.layers)
         {
@@ -3279,7 +3356,7 @@ QString ShowTreeController::cueLabel(const CueList &list, int index) const
     // A look goes by its name alone: its number is only the tree's.
     if (list.looks)
         return c.name.isEmpty() ? tr("Look %1").arg(index + 1) : c.name;
-    const QString number = c.number.isEmpty() ? QString::number(index + 1) : c.number;
+    const QString number = cueNumber(list, index);
     return c.name.isEmpty() ? number : QStringLiteral("%1 %2").arg(number, c.name);
 }
 
@@ -3488,7 +3565,8 @@ static bool sameSteps(const QList<ChaserStep> &a, const QList<ChaserStep> &b)
     {
         const ChaserStep &x = a.at(i), &y = b.at(i);
         if (x.fid != y.fid || x.fadeIn != y.fadeIn || x.hold != y.hold || x.fadeOut != y.fadeOut
-            || x.duration != y.duration || x.note != y.note || x.cueNumber != y.cueNumber)
+            || x.duration != y.duration || x.note != y.note || x.cueNumber != y.cueNumber
+            || x.subCues != y.subCues)
             return false;
     }
     return true;
@@ -3519,9 +3597,31 @@ void ShowTreeController::bake()
 
     for (Production &prod : m_productions)
     {
+        // Sub-cue lists first (P6): their chasers are their cues' steps.
+        QList<CueList *> order;
         for (CueList &list : prod.lists)
+            if (list.isSubCues())
+                order << &list;
+        for (CueList &list : prod.lists)
+            if (!list.isSubCues())
+                order << &list;
+        for (CueList *lp : order)
         {
-            const QString folder = QStringLiteral("%1/%2/%3").arg(kProductionsFolder, prod.name, list.name);
+            CueList &list = *lp;
+            // A sub-cue list is filed with its cue's list, and named after it.
+            const CueList *parentList = nullptr;
+            int parentIndex = -1;
+            if (list.isSubCues())
+                for (const CueList &l : prod.lists)
+                    if (!l.isSubCues() && l.indexOf(list.subOf) >= 0)
+                    {
+                        parentList = &l;
+                        parentIndex = l.indexOf(list.subOf);
+                    }
+            if (list.isSubCues() && parentList == nullptr)
+                continue;
+            const QString folder = QStringLiteral("%1/%2/%3").arg(kProductionsFolder, prod.name,
+                                                                  parentList != nullptr ? parentList->name : list.name);
             const QList<ResolvedCue> resolved = this->resolved(list);
 
             // A Looks section (R3) has no chaser: each look is a Collection
@@ -3542,7 +3642,21 @@ void ShowTreeController::bake()
                 list.chaser = chaser->id();
                 m_generatedChasers.insert(chaser->id());
             }
-            if (chaser != nullptr)
+            if (chaser != nullptr && parentList != nullptr)
+            {
+                // Sub-cues: a hidden chaser, the parent cue's step.
+                const QString name = tr("%1 · sub-cues").arg(cueLabel(*parentList, parentIndex));
+                if (chaser->name() != name)
+                    chaser->setName(name);
+                if (chaser->path(true) != folder)
+                    chaser->setPath(folder);
+                if (chaser->isVisible())
+                    chaser->setVisible(false);
+                keepChasers.insert(chaser->id());
+                m_generatedLabels.insert(chaser->id(), tr("Sub-cues of cue %1 in %2")
+                                                       .arg(cueLabel(*parentList, parentIndex), parentList->name));
+            }
+            else if (chaser != nullptr)
             {
                 if (chaser->name() != list.name)
                     chaser->setName(list.name);
@@ -3562,11 +3676,9 @@ void ShowTreeController::bake()
             {
                 Cue &cue = list.cues[i];
                 const QString label = cueLabel(list, i);
+                const QString number = cueNumber(list, i);
                 const QString collName = list.looks ? label : cue.name.isEmpty()
-                                         ? (cue.number.isEmpty() ? QString::number(i + 1) : cue.number)
-                                         : QStringLiteral("%1-%2").arg(cue.number.isEmpty()
-                                                                       ? QString::number(i + 1) : cue.number,
-                                                                       cue.name);
+                                         ? number : QStringLiteral("%1-%2").arg(number, cue.name);
 
                 QList<quint32> members;
                 // Opaque functions as they are, in layer order.
@@ -3694,12 +3806,37 @@ void ShowTreeController::bake()
                 if (list.looks)
                     continue;
 
+                if (list.isSubCues())
+                {
+                    // A sub-cue holds until Sub GO, unless the next one
+                    // auto-follows: its wait is this one's hold.
+                    const bool nextFollows = i + 1 < list.cues.count() && list.cues.at(i + 1).follow;
+                    const uint hold = nextFollows ? list.cues.at(i + 1).wait : Function::infiniteSpeed();
+                    ChaserStep step(coll->id(), cue.fadeIn, hold, cue.fadeOut);
+                    step.duration = nextFollows ? cue.fadeIn + hold : hold;
+                    step.note = cue.note;
+                    step.cueNumber = number;
+                    steps << step;
+                    continue;
+                }
+
                 ChaserStep step(coll->id(), cue.fadeIn, cue.hold, cue.fadeOut);
                 // As ChaserStep::loadXML: an infinite hold is the duration
                 // (adding the fade would wrap it round to a few seconds).
                 step.duration = int(cue.hold) < 0 ? cue.hold : cue.fadeIn + cue.hold;
                 step.note = cue.note;
                 step.cueNumber = cue.number;
+                // With sub-cues (P6): the step plays their chaser, held on
+                // Sub GO; the first sub-cue plays with GO.
+                for (const CueList &s : prod.lists)
+                    if (s.subOf == cue.id && m_doc->function(s.chaser) != nullptr)
+                    {
+                        step.fid = s.chaser;
+                        bool follows = false;
+                        for (const Cue &sc : s.cues)
+                            follows = follows || sc.follow;
+                        step.subCues = follows ? ChaserStep::SubGoFollow : ChaserStep::SubGo;
+                    }
                 steps << step;
             }
 
@@ -3918,6 +4055,14 @@ bool ShowTreeController::generatedNode(quint32 functionId, quint32 *listId, quin
             if (l.chaser == functionId)
             {
                 *listId = l.id;
+                // A cue's sub-cues: shown as that cue.
+                if (l.isSubCues())
+                    if (const CueList *up = listOfCue(l.subOf))
+                    {
+                        *listId = up->id;
+                        if (cueId != nullptr)
+                            *cueId = l.subOf;
+                    }
                 return true;
             }
             for (const Cue &c : l.cues)
@@ -4807,7 +4952,7 @@ QStringList ShowTreeController::listsRunning() const
     QStringList names;
     for (const Production &p : m_productions)
         for (const CueList &l : p.lists)
-            if (const Function *f = m_doc->function(l.chaser))
+            if (const Function *f = l.isSubCues() ? nullptr : m_doc->function(l.chaser))
                 if (f->isRunning())
                     names << l.name;
     return names;

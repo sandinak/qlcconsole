@@ -172,6 +172,12 @@ ShowTreeController::ConvertPlan ShowTreeController::planConvertToTracking(quint3
         plan.why = tr("Looks never track: each plays only what it has.");
         return plan;
     }
+    if (src->isSubCues() || subCueListsOf(listId) > 0)
+    {
+        plan.why = src->isSubCues() ? tr("Sub-cues always track from the one before.")
+                                    : tr("It has sub-cues: Convert reads imported lists, which have none.");
+        return plan;
+    }
     const LineAimTest aimTest = lineAimTest();
     quint32 next = m_nextId;
 

@@ -76,7 +76,6 @@ Chaser::~Chaser()
     m_runner = NULL;
 }
 
-
 QIcon Chaser::getIcon() const
 {
     return QIcon(":/chaser.png");
@@ -513,7 +512,7 @@ void Chaser::setStepSubCues(int index, ChaserStep::SubCueMode mode)
 
 bool Chaser::isSubGoStep(int index) const
 {
-    return stepSubCues(index) == ChaserStep::SubGo && subCueChase(index) != NULL;
+    return stepSubCues(index) != ChaserStep::Auto && subCueChase(index) != NULL;
 }
 
 bool Chaser::hasSubGoSteps() const
@@ -675,6 +674,14 @@ bool Chaser::beginRestart()
     m_restarting = true;
     m_startupAction.m_action = ChaserNoAction;
     return true;
+}
+
+void Chaser::setSubCueFollow(bool follow)
+{
+    QMutexLocker runnerLocker(&m_runnerMutex);
+    m_subCueFollow = follow;
+    if (m_runner != NULL)
+        m_runner->setSubCueFollow(follow);
 }
 
 bool Chaser::isSubCueHeld() const
@@ -993,6 +1000,7 @@ void Chaser::createRunner(quint32 startTime)
     m_runner->setParent(this);
     m_runner->setExternalClock(m_showClocked);
     m_runner->setSubCueHeld(m_subCueHeld);
+    m_runner->setSubCueFollow(m_subCueFollow);
     m_runner->setAction(m_startupAction);
     m_startupAction.m_action = ChaserNoAction;
 }

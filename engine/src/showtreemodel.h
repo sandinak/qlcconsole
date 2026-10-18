@@ -222,6 +222,11 @@ namespace ShowTree
         /** A look of a production's Looks section (CueList::looks): the
          *  folder it is filed in there ("Hits", "Hits/Big"; empty: none). */
         QString folder;
+        /** A sub-cue (P6, §3C): it goes on by itself @a wait ms after the
+         *  sub-cue before it has faded in (Auto-follow, "auto 0.5s"); false:
+         *  it waits for Sub GO. The first sub-cue plays with GO. */
+        bool follow = false;
+        uint wait = 0;
 
         const Look *look(const QString &key) const;
         void setLook(const Look &look);
@@ -248,6 +253,18 @@ namespace ShowTree
         /** A Looks section's folders kept although no look is in them yet
          *  (New folder); a folder a look is in needs no entry. */
         QStringList folders;
+        /** A cue's sub-cues (P6, §3C, D9, D25): the sub-cues of cue @a subOf
+         *  (in another list of the same production) as a list of their own,
+         *  as a Looks section is -- so every cue operation works on a
+         *  sub-cue. Its first sub-cue starts from what its cue puts on
+         *  stage, each next one from the one before (always tracking: no
+         *  mode, includes or base); nothing passes on to the cue after the
+         *  parent (sub-cue changes are cue-only). Numbered <cue>.<n> unless
+         *  a sub-cue has a number of its own. Bakes to a hidden Chaser of the
+         *  sub-cues' Collections that is the parent's step, SubCues="SubGo"
+         *  (SUBCUES_DESIGN.md). Saved as <SubCues>. Invalid: a plain list. */
+        quint32 subOf = 0xFFFFFFFF;
+        bool isSubCues() const { return subOf != 0xFFFFFFFF; }
 
         int indexOf(quint32 cueId) const;
         Cue *cue(quint32 id);
@@ -379,8 +396,11 @@ namespace ShowTree
      *  cue's Spread / Grouping / Cross. Without one, none do. */
     typedef std::function<bool(const Look &)> LineAimTest;
 
-    /** Resolve every cue of @a list, in list order. Pure: no Doc. */
-    QLC_ENGINE_EXPORT QList<ResolvedCue> resolve(const CueList &list, const LineAimTest &isLineAim = LineAimTest());
+    /** Resolve every cue of @a list, in list order. Pure: no Doc. A list of
+     *  sub-cues (CueList::subOf) starts from @a start: what its cue puts
+     *  on stage (that cue's ResolvedCue::layers). */
+    QLC_ENGINE_EXPORT QList<ResolvedCue> resolve(const CueList &list, const LineAimTest &isLineAim = LineAimTest(),
+                                                 const QList<ResolvedLayer> *start = nullptr);
 
     /** What a cue puts on stage, per unit -- each group, fixture and opaque
      *  function a layer lights ("g:12", "f:3", "x:40") -- and attribute:
@@ -399,7 +419,8 @@ namespace ShowTree
                                         const LineAimTest &isLineAim = LineAimTest());
 
     /** The mode @a cue really plays in, in @a list (List default made
-     *  Track or Block; a look of a Looks section is always Block). */
+     *  Track or Block; a look of a Looks section is always Block, a sub-cue
+     *  always Track). */
     QLC_ENGINE_EXPORT CueMode effectiveMode(const CueList &list, const Cue &cue);
 
     /** Whether resolving cue @a fromCue needs cue @a onCue, at any depth:
@@ -431,7 +452,11 @@ namespace ShowTree
     /** The number for a cue inserted after @a afterIndex (-1: at the top):
      *  the next whole number in the last place if free, else a point cue
      *  between its neighbours. Never renumbers. */
-    QLC_ENGINE_EXPORT QString numberForInsert(const CueList &list, int afterIndex);
+    QLC_ENGINE_EXPORT QString numberForInsert(const CueList &list, int afterIndex,
+                                              const QStringList &taken = QStringList());
+    /** A cue's number as a person (and show control) reads it: its own, else
+     *  its position; a sub-cue's is its cue's and its own, "4.1" (P6). */
+    QLC_ENGINE_EXPORT QString cueNumberAt(const CueList &list, int index, const QString &parentNumber = QString());
 
     /** Compare two cue numbers part by part, as numbers: "0.0.4" <
      *  "0.0.4.5" < "0.0.5". Negative, 0 or positive. */

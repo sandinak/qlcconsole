@@ -30,6 +30,7 @@
 #define KXMLShowTreeProduction  QStringLiteral("Production")
 #define KXMLShowTreeCueList     QStringLiteral("CueList")
 #define KXMLShowTreeLooks       QStringLiteral("Looks")
+#define KXMLShowTreeSubCues     QStringLiteral("SubCues")
 #define KXMLShowTreeCue         QStringLiteral("Cue")
 #define KXMLShowTreeLayer       QStringLiteral("Layer")
 #define KXMLShowTreeLook        QStringLiteral("Look")
@@ -353,6 +354,9 @@ CueMode effectiveMode(const CueList &list, const Cue &cue)
     // A busking look never tracks (P-D5): what it has is all it plays.
     if (list.looks)
         return CueMode::Block;
+    // A sub-cue starts from the one before it, 4.1 from cue 4 (D25).
+    if (list.isSubCues())
+        return CueMode::Track;
     if (cue.mode != CueMode::ListDefault)
         return cue.mode;
     return list.mode == ListMode::Tracking ? CueMode::Track : CueMode::Block;
@@ -458,11 +462,12 @@ struct Resolver
 {
     const CueList &list;
     LineAimTest isLineAim;
+    const QList<ResolvedLayer> *startState;
     QVector<ResolvedCue> out;
     QVector<int> state;     // 0 not yet, 1 in progress, 2 done
 
-    Resolver(const CueList &l, const LineAimTest &lineAim)
-        : list(l), isLineAim(lineAim), out(l.cues.count()), state(l.cues.count(), 0)
+    Resolver(const CueList &l, const LineAimTest &lineAim, const QList<ResolvedLayer> *s)
+        : list(l), isLineAim(lineAim), startState(s), out(l.cues.count()), state(l.cues.count(), 0)
     {
     }
 
@@ -482,6 +487,11 @@ struct Resolver
         {
             resolveAt(i - 1);
             start = carried(out.at(i - 1).passOn);
+        }
+        else if (i == 0 && startState != nullptr && mode == CueMode::Track)
+        {
+            // The first sub-cue: from what its cue puts on stage.
+            start = carried(settled(*startState));
         }
 
         QList<ResolvedLayer> layers = start;
@@ -708,6 +718,8 @@ bool canInclude(const CueList &list, quint32 cueId, quint32 includedId, QString 
             *why = text;
         return false;
     };
+    if (list.isSubCues())
+        return no(QStringLiteral("a sub-cue starts from the one before it (no includes)"));
     const int i = list.indexOf(cueId), j = list.indexOf(includedId);
     if (i < 0 || j < 0)
         return no(QStringLiteral("not a cue of this list"));
@@ -774,9 +786,9 @@ QList<quint32> rebakeChain(const CueList &list, quint32 cueId)
     return out;
 }
 
-QList<ResolvedCue> resolve(const CueList &list, const LineAimTest &isLineAim)
+QList<ResolvedCue> resolve(const CueList &list, const LineAimTest &isLineAim, const QList<ResolvedLayer> *start)
 {
-    Resolver r(list, isLineAim);
+    Resolver r(list, isLineAim, start);
     for (int i = 0; i < list.cues.count(); ++i)
         r.resolveAt(i);
     return QList<ResolvedCue>(r.out.begin(), r.out.end());
@@ -914,12 +926,23 @@ static QString numberAt(const CueList &list, int index)
     return n.isEmpty() ? QString::number(index + 1) : n;
 }
 
-static bool numberUsed(const CueList &list, const QString &number)
+static bool numberUsed(const CueList &list, const QString &number, const QStringList &taken = QStringList())
 {
     for (int i = 0; i < list.cues.count(); ++i)
         if (compareNumbers(numberAt(list, i), number) == 0)
             return true;
+    for (const QString &t : taken)
+        if (compareNumbers(t, number) == 0)
+            return true;
     return false;
+}
+
+QString cueNumberAt(const CueList &list, int index, const QString &parentNumber)
+{
+    if (index < 0 || index >= list.cues.count())
+        return QString();
+    const QString n = numberAt(list, index);
+    return list.isSubCues() && !parentNumber.isEmpty() ? parentNumber + QLatin1Char('.') + n : n;
 }
 
 int indexOfNumber(const CueList &list, const QString &number)
@@ -932,8 +955,11 @@ int indexOfNumber(const CueList &list, const QString &number)
     return -1;
 }
 
-QString numberForInsert(const CueList &list, int afterIndex)
+QString numberForInsert(const CueList &list, int afterIndex, const QStringList &taken)
 {
+    // Sub-cues are numbered under their cue: 1, 2... (4.1, 4.2).
+    if (list.cues.isEmpty() && list.isSubCues())
+        return QStringLiteral("1");
     if (list.cues.isEmpty())
     {
         // A new list's first cue: from the list's leading digits (D23):
@@ -950,7 +976,7 @@ QString numberForInsert(const CueList &list, int afterIndex)
         // Above the first: a point below it.
         const QString first = numberAt(list, 0);
         for (const QString &c : { QStringLiteral("0.5"), QStringLiteral("0.1") })
-            if (compareNumbers(c, first) < 0 && !numberUsed(list, c))
+            if (compareNumbers(c, first) < 0 && !numberUsed(list, c, taken))
                 return c;
         return QString();
     }
@@ -966,7 +992,7 @@ QString numberForInsert(const CueList &list, int afterIndex)
     {
         parts.last() = QString::number(last + 1);
         const QString candidate = parts.join(QLatin1Char('.'));
-        if (!numberUsed(list, candidate) && (next.isEmpty() || compareNumbers(candidate, next) < 0))
+        if (!numberUsed(list, candidate, taken) && (next.isEmpty() || compareNumbers(candidate, next) < 0))
             return candidate;
     }
 
@@ -974,7 +1000,7 @@ QString numberForInsert(const CueList &list, int afterIndex)
     for (int k : { 5, 6, 7, 8, 9, 1, 2, 3, 4 })
     {
         const QString candidate = QStringLiteral("%1.%2").arg(prev).arg(k);
-        if (!numberUsed(list, candidate) && (next.isEmpty() || compareNumbers(candidate, next) < 0))
+        if (!numberUsed(list, candidate, taken) && (next.isEmpty() || compareNumbers(candidate, next) < 0))
             return candidate;
     }
     return QStringLiteral("%1.5.5").arg(prev);
@@ -1116,10 +1142,17 @@ void saveXML(QXmlStreamWriter *doc, const Production &production)
     {
         // The Looks section is an element of its own: an older build skips
         // it (and plays the looks' generated collections as they are).
-        doc->writeStartElement(list.looks ? KXMLShowTreeLooks : KXMLShowTreeCueList);
+        // So is a cue's list of sub-cues (P6).
+        doc->writeStartElement(list.looks ? KXMLShowTreeLooks
+                               : list.isSubCues() ? KXMLShowTreeSubCues : KXMLShowTreeCueList);
         writeId(doc, QStringLiteral("ID"), list.id);
         doc->writeAttribute(QStringLiteral("Name"), list.name);
-        if (!list.looks)
+        writeId(doc, QStringLiteral("Cue"), list.subOf);
+        if (list.isSubCues())
+        {
+            writeId(doc, QStringLiteral("Chaser"), list.chaser);
+        }
+        else if (!list.looks)
         {
             doc->writeAttribute(QStringLiteral("Mode"), list.mode == ListMode::Tracking
                                                         ? QStringLiteral("Tracking")
@@ -1158,6 +1191,11 @@ void saveXML(QXmlStreamWriter *doc, const Production &production)
             writeId(doc, QStringLiteral("Collection"), cue.collection);
             if (list.looks && !cue.folder.isEmpty())
                 doc->writeAttribute(QStringLiteral("Folder"), cue.folder);
+            if (list.isSubCues() && cue.follow)
+            {
+                doc->writeAttribute(QStringLiteral("Follow"), QStringLiteral("Auto"));
+                doc->writeAttribute(QStringLiteral("Wait"), QString::number(cue.wait));
+            }
 
             saveLooks(doc, cue.looks);
             for (const Layer &layer : cue.layers)
@@ -1258,7 +1296,8 @@ bool loadXML(QXmlStreamReader &root, Production &production)
     while (root.readNextStartElement())
     {
         const bool looks = root.name() == KXMLShowTreeLooks;
-        if (root.name() != KXMLShowTreeCueList && (!looks || production.looks() != nullptr))
+        const bool subs = root.name() == KXMLShowTreeSubCues;
+        if (root.name() != KXMLShowTreeCueList && !subs && (!looks || production.looks() != nullptr))
         {
             root.skipCurrentElement();
             continue;
@@ -1272,6 +1311,17 @@ bool loadXML(QXmlStreamReader &root, Production &production)
                     ? ListMode::Tracking : ListMode::NonTracking;
         list.baseCue = readId(a, QStringLiteral("Base"));
         list.chaser = readId(a, QStringLiteral("Chaser"));
+        if (subs)
+        {
+            list.subOf = readId(a, QStringLiteral("Cue"));
+            list.mode = ListMode::Tracking;
+            list.baseCue = invalidId();
+            if (list.subOf == invalidId())
+            {
+                root.skipCurrentElement();
+                continue;
+            }
+        }
 
         while (root.readNextStartElement())
         {
@@ -1309,6 +1359,13 @@ bool loadXML(QXmlStreamReader &root, Production &production)
                 cue.folder = a.value(QStringLiteral("Folder")).toString();
                 cue.mode = CueMode::ListDefault;
                 cue.includes.clear();
+            }
+            if (subs)
+            {
+                cue.mode = CueMode::ListDefault;
+                cue.includes.clear();
+                cue.follow = a.value(QStringLiteral("Follow")).toString() == QLatin1String("Auto");
+                cue.wait = a.value(QStringLiteral("Wait")).toString().toUInt();
             }
 
             while (root.readNextStartElement())

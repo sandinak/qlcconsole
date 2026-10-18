@@ -36,12 +36,21 @@
 
 QString ChaserStep::subCueModeToString(SubCueMode mode)
 {
-    return mode == SubGo ? QStringLiteral("SubGo") : QStringLiteral("Auto");
+    switch (mode)
+    {
+        case SubGo: return QStringLiteral("SubGo");
+        case SubGoFollow: return QStringLiteral("SubGoFollow");
+        default: return QStringLiteral("Auto");
+    }
 }
 
 ChaserStep::SubCueMode ChaserStep::stringToSubCueMode(const QString &str)
 {
-    return str == QLatin1String("SubGo") ? SubGo : Auto;
+    if (str == QLatin1String("SubGo"))
+        return SubGo;
+    if (str == QLatin1String("SubGoFollow"))
+        return SubGoFollow;
+    return Auto;
 }
 
 ChaserStep::ChaserStep(quint32 aFid, uint aFadeIn, uint aHold, uint aFadeOut)
@@ -197,7 +206,10 @@ ChaserStep ChaserStep::fromVariant(const QVariant& var)
         if (!list.isEmpty())
             cs.skip = list.takeFirst().toBool();
         if (!list.isEmpty())
-            cs.subCues = list.takeFirst().toInt() == SubGo ? SubGo : Auto;
+        {
+            const int m = list.takeFirst().toInt();
+            cs.subCues = m == SubGo ? SubGo : m == SubGoFollow ? SubGoFollow : Auto;
+        }
     }
     return cs;
 }

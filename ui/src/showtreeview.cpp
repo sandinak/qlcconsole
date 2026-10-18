@@ -804,6 +804,10 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                                        "after the selected one — the selected cue, the list's running cue "
                                        "or everything lit. When they differ it asks, or does what "
                                        "Settings → Show Tree says."), "stRecord");
+    m_newSubCue = button(tr("+ Sub-cue"), tr("A sub-cue of the selected cue (4.1, 4.2…): Sub GO (⌥⌘↩) steps "
+                                             "through them while GO goes on to the next cue. It starts from what "
+                                             "is on stage before it; its changes are cue-only."), "stNewSubCue");
+    connect(m_newSubCue, &QToolButton::clicked, this, [this]() { newSubCue(); });
     m_merge = button(tr("Merge"), tr("Merge the layers selected in the tree (⌘- or ⇧-click two or more "
                                      "layers of one cue) into one layer on all their groups"), "stMerge");
     m_delete = button(tr("Delete"), tr("Delete the selected cues and layers, or a cue list or production"),
@@ -1231,6 +1235,46 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         f->addRow(tr("Fade in"), m_cueFadeIn);
         f->addRow(tr("Fade out"), m_cueFadeOut);
         f->addRow(tr("Hold"), m_cueHold);
+        {
+            // P6: a sub-cue goes on by Sub GO, or by itself after a wait.
+            m_cueAdvanceRow = new QWidget(inner);
+            QHBoxLayout *h = new QHBoxLayout(m_cueAdvanceRow);
+            h->setContentsMargins(0, 0, 0, 0);
+            m_cueAdvance = new QComboBox(m_cueAdvanceRow);
+            m_cueAdvance->setObjectName("stSubCueAdvance");
+            m_cueAdvance->addItem(tr("Sub GO (⌥⌘↩)"), 0);
+            m_cueAdvance->addItem(tr("Auto-follow after"), 1);
+            m_cueAdvance->setToolTip(tr("Sub GO: it waits for Sub GO. Auto-follow: it goes on by itself the wait "
+                                        "after the sub-cue before it has faded in. The first sub-cue plays with "
+                                        "GO."));
+            m_cueWait = seconds();
+            m_cueWait->setObjectName("stSubCueWait");
+            h->addWidget(m_cueAdvance);
+            h->addWidget(m_cueWait);
+            h->addStretch(1);
+            f->addRow(tr("Advance"), m_cueAdvanceRow);
+            auto commit = [this]() {
+                if (m_inspectorUpdating || m_pageCue == invalidId())
+                    return;
+                const bool follow = m_cueAdvance->currentData().toInt() == 1;
+                m_cueWait->setEnabled(follow);
+                m_st->setSubCueFollow(m_pageCue, follow, uint(qRound(m_cueWait->value() * 1000)));
+            };
+            connect(m_cueAdvance, QOverload<int>::of(&QComboBox::activated), this, commit);
+            connect(m_cueWait, &QDoubleSpinBox::editingFinished, this, commit);
+            // A cue's sub-cues: which, and + Sub-cue.
+            m_cueSubCues = new QLabel(inner);
+            m_cueSubCues->setObjectName("stCueSubCues");
+            m_cueSubCues->setWordWrap(true);
+            m_cueSubCues->setTextFormat(Qt::RichText);
+            connect(m_cueSubCues, &QLabel::linkActivated, this, [this](const QString &link) {
+                if (link == QLatin1String("new"))
+                    newSubCue();
+                else
+                    selectNode(link.toUInt());
+            });
+            f->addRow(tr("Sub-cues"), m_cueSubCues);
+        }
         m_cueLooks = new QLabel(inner);
         m_cueLooks->setWordWrap(true);
         m_cueLooks->setObjectName("stCueLooks");
@@ -1906,7 +1950,7 @@ void ShowTreeView::buildTree()
         // The cue lists, then the Looks section (R3).
         QList<const CueList *> lists;
         for (const CueList &list : prod.lists)
-            if (!list.looks)
+            if (!list.looks && !list.isSubCues())
                 lists << &list;
         if (const CueList *looks = prod.looks())
             lists << looks;
@@ -1963,10 +2007,14 @@ void ShowTreeView::buildTree()
                     firedBy[b->function()]++;
             }
 
-            for (int i = 0; i < list.cues.count(); ++i)
-            {
+            // One cue's row, its layers, what else is on stage in it -- and
+            // (P6) its sub-cues under it, each a cue row of its own.
+            std::function<void(const CueList &, int, const QList<ResolvedCue> &, QTreeWidgetItem *)> addCue;
+            addCue = [&](const CueList &list, int i, const QList<ResolvedCue> &resolved,
+                         QTreeWidgetItem *parentItem) {
                 const Cue &cue = list.cues.at(i);
-                QTreeWidgetItem *ci = new QTreeWidgetItem(list.looks ? folderItem(cue.folder) : li);
+                QTreeWidgetItem *ci = new QTreeWidgetItem(parentItem != nullptr ? parentItem
+                                                          : list.looks ? folderItem(cue.folder) : li);
                 ci->setText(0, m_st->cueLabel(list, i));
                 QStringList badges;
                 if (list.baseCue == cue.id)
@@ -2058,10 +2106,15 @@ void ShowTreeView::buildTree()
                         if (rl.depth > 0)
                             tname = tr("%1 (in %2)").arg(tname, m_st->targetLabel(rl.parent));
                         ti->setText(0, QStringLiteral("⤳ %1").arg(tname));
-                        const int from = list.indexOf(rl.fromCue);
-                        const QString src = from < 0 ? QString() : m_st->cueLabel(list, from);
+                        // From a cue of this list, or (P6) a sub-cue, or a
+                        // sub-cue's own cue.
+                        const CueList *fromList = m_st->listOfCue(rl.fromCue);
+                        const int from = fromList == nullptr ? -1 : fromList->indexOf(rl.fromCue);
+                        const QString src = from < 0 ? QString() : m_st->cueLabel(*fromList, from);
                         ti->setText(1, rl.origin == Origin::Included ? tr("included from %1").arg(src)
                                        : rl.origin == Origin::Base ? tr("base")
+                                       : fromList != nullptr && fromList->isSubCues()
+                                         ? tr("from sub-cue %1").arg(src)
                                        : tr("tracked from %1").arg(src));
                         ti->setForeground(0, grey);
                         ti->setForeground(1, grey);
@@ -2071,7 +2124,38 @@ void ShowTreeView::buildTree()
                         ti->setData(0, TargetRole, rl.target.signature());
                     }
                 }
-            }
+
+                // Its sub-cues (§3C): 4.1, 4.2... with Sub GO / auto badges.
+                if (!list.isSubCues() && !list.looks)
+                    if (const CueList *subs = m_st->cueList(m_st->subCueList(cue.id)))
+                    {
+                        const QList<ResolvedCue> subResolved = m_st->resolved(*subs);
+                        for (int k = 0; k < subs->cues.count(); ++k)
+                            addCue(*subs, k, subResolved, ci);
+                    }
+                if (list.isSubCues())
+                {
+                    // ↳ .1 Hit · Sub GO / auto 0.5s, fade 1.5s.
+                    QStringList sb;
+                    if (i == 0)
+                        sb << tr("with GO");
+                    else if (cue.follow)
+                        sb << tr("auto %1s").arg(cue.wait / 1000.0);
+                    else
+                        sb << tr("Sub GO");
+                    if (cue.fadeIn > 0)
+                        sb << tr("fade %1s").arg(cue.fadeIn / 1000.0);
+                    ci->setText(0, QStringLiteral("↳ ") + ci->text(0));
+                    ci->setText(1, sb.join(QStringLiteral(" · ")));
+                    ci->setToolTip(0, tr("Sub-cue: it starts from what is on stage before it; its changes are "
+                                         "cue-only -- the next main cue starts from %1's own state. %2")
+                                      .arg(m_st->cueLabel(*m_st->listOfCue(list.subOf),
+                                                          m_st->listOfCue(list.subOf)->indexOf(list.subOf)),
+                                           cue.note).trimmed());
+                }
+            };
+            for (int i = 0; i < list.cues.count(); ++i)
+                addCue(list, i, resolved, nullptr);
         }
     }
 
@@ -2278,6 +2362,7 @@ void ShowTreeView::updateButtons()
     m_newCue->setEnabled(kind == ListNode || kind == CueNode || kind == LayerNode
                          || kind == TrackedLayerNode || kind == LookFolderNode);
     m_addLayer->setEnabled(currentCueId() != invalidId());
+    m_newSubCue->setEnabled(currentCueId() != invalidId() && !looks);
     m_record->setEnabled(currentCueId() != invalidId() && !looks);
     m_delete->setEnabled(kind != NoNode && kind != TrackedLayerNode);
     m_merge->setEnabled(selectedLayers().count() > 1);
@@ -2528,6 +2613,15 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
                             static_cast<QWidget *>(m_cueHold), static_cast<QWidget *>(m_cueNext) })
             m_cueForm->setRowVisible(w, cueRows);
         m_cueForm->setRowVisible(m_lookFiredBy, list.looks);
+        // A sub-cue (P6): its advance, not a mode, base, includes or hold
+        // (it holds until Sub GO or auto-follows); a cue: its sub-cues.
+        const bool sub = list.isSubCues();
+        for (QWidget *w : { static_cast<QWidget *>(m_cueMode), static_cast<QWidget *>(m_cueBase),
+                            m_cueIncludes->parentWidget(), static_cast<QWidget *>(m_cueHold) })
+            if (sub)
+                m_cueForm->setRowVisible(w, false);
+        m_cueForm->setRowVisible(m_cueAdvanceRow, sub);
+        m_cueForm->setRowVisible(m_cueSubCues, !list.looks && !sub);
         if (list.looks)
         {
             const QStringList fired = lookFiredBy(cue.id);
@@ -2541,6 +2635,29 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
     }
     m_cueNumber->setText(cue.number);
     m_cueNumber->setPlaceholderText(QString::number(index + 1));
+    m_cueNumber->setToolTip(list.isSubCues() ? tr("Its number under its cue: %1").arg(m_st->cueNumber(list, index))
+                                             : QString());
+    if (list.isSubCues())
+    {
+        m_cueAdvance->setCurrentIndex(cue.follow ? 1 : 0);
+        m_cueWait->setValue(cue.wait / 1000.0);
+        m_cueWait->setEnabled(cue.follow);
+        m_cueAdvance->setEnabled(index > 0);
+        m_cueAdvance->setToolTip(index == 0 ? tr("The first sub-cue plays with GO.") : m_cueAdvance->toolTip());
+    }
+    else if (!list.looks)
+    {
+        QStringList subs;
+        if (const CueList *sl = m_st->cueList(m_st->subCueList(cue.id)))
+            for (int k = 0; k < sl->cues.count(); ++k)
+                subs << QStringLiteral("<a href=\"%1\">%2</a>").arg(sl->cues.at(k).id)
+                        .arg(m_st->cueLabel(*sl, k).toHtmlEscaped());
+        m_cueSubCues->setText((subs.isEmpty() ? tr("none") : subs.join(QStringLiteral(" · ")))
+                              + QStringLiteral(" · <a href=\"new\">%1</a>").arg(tr("+ Sub-cue")));
+        m_cueSubCues->setToolTip(subs.isEmpty() ? QString()
+                                 : tr("GO plays the first; Sub GO the next. Cue-only: the next cue starts from "
+                                      "this cue's own state, however far Sub GO got."));
+    }
     m_cueName->setText(cue.name);
     m_cueNote->setText(cue.note);
     m_cueMode->setCurrentIndex(m_cueMode->findData(int(cue.mode)));
@@ -3670,11 +3787,15 @@ void ShowTreeView::slotNewCue()
     }
     else if (currentCueId() != invalidId())
     {
-        const CueList *l = m_st->listOfCue(currentCueId());
+        // A sub-cue selected: the next main cue, after its cue (+ Sub-cue
+        // makes another sub-cue).
+        quint32 cueId = currentCueId();
+        m_st->isSubCue(cueId, &cueId);
+        const CueList *l = m_st->listOfCue(cueId);
         if (l == nullptr)
             return;
         listId = l->id;
-        after = l->indexOf(currentCueId());
+        after = l->indexOf(cueId);
     }
     if (listId == invalidId())
         return;
@@ -4809,6 +4930,8 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
         menu.addAction(tr("+ Look"), this, [this]() { newLook(); })->setObjectName("stNewLook");
         if (kind != ProductionNode && !inLooks)
             menu.addAction(tr("+ Cue"), this, &ShowTreeView::slotNewCue);
+        if ((kind == CueNode || kind == LayerNode || kind == TrackedLayerNode) && !inLooks)
+            menu.addAction(tr("+ Sub-cue"), this, [this]() { newSubCue(); })->setObjectName("stNewSubCueMenu");
         if (inLooks && kind != CueNode && kind != LayerNode)
         {
             const quint32 listId = currentListId();
@@ -6570,6 +6693,30 @@ QString ShowTreeView::currentLookFolder() const
     QTreeWidgetItem *item = m_tree->currentItem();
     return item != nullptr && item->data(0, KindRole).toInt() == LookFolderNode
            ? item->data(0, FolderRole).toString() : QString();
+}
+
+quint32 ShowTreeView::newSubCue()
+{
+    quint32 cueId = currentCueId();
+    if (cueId == invalidId())
+    {
+        m_hint->setText(tr("Select a cue first: its sub-cues go under it"));
+        return invalidId();
+    }
+    quint32 parent = cueId, after = invalidId();
+    if (m_st->isSubCue(cueId, &parent))
+        after = cueId;
+    QString why;
+    const quint32 id = m_st->addSubCue(parent, QString(), after, &why);
+    if (id == invalidId())
+    {
+        m_hint->setText(why);
+        return id;
+    }
+    selectNode(id);
+    if (QTreeWidgetItem *item = m_tree->currentItem())
+        m_tree->scrollToItem(item);
+    return id;
 }
 
 quint32 ShowTreeView::newLook()

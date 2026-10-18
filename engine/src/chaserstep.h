@@ -45,7 +45,12 @@ public:
     enum SubCueMode
     {
         Auto = 0,   //! The inner chase runs on its own timing (as ever)
-        SubGo       //! The inner chase holds each step until a Sub GO
+        SubGo,      //! The inner chase holds each step until a Sub GO
+        /** As SubGo, but an inner step with a finite hold goes on to the
+         *  next by itself once it has run (auto-follow sub-cues, the Show
+         *  Tree's "auto 0.5s"); an infinite hold waits for Sub GO. Saved as
+         *  SubCues="SubGoFollow" (an older build reads it as Auto). */
+        SubGoFollow
     };
 
     static QString subCueModeToString(SubCueMode mode);

@@ -135,6 +135,33 @@ private:
     bool m_settingMain = false;
 
     /************************************************************************
+     * Sub-cues (P6, §3C, D9, D25): a cue's sub-cues 4.1, 4.2... are a list of
+     * their own (CueList::subOf), so every cue operation works on them
+     ************************************************************************/
+public:
+    /** Cue @a cueId's list of sub-cues (invalid: it has none). */
+    quint32 subCueList(quint32 cueId) const;
+    /** Whether @a cueId is a sub-cue; @a parentCue: its cue. */
+    bool isSubCue(quint32 cueId, quint32 *parentCue = nullptr) const;
+    /** A new sub-cue of cue @a cueId after sub-cue @a afterId (invalid: at
+     *  the end), numbered <cue>.<n> (D23 under the cue). Its list is made
+     *  in the same undo step when the cue has none. Refused (invalid, @a
+     *  why) for a look, a sub-cue (one level) or a cue that isn't there. */
+    quint32 addSubCue(quint32 cueId, const QString &name, quint32 afterId = ShowTree::invalidId(),
+                      QString *why = nullptr);
+    /** A sub-cue's advance: Auto-follow @a wait ms after the one before has
+     *  faded in, or (false) on Sub GO. One undo step. */
+    bool setSubCueFollow(quint32 subCueId, bool follow, uint wait);
+    /** The cue's number as show control reads it: its own, else its
+     *  position; a sub-cue's "4.1" (its cue's and its own). */
+    QString cueNumber(const ShowTree::CueList &list, int index) const;
+    /** The full numbers of the sub-cues of @a list's cues ("4.1", "4.2"):
+     *  taken, so a new cue never gets one (D23). In @a ps. */
+    static QStringList takenNumbers(const QList<ShowTree::Production> &ps, const ShowTree::CueList &list);
+    /** How many of @a listId's cues have sub-cues. */
+    int subCueListsOf(quint32 listId) const;
+
+    /************************************************************************
      * Group sets (the Library's "Make set", §1)
      ************************************************************************/
 public:

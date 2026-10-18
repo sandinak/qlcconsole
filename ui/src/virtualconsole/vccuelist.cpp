@@ -530,7 +530,7 @@ void VCCueList::updateStepList()
                 if (Function *f = m_doc->function(subs.at(j).fid))
                     child->setText(COL_NAME, f->name());
                 child->setText(COL_NOTES, subs.at(j).note);
-                child->setToolTip(COL_NAME, step.subCues == ChaserStep::SubGo
+                child->setToolTip(COL_NAME, step.subCues != ChaserStep::Auto
                                                 ? tr("Sub-cue: Sub GO plays it; click to jump to it")
                                                 : tr("Sub-cue on its own timing; click to jump to it"));
                 if (subs.at(j).skip)
@@ -545,7 +545,7 @@ void VCCueList::updateStepList()
                 child->setForeground(COL_NAME, subs.at(j).skip ? grey
                                          : m_tree->palette().brush(QPalette::Text));
             }
-            item->setExpanded(step.subCues == ChaserStep::SubGo);
+            item->setExpanded(step.subCues != ChaserStep::Auto);
         }
     }
 

@@ -4482,4 +4482,114 @@ void ShowTreeView_Test::theProductionSwitcherAndPage()
     QCOMPARE(sw->currentIndex(), 0);
 }
 
+/* P6 (§3C): a cue's sub-cues sit under it in the tree (↳ 2.1 · with GO,
+   Sub GO, auto 0.5s), each a cue page of its own with Advance instead of a
+   mode; + Sub-cue (header, context menu, the cue page's link) is one undo
+   step each; what tracks from a sub-cue says "from sub-cue 2.1"; Design
+   previews the selected sub-cue's full state. */
+void ShowTreeView_Test::subCuesInTheTree()
+{
+    FixtureGroup *a = group("A", 0, 1);
+    FixtureGroup *b = group("B", 1, 1);
+    const quint32 half = dimmer(127, "Half");
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Dance");
+    const quint32 list = st->addCueList(prod, "Song");
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 c2 = st->addCue(list, 0, "Two");
+    Target ta, tb;
+    ta.groups << a->id();
+    tb.groups << b->id();
+    st->setTargetLook(c1, ta, st->lookForPalette(half));
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 700);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    ModalCloser closer;
+
+    // + Sub-cue with cue 1 selected: 1.1, one undo step.
+    QVERIFY(view.selectNode(c1));
+    QToolButton *plus = view.findChild<QToolButton *>("stNewSubCue");
+    QVERIFY(plus != nullptr && plus->isEnabled());
+    const QString before = treeState(m_doc);
+    plus->click();
+    const quint32 s1 = view.currentId();
+    QVERIFY(st->isSubCue(s1));
+    QCOMPARE(st->undoText(), QString("New sub-cue"));
+    QVERIFY(st->undo());
+    QCOMPARE(treeState(m_doc), before);
+    QVERIFY(st->redo());
+    QVERIFY(view.selectNode(s1));
+    QCOMPARE(view.currentKind(), ShowTreeView::CueNode);
+    // Its row: under cue 1, "↳ 1.1", with GO.
+    QTreeWidgetItem *row = view.tree()->currentItem();
+    QCOMPARE(row->parent()->data(0, ShowTreeView::IdRole).toUInt(), c1);
+    QVERIFY(row->text(0).startsWith(QString::fromUtf8("↳ 1.1")));
+    QVERIFY(row->text(1).contains("with GO"));
+
+    // Another from the selected sub-cue: after it.
+    plus->click();
+    const quint32 s2 = view.currentId();
+    QVERIFY(s2 != s1 && st->isSubCue(s2));
+    const CueList *subs = st->cueList(st->subCueList(c1));
+    QCOMPARE(subs->cues.count(), 2);
+    QCOMPARE(subs->cues.at(1).id, s2);
+    QVERIFY(st->setTargetLook(s1, tb, st->lookForPalette(full)));
+
+    // The page: Advance (not mode / base / hold); Auto-follow is one step.
+    QVERIFY(view.selectNode(s2));
+    QComboBox *adv = view.findChild<QComboBox *>("stSubCueAdvance");
+    QVERIFY(adv->isVisibleTo(&view));
+    QVERIFY(!view.findChild<QComboBox *>("stCueMode")->isVisibleTo(&view));
+    QDoubleSpinBox *wait = view.findChild<QDoubleSpinBox *>("stSubCueWait");
+    wait->setValue(0.5);
+    adv->setCurrentIndex(1);
+    emit adv->activated(1);
+    QVERIFY(st->cue(s2)->follow);
+    QCOMPARE(st->cue(s2)->wait, 500u);
+    QCOMPARE(st->undoText(), QString("Auto-follow"));
+    QTreeWidgetItem *r2 = view.tree()->currentItem();
+    QVERIFY(r2->text(1).contains("auto 0.5s"));
+    // What 1.2 carries from 1.1: "from sub-cue 1.1"; from cue 1: tracked.
+    bool fromSub = false, fromCue = false;
+    for (int i = 0; i < r2->childCount(); ++i)
+    {
+        fromSub = fromSub || r2->child(i)->text(1) == QString("from sub-cue 1.1");
+        fromCue = fromCue || r2->child(i)->text(1) == QString("tracked from 1 One");
+    }
+    QVERIFY(fromSub);
+    QVERIFY(fromCue);
+
+    // A main cue's page lists its sub-cues; + Cue from a sub-cue makes a
+    // main cue after its cue.
+    QVERIFY(view.selectNode(c1));
+    QLabel *line = view.findChild<QLabel *>("stCueSubCues");
+    QVERIFY(line->isVisibleTo(&view));
+    QVERIFY(line->text().contains("1.1"));
+    QVERIFY(view.selectNode(s2));
+    view.findChild<QToolButton *>("stNewCue")->click();
+    const quint32 made = view.currentId();
+    QVERIFY(!st->isSubCue(made));
+    QCOMPARE(st->listOfCue(made)->id, list);
+    QCOMPARE(st->cueList(list)->indexOf(made), 1);
+    QCOMPARE(st->cueList(list)->indexOf(c2), 2);
+
+    // Design: selecting a sub-cue previews its full state (A from cue 1, B).
+    m_doc->setMode(Doc::Design);
+    QVERIFY(view.selectNode(s1));
+    QCOMPARE(st->previewedCue(), s1);
+    const QHash<quint32, uchar> dmx = settleDmx(m_doc);
+    QCOMPARE(int(dmx.value(0)), 127);
+    QCOMPARE(int(dmx.value(1)), 255);
+    m_doc->setMode(Doc::Operate);
+
+    // Typed, and help.
+    QVERIFY(view.runCommand("sub \"Strobe\" subgo"));
+    QCOMPARE(st->cueList(st->subCueList(c1))->cues.count(), 3);
+    QVERIFY(view.runCommand("help sub"));
+    view.hide();
+}
+
 QTEST_MAIN(ShowTreeView_Test)

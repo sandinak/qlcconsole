@@ -971,8 +971,12 @@ void ChaserEditor::slotItemChanged(QTreeWidgetItem *item, int column)
     else if (column == COL_SUBCUES)
     {
         if (qobject_cast<Chaser *>(m_doc->function(step.fid)) != NULL)
-            step.subCues = item->data(COL_SUBCUES, Qt::UserRole).toInt() == 1
-                               ? ChaserStep::SubGo : ChaserStep::Auto;
+        {
+            // Sub GO (an auto-follow step kept so), or own timing.
+            const bool subGo = item->data(COL_SUBCUES, Qt::UserRole).toInt() == 1;
+            step.subCues = !subGo ? ChaserStep::Auto
+                           : step.subCues == ChaserStep::SubGoFollow ? ChaserStep::SubGoFollow : ChaserStep::SubGo;
+        }
     }
     if (updateTreeNeeded)
         updateTree();
@@ -1794,9 +1798,10 @@ void ChaserEditor::updateItem(QTreeWidgetItem* item, ChaserStep& step)
         const bool chase = m_chaser->type() == Function::ChaserType
                            && qobject_cast<Chaser *>(function) != NULL;
         item->setData(COL_SUBCUES, PROP_SUBCUE_CHASE, chase);
-        item->setData(COL_SUBCUES, Qt::UserRole, step.subCues == ChaserStep::SubGo ? 1 : 0);
+        item->setData(COL_SUBCUES, Qt::UserRole, step.subCues != ChaserStep::Auto ? 1 : 0);
         item->setText(COL_SUBCUES, !chase ? QString()
                                           : step.subCues == ChaserStep::SubGo ? tr("Sub GO")
+                                          : step.subCues == ChaserStep::SubGoFollow ? tr("Sub GO + auto")
                                                                               : tr("Own timing"));
         updateSubCueItems(item, step);
     }

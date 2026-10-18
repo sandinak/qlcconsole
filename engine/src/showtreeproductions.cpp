@@ -40,7 +40,7 @@ QList<quint32> ShowTreeController::playableLists(quint32 productionId) const
     if (p == nullptr)
         return out;
     for (const CueList &l : p->lists)
-        if (!l.looks)
+        if (!l.looks && !l.isSubCues())
             out << l.id;
     return out;
 }
@@ -62,7 +62,7 @@ quint32 ShowTreeController::productionOfChaser(quint32 chaserId, quint32 *listId
         return invalidId();
     for (const Production &p : m_productions)
         for (const CueList &l : p.lists)
-            if (!l.looks && l.chaser == chaserId)
+            if (!l.looks && !l.isSubCues() && l.chaser == chaserId)
             {
                 if (listId != nullptr)
                     *listId = l.id;
@@ -91,7 +91,7 @@ bool ShowTreeController::setMainList(quint32 listId)
 {
     quint32 pid = invalidId();
     const CueList *list = cueList(listId, &pid);
-    if (list == nullptr || list->looks)
+    if (list == nullptr || list->looks || list->isSubCues())
         return false;
     if (production(pid)->mainList == listId)
         return true;

@@ -307,6 +307,9 @@ public:
      *  set by the chase whose step it is, before it starts it. */
     void setSubCueHeld(bool held);
     bool isSubCueHeld() const;
+    /** Held, an inner step with a finite hold still goes on by itself
+     *  (ChaserStep::SubGoFollow): set with setSubCueHeld(). */
+    void setSubCueFollow(bool follow);
 
     /** About to be started again in this tick, having just been stopped (a
      *  step's chase whose next step is the same chase): until the new run
@@ -317,6 +320,7 @@ public:
 
 private:
     bool m_subCueHeld = false;
+    bool m_subCueFollow = false;
     bool m_restarting = false;
 
 public:

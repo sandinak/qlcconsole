@@ -49,6 +49,17 @@ private slots:
     void deletingTheCurrentProduction();
     void productionCommands();
 
+    // P6: sub-cues in the tree
+    void subCuesTrackFromTheirCueAndAreCueOnly();
+    void subCuesBakeToAHeldChaser();
+    void subGoPlaysThemOnTheRig();
+    void autoFollowSubCuesGoOnByThemselves();
+    void aSceneSharedThroughSubCuesNeverRefades();
+    void subCuesSaveLoadUndoAndDelete();
+    void numberingSkipsSubCueNumbers();
+    void subCuesAreRefusedWhereTheyCantBe();
+    void subCueCommands();
+
 private:
     quint32 dimmer(int level, const QString &name);
     FixtureGroup *group(const QString &name, const QList<quint32> &fixtures);
@@ -57,6 +68,11 @@ private:
     quint32 oneListProduction(const QString &name, quint32 groupId, int cues, quint32 level,
                               quint32 *productionId = nullptr);
     QHash<quint32, uchar> settle(int ticks = 10);
+    /** A Tracking list "Song": cue 1 (A at Half), cue 2 (A Full, B Half)
+     *  with sub-cues 2.1 (B Full) and 2.2 (A Half), cue 3 (nothing of its
+     *  own). Ids in order: list, c1, c2, c3, s1, s2. */
+    QList<quint32> subCueShow();
+    void go(Chaser *c);
     void tick(int n = 1);
 
     Doc *m_doc = nullptr;

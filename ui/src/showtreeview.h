@@ -591,6 +591,18 @@ private:
     QDoubleSpinBox *m_cueFadeIn;
     QDoubleSpinBox *m_cueFadeOut;
     QDoubleSpinBox *m_cueHold;
+    /** P6: a sub-cue's advance (Sub GO / Auto-follow + wait); a cue's
+     *  sub-cues line (+ Sub-cue). */
+    QComboBox *m_cueAdvance = nullptr;
+    QDoubleSpinBox *m_cueWait = nullptr;
+    QWidget *m_cueAdvanceRow = nullptr;
+    QLabel *m_cueSubCues = nullptr;
+    QToolButton *m_newSubCue = nullptr;
+public:
+    /** + Sub-cue: a sub-cue of the selected cue (after the selected
+     *  sub-cue). Its id (invalid: none). */
+    quint32 newSubCue();
+private:
     QLabel *m_cueLooks;
     QListWidget *m_cueLayers;
     QLabel *m_cueDropZone;

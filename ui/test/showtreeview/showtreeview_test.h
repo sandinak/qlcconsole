@@ -106,6 +106,9 @@ private slots:
     // P5: multiple productions
     void theProductionSwitcherAndPage();
 
+    // P6: sub-cues in the tree
+    void subCuesInTheTree();
+
 private:
     quint32 dimmer(int level, const QString &name);
     quint32 colour(const QColor &c, const QString &name);
