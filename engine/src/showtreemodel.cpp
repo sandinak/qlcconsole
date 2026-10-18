@@ -1079,6 +1079,8 @@ static void saveLayer(QXmlStreamWriter *doc, const Layer &layer)
     if (layer.release)
         doc->writeAttribute(QStringLiteral("Release"), QStringLiteral("1"));
     writeId(doc, QStringLiteral("Reusable"), layer.reusable);
+    if (!layer.unlinkedFrom.isEmpty())
+        doc->writeAttribute(QStringLiteral("UnlinkedFrom"), layer.unlinkedFrom);
     if (!layer.continues.groups.isEmpty())
         doc->writeAttribute(QStringLiteral("ContinuesGroups"), idsToString(layer.continues.groups));
     if (!layer.continues.fixtures.isEmpty())
@@ -1148,6 +1150,8 @@ void saveXML(QXmlStreamWriter *doc, const Production &production)
             if (cue.mixOverlap)
                 doc->writeAttribute(QStringLiteral("Overlap"), QStringLiteral("Mix"));
             writeId(doc, QStringLiteral("Reusable"), cue.reusable);
+            if (!cue.unlinkedFrom.isEmpty())
+                doc->writeAttribute(QStringLiteral("UnlinkedFrom"), cue.unlinkedFrom);
             writeId(doc, QStringLiteral("Collection"), cue.collection);
             if (list.looks && !cue.folder.isEmpty())
                 doc->writeAttribute(QStringLiteral("Folder"), cue.folder);
@@ -1202,6 +1206,7 @@ static Layer loadLayer(QXmlStreamReader &root)
     layer.parent = readId(a, QStringLiteral("Parent"));
     layer.release = a.value(QStringLiteral("Release")).toString() == QLatin1String("1");
     layer.reusable = readId(a, QStringLiteral("Reusable"));
+    layer.unlinkedFrom = a.value(QStringLiteral("UnlinkedFrom")).toString();
     layer.continues.groups = stringToIds(a.value(QStringLiteral("ContinuesGroups")).toString());
     layer.continues.fixtures = stringToIds(a.value(QStringLiteral("ContinuesFixtures")).toString());
     layer.continues.sets = stringToIds(a.value(QStringLiteral("ContinuesSets")).toString());
@@ -1287,6 +1292,7 @@ bool loadXML(QXmlStreamReader &root, Production &production)
             cue.includes = stringToIds(a.value(QStringLiteral("Includes")).toString());
             cue.mixOverlap = a.value(QStringLiteral("Overlap")).toString() == QLatin1String("Mix");
             cue.reusable = readId(a, QStringLiteral("Reusable"));
+            cue.unlinkedFrom = a.value(QStringLiteral("UnlinkedFrom")).toString();
             cue.collection = readId(a, QStringLiteral("Collection"));
             if (looks)
             {

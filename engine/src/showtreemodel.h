@@ -177,6 +177,9 @@ namespace ShowTree
          *  (an edit to one is an edit to all). Release, what it carries on
          *  from and its parent stay this use's. Invalid: a plain layer. */
         quint32 reusable = 0xFFFFFFFF;
+        /** After Unlink here (open 20): the reusable it was a use of, by
+         *  name, for the tooltip "Unlinked from BackStage". Empty: none. */
+        QString unlinkedFrom;
 
         /** The pieces a split makes: one per group, per set, and one on the
          *  fixtures. */
@@ -212,6 +215,8 @@ namespace ShowTree
          *  in every use. Number, note, timing and includes stay this use's.
          *  Invalid: a plain cue. */
         quint32 reusable = 0xFFFFFFFF;
+        /** After Unlink here (open 20): the reusable cue's name. */
+        QString unlinkedFrom;
         /** Generated: the Collection this cue bakes to. */
         quint32 collection = 0xFFFFFFFF;
         /** A look of a production's Looks section (CueList::looks): the

@@ -461,7 +461,22 @@ public:
         int layersRemoved = 0;              //!< layers left with nothing of their own
         int includesRemoved = 0;            //!< "includes the cue before" made tracking
         int releases = 0;                   //!< Release set so a layer doesn't track on
+        int mixCleared = 0;                 //!< Mix cues now on the single rule (output the same)
+        int cueOnly = 0;                    //!< cues made Cue-only (removes repetition)
+        /** Mix cues left mixing: the single rule would change their output
+         *  ("0.0.4 SHOUT: StepTops and Steps both set Colour on 2 fixtures"). */
+        QStringList mixKept;
     };
+    /** What cue @a index would put out if it ran alone, statically: per
+     *  fixture and channel (fixture << 32 | channel), its scenes' palettes
+     *  as Scene::write lays them (left-out fixtures, the look's dimmer on a
+     *  fixture with no dimmer), merged as a Collection plays them (HTP on
+     *  intensity, else the later scene), opaque functions by CueOutput.
+     *  Effects are dynamic and not in it: @a effects, when given, gets
+     *  each effect palette's played fixtures instead, to compare. */
+    QHash<quint64, uchar> staticCueOutput(const ShowTree::CueList &list,
+                                          const QList<ShowTree::ResolvedCue> &resolved, int index,
+                                          QStringList *effects = nullptr) const;
     /** Plan Convert to tracking for an imported (non-tracking) list (§7):
      *  each cue tracks where it then plays exactly as before (else it stays
      *  Block); an include of the cue before becomes tracking; a layer that
@@ -814,6 +829,10 @@ private:
     bool m_snapshotHasDetachedLists = false;
     /** Hand generated function @a id over to the show (no longer the tree's). */
     void handOver(quint32 id);
+    /** Detach (open 19): a scene of @a collectionId another list still
+     *  plays is copied, and the copy put in its place, so the detached
+     *  chaser is its own from the start. The copies' ids into @a made. */
+    void copySharedScenes(quint32 collectionId, QList<quint32> *made);
     /** After a snapshot is read: take back what a list Detach handed over
      *  that the snapshot's state didn't have, hand over what it did. */
     void applyDetachedLists();

@@ -1097,10 +1097,11 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         connect(m_cueBase, &QCheckBox::toggled, this, &ShowTreeView::slotCueBaseToggled);
         m_cueMix = new QCheckBox(tr("Overlapping layers mix (as a chaser)"), inner);
         m_cueMix->setObjectName("stCueMix");
-        m_cueMix->setToolTip(tr("Off (the tree's rule): where two layers share fixtures, the lower one wins "
-                                "what both set, and the upper isn't lit there for it. On: they both play, "
-                                "highest intensity wins -- how an imported chaser played, which an import "
-                                "keeps. Child layers always win."));
+        m_cueMix->setToolTip(tr("Off (the one rule, as everywhere in the tree): where layers share fixtures, "
+                                "the most specific source wins what both set -- a layer's own over a cue look, "
+                                "a child over its parent, then the lower layer -- and the other isn't lit there "
+                                "for it. On: they both play, highest intensity wins -- how an imported chaser "
+                                "played. Convert to tracking turns it off wherever that plays the same."));
         f->addRow(QString(), m_cueMix);
         connect(m_cueMix, &QCheckBox::toggled, this, &ShowTreeView::slotCueMixToggled);
         {
@@ -1906,8 +1907,22 @@ void ShowTreeView::buildTree()
                 }
                 if (list.looks && firedBy.value(cue.collection) > 0)
                     badges << tr("VC ×%1").arg(firedBy.value(cue.collection));
+                // A cue that still mixes (open 13): the one exception to
+                // the one rule, kept only where the rule would change it.
+                if (cue.mixOverlap)
+                {
+                    badges << tr("≈ mix");
+                    ci->setToolTip(1, tr("Overlapping layers mix here as the imported chaser did (the highest "
+                                         "intensity wins, the last started sets the rest) instead of the one "
+                                         "rule (the most specific source, then the deeper, then the lower "
+                                         "layer wins). Convert to tracking keeps a cue mixing only where the "
+                                         "rule would change what it plays; untick Overlapping layers mix on "
+                                         "the cue page to put it on the rule anyway."));
+                }
                 ci->setText(1, badges.join(QStringLiteral(" ")));
-                ci->setToolTip(0, cue.reusable == invalidId() ? cue.note
+                ci->setToolTip(0, cue.reusable == invalidId()
+                               ? (cue.unlinkedFrom.isEmpty() ? cue.note
+                                  : tr("Unlinked from %1. %2").arg(cue.unlinkedFrom, cue.note).trimmed())
                                : tr("A use of the reusable cue %1: an edit here is an edit to every use. %2")
                                  .arg(m_st->reusableName(cue.reusable), cue.note).trimmed());
                 ci->setData(0, KindRole, CueNode);
@@ -1942,6 +1957,8 @@ void ShowTreeView::buildTree()
                     if (layer.reusable != invalidId())
                         tip = tr("Reusable layer: an edit here is an edit to every use (%1).\n")
                               .arg(m_st->reusableUses(layer.reusable).count()) + tip;
+                    else if (!layer.unlinkedFrom.isEmpty())
+                        tip = tr("Unlinked from %1.\n").arg(layer.unlinkedFrom) + tip;
                     yi->setToolTip(0, tip);
                     yi->setData(0, KindRole, LayerNode);
                     yi->setData(0, IdRole, layer.id);
@@ -5128,10 +5145,14 @@ bool ShowTreeView::convertListToTracking(quint32 listId)
     const QString name = list->name;
     const QString text = tr("Convert %1 to tracking? Every cue plays exactly as it does now: %2 cue(s) track "
                             "from the cue before, %3 value(s) and %4 layer(s) that only repeat what tracks in go, "
-                            "%5 include(s) of the cue before become tracking, %6 layer(s) are released. "
+                            "%5 include(s) of the cue before become tracking, %6 layer(s) are released, "
+                            "%7 cue(s) become Cue-only, %8 mixing cue(s) follow the one rule. "
                             "One undo step.")
                          .arg(name).arg(plan.tracking).arg(plan.looksRemoved).arg(plan.layersRemoved)
-                         .arg(plan.includesRemoved).arg(plan.releases);
+                         .arg(plan.includesRemoved).arg(plan.releases).arg(plan.cueOnly).arg(plan.mixCleared)
+                         + (plan.mixKept.isEmpty() ? QString()
+                            : tr(" %n cue(s) keep mixing (≈ mix in the tree): the one rule would change "
+                                 "what they play.", "", int(plan.mixKept.count())));
     const QString details = plan.changes.join(QStringLiteral("\n"));
     if (m_confirm)
     {

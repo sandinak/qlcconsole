@@ -3578,6 +3578,12 @@ void ShowTreeView_Test::reusablesInTheTreeAndTheLibrary()
     emit line->linkActivated("unlink");
     QCOMPARE(st->cue(c3)->reusable, invalidId());
     QCOMPARE(st->reusableUses(rc).count(), 1);
+    // No badge; the row's tooltip says where it came from (open 20).
+    QTRY_VERIFY(rowOf(view.tree(), ShowTreeView::CueNode, c3) != nullptr);
+    QVERIFY(!rowOf(view.tree(), ShowTreeView::CueNode, c3)->text(0).startsWith("⟲"));
+    QVERIFY2(rowOf(view.tree(), ShowTreeView::CueNode, c3)->toolTip(0).startsWith("Unlinked from Walk-in"),
+             qPrintable(rowOf(view.tree(), ShowTreeView::CueNode, c3)->toolTip(0)));
+    QCOMPARE(st->cue(c3)->unlinkedFrom, QString("Walk-in"));
 
     // Delete while used: asked, then the uses are plain copies.
     QVERIFY(view.deleteReusable(rid));
@@ -3586,6 +3592,7 @@ void ShowTreeView_Test::reusablesInTheTreeAndTheLibrary()
     QVERIFY2(asked.first().contains("used in 4 place"), qPrintable(asked.first()));
     QVERIFY(st->reusableLayer(rid) == nullptr);
     QCOMPARE(st->cue(c1)->layer(l1)->reusable, invalidId());
+    QVERIFY(rowOf(view.tree(), ShowTreeView::LayerNode, l1, c1)->toolTip(0).startsWith("Unlinked from "));
     view.setConfirm([](const QString &, const QString &, const QString &) { return false; });
     QVERIFY(!view.deleteReusable(rc));               // cancelled
     QVERIFY(st->reusableCue(rc) != nullptr);

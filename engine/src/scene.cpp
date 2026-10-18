@@ -1313,7 +1313,7 @@ void Scene::processValue(MasterTimer *timer, QList<Universe*> ua, uint fadeIn, S
     fc->setStart(fc->current(chIndex), chIndex);
     fc->setTarget(scv.value, chIndex);
     if (m_editOverrideApplied)
-        fc->addFlag(FadeChannel::Override);
+        fc->addFlag(FadeChannel::Override | FadeChannel::EditOverride);
 
     if (fc->canFade() == false)
     {
@@ -1422,7 +1422,7 @@ void Scene::handleFadersEnd(MasterTimer *timer)
         {
             foreach (QSharedPointer<GenericFader> fader, m_fadersMap)
                 if (!fader.isNull())
-                    fader->setChannelsFlag(FadeChannel::Override, false);
+                    fader->setChannelsFlag(FadeChannel::Override | FadeChannel::EditOverride, false);
             m_editOverrideApplied = false;
         }
         if (m_transitionOut.isActive() && tempoType() != Beats)
@@ -1626,7 +1626,7 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
                 fc.setCurrent(v);
                 fc.setFadeTime(0);
                 if (m_editOverrideApplied)
-                    fc.addFlag(FadeChannel::Override);
+                    fc.addFlag(FadeChannel::Override | FadeChannel::EditOverride);
                 m_fadersMap[universe]->replace(fc);
             };
 
@@ -1694,7 +1694,7 @@ void Scene::applyEditOverride(QList<Universe *> ua)
             continue;
         if (it.key() < quint32(ua.count()) && ua.at(int(it.key())) != nullptr)
             ua.at(int(it.key()))->requestFaderPriority(it.value(), priority);
-        it.value()->setChannelsFlag(FadeChannel::Override, want);
+        it.value()->setChannelsFlag(FadeChannel::Override | FadeChannel::EditOverride, want);
     }
 }
 

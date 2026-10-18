@@ -538,6 +538,8 @@ protected:
     QVector<int> m_nonIntensityChannels;
     /** Array of values BEFORE the Grand Master changes */
     QScopedPointer<QByteArray> m_preGMValues;
+    /** Channels an Override fader wrote this frame (writeOverride) */
+    QByteArray m_overrideWritten;
     /** Array of values AFTER the Grand Master changes (applyGM) */
     QScopedPointer<QByteArray> m_postGMValues;
     /** Array of the last preGM values written before the zeroIntensityChannels call  */
@@ -583,6 +585,15 @@ public:
      * @return true if successful, otherwise false
      */
     bool write(int address, uchar value, bool forceLTP = false);
+
+    /**
+     * Write a channel from an Override fader (an edit preview over whatever
+     * runs): it replaces what lower-priority faders wrote, LTP -- but on an
+     * HTP channel two Override faders in the same frame take the higher, as
+     * the same functions would played at Auto (the Show Tree's Design
+     * preview of a cue that mixes plays what GO plays).
+     */
+    bool writeOverride(int address, uchar value);
 
     /**
      * Write a value representing one or multiple channels

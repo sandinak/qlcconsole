@@ -349,11 +349,18 @@ void GenericFader::write(Universe *universe)
         {
             // Every byte of a 16-bit channel (a fader handling secondary
             // channels holds both in one FadeChannel), MSB first.
-            if (channelCount == 1)
-                universe->write(address, uchar(value), true);
-            else
-                for (int i = 0; i < channelCount; i++)
-                    universe->write(address + i, ((uchar *)&value)[channelCount - 1 - i], true);
+            // An edit preview's scenes: HTP among themselves (as at Auto),
+            // over everything else. Other overrides (an effect owning a
+            // channel) write verbatim.
+            const bool edit = flags & FadeChannel::EditOverride;
+            for (int i = 0; i < channelCount; i++)
+            {
+                const uchar b = channelCount == 1 ? uchar(value) : ((uchar *)&value)[channelCount - 1 - i];
+                if (edit)
+                    universe->writeOverride(address + i, b);
+                else
+                    universe->write(address + i, b, true);
+            }
             continue;
         }
         else if (flags & FadeChannel::Relative)

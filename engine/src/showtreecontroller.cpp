@@ -2532,6 +2532,126 @@ QList<ShowTreeController::ScenePlan> ShowTreeController::planCue(const CueList &
             continue;
         out << plan;
     }
+
+    /* A fixture with no dimmer channel shows its Dimmer only as the colour
+       scaled (QLCPalette::dimScaleWithoutDimmer, per scene). Where the
+       layer that wins Dimmer there isn't the one that wins Colour (a child
+       dimming what its parent colours, open 16; a lower sibling's level),
+       the Dimmer's layer plays the winning colour there itself -- the
+       colour's layer leaves that fixture out -- so the Dimmer that wins is
+       the one that dims it, as the single rule says. Only into a layer
+       with no Colour of its own (its own colours' set offsets stay put),
+       one colour look per layer. */
+    {
+        const QHash<quint32, int> dimW = winner.value(KeyDimmer);
+        const QHash<quint32, int> colW = winner.value(KeyColour);
+        QHash<int, QList<quint32>> fillAt;              // dimmer layer -> fixtures
+        QHash<int, int> fillFrom;                       // dimmer layer -> colour layer
+        QHash<int, QList<quint32>> fillOut;             // colour layer -> fixtures left out
+        QList<quint32> fs = dimW.keys();
+        std::sort(fs.begin(), fs.end());
+        for (quint32 f : fs)
+        {
+            const int di = dimW.value(f);
+            const int cj = colW.value(f, -1);
+            if (cj < 0 || cj == di)
+                continue;
+            if (mix && rc.layers.at(di).depth <= rc.layers.at(cj).depth)
+                continue;                               // a mixing cue: as a collection plays
+            if (QLCPalette::fixtureHasDimmer(m_doc->fixture(f)))
+                continue;
+            const ResolvedLayer &dl = rc.layers.at(di), &cl = rc.layers.at(cj);
+            const ResolvedValue dv = dl.values.value(KeyDimmer), cv = cl.values.value(KeyColour);
+            if (dv.look.none || cv.look.none || cv.look.palettes.isEmpty() || dl.values.contains(KeyColour))
+                continue;
+            if (fillFrom.contains(di) && rc.layers.at(fillFrom.value(di)).values.value(KeyColour).look.palettes
+                                         != cv.look.palettes)
+                continue;                               // one colour look per layer
+            fillFrom.insert(di, cj);
+            fillAt[di] << f;
+            fillOut[cj] << f;
+        }
+        if (!fillAt.isEmpty())
+        {
+            QSet<int> planned;
+            for (const ScenePlan &p : out)
+                planned.insert(p.layer);
+            // A Dimmer layer all of whose looks were left out has no plan
+            // yet: one with only its Dimmer, where it wins.
+            for (auto it = fillAt.constBegin(); it != fillAt.constEnd(); ++it)
+            {
+                if (planned.contains(it.key()))
+                    continue;
+                ScenePlan p;
+                p.layer = it.key();
+                p.target = targets.at(it.key());
+                p.target.sets.clear();
+                QList<quint32> ex;
+                for (quint32 f : fixtures.at(it.key()))
+                    if (dimW.value(f, -1) != it.key())
+                        ex << f;
+                std::sort(ex.begin(), ex.end());
+                for (quint32 pid : rc.layers.at(it.key()).values.value(KeyDimmer).look.palettes)
+                    if (m_doc->palette(pid) != nullptr)
+                    {
+                        p.palettes << pid;
+                        if (!ex.isEmpty())
+                            p.excluded.insert(pid, ex);
+                    }
+                out << p;
+            }
+            QList<ScenePlan> kept;
+            for (ScenePlan p : out)
+            {
+                if (fillAt.contains(p.layer))
+                {
+                    const QList<quint32> fill = fillAt.value(p.layer);
+                    const QList<quint32> cols = rc.layers.at(fillFrom.value(p.layer))
+                                                .values.value(KeyColour).look.palettes;
+                    QList<quint32> ex;
+                    for (quint32 f : fixtures.at(p.layer))
+                        if (!fill.contains(f))
+                            ex << f;
+                    std::sort(ex.begin(), ex.end());
+                    QList<quint32> front;
+                    for (quint32 pid : cols)
+                        if (m_doc->palette(pid) != nullptr && !p.palettes.contains(pid))
+                        {
+                            front << pid;
+                            if (!ex.isEmpty())
+                                p.excluded.insert(pid, ex);
+                        }
+                    p.palettes = front + p.palettes;
+                }
+                if (fillOut.contains(p.layer))
+                {
+                    const QList<quint32> outF = fillOut.value(p.layer);
+                    for (quint32 pid : rc.layers.at(p.layer).values.value(KeyColour).look.palettes)
+                    {
+                        if (!p.palettes.contains(pid))
+                            continue;
+                        QList<quint32> ex = p.excluded.value(pid);
+                        for (quint32 f : outF)
+                            if (!ex.contains(f))
+                                ex << f;
+                        std::sort(ex.begin(), ex.end());
+                        p.excluded.insert(pid, ex);
+                    }
+                }
+                bool writes = false;
+                for (quint32 pid : p.palettes)
+                    for (quint32 f : fixtures.at(p.layer))
+                        if (!p.excluded.value(pid).contains(f))
+                            writes = true;
+                if (writes)
+                    kept << p;
+            }
+            std::sort(kept.begin(), kept.end(), [](const ScenePlan &a, const ScenePlan &b) {
+                return a.layer < b.layer;
+            });
+            out = kept;
+        }
+    }
     return out;
 }
 
@@ -4151,16 +4271,28 @@ ShowTreeController::ImportReport ShowTreeController::importChaser(quint32 chaser
                     if (la.target.isOpaque() || lb.target.isOpaque() || la.target == lb.target)
                         continue;
                     const QList<quint32> fa = targetFixtures(la.target), fb = targetFixtures(lb.target);
-                    bool common = false;
+                    bool common = false, dimmerless = false;
                     for (quint32 f : fa)
                         if (fb.contains(f))
+                        {
                             common = true;
+                            dimmerless |= !QLCPalette::fixtureHasDimmer(m_doc->fixture(f));
+                        }
                     if (!common)
                         continue;
                     QStringList keys;
                     for (const Look &l : la.playedLooks())
                         if (lb.values.contains(l.key) && !lb.values.value(l.key).look.none)
                             keys << keyLabel(l.key);
+                    // No dimmer channel: a scene's Dimmer is its colour
+                    // scaled, so one's Colour and the other's Dimmer meet.
+                    auto sets = [](const ResolvedLayer &x, const QString &k) {
+                        return x.values.contains(k) && !x.values.value(k).look.none;
+                    };
+                    if (keys.isEmpty() && dimmerless
+                        && ((sets(la, KeyColour) && sets(lb, KeyDimmer)) || (sets(la, KeyDimmer) && sets(lb, KeyColour))))
+                        keys << tr("%1 on fixtures with no dimmer").arg(keyLabel(KeyColour) + QLatin1Char('/')
+                                                                         + keyLabel(KeyDimmer));
                     if (!keys.isEmpty())
                         clash << tr("Cue %1: %2 and %3 share fixtures and both set %4; they mix "
                                     "as the chaser did (Overlap: Mix on the cue page).")

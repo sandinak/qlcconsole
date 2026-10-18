@@ -156,6 +156,11 @@ private slots:
     void recordLitTakesARunningLooksLayers();
     void lookCommands();
 
+    // Answers 12-20 (2026-10-18)
+    void oneRuleUpAndDownTheChain();
+    void aChildDimmerDimsItsParentsColourWithoutADimmer();
+    void previewPlaysWhatGoPlays();
+
 private:
     quint32 dimmer(int level, const QString &name);
     quint32 colour(const QString &name);

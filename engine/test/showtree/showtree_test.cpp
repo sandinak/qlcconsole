@@ -4454,10 +4454,10 @@ void ShowTree_Test::reusablesSaveLoadAndUndo()
 
 /* Detach a cue list to a plain chaser: its chaser and collections become
    the show's own (unlocked, shown); the scenes only it plays go with them;
-   one another list also plays stays the tree's until the tree lets go of it
-   -- then it is handed over, never deleted from under the plain chaser. It
-   plays as before. One undo step: the list comes back on the same
-   functions; redo hands them over again. */
+   one another list also plays is copied at once (open 19), so the chaser is
+   all its own from the start and the tree keeps its scene. It plays as
+   before. One undo step: the list comes back on the same functions (the
+   copies swept); redo hands them over and copies again. */
 void ShowTree_Test::detachAListToAPlainChaser()
 {
     FixtureGroup *a = group("A", { m_fixtures[0] });
@@ -4494,15 +4494,26 @@ void ShowTree_Test::detachAListToAPlainChaser()
     }
     QVERIFY(!st->isGenerated(own));
     QVERIFY(m_doc->function(own)->isVisible());
-    QVERIFY(st->isGenerated(shared));                   // Other still plays it
+    QVERIFY(st->isGenerated(shared));                   // Other still plays it: the tree's
     QCOMPARE(playAll(ch), before);
     QCOMPARE(ch->stepsCount(), 2);
+    // ... and the chaser plays a copy of its own.
+    auto copyIn = [&]() {
+        const QList<quint32> fids = qobject_cast<Collection *>(m_doc->function(colls.first()))->functions();
+        return fids.count() == 1 ? fids.first() : Function::invalidId();
+    };
+    const quint32 copy = copyIn();
+    QVERIFY(copy != shared && m_doc->function(copy) != nullptr);
+    QVERIFY(!st->isGenerated(copy));
+    QVERIFY(m_doc->function(copy)->isVisible());
+    QVERIFY(m_doc->function(copy)->name().contains("One"));   // named as it was in Song
+    for (quint32 c : colls)
+        QVERIFY(!qobject_cast<Collection *>(m_doc->function(c))->functions().contains(shared));
 
-    // Other lets go of the shared scene: handed over, not deleted.
+    // Other changes its scene: the detached chaser doesn't notice.
     QVERIFY(st->setLayerLook(o1, ol, st->lookForPalette(half)));
-    QVERIFY(m_doc->function(shared) != nullptr);
-    QVERIFY(!st->isGenerated(shared));
-    QVERIFY(qobject_cast<Collection *>(m_doc->function(colls.first()))->functions().contains(shared));
+    QVERIFY(m_doc->function(copy) != nullptr);
+    QCOMPARE(copyIn(), copy);
     QCOMPARE(playAll(ch), before);
 
     // Undo (the look, then the detach): the list is back on its functions.
@@ -4515,12 +4526,17 @@ void ShowTree_Test::detachAListToAPlainChaser()
         QVERIFY(st->isGenerated(c));
     QVERIFY(st->isGenerated(own));
     QVERIFY(!m_doc->function(own)->isVisible());
+    QVERIFY(st->isGenerated(copyIn()));                 // the tree's scene again
+    for (Function *f : m_doc->functions())              // no copy left behind
+        if (f->type() == Function::SceneType)
+            QVERIFY2(st->isGenerated(f->id()), qPrintable(f->name()));
     QCOMPARE(playAll(ch), before);
-    // Redo: plain again.
+    // Redo: plain again, and its own copy again.
     QVERIFY(st->redo());
     QVERIFY(st->cueList(l1) == nullptr);
     QVERIFY(!st->isGenerated(chaserId));
     QVERIFY(!st->isGenerated(own));
+    QVERIFY(!st->isGenerated(copyIn()));
     QCOMPARE(playAll(ch), before);
     // A plain chaser can't be detached again; an unknown list neither.
     QCOMPARE(st->detachList(l1), Function::invalidId());
@@ -4640,7 +4656,7 @@ void ShowTree_Test::convertToTrackingSyntheticLists()
     const quint32 prod = st->addProduction("P");
     const quint32 listId = st->addCueList(prod, "Synthetic", ListMode::NonTracking);
     QList<quint32> c;
-    for (int i = 0; i < 7; ++i)
+    for (int i = 0; i < 8; ++i)
         c << st->addCue(listId, i - 1, QString("C%1").arg(i + 1));
     auto set = [&](int i, FixtureGroup *g, quint32 pal) {
         quint32 lid = invalidId();
@@ -4671,12 +4687,16 @@ void ShowTree_Test::convertToTrackingSyntheticLists()
     set(5, side, low);
     // C7: Side low again and Back
     set(6, side, low); set(6, back, full);
+    // C8: mixing where the one rule would change it: Mid low under Wide
+    // full mixes to full; the rule gives Mid its own low.
+    set(7, wide, full); set(7, mid, low);
+    QVERIFY(st->setCueMixOverlap(c[7], true));
     QVERIFY(st->setBaseCue(listId, c[0]));
 
     Chaser *ch = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
     const QList<QHash<quint32, uchar>> before = playAll(ch);
     ShowTreeController::ConvertPlan plan;
-    QVERIFY(st->convertToTracking(listId, &plan));
+    QVERIFY2(st->convertToTracking(listId, &plan), qPrintable(plan.why));
     for (const QString &line : plan.changes)
         qInfo().noquote() << "  plan:" << line;
     QVERIFY(plan.tracking >= 3);
@@ -4688,8 +4708,16 @@ void ShowTree_Test::convertToTrackingSyntheticLists()
             QVERIFY2(after[i].value(k) == before[i].value(k),
                      qPrintable(QString("cue %1, channel %2: %3, before %4").arg(i + 1).arg(k)
                                 .arg(after[i].value(k)).arg(before[i].value(k))));
-    // The mixing cue kept its mix; C2's Mid (overlapping Wide) kept its own value.
-    QVERIFY(st->cue(c[4])->mixOverlap);
+    // One rule (open 13): C5's mix gave Mid full (HTP of half and full),
+    // and so does the rule (Mid is lower, full): cleared. C8's would not
+    // be the same: it stays Mix, and the plan says so.
+    QVERIFY(!st->cue(c[4])->mixOverlap);
+    QVERIFY(st->cue(c[7])->mixOverlap);
+    QCOMPARE(plan.mixCleared, 1);
+    QCOMPARE(plan.mixKept.count(), 1);
+    QVERIFY2(plan.mixKept.first().startsWith(st->cueLabel(*st->cueList(listId), 7) + ": stays Mix"),
+             qPrintable(plan.mixKept.first()));
+    // C2's Mid (overlapping Wide) kept its own value.
     QVERIFY(st->cue(c[1])->layers.count() >= 1);
 }
 
@@ -5413,3 +5441,224 @@ void ShowTree_Test::lookCommands()
 }
 
 QTEST_MAIN(ShowTree_Test)
+
+/****************************************************************************
+ * Answers 12-20 (2026-10-18)
+ ****************************************************************************/
+
+/* Open 13: one precedence rule up and down the chain. For a fixture and an
+   attribute the most specific source wins -- tracked < included < cue look
+   < layer < child layer (< an effect's own looks, inside the effect) --
+   then, between layers of the same source, the deeper (a child) and then
+   the lower one; a later cue's tracked value over an earlier one's. Each
+   row is played by GO, as the show plays it; a Mix cue (an import) mixes. */
+void ShowTree_Test::oneRuleUpAndDownTheChain()
+{
+    FixtureGroup *all = group("All", { m_fixtures[0], m_fixtures[1], m_fixtures[2], m_fixtures[3] });
+    FixtureGroup *some = group("Some", { m_fixtures[2], m_fixtures[3] });
+    FixtureGroup *one = group("One", { m_fixtures[2] });
+    const quint32 full = dimmer(255, "Full");
+    const quint32 half = dimmer(127, "Half");
+    const quint32 d45 = dimmer(115, "45");
+    const quint32 low = dimmer(40, "Low");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "Chain");      // Tracking
+    QList<quint32> q;
+    for (int i = 0; i < 11; ++i)
+        q << st->addCue(listId, i - 1, QString("Q%1").arg(i + 1));
+    auto own = [&](int i, FixtureGroup *g, quint32 pal) {
+        const quint32 l = st->addLayer(q[i], groupTarget(g->id()));
+        if (pal != invalidId())
+            st->setLayerLook(q[i], l, st->lookForPalette(pal));
+        return l;
+    };
+    // Q1 All half; Q2 One low (tracked: the later cue's value wins on One)
+    own(0, all, half);
+    own(1, one, low);
+    // Q3 Block All full; Q4 includes Q1 (included beats tracked)
+    QVERIFY(st->setCueMode(q[2], CueMode::Block));
+    own(2, all, full);
+    QVERIFY(st->addInclude(q[3], q[0]));
+    // Q5 includes Q1 + a cue look 45 on its own (empty) All: the cue look
+    // beats the include -- although lower (not HTP)
+    QVERIFY(st->addInclude(q[4], q[0]));
+    own(4, all, invalidId());
+    QVERIFY(st->setCueLook(q[4], st->lookForPalette(d45)));
+    // Q6 the layer's own Low beats the cue look 45
+    own(5, all, low);
+    QVERIFY(st->setCueLook(q[5], st->lookForPalette(d45)));
+    // Q7 All full, child One low: the child beats its parent
+    {
+        const quint32 parent = own(6, all, full);
+        const quint32 child = st->addChildLayer(q[6], parent, groupTarget(one->id()));
+        QVERIFY(child != invalidId());
+        QVERIFY(st->setLayerLook(q[6], child, st->lookForPalette(low)));
+    }
+    // Q8 Block: All full over Some half (lower sibling wins)
+    QVERIFY(st->setCueMode(q[7], CueMode::Block));
+    own(7, all, full);
+    own(7, some, half);
+    // Q9 Block: All low with child One full; Some half below: the child
+    // (deeper) beats the lower sibling, the lower sibling beats All
+    QVERIFY(st->setCueMode(q[8], CueMode::Block));
+    {
+        const quint32 parent = own(8, all, low);
+        const quint32 child = st->addChildLayer(q[8], parent, groupTarget(one->id()));
+        QVERIFY(st->setLayerLook(q[8], child, st->lookForPalette(full)));
+        own(8, some, half);
+    }
+    // Q10 Block: All's own Full over the cue look reaching Some below
+    QVERIFY(st->setCueMode(q[9], CueMode::Block));
+    own(9, all, full);
+    own(9, some, invalidId());
+    QVERIFY(st->setCueLook(q[9], st->lookForPalette(d45)));
+    // Q11 Block, Mix (an import that would change on the rule): HTP
+    QVERIFY(st->setCueMode(q[10], CueMode::Block));
+    own(10, all, full);
+    own(10, some, half);
+    QVERIFY(st->setCueMixOverlap(q[10], true));
+
+    // f0 (All only), f2 (All, Some, One), f3 (All, Some)
+    const QList<QList<int>> want = {
+        { 127, 127, 127 },      // Q1
+        { 127,  40, 127 },      // Q2 later tracked over earlier tracked
+        { 255, 255, 255 },      // Q3 Block
+        { 127, 127, 127 },      // Q4 included > tracked
+        { 115, 115, 115 },      // Q5 cue look > included
+        {  40,  40,  40 },      // Q6 layer > cue look
+        { 255,  40, 255 },      // Q7 child > layer
+        { 255, 127, 127 },      // Q8 lower sibling
+        {  40, 255, 127 },      // Q9 deeper over lower, lower over upper
+        { 255, 255, 255 },      // Q10 own over a cue look on a lower layer
+        { 255, 255, 255 },      // Q11 Mix: highest wins
+    };
+    Chaser *ch = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    QVERIFY(ch != nullptr);
+    const QList<QHash<quint32, uchar>> played = playAll(ch);
+    QCOMPARE(played.count(), want.count());
+    for (int i = 0; i < want.count(); ++i)
+    {
+        const QList<int> got { played[i].value(0), played[i].value(2), played[i].value(3) };
+        QVERIFY2(got == want[i], qPrintable(QString("Q%1: f0/f2/f3 %2/%3/%4, want %5/%6/%7").arg(i + 1)
+                                            .arg(got[0]).arg(got[1]).arg(got[2])
+                                            .arg(want[i][0]).arg(want[i][1]).arg(want[i][2])));
+    }
+}
+
+/* Open 16: a child's Dimmer dims the colour its parent gives fixtures with
+   no dimmer channel (an RGB bar): the child plays the parent's colour there
+   itself, scaled by its own Dimmer; the parent leaves those heads out. */
+void ShowTree_Test::aChildDimmerDimsItsParentsColourWithoutADimmer()
+{
+    QList<quint32> bars;
+    for (int i = 0; i < 2; ++i)
+    {
+        Fixture *bar = new Fixture(m_doc);
+        bar->setName(QString("Bar %1").arg(i + 1));
+        QLCFixtureDef *def = bar->genericRGBPanelDef(1, Fixture::RGB, false);
+        QLCFixtureMode *mode = bar->genericRGBPanelMode(def, Fixture::RGB, false, 100, 100);
+        bar->setFixtureDefinition(def, mode);
+        bar->setUniverse(0);
+        bar->setAddress(quint32(100 + i * 3));
+        m_doc->addFixture(bar);
+        QVERIFY(!QLCPalette::fixtureHasDimmer(bar));
+        bars << bar->id();
+    }
+    FixtureGroup *row = group("Bars", bars);
+    FixtureGroup *first = group("Bar 1", { bars[0] });
+    const quint32 blue = colour("Blue");             // B = 255
+    const quint32 full = dimmer(255, "Full");
+    const quint32 half = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 parent = st->addLayer(c1, groupTarget(row->id()));
+    QVERIFY(st->setLayerLook(c1, parent, st->lookForPalette(blue)));
+    QVERIFY(st->setLayerLook(c1, parent, st->lookForPalette(full)));
+    const quint32 child = st->addChildLayer(c1, parent, groupTarget(first->id()));
+    QVERIFY(st->setLayerLook(c1, child, st->lookForPalette(half)));
+
+    auto blueOf = [this](int bar) {
+        QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+        const int v = uchar(ua.first()->preGMValues().at(100 + bar * 3 + 2));
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        return v;
+    };
+    Chaser *ch = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    go(ch);
+    tick(10);
+    QCOMPARE(blueOf(0), 127);              // the child's Half dims the parent's Blue
+    QCOMPARE(blueOf(1), 255);              // the parent's own Full
+    stopAll();
+
+    // A lower sibling's Dimmer, the same rule: it dims the Blue above it.
+    QVERIFY(st->removeLayer(c1, child));
+    const quint32 sib = st->addLayer(c1, groupTarget(first->id()));
+    QVERIFY(st->setLayerLook(c1, sib, st->lookForPalette(half)));
+    ch = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    go(ch);
+    tick(10);
+    QCOMPARE(blueOf(0), 127);
+    QCOMPARE(blueOf(1), 255);
+    stopAll();
+}
+
+/* Open 15: the Design preview puts out what GO plays, cue for cue --
+   overlapping layers, a child, a cue look, a Mix cue (HTP among the
+   preview's own scenes, though they win over a running list). */
+void ShowTree_Test::previewPlaysWhatGoPlays()
+{
+    FixtureGroup *all = group("All", { m_fixtures[0], m_fixtures[1], m_fixtures[2], m_fixtures[3] });
+    FixtureGroup *some = group("Some", { m_fixtures[2], m_fixtures[3] });
+    FixtureGroup *one = group("One", { m_fixtures[2] });
+    const quint32 full = dimmer(255, "Full");
+    const quint32 half = dimmer(127, "Half");
+    const quint32 low = dimmer(40, "Low");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L");
+    QList<quint32> q;
+    for (int i = 0; i < 4; ++i)
+        q << st->addCue(listId, i - 1, QString("Q%1").arg(i + 1));
+    auto own = [&](int i, FixtureGroup *g, quint32 pal) {
+        const quint32 l = st->addLayer(q[i], groupTarget(g->id()));
+        st->setLayerLook(q[i], l, st->lookForPalette(pal));
+        return l;
+    };
+    own(0, all, full);                              // Q1
+    own(1, some, low);                              // Q2: overlap, tracked All
+    {                                               // Q3: a child
+        const quint32 p = own(2, all, half);
+        const quint32 c = st->addChildLayer(q[2], p, groupTarget(one->id()));
+        st->setLayerLook(q[2], c, st->lookForPalette(full));
+    }
+    QVERIFY(st->setCueMode(q[3], CueMode::Block));  // Q4: Mix, HTP between its scenes
+    own(3, all, full);                              // the upper brighter: HTP ≠ the later
+    own(3, some, low);
+    QVERIFY(st->setCueMixOverlap(q[3], true));
+    Chaser *ch = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    const QList<QHash<quint32, uchar>> played = playAll(ch);
+    QCOMPARE(played.count(), 4);
+    QCOMPARE(int(played[3].value(2)), 255);
+    for (int i = 0; i < q.count(); ++i)
+    {
+        st->previewCue(q[i]);
+        const QHash<quint32, uchar> pv = settle(20);
+        for (quint32 f = 0; f < quint32(m_fixtures.count()); ++f)
+            QVERIFY2(pv.value(f) == played[i].value(f),
+                     qPrintable(QString("Q%1 fixture %2: preview %3, GO %4").arg(i + 1).arg(f)
+                                .arg(pv.value(f)).arg(played[i].value(f))));
+        st->stopPreview();
+        stopAll();
+        tick(20);
+    }
+
+    // Over a list running for real (at Q1, All Full), the preview still
+    // shows what is in edit: Q2's Some Low wins there (Design, open 6).
+    go(ch);
+    tick(10);
+    st->previewCue(q[1]);
+    const QHash<quint32, uchar> over = settle(20);
+    QCOMPARE(int(over.value(0)), 255);
+    QCOMPARE(int(over.value(2)), 40);
+    st->stopPreview();
+}

@@ -334,6 +334,10 @@ void Universe::processFaders()
 {
     flushInput();
     zeroIntensityChannels();
+    if (m_overrideWritten.size() != UNIVERSE_SIZE)
+        m_overrideWritten = QByteArray(UNIVERSE_SIZE, char(0));
+    else
+        m_overrideWritten.fill(char(0));
 
     {
         QMutexLocker fadersLocker(&m_fadersMutex);
@@ -1071,6 +1075,18 @@ bool Universe::write(int address, uchar value, bool forceLTP)
     updatePostGMValue(address);
 
     return true;
+}
+
+bool Universe::writeOverride(int address, uchar value)
+{
+    if (address < 0 || address >= UNIVERSE_SIZE)
+        return false;
+    if (m_overrideWritten.size() != UNIVERSE_SIZE)
+        m_overrideWritten = QByteArray(UNIVERSE_SIZE, char(0));
+    if ((m_channelsMask->at(address) & HTP) && m_overrideWritten.at(address))
+        value = qMax(value, uchar(m_preGMValues->at(address)));
+    m_overrideWritten[address] = char(1);
+    return write(address, value, true);
 }
 
 bool Universe::writeMultiple(int address, quint32 value, int channelCount)

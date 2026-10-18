@@ -439,6 +439,7 @@ bool ShowTreeController::unlinkLayer(quint32 cueId, quint32 layerId)
         Layer *layer = cc == nullptr ? nullptr : cc->layer(layerId);
         if (layer == nullptr || layer->reusable == invalidId())
             return false;
+        layer->unlinkedFrom = reusableName(layer->reusable);
         layer->reusable = invalidId();
         return true;
     });
@@ -453,6 +454,7 @@ bool ShowTreeController::unlinkCue(quint32 cueId)
         Cue *cc = findCueIn(ps, cueId);
         if (cc == nullptr || cc->reusable == invalidId())
             return false;
+        cc->unlinkedFrom = reusableName(cc->reusable);
         cc->reusable = invalidId();
         return true;
     });
@@ -507,10 +509,16 @@ bool ShowTreeController::removeReusable(quint32 reusableId, bool unlinkUses, QSt
                 for (Cue &c : l.cues)
                 {
                     if (c.reusable == reusableId)
+                    {
+                        c.unlinkedFrom = name;
                         c.reusable = invalidId();
+                    }
                     for (Layer &layer : c.layers)
                         if (layer.reusable == reusableId)
+                        {
+                            layer.unlinkedFrom = name;
                             layer.reusable = invalidId();
+                        }
                 }
         for (ReusableCue &rc : m_reusableCues)
             for (Layer &layer : rc.layers)
@@ -557,6 +565,37 @@ void ShowTreeController::handOver(quint32 id)
                 m_madeReusable.insert(pid);
 }
 
+void ShowTreeController::copySharedScenes(quint32 collectionId, QList<quint32> *made)
+{
+    Collection *coll = qobject_cast<Collection *>(m_doc->function(collectionId));
+    if (coll == nullptr)
+        return;
+    QList<quint32> fids = coll->functions();
+    bool changed = false;
+    for (int k = 0; k < fids.count(); ++k)
+    {
+        Function *f = m_doc->function(fids.at(k));
+        // Still the tree's: another list plays it (else it went with this one).
+        if (f == nullptr || !m_generatedScenes.contains(fids.at(k)))
+            continue;
+        Function *copy = f->createCopy(m_doc, true);
+        if (copy == nullptr)
+            continue;
+        copy->setName(f->name());
+        copy->setPath(f->path(true));
+        fids[k] = copy->id();
+        changed = true;
+        if (made != nullptr)
+            *made << copy->id();
+    }
+    if (!changed)
+        return;
+    for (quint32 fid : coll->functions())
+        coll->removeFunction(fid);
+    for (quint32 fid : fids)
+        coll->addFunction(fid);
+}
+
 void ShowTreeController::applyDetachedLists()
 {
     if (!m_snapshotHasDetachedLists)
@@ -583,9 +622,23 @@ void ShowTreeController::applyDetachedLists()
     }
     QList<quint32> again = m_snapshotDetachedLists.values();
     std::sort(again.begin(), again.end());
+    QList<quint32> collections;
     for (quint32 id : again)
         if (!m_detachedLists.contains(id) && m_doc->function(id) != nullptr)
+        {
             handOver(id);
+            if (m_doc->function(id)->type() == Function::CollectionType)
+                collections << id;
+        }
+    // Redo: what another list plays is copied again (the copies an undo
+    // took back were swept as unused).
+    for (quint32 id : collections)
+    {
+        QList<quint32> made;
+        copySharedScenes(id, &made);
+        for (quint32 c : made)
+            handOver(c);
+    }
 }
 
 quint32 ShowTreeController::detachList(quint32 listId)
@@ -629,6 +682,15 @@ quint32 ShowTreeController::detachList(quint32 listId)
                 {
                     // Handed over before the bake below would find them unused.
                     for (quint32 id : going)
+                        handOver(id);
+                    // A scene another list still plays: copied (open 19),
+                    // so the chaser is all its own from the start.
+                    QList<quint32> made;
+                    for (quint32 id : going)
+                        if (m_doc->function(id) != nullptr
+                            && m_doc->function(id)->type() == Function::CollectionType)
+                            copySharedScenes(id, &made);
+                    for (quint32 id : made)
                         handOver(id);
                     p.lists.removeAt(i);
                     return true;
