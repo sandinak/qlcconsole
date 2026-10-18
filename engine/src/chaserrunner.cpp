@@ -700,6 +700,18 @@ void ChaserRunner::startNewStep(int index, MasterTimer *timer, qreal mIntensity,
     if (func == NULL)
         return;
 
+    // The same chase as a step just left (consecutive cues on one chase):
+    // it is stopped first, as before the hand-over held sub-cue chases, so
+    // it starts again here (beginRestart) rather than being stopped after.
+    foreach (ChaserRunnerStep *leaving, m_leavingSteps)
+    {
+        if (leaving->m_function != func)
+            continue;
+        m_leavingSteps.removeOne(leaving);
+        stopStepFunction(leaving, m_chaser->type() == Function::SequenceType);
+        delete leaving;
+    }
+
     ChaserRunnerStep *newStep = new ChaserRunnerStep();
     newStep->m_index = index;
     newStep->m_subCues = false;
