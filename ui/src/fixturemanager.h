@@ -181,6 +181,13 @@ private:
                                 const QList<quint32>& fixtureIds,
                                 const QList<quint32>& groupIds);
 
+    /** Group ▸ Create Group(s) from Selection…: the fixtures and groups as
+     *  one group (each group a block), or their heads as a group per head
+     *  type, or a group per head type for each fixture, through
+     *  CreateGroupsDialog. Returns the groups made (none when cancelled). */
+    QList<FixtureGroup *> createGroupsFromSelection(const QList<quint32>& fixtureIds,
+                                                    const QList<quint32>& groupIds);
+
     /** Create the text browser for displaying information */
     void createInfo();
 

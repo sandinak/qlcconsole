@@ -105,6 +105,20 @@ The latest changes, newest first. Each links to the guide with the detail.
   end to end) and **Group / Cross** for halves or pairs that swap sides or
   mirror. See [Line targets](stage-targets.md#line-targets).
 
+### Fixture Manager
+
+- **One menu item for one group or many.** Select fixtures and/or groups
+  → **Group → Create Group(s) from Selection…**: one group of every head
+  (made as the old *Create Group from Selection…* made it — groups
+  selected go in as blocks keeping their layout, fixtures off the stage
+  fill a grid you can size), a group per head type across them ("Bar · RGB
+  pixels" with all 128 RGB pixels of eight bars, "Bar · White pixels" with
+  their 32 whites; a par's single head stays "Par · RGB"), or a group per
+  head type for each fixture, in a folder. The groups are listed — names,
+  head counts, layout — before any is made. It replaces the two separate
+  items. See
+  [Create Group(s) from Selection](fixture-manager.md#create-groups-from-selection).
+
 ### Programming
 
 - **Palette folders hold any type.** A song's folder can hold its colours,

@@ -54,6 +54,7 @@
 #include "qlcfile.h"
 
 #include "createfixturegroup.h"
+#include "creategroupsdialog.h"
 #include "powerdistributionwidget.h"
 #include "powerdistribution.h"
 #include "universeusagewidget.h"
@@ -2349,6 +2350,21 @@ void FixtureManager::slotUnGroup()
     }
 }
 
+QList<FixtureGroup *> FixtureManager::createGroupsFromSelection(const QList<quint32> &fixtureIds,
+                                                                const QList<quint32> &groupIds)
+{
+    if (fixtureIds.isEmpty() && groupIds.isEmpty())
+        return QList<FixtureGroup *>();
+    CreateGroupsDialog dlg(m_doc, fixtureIds, groupIds, QString(), this);
+    if (dlg.heads() == 0)
+        return QList<FixtureGroup *>();
+    if (dlg.exec() != QDialog::Accepted)
+        return QList<FixtureGroup *>();
+    updateGroupMenu();
+    updateView();
+    return dlg.createdGroups();
+}
+
 void FixtureManager::slotGroupSelected(QAction* action)
 {
     // m_groupMenu (this action's origin) only ever lists real existing
@@ -2568,69 +2584,7 @@ void FixtureManager::copySelectionIntoGroup(FixtureGroup* target,
 
     // Silence the per-head changed() storm; one refresh happens at the end.
     target->blockSignals(true);
-
-    // Start appending below whatever the target already holds.
-    int curY = 0;
-    {
-        QMapIterator<QLCPoint, GroupHead> it(target->headsMap());
-        while (it.hasNext()) { it.next(); curY = qMax(curY, it.key().y() + 1); }
-    }
-
-    // Each source group goes in as a block (preserving its relative layout),
-    // tagged as a sub-group so it stays visually distinct and movable as a unit.
-    foreach (quint32 gid, groupIds)
-    {
-        FixtureGroup* src = m_doc->fixtureGroup(gid);
-        if (src == NULL || src == target)
-            continue;
-
-        const QMap<QLCPoint, GroupHead> srcHeads = src->headsMap();
-        if (srcHeads.isEmpty())
-            continue;
-
-        // Normalise the source to its top-left corner.
-        int minX = INT_MAX, minY = INT_MAX;
-        QMapIterator<QLCPoint, GroupHead> nit(srcHeads);
-        while (nit.hasNext()) { nit.next(); minX = qMin(minX, nit.key().x()); minY = qMin(minY, nit.key().y()); }
-
-        int blockMaxY = curY;
-        QMapIterator<QLCPoint, GroupHead> it(srcHeads);
-        while (it.hasNext())
-        {
-            it.next();
-            const int x = it.key().x() - minX;
-            const int y = curY + (it.key().y() - minY);
-            if (target->assignHead(QLCPoint(x, y), it.value()) == true)
-            {
-                target->setHeadSubGroup(QLCPoint(x, y), FixtureGroup::subGroupTagFor(src->id()));
-                blockMaxY = qMax(blockMaxY, y);
-            }
-        }
-        curY = blockMaxY + 1;
-    }
-
-    // Loose fixtures go in a row of their own (all heads of each fixture).
-    int col = 0;
-    foreach (quint32 fid, fixtureIds)
-    {
-        Fixture* fxi = m_doc->fixture(fid);
-        if (fxi == NULL)
-            continue;
-        for (int h = 0; h < fxi->heads(); h++)
-        {
-            if (target->assignHead(QLCPoint(col, curY), GroupHead(fid, h)) == true)
-                col++;
-        }
-    }
-
-    // Grow the grid to fit everything we placed.
-    int maxX = 0, maxY = 0;
-    QMapIterator<QLCPoint, GroupHead> sz(target->headsMap());
-    while (sz.hasNext()) { sz.next(); maxX = qMax(maxX, sz.key().x()); maxY = qMax(maxY, sz.key().y()); }
-    if (maxX + 1 > target->size().width() || maxY + 1 > target->size().height())
-        target->setSize(QSize(qMax(maxX + 1, target->size().width()),
-                              qMax(maxY + 1, target->size().height())));
-
+    CreateFixtureGroup::appendSelection(m_doc, target, fixtureIds, groupIds);
     target->blockSignals(false);
     target->notifyChanged(); // single refresh
     m_doc->setModified();
@@ -2822,7 +2776,7 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
     // ---- Organising it ----
     QAction *moveToFolder = NULL;
     QAction *ungroupOnly = NULL;
-    QAction *copyToNew = NULL;
+    QAction *createGroups = NULL;
     QMenu *copyIntoMenu = NULL;
     QAction *rebuildComposite = NULL;
     QMenu *circuitMenu = NULL;
@@ -2831,7 +2785,13 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
     {
         menu.addSeparator();
         QMenu *groupMenu = menu.addMenu(QIcon(":/group.png"), tr("Group"));
-        copyToNew = groupMenu->addAction(tr("Create Group from Selection…"));
+        /* One group (selected groups as blocks), a group per head type, or
+           a group per head type for each fixture -- previewed, and named,
+           before any is made. */
+        createGroups = groupMenu->addAction(tr("Create Group(s) from Selection…"));
+        createGroups->setToolTip(tr("One group of the selection (a group selected goes in as a "
+                                    "block), a group per head type across the fixtures, or a "
+                                    "group per head type for each fixture."));
         const QList<FixtureGroup*> groups = m_doc->fixtureGroups();
         if (groups.isEmpty() == false)
         {
@@ -3259,34 +3219,9 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
             updateView();
         }
     }
-    else if (chosen == copyToNew)
+    else if (createGroups != NULL && chosen == createGroups)
     {
-        if (selGroups.isEmpty() && !selFixtures.isEmpty())
-        {
-            // Loose fixtures → the shared creator (grid heuristic + name/size
-            // prompt + physical-order arrangement), consistent with the
-            // Programming tab and Studio.
-            if (CreateFixtureGroup::createFromFixtures(m_doc, selFixtures, this) != NULL)
-                updateView();
-        }
-        else
-        {
-            // Selection includes existing groups → keep the block-copy behaviour
-            // (each source group placed as a sub-group block, grown to fit).
-            bool ok = false;
-            const QString name = QInputDialog::getText(
-                this, tr("Create group from selection"), tr("New group name:"),
-                QLineEdit::Normal, tr("New Group"), &ok);
-            if (ok)
-            {
-                FixtureGroup *ng = new FixtureGroup(m_doc);
-                ng->setName(name.trimmed().isEmpty() ? tr("New Group") : name.trimmed());
-                ng->setSize(QSize(1, 1)); // grown to fit by copySelectionIntoGroup
-                m_doc->addFixtureGroup(ng);
-                copySelectionIntoGroup(ng, selFixtures, selGroups);
-                updateView();
-            }
-        }
+        createGroupsFromSelection(selFixtures, selGroups);
     }
     else if (copyIntoMenu != NULL && copyIntoMenu->actions().contains(chosen))
     {

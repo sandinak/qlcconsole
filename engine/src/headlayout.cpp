@@ -236,6 +236,60 @@ bool HeadKinds::isMixed(const Fixture *fx)
     return kindsOf(fx).size() > 1;
 }
 
+QString HeadKinds::typeOf(const QLCFixtureMode *mode, int head)
+{
+    if (mode == nullptr || head < 0 || head >= mode->heads().size())
+        return QString();
+    auto moves = [](const QLCChannel *ch) {
+        return ch != nullptr && (ch->group() == QLCChannel::Pan || ch->group() == QLCChannel::Tilt);
+    };
+    bool moving = false;
+    foreach (quint32 ci, mode->heads().at(head).channels())
+        if (moves(mode->channel(ci)))
+            moving = true;
+    // Pan and tilt on the fixture's body, in no head: every head moves with it.
+    for (quint32 ci = 0; !moving && ci < quint32(mode->channels().size()); ++ci)
+        if (mode->headForChannel(ci) < 0 && moves(mode->channel(ci)))
+            moving = true;
+
+    QString t = kindOf(mode, head);
+    if (moving)
+        t += t.isEmpty() ? QStringLiteral("PT") : QStringLiteral("/PT");
+    if (t.isEmpty())
+        t = QStringLiteral("Other");
+    return t;
+}
+
+QStringList HeadKinds::typesOf(const Fixture *fx)
+{
+    QStringList out;
+    const QLCFixtureMode *mode = fx != nullptr ? fx->fixtureMode() : nullptr;
+    if (mode == nullptr)
+        return out;
+    for (int h = 0; h < mode->heads().size(); ++h)
+    {
+        const QString t = typeOf(mode, h);
+        if (!t.isEmpty() && !out.contains(t))
+            out << t;
+    }
+    return out;
+}
+
+QString HeadKinds::typeName(const QString &type)
+{
+    QString kind = type;
+    const bool moving = kind.endsWith(QLatin1String("PT"));
+    if (moving)
+        kind.chop(kind.endsWith(QLatin1String("/PT")) ? 3 : 2);
+    if (kind.isEmpty())
+        return moving ? QStringLiteral("Movers") : QString();
+    QString name = kind;
+    if (kind == QLatin1String("W"))       name = QStringLiteral("White");
+    else if (kind == QLatin1String("I"))  name = QStringLiteral("Dimmer");
+    else if (kind == QLatin1String("A"))  name = QStringLiteral("Amber");
+    return moving ? name + QStringLiteral(" movers") : name;
+}
+
 /*****************************************************************************
  * HeadLayoutLibrary
  *****************************************************************************/

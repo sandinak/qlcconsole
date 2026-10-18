@@ -323,22 +323,82 @@ group in a sub-folder underneath it — gets its path updated to match.
 
 - **Right-click "Fixture Groups" or any folder → "New Group..."** — an empty
   group at your chosen grid size.
-- **Select one or more fixtures or groups → "Create group from selection…"**
-  — for a pure fixture selection:
-  - If any of them are placed in the Lighting Studio, the **New Fixture
-    Group** dialog lays them out from where they really stand: **From the
-    front** (as the audience sees it — step fronts become one picture),
-    **From above** (the plan) or **Automatic**, with **"Close up the gaps"**
-    (on by default: each keeps its place relative to the others, empty
-    rows and columns dropped; off is the rig to scale). It previews the
-    size, and warns if a group with exactly these heads already exists —
-    keep it, or make another.
-  - Otherwise the app suggests a grid size from head count and you fill it.
-  - If the fixtures have more than one kind of head, you're first offered
-    **Split by Head Type** (below) or **One Group**.
+- **Select fixtures and/or groups → Group → "Create Group(s) from
+  Selection…"** — one group of the selection, a group per head type, or a
+  group per head type for each fixture, previewed before any is made
+  (below).
 
-  Selecting existing groups instead copies each one in as a tagged
-  sub-group block.
+### Create Group(s) from Selection
+
+One menu item, **Group → Create Group(s) from Selection…**, for one group
+or many. Take eight bars, each with 16 RGB pixels and 4 white strobe
+cells. It offers:
+
+1. **One group with every head** — all 160 heads in one group, made just
+   as the old one-click *Create Group from Selection* made it (below). On
+   by default when the fixtures have one type of head, or when groups are
+   selected.
+2. **A group per head type, across all the fixtures** — "Bar · RGB pixels"
+   (128 heads) and "Bar · White pixels" (32 heads). On by default when the
+   fixtures have more than one type of head.
+3. **A group per head type for each fixture** — "Bar 1 · RGB pixels",
+   "Bar 1 · White pixels", "Bar 2 · RGB pixels"… 16 groups, filed in a
+   folder named after the selection.
+
+**One group.** How the heads are laid out depends on what is selected:
+
+- **Groups selected** (with or without fixtures): with **Each group
+  selected as a block, as it is laid out** ticked (the default), each
+  group goes in keeping its own layout, one under the other, tagged as a
+  [sub-group](#sub-groups-pasted-blocks-with-provenance) so it moves as a
+  unit; fixtures selected as well go in a row below them (a head already
+  in one of the groups isn't added twice). It's what **Add to Group** does
+  into an empty group. Untick it to lay every fixture out afresh instead.
+- **Fixtures placed in the Lighting Studio**: laid out from where they
+  really stand — **From the front** (as the audience sees it — step fronts
+  become one picture), **From above** (the plan) or **Automatic**, with
+  **"Close up the gaps"** (on by default: each keeps its place relative to
+  the others, empty rows and columns dropped; off is the rig to scale).
+- **Otherwise**: the heads fill a **Grid** row by row, the fixtures in
+  their order on the 2D plot (top row first, left to right; ones not on
+  the plot after, as picked). The grid is suggested from the plot (a row
+  of fixtures per band of the plot), else a near-square of the head
+  count; change it there, or resize the group later.
+
+**What a head type is.** Fixture definitions don't name their heads'
+types, so it is read from each head's channels: its colours ("RGB",
+"RGBW", "White"; "Dimmer" for plain intensity) and whether it moves (pan
+or tilt in the head, or on the fixture's body: "RGBW movers"). Two heads
+are the same type when those match — whatever fixture model they are on,
+so the RGB pixels of a bar and of a strip share "· RGB pixels" in option
+2. Tick **Keep fixture models apart** to give each model its own group
+instead. A head with no colour, intensity or movement is "Other".
+
+**Strobe isn't a type.** A shutter or strobe channel doesn't make a head
+a different type: the bars' white strobe cells are "White", and an RGB
+head with its own strobe channel is still "RGB". Only colour, intensity
+and movement count.
+
+**Names.** Each group is named after what its fixtures' names share, less
+a trailing number ("Bar 1"…"Bar 8" → "Bar"), and its head type; a group
+per fixture takes the fixture's name. When every fixture in a group has
+more than one head of its type, the type is called **pixels** ("Bar · RGB
+pixels", "Bar · White pixels"); fixtures of one head of it keep the plain
+type ("Par · RGB"), and movers stay movers ("Spot · RGBW movers") however
+many heads they have. Type a **Name** to name them all after that
+instead. Selecting only groups names them after the groups. Every name in
+the list can be changed (double-click it) and any group unticked before
+**Create**. A group that already exists with exactly the same heads is
+shown as such: in options 2 and 3 it's left unticked; the one group of
+option 1, asked for, is still made unless you untick it. **Folder** files
+them all (empty: no folder).
+
+**Layout of a group per type.** Fixtures placed in the Lighting Studio are
+laid out where they stand, as for one group, each fixture's heads of that
+type turned the way it is rigged. Fixtures that aren't placed get a row
+each, one under the other, in their order on the 2D plot (a panel keeps
+its own grid); fixtures of one head each fill a near-square instead.
+Click a group in the list to see its layout.
 
 ### Split by Head Type
 
@@ -353,9 +413,11 @@ pattern, or click two heads to swap), name each kind's group, and pick the
 same From the front / From above / Close up the gaps choices. The head map
 you fix is remembered per model and mode, and copied into the show.
 
-It's offered when making a group from mixed fixtures (above), on the
-Lighting Studio plot's fixture menu, and on a fixture group's row in the
-Studio's Layers list.
+It's offered when making a group from mixed fixtures on the Lighting
+Studio plot's fixture menu, and on a fixture group's row in the Studio's
+Layers list. (In the Fixture Manager, option 2 of
+[Create Group(s) from Selection](#create-groups-from-selection) does the
+same job.)
 
 ### Lay Out from the Stage
 
@@ -390,7 +452,7 @@ selected, and only offers what applies:
    moving one, here, on the plot and in the studio; "Patch N Fixtures…" for
    several) and Return to Inventory….
 3. **Finding it on the rig** — Test Fixture…, Locate, Reset.
-4. **Organising it** — a **Group** submenu (Create Group from Selection…,
+4. **Organising it** — a **Group** submenu (Create Group(s) from Selection…,
    Add to Group ▸, Remove from Group; for a group: Move to Folder…, Remove
    Group (Keep Fixtures), Rebuild Composite), a **Power** submenu (Add to
    Circuit ▸, Remove from Circuit), and Channel Behaviour & Modifiers….

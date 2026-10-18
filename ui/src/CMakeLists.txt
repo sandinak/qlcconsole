@@ -44,6 +44,8 @@ add_library(${module_name}
     consolechannel.cpp consolechannel.h
     createfixturegroup.cpp createfixturegroup.h createfixturegroup.ui
     headtypesdialog.cpp headtypesdialog.h
+    headtypegroups.cpp headtypegroups.h
+    creategroupsdialog.cpp creategroupsdialog.h
     stagegroupdialog.cpp stagegroupdialog.h
     ctkrangeslider.cpp ctkrangeslider.h
     cuestackmodel.cpp cuestackmodel.h
