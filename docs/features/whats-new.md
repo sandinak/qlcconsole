@@ -6,6 +6,24 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Show Tree
 
+- **Several productions, sub-cues in the tree, and the cue runner.** A show
+  can hold several **productions**; the **current** one (the header's
+  **Production:** switcher, or the footer's GO menu) is what the footer GO,
+  ⌘↩, QLab / OSC / MSC and the runner play -- its **main list**, with a
+  **timecode** source of its own if it needs one. A cue gets **sub-cues**
+  4.1, 4.2… with **+ Sub-cue**: each with its own layers, fade and **Sub GO**
+  or **Auto-follow**; they track from one another and leave the next cue
+  alone. The new **Run** tab (⇧⌘0) is the operator's view: the cue list
+  with ▶ / STANDBY / NEXT / SUB NEXT, a *what changes* line from the
+  tracking ("Towers → Red; BackStage in → Green"), the timecode, LIVE /
+  DESIGN and big GO, Sub GO, Back, Sub Back, Pause and Stop buttons (Space
+  is GO); click a cue to LOAD it, double-click to jump. The **Cue Runner**
+  VC widget is the same runner on a page (compact or list), and **Swap
+  Widget** turns a Cue List into one. OSC gains `/subgo` and `/subback`, and
+  sub-cues answer to their numbers. Typed: `production …`, `main`, `sub …`,
+  `follow`, `subgo`. See [Productions](show-tree.md#productions),
+  [Sub-cues](show-tree.md#sub-cues) and
+  [The cue runner](show-tree.md#the-cue-runner).
 - **Looks (busking) and palettes in the Library.** A production now has a
   **Looks** section beside its cue lists: looks built with the same layers
   and rows as cues, which never track and play from VC buttons over

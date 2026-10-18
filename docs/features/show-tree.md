@@ -18,6 +18,11 @@ as cues. Everything is in one tree:
 - Beside its cue lists, a production has a **Looks** section: busking looks
   built the same way, fired from Virtual Console buttons
   ([Looks](#looks-busking)).
+- A show can hold **several productions**; the **current** one is what GO
+  plays ([Productions](#productions)). A cue can have **sub-cues** 4.1,
+  4.2… that **Sub GO** steps through ([Sub-cues](#sub-cues)). The **Run**
+  tab and the **Cue Runner** VC widget play it all
+  ([The cue runner](#the-cue-runner)).
 
 **The Programming tab works alongside it.** It is the palette and effect
 workshop: effect design, `.qxfx` files, Bundles and raw-value scenes. The
@@ -38,9 +43,9 @@ is changed only in the tree: elsewhere it is locked. See
 ## The tab
 
 - **Header.** It has + Production, + Cue list, + Cue (**+ Look** in a
-  Looks section), + Layer, Record, Merge, Delete, Undo, Redo and Import
-  chaser…. On the right are two pieces of
-  status:
+  Looks section), + Layer, Record, **+ Sub-cue**, Merge, Delete, Undo, Redo,
+  Import chaser… and the **Production** switcher (the current production).
+  On the right are two pieces of status:
   - what the rig shows, such as *"▶ On the rig: 1.0.1 Verse"* (see
     [Seeing it on the rig](#seeing-it-on-the-rig));
   - while you drag, what the drop will do; after an edit, which cues it
@@ -61,11 +66,15 @@ from the Library lands in the tree right beside it.
   production's busking looks, in their folders; a look a VC button fires
   shows **VC ×1**.
 - **Right: the page** for what is selected:
+  - **A production** shows whether it is **current**, its **main list**
+    and its **timecode** source ([Productions](#productions)).
   - **A cue list** shows its mode and base cue, **Convert to tracking…**
     and **Detach to plain chaser…**.
   - **A cue** shows its number, name, note, mode, base check box, includes,
-    fade in / out, hold, cue looks, every layer on stage in it, a dashed
-    drop area, and *Next cue receives*.
+    fade in / out, hold, its **sub-cues** (and + Sub-cue), cue looks, every
+    layer on stage in it, a dashed drop area, and *Next cue receives*. A
+    **sub-cue** shows **Advance** (Sub GO, or Auto-follow after a wait) in
+    place of the mode, base, includes and hold.
   - **A layer** shows what it contains, then one row per attribute.
   - **A look** shows its name, note, *Fired by* (the VC buttons, **Make VC
     page**, **Move to folder…**), its looks and layers; **Looks** or a
@@ -711,9 +720,15 @@ is always there and calls the same operations as the mouse.
 
 | Type | Does |
 |---|---|
+| `production "Corporate Gig"` | Selects that production, or makes it |
+| `production "Corporate Gig" current` · `production current` · `production none` | Makes it (or the selected one) the **current production**, or none |
+| `main` | Makes the selected list its production's main list |
 | `list "01-Opener"` | Selects that cue list, or makes a new **Tracking** one in the selected production |
 | `cue 1.0.1 "Verse"` | Selects cue 1.0.1, or makes it in number order. Renames it if the name differs |
-| `cue + "Verse"` | A new cue after the selected one, numbered as + Cue does |
+| `cue + "Verse"` | A new cue after the selected one, numbered as + Cue does (from a sub-cue: after its cue) |
+| `sub "Hit"` · `sub + "Sweep" follow 0.5` · `sub "Strobe" subgo` | A **sub-cue** of the selected cue (after the selected sub-cue); Auto-follow after 0.5 s, or Sub GO |
+| `follow 1.5` · `subgo` | The selected sub-cue auto-follows after 1.5 s, or waits for Sub GO |
+| `cue 4.2` | Selects sub-cue 4.2 (when no main cue has that number) |
 | `track` · `block` · `cueonly` · `default` | Sets the selected cue's mode (`default` = List default). Also works after `cue …`: `cue + "Out" block` |
 | `base` | Makes the selected cue the base cue |
 | `Towers colour Blue dimmer 45` | The cue's layer on Towers (made if needed; a grey one is brought in), then its looks |
@@ -772,7 +787,7 @@ with another name or holds a `,` or `+`.
 
 **`help`** (or **`?`**) lists every word, grouped: navigate, build, looks,
 tracking, record and copy, reuse (with detach and convert), palettes, looks
-(busking), undo. **`help <word>`** (`help record`, `help
+(busking), sub-cues, undo. **`help <word>`** (`help record`, `help
 spread`) shows its syntax (optional parts in [ ], alternatives with |),
 what it does, examples and related words. The help shows in a small pane
 above the line: **Esc** closes it, and a click on an example puts it in the
@@ -795,6 +810,8 @@ command line reads, so it is always right. The table above is a summary.
 | `cue` and a number | the cue modes and `base` |
 | `include` | the list's cue numbers |
 | `list` | the cue lists (the selected production's first) |
+| `production` | `current`, `none` and the productions; after a name, `current` |
+| `sub` (and a name) | `follow`, `subgo` |
 | `function` | the functions |
 | `release` | groups and fixtures |
 | `record` | `selected`, `running`, `lit` |
@@ -1112,13 +1129,110 @@ production has a **Looks** section beside its cue lists.
   offers to point them at the look.
 - What the tree made for a look is locked elsewhere, as for cues.
 
+## Productions
+
+A show can hold several productions -- a tour's two sets, the dance show
+and the corporate gig in the same venue. They share the Library (groups,
+palettes, targets, reusables); each has its own cue lists and its own Looks
+section. **Undo is one history** for all of them.
+
+- **The current production** is what plays: the footer GO (**⌘↩**), Back,
+  Sub GO, show control (QLab, OSC, MSC) and every Cue Runner set to follow
+  "the current production". Pick it in the header's **Production:** switcher,
+  on the production's page (**Make current**), from its right-click menu, or
+  in the footer's GO menu (**Production**). The tree marks it **▶ current**.
+- **Its main list** is the one GO plays (its first list until you choose):
+  the production page's **Main list**, a list's right-click **Make main
+  list**, or **Play on GO** (makes the production current too). The tree
+  marks it **· main**. The current production's main list *is* the show's
+  main cue list: choosing a main cue list in a chaser editor moves the
+  current production with it, and choosing a plain chaser there means no
+  production is current.
+- **Its timecode source.** The production page's **Timecode** picks where its
+  timecode comes from while it is current: the show's setting (Connections →
+  Show control & sync), any source, or one universe -- QLab's MTC for one
+  production, a desk's for the other. The show's own setting is kept.
+- Switching production never stops a list that runs: the next GO plays the
+  new one. Which production is current is saved with the show, and is not a
+  step of Undo (it is what GO plays, not an edit).
+- The footer says whose GO it is: *"Dance ▸ Next: 1.0.2 — Build"*.
+
+## Sub-cues
+
+A cue can have **sub-cues** -- 4.1, 4.2… -- that **Sub GO** (**⌥⌘↩**)
+steps through while GO still goes on to cue 5: the hit, the sweep and the
+strobe inside a chorus.
+
+- **+ Sub-cue** (the header, a cue's right-click menu, or the cue page's
+  *Sub-cues* line) adds one under the selected cue, after the selected
+  sub-cue. They are numbered under their cue (4.1, 4.2), and a new main cue
+  never takes one of their numbers.
+- **Each is a cue of its own**: layers, cue looks, groups and palettes
+  dropped on it, its own fade in and out, a name and a note -- everything a
+  cue has but a mode, base, includes or hold.
+- **Advance** (on its page): **Sub GO** waits for Sub GO; **Auto-follow
+  after** a wait goes on by itself that long after the sub-cue before it has
+  faded in. The tree says *Sub GO* or *auto 0.5s*, and its fade. **The first
+  plays with GO**: GO into cue 4 plays 4.1 and holds there.
+- **Tracking:** 4.1 starts from what cue 4 puts on stage, 4.2 from 4.1. A
+  value set in 4.1 shows grey in 4.2 *from sub-cue 4.1*.
+- **Cue-only:** what the sub-cues change doesn't pass on. Cue 5 starts from
+  cue 4's own state, however far Sub GO got (D9).
+- **Back** (⌘⇧↩) goes to the previous main cue; **Sub Back** (⌥⌘⇧↩) to the
+  previous sub-cue. Show control fires a sub-cue by its number (`/go 4.2`,
+  MSC GO 4.2), and `/subgo` / `/subback` step ([Show control](show-control.md)).
+- Under the hood, cue 4's step plays a hidden chaser of the sub-cues'
+  collections, held on Sub GO -- the same sub-cues a hand-made chaser gets
+  ([sub-cues in the chaser editor](show-control.md#sub-cues)). A scene two
+  sub-cues share keeps running through Sub GO, with no re-fade.
+
+## The cue runner
+
+The **Run** tab (**⇧⌘0**) is the operator's view of a production: big
+targets, keyboard GO, nothing else to bump. The **Cue Runner** Virtual
+Console widget is the same runner on a VC page.
+
+- **Header:** the production and cue list it plays (switch with the box:
+  the current production, or any list of any production), the **timecode**
+  (*TC 01:02:03:15*, *hold* when it stops arriving) and **LIVE / DESIGN**
+  (⌘F12 switches).
+- **The list:** every cue, its sub-cues under it, each with its state --
+  **▶** running (with its fade's progress), **▷ STANDBY** (loaded), **NEXT**,
+  **SUB NEXT** -- its timing (fade; *with GO*, *Sub GO* or *auto 0.5s*) and
+  its note. Done cues are grey.
+- **What changes.** NEXT (or STANDBY) and SUB NEXT carry one line: only what
+  differs between the stage now and that cue, from the tracking -- *"Towers
+  → Red, spread +5, gobo Breakup; BackStage in → Green, Intensity 45%;
+  USTs out"*. GO into a cue with sub-cues shows what its first sub-cue
+  brings.
+- **Buttons:** **GO** (⌘↩; **Space** in the Run tab), **Sub GO** (⌥⌘↩),
+  **Sub Back** (⌥⌘⇧↩), **Back** (⌘⇧↩), **Pause** / **Resume** (holds the
+  fade and an auto-follow's wait) and **Stop** (⌘⇧Esc stops everything).
+- **Click a cue: LOAD** -- it becomes STANDBY, what the next GO plays.
+  **Double-click: jump** to it now (a sub-cue: its cue first).
+- **One state everywhere.** The Run tab, every Cue Runner widget, the
+  footer, the keys and QLab / OSC / MSC all drive the same list: what one
+  does, all show.
+
+**The Cue Runner VC widget.** Virtual Console → Add → **New Cue Runner**.
+Its properties (double-click in Design) choose what it **plays** (the
+current production, or one list -- several widgets can each follow a
+different list or production) and its **size**: **Compact** (on now, next,
+big GO and Sub GO) or **List** (the whole runner). The old **Cue List**
+widget stays for plain chasers. **Edit → Swap Widget** turns a Cue List
+playing a Show Tree list into a Cue Runner on it, in the same place (and a
+Cue Runner back into a Cue List).
+
 ## Playing it
 
 - Each cue list plays as a chaser of the same name, at
   `Productions/<production>` in the Functions window. Its steps carry the
   cue numbers, fades, holds and notes.
-- Pick the chaser in a Virtual Console Cue List, GO it from the footer, or
-  fire its cues from QLab by number ([Show control](show-control.md)).
+- Play it from the **Run** tab or a **Cue Runner** widget
+  ([The cue runner](#the-cue-runner)), pick the chaser in a Virtual Console
+  Cue List, GO it from the footer, or fire its cues from QLab by number
+  ([Show control](show-control.md)). What GO plays is the **current
+  production's** main list ([Productions](#productions)).
 - The cue collections and layer scenes are hidden, in
   `Productions/<production>/<list>`. A scene two cues play is the same
   scene, so it keeps running through GO, with no re-fade, and effects keep
@@ -1149,6 +1263,11 @@ production has a **Looks** section beside its cue lists.
 | Keys / mouse | Does |
 |---|---|
 | ⇧⌘6 | Bring the Show Tree forward |
+| ⇧⌘0 | Bring the **Run** tab forward |
+| ⌘↩ / ⌘⇧↩ | GO / Back: the current production's main list |
+| ⌥⌘↩ / ⌥⌘⇧↩ | Sub GO / Sub Back |
+| **Space** (in the Run tab) | GO, for the list the Run tab plays |
+| Click / double-click a cue (Run tab, Cue Runner) | LOAD it (STANDBY) / jump to it now |
 | Drag from the Library onto a cue, a layer, or the page | One layer on everything dropped; onto a layer, added to it |
 | **⌥** held as you drop groups | A layer for each group (a set: each member) |
 | **⇧** held as you drop groups on a layer | A child layer on them (⌥⇧: one each) |
@@ -1198,12 +1317,18 @@ production has a **Looks** section beside its cue lists.
   the whole rig, does that.
 - **Edits in Operate are blind** and reach the stage on the cue's next GO.
 - **Import** doesn't carry a step's skip flag, its own speed master or Sub GO
-  steps.
+  steps (a chaser step plays as a function layer).
+- **Sub-cues are one level** (no 4.1.1), have no includes, mode or base, and
+  the first plays with GO (its Advance is ignored). Convert to tracking and
+  Detach to plain chaser leave a list with sub-cues alone.
+- **The Cue Runner widget has no MIDI / key inputs of its own** yet: GO
+  comes from the app's keys, the footer, show control and its buttons.
+- **No tracking sheet** yet (so no sub-cue columns in it); the Run tab's
+  list and *what changes* line read the tracking instead.
 - **An effect laid out over several layers** writes each layer's part from
   its own scene. A script that looks at its neighbours' base colour sees
   only its own layer's.
 - **Later:**
-  - sub-cues in the tree;
-  - the cue runner (a Run tab and a VC widget);
-  - a production switcher for show control;
+  - the tracking sheet (cues × layers, with sub-cue columns);
+  - a "stage now" strip of swatches in the runner;
   - a plain-language command line ("make the towers blue at half").

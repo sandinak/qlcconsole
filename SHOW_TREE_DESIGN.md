@@ -642,9 +642,9 @@ Originals stay; VC buttons are offered a switch to the new list.
 | P2 *(built 2026-10-17, §10.10)* | **Tracking**: list mode, cue Track/Block/Cue-only, layer Release, base cue, **includes**, origin marks, "Next cue receives", re-bake chain; "Update cue X" for tracked values; Library "In this cue list"; **optional command line** (D24). | none |
 | P3 *(built 2026-10-17, §10.13)* | **Group sets** (+ Make set in the Library), child layers, overlap; cue-level effects across layers; **line aims in the tree** (§3B: aim params per key, cue-level formations, plan view) once the line-target P1–P3 have shipped. | `Scene::excludedFixtures` (+ a per-look layout span) |
 | P4 *(built 2026-10-17, §10.14)* | **Make reusable / Detach** for layers and cues; Reusable panel; Convert-to-tracking. | none |
-| P5 | **Multiple productions**: switcher, current production for VC / footer GO / show control, per-production timecode. | small: "current production" in Doc |
-| P6 | Sub-cues in the tree (§3C); tracking sheet with sub-cue columns and the attribute switch. | none (SUBCUES) |
-| P7 | **Cue runner** (§6B): Run tab, then the Cue Runner VC widget (compact / list) with Swap widget; "what changes" line. | none (drives ChaserRunner as the footer does) |
+| P5 *(built 2026-10-18, §10.17)* | **Multiple productions**: switcher, current production for VC / footer GO / show control, per-production timecode. | small: "current production" in Doc |
+| P6 *(built 2026-10-18, §10.18)* | Sub-cues in the tree (§3C); tracking sheet with sub-cue columns and the attribute switch *(sheet not built)*. | none (SUBCUES) *(as built: `SubGoFollow`)* |
+| P7 *(built 2026-10-18, §10.19)* | **Cue runner** (§6B): Run tab, then the Cue Runner VC widget (compact / list) with Swap widget; "what changes" line. | none (drives ChaserRunner as the footer does) |
 | later | Engine-resolved cue lists, move fades (§5) — only if baking hits a wall. | large |
 | later | **Plain-language command line** (Branson, 2026-10-17): an offline phrase layer first (synonyms and filler words onto the existing grammar — "make the towers blue at half"; deterministic, always there at a show), then an optional online layer (the prompt and the show's names to Claude, which returns ordinary command lines, shown for confirmation, one undo step each; API key in Settings; not for show time). TODO.md. | none |
 
@@ -1763,6 +1763,160 @@ would now be a real folder). Tests: `qlcpalette_test::
 aUserFolderNamedLikeATypeIsKept`, `programmingmanager_test::
 libraryAndProgrammingAgreeOnFolders`, `undoHereReachesTheSharedHistory`.
 
+### 10.17 P5 (2026-10-18, build host): multiple productions
+
+- **The current production is the main cue list seen from the tree.**
+  `ShowTreeController::currentProduction()` (Doc forwarders
+  `currentProduction()` / `setCurrentProduction()`; saved as `<ShowTree
+  Current=>`, never in an undo snapshot -- what GO plays is the operator's
+  choice, not an edit). Making a production current makes its **main
+  list**'s chaser ShowControl's main cue list, so the footer GO, ⌘↩, Sub GO,
+  QLab / OSC / MSC and every Cue Runner following "the current production"
+  play it with no change on their side. The other way round
+  (`ShowControl::mainCueListChanged`): a main cue list picked in a chaser
+  editor makes its production current, with that list as its main; a plain
+  chaser there means none is current. Nothing current = the behaviour
+  before P5. A bake keeps the main cue list on the current production's
+  main list (a new list, a deleted main list -> its first).
+- **`Production::mainList`** (`MainList=`, one undo step; invalid = its
+  first list; never a Looks section or sub-cue list) and
+  **`Production::timecode`** (`Timecode=`: a universe, -1 any, -2 the
+  show's; one undo step). While the production is current, Doc's
+  `TimecodeSource` follows it through a second layer,
+  `setProductionUniverse()` / `effectiveUniverse()`; the show's own
+  `sourceUniverse()` is untouched and is what is saved.
+- **Switching never stops a running list**: the next GO is the new
+  production's (open 27). Deleting the current production: none current,
+  the timecode back to the show's; undo brings the production back, not the
+  choice.
+- **Looks sections** were per production already (R3); tested: separate
+  sections and collections under `Productions/<name>/Looks`.
+- **Tab:** the header's **Production:** switcher (None + every production),
+  a production page (Make current / Current, Main list, Timecode),
+  **▶ current** / **· main** in the tree, Make current / Make main list /
+  Play on GO in the context menu. **Footer:** "Dance ▸ Next: …" and a
+  **Production** submenu in its GO menu. **Commands:** `production "name"
+  [current]`, `production current|none`, `main`.
+- Tests: `showtreeplay_test` (new, engine): `theCurrentProductionIsWhatGoPlays`,
+  `aMainCueListSetElsewhereMovesTheCurrentProduction`, `aProductionsMainList`,
+  `eachProductionHasItsTimecodeSource`, `productionsSaveAndLoad`,
+  `oneUndoHistoryAcrossProductions`, `looksSectionsPerProduction`,
+  `deletingTheCurrentProduction`, `productionCommands`;
+  `showtreeview_test::theProductionSwitcherAndPage`.
+
+**Found on the way (pre-existing, fixed, 132108f2f):** deleting a chaser
+that runs (a Doc torn down with a list playing) left its `ChaserRunner` to
+`QObject`'s child deletion, after `m_steps` was destroyed; the runner's
+`clearRunningList()` read the steps from freed memory. glibc caught it as
+"double free or corruption" in `showtreeview_test` on Linux (intermittent;
+macOS never showed it); an ASan build pinned it. `~Chaser` deletes the runner
+first. The same ASan run found a test reading a Scene an undo had deleted.
+
+### 10.18 P6 (2026-10-18, build host): sub-cues in the tree
+
+- **Model -- a flagged list, as the Looks section is.** A cue's sub-cues
+  are a `CueList` of their own with `subOf` = the cue (saved as `<SubCues
+  ID Name Cue Chaser>` in the production; an older build skips it and plays
+  the baked chasers). So every cue operation works on a sub-cue unchanged:
+  layers, looks, cue looks, the cascade, groups/palettes dropped, copy/paste,
+  rename, delete, undo, the command line, the Design preview (a sub-cue's
+  Collection is its full state). `edit()` keeps them as sub-cues: always
+  tracking, no mode / includes / base / folder, right after their cue's
+  list in the same production, gone with their cue or when empty, never of
+  a look or of a sub-cue (one level, SUBCUES §8).
+- **`Cue::follow` / `wait`** (`Follow="Auto" Wait=`): Auto-follow `wait` ms
+  after the sub-cue before has faded in; else Sub GO. **The first plays with
+  GO** (its Advance is ignored; open 30 on the cue's own fade).
+- **Resolver:** `resolve(list, lineAimTest, start)` -- a sub list's first
+  cue starts from its cue's `layers` (what is on stage, carried), the next
+  from the one before. The cue's own `passOn` is untouched, so the cue after
+  it starts from its own state (D9). `ShowTreeController::resolved()` finds
+  the start for a sub list. Values show **"from sub-cue 4.1"**.
+- **Numbering:** `<cue>.<n>` from the sub-cue's own (local) number;
+  `cueNumber()` gives the full one. `numberForInsert(list, after, taken)`:
+  a new main cue never takes a sub-cue's number (D23; 4.5 a sub-cue -> 4.6).
+- **Bake:** sub lists first; each a hidden generated Chaser ("2 Two ·
+  sub-cues", in the parent list's folder) of the sub-cues' Collections,
+  inner step k's hold = sub-cue k+1's wait when it follows, else infinite;
+  the parent's step plays it with `SubCues="SubGo"`, or **`SubGoFollow`**
+  when any sub-cue auto-follows.
+- **Engine (deviation from "none"):** `ChaserStep::SubGoFollow` -- as SubGo,
+  but a held inner step with a finite hold goes on by itself
+  (`ChaserRunner::setSubCueFollow`); an older build reads it as Auto. The
+  **hand-over** now reaches into a held sub-cue chase (`playingCollection`:
+  the Collection it plays, or will start on) and holds the leaving step one
+  write longer when either side is one (the inner chase starts its
+  Collection a tick later) -- tested: a scene shared by cue 1, 2.1, 2.2 and
+  cue 3 never stops or re-fades through GO, Sub GO and GO out.
+  The same chase on two consecutive steps is still stopped before it
+  starts again (the P6 gate caught that the hold broke it,
+  `subcues_test::consecutiveCuesOnOneChaseStartWhereAsked`; 652d901e6).
+- **Refused (why):** a sub-cue's mode / base / includes / list mode;
+  Convert to tracking and Detach to plain chaser on a list with sub-cues
+  (open 34); sub-cues of a look or a sub-cue.
+- **Tab:** sub-cue rows under their cue (`↳ 4.1 Hit · with GO / Sub GO /
+  auto 0.5s · fade 1.5s`), + Sub-cue (header, menu, the cue page's Sub-cues
+  line), Advance on a sub-cue's page, + Cue from a sub-cue = the next main
+  cue. **Commands:** `sub [+] ["name"] [follow <s> | subgo]`, `follow <s>`,
+  `subgo`, `cue 4.2` selects a sub-cue; help group *Sub-cues*.
+- **Not built:** the tracking sheet (it doesn't exist yet, so no sub-cue
+  columns: open 35); import of a chaser's Sub GO steps as tree sub-cues.
+- Tests: `showtreeplay_test` `subCuesTrackFromTheirCueAndAreCueOnly`,
+  `subCuesBakeToAHeldChaser`, `subGoPlaysThemOnTheRig`,
+  `autoFollowSubCuesGoOnByThemselves`, `aSceneSharedThroughSubCuesNeverRefades`,
+  `subCuesSaveLoadUndoAndDelete`, `numberingSkipsSubCueNumbers`,
+  `subCuesAreRefusedWhereTheyCantBe`, `subCueCommands`;
+  `showtreeview_test::subCuesInTheTree`.
+
+### 10.19 P7 (2026-10-18, build host): the cue runner
+
+- **One component, three sizes** (`ui/src/cuerunner.*`, `CueRunner::Full /
+  Compact / List`). It **keeps no state**: what plays is the list's chaser,
+  what is loaded is ShowControl's, and every button goes through
+  `ShowControl::execute()` with the followed chaser -- the path the footer,
+  ⌘↩ and QLab take. So the Run tab, any number of VC widgets, the keys and
+  show control mirror one state by construction (tested).
+- **Follows** a tree list of any production, or (invalid) the current
+  production = the show's main cue list (a plain chaser too: its steps,
+  without *what changes*).
+- **Shows:** header (production · list, switch box, timecode readout from
+  `TimecodeSource` -- `TC 01:02:03:15`, `hold`, `TC —` -- and LIVE / DESIGN);
+  the list (cues, sub-cues under them; ▶ with the fade's %, ▷ STANDBY, NEXT,
+  SUB NEXT; done grey); **now**, **NEXT / ▷ STANDBY** and **SUB NEXT** lines
+  with *what changes*; GO, Sub GO, Sub Back, Back, Pause/Resume, Stop. Click
+  = LOAD, double-click = jump (Go by number: a sub-cue's cue first).
+- **What changes** (`ShowTreeController::changeLine(from, to)`): per
+  resolved layer, the played looks that differ (Colour and Dimmer by
+  palette name, the rest prefixed: "gobo Breakup", "spread +5", "no gobo"
+  for one it stops), "X in → …" for a layer that comes in, "X out" for one
+  that goes. From the cue (or sub-cue) playing; GO into a cue with sub-cues
+  compares with its first sub-cue, what GO really plays.
+- **Run tab:** the last tab, **⇧⌘0** (the Window menu's tenth), `Full`,
+  following the current production; **Space** is GO there (a widget
+  shortcut: ⌘↩ etc. stay the app's).
+- **VC widget** (`VCCueRunner`, `VCWidget::CueRunnerWidget`): Compact or
+  List (Full is the tab's), follow, caption; `<CueRunner Follow Size>`;
+  copy/paste; a properties dialog; Add → New Cue Runner. **Swap widget**
+  (`VirtualConsole::swapWidget`, Edit → Swap Widget): a Cue List whose
+  chaser is a tree list becomes a List-size Cue Runner on it (following the
+  current production when that list is its main) at the same geometry, page
+  and caption; a Cue Runner becomes a Cue List of its chaser; a plain
+  chaser's Cue List is not swapped. No external input of its own yet
+  (open 32).
+- **Show control (SUBCUES §4, P3 of it):** `SubGo` / `SubBack` commands
+  (OSC `/subgo`, `/subback`), GO and LOAD of a sub-cue by number
+  (`findCueOrSubCue`, `jumpToSubCue`; `loadedSubCue()`), and
+  `Request::chaser` for a runner following a list that isn't the main one.
+- **Not built:** the "stage now" swatch strip (§6B); Run-tab keys beyond
+  Space (open 31).
+- Tests: `showtreeplay_test` `showControlStepsThroughSubCues`,
+  `whatChangesComesFromTheResolvedTracking`, `cueOfStepMapsTheChaserBack`;
+  `cuerunner_test` (new, 9: the list and its sub-cues, GO / Sub GO / Back /
+  Pause with what changes, click LOAD / double-click jump, two runners +
+  ⌘↩ + OSC mirror one state, following another production's list, LIVE /
+  DESIGN and timecode, Space, the VC widget's XML / copy, Swap widget);
+  `appviews_test::theRunTabIsTheCueRunner`.
+
 ### Open for Branson
 
 1. **`Generated` mark on `<Function>`** as well as in `<ShowTree>`? (10.2;
@@ -1844,4 +1998,29 @@ libraryAndProgrammingAgreeOnFolders`, `undoHereReachesTheSharedHistory`.
     with its migration fixed to strip only the genuine old layout (§10.16).
 26. **Deleting a palette cues use:** as built, the cues keep naming it
     ("(missing)") and Undo brings it back everywhere. Or should Delete also
-    take the looks off the cues (a tree step)?
+    take the looks off the cues (a tree step)? *(Being built elsewhere.)*
+27. **Switching the current production while a list runs:** as built, the
+    running list keeps going and the next GO is the new production's. Should
+    a switch in Perform ask first, or stop the old production's lists?
+28. **No current production until one is chosen** (an old show, a new
+    production): GO plays the main cue list as set, as before P5. Should the
+    first production made (or imported) become current by itself?
+29. **A sub-cue's wait** counts from when the sub-cue before it has **faded
+    in** (it is that one's hold). QLab's auto-continue counts from its
+    *start*. Which?
+30. **A cue with sub-cues:** GO plays the first sub-cue, with the first
+    sub-cue's own fade; the cue's own fade isn't used. Should the first
+    sub-cue take the cue's fade by default (or the cue page hide it)?
+31. **Run tab keys:** only Space = GO (⌘↩ & co. stay app-wide). Wanted:
+    ↑/↓ to move STANDBY, Esc, a Sub GO key?
+32. **Cue Runner VC widget inputs:** none of its own (it follows the app's
+    keys, the footer and show control). Add GO / Sub GO / Back MIDI and key
+    inputs as the VC Cue List has?
+33. **Swap widget:** a Cue List on the current production's main list
+    becomes a runner following "the current production" (it moves when the
+    production changes). Pin it to that list instead?
+34. **Sub-cues and the list tools:** Convert to tracking and Detach to plain
+    chaser refuse a list with sub-cues; an import keeps a chaser's Sub GO
+    step as a function layer. Build them through?
+35. **The tracking sheet** (§3A, §3C, sub-cue columns) doesn't exist yet:
+    build it next?

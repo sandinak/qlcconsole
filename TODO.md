@@ -156,6 +156,19 @@ help (DONE.md 2026-10-16). Handoff: SHOW_TREE_OVERNIGHT.md.
   from two groups, drop it with ⌥; ⇧-drop a group on a layer, set its
   dimmer down; drop a line target on a cue with two layers and slide Spread
   from the cue's Line ⋯; type `help`.
+- **P5–P7 done 2026-10-18 on the build host** (DONE.md, §10.17–10.19;
+  handoff SHOW_TREE_OVERNIGHT.md "P5-P7 on the build host"): several
+  productions with a current one (what GO, the footer, show control and the
+  runner play; its main list, its timecode source); sub-cues in the tree
+  (Sub GO / Auto-follow, cue-only, `SubGoFollow`); the cue runner (Run tab
+  ⇧⌘0, Cue Runner VC widget, Swap widget, "what changes", OSC
+  `/subgo` `/subback`). **Open (§10, 27–35):** switching production while a
+  list runs; no current production by default; a sub-cue's wait from fade-in
+  or start; the cue's own fade with sub-cues; Run-tab keys; VC widget inputs;
+  Swap's follow rule; Convert/Detach/import with sub-cues; the tracking
+  sheet. **Mac:** `./check-all.sh` legs not run yet (Linux only). **Try:**
+  two productions, switch, ⌘↩; + Sub-cue, Sub GO, auto-follow; the Run tab;
+  a Cue Runner on a VC page, Swap Widget.
 - **Show Tree command line: plain-language prompts** (Branson, 2026-10-17;
   not built). Two layers, phrase layer first. (1) Offline phrase layer
   (~2–3 days): synonyms/filler words mapped onto the existing grammar —

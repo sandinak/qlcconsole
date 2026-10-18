@@ -6,6 +6,27 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-18 — Show Tree P5–P7: productions, sub-cues in the tree, the cue runner *(on feat/show-tree, built on the Linux build host, not merged)*
+
+SHOW_TREE_DESIGN.md §8 P5–P7; notes §10.17–10.19, open 27–35; handoff in
+SHOW_TREE_OVERNIGHT.md.
+
+- **P5 productions:** the current production (header switcher, production
+  page, footer menu, `production … current`) is the show's main cue list
+  seen from the tree, kept as one both ways; per production a main list and
+  a timecode source (a second layer on `TimecodeSource`); one undo history.
+- **Fix:** `~Chaser` deletes a running runner before its steps (a
+  use-after-free on teardown, intermittent "double free" on Linux, found
+  with ASan).
+- **P6 sub-cues:** a flagged list per cue (`CueList::subOf`), tracking from
+  the cue then each other, cue-only for the next cue; baked as a held inner
+  chaser (`SubGo`, new `SubGoFollow` for auto-follow); hand-over through
+  them; tree rows, + Sub-cue, Advance, `sub` / `follow` / `subgo`.
+- **P7 cue runner:** `CueRunner` (Full / Compact / List) through
+  ShowControl only; Run tab (⇧⌘0, Space = GO); `VCCueRunner` + Swap
+  Widget; `changeLine()` "what changes"; ShowControl Sub GO / Sub Back,
+  sub-cue numbers, LOAD of a sub-cue.
+
 ### 2026-10-18 — Show Tree answers 12–25: one precedence rule, the plan view, preview = GO, palette folders merged *(on feat/show-tree, not merged)*
 
 Branson's answers to SHOW_TREE_DESIGN.md §10 open 12–25 (26 still open);
