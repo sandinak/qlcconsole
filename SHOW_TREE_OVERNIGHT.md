@@ -889,3 +889,174 @@ build/main/qlcconsole -o /tmp/dh-p7.qlcc
 4. **VC:** Add → New Cue Runner (properties: plays, Compact / List); put a
    Cue List on a tree list → Edit → **Swap Widget**. GO from the footer and
    from QLab (`/go`, `/subgo`, `/go 4.2`): every runner follows.
+
+---
+
+## Rig test build (2026-10-18)
+
+Everything after 0.1.0 on **one branch, `feat/show-tree`**, for the
+office-rig test this week. Not merged into release/0.1.0 or main; no tag.
+
+**Merged** (`--no-ff`, in this order, on top of 017a94718):
+
+| Merge | Branch | Conflicts |
+|---|---|---|
+| 113124697 | feat/show-tree-p5p7 (8363f532c) | docs only (DONE, whats-new, design). The palette-delete answer, also §10.17 here, is now **§10.20**; P5-P7 keep §10.17-10.19 |
+| cefa8fc44 | feat/wled-multi-device (c56b0c95f) | DONE; its "[0.1.1] - Unreleased" became the one **[Unreleased]** |
+| 8b91ce278 | feat/matrix-effects (aef70cdd9) | whats-new |
+| 5785db620 | feat/drape-curtain (070609013) | whats-new |
+| 7f59ac197 | feat/beam-occlusion (252203b2c) | **code:** aimsolver (collectAims vs line targets), lookeditor (line controls + dim checkbox), monitorgraphicsview (line points + blocked traces), qlcpalette copy, lookeditor_test; docs |
+
+Then: 307d64540 CHANGELOG [Unreleased]; **cd3826b31** storeDef fix (below).
+The rig-test commit is **cd3826b31** (plus this note).
+
+**Line of sight, made to work with the rest** (in the occlusion merge):
+- **Line targets:** each head's sight is checked to **its own point on the
+  line** (the one it aims at, `AimSolver::linePoints`), over the heads the
+  look writes -- not the line's centre. The plot's blocked trace stops on
+  the way to that point.
+- **Live drapes:** the occlusion model was built from each curtain's fixed
+  state, so a curtain moved by its fixture never changed what blocked.
+  `BeamOcclusion::livePoses()` now reads each driven curtain's pose from
+  its fixture's channel values, the model and its signature use it, so a
+  curtain opening/closing rebuilds the model on the next query: Aim-look
+  dimming, follow-spot Fade When Blocked, effect scripts' `blocked`, the 2D
+  traces (redrawn when a driven curtain moves) and the 3D views (the poses
+  they draw).
+- Tests: `beamocclusion_test::aLineTargetChecksEachHeadsOwnPoint`,
+  `aDrivenCurtainBlocksAsItsFixtureHasIt` (query, model rebuild, and a
+  running scene's dimming following the curtain fixture). Help:
+  stage-targets.md.
+
+**storeDef** (`qlcfixturedefcache_test`, the 300 s timeouts):
+`QLCFixtureDefCache::storeFixtureDef()` called a **global `sync()`**, which
+flushes every mounted volume (Time Machine over SMB, external disks, other
+builds); on the first gate here it passed but took 44 s / 26 s / 3 s across
+the legs. Now it writes through `QSaveFile` (whole or nothing; `commit()`
+flushes just that file): ~1.3 s, the same with 4 GB of other writes
+pending. A real fix in the app (Fixture Editor's save into the user
+folder), not a longer timeout.
+
+### Gate (macOS, `./check-all.sh` on a `git archive`, JOBS=8)
+
+- **cd3826b31** (the rig-test code): **Qt6 PASS** (388 s), **Qt6-Release
+  PASS** (314 s), **Qt6-Werror PASS** (364 s); whole gate 1066 s, 474 test
+  programs' totals, 0 failed. storeDef 1.3 s / 0.1 s / 1.3 s.
+- 307d64540 (before the storeDef fix): all three PASS too (444 / 359 /
+  366 s); storeDef passed but took 44 s / 26 s / 3 s -- what led to the fix.
+- Per merge, the targeted tests (Debug build/): showtree 138 (+1 opt-in
+  skip), showtreeplay 23, cuehandover 11, subcues 14, chaser 24,
+  chaserrunner 22, showcontrol 21, collection 16, cuerunner 11,
+  showtreeview 62 (+1), appviews 14, vccuelist / vcframe / vcbutton,
+  helpbrowser 9, programmingmanager 42, qlcpalette 56; wled 12 (+1),
+  wleddevices 11, inputoutputmap 48, inventory 62, fixturemanager 20;
+  effectinstance 34, lookeditor 20, headtypegroups 17, rgbscript 14;
+  scenery 18, monitor 294 (+1), addfixture 17, fixturedefcheck 22,
+  powerdistribution 12; beamocclusion 16, aimsolver 9, linetarget 22,
+  scene 25 -- all pass.
+- **No crash reports** in ~/Library/Logs/DiagnosticReports from any of
+  it (the newest *_test .ips there predate this work).
+- No DMX out: every test reads the universes in memory.
+
+### DanceHysteria-0.6 dry run (a COPY, all 71 `<Output>` patches and the
+ArtNet manual targets stripped; the original unchanged, sha256)
+
+- **0 channels differ** in every cue of **New Chaser 8** (2) and
+  **00-Preshow** (7), and in all 15 converted-vs-imported compares.
+- **Full Show: 0.0.2-0.0.4 = 0 differ; 0.0.5, 0.0.6, 0.0.7 = 1410 channels
+  differ** (chaser 255, list 115). Not from the merges: the pre-merge
+  017a94718 gives the same numbers on this copy, and **0.5 still gives 0**
+  on the merged build. It is the show: in 0.6, cue 0.0.5 includes 0.0.4
+  (StepTops White, full) and adds its own StepTops at **Intensity 45%**;
+  the chaser runs both and HTP keeps 255 -- the 45% never shows -- while
+  the tree's one rule plays the cue's own 45% (0.0.6 / 0.0.7 include
+  0.0.5). The import reports it ("HTP: Cue 0.0.5 … the cue list keeps the
+  last one's value"). Question below.
+- The test harness reads only `<Engine>`, so the fixtures whose
+  definitions are embedded in the .qlcc (Movinghead+Circle, LED SPOT,
+  XL-450, Junman beam, PHS step row …) don't load in it; same as earlier
+  dry runs.
+
+### What's in it (one line each)
+
+- **Show Tree P1-P4** -- productions → lists → cues → layers → looks,
+  tracking, includes, Import chaser / Convert / Detach, plan view, preview
+  = GO, typed command line, one shared undo.
+- **Looks + Library palettes** -- busking Looks section, Make VC page,
+  Library with Recent / Pinned / by type.
+- **Answers 12-26** -- one precedence rule, palette folders merged, delete
+  a palette clears every use (one Undo).
+- **P5 productions** -- several per show, a current one, main list +
+  timecode each.
+- **P6 sub-cues** -- 4.1, 4.2… with Sub GO / Auto-follow, tracking inside
+  the cue.
+- **P7 cue runner** -- Run tab (⇧⌘0), Cue Runner VC widget, Swap Widget,
+  OSC /subgo /subback.
+- **Chaser teardown fix** -- a running runner let go before its steps
+  (use-after-free).
+- **Line targets** -- Aim looks spread / cross / group heads along a line.
+- **Colour rings** -- ring as its own head type, ring chases by name, drawn
+  live; Change Definition.
+- **Group by head type** -- Create Group(s) from Selection.
+- **Backup WLED lanterns** -- several devices per WLED universe.
+- **Matrix effects** -- 14 effects + lib/matrix.js, per-head RGB/white, loose
+  15×5 box grid.
+- **Moving curtains** -- Generic Stage Curtain fixture drives a drape
+  (open / fly).
+- **Line of sight** -- follow spot Fade When Blocked, Aim look "Dim lights
+  that can't see the target", blocked traces; with line targets and live
+  curtains.
+- **storeDef / fixture save** -- no global sync().
+
+### Known gaps / open questions (all branches)
+
+Show Tree (§10):
+- **27** Switching the current production while a list runs: keep running
+  (built), ask, or stop?
+- **28** No current production until one is chosen -- or the first made /
+  imported becomes current?
+- **29** A sub-cue's wait from the one before *faded in* (built) or from its
+  start (QLab)?
+- **30** A cue with sub-cues: should the first sub-cue take the cue's fade?
+- **31** Run tab keys beyond Space (↑/↓ STANDBY, Esc, Sub GO)?
+- **32** Inputs (MIDI / keys) on the Cue Runner VC widget?
+- **33** Swap widget: follow "the current production" (built) or pin to
+  the list?
+- **34** Convert / Detach / import with sub-cues -- build them through?
+- **35** Build the tracking sheet next?
+- Still open from before: 1, 3, 4, 5, 8.
+- **New, from the 0.6 dry run:** an include brighter than the cue's own
+  scene on the same group (see above). The tree plays the cue's own value;
+  the chaser played the brighter one. Keep the rule (and the 45% you set
+  in 0.0.5 now shows), or have the import keep what the chaser did?
+
+Other branches:
+- **Colour ring** doesn't follow the spot's dimmer (a ring stays lit with
+  the spot dimmed); the ring chase's speed is the fixture's, not set from
+  the look -- both open.
+- **Matrix effects:** checked offscreen only; on the rig -- each effect on
+  one box and all eight as one canvas, 135ch and 30ch modes, the five
+  white choices, the head map vs the box as built, and how a look on the
+  split TrussC-RGB + TrussC-W groups lays out on stage positions against
+  one 75-head group per box.
+- **Line of sight:** the minimum blocker size (20 cm) has no UI (XML only);
+  an Aim look's dimming takes down only the look's own dimmer (another
+  scene's dimmer on top still shows).
+- **WLED backups:** every backup must be on the same network as the
+  primary (one patch, one interface) -- a backup on another subnet / VLAN
+  isn't reachable.
+- **Curtains:** real curtain motors only through a curtain fixture
+  patched to a controller / relay; no cue-light / stand-by signalling yet.
+- A curtain fixture is only followed live when it's patched (the app hands
+  values to patched fixtures).
+
+### Run it
+
+```sh
+cp ~/git/qlcconsole/test-workspaces/DanceHysteria-0.6.qlcc /tmp/dh-rig.qlcc
+~/git/qlcconsole-showtree/build/main/qlcconsole -o /tmp/dh-rig.qlcc
+```
+
+`build/` is a **Debug** build (Unix Makefiles, Qt 6 from Homebrew). The
+show's outputs are patched as saved: on the office rig network it sends
+DMX.
