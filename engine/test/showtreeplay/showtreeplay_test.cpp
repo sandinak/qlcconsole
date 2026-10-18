@@ -626,10 +626,11 @@ void ShowTreePlay_Test::subCuesBakeToAHeldChaser()
     QVERIFY(st->setSubCueFollow(ids[5], false, 0));
     QCOMPARE(outer->steps().at(1).subCues, ChaserStep::SubGo);
 
-    // A bake straight after changes nothing.
+    // A bake straight after changes nothing. (An edit replaces the tree:
+    // what `song` pointed at is gone, so by id.)
     const quint32 before = inner->id();
     st->bake();
-    QCOMPARE(qobject_cast<Chaser *>(m_doc->function(song->chaser))->steps().at(1).fid, before);
+    QCOMPARE(qobject_cast<Chaser *>(m_doc->function(st->cueList(ids[0])->chaser))->steps().at(1).fid, before);
 }
 
 void ShowTreePlay_Test::subGoPlaysThemOnTheRig()
