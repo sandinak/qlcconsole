@@ -335,8 +335,17 @@ public:
     /** Associate this palette with a StageTarget (pass invalidId() to clear). */
     void setStageTargetId(quint32 id) { m_stageTargetId = id; }
 
+    /** Aim looks: "Dim lights that can't see the target". On, a head this
+     *  look points at its target with something solid on stage in the way
+     *  (a closed drape, a wall, a riser -- BeamOcclusion) has its dimmer
+     *  taken down while it is blocked, and back when it is clear. Off (the
+     *  default) the look never touches a dimmer. */
+    bool dimWhenBlocked() const { return m_dimWhenBlocked; }
+    void setDimWhenBlocked(bool on) { m_dimWhenBlocked = on; }
+
 private:
     quint32 m_stageTargetId = UINT_MAX;
+    bool m_dimWhenBlocked = false;
 
     /************************************************************************
      * Gobo by name (type == Gobo only), SHOW_TREE_DESIGN.md §3A / §10.7

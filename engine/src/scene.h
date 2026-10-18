@@ -25,6 +25,7 @@
 #include <atomic>
 #include <QHash>
 #include <QList>
+#include <QSet>
 
 #include "genericfader.h"
 #include "fadechannel.h"
@@ -187,6 +188,16 @@ protected:
     mutable QMutex m_valueListMutex;
     bool m_reaimRequested = false;
     bool m_repaletteRequested = false;
+
+    /** Line of sight: the heads an Aim look with "Dim lights that can't see
+     *  the target" has dimmed because something on stage is in their way
+     *  (QLCPalette::dimWhenBlocked). Under m_valueListMutex, like the faders. */
+    QSet<quint32> m_sightDimmed;
+    /** Look again, each tick, for heads that became blocked or clear, and
+     *  fade their dimmers down or back. Holds m_valueListMutex. */
+    void updateSightDim(QList<Universe *> ua);
+    /** Fade one channel of the running scene to @p value over @p ms. */
+    void fadeChannelTo(QList<Universe *> ua, quint32 fxi, quint32 channel, uchar value, uint ms);
 
     /**
      * Guards m_fixtures, m_fixtureGroups and m_palettes.

@@ -7295,6 +7295,122 @@ void Monitor_Test::aTargetSaysWhichHeadsCannotReachIt()
     delete doc;
 }
 
+void Monitor_Test::aBlockedBeamIsTracedToWhatBlocksIt()
+{
+    /* A spot on the FOH pipe aimed at a vocalist upstage of the closed main
+       drape: the trace runs red and dashed to the drape, with a cross where
+       it stops and the blocker named; the drape opens and it is an ordinary
+       trace again. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Scenery *drape = props->addScenery();
+    drape->setKind(Scenery::MainDrape);
+    drape->setName("Main drape 2");
+    drape->setOriginX(5.0f);
+    drape->setOriginY(3.0f);
+    drape->setWidth(10.0f);
+    drape->setHeight(6.0f);
+    drape->setOpeningWidth(8.0f);
+
+    Truss *pipe = props->addTruss();
+    pipe->setName("FOH");
+    pipe->setType(Truss::Horizontal);
+    pipe->setOrigin(QVector3D(2.0f, 6.5f, 6.0f));
+    pipe->setDirection(QPointF(1.0, 0.0));
+    pipe->setLength(6.0f);
+    pipe->setWidth(0.29f);
+
+    Fixture *spot = makeMover(doc, 14.0, 0, "FOH spot", QVector3D(5.0f, 6.5f, 6.0f));
+    QVERIFY(spot != nullptr);
+    FixtureRigProps rp;
+    rp.trussId = pipe->id();
+    rp.trussOffset = 3.0f;
+    rp.mountingType = Truss::TopHung;
+    props->setFixtureRigProps(spot->id(), rp);
+
+    StageTarget *who = props->addStageTarget();
+    who->setName("Vocalist");
+    who->setKind(StageTarget::Kind::Person);
+    who->setPosition(QVector3D(5.0f, 1.0f, 0.0f));
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, doc);
+    aim->setName("At the vocalist");
+    aim->setStageTargetId(who->id());
+    QVERIFY(doc->addPalette(aim));
+    Scene *scene = new Scene(doc);
+    scene->setName("Solo");
+    scene->addFixture(spot->id());
+    scene->addPalette(aim->id());
+    QVERIFY(doc->addFunction(scene));
+
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(1000, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(10, 8));
+        view.updateTrusses();
+        view.addFixture(spot->id(), QPointF(5000.0, 6500.0));
+        view.setActiveScene(scene->id());
+        view.updateAimLines();
+
+        auto blockedTraces = [&]() {
+            QList<QGraphicsLineItem *> out;
+            foreach (QGraphicsLineItem *li, view.m_aimLines)
+                if (li->data(0).toString() == QLatin1String("blockedTrace"))
+                    out << li;
+            return out;
+        };
+        QList<QGraphicsLineItem *> traces = blockedTraces();
+        QCOMPARE(traces.size(), 1);
+        QCOMPARE(traces.first()->pen().style(), Qt::DashLine);
+        QVERIFY2(traces.first()->toolTip().contains("Main drape 2"),
+                 qPrintable(traces.first()->toolTip()));
+        // It stops short of the target: at the drape, not at the vocalist.
+        TargetItem *ti = view.m_targetItems.value(who->id(), nullptr);
+        QVERIFY(ti != nullptr);
+        const QLineF l = traces.first()->line();
+        QVERIFY(QLineF(l.p1(), ti->pos()).length() > l.length() + 5.0);
+
+        drape->setState(Scenery::Open);
+        view.updateAimLines();
+        QVERIFY(blockedTraces().isEmpty());
+        QVERIFY(!view.m_aimLines.isEmpty());
+    }
+
+    delete doc;
+}
+
+void Monitor_Test::theLineOfSightMenuSetsWhatBlocks()
+{
+    QWidget parent;
+    Monitor mon(&parent, m_doc);
+    MonitorProperties *props = m_doc->monitorProperties();
+    const int before = props->occlusionKinds();
+    QVERIFY(before & BeamOcclusion::Towers);
+
+    QMenu *menu = mon.findChild<QMenu *>("lineOfSightMenu");
+    QVERIFY(menu != nullptr);
+    QAction *towers = nullptr, *beams = nullptr;
+    foreach (QAction *a, menu->actions())
+    {
+        if (a->objectName() == QStringLiteral("lineOfSightKind%1").arg(int(BeamOcclusion::Towers)))
+            towers = a;
+        else if (a->objectName() == QLatin1String("lineOfSightBeams"))
+            beams = a;
+    }
+    QVERIFY(towers != nullptr && beams != nullptr);
+    QVERIFY(towers->isChecked());
+    towers->setChecked(false);
+    QCOMPARE(props->occlusionKinds(), before & ~int(BeamOcclusion::Towers));
+    towers->setChecked(true);
+    QCOMPARE(props->occlusionKinds(), before);
+
+    const bool was = StructureStudioView::lineOfSightBeams();
+    beams->setChecked(!beams->isChecked());
+    QCOMPARE(StructureStudioView::lineOfSightBeams(), beams->isChecked());
+    beams->setChecked(was);
+    QCOMPARE(StructureStudioView::lineOfSightBeams(), was);
+}
+
 void Monitor_Test::aFaceFixtureDrawsOverWhatIsInside()
 {
     /* "I put this XL-450 on the front of the truss and it's showing under

@@ -169,6 +169,31 @@ void LookEditor_Test::aColourLookCanPickARingSlot()
     QCOMPARE(ed.m_macroCombo->currentData().toString(), QString("RGB/Random-Chase"));
 }
 
+void LookEditor_Test::anAimLookCanDimLightsThatCannotSeeItsTarget()
+{
+    Doc doc(this);
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, &doc);
+    aim->setName("At the vocalist");
+    QVERIFY(doc.addPalette(aim));
+
+    LookEditor ed(&doc);
+    ed.setPalette(aim->id());
+    QCheckBox *dim = ed.findChild<QCheckBox *>("aimDimWhenBlocked");
+    QVERIFY(dim != nullptr);
+    // Off unless asked for: an existing show never changes.
+    QVERIFY(!dim->isChecked());
+    QVERIFY(!aim->dimWhenBlocked());
+    dim->setChecked(true);
+    QVERIFY(aim->dimWhenBlocked());
+
+    // Opened again, it shows what the look says.
+    LookEditor again(&doc);
+    again.setPalette(aim->id());
+    QVERIFY(again.findChild<QCheckBox *>("aimDimWhenBlocked")->isChecked());
+    again.findChild<QCheckBox *>("aimDimWhenBlocked")->setChecked(false);
+    QVERIFY(!aim->dimWhenBlocked());
+}
+
 /* A one-channel fixture type whose channel is a gobo wheel with the given
    slots, 20 DMX values each (or a plain dimmer when @p gobos is empty). */
 static QLCFixtureDef *wheelDef(const QString &model, const QStringList &gobos)

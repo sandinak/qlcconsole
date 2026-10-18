@@ -40,6 +40,7 @@ private slots:
      *  ring): picking a chase makes the look name it; a colour slot sets the
      *  picker too; "Nearest to the colour" goes back. */
     void aColourLookCanPickARingSlot();
+    void anAimLookCanDimLightsThatCannotSeeItsTarget();
     /** "if I create a gobo it doesn't give me a gobo selector?" A gobo made
      *  from the palette list has no look yet; the picker falls back to the
      *  workspace's fixtures, with a chooser when several wheels differ. */

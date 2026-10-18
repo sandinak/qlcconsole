@@ -170,6 +170,18 @@ The latest changes, newest first. Each links to the guide with the detail.
   to a curtain controller or relay box to move the real one. See
   [Curtains that move](lighting-studio.md#curtains-that-move).
 
+### Follow spot and aiming
+
+- **Line of sight: lights go out when they can't see the target.** A follow
+  spot's new **Fade When Blocked** fades a head while a closed drape, a
+  wall, a riser or a tower stands between it and the subject, and brings it
+  back when the way is clear; an Aim look's **Dim lights that can't see the
+  target** does the same for any aimed look. Both are off unless you turn
+  them on. The Targets panel names what's in the way, the plot draws a
+  blocked aim line red to its blocker, and **Show → Line of sight** picks
+  what counts and can stop the 3D views' beams at it. See
+  [Line of sight](stage-targets.md#line-of-sight).
+
 ### Programming
 
 - **Palette folders hold any type.** A song's folder can hold its colours,

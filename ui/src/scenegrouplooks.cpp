@@ -600,10 +600,15 @@ QHash<quint32, QStringList> SceneGroupLooks::headsThatCannotReach() const
         return out;
     foreach (const AimSolver::SceneAim &a, AimSolver::sceneAims(m_doc, m_scene))
     {
-        if (a.solution.reachable())
+        StageTarget *t = props->stageTarget(a.targetId);
+        if (t == nullptr)
             continue;
-        if (StageTarget *t = props->stageTarget(a.targetId))
+        if (!a.solution.reachable())
             out[a.fixtureId] << t->name();
+        /* In range, but something solid on stage is in the way: it points
+           there and its light stops short (line of sight). */
+        else if (a.sight.blocked)
+            out[a.fixtureId] << tr("%1 (blocked by %2)").arg(t->name(), a.sight.name);
     }
     return out;
 }

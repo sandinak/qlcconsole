@@ -653,6 +653,8 @@ private slots:
     void aFrameFilledAcrossCoresIsTheSameFrame();
     void aFaceFixtureDrawsOverWhatIsInside();
     void aTargetSaysWhichHeadsCannotReachIt();
+    void aBlockedBeamIsTracedToWhatBlocksIt();
+    void theLineOfSightMenuSetsWhatBlocks();
     void theReachOverlayShadesWhereASpotCannotAim();
     void aSelectedLookLightsTheRigInDesign();
     void anUndrivenHeadPointsAtTheScenesTarget();

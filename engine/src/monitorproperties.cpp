@@ -59,6 +59,8 @@
 #define KXMLQLCMonitorLayoutLocked  QStringLiteral("LayoutLocked")
 #define KXMLQLCMonitorSnapDivisions QStringLiteral("SnapDivisions")
 #define KXMLQLCMonitorAimSubjectHeight QStringLiteral("AimSubjectHeight")
+#define KXMLQLCMonitorOcclusionKinds   QStringLiteral("OcclusionKinds")
+#define KXMLQLCMonitorOcclusionMinSize QStringLiteral("OcclusionMinSize")
 #define KXMLQLCMonitorOriginX       QStringLiteral("OriginX")
 #define KXMLQLCMonitorOriginY       QStringLiteral("OriginY")
 #define KXMLQLCMonitorItemID        QStringLiteral("ID")
@@ -277,6 +279,9 @@ void MonitorProperties::reset()
     m_gridSubdivisions = 1;
     m_snapDivisions = 0;
     m_aimSubjectHeight = 1.4f;
+    m_occlusionKinds = BeamOcclusion::defaultKinds();
+    m_occlusionMinSize = BeamOcclusion::defaultMinSize();
+    m_occlusion.clear();
     m_stageOrigin = QPointF(0, 0);
     m_showLabels = true;
     m_fixtureItems.clear();
@@ -2328,6 +2333,10 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
 
     if (attrs.hasAttribute(KXMLQLCMonitorAimSubjectHeight))
         setAimSubjectHeight(attrs.value(KXMLQLCMonitorAimSubjectHeight).toString().toFloat());
+    if (attrs.hasAttribute(KXMLQLCMonitorOcclusionKinds))
+        setOcclusionKinds(attrs.value(KXMLQLCMonitorOcclusionKinds).toString().toInt());
+    if (attrs.hasAttribute(KXMLQLCMonitorOcclusionMinSize))
+        setOcclusionMinSize(attrs.value(KXMLQLCMonitorOcclusionMinSize).toString().toFloat());
 
     if (attrs.hasAttribute(KXMLQLCMonitorOriginX) || attrs.hasAttribute(KXMLQLCMonitorOriginY))
         setStageOrigin(QPointF(attrs.value(KXMLQLCMonitorOriginX).toString().toDouble(),
@@ -3176,6 +3185,11 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
     // Written unconditionally, which is the behaviour every existing .qxw was
     // saved with, so the indentation is what's wrong here, not the logic.
     doc->writeAttribute(KXMLQLCMonitorAimSubjectHeight, QString::number(aimSubjectHeight()));
+    // Line of sight: only when not the default, so existing files are unchanged.
+    if (occlusionKinds() != BeamOcclusion::defaultKinds())
+        doc->writeAttribute(KXMLQLCMonitorOcclusionKinds, QString::number(occlusionKinds()));
+    if (!qFuzzyCompare(occlusionMinSize(), BeamOcclusion::defaultMinSize()))
+        doc->writeAttribute(KXMLQLCMonitorOcclusionMinSize, QString::number(double(occlusionMinSize())));
     if (!stageOrigin().isNull())
     {
         doc->writeAttribute(KXMLQLCMonitorOriginX, QString::number(stageOrigin().x()));

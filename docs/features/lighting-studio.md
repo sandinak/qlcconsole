@@ -570,6 +570,26 @@ the Rig Overview show what it's actually doing, not just where it sits:
 Both overlays are visualization aids only — they aren't saved with the
 workspace.
 
+### Line of sight
+
+**Show → Line of sight** says what stands in a beam's way and how the views
+show it:
+
+- **What blocks a beam** — drapes and cyc, walls and proscenium, platforms
+  and risers, towers, trusses, pipes and stands (trusses, pipes and stands
+  only when at least 20 cm thick). Saved with the show; it's what a follow
+  spot's *Fade When Blocked*, an Aim look's *Dim lights that can't see the
+  target* and the blocked traces go by. See
+  [Line of sight](stage-targets.md#line-of-sight).
+- **Beams stop at what is in their way** — in the Angled view and the Rig
+  Overview a beam already stops at a deck, a drape or a wall; with this on
+  it stops at a tower, a truss or a riser's side too. Off by default;
+  remembered.
+
+On the plot, a head aimed at a target it can't see draws its aim line **red
+and dashed to the blocker**, with a cross where it stops and a faint dotted
+line on to the target; hover it for what's in the way and how far out.
+
 ### Washes and profiles: the edge of a pool
 
 A beam's angle (the definition's **Lens** degrees) is where the light is

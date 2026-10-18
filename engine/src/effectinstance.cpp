@@ -1226,6 +1226,9 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
     QHash<quint32, QJSValue> aimAtOf, sceneTargetOf, lastSpotOf;
     if (aiming || sceneTarget || !m_lastSpotIn.isEmpty())
     {
+        // Line of sight: the stage's model, fetched once for every head.
+        const BeamOcclusion::ModelPtr sight = (aiming || sceneTarget)
+            ? mp->occlusionModel(m_doc) : BeamOcclusion::ModelPtr();
         for (auto it = m_facts.begin(); it != m_facts.end(); ++it)
         {
             const quint32 fid = it.key();
@@ -1233,9 +1236,9 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
             if (f.fixture == nullptr)
                 continue;
             if (aiming)
-                aimAtOf.insert(fid, aimAtObject(fid, f.pos, effectPal));
+                aimAtOf.insert(fid, aimAtObject(fid, f.pos, effectPal, *sight));
             if (sceneTarget)
-                sceneTargetOf.insert(fid, sceneTargetObject(fid, sceneTarget));
+                sceneTargetOf.insert(fid, sceneTargetObject(fid, sceneTarget, *sight));
             // lastSpot: pan/tilt (degrees) where this fixture's beam was left by the
             // previous Operate-mode tick (possibly from a different scene).  Lets a
             // followspot script seed followMode = "lastPosition" so the beam holds
@@ -1380,7 +1383,29 @@ void EffectInstance::readFixtureFacts(const Fixture *fxi, FixtureFacts &f) const
     f.hasRGB = hasR && hasG && hasB;
 }
 
-QJSValue EffectInstance::aimAtObject(quint32 fid, const QVector3D &pos, QLCPalette *effectPal)
+void EffectInstance::setSight(QJSValue &obj, const BeamOcclusion::Hit &hit) const
+{
+    obj.setProperty("blocked", hit.blocked);
+    obj.setProperty("blockedBy", hit.blocked ? hit.name : QString());
+    QString kind;
+    switch (hit.blocked ? hit.kind : 0)
+    {
+        case BeamOcclusion::Drapes:    kind = QStringLiteral("drape"); break;
+        case BeamOcclusion::Walls:     kind = QStringLiteral("wall"); break;
+        case BeamOcclusion::Platforms: kind = QStringLiteral("platform"); break;
+        case BeamOcclusion::Towers:    kind = QStringLiteral("tower"); break;
+        case BeamOcclusion::Trusses:   kind = QStringLiteral("truss"); break;
+        case BeamOcclusion::Pipes:     kind = QStringLiteral("pipe"); break;
+        case BeamOcclusion::Stands:    kind = QStringLiteral("stand"); break;
+        default: break;
+    }
+    obj.setProperty("blockedKind", kind);
+    obj.setProperty("blockedAt", double(hit.distance));
+    obj.setProperty("clearance", double(hit.clearance));
+}
+
+QJSValue EffectInstance::aimAtObject(quint32 fid, const QVector3D &pos, QLCPalette *effectPal,
+                                     const BeamOcclusion::Model &sight)
 {
     // aimAt: pre-computed pan/tilt for each bound target slot
     QJSValue aimAt = m_script.engine()->newObject();
@@ -1404,20 +1429,23 @@ QJSValue EffectInstance::aimAtObject(quint32 fid, const QVector3D &pos, QLCPalet
         // palette uses in Edit — so the beam doesn't jump on Edit→Run.
         // aimAt.pan/tilt are fixture degrees; the host converts via
         // positionToValues (see parseIntents).
-        AimSolver::Solution sol;
+        AimSolver::Frame frame;
         QJSValue aimObj = m_script.engine()->newObject();
-        if (AimSolver::reach(m_doc, fid, tgtPos, sol))
+        if (AimSolver::frameFor(m_doc, fid, frame))
         {
+            const AimSolver::Solution sol = AimSolver::solve(frame, tgtPos);
             aimObj.setProperty("pan",  (double)sol.panDeg);
             aimObj.setProperty("tilt", (double)sol.tiltDeg);
             aimObj.setProperty("reachMargin", (double)sol.marginDeg);
+            setSight(aimObj, AimSolver::lineOfSight(m_doc, sight, fid, frame.position, tgtPos));
         }
         aimAt.setProperty(td.name, aimObj);
     }
     return aimAt;
 }
 
-QJSValue EffectInstance::sceneTargetObject(quint32 fid, StageTarget *st)
+QJSValue EffectInstance::sceneTargetObject(quint32 fid, StageTarget *st,
+                                           const BeamOcclusion::Model &sight)
 {
     const MonitorProperties *mp = m_doc->monitorProperties();
     QVector3D raw = st->position();
@@ -1451,6 +1479,9 @@ QJSValue EffectInstance::sceneTargetObject(quint32 fid, StageTarget *st)
         so.setProperty("tilt", double(sol.tiltDeg));
         so.setProperty("reachMargin", double(sol.marginDeg));
         so.setProperty("distance", double((subject - frame.position).length()));
+        // blocked / blockedBy / clearance: whether anything solid on stage
+        // stands between the head and the point it is aimed at.
+        setSight(so, AimSolver::lineOfSight(m_doc, sight, fid, frame.position, tp));
     }
     return so;
 }

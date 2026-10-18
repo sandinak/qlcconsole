@@ -63,6 +63,7 @@ add_library(${module_name} SHARED
     powerdistribution.cpp powerdistribution.h
     venue.cpp venue.h
     aimsolver.cpp aimsolver.h
+    beamocclusion.cpp beamocclusion.h
     stageplatform.cpp stageplatform.h
     pipe.cpp pipe.h
     scenery.cpp scenery.h

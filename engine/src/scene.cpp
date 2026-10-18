@@ -35,6 +35,8 @@
 #include "universe.h"
 #include "scene.h"
 #include "doc.h"
+#include "aimsolver.h"
+#include "qlcchannel.h"
 #include "bus.h"
 
 // Optional per-look fade override (ms), stored on the scene's <Palette> ref.
@@ -1471,6 +1473,105 @@ void Scene::handleFadersEnd(MasterTimer *timer)
     setBlendFunctionID(Function::invalidId());
 }
 
+/* The channels a head blocked from its target is dimmed by: its dimmers --
+   the master and any head dimmer -- or, with none, everything that makes its
+   light (a colour-mixing head with no dimmer of its own). */
+static QList<quint32> sightDimChannels(const Fixture *fixture)
+{
+    QList<quint32> dimmers, emitters;
+    if (fixture == NULL)
+        return dimmers;
+    for (quint32 c = 0; c < fixture->channels(); ++c)
+    {
+        const QLCChannel *ch = fixture->channel(c);
+        if (ch == NULL || ch->group() != QLCChannel::Intensity)
+            continue;
+        if (ch->colour() == QLCChannel::NoColour)
+            dimmers << c;
+        else
+            emitters << c;
+    }
+    return dimmers.isEmpty() ? emitters : dimmers;
+}
+
+/* How long a head blocked from its target takes to go out, and to come back. */
+static const uint SIGHT_FADE_MS = 400;
+
+void Scene::fadeChannelTo(QList<Universe *> ua, quint32 fxi, quint32 channel, uchar value, uint ms)
+{
+    Fixture *fixture = doc()->fixture(fxi);
+    if (fixture == NULL)
+        return;
+    const int universeIndex = int(floor((fixture->universeAddress() + channel) / 512));
+    if (universeIndex < 0 || universeIndex >= ua.count())
+        return;
+    Universe *universe = ua.at(universeIndex);
+    QSharedPointer<GenericFader> fader = m_fadersMap.value(universe->id(), QSharedPointer<GenericFader>());
+    if (fader.isNull())
+        return;     // nothing of this scene's on that universe to take down
+    GenericFader::ChannelRef fc = fader->getChannelFader(doc(), universe, fxi, channel);
+    const int chIndex = fc->channelIndex(channel);
+    fc->setStart(fc->current(chIndex), chIndex);
+    fc->setTarget(value, chIndex);
+    fc->setFadeTime(fc->canFade() ? ms : 0);
+    fc->setElapsed(0);
+    fc->setReady(false);
+}
+
+void Scene::updateSightDim(QList<Universe *> ua)
+{
+    const QHash<quint32, BeamOcclusion::Hit> blocked = AimSolver::blockedDimmedHeads(doc(), this);
+    QSet<quint32> now;
+    for (auto it = blocked.constBegin(); it != blocked.constEnd(); ++it)
+        now.insert(it.key());
+    if (now == m_sightDimmed)
+        return;
+
+    const QSet<quint32> going = now - m_sightDimmed;
+    const QSet<quint32> coming = m_sightDimmed - now;
+    m_sightDimmed = now;
+
+    foreach (quint32 fid, going)
+        foreach (quint32 ch, sightDimChannels(doc()->fixture(fid)))
+            fadeChannelTo(ua, fid, ch, 0, SIGHT_FADE_MS);
+
+    if (coming.isEmpty())
+        return;
+
+    /* Clear again: back to what the look gives it -- resolved as the full
+       build does (baked values, then each look in order, the last wins). */
+    QHash<quint64, uchar> want;
+    auto keyOf = [](quint32 fxi, quint32 ch) { return (quint64(fxi) << 32) | ch; };
+    for (auto it = m_values.constBegin(); it != m_values.constEnd(); ++it)
+        if (coming.contains(it.key().fxi))
+            want.insert(keyOf(it.key().fxi, it.key().channel), it.key().value);
+    const QList<quint32> pals = runtimePalettes();
+    foreach (quint32 paletteID, pals)
+    {
+        QLCPalette *palette = doc()->palette(paletteID);
+        if (palette == NULL || palette->type() == QLCPalette::Effect
+            || QLCPalette::isEffectScoped(doc(), pals, paletteID))
+            continue;
+        const int cOff = QLCPalette::colorSetOffset(doc(), pals, paletteID);
+        QList<SceneValue> vals = palette->valuesFromFixtureGroups(doc(), fixtureGroups(), this, cOff);
+        vals += palette->valuesFromFixtures(doc(), fixtures(), this, cOff);
+        foreach (const SceneValue &scv, vals)
+            if (coming.contains(scv.fxi))
+                want.insert(keyOf(scv.fxi, scv.channel), scv.value);
+    }
+    const int lookDim = QLCPalette::lookDimmerValue(doc(), pals);
+    foreach (quint32 fid, coming)
+    {
+        Fixture *fixture = doc()->fixture(fid);
+        foreach (quint32 ch, sightDimChannels(fixture))
+        {
+            const uchar v = QLCPalette::dimScaleWithoutDimmer(fixture, ch,
+                                                              want.value(keyOf(fid, ch), 0), lookDim);
+            fadeChannelTo(ua, fid, ch, v, SIGHT_FADE_MS);
+        }
+    }
+}
+
 void Scene::write(MasterTimer *timer, QList<Universe*> ua)
 {
     //qDebug() << Q_FUNC_INFO << elapsed();
@@ -1583,11 +1684,25 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
             // A fixture with no dimmer of its own: the look's Dimmer dims its
             // colour (as it does an effect's colour on it).
             const int lookDim = QLCPalette::lookDimmerValue(doc(), pals);
+            // Line of sight: an Aim look that dims the heads that cannot see
+            // its target starts them out (only when one asks for it).
+            m_sightDimmed.clear();
+            {
+                const QHash<quint32, BeamOcclusion::Hit> blocked =
+                    AimSolver::blockedDimmedHeads(doc(), this);
+                for (auto bit = blocked.constBegin(); bit != blocked.constEnd(); ++bit)
+                    m_sightDimmed.insert(bit.key());
+            }
+            QHash<quint32, QList<quint32> > sightChannels;
+            foreach (quint32 fid, m_sightDimmed)
+                sightChannels.insert(fid, sightDimChannels(doc()->fixture(fid)));
             for (int i = 0; i < stack.size(); ++i)
             {
                 SceneValue &scv = stack[i].first;
                 scv.value = QLCPalette::dimScaleWithoutDimmer(doc()->fixture(scv.fxi), scv.channel,
                                                               scv.value, lookDim);
+                if (sightChannels.value(scv.fxi).contains(scv.channel))
+                    scv.value = 0;
                 processValue(timer, ua, stack.at(i).second, scv);
             }
             m_applyTransitionIn = false;   // the start only, not a later re-aim
@@ -1619,7 +1734,10 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
                 if (fixture == NULL) return;
                 quint32 universe = fixture->universe();
                 if (!m_fadersMap.contains(universe)) return;
-                const uchar v = QLCPalette::dimScaleWithoutDimmer(fixture, scv.channel, scv.value, lookDim);
+                uchar v = QLCPalette::dimScaleWithoutDimmer(fixture, scv.channel, scv.value, lookDim);
+                // A head dimmed for want of line of sight stays down.
+                if (m_sightDimmed.contains(scv.fxi) && sightDimChannels(fixture).contains(scv.channel))
+                    v = 0;
                 FadeChannel fc(doc(), scv.fxi, scv.channel);
                 fc.setStart(v);
                 fc.setTarget(v);
@@ -1655,6 +1773,12 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
                         replaceOne(scv);
             }
         }
+
+        /* Line of sight, every tick: a drape closing, a target walking behind
+           a wall. Nothing to do -- and no work -- unless an Aim look in the
+           scene has "Dim lights that can't see the target" on. */
+        if (!m_fadersMap.isEmpty())
+            updateSightDim(ua);
     }
 
     if (isPaused() == false)

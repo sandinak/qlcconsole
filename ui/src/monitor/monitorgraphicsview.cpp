@@ -4859,6 +4859,9 @@ void MonitorGraphicsView::refreshScenery(quint32 sceneryId)
     const QPointF anchor = projectMm(sc->originX() * 1000.0, sc->originY() * 1000.0,
                                      sc->bottom() * 1000.0);
     sci->setParts(anchor, parts, flown, pose);
+    // A curtain that opened or closed can block, or clear, an aim trace.
+    if (m_doc->monitorProperties()->occlusionKinds() & BeamOcclusion::Drapes)
+        updateAimLines();
 }
 
 void MonitorGraphicsView::slotSceneryMoved(SceneryItem *item)
@@ -5809,12 +5812,15 @@ void MonitorGraphicsView::updateAimLines()
        somewhere short of it, and a line drawn as if it arrived says otherwise. */
     QHash<QPair<quint32, quint32>, AimSolver::Solution> reach;
     QHash<QPair<quint32, quint32>, QVector3D> aimedAt;  // a line's head -> its own point
+    QHash<QPair<quint32, quint32>, BeamOcclusion::Hit> sight;   // line of sight
     QHash<quint32, QPair<int, int> > shortfall;        // target -> (short, aimed)
     QHash<quint32, QStringList> shortNames;
     foreach (const AimSolver::SceneAim &a, AimSolver::sceneAims(m_doc, activeScene))
     {
         reach.insert(qMakePair(a.fixtureId, a.targetId), a.solution);
         aimedAt.insert(qMakePair(a.fixtureId, a.targetId), a.point);
+        if (a.sight.blocked)
+            sight.insert(qMakePair(a.fixtureId, a.targetId), a.sight);
         QPair<int, int> &sf = shortfall[a.targetId];
         sf.second += 1;
         if (a.solution.reachable() == false)
@@ -5909,6 +5915,50 @@ void MonitorGraphicsView::updateAimLines()
             {
                 pen = QPen(QColor(235, 70, 60), 2.0);
                 pen.setStyle(Qt::SolidLine);
+            }
+
+            /* Something solid in the way (line of sight): red and dashed as
+               far as the blocker, a cross where it stops, and only a faint
+               dotted line on to where it was meant to go. */
+            const auto sit = sight.constFind(qMakePair(fid, tgt->id()));
+            if (!cannot && sit != sight.constEnd())
+            {
+                const BeamOcclusion::Hit &hit = sit.value();
+                const QPointF stopPx = fixPx + (tgtPx - fixPx) * qreal(qBound(0.0f, hit.fraction, 1.0f));
+                QPen blockedPen(QColor(235, 70, 60), 2.0);
+                blockedPen.setStyle(Qt::DashLine);
+                const QString tip = tr("%1 cannot see %2: blocked by %3, %4 m out")
+                                        .arg(fxi->name(), tgt->name(), hit.name)
+                                        .arg(double(hit.distance), 0, 'f', 1);
+                QGraphicsLineItem *toBlock = m_scene->addLine(
+                    fixPx.x(), fixPx.y(), stopPx.x(), stopPx.y(), blockedPen);
+                toBlock->setZValue(2.5);
+                toBlock->setAcceptedMouseButtons(Qt::NoButton);
+                toBlock->setToolTip(tip);
+                toBlock->setData(0, QStringLiteral("blockedTrace"));
+                m_aimLines.append(toBlock);
+                QPen restPen(QColor(235, 70, 60, 90), 1.0);
+                restPen.setStyle(Qt::DotLine);
+                QGraphicsLineItem *rest = m_scene->addLine(
+                    stopPx.x(), stopPx.y(), tgtPx.x(), tgtPx.y(), restPen);
+                rest->setZValue(2.4);
+                rest->setAcceptedMouseButtons(Qt::NoButton);
+                rest->setToolTip(tip);
+                m_aimLines.append(rest);
+                QPen crossPen(QColor(235, 70, 60), 2.5);
+                const qreal c = 5.0;
+                QGraphicsLineItem *x1 = m_scene->addLine(stopPx.x() - c, stopPx.y() - c,
+                                                         stopPx.x() + c, stopPx.y() + c, crossPen);
+                QGraphicsLineItem *x2 = m_scene->addLine(stopPx.x() - c, stopPx.y() + c,
+                                                         stopPx.x() + c, stopPx.y() - c, crossPen);
+                for (QGraphicsLineItem *x : { x1, x2 })
+                {
+                    x->setZValue(2.6);
+                    x->setAcceptedMouseButtons(Qt::NoButton);
+                    x->setToolTip(tip);
+                    m_aimLines.append(x);
+                }
+                continue;
             }
 
             QGraphicsLineItem *line = m_scene->addLine(

@@ -146,6 +146,7 @@
 #include "outputpatch.h"
 #include "qlccapability.h"
 #include "monitor.h"
+#include "beamocclusion.h"
 #include "fountaindiagram.h"
 #include "fixturemanager.h"
 #include "patchinventorydialog.h"
@@ -164,6 +165,7 @@
 #define SETTINGS_RULERS "monitor/rulers"
 #define SETTINGS_GRID   "monitor/grid"
 #define SETTINGS_CENTERLINES "monitor/centerlines"
+#define SETTINGS_LINEOFSIGHT "monitor/lineOfSightBeams"
 #define SETTINGS_MOUNTEDFIXTURES "monitor/mountedfixtures"
 #define SETTINGS_STUDIOROTATION "monitor/studiorotation"
 #define SETTINGS_PLOTROTATION "monitor/plotrotation"
@@ -851,6 +853,63 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
             projectionBtn, [projectionBtn](bool on) {
         QSignalBlocker block(projectionBtn);
         projectionBtn->setChecked(on);
+    });
+
+    /* Line of sight: what stands in a beam's way. The kinds are the
+       stage's own (saved with the show) and are what a follow spot's Fade
+       When Blocked, an Aim look's "Dim lights that can't see the target" and
+       the blocked aim traces go by; whether the rig views stop beams at
+       them too is a view choice, remembered here. */
+    QMenu *sightMenu = showMenu->addMenu(tr("Line of sight"));
+    sightMenu->setObjectName("lineOfSightMenu");
+    sightMenu->setToolTipsVisible(true);
+    QAction *sightBeams = sightMenu->addAction(tr("Beams stop at what is in their way"));
+    sightBeams->setObjectName("lineOfSightBeams");
+    sightBeams->setCheckable(true);
+    sightBeams->setToolTip(tr("In the 3D views, a beam stops at a tower, a truss or a riser's "
+                              "side in its way, as it already does at decks, drapes and walls"));
+    {
+        const bool on = QSettings().value(SETTINGS_LINEOFSIGHT, false).toBool();
+        sightBeams->setChecked(on);
+        StructureStudioView::setLineOfSightBeams(on);
+    }
+    connect(sightBeams, &QAction::toggled, this, [this](bool on) {
+        StructureStudioView::setLineOfSightBeams(on);
+        QSettings().setValue(SETTINGS_LINEOFSIGHT, on);
+        foreach (StructureStudioView *v, findChildren<StructureStudioView *>())
+            v->update();
+    });
+    sightMenu->addSection(tr("What blocks a beam"));
+    foreach (int kind, BeamOcclusion::kinds())
+    {
+        QAction *k = sightMenu->addAction(BeamOcclusion::kindName(kind));
+        k->setObjectName(QStringLiteral("lineOfSightKind%1").arg(kind));
+        k->setCheckable(true);
+        k->setChecked((m_props->occlusionKinds() & kind) != 0);
+        if (kind == BeamOcclusion::Trusses || kind == BeamOcclusion::Pipes
+            || kind == BeamOcclusion::Stands)
+            k->setToolTip(tr("Only when at least %1 cm thick: a beam lights round a thin pipe")
+                              .arg(qRound(m_props->occlusionMinSize() * 100.0f)));
+        connect(k, &QAction::toggled, this, [this, kind](bool on) {
+            const int kinds = m_props->occlusionKinds();
+            m_props->setOcclusionKinds(on ? (kinds | kind) : (kinds & ~kind));
+            m_doc->setModified();
+            m_graphicsView->updateAimLines();
+            foreach (StructureStudioView *v, findChildren<StructureStudioView *>())
+                v->update();
+        });
+    }
+    // A show loaded later brings its own kinds: tick them to match on opening.
+    connect(sightMenu, &QMenu::aboutToShow, this, [this, sightMenu]() {
+        foreach (QAction *a, sightMenu->actions())
+        {
+            const QString name = a->objectName();
+            if (!name.startsWith(QLatin1String("lineOfSightKind")))
+                continue;
+            const int kind = name.mid(15).toInt();
+            QSignalBlocker block(a);
+            a->setChecked((m_props->occlusionKinds() & kind) != 0);
+        }
     });
 
     QAction *centerBtn = showMenu->addAction(tr("Stage centre lines"));

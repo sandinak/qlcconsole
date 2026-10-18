@@ -3569,9 +3569,27 @@ QVector<StructureStudioView::Deck> StructureStudioView::decks() const
     return out;
 }
 
+bool StructureStudioView::s_lineOfSightBeams = false;
+
+void StructureStudioView::setLineOfSightBeams(bool on)
+{
+    s_lineOfSightBeams = on;
+}
+
+bool StructureStudioView::lineOfSightBeams()
+{
+    return s_lineOfSightBeams;
+}
+
 quint64 StructureStudioView::throwScene() const
 {
     QVector<float> f;
+    // Line of sight: where beams stop moves with everything that blocks them.
+    if (m_sightModel)
+    {
+        const quint64 sig = m_sightModel->signature();
+        f << 1.0f << float(sig & 0xFFFFFF) << float((sig >> 24) & 0xFFFFFF) << float(sig >> 48);
+    }
     for (const Deck &d : decks())
     {
         const StagePlatform *pl = d.platform;
@@ -3717,6 +3735,31 @@ double StructureStudioView::beamThrowUncached(const QVector3D &apex, const QVect
             best = t;
             normal = n;
             what = -1 - int(sc->id());
+        }
+    }
+
+    /* Line of sight: a tower, a truss, a riser's side -- whatever else
+       solid the stage counts -- stops it too, when the views are asked to
+       show that. Decks and scenery are found above, layer by layer, as ever. */
+    BeamOcclusion::ModelPtr sight = m_decksValid ? m_sightModel : BeamOcclusion::ModelPtr();
+    if (!m_decksValid && s_lineOfSightBeams)
+    {
+        BeamOcclusion::Poses poses;     // the curtains where this view shows them
+        foreach (Scenery *sc, props->sceneries())
+            if (sc != nullptr && sc->isDriven())
+                poses.insert(sc->id(), drapePose(sc));
+        sight = props->occlusionModel(poses);
+    }
+    if (sight && !sight->isEmpty())
+    {
+        const double reach = best > 0.0 ? best : MAX_THROW;
+        const BeamOcclusion::Hit h = sight->ray(apex, dir, float(reach));
+        if (h.blocked && h.kind != BeamOcclusion::Drapes && h.kind != BeamOcclusion::Walls
+            && double(h.distance) > MIN_THROW && double(h.distance) < reach - 1e-3)
+        {
+            best = double(h.distance);
+            normal = -dir.normalized();
+            what = -1000000 - h.kind * 10000 - int(h.id % 10000);
         }
     }
 
@@ -8356,12 +8399,16 @@ void StructureStudioView::paintEvent(QPaintEvent *)
     // The decks every beam ray is thrown against, worked out once this frame.
     m_decksValid = false;
     m_decks = decks();
+    // Before the sight model and throwScene(): where a curtain is decides
+    // what a ray meets -- the curtains as this view draws them.
+    updateDrapePoses();
+    m_sightModel = s_lineOfSightBeams ? m_doc->monitorProperties()->occlusionModel(m_drapePoses)
+                                      : BeamOcclusion::ModelPtr();
     m_decksValid = true;
 
     /* Where rays landed last frame still stands if what they land on hasn't
        changed. Rays no longer thrown (a mover that has moved on) are let go
        once they are most of what is kept. */
-    updateDrapePoses();         // before throwScene(): where a curtain is decides what a ray meets
     const quint64 scene = throwScene();
     if (scene != m_throwScene || m_throws.size() > 400000)
     {

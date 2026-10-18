@@ -115,6 +115,7 @@ private slots:
     void slotAimTargetChanged(int index);
     /** A line target's Spread (and grouping) changed in the Aim page. */
     void slotLineSettingsChanged();
+    void slotAimDimWhenBlocked(bool on);
     void slotSingleValueChanged(int v);
     void slotSingleCapabilityPicked(int index);
     /** "Wheel of" changed: list that fixture type's gobos/shutter states. */
@@ -254,6 +255,7 @@ private:
     LineSpreadPreview *m_linePreview = nullptr;
     /** Show the line controls for the look's target, filled from the look. */
     void syncLineControls();
+    QCheckBox   *m_aimDimBlocked;   //!< Aim: dim heads that can't see the target
     QSlider *m_beamFocusSlider, *m_beamFrostSlider, *m_beamIrisSlider;
     QLabel *m_beamFocusValue, *m_beamFrostValue, *m_beamIrisValue;
     QSlider *m_singleSlider;
