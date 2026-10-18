@@ -163,9 +163,29 @@ One object per (filtered) fixture in the scene. Fields:
 | `pos` | `{x,y,z}` | 3-D rig world position in **metres** (`{0,0,0}` if unplaced). |
 | `phase` | number | Where this head is in the effect's cycle, in **cycles**, from the host's spread (amount × its place along the chosen axis, direction, wings and blocks). 0 when the spread is off. Use it as the offset you'd otherwise compute from `i / n`: `t * rate + (inputs._spread ? f.phase : i * spread / n)`. |
 | `grid` | `{col,row,cols,rows}` | Cell coords for **pixel-style / matrix effects** (ripple, comet, plasma, RGBScript ports). `col,row` = this fixture's cell; `cols,rows` = grid size. Sourced from the fixture group's **head layout** (the same map RGB Matrix uses) when the scene targets a single laid-out group; otherwise the fixtures are a **1-D strip** in list order (`cols = N, rows = 1, row = 0`). Always present, so an effect can render on a grid unconditionally — a 1×N strip is just the degenerate case. |
-| `aimAt` | `{ <slot>: {pan,tilt} }` | Per-fixture aim **degrees** toward each bound `effect.targets` slot. Empty object per slot when unbound/unsolvable. |
-| `sceneTarget` | `{x,y,z, pan,tilt}` | The scene's **own Aim look** (implicit target). **Present only when the scene carries an Aim look.** `x,y,z` = the target's **world location** in metres (shared by all fixtures) — centre a shape/formation on it and return world-space aim intents (`aimX/aimY/aimZ`). `pan,tilt` = this fixture's pre-solved aim **degrees** at the target (subject-height biased; present only with usable rig geometry) — the followspot defers to the host's converged aim when these are present. |
+| `aimAt` | `{ <slot>: {pan,tilt,reachMargin, blocked,blockedBy,blockedKind,blockedAt,clearance} }` | Per-fixture aim **degrees** toward each bound `effect.targets` slot, with the same reach and [line-of-sight](#line-of-sight) fields as `sceneTarget`. Empty object per slot when unbound/unsolvable. |
+| `sceneTarget` | `{x,y,z, pan,tilt}` | The scene's **own Aim look** (implicit target). **Present only when the scene carries an Aim look.** `x,y,z` = the target's **world location** in metres (shared by all fixtures) — centre a shape/formation on it and return world-space aim intents (`aimX/aimY/aimZ`). `pan,tilt` = this fixture's pre-solved aim **degrees** at the target (subject-height biased; present only with usable rig geometry) — the followspot defers to the host's converged aim when these are present. With them: `reachMargin` (degrees to spare before a pan/tilt limit; negative = it cannot point there), `distance` (metres to the subject), and the [line-of-sight](#line-of-sight) fields `blocked`, `blockedBy`, `blockedKind`, `blockedAt`, `clearance`. |
 | `lastSpot` | `{pan,tilt}` | Pan/tilt **degrees** where this fixture's beam was left by the previous Operate tick (possibly a different scene). Absent if no prior position. Enables `followMode = lastPosition` handoffs. |
+
+#### Line of sight
+
+Whether anything solid on stage stands between this head's beam and the
+point it is aimed at — a closed drape, a wall, a riser, a tower; the kinds
+the stage counts (Lighting Studio → Show → Line of sight). The head's own
+mount never blocks it. Present on `sceneTarget` and on each `aimAt` slot
+whenever `pan`/`tilt` are.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `blocked` | bool | Something is in the way. |
+| `blockedBy` | string | Its name (`"Main drape"`, `"Riser 2"`); `""` when clear. |
+| `blockedKind` | string | `"drape"`, `"wall"`, `"platform"`, `"tower"`, `"truss"`, `"pipe"`, `"stand"`; `""` when clear. |
+| `blockedAt` | number | Metres from the head to where the beam stops (to the aim point when clear). |
+| `clearance` | number | Metres the beam clears the nearest solid feature by — negative when blocked (how far in from the blocker's edge). Capped at 2. A soft margin: fade as it drops below, say, 0.3. |
+
+The host does no dimming for a script: fade on `blocked` yourself, writing
+`dimmer` only while fading so the look keeps its dimmer otherwise (as
+`followspot.js`'s **Fade When Blocked** does).
 
 ### `inputs` — control values
 

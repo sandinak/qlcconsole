@@ -84,8 +84,9 @@ in range, preferring the one that doesn't need to swing all the way around.
 It reports **margin**: how much spare travel is left before the nearest
 limit. Negative margin means the fixture physically can't get there at all.
 
-There's no line-of-sight or obstruction check — reachability is purely a
-question of pan/tilt range against the fixture's own calibrated limits.
+Reachability is a question of pan/tilt range against the fixture's own
+calibrated limits. Whether anything *stands in the way* is a separate
+question — see [Line of sight](#line-of-sight).
 
 ## Reachability
 
@@ -105,6 +106,57 @@ In the Lighting Studio itself, two overlays answer the same question spatially
   drawing nothing.
 - **"Where selected heads CANNOT reach"** — the inverse: deck area none of
   the selected heads can aim at, at a configurable subject height.
+
+## Line of sight
+
+A head can be well within its pan and tilt range and still not light its
+target, because something solid is between them: a closed main drape, a
+wall, a riser, a tower. qlcconsole checks the straight line from each
+head's beam to the point it's aimed at against the stage's solid features:
+
+- **Drapes and travelers as they hang now** — closed, the whole curtain
+  blocks; open, only the gathered halves do and the gap is clear; flown,
+  nothing. Legs, borders and the cyc block too. A **scrim** never does.
+- **Walls, the back wall and the proscenium** (its piers and header — the
+  opening is clear).
+- **Platforms, risers and steps** — their sides, and their deck unless it's
+  clear or open.
+- **Towers**, and **trusses, pipes and stands** at least 20 cm thick (a beam
+  lights round a thin pipe; a stand pole never counts at that size).
+
+A head's **own mount never blocks it** — the truss it hangs on (and the bar
+that carries that), its pipe, its tower, the hanger's structure, the deck or
+riser it's fixed to. Which kinds count is the stage's choice: Lighting
+Studio → **Show → Line of sight** → *What blocks a beam*, saved with the
+show (see [Line of sight in the studio](lighting-studio.md#line-of-sight)).
+
+What it changes — only where you turn it on:
+
+- **Follow spot: Fade When Blocked.** On the Followspot effect, set **Fade
+  When Blocked** to a time in milliseconds (0, the default, is off). While
+  the subject is behind something, the head fades out over that time; once
+  the way is clear it comes back, and then hands the dimmer back to the
+  look. Only the dimmer, only while it's fading — the same rule as **Fade
+  Near Limit**, which dims a head as the subject nears the edge of its pan
+  and tilt (the two combine: the darker wins).
+- **Aim looks: "Dim lights that can't see the target".** A checkbox on an
+  Aim look (the look editor's Aim page, or the palette dialog). On, a head
+  the look points at a target it can't see fades its dimmer out (0.4 s) for
+  as long as it's blocked, and back to the look's level when clear — a
+  drape closing, a target walking behind a wall. Off by default: an
+  existing show never changes. It takes down the look's own dimmer (a head
+  with no dimmer: its colour), so a dimmer another scene adds on top still
+  shows.
+- **Warnings and traces** (always, since they change nothing): the Aim
+  look's Targets panel names what's in the way — *"can't reach: Vocalist
+  (blocked by Main drape)"* — and the Lighting Studio plot draws a blocked
+  head's aim line red and dashed as far as the blocker, a cross where it
+  stops, and a faint dotted line on to the target, with the blocker named in
+  its tooltip.
+
+Effect scripts get the same answer for every aimed head
+(`fixture.sceneTarget.blocked`, `blockedBy`, `clearance`, …), so any aim
+effect can use it — see the EffectScript API.
 
 ## Follow-spot behavior
 
@@ -142,6 +194,7 @@ doesn't stop just because that's where you pointed it.
 | **Stage Target** | A named 3D point with a kind, optional structure binding, optional footprint, and color. |
 | **Kind** | What a target represents — None, Person, Drum Kit, Structure, or Area — governing its default aim height and how it's drawn. |
 | **Aim palette** | A palette that names a target instead of carrying fixed DMX values; resolved per-fixture through the Aim Solver. |
+| **Line of sight** | Whether a solid stage feature (a closed drape, a wall, a riser, a tower) stands between a head and the point it's aimed at. Its own mount never counts. |
 | **Height** (Person) | How tall a person is, standing on whatever is under them: the figure is drawn that tall and light is aimed at 80% of it. A person without one is 5'9". |
 | **Follow-spot aim height (chest)** | Where a follow spot aims above the deck — a chest, not how tall anyone is — overriding a target's stored Z in follow-spot mode. It never sizes a person: a Person is aimed at 80% of its own Height. (Called "subject height" before.) |
 | **Reachable / margin** | Whether a fixture's calibrated pan/tilt range can actually get to a target, and how much spare travel it has if so. |

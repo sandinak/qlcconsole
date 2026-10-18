@@ -58,7 +58,7 @@ where it is.
 | **Ballyhoo** | Wide, pseudo-random audience-scan sweeps |
 | **Diamond** / **Figure-8** / **Lissajous** | Shapes traced by each head |
 | **Drawn Path** | Heads follow a path you draw in the look editor |
-| **Fan** / **Orbit** / **Followspot** | Fan out, orbit, or follow a joystick's X/Y |
+| **Fan** / **Orbit** / **Followspot** | Fan out, orbit, or follow a joystick's X/Y. Followspot can fade a head out near its pan/tilt limit (**Fade Near Limit**) or while a drape, wall or riser is between it and the subject (**Fade When Blocked** — see [Line of sight](stage-targets.md#line-of-sight)) |
 | **Pan/Tilt Phaser** | Independent pan and tilt sines, phase-spread |
 | **Stage Shape** | Heads trace the outline of a shape (circle, polygon, star, line) round the look's Aim target, on the floor or stood up as a wall. With **Spread** on, the spread decides which head takes which point — Axis *stage left to right* puts the leftmost heads on the left of the line, no beams crossing |
 | **Sweep** | A synchronised pan or tilt scan with a cascade |

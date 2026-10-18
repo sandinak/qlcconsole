@@ -10,6 +10,23 @@ active work in [TODO.md](TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 
+## [Unreleased]
+
+### Added
+- **Line of sight for follow spots and aiming.** The stage's solid features
+  — drapes and travelers as they hang (closed blocks, the open gap doesn't,
+  flown is out of the way), walls and the proscenium, platform and riser
+  sides, towers, and trusses/pipes/stands at least 20 cm thick — are checked
+  between each aimed head and its point; a head's own mount never counts.
+  The Followspot effect's **Fade When Blocked** (ms; 0 = off) fades a
+  blocked head out and back; an Aim look's **Dim lights that can't see the
+  target** (off by default) does the same for any aimed look. Reach
+  warnings name the blocker ("blocked by Main drape"), the Lighting Studio
+  plot draws blocked aim lines red to the blocker, and **Show → Line of
+  sight** sets which kinds block and whether the 3D views stop beams at
+  them. Effect scripts read `sceneTarget.blocked` / `blockedBy` /
+  `blockedKind` / `blockedAt` / `clearance` (also on `aimAt` slots).
+
 ## [0.1.0] - Unreleased
 
 First public release. qlcconsole is a fork of

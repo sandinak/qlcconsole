@@ -6,6 +6,64 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-18 — Line of sight: follow spot and Aim looks dim when blocked *(feat/beam-occlusion)*
+
+Branson: "for follow spot .. do we have interference detection .. can we
+enable it so when a light is trying to reach a place it can't because of
+other stage features it dims out .. this should be an option".
+
+- **Engine query** (`engine/src/beamocclusion.{h,cpp}`): the stage's solid
+  features become flat panels (scenery pieces along their line — so a
+  closed drape is one sheet, an open one its two gathered ends, a flown one
+  nothing; platform/step blocks' sides and solid decks; tower boxes) and
+  rods (trusses, pipes, stand poles at least `occlusionMinSize`, default
+  0.2 m, thick), each with a bounding box. `Model::segment()` skips the
+  first 0.25 m at the head and the last 5 cm (the deck a target stands on)
+  and returns blocked / which / where / how far / clearance (how close it
+  passes the nearest feature, from in-plane edge distance or rod
+  distance). The model is immutable and shared; `MonitorProperties::
+  occlusionModel()` keeps one under a mutex and rebuilds it when a cheap
+  stage signature (every blocking item's geometry, including
+  `Scenery::pieces()`) changes. `ownMounts()` excludes a head's truss chain,
+  pipe chain, tower, hanger parent, deck/riser, or the platform a free head
+  stands on. Which kinds block (`OcclusionKinds`) and the size threshold
+  (`OcclusionMinSize`) are saved on the Monitor element, only when not the
+  default. 100 heads × 50 features: ~0.5 ms a tick in a Debug build.
+- **Live drape later:** nothing to do here for `feat/drape-curtain`'s
+  `Scenery::Pose` — the model is built from, and the signature hashes,
+  `Scenery::pieces()`, so a live pose that moves the pieces rebuilds it on
+  the next query.
+- **Scripts:** `sceneTarget` and `aimAt` slots carry `blocked`, `blockedBy`,
+  `blockedKind`, `blockedAt`, `clearance` (EFFECTSCRIPT_API.md, Line of
+  sight). `followspot.js` gains **fadeWhenBlocked** (ms, 0 = off): a per-head
+  level ramps down while blocked and up when clear, min'd with Fade Near
+  Limit, dimmer written only while below full.
+- **Aim looks:** `QLCPalette::dimWhenBlocked` (XML `DimWhenBlocked="1"`, only
+  when on). `Scene::write` zeroes the dimmers (else emitters) of blocked
+  heads on the full build, and every tick `updateSightDim()` asks
+  `AimSolver::blockedDimmedHeads()` (cheap early-out when no Aim look asks)
+  and fades newly blocked heads to 0 / newly clear ones back to the
+  resolved look value over 0.4 s; the repalette path keeps them down.
+  `AimSolver::SceneAim` carries `sight` and `paletteId`.
+- **UI:** look editor Aim page and palette dialog checkbox "Dim lights that
+  can't see the target"; Programming tab reach warnings read "can't reach:
+  Vocalist (blocked by Main drape)"; plot aim traces of blocked heads red
+  dashed to the blocker + a cross + a faint dotted rest; Lighting Studio
+  Show → Line of sight (kinds, saved with the show; "Beams stop at what is
+  in their way", QSettings, off by default — the 3D views clip beams at
+  towers/trusses/riser sides via `Model::ray()`; decks, drapes and walls
+  already stopped them).
+- **Tests:** `beamocclusion_test` (drape closed/open/flown, scrim, wall over
+  the top, platform edge and deck, tower / box truss / thin boom +
+  threshold, clearance, own mount, kinds, rebuild-on-change, XML, sceneAims,
+  Aim-look dimming through MasterTimer, perf); effectinstance_test (follow
+  spot fades and recovers, script fields); lookeditor_test, monitor_test
+  (blocked trace, Line of sight menu).
+- **Not done:** "line targets" — no such target kind exists yet; the
+  warnings/traces are informational and always on (they change no output);
+  min size has no UI (XML only); blocked dimming of an Aim look is the
+  look's own dimmer — an HTP dimmer from another scene still shows.
+
 ### 2026-10-18 — Offline patches kept; patches follow the network *(fix/keep-offline-patches)*
 
 Release blocker from Branson's DanceHysteria 0.5: saved on the laptop off the
