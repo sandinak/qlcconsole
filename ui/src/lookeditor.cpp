@@ -12,6 +12,7 @@
 #include <QStackedWidget>
 #include <QColorDialog>
 #include <QCheckBox>
+#include <QSignalBlocker>
 #include <QScrollArea>
 #include <QSplitter>
 #include <QComboBox>
@@ -508,8 +509,20 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     m_aimTargetCombo->setToolTip(tr("Stage target this palette aims at (rig geometry computes per-fixture pan/tilt)"));
     aimRow->addWidget(m_aimTargetCombo, 1);
     av->addLayout(aimRow);
+    /* Line of sight: off unless asked for, so an existing show never
+       changes. On, a head with a drape, a wall or a riser between it and the
+       target fades out while it is blocked and back when it is clear. */
+    m_aimDimBlocked = new QCheckBox(tr("Dim lights that can't see the target"), aim);
+    m_aimDimBlocked->setObjectName("aimDimWhenBlocked");
+    m_aimDimBlocked->setToolTip(tr("Fade a head out while something solid on stage -- a closed "
+                                   "drape, a wall, a riser, a tower -- stands between it and the "
+                                   "target, and back up when the way is clear. Which features "
+                                   "count is set in the Lighting Studio (Show > Line of sight)."));
+    av->addWidget(m_aimDimBlocked);
     av->addStretch(1);
     m_pageAim = m_stack->addWidget(aim);
+    connect(m_aimDimBlocked, SIGNAL(toggled(bool)),
+            this, SLOT(slotAimDimWhenBlocked(bool)));
     connect(m_aimTargetCombo, SIGNAL(currentIndexChanged(int)),
             this, SLOT(slotAimTargetChanged(int)));
 
@@ -1133,6 +1146,10 @@ void LookEditor::setPalette(quint32 paletteId)
         }
         m_aimTargetCombo->setCurrentIndex(sel);
         m_aimTargetCombo->blockSignals(false);
+        {
+            QSignalBlocker block(m_aimDimBlocked);
+            m_aimDimBlocked->setChecked(p->dimWhenBlocked());
+        }
         m_stack->setCurrentIndex(m_pageAim);
         setMaximumHeight(340);
         break;
@@ -1619,6 +1636,18 @@ void LookEditor::slotAimTargetChanged(int index)
     if (p == NULL || p->type() != QLCPalette::Aim)
         return;
     p->setStageTargetId(m_aimTargetCombo->itemData(index).toUInt());
+    m_doc->setModified();
+    emit paletteChanged(m_paletteId);
+}
+
+void LookEditor::slotAimDimWhenBlocked(bool on)
+{
+    if (m_loading)
+        return;
+    QLCPalette *p = m_doc->palette(m_paletteId);
+    if (p == NULL || p->type() != QLCPalette::Aim || p->dimWhenBlocked() == on)
+        return;
+    p->setDimWhenBlocked(on);
     m_doc->setModified();
     emit paletteChanged(m_paletteId);
 }

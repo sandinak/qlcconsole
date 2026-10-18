@@ -16,6 +16,7 @@
 #include <QColor>
 
 class QComboBox;
+class QCheckBox;
 class QLineEdit;
 class QSpinBox;
 class QPushButton;
@@ -79,6 +80,7 @@ private:
     QSpinBox   *m_value2Spin;
     QLabel     *m_targetLabel;
     QComboBox  *m_targetCombo;
+    QCheckBox  *m_dimBlockedCheck;  //!< Aim: dim heads that can't see the target
 };
 
 /** @} */

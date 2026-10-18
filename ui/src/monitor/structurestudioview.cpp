@@ -3547,9 +3547,27 @@ QVector<StructureStudioView::Deck> StructureStudioView::decks() const
     return out;
 }
 
+bool StructureStudioView::s_lineOfSightBeams = false;
+
+void StructureStudioView::setLineOfSightBeams(bool on)
+{
+    s_lineOfSightBeams = on;
+}
+
+bool StructureStudioView::lineOfSightBeams()
+{
+    return s_lineOfSightBeams;
+}
+
 quint64 StructureStudioView::throwScene() const
 {
     QVector<float> f;
+    // Line of sight: where beams stop moves with everything that blocks them.
+    if (m_sightModel)
+    {
+        const quint64 sig = m_sightModel->signature();
+        f << 1.0f << float(sig & 0xFFFFFF) << float((sig >> 24) & 0xFFFFFF) << float(sig >> 48);
+    }
     for (const Deck &d : decks())
     {
         const StagePlatform *pl = d.platform;
@@ -3689,6 +3707,24 @@ double StructureStudioView::beamThrowUncached(const QVector3D &apex, const QVect
             best = t;
             normal = n;
             what = -1 - int(sc->id());
+        }
+    }
+
+    /* Line of sight: a tower, a truss, a riser's side -- whatever else
+       solid the stage counts -- stops it too, when the views are asked to
+       show that. Decks and scenery are found above, layer by layer, as ever. */
+    BeamOcclusion::ModelPtr sight = m_decksValid ? m_sightModel
+        : (s_lineOfSightBeams ? props->occlusionModel() : BeamOcclusion::ModelPtr());
+    if (sight && !sight->isEmpty())
+    {
+        const double reach = best > 0.0 ? best : MAX_THROW;
+        const BeamOcclusion::Hit h = sight->ray(apex, dir, float(reach));
+        if (h.blocked && h.kind != BeamOcclusion::Drapes && h.kind != BeamOcclusion::Walls
+            && double(h.distance) > MIN_THROW && double(h.distance) < reach - 1e-3)
+        {
+            best = double(h.distance);
+            normal = -dir.normalized();
+            what = -1000000 - h.kind * 10000 - int(h.id % 10000);
         }
     }
 
@@ -8244,6 +8280,8 @@ void StructureStudioView::paintEvent(QPaintEvent *)
     // The decks every beam ray is thrown against, worked out once this frame.
     m_decksValid = false;
     m_decks = decks();
+    m_sightModel = s_lineOfSightBeams ? m_doc->monitorProperties()->occlusionModel()
+                                      : BeamOcclusion::ModelPtr();
     m_decksValid = true;
 
     /* Where rays landed last frame still stands if what they land on hasn't

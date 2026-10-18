@@ -100,6 +100,7 @@ private slots:
     void slotDimmerChanged(int v);
     void slotPanTiltChanged(const QPointF &p);
     void slotAimTargetChanged(int index);
+    void slotAimDimWhenBlocked(bool on);
     void slotSingleValueChanged(int v);
     void slotSingleCapabilityPicked(int index);
     /** "Wheel of" changed: list that fixture type's gobos/shutter states. */
@@ -211,6 +212,7 @@ private:
     QLabel *m_dimmerCap;       //!< capability name at current intensity (strobe etc.)
     VCXYPadArea *m_xyPad;
     QComboBox   *m_aimTargetCombo;  //!< stage target for Aim palettes
+    QCheckBox   *m_aimDimBlocked;   //!< Aim: dim heads that can't see the target
     QSlider *m_beamFocusSlider, *m_beamFrostSlider, *m_beamIrisSlider;
     QLabel *m_beamFocusValue, *m_beamFrostValue, *m_beamIrisValue;
     QSlider *m_singleSlider;

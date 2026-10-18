@@ -46,6 +46,7 @@
 
 #include "fixture.h"   // Fixture::invalidId() -- the "no fixture" marker
 #include "truss.h"     // FixtureRigProps::Face
+#include "beamocclusion.h"
 
 class Doc;
 
@@ -154,6 +155,14 @@ public:
      *  is no live DMX saying otherwise. The studio draws these as dashed lines;
      *  this is the same association, shown as the direction it actually means. */
     void setActiveScene(quint32 sceneId);
+
+    /** Line of sight in the rig views: a beam stops at the first solid
+     *  feature in its way -- a tower, a truss, a riser's side -- as it
+     *  already does at decks and scenery (BeamOcclusion, the kinds the stage
+     *  counts). Off by default; every view shares it (Lighting Studio:
+     *  Show > Line of sight). */
+    static void setLineOfSightBeams(bool on);
+    static bool lineOfSightBeams();
 
     /** Metres along truss @p trussId to the point nearest @p viewPos as it
      *  is drawn in this view (0 at its origin, clamped to its length); -1 when
@@ -714,6 +723,10 @@ private:
     };
     mutable QHash<ThrowKey, Throw> m_throws;
     mutable quint64 m_throwScene = 0;
+    /** This frame's line-of-sight model, when beams stop at what is in
+     *  their way (lineOfSightBeams()); null otherwise. */
+    mutable BeamOcclusion::ModelPtr m_sightModel;
+    static bool s_lineOfSightBeams;
     mutable quint32 m_throwFrame = 0;
     mutable int m_throwsUsed = 0;
     /** A split pool's mesh, as it landed (drawBeamCone()): kept while the
