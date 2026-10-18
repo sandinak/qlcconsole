@@ -6,6 +6,29 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-17 — Show Tree P4: reusable layers and cues, Convert to tracking, Detach to plain chaser *(on feat/show-tree, not merged)*
+
+- **Reusable layers and cues** (§1, SHOW_TREE_DESIGN.md §10.14): Make
+  reusable on a layer or a cue (tree right-click, the page's Reuse line,
+  `reusable "name"`); Library → All → Reusable (drag or Return onto a cue:
+  a layer in it / a cue after it; `use`). Every use is live-linked — the
+  engine syncs the uses after every edit, so any operation on one use
+  (looks, groups, name, a cue's mode or layers) changes all of them, one
+  undo step. Per use: a layer's Release and tracking, a cue's number,
+  timing, note, includes. Unlink here; Used by (cues, reusable cues, VC
+  buttons); rename; delete asks while used. Saved in `<ShowTree>`
+  (`<ReusableLayer>`, `<ReusableCue>`, `Reusable=`).
+- **Detach to plain chaser**: the list's chaser, collections and the scenes
+  only it plays become the show's own; a scene still shared is handed over
+  when the tree lets go of it, never deleted. Undo takes them back.
+- **Convert to tracking…** (§7): plan first, then one undo step; each
+  change kept only if every cue plays the same (stage, generated scenes,
+  opaque functions). DanceHysteria-0.5 copy: Full Show 5 cues track, 3
+  includes become tracking, 6 values + 2 layers taken out; 0 channels
+  differ in all 11 cues of its three lists.
+- Command line: `reusable`, `use`, `unlink`, `detach [list]`, `convert
+  [apply]`, with help and Tab.
+
 ### 2026-10-17 — Show Tree P3: group sets, child layers and overlap, cue-wide effects, line aims; rename in place, copy/paste, `help` *(on feat/show-tree, not merged)*
 
 - **Engine:** `Scene::setExcludedFixtures` / `setLayoutSpan` per look (fader

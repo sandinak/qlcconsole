@@ -6,6 +6,18 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Show Tree
 
+- **Show Tree P4: reusable layers and cues, Convert to tracking, Detach a
+  list.** Right-click a layer or a cue → **Make reusable…**: it goes into
+  the Library (All → Reusable) and can be dropped into any cue of any list
+  — a "BackStage" wash in ten cues, a "Walk-in" state in every song. Every
+  use stays linked: change one and they all change; **Unlink here** makes a
+  copy of its own. **Convert to tracking…** on an imported list takes out
+  what only repeats the cue before, turns "includes the cue before" into
+  tracking and shows you the changes first — every cue plays exactly as
+  before. **Detach to plain chaser…** hands a list back as an ordinary
+  chaser. See [Reusable layers and cues](show-tree.md#reusable-layers-and-cues),
+  [Convert to tracking](show-tree.md#convert-to-tracking) and
+  [Detach to plain chaser](show-tree.md#detach-to-plain-chaser).
 - **Show Tree P3: group sets, child layers, cue-wide effects, line aims.**
   Make a **group set** (Towers = SL + SR) once in the Library and use it by
   name anywhere; **⇧-drop** a group onto a layer for a **child layer** that

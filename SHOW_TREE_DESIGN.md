@@ -638,7 +638,7 @@ Originals stay; VC buttons are offered a switch to the new list.
 | **P1** | **Show Tree tab, one production, Non-tracking lists.** Cue list = Chaser, cue = Collection, layer = generated Scene. Cue looks cascade to layers; layer attribute rows with inherited values greyed — **including the Beam family with gobo palettes per fixture definition and "applies to N of M"** (§3A); inline looks; effects with child looks (colour, gobo); opaque function layers; **Import chaser as cue list**; authoring by mouse (+ Cue / + Layer, picker, drag & drop with drop hints, undo); Library panel Recent / Pinned / All. Spike: shared-scene hand-over across a step change. | none, or the hand-over fix |
 | P2 *(built 2026-10-17, §10.10)* | **Tracking**: list mode, cue Track/Block/Cue-only, layer Release, base cue, **includes**, origin marks, "Next cue receives", re-bake chain; "Update cue X" for tracked values; Library "In this cue list"; **optional command line** (D24). | none |
 | P3 *(built 2026-10-17, §10.13)* | **Group sets** (+ Make set in the Library), child layers, overlap; cue-level effects across layers; **line aims in the tree** (§3B: aim params per key, cue-level formations, plan view) once the line-target P1–P3 have shipped. | `Scene::excludedFixtures` (+ a per-look layout span) |
-| P4 | **Make reusable / Detach** for layers and cues; Reusable panel; Convert-to-tracking. | none |
+| P4 *(built 2026-10-17, §10.14)* | **Make reusable / Detach** for layers and cues; Reusable panel; Convert-to-tracking. | none |
 | P5 | **Multiple productions**: switcher, current production for VC / footer GO / show control, per-production timecode. | small: "current production" in Doc |
 | P6 | Sub-cues in the tree (§3C); tracking sheet with sub-cue columns and the attribute switch. | none (SUBCUES) |
 | P7 | **Cue runner** (§6B): Run tab, then the Cue Runner VC widget (compact / list) with Swap widget; "what changes" line. | none (drives ChaserRunner as the footer does) |
@@ -1224,8 +1224,8 @@ Four limits the help listed, found while documenting it.
   edits, the skip menu, Renumber, the speed dial) and keeps what §10.2 says
   is the user's: run order, direction, the fade/hold modes, the cue-list
   number and main cue list, testing. Running and playing are untouched.
-  **Detach to plain chaser** is not built (open): a chaser's steps are the
-  tree's cues.
+  ~~**Detach to plain chaser** is not built (open)~~ — built in P4
+  (§10.14): the list leaves the tree.
 - **One list rule.** `addCueList()` defaults to **Tracking**, and + Cue
   list passes it explicitly, as `list "name"` always did; `importChaser()`
   makes its list Non-tracking (D12). The existing tests that relied on the
@@ -1393,6 +1393,122 @@ showtreeview_test `groupSetsInTheLibrary`, `childLayersByMouse`,
 `editSeveralLayersAtOnce`, and
 `everyActionIsOneUndoStep` (+13 actions).
 
+### 10.14 P4 (2026-10-17): reusable layers and cues, Detach a list, Convert to tracking
+
+**Reusable layers and cues (§1).** `ShowTree::ReusableLayer` (name, target,
+looks) and `ReusableCue` (name, mode, overlap, cue looks, layers; plus the
+timing and note a new use starts with) live in the Library, saved in
+`<ShowTree>` as `<ReusableLayer>` / `<ReusableCue>` (a layer's content in
+the same `<Layer>` element). A **use** is an ordinary layer (cue) in the
+tree with `Reusable=<id>`: the resolver, the bake, the stage compare and
+every edit see plain layers, so nothing downstream knows about reusables.
+
+- **Live-linked by syncing, not by indirection.** `edit()` (and a batch's
+  edits) runs `syncReusables(before, after)`: the first use the edit
+  changed (in tree order, compared with what it was before) gives the
+  reusable its content, then every use that differs takes the reusable's.
+  So *any* operation on any use -- a look dropped, a group added, a rename,
+  a cue's mode, a layer added to a reusable cue's use, typed or by mouse --
+  is an edit to all, one undo step, without each operation knowing about
+  reusables. A rename of the reusable itself (no use changed) is pushed to
+  the uses the same way. Nested: a reusable cue may hold a use of a
+  reusable layer; layers sync first, cues next, layers again.
+- **What is each use's own.** A layer use: Release, its parent, what it
+  carries on from (`continues*`), its id. A cue use: number, note, fade
+  in/out, hold, includes, its layers' ids (by position) and what they carry
+  on from. A reusable cue's layers have ids of their own; a use has its own
+  ids for the same layers, in the same order. *(Open 17.)*
+- **Tracking identity** is unchanged -- a layer's target -- so a use tracks
+  on as any layer does, and *Update cue X* on a tracked value sets it in
+  the use it came from, i.e. in the reusable. Retargeting one use (a group
+  added) retargets every use; the uses in the following cues of the same
+  list are retargeted with it by `setLayerTarget()` as before.
+- **Refused, with why:** Make reusable on a child layer (make the parent),
+  on a layer of a reusable cue's use (the cue is), twice; Split / Merge of
+  a use (every use would change: unlink first). Detach to plain scene of a
+  use unlinks that use only.
+- **Unlink here** clears the link: the use stays as it is. **Delete** is
+  refused while used (`why` names the uses); the UI asks, then
+  `removeReusable(id, unlinkUses=true)` unlinks every use (and a reusable
+  cue's layers using it) in the same step. One-off palettes a reusable
+  holds count as used (not dropped by the bake).
+- **Used by** (D20 "Reusable" in All; P-D13 in PROGRAMMING_ROLE_DESIGN.md):
+  every use by list and cue, the reusable cues holding it, and the VC
+  buttons whose function is a use's cue Collection or layer Scene (cheap:
+  `VCButton::function()`). R1's shared `usage()` can absorb this later.
+
+**Detach to plain chaser (D13 for lists; decided here).** The list
+**leaves the tree** -- it doesn't stay as an opaque function layer: a
+chaser's steps *are* the list's cues, so a tree pointing at it would have
+nothing of its own left. `detachList()` hands over the chaser, its cues'
+Collections and the generated scenes only this list plays: they leave the
+generated sets, are shown (`setVisible(true)`) and unlocked, and keep their
+ids and paths (`Productions/<production>/<list>`). One-off palettes they
+play become ordinary palettes (named as they are). A scene **another list
+still plays** stays the tree's (locked) for now; `deleteUnused()` now
+hands a generated function that a plain function still plays over instead
+of deleting it, so when the other list lets go of it, it becomes the
+detached chaser's. *(Open 19.)* Undo: the snapshot records the handed-over
+ids (`<DetachedLists>`); restoring one from before the detach takes them
+back into the generated sets (hidden again) before the bake, so the list
+comes back on the same chaser and collections; redo hands them over again.
+VC widgets and show control keep the chaser id, so they keep playing it.
+
+**Convert to tracking (§7).** `planConvertToTracking(list)` (const; the
+plan is the list as it would be, plus a line per change) and
+`convertToTracking(list)` (one undo step):
+
+1. Every cue's mode made explicit as it plays now, then the list
+   Tracking (checked: nothing changes).
+2. For each Block cue in order: make it Track, drop an include of the cue
+   before, and in the cue before set **Release** on every layer it passes
+   on that this cue doesn't light (an own empty layer with Release is made
+   on one only carried in). Kept only if every cue plays the same; else
+   once more keeping the include; else it stays Block.
+3. For each cue that starts from the one before: each look of an own layer
+   taken out alone, kept out only if every cue plays the same; a layer
+   left with no looks, no Release and no children taken out, likewise.
+4. The whole list checked once more.
+
+"Plays the same" is two compares of every cue: the **stage**
+(`ShowTree::stageOf`: per group / fixture / opaque function and attribute,
+the winning value, HTP levels as a set) and **what the bake makes**: each
+cue's generated scenes by signature -- target, palettes, what each leaves
+out for another layer (§3.5) and what it lays out over (D10/D17) -- and its
+opaque functions, order-free in a cue that doesn't mix (each fixture's
+attribute has one writer), in order in a Mix cue. Equal scenes play equal
+DMX, so the DMX output is unchanged by construction; the tests and the
+DanceHysteria-0.5 dry run play both lists on the rig and compare every
+channel of every universe: **0 channels differ** (Full Show: 5 cues track,
+3 includes made tracking, 2 releases, 6 values and 2 layers taken out;
+00-Preshow: 2 cues track, 5 releases, 6 values and 2 layers; New Chaser 8:
+1 cue tracks, 2 releases, 3 values and 1 layer).
+
+Left alone: cue looks (an import has none; taking one out would change
+which value wins where layers overlap), reusable uses (an edit would reach
+other lists), a reusable cue use whose mode is the list's default (refused
+with why). A list already Tracking with nothing to do says so. It
+releases rather than making a cue Cue-only, and a Mix cue keeps mixing
+*(open 18, with 13)*.
+
+**Command line.** `reusable ["name"]`, `use <reusable>`, `unlink`,
+`detach` / `detach list`, `convert` / `convert apply` (the plan in the
+help pane, a link to apply); help group "reuse", Tab completes reusable
+names, `apply`, `list`.
+
+**R1 (PROGRAMMING_ROLE_DESIGN.md).** None of its pieces was needed by P4
+(palette undo, one `usage()`, the power estimate to the app, the Stage
+bar); they stay R1's, alongside.
+
+Tests: `showtree_test::reusableLayersAreLiveLinked`,
+`reusableCuesInSeveralLists`, `reusablesSaveLoadAndUndo`,
+`detachAListToAPlainChaser`, `convertToTrackingPlaysTheSame`,
+`convertToTrackingSyntheticLists` (overlap, an opaque function, a Mix cue,
+a base cue, a cue dropping a layer: 0 channels differ),
+`reuseDetachAndConvertTyped`, `importARealShow` (now also converts and
+compares); `showtreeview_test::reusablesInTheTreeAndTheLibrary`,
+`convertAndDetachFromTheListPage`, `everyActionIsOneUndoStep` (+13).
+
 ### Open for Branson
 
 1. **`Generated` mark on `<Function>`** as well as in `<ShowTree>`? (10.2;
@@ -1451,3 +1567,18 @@ showtreeview_test `groupSetsInTheLibrary`, `childLayersByMouse`,
     the colour its parent gives them (the parent's scene scales by its own
     look dimmer). Fill the parent's colour into the child there (more
     scenes), or leave it as a known limit?
+17. **What a reusable cue shares** (§10.14): built -- name, mode, overlap,
+    cue looks and layers (with their Release) are shared; number, timing,
+    note and includes are each use's (a new use starts with the timing it
+    was made with). Should timing be shared too (a "Blackout" always 0 s),
+    or mode be each use's?
+18. **Convert to tracking's choices** (§10.14): a layer the next cue
+    doesn't light is *released* (not a Cue-only cue), cue looks are never
+    taken out, and Mix cues keep mixing (open 13). OK, or should it also
+    try Cue-only and clear Mix where nothing would change?
+19. **Detach to plain chaser and shared scenes** (§10.14): a scene another
+    list still plays stays the tree's (locked) until the tree lets go of
+    it, then is handed over. Or copy such scenes at once, so the detached
+    chaser is all its own from the start?
+20. **"Detached from BackStage" badge** (§1): after Unlink here a use
+    doesn't say where it came from. Wanted?

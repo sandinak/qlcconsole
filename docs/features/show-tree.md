@@ -48,9 +48,12 @@ from the Library lands in the tree right beside it.
   layers. Grey **⤳** rows under a cue are layers it doesn't hold itself but
   that are on stage in it. They are marked *tracked from*, *included from*
   or *base*. A cue's badges are **■ base**, **⊘ block**, **◐ cue-only** and
-  *includes N*. A layer that plays a function as it is shows **▣**.
+  *includes N*. A layer that plays a function as it is shows **▣**. A use
+  of a [reusable](#reusable-layers-and-cues) layer or cue shows **⟲** and
+  how many uses there are.
 - **Right: the page** for what is selected:
-  - **A cue list** shows its mode and base cue.
+  - **A cue list** shows its mode and base cue, **Convert to tracking…**
+    and **Detach to plain chaser…**.
   - **A cue** shows its number, name, note, mode, base check box, includes,
     fade in / out, hold, cue looks, every layer on stage in it, a dashed
     drop area, and *Next cue receives*.
@@ -82,7 +85,11 @@ The dividers between them can be dragged; their places are kept.
 3. Click a cue. In Design mode it plays on the rig. Open a layer and change
    it.
 
-**To convert the import to tracking:**
+**To convert the import to tracking:** select the list → **Convert to
+tracking…** ([how](#convert-to-tracking)). It shows what it will change,
+and every cue then plays exactly as before.
+
+By hand instead (or after it, to go further):
 
 1. Select the list and set **Mode: Tracking**.
 2. Pick a **Base cue**.
@@ -682,6 +689,11 @@ is always there and calls the same operations as the mouse.
 | `cue look spread +5` | The cue's Spread: reaches the layers aiming at a line |
 | `name "Hero"` · `name ""` | Names the selected layer (else the cue); "" = automatic |
 | `copy` · `copy cue 1.0.2` · `copy layer Towers` · `paste` | Copy and paste, as ⌘C / ⌘V |
+| `reusable` · `reusable "Back Wash"` | **Make reusable**: the selected layer (else the cue), named as given |
+| `use Back Wash` | A use of that reusable: a layer in the selected cue, or (a reusable cue) a cue after it |
+| `unlink` | **Unlink here**: the selected layer (else cue) keeps what it is, as its own |
+| `detach` · `detach list` | The selected layer to a plain scene; the selected list to a plain chaser |
+| `convert` · `convert apply` | **Convert to tracking**: what would change, in the help pane; then do it |
 | `dup` · `undo` · `redo` | As Duplicate cue, Undo and Redo |
 | `help` · `help spread` · `?` | The language, with examples (see below) |
 
@@ -701,7 +713,7 @@ before a group.
 ### Help
 
 **`help`** (or **`?`**) lists every word, grouped: navigate, build, looks,
-tracking, record and copy, undo. **`help <word>`** (`help record`, `help
+tracking, record and copy, reuse (with detach and convert), undo. **`help <word>`** (`help record`, `help
 spread`) shows its syntax (optional parts in [ ], alternatives with |),
 what it does, examples and related words. The help shows in a small pane
 above the line: **Esc** closes it, and a click on an example puts it in the
@@ -732,6 +744,8 @@ command line reads, so it is always right. The table above is a summary.
 | `spread` · `group` · `cross` | their values (−5…+5; each, pairs…; swap, mirror) |
 | groups, then `in` | the parent's groups |
 | `copy` | `cue`, `layer`, then cue numbers or groups |
+| `use` | the reusable layers and cues |
+| `convert` · `detach` | `apply` · `list` |
 | `help` | every word |
 
 - **One match:** Tab puts it in, with a space after it.
@@ -752,12 +766,15 @@ In the command line, ⌘Z undoes your typing. Type `undo` to undo the tree.
   exactly what was there before. That includes every drop, however much is
   dropped at once (several groups, an ⌥-drop, several functions, a colour
   and a dimmer together), every ⋯ choice, every command, Record, Split,
-  Merge, a Delete of several rows, **Make reusable**, **Detach to plain
-  scene** and an import. Up to 200 steps.
+  Merge, a Delete of several rows, **Make reusable** (a value, a layer or
+  a cue), **Unlink here**, a reusable renamed or deleted, **Detach to plain
+  scene**, **Detach to plain chaser**, **Convert to tracking** and an
+  import. Up to 200 steps.
 - Undo puts the tree back and rebuilds the scenes, collections and chaser
   from it, including the chaser's playback settings and any one-off values.
   Undoing a Detach removes the plain scene it made; Redo brings it back as
-  it was.
+  it was. Undoing a Detach to plain chaser gives the list back on the same
+  chaser and collections (locked again); Redo hands them over again.
 - **What tree undo doesn't cover:**
   - a palette's values changed in the Look Editor (a colour dragged, a
     level moved): those are the palette's, as in the Programming tab;
@@ -781,6 +798,8 @@ again what it opened.
 - **All**:
   - **Targets**: the stage's points, areas and lines ([Line aims](#line-aims));
   - **Group sets** ([Group sets](#group-sets)): right-click groups → **Make set…**;
+  - **Reusable**: the [reusable layers and cues](#reusable-layers-and-cues),
+    each with how many use it (hover: *Used by*);
   - **Groups**, in the Fixture Manager's folders;
   - **Palettes**, by kind;
   - **Functions (played as they are)**: not chasers, and not what the tree
@@ -802,8 +821,11 @@ Right-click in the tree for:
 - **+ Production…**, **+ Cue list…**, **+ Cue**;
 - on a cue: **Make the base cue**, **Include cue**, **Mode**, **Record as new
   cue**, **Duplicate cue**, **Move up** / **Move down**;
-- on a layer: **Rename…**, **Detach to plain scene**, **Add child layer**,
-  **Split layer**, **Merge layers**, **Remove &lt;group&gt; from layer**;
+- on a cue: **Make cue reusable…** (or, on a use, **Unlink here**);
+- on a layer: **Rename…**, **Detach to plain scene**, **Make reusable…** (or
+  **Unlink here**), **Add child layer**, **Split layer**, **Merge layers**,
+  **Remove &lt;group&gt; from layer**;
+- on a cue list: **Convert to tracking…**, **Detach to plain chaser…**;
 - on a cue or layer: **Copy**, **Paste after this cue** / **Paste into this
   cue**, **Duplicate**;
 - **Rename…** on a production or cue list, and **Delete** on anything but a
@@ -823,6 +845,93 @@ brings any of them back.
 **Detach to plain scene** turns a layer into an ordinary, visible scene
 named after the cue and layer. The layer then plays that scene as it is, and
 the tree no longer edits its looks. It is one undo step.
+
+## Reusable layers and cues
+
+A **reusable layer** is a layer you use in many cues: a "BackStage" wash,
+the house "Works". A **reusable cue** is a whole state you put in many
+lists: a "Walk-in", a "Blackout". Palettes stay the reusable *values*;
+reusables are reusable *arrangements*.
+
+- **Make reusable.** Right-click a layer (or a cue) in the tree → **Make
+  reusable…**, or the page's *Reuse* line, or type `reusable "Back Wash"`.
+  Give it a name. It goes into the Library under **All → Reusable**, and
+  the layer (cue) is its first use. A child layer can't be made reusable
+  (make its parent), nor a layer of a reusable cue's use (the cue is).
+- **Use it.** Drag it from the Library onto a cue (or select it and press
+  **Return**, or `use Back Wash`):
+  - a reusable **layer** becomes a layer of that cue;
+  - a reusable **cue** becomes a new cue right after it, numbered as + Cue
+    numbers, with the timing it was made with.
+  The drop hint says which before you let go.
+- **Live-linked.** Every use is the same: change one — a look, a group
+  added, its name, a cue's mode, a layer added to a reusable cue — and
+  every use changes, in one undo step. The tree marks each use **⟲** with
+  how many there are; the page says *"Reusable layer Back Wash — used in 3
+  place(s): an edit here is an edit to all"*.
+- **What stays each use's own.** A layer's **Release**, its parent and
+  what it carries on from. A cue's **number**, **note**, **fades and hold**
+  and **includes**.
+- **Tracking.** A use is an ordinary layer on its groups: it tracks into
+  the next cues as any layer does, and a tracked value set with *Update cue
+  X* sets it in the use it came from — that is, in all of them.
+- **Unlink here** (the page's link, right-click, or `unlink`) makes this use
+  a plain copy of its own, as it is now. The other uses stay linked.
+- **Used by.** Right-click it in the Library → **Used by** lists every use
+  by list and cue (click one to go there), the reusable cues it is part of,
+  and any VC button that plays one of its uses' cues or layers. The page's
+  **Used by…** link does the same.
+- **Rename** it in the Library (right-click → Rename…) or by renaming any
+  use: every use takes the name.
+- **Delete** it in the Library: while it is used, it asks first, and each
+  use stays as it is, unlinked.
+- **Split** and **Merge** are refused on a use (every use would change):
+  unlink it first.
+
+## Convert to tracking
+
+An imported list is Non-tracking: every cue repeats what stays on, or
+includes the cue before. **Convert to tracking…** (the list's page,
+right-click the list, or `convert`) makes it a Tracking list that plays
+**exactly** as it did, cue by cue:
+
+- each cue **tracks** from the cue before wherever it then plays the same;
+  an **include of the cue before** is taken out (tracking brings it);
+- a layer the cue before passes on but this cue doesn't light is
+  **released** there, so it doesn't track in;
+- a value a layer only **repeats** (the same as what tracks in) is taken
+  out, and a layer left with nothing of its own goes too;
+- a cue that can't track without changing (it plays something else, a base
+  cue would bring a value back) **stays Block**.
+
+Before anything changes it shows the plan, one line per change (*"0.0.5
+WHO ARE WE: tracks from 0.0.4 SHOUT (its include of 0.0.4 SHOUT taken
+out)"*), and asks. It is one undo step. Each change is kept only if every
+cue still puts the same looks on the same fixtures; on DanceHysteria's
+Full Show, 0 channels differ in any cue before and after. Typed: `convert`
+shows the plan in the help pane, `convert apply` does it.
+
+It leaves alone what it can't prove plays the same: cue looks, cues whose
+layers mix (*Overlapping layers mix*), and reusable uses. A list that
+tracks already says *Nothing to convert*.
+
+## Detach to plain chaser
+
+**Detach to plain chaser…** (the list's page, right-click the list, or
+`detach list`) hands a cue list back as an ordinary chaser:
+
+- the list's **chaser** and its cues' **collections** become your own
+  functions, unlocked and shown in the Functions window where they are
+  (`Productions/<production>/…`), to edit as any chaser;
+- the **scenes** only this list plays go with them; a scene another list
+  still plays stays the tree's (locked) until the tree no longer needs it,
+  and is then handed over too — never deleted from under the chaser;
+- one-off values those scenes play become ordinary palettes;
+- the list **leaves the tree**. VC widgets and show control that play the
+  chaser keep playing it, unchanged.
+
+It asks first, and is one undo step: undo puts the list back on the same
+chaser and collections.
 
 ## Playing it
 
@@ -880,8 +989,11 @@ the tree no longer edits its looks. It is one undo step.
 
 ## Limits and not yet
 
-- **Detach is for a layer's scene.** A cue list's chaser has no *Detach to
-  plain chaser* yet: to change its steps, change the tree.
+- **An unlinked use** doesn't say what it was linked to (no *"detached
+  from BackStage"* badge).
+- **Convert to tracking** releases a layer the next cue doesn't light; it
+  doesn't make cues Cue-only, and leaves cue looks, mixing cues and reusable
+  uses as they are.
 - **Effects in the cue don't take precedence in the Design preview.** The
   cue's looks win over a running list, but an EFX, RGB Matrix or other
   function played as it is mixes with what runs, as it normally would.

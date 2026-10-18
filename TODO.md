@@ -48,7 +48,7 @@ On `release/0.1.0`. Universal (Apple silicon + Intel), macOS 12+.
   work), on the office rig with kronk.
 - Then: merge `release/0.1.0` to main, `./release.sh`.
 
-## Show Tree (feat/show-tree, P1 built 2026-10-16 overnight, P2 and P3 2026-10-17 — not merged)
+## Show Tree (feat/show-tree, P1 built 2026-10-16 overnight, P2–P4 2026-10-17 — not merged)
 
 [SHOW_TREE_DESIGN.md](SHOW_TREE_DESIGN.md) (D1–D27 approved; §10 has the
 implementation notes and the questions below). Built: the hand-over fix,
@@ -115,8 +115,23 @@ help (DONE.md 2026-10-16). Handoff: SHOW_TREE_OVERNIGHT.md.
   shown for confirmation, Return runs them through the same op layer, one
   undo step each; API key in Settings; handles 'warmer', 'like cue 3
   but…'. Not show-time (needs internet).
-- **P4 next:** Detach to plain chaser, Convert to tracking, Make reusable
-  layers/cues.
+- **P4 done 2026-10-17** (DONE.md, §10.14): reusable layers and cues
+  (Make reusable, uses live-linked by syncing after every edit, Unlink
+  here, Library → Reusable with Used by incl. VC buttons, rename, delete
+  that asks), Detach to plain chaser, Convert to tracking… (plan first,
+  every cue checked to play the same; DanceHysteria-0.5's three lists: 0
+  channels differ). **Open (§10, 17–20):** what a reusable cue shares
+  (mode yes, timing no); Convert releases rather than Cue-only and leaves
+  Mix cues mixing (ties to 13); a detached list's shared scenes stay
+  locked until the tree lets go; "detached from X" badge not built.
+  **Try:** make a layer reusable, drop it in another list's cue, change it
+  there; Convert to tracking on an imported list and GO through it.
+- **R1 (PROGRAMMING_ROLE_DESIGN.md) not taken in P4:** P4 needed none of
+  its shared pieces (palette undo, one `usage()`, power estimate to the
+  app, the Stage bar). "Used by" for reusables is the tree's own
+  (`reusableUses()` + VC buttons); R1's `usage()` can absorb it.
+- **P5 next:** multiple productions (switcher, current production for VC /
+  footer GO / show control, per-production timecode).
 
 ## Needs the real rig / hardware
 
