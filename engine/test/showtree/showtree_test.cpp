@@ -4246,6 +4246,7 @@ void ShowTree_Test::reusableLayersAreLiveLinked()
 
     // Cue 2 tracks it from cue 1: the same layer (its target).
     QList<ResolvedCue> r = st->resolved(*st->cueList(listA));
+    QCOMPARE(r[1].cueId, a2);
     CHECK_VALUE(r[1], bs->id(), KeyDimmer, d45, Origin::Tracked, a1);
     QCOMPARE(r[1].layer(groupTarget(bs->id()))->name, QString("BackStage Wash"));
 
