@@ -162,6 +162,7 @@ add_library(${module_name}
     universeusagewidget.cpp universeusagewidget.h
     programmingmanager.cpp programmingmanager.h
     showtreeview.cpp showtreeview.h
+    cuerunner.cpp cuerunner.h
     usedby.cpp usedby.h
     paletteeditdialog.cpp paletteeditdialog.h
     palettemanager.cpp palettemanager.h
@@ -202,6 +203,7 @@ add_library(${module_name}
     virtualconsole/vcclock.cpp virtualconsole/vcclock.h
     virtualconsole/vcclockproperties.cpp virtualconsole/vcclockproperties.h virtualconsole/vcclockproperties.ui
     virtualconsole/vcshowcontrol.cpp virtualconsole/vcshowcontrol.h
+    virtualconsole/vccuerunner.cpp virtualconsole/vccuerunner.h
     virtualconsole/vcshowcontrolproperties.cpp virtualconsole/vcshowcontrolproperties.h
     virtualconsole/vccuelist.cpp virtualconsole/vccuelist.h
     virtualconsole/vccuelistproperties.cpp virtualconsole/vccuelistproperties.h virtualconsole/vccuelistproperties.ui

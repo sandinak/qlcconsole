@@ -162,6 +162,23 @@ public:
     int subCueListsOf(quint32 listId) const;
 
     /************************************************************************
+     * The cue runner (P7, §6B): what it reads of the tree
+     ************************************************************************/
+public:
+    /** The cue (or sub-cue) step @a step (and sub-cue @a subStep, -1:
+     *  none) of a list's chaser plays (invalid: none). */
+    quint32 cueOfStep(quint32 listId, int step, int subStep = -1) const;
+    /** Cue @a cueId resolved as it plays (tracked, included, its own; a
+     *  sub-cue from its cue). False: no such cue. */
+    bool resolvedCue(quint32 cueId, ShowTree::ResolvedCue *out) const;
+    /** What changes on stage going from cue @a fromCue to cue @a toCue
+     *  (§6B "what changes"): per layer, only the attributes that differ --
+     *  "Towers → Red, spread +5, gobo Breakup; BackStage in → Green,
+     *  Intensity 45%; USTs out". @a fromCue invalid: from dark. Empty: no
+     *  change (or no such cue). */
+    QString changeLine(quint32 fromCue, quint32 toCue) const;
+
+    /************************************************************************
      * Group sets (the Library's "Make set", §1)
      ************************************************************************/
 public:

@@ -57,7 +57,9 @@ class QLC_ENGINE_EXPORT ShowControl final : public QObject
 public:
     explicit ShowControl(Doc *doc, QObject *parent = nullptr);
 
-    enum Command { Go, Stop, Pause, Resume, Load, AllOff, Reset, Back };
+    /** SubGo / SubBack: through the sub-cues of the cue playing
+     *  (SUBCUES_DESIGN.md §4, OSC /subgo /subback). */
+    enum Command { Go, Stop, Pause, Resume, Load, AllOff, Reset, Back, SubGo, SubBack };
 
     /** Where a command came from: OSC, MSC, or this console (a key, the
      *  footer, the Virtual Console). */
@@ -71,6 +73,9 @@ public:
         Command command = Go;
         QString cue;
         QString list;
+        /** A list by its chaser (a Cue Runner following one): wins over
+         *  @a list. UINT_MAX: by @a list. */
+        quint32 chaser = UINT_MAX;
     };
 
     static QString commandName(Command command);
@@ -98,6 +103,9 @@ public:
 
     /** The cue GO with no cue goes to next, on a stopped list; -1: none. */
     int loadedStep(quint32 chaserId) const { return m_loaded.value(chaserId, -1); }
+    /** The sub-cue of loadedStep() that is loaded (LOAD 4.2); -1: the cue
+     *  itself. */
+    int loadedSubCue(quint32 chaserId) const { return m_loadedSub.value(chaserId, -1); }
 
     /** The step a GO with no cue plays next on @a chaser -- what's on
      *  standby: the loaded cue; else, playing, the next not skipped; else
@@ -186,6 +194,7 @@ private:
     Doc *m_doc;
     quint32 m_mainCueList;
     QHash<quint32, int> m_loaded;       ///< chaser id -> step on standby
+    QHash<quint32, int> m_loadedSub;    ///< chaser id -> its sub-cue on standby
     int m_mscDeviceId;
     bool m_mscEnabled;
     QString m_mscInputPlugin;           ///< empty: any input

@@ -29,6 +29,8 @@
 #include <QLabel>
 #include <QFile>
 
+#include "cuerunner.h"
+#include "showtreemodel.h"
 #include "appviews_test.h"
 
 #define private public
@@ -376,6 +378,27 @@ void AppViews_Test::virtualConsoleKeysDontClashWithTheApp()
     QCOMPARE(vc->m_addButtonMatrixAction->shortcut(), QKeySequence("CTRL+SHIFT+G"));
     QCOMPARE(vc->m_addAnimationAction->shortcut(), QKeySequence("CTRL+SHIFT+N"));
     vc->disableEdit();
+}
+
+void AppViews_Test::theRunTabIsTheCueRunner()
+{
+    QAction *jump = nullptr;
+    foreach (QAction *a, m_app->m_windowJumps)
+        if (a->data().toString() == QLatin1String("Run"))
+            jump = a;
+    QVERIFY(jump != nullptr);
+    QCOMPARE(jump->shortcut(), QKeySequence("CTRL+SHIFT+0"));
+    jump->trigger();
+    QWidget *page = m_app->m_tab->currentWidget();
+    CueRunner *runner = qobject_cast<CueRunner *>(page);
+    QVERIFY(runner != nullptr);
+    QCOMPARE(runner->runnerSize(), CueRunner::Full);
+    QCOMPARE(runner->follow(), ShowTree::invalidId());    // the current production
+    QCOMPARE(page->property("helpTopic").toString(), QString("show-tree.md#the-cue-runner"));
+    // The others keep their keys (⇧⌘9 is still Simple Desk).
+    foreach (QAction *a, m_app->m_windowJumps)
+        if (a->data().toString() == QLatin1String("Simple Desk"))
+            QCOMPARE(a->shortcut(), QKeySequence("CTRL+SHIFT+9"));
 }
 
 void AppViews_Test::theRigOverviewOpensWithoutTakingYouToTheStudio()

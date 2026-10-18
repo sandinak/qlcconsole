@@ -187,6 +187,8 @@ protected:
     QAction* m_addAudioTriggersAction;
     QAction* m_addClockAction;
     QAction* m_addShowControlAction;
+    QAction* m_addCueRunnerAction = nullptr;
+    QAction* m_editSwapAction = nullptr;
     QAction* m_addAnimationAction;
     QAction* m_addProgrammerFrameAction;
 
@@ -268,6 +270,7 @@ public slots:
     void slotAddAudioTriggers();
     void slotAddClock();
     void slotAddShowControl();
+    void slotAddCueRunner();
     void slotAddAnimation();
     void slotAddProgrammerFrame();
 
@@ -357,6 +360,10 @@ public:
      *  page), in @a parent: its id, its page in a multipage frame, shown.
      *  Placing and selecting it is the caller's. */
     void placeWidget(VCWidget *widget, VCWidget *parent);
+    /** Swap widget (P7): a Cue List playing a Show Tree list becomes a Cue
+     *  Runner on it, a Cue Runner a Cue List of its chaser -- in place
+     *  (geometry, page, caption). The new widget (null: not swappable). */
+    VCWidget *swapWidget(VCWidget *widget);
     /** Take @a widget (and its children) off the console as Delete does,
      *  without asking (the Show Tree's Make VC page, a look gone). */
     void removeWidget(VCWidget *widget);

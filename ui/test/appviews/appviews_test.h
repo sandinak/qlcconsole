@@ -51,6 +51,8 @@ private slots:
     void helpOpensOnWhatIsInFront();
     void virtualConsoleKeysDontClashWithTheApp();
     void theRigOverviewOpensWithoutTakingYouToTheStudio();
+    /* P7: the Run tab -- the full-screen cue runner, ⇧⌘0. */
+    void theRunTabIsTheCueRunner();
 
     /** "fetch and CACHE .. we cannot have remote stuff for a showfile on a
      *  production run": a show's definitions come from this computer. */

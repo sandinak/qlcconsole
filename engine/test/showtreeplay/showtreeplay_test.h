@@ -60,6 +60,11 @@ private slots:
     void subCuesAreRefusedWhereTheyCantBe();
     void subCueCommands();
 
+    // P7: the cue runner
+    void showControlStepsThroughSubCues();
+    void whatChangesComesFromTheResolvedTracking();
+    void cueOfStepMapsTheChaserBack();
+
 private:
     quint32 dimmer(int level, const QString &name);
     FixtureGroup *group(const QString &name, const QList<quint32> &fixtures);

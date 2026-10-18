@@ -920,4 +920,119 @@ void ShowTreePlay_Test::subCueCommands()
     QVERIFY(out.contains("follow"));
 }
 
+/****************************************************************************
+ * P7: the cue runner
+ ****************************************************************************/
+
+/* QLab / OSC / MSC drive the runner through ShowControl (SUBCUES §4):
+   /subgo, /subback, GO and LOAD by a sub-cue's number, a request to one
+   list by its chaser (a Cue Runner following it). */
+void ShowTreePlay_Test::showControlStepsThroughSubCues()
+{
+    const QList<quint32> ids = subCueShow();
+    ShowTreeController *st = m_doc->showTree();
+    ShowControl *sc = m_doc->showControl();
+    quint32 pid = invalidId();
+    st->cueList(ids[0], &pid);
+    QVERIFY(st->setCurrentProduction(pid));
+    Chaser *outer = qobject_cast<Chaser *>(m_doc->function(st->cueList(ids[0])->chaser));
+
+    // OSC addresses parse.
+    auto osc = [](const QByteArray &address) {
+        QByteArray d = address;
+        d.append('\0');
+        while (d.size() % 4)
+            d.append('\0');
+        d.append(",\0\0\0", 4);
+        return d;
+    };
+    QList<ShowControl::Request> rs = ShowControl::parseOsc(osc("/subgo"));
+    QCOMPARE(rs.count(), 1);
+    QCOMPARE(int(rs.first().command), int(ShowControl::SubGo));
+    rs = ShowControl::parseOsc(osc("/qlcconsole/subback"));
+    QCOMPARE(int(rs.first().command), int(ShowControl::SubBack));
+
+    // Sub GO on a stopped list: nothing.
+    QVERIFY(!sc->execute({ ShowControl::SubGo, QString(), QString() }));
+    // GO 2.2 by number: its cue, then that sub-cue.
+    QVERIFY(sc->execute({ ShowControl::Go, "2.2", QString() }));
+    settle();
+    QCOMPARE(outer->currentStepIndex(), 1);
+    QCOMPARE(outer->currentSubCueIndex(), 1);
+    QCOMPARE(sc->handleOsc(osc("/subback")), 1);
+    settle();
+    QCOMPARE(outer->currentSubCueIndex(), 0);
+    QVERIFY(!sc->execute({ ShowControl::SubBack, QString(), QString() }));    // the start
+    QVERIFY(sc->execute({ ShowControl::SubGo, QString(), QString() }));
+    settle();
+    QCOMPARE(outer->currentSubCueIndex(), 1);
+    QVERIFY(!sc->execute({ ShowControl::SubGo, QString(), QString() }));      // the end
+
+    // LOAD 2.1 then GO: there.
+    QVERIFY(sc->execute({ ShowControl::Go, "3", QString() }));
+    settle();
+    QCOMPARE(outer->currentStepIndex(), 2);
+    QVERIFY(sc->execute({ ShowControl::Load, "2.1", QString() }));
+    QCOMPARE(sc->loadedStep(outer->id()), 1);
+    QCOMPARE(sc->loadedSubCue(outer->id()), 0);
+    QVERIFY(sc->execute({ ShowControl::Go, QString(), QString() }));
+    settle();
+    QCOMPARE(outer->currentStepIndex(), 1);
+    QCOMPARE(outer->currentSubCueIndex(), 0);
+    QCOMPARE(sc->loadedStep(outer->id()), -1);
+
+    // A request to a list by its chaser (not the main one).
+    const quint32 other = st->addCueList(pid, "Encore");
+    st->addCue(other, -1, "E1");
+    Chaser *enc = qobject_cast<Chaser *>(m_doc->function(st->cueList(other)->chaser));
+    ShowControl::Request r { ShowControl::Go, QString(), QString() };
+    r.chaser = enc->id();
+    QVERIFY(sc->execute(r));
+    settle();
+    QVERIFY(enc->isRunning());
+    QCOMPARE(sc->mainCueList(), outer->id());   // still the main one
+}
+
+void ShowTreePlay_Test::whatChangesComesFromTheResolvedTracking()
+{
+    const QList<quint32> ids = subCueShow();
+    ShowTreeController *st = m_doc->showTree();
+    // Cue 1 -> cue 2: A Half -> Full, B in at Half.
+    QCOMPARE(st->changeLine(ids[1], ids[2]), QString("A → Full; B in → Half"));
+    // From dark: everything in.
+    QCOMPARE(st->changeLine(invalidId(), ids[1]), QString("A in → Half"));
+    // Cue 2 -> 2.1: only B.
+    QCOMPARE(st->changeLine(ids[2], ids[4]), QString("B → Full"));
+    // 2.1 -> 2.2: only A; B unchanged is not listed.
+    QCOMPARE(st->changeLine(ids[4], ids[5]), QString("A → Half"));
+    // 2.2 -> 3: back to cue 2's own state (sub-cues are cue-only).
+    QCOMPARE(st->changeLine(ids[5], ids[3]), QString("A → Full; B → Half"));
+    // Nothing differs.
+    QCOMPARE(st->changeLine(ids[2], ids[3]), QString());
+    // A layer that goes.
+    const FixtureGroup *b = m_doc->fixtureGroups().at(1);
+    const quint32 c4 = st->addCue(ids[0], 2, "Block");
+    QVERIFY(st->setCueMode(c4, CueMode::Block));
+    st->setTargetLook(c4, groupTarget(m_doc->fixtureGroups().at(0)->id()),
+                      st->lookForPalette(m_doc->palettes().at(0)->id()));
+    QCOMPARE(st->changeLine(ids[3], c4), QString("A → Half; %1 out").arg(b->name()));
+}
+
+void ShowTreePlay_Test::cueOfStepMapsTheChaserBack()
+{
+    const QList<quint32> ids = subCueShow();
+    ShowTreeController *st = m_doc->showTree();
+    QCOMPARE(st->cueOfStep(ids[0], 0), ids[1]);
+    QCOMPARE(st->cueOfStep(ids[0], 1), ids[2]);
+    QCOMPARE(st->cueOfStep(ids[0], 1, 0), ids[4]);
+    QCOMPARE(st->cueOfStep(ids[0], 1, 1), ids[5]);
+    QCOMPARE(st->cueOfStep(ids[0], 1, 2), invalidId());
+    QCOMPARE(st->cueOfStep(ids[0], 9), invalidId());
+    quint32 listId = invalidId();
+    QVERIFY(st->productionOfChaser(st->cueList(ids[0])->chaser, &listId) != invalidId());
+    QCOMPARE(listId, ids[0]);
+    // The sub-cues' own chaser is not a list of the production.
+    QCOMPARE(st->productionOfChaser(st->cueList(st->subCueList(ids[2]))->chaser), invalidId());
+}
+
 QTEST_MAIN(ShowTreePlay_Test)

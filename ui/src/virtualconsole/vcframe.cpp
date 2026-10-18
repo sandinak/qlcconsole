@@ -44,6 +44,7 @@
 #include "vcspeeddial.h"
 #include "vccuelist.h"
 #include "vcshowcontrol.h"
+#include "vccuerunner.h"
 #include "vcbutton.h"
 #include "vcslider.h"
 #include "vcmatrix.h"
@@ -1232,6 +1233,18 @@ bool VCFrame::loadXML(QXmlStreamReader &root)
             {
                 addWidgetToPageMap(cuelist);
                 cuelist->show();
+            }
+        }
+        else if (root.name() == KXMLQLCVCCueRunner)
+        {
+            /* The Show Tree's cue runner (P7) */
+            VCCueRunner *cr = new VCCueRunner(this, m_doc);
+            if (cr->loadXML(root) == false)
+                delete cr;
+            else
+            {
+                addWidgetToPageMap(cr);
+                cr->show();
             }
         }
         else if (root.name() == KXMLQLCVCShowControl)
