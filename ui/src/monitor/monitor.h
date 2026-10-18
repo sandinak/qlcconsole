@@ -96,6 +96,9 @@ public:
 
     /** Refresh fixtures & show current view */
     void updateView();
+    /** The person's unit changed (Settings -> Units): redraw the grid,
+     *  rulers and readouts here and in every Studio window */
+    void unitsChanged();
 
     /** Highlight the given fixtures (orange border) in the 2D graphics view.
      *  Passing an empty list clears all highlights. */
@@ -310,7 +313,6 @@ protected slots:
     void slotGridHeightChanged(int value);
 
     /** Slot called when the unit metrics changes */
-    void slotGridUnitsChanged(int index);
 
     /** Slot called when the grid sub-divisions value changes */
     void slotGridSubdivisionsChanged(int value);
@@ -569,7 +571,8 @@ protected:
     MonitorInventoryPanel* m_inventoryPanel;
     QSpinBox* m_gridWSpin;
     QSpinBox *m_gridHSpin;
-    QComboBox *m_unitsCombo;
+    QLabel *m_unitsLabel;   ///< the grid's unit, from Settings -> Units
+    void updateUnitsLabel();
     QSpinBox *m_gridSubdivSpin;
     QComboBox *m_snapCombo;
     QToolButton *m_snapToggle = nullptr;

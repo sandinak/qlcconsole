@@ -49,6 +49,7 @@
 #include "inputpatch.h"
 #include "vcwidget.h"
 #include "doc.h"
+#include "apputil.h"
 
 #define GRID_RESOLUTION 5
 
@@ -1428,12 +1429,12 @@ void VCWidget::mousePressEvent(QMouseEvent* e)
         {
             m_resizeMode = true;
             setMouseTracking(true);
-            setCursor(QCursor(Qt::SizeFDiagCursor));
+            setCursor(AppUtil::nativeCursorShape(Qt::SizeFDiagCursor, true));
         }
         else
         {
             m_mousePressPoint = QPoint(e->pos().x(), e->pos().y());
-            setCursor(QCursor(Qt::SizeAllCursor));
+            setCursor(AppUtil::nativeCursorShape(Qt::SizeAllCursor, true));
         }
     }
     else if (e->button() & Qt::RightButton)

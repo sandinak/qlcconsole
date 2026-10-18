@@ -34,6 +34,7 @@ private slots:
 
     void addRemove();
     void writeZeroFade();
+    void anOverride16BitChannelWritesBothBytes();
     void anUnpatchedFixturesValuesAreShownNotWritten();
     void replaceAllSwapsTheWholeSet();
     void aFaderRebuiltEveryTickIsNeverSeenEmpty();

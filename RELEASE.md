@@ -1,7 +1,17 @@
 # Release process
 
-qlcconsole ships macOS releases, built and signed locally, published to
-[GitHub Releases](https://github.com/sandinak/qlcconsole/releases).
+qlcconsole releases are published to
+[GitHub Releases](https://github.com/sandinak/qlcconsole/releases):
+
+- **macOS** — a universal DMG (Apple silicon + Intel, macOS 12+), built,
+  Developer ID signed and notarized **locally** by `./release.sh`.
+- **Windows** — the NSIS installer (`…-win64-setup.exe`) built by CI's
+  `build-windows` job. Not code-signed.
+- **Linux** — the x86_64 AppImage built by CI's `build-linux` job
+  (`build-v4`).
+
+The Windows and Linux files are downloaded from the CI run of the release
+commit and attached to the release `release.sh` created (step 5 below).
 
 ## Two independent version numbers
 
@@ -55,8 +65,12 @@ Steps:
 1. Bump `VERSION` to the new release number.
 2. Add a `## [X.Y.Z] - YYYY-MM-DD` section to [CHANGELOG.md](CHANGELOG.md)
    summarizing what shipped since the last release (pull the user-facing
-   highlights from [DONE.md](DONE.md)).
-3. Commit those two changes.
+   highlights from [DONE.md](DONE.md)), with its Known issues. A section
+   written ahead as `- Unreleased` gets its date now. The section is the
+   release notes, verbatim.
+3. Commit those two changes, and merge the release branch (e.g.
+   `release/0.1.0`) to `main`; release from `main`. Push it, so CI builds
+   the Windows installer and the AppImage from that commit.
 4. Run `./release.sh`. This:
    - runs the test gate (`cmake --build build --target check` — engine +
      UI unit tests, fixture-definition validation) and **stops here** if
@@ -68,29 +82,47 @@ Steps:
    - tags `vX.Y.Z` and pushes the tag,
    - creates a GitHub Release with the signed DMG attached and release notes
      pulled straight from that version's `CHANGELOG.md` section.
-5. Sanity-check the release page, then announce it.
+5. Attach the Windows installer and the Linux AppImage from CI. Wait for
+   the CI run of the release commit to finish (`build-windows` and the
+   `build-v4` Linux job green), then:
+
+   ```sh
+   RUN=$(gh run list --workflow build.yml --commit "$(git rev-parse HEAD)" \
+         --limit 1 --json databaseId -q '.[0].databaseId')
+   gh run download "$RUN" -D dist/ci \
+      -p 'qlcconsole-*-win64-setup.exe' -p 'build-v4-AppImage'
+   cp dist/ci/qlcconsole-*-win64-setup.exe/*.exe dist/qlcconsole-X.Y.Z-win64-setup.exe
+   cp dist/ci/build-v4-AppImage/*.AppImage dist/qlcconsole-X.Y.Z-x86_64.AppImage
+   gh release upload vX.Y.Z dist/qlcconsole-X.Y.Z-win64-setup.exe \
+      dist/qlcconsole-X.Y.Z-x86_64.AppImage
+   ```
+
+   CI's names carry the build date and commit (and, for the AppImage, the
+   build id rather than the release number); the copies above give users
+   plain names. Check the installer's `--version` says X.Y.Z (CI's smoke
+   test already does) and, if the Windows VM is free, install it there.
+6. Sanity-check the release page, then announce it.
 
 `release.sh` pushes a tag and creates a public GitHub Release — real,
 visible actions. Run it deliberately, not as part of routine iteration.
 
 ## Signing: local, not CI
 
-Release builds are signed and notarized **on this machine**, not in GitHub
-Actions. The Developer ID private key stays in the local keychain and is
+macOS release builds are signed and notarized **on this machine**, not in
+GitHub Actions. The Developer ID private key stays in the local keychain and is
 never exported as a CI secret. `.github/workflows/build.yml` remains
 plain CI (build + test on push/PR) and is unrelated to publishing releases.
 
 ## Out of scope for now
 
-- **Linux packaging** (`platforms/linux/qlcconsole.spec`,
-  `debian/changelog`) — inherited from upstream QLC+ and stale (e.g. the
-  `.spec` file still reads a `QLCPLUS_VERSION` env var from the old build).
-  qlcconsole's releases are macOS-only until Linux becomes an actual target;
-  at that point these files need their own version/branding pass.
-- **Windows** — CI's `build-windows` job builds an NSIS installer
-  (`platforms/windows/qlcconsole.nsi.in`, version from `VERSION`) on every
-  push and uploads it as an artifact. It is not part of a release: unsigned,
-  and not yet tried on a real Windows machine (see TODO.md).
+- **Linux distribution packages** (`platforms/linux/qlcconsole.spec`,
+  `debian/changelog`) — inherited from upstream QLC+ and stale (the `.spec`
+  still reads a `QLCPLUS_VERSION` env var; `debian/changelog` is upstream's
+  4.14.x history). Linux ships as CI's AppImage only; these files need their
+  own version/branding pass before an .rpm or .deb is offered.
+- **Windows code signing** — the installer is unsigned, so SmartScreen
+  warns on first run. It has been installed and used on a Windows 10 VM
+  (2026-10-15/16), not yet on a real Windows 11 machine (TODO.md).
 - **CI-based release builds** — could move build+sign+notarize into GitHub
   Actions later by exporting the cert as a secret, but that trades local key
   custody for CI convenience; not worth it while releases are infrequent and

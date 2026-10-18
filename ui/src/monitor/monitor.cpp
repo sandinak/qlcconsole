@@ -192,7 +192,7 @@ Monitor::Monitor(QWidget* parent, Doc* doc, Qt::WindowFlags f)
     , m_inventoryPanel(NULL)
     , m_gridWSpin(NULL)
     , m_gridHSpin(NULL)
-    , m_unitsCombo(NULL)
+    , m_unitsLabel(NULL)
     , m_povCombo(NULL)
     , m_labelsAction(NULL)
     , m_layersAction(NULL)
@@ -683,12 +683,13 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     m_gridHSpin->setValue(gridSize.z());
     connect(m_gridHSpin, SIGNAL(valueChanged(int)), this, SLOT(slotGridHeightChanged(int)));
 
-    m_unitsCombo = new QComboBox();
-    m_unitsCombo->addItem(tr("Meters"), MonitorProperties::Meters);
-    m_unitsCombo->addItem(tr("Feet"), MonitorProperties::Feet);
-    if (m_props->gridUnits() == MonitorProperties::Feet)
-        m_unitsCombo->setCurrentIndex(1);
-    connect(m_unitsCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(slotGridUnitsChanged(int)));
+    // The unit is the person's, set in Settings -> Units (App applies it to
+    // the show); shown here, not chosen here.
+    m_unitsLabel = new QLabel();
+    m_unitsLabel->setObjectName(QStringLiteral("monitorGridUnitsLabel"));
+    m_unitsLabel->setToolTip(tr("Metres for mm, cm and m; feet for inches and feet. "
+                                "Change it in Settings, Units."));
+    updateUnitsLabel();
 
     m_gridSubdivSpin = new QSpinBox();
     m_gridSubdivSpin->setMinimum(1);
@@ -715,7 +716,7 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
         srl->addWidget(new QLabel("x", sizeRow));
         srl->addWidget(m_gridHSpin);
         gfl->addRow(tr("Stage size:"), sizeRow);
-        gfl->addRow(tr("Units:"), m_unitsCombo);
+        gfl->addRow(tr("Units:"), m_unitsLabel);
         gfl->addRow(tr("Subdivisions:"), m_gridSubdivSpin);
 
         QMenu *gm = new QMenu(gridBtn);
@@ -1123,20 +1124,14 @@ void Monitor::fillGraphicsView(bool keepView)
 
     m_gridWSpin->blockSignals(true);
     m_gridHSpin->blockSignals(true);
-    m_unitsCombo->blockSignals(true);
     m_gridSubdivSpin->blockSignals(true);
     m_snapCombo->blockSignals(true);
 
     if (m_props->gridUnits() == MonitorProperties::Meters)
-    {
         m_graphicsView->setGridMetrics(1000.0);
-        m_unitsCombo->setCurrentIndex(0);
-    }
     else // m_props->gridUnits() == MonitorProperties::Feet
-    {
         m_graphicsView->setGridMetrics(304.8);
-        m_unitsCombo->setCurrentIndex(1);
-    }
+    updateUnitsLabel();
 
     m_gridWSpin->setValue(m_props->gridSize().x());
     m_gridHSpin->setValue(m_props->gridSize().z());
@@ -1145,7 +1140,6 @@ void Monitor::fillGraphicsView(bool keepView)
     m_snapCombo->setCurrentIndex(snapIdx >= 0 ? snapIdx : 0);
     m_gridWSpin->blockSignals(false);
     m_gridHSpin->blockSignals(false);
-    m_unitsCombo->blockSignals(false);
     m_gridSubdivSpin->blockSignals(false);
     m_snapCombo->blockSignals(false);
 
@@ -1995,58 +1989,22 @@ void Monitor::slotGridHeightChanged(int value)
     m_props->setGridSize(QVector3D(m_gridWSpin->value(), m_props->gridSize().y(), value));
 }
 
-void Monitor::slotGridUnitsChanged(int index)
+void Monitor::updateUnitsLabel()
 {
-    Q_ASSERT(m_graphicsView != NULL);
+    if (m_unitsLabel == NULL)
+        return;
+    m_unitsLabel->setText(m_props->gridUnits() == MonitorProperties::Feet
+                          ? tr("Feet (Settings, Units)") : tr("Metres (Settings, Units)"));
+}
 
-    MonitorProperties::GridUnits units = MonitorProperties::Meters;
-
-    QVariant var = m_unitsCombo->itemData(index);
-    if (var.isValid())
-        units = MonitorProperties::GridUnits(var.toInt());
-
-    /* Re-express the stage in the new unit WITHOUT re-quantising it.
-     *
-     * This used to read the integer spin boxes, multiply, and qRound back into
-     * integers -- so the stored extent was rounded to a whole foot or metre on
-     * every toggle. A 10 m stage became 33 ft, which is 10.058 m: the stage
-     * physically grew, everything on it shifted relative to the grid, and
-     * toggling back did not undo it because the rounding had already thrown
-     * the original away. Switch units twice and the rig has moved.
-     *
-     * m_gridSize is a QVector3D of floats, so the exact converted value fits.
-     * Convert from the STORED extent rather than from the spin boxes -- the
-     * spin boxes are integers and reading them back is what lost the precision
-     * in the first place -- and round only for display. */
-    if (units != m_props->gridUnits())
-    {
-        const double factor = (units == MonitorProperties::Feet) ? 3.28084 : (1.0 / 3.28084);
-        const QVector3D cur = m_props->gridSize();
-        const double exactW = qMax(0.001, double(cur.x()) * factor);
-        const double exactH = qMax(0.001, double(cur.z()) * factor);
-        const double exactY = double(cur.y()) * factor;
-
-        m_gridWSpin->blockSignals(true);
-        m_gridHSpin->blockSignals(true);
-        m_gridWSpin->setValue(qMax(1, qRound(exactW)));
-        m_gridHSpin->setValue(qMax(1, qRound(exactH)));
-        m_gridWSpin->blockSignals(false);
-        m_gridHSpin->blockSignals(false);
-
-        // The view draws whole grid cells, so it gets the rounded count --
-        // that only decides how many lines are painted. The DOCUMENT keeps the
-        // exact extent, which is what has to survive a round trip.
-        m_graphicsView->setGridSize(QSize(qMax(1, qRound(exactW)),
-                                          qMax(1, qRound(exactH))));
-        m_props->setGridSize(QVector3D(float(exactW), float(exactY), float(exactH)));
-    }
-
-    if (units == MonitorProperties::Meters)
-        m_graphicsView->setGridMetrics(1000.0);
-    else if (units == MonitorProperties::Feet)
-        m_graphicsView->setGridMetrics(304.8);
-
-    m_props->setGridUnits(units);
+void Monitor::unitsChanged()
+{
+    // App has converted the stage (MonitorProperties::convertGridUnits);
+    // redraw everything that rules or labels it.
+    updateView();
+    for (QWidget *w : QApplication::topLevelWidgets())
+        for (StructureStudioView *v : w->findChildren<StructureStudioView *>())
+            v->update();
 }
 
 void Monitor::slotGridSubdivisionsChanged(int value)

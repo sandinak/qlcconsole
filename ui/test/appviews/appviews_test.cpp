@@ -25,6 +25,9 @@
 #include <QTabWidget>
 #include <QTabBar>
 #include <QDialog>
+#include <QComboBox>
+#include <QLabel>
+#include <QFile>
 
 #include "appviews_test.h"
 
@@ -33,8 +36,11 @@
 #include "qlcfixturedef.h"
 #include "doc.h"
 #include "monitor.h"
+#include "monitorproperties.h"
 #define protected public
 #include "app.h"
+#include "appsettings.h"
+#include "measurementunits.h"
 #include "functionmanager.h"
 #define private public
 #define protected public
@@ -436,6 +442,99 @@ void AppViews_Test::aShowsDefinitionsComeFromTheShowCache()
 
     qputenv("USERPROFILE", realProfile);
 #endif
+}
+
+void AppViews_Test::settingsChoosesTheUnits()
+{
+    QCOMPARE(MeasurementUnits::preferredLength(), MeasurementUnits::Millimetres);
+    {
+        AppSettings dlg(m_app);
+        QComboBox *units = dlg.findChild<QComboBox *>(QStringLiteral("settingsUnitsCombo"));
+        QVERIFY(units != nullptr);
+        QCOMPARE(units->count(), 5);
+        QCOMPARE(units->currentData().toInt(), int(MeasurementUnits::Millimetres));
+        units->setCurrentIndex(units->findData(int(MeasurementUnits::Inches)));
+        dlg.accept();
+    }
+    QCOMPARE(MeasurementUnits::preferredLength(), MeasurementUnits::Inches);
+    {
+        AppSettings dlg(m_app);
+        QComboBox *units = dlg.findChild<QComboBox *>(QStringLiteral("settingsUnitsCombo"));
+        QCOMPARE(units->currentData().toInt(), int(MeasurementUnits::Inches));
+        dlg.reject();   // Cancel keeps it
+    }
+    QCOMPARE(MeasurementUnits::preferredLength(), MeasurementUnits::Inches);
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Millimetres);
+}
+
+void AppViews_Test::theGridFollowsTheUnitPreference()
+{
+    QSettings settings(QSettings::defaultFormat(), QSettings::UserScope,
+                       QStringLiteral("qlcplus"), QStringLiteral("qlcconsole"));
+    auto forget = [&settings]() {
+        settings.remove(MeasurementUnits::settingsKey());
+        settings.remove(QStringLiteral("units/seededFromShow"));
+    };
+    forget();
+
+    // A show as an older version saved it: a 40 x 30 ft stage, in feet.
+    QTemporaryDir dir;
+    const QString show = dir.filePath(QStringLiteral("feet.qxw"));
+    m_app->clearDocument();
+    MonitorProperties *mp = m_app->doc()->monitorProperties();
+    mp->setGridUnits(MonitorProperties::Feet);   // relabel, as a file says it
+    mp->setGridSize(QVector3D(40, 10, 30));
+    QCOMPARE(m_app->saveXML(show), QFile::NoError);
+
+    // Never chosen: the first show opened, in feet, makes it feet.
+    QCOMPARE(m_app->loadXML(show), QFile::NoError);
+    mp = m_app->doc()->monitorProperties();
+    QCOMPARE(MeasurementUnits::preferredLength(), MeasurementUnits::Feet);
+    QCOMPARE(mp->gridUnits(), MonitorProperties::Feet);
+    QCOMPARE(mp->gridSize(), QVector3D(40, 10, 30));
+    QLabel *label = Monitor::instance()->findChild<QLabel *>(QStringLiteral("monitorGridUnitsLabel"));
+    QVERIFY(label != nullptr);
+    QVERIFY(label->text().startsWith(QStringLiteral("Feet")));
+    QVERIFY(Monitor::instance()->findChild<QComboBox *>(QStringLiteral("monitorGridUnitsCombo")) == nullptr);
+
+    // Only once: chosen mm, the same show opens in metres, the same stage.
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Millimetres);
+    QCOMPARE(m_app->loadXML(show), QFile::NoError);
+    mp = m_app->doc()->monitorProperties();
+    QCOMPARE(MeasurementUnits::preferredLength(), MeasurementUnits::Millimetres);
+    QCOMPARE(mp->gridUnits(), MonitorProperties::Meters);
+    QVERIFY(qAbs(mp->gridSize().x() - 12.192f) < 1e-3f);
+    QVERIFY(qAbs(mp->gridSize().z() - 9.144f) < 1e-3f);
+    QVERIFY(label->text().startsWith(QStringLiteral("Metres")));
+
+    // Saved in the person's unit, whole numbers for older readers.
+    const QString saved = dir.filePath(QStringLiteral("metres.qxw"));
+    QCOMPARE(m_app->saveXML(saved), QFile::NoError);
+    QFile f(saved);
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    const QByteArray xml = f.readAll();
+    QVERIFY(xml.contains("Units=\"0\""));
+    QVERIFY(xml.contains("Width=\"12\""));
+    QVERIFY(xml.contains("ExactWidth=\"12.192"));
+
+    // Changing it in Settings converts the open show and redraws.
+    {
+        AppSettings dlg(m_app);
+        QComboBox *units = dlg.findChild<QComboBox *>(QStringLiteral("settingsUnitsCombo"));
+        units->setCurrentIndex(units->findData(int(MeasurementUnits::Inches)));
+        dlg.accept();
+    }
+    QCOMPARE(mp->gridUnits(), MonitorProperties::Feet);
+    QVERIFY(qAbs(mp->gridSize().x() - 40.0f) < 1e-3f);
+    QVERIFY(label->text().startsWith(QStringLiteral("Feet")));
+
+    // New: in the person's unit too.
+    m_app->clearDocument();
+    QCOMPARE(m_app->doc()->monitorProperties()->gridUnits(), MonitorProperties::Feet);
+
+    // (No second New straight after: MasterTimer::stop() right behind a
+    // start() can wait forever -- see TODO.md.)
+    forget();
 }
 
 QTEST_MAIN(AppViews_Test)

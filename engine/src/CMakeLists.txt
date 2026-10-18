@@ -90,6 +90,7 @@ add_library(${module_name} SHARED
     qlcinputsource.cpp qlcinputsource.h
     qlcmodifierscache.cpp qlcmodifierscache.h
     qlcpalette.cpp qlcpalette.h
+    measurementunits.cpp measurementunits.h
     qlcphysical.cpp qlcphysical.h
     qlcpoint.cpp qlcpoint.h
     qxwimporter.cpp qxwimporter.h

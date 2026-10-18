@@ -22,6 +22,7 @@
 #include "stand.h"
 #include "monitorproperties.h"
 #include "doc.h"
+#include "apputil.h"
 
 StandItem::StandItem(Stand *stand, Doc *doc,
                      float pxX, float pxY, float pxBaseR,
@@ -39,7 +40,7 @@ StandItem::StandItem(Stand *stand, Doc *doc,
     setFlags(ItemIsSelectable | ItemSendsGeometryChanges);
     setZValue(-0.8);   // below pipes/fixtures, above platforms
     setFlag(ItemIsMovable, !elevation && !stand->locked());
-    setCursor((elevation || stand->locked()) ? Qt::ArrowCursor : Qt::SizeAllCursor);
+    setCursor((elevation || stand->locked()) ? Qt::ArrowCursor : AppUtil::nativeCursorShape(Qt::SizeAllCursor));
     setPos(pxX, pxY);
 
     const bool isFeet = doc->monitorProperties()->gridUnits() == MonitorProperties::Feet;
@@ -63,7 +64,7 @@ quint32 StandItem::standId() const { return m_stand->id(); }
 void StandItem::setMovable(bool movable)
 {
     setFlag(ItemIsMovable, movable && !m_elevation);
-    setCursor((movable && !m_elevation) ? Qt::SizeAllCursor : Qt::ArrowCursor);
+    setCursor((movable && !m_elevation) ? AppUtil::nativeCursorShape(Qt::SizeAllCursor) : Qt::ArrowCursor);
 }
 
 void StandItem::showLabel(bool visible)
@@ -156,7 +157,7 @@ void StandItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
         m_stand->setLocked(!m_stand->locked());
         const bool canMove = !m_stand->locked();
         setFlag(ItemIsMovable, canMove && !m_elevation);
-        setCursor((canMove && !m_elevation) ? Qt::SizeAllCursor : Qt::ArrowCursor);
+        setCursor((canMove && !m_elevation) ? AppUtil::nativeCursorShape(Qt::SizeAllCursor) : Qt::ArrowCursor);
         update();
         if (m_doc) m_doc->setModified();
     }

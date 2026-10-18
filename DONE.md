@@ -339,6 +339,99 @@ distributed along the line evenly." Design: `LINE_TARGET_DESIGN.md`.
   target menu's own "Lock Target" is undone by the next refresh unless the
   layer is locked -- by design for layers, but the menu item then misleads.
 
+### 2026-10-17 — Rig Overview: dimmed RGB without a dimmer channel drew black
+
+`channelSetLiveState()` (`ui/src/monitor/fixturevisualtraits.cpp`) handed back the raw, already-dimmed colour *and* a level of max(R,G,B) for fixtures with no dimmer channel; every reader draws colour × level, so Blue at 19% (0,1,48) drew at 9/255. It now returns the hue at full and the level once. Fixtures with a dimmer channel are unchanged. Found from a Show Tree preview (feat/show-tree d8664080a); backported with its `monitor_test` case.
+### 2026-10-17 — No colour profiles in the bundled PNGs (QTBUG-147602 guard) *(fix/png-colour-profiles)*
+
+Follow-up to the cursor crash below. QTBUG-147602 (Qt 6.11.x, macOS;
+upstream fix qtbase a481ede673, not in Homebrew's 6.11.1):
+`qt_mac_cgImageFormatForImage()` releases a QImage's `CGColorSpace` before
+`CGImageCreate` reads it, so **any** QImage carrying a colour space can crash
+in `QImage::toCGImage()` -- cursors, drag pixmaps, icons/NSImages. 508 of the
+repo's 660 PNGs carried one.
+
+- **Which chunks matter** (measured with an offscreen Qt 6.11.1 probe, one
+  chunk spliced into a clean icon at a time): `iCCP` (here Display P3) and
+  `sRGB` each give a valid `QColorSpace`; `gAMA` alone or with `cHRM` does
+  too; `cHRM` alone and `cICP` alone (libpng 1.6.4x) do not. Qt applies no
+  gamma/colour conversion on load (the reader's gamma is 0): the decoded
+  pixels are byte-identical with and without each chunk.
+- **`tools/png-colour-chunks.py`** -- dependency-free chunk rewriter. Lists
+  PNGs with `iCCP`/`sRGB`/`gAMA`/`cHRM`/`cICP` (exit 1), or `--strip`s exactly
+  those chunks, copying every other chunk (IDAT included) byte for byte.
+  `cICP` is stripped too although Qt 6.11.1 ignores it: in the 9 macOS
+  screenshots it said "Display P3" next to the iCCP, and a later Qt that reads
+  it would put them back on the crash path.
+- **Stripped:** 660 PNGs scanned, 508 changed, 35 777 bytes saved (429
+  gobos/icons sRGB+gAMA+cHRM, 65 icons sRGB, 9 `docs/images` screenshots
+  iCCP+cICP, 5 gAMA[+cHRM]).
+- **No visual change:** for all 508, Qt's decode (RGBA8888, same format and
+  size) and Pillow's decode are identical before/after, and IHDR/PLTE/tRNS/
+  IDAT are byte-identical. Qt reports a valid colour space on 508 files
+  before, 0 after. In-app drawing (QPainter) never colour-managed these, so
+  nothing the app paints changes. Only where an image goes to AppKit (native
+  menu icons, drag pixmaps) is it now read as sRGB instead of its tag: the same
+  for the 494 sRGB files and close for the gamma-0.45 icons (effect, fontcolor,
+  function, grid); the help screenshots (P3) are only ever painted by Qt, and
+  Robe gobo00004 (gamma 1.0) only in Qt views.
+- **Guard:** the root `unittest.sh` (so `make check`, check-all, CI) runs the
+  checker over the tree first and stops on any hit; `help-shots.sh` checks
+  `docs/images` after a run (its QImages carry no colour space, so it never
+  wrote one). CONTRIBUTING.md says why and how to strip a new picture.
+
+### 2026-10-17 — macOS: no image-based cursors (crash orbiting the Angled view) *(fix/macos-native-cursors)*
+
+Crash report 2026-10-17 15:36 (macOS 27.0, Homebrew Qt 6.11.1): pressing the
+empty canvas in Structure Studio's Angled view to orbit called
+`setCursor(Qt::SizeAllCursor)` and died in `CGColorSpaceGetType` under
+`QImage::toCGImage()` ← `QCocoaCursor::createCursorData()`.
+
+- **Root cause (Qt):** cursors with no native NSCursor are built from PNGs;
+  `sizeallcursor.png`, `spincursor.png` and `waitcursor.png` all carry an
+  `iCCP` profile, so the QImage has a custom colour space. In Qt 6.11.x
+  `qt_mac_cgImageFormatForImage()` returns a raw `CGColorSpaceRef` whose
+  `QCFType` owner has already released it -- a use-after-free that only
+  survives for the system sRGB space. QTBUG-147602, fixed upstream in qtbase
+  a481ede673 (picked to 6.11/6.12), not yet in the Homebrew 6.11.1 here.
+- **Fix:** `AppUtil::nativeCursorShape()` -- on macOS SizeAll → OpenHand
+  (ClosedHand while dragging), Wait/Busy → Arrow; everything else (and every
+  shape on Linux/Windows) passes through. In Qt 6.11 Forbidden, WhatsThis,
+  Drag*, the four resize arrows and the hands are native NSCursors already,
+  and Blank is a profile-less pixmap, so they stay. All 21 SizeAll call
+  sites (Structure Studio view and its items, path draw widget, VC widget
+  move) and the VC widget's FDiag resize go through it.
+- **Residual risk:** any other QImage with an embedded profile that reaches
+  `toCGImage()` (e.g. a drag pixmap made from a profiled PNG) can hit the same
+  Qt bug until Qt is upgraded.
+- **Test:** `ui/test/nativecursor` -- the mapping, that no shape maps to a
+  PNG-backed one, pass-through off macOS, and a source guard that no
+  `Qt::SizeAll/Wait/BusyCursor` in `ui/src`, `main`, `fixtureeditor` or
+  `webaccess/src` bypasses the helper. The CoreGraphics crash itself cannot be
+  reproduced offscreen.
+
+### 2026-10-17 — Engine: fader priority moves both ways; an Override 16-bit channel writes both bytes *(fix/fader-priority-16bit)*
+
+Backported from `feat/show-tree` (4973a8d43), the two engine fixes only.
+
+- **`Universe::requestFaderPriority()`** searched for a slot with the fader
+  still in the list, so a priority lower than its own never found one: the
+  fader stayed put and kept its old priority. It now takes the fader out,
+  sets the priority and puts it back where `requestFader()` would place a
+  new fader of that priority (after the last one at or below it).
+- **`GenericFader::write()`, `FadeChannel::Override`**: a fader handling
+  secondary channels holds a 16-bit channel (coarse + fine) in one
+  FadeChannel; Override wrote one byte -- the low one, at the coarse
+  address. It now writes every byte, MSB first, like the Flashing branch.
+- **User-visible on 0.1.0: nothing.** No code on the release branch calls
+  `requestFaderPriority()`, and the Override flag is only set on faders
+  without secondary handling (Simple Desk, VC slider override, power
+  measuring, effect-script `replace`), whose channels are always one byte.
+  Both were latent; Show Tree's edit override is the first user of either.
+- **Tests**: `Universe_Test::faderPriorityMovesBothWays`,
+  `GenericFader_Test::anOverride16BitChannelWritesBothBytes` -- each fails
+  on the unfixed code and passes with the fix.
+
 ### 2026-10-16 — A look's Speed and Spread survive picking an effect; Speed Masters window closes cleanly *(fix/speedmaster-dblclick-reset)*
 
 Branson: "when I set something on the speed masters .. and then double click
@@ -579,6 +672,242 @@ could see or address a node off this computer's subnets.
 ArtIpProg. Passive capture on vlan0 wasn't possible from the agent (BPF is
 root-only).
 
+### 2026-10-16 — The first 24-hour soak: what it found, and the fixes *(release/0.1.0: fix/soak-findings, fix/win-mastertimer, feat/soak-windows, feat/soak-linux, fix/linux-soak-findings)*
+
+First 24 h run of `stresstest/soak24/` on **kronk** (the Intel show Mac,
+i7-9750H, 6 cores), on screen, from 2026-10-15 09:56, three phases:
+
+- **Real show:** 0 crashes, worst tick 40 ms. RSS 201 → 1116 MB over the
+  phase -- the on-screen app grows (~50 MB/h) where neither the engine nor
+  the App driven offscreen does. Not explained yet: `--heap-track` (lite
+  malloc stack logging, hourly `heap -s` / `vmmap --summary`) is on the
+  second soak (TODO.md).
+- **Scaled** (the show plus a synthetic block): **6 crashes in 8 h**,
+  `nanov2_guard_corruption_detected` on universe threads and the
+  MasterTimer -- heap corruption. **Fixed** (`228bc9274`):
+  `GenericFader::getChannelFader()` handed back a bare `FadeChannel*` after
+  letting go of the fader's lock, while the universe thread stepped and
+  removed channels in the same QHash (Qt 6 moves entries on remove/grow),
+  so set-up writes landed in another channel or freed memory. It now
+  returns a `ChannelRef` holding the fader's `std::recursive_mutex` until
+  the caller lets go. Shown three ways on the old code: TSan, ASan
+  (heap-use-after-free in FadeChannel's QList) and a new genericfader test
+  (fails 5/5 before, passes after). `qlcstress --churn-ms` reproduces the
+  load (function churn on top of output).
+- **Universe bounds** (`d5f527e35`): `writeMultiple` / `writeBlended` /
+  `writeRelative` wrote past the 512-byte buffers for a 16-bit pair or a
+  fixture on the last addresses (unchecked in Release); now clipped, and a
+  write starting outside is refused. The per-tick HTP / MaskBlend qDebugs
+  (an allocation per losing channel, every tick, where the corruption
+  surfaced) are gone, and the message handler checks the level first.
+- **Rough handling:** 0 crashes, 7 reloads, worst tick 43 ms, RSS 317 →
+  549 MB.
+
+**Windows** (soak runner on Windows, `47c3c8779`; dry run on the Windows
+10 VM):
+- **Timer pile-up, fixed** (`86e14a88a`): `CreateTimerQueueTimer` started
+  a pool worker for every overlapping tick once ticks overran -- threads
+  111 → 872, private bytes 163 → 803 MB, ticks up to 40 s, 736 MMCSS
+  refusals. Now one dedicated thread on a high-resolution waitable timer,
+  absolute deadlines, re-anchored on overrun (missed ticks dropped, never
+  queued), MMCSS asked once. After: **threads flat at ~110**. Ticks on the
+  heavy show are still slow on Windows (`fix/win-tick-perf`, TODO.md).
+- **Two dead connections** found in the dry run's log (`731dc55d9`):
+  `UniversePatchGrid::reload()` and `FunctionManager::updateActionStatus()`
+  were connected by SLOT() but weren't slots. `unittest.sh` now fails any
+  test that logs "No such slot/signal" (the third in a week, after the
+  Studio's Add Target / Add Person / Copy / Paste, `5c98fd717`).
+- **Patch-grid load** (`da40149e5`): with reload() live, a show load
+  rebuilt the whole grid once per universe added. Now coalesced into one:
+  the 94-universe STRESS show loads in **8.9 s (was 33.9 s), 283 MB (was
+  2.8 GB)** on macOS; on the VM it had held the main thread past the
+  runner's 120 s load timeout.
+
+**Linux** (`48e687a66`): the soak runner runs headless under Xvfb (a box
+or a container), sampling /proc (CPU, RSS, private, threads, fds), cores /
+coredumpctl on a crash. Its first runs found (`be5eefa5d`) a GCC -O3
+-Werror maybe-uninitialized in patchinventorydialog_test (Release builds of
+the tree failed), and the Programming tab's first-run guide holding up the
+web API on a scripted run (it now honours `QLC_NO_RECOVERY_PROMPT`).
+
+**Second soak, 2026-10-16 → 17, on 4 hosts**, with all of the above in:
+DanceHysteria-0.3, three 8 h phases (real / scaled / rough), outputs
+stripped. RSS is start → peak → end.
+
+| Host | Real | Scaled | Rough |
+|---|---|---|---|
+| Linux build host (Debian 13, Qt 6.8.2, x86_64) | 0 crashes/hangs/restarts; RSS 234 → 291 → 277 MB; worst tick 44 ms | 0; 281 → 400 → 394 MB; 101 ms | 0; 295 → 404 → 375 MB; 57 ms; 7 reloads |
+| Podman container (Linux arm64) | 0 crashes/hangs/restarts; 231 → 281 → 271 MB | 0; 269 → 385 → 378 MB | 0; 289 → 408 → 378 MB |
+| kronk (macOS, `--heap-track`) | 0 crashes/hangs; 312 → 492 → 486 MB | 0; 547 → 758 → 749 MB | 0; 360 → 639 → 608 MB |
+| Windows 10 VM | 0 crashes/hangs/restarts; 204 → 248 → 233 MB; handles 1612 → 1628 → 1595; worst tick 97.8 ms | cut after 15 min by a Windows Update reboot (event 1074, planned) -- not an app fault | not run |
+
+Linux fds stayed flat (~100-119). The first soak's scaled-phase crashes
+did not recur: 0 on the three hosts that ran that phase in full. Still open: a short Windows
+re-soak (scaled and rough phases), and reading kronk's heap snapshots for
+what the on-screen app's memory is (TODO.md).
+
+### 2026-10-15 — WLED: the rest of the 1D effects, 160 in all *(feat/wled-effects-2, merged into release/0.1.0)*
+
+- 68 more ports, from what each effect does on a device and WLED's effect
+  documentation -- never from WLED's code (EUPL): every remaining 1D effect
+  (Fireworks Starburst, Percent, Noise 1-4, Perlin Move, Meteor Smooth,
+  the particle-system 1D ones…) and the 23 sound-reactive 1D ones on the
+  audio data channel (dark with no audio input). `lib/wled.js` gains the
+  shared helpers (randomColor, mix/dim/add, bounce, heatColor, audio(),
+  beat(), pixel memory between ticks).
+- Not ported: the 2D effects; Copy Segment, Image and Slow Transition.
+- **effectscripts: every script ships** (a glob, not a hand-kept list) --
+  the Windows VM's first install lacked the WLED scripts because of it.
+- Tests: the every-port sweep wants 160; sound-reactive ones play a
+  made-up song and rest dark without one. Not compared side by side with
+  a real device yet (TODO.md, "WLED on a real device").
+
+### 2026-10-15 — Output trouble reporting: send health, node health, UI *(feat/artnet-status, merged into release/0.1.0)*
+
+Moved from TODO.md word for word (its rig checks stay there).
+
+- **Built 2026-10-15 — needs the rig** — started as "ArtNet failure reporting still flaps":
+  `e3905a2a1` logged once per state change, and a unicast target that never
+  answers ARP flips that state itself (macOS: ~5 s of queued "successes"
+  while ARP is out, then 20 s of "host is down"), so the soak still produced
+  200 "is failing" + 150 "recovered" lines across 50 universes in 120 s.
+  Built on `feat/artnet-status`:
+  - **Send health** (`plugins/interfaces/sendhealth.{h,cpp}`, shared by
+    Art-Net and E1.31): failing once failures persist 1 s (isolated successes
+    don't reset it), at once for a hard error; recovered only after 30 s of
+    uninterrupted successes. E1.31's per-packet `qDebug` spam is gone too.
+  - **Node health** (`plugins/artnet/src/artnetnodewatch.{h,cpp}`), from the
+    ArtPollReplies the plugin already asks for: a node heard this session
+    that misses 3 polls in a row is "stopped answering" (back after 2
+    answered); the port carrying our universe reporting a DMX short
+    (GoodOutputA bit 2), or no longer outputting after it was, is a port
+    fault (2 replies in a row; clears after 10 s clean). Broadcast universes
+    watch the nodes that output that Port-Address; unicast ones the node at
+    that address.
+  - **Traffic:** unchanged on-subnet (the existing 3 s broadcast ArtPoll per
+    interface with an output). New: one unicast ArtPoll per 3 s to each
+    distinct unicast output target OFF the interface's subnet (coalesced by
+    address, GUI thread, never in a DMX tick), since those never hear the
+    broadcast.
+  - **UI:** new `QLCIOPlugin::outputProblems(output, universe)`; footer entry
+    `outputs.problems` (one line per problem with the universes it hits,
+    **Open Connections**); the universe's Connections row gets the problem in
+    red with a tooltip, in both views, refreshed on `targetProblemsChanged()`.
+    The footer now listens to every plugin's `targetProblemsChanged()`, not
+    only WLED's.
+  - **Bug found on the way:** Connections had GoodOutput's short (0x04) and
+    merging (0x08) bits swapped, so a merging port showed SHORT DETECTED.
+    Fixed per the Art-Net 4 spec / libartnet's `PORT_STATUS_*` — **worth
+    confirming against a node that really is merging**.
+  - Tests: `artnet_test` 7 → 24, new `e131_test` (5), `connectionstree_test`
+    +2 (row + footer), all on injected results/times and fabricated replies;
+    nothing is sent.
+  **To confirm on the rig:** the seven checks are in TODO.md ("Needs the
+  real rig / hardware").
+  Not built: E1.31 has no per-receiver reply in the base protocol. E1.31
+  Universe Discovery packets only list the universes a *source* sends, so
+  they say nothing about receivers either -- noted, not worth building.
+
+### 2026-10-15 — Windows build, installer and first install *(feat/windows-build, merged into release/0.1.0)*
+
+Moved from TODO.md word for word; what is still open (tests, signing,
+installer size, VM checks) is in TODO.md, "Platforms and soak findings".
+
+- **Windows build back in CI (2026-10-15)** — `fb9c5fd74` had deleted
+  `build-windows` (it died seding the pre-rebrand `qlcplus4Qt6.nsi`).
+  Re-added: MSYS2 UCRT64 + MSYS2's own Qt 6 packages (6.11 at the time; GCC
+  16), NSIS installer `qlcconsole-<VERSION>-<date>-<rev>-win64-setup.exe`
+  uploaded as an artifact, `--version` smoke test run from the deploy dir with
+  MSYS2 off PATH. Fixed on the way: avrt.h include order, `near` (a windows.h
+  macro) as a variable name, PreviewItem typedefs, and -- the important one --
+  signals named by member pointer across the engine/UI DLL boundary silently
+  never connecting under MinGW (`qlcengine_export.h` / `qlcui_export.h`; a new
+  class whose signal another module connects by `&Class::signal` needs
+  `QLC_ENGINE_EXPORT` / `QLC_UI_EXPORT` too). Left open:
+  1. Nobody has installed it on a real Windows machine -- rig view on D3D11,
+     audio, DMX USB/D2XX and the per-user file associations are unverified.
+  2. ~95 MB installer, mostly ffmpeg codec DLLs pulled in by Qt Multimedia's
+     ffmpeg backend; trim if it matters.
+  3. Tests: 126 of 136 binaries pass; the step is informational
+     (`continue-on-error`). Failing: qlcfixturedefcache (definitionSourceFile
+     vs relPath -- path form), rgbscript (`scriptName.toLower()`), addfixture
+     rememberExpanded, functionselection rememberFilter/constFilter,
+     programmingguide (these three look like QSettings persisting in the
+     registry between runs), monitor theInventoryButtonShowsAndHidesThePanel,
+     networkreportdialog saveCsv (a "locked" dir is writable on Windows),
+     showcontrol_ui OSC listener (firewall/port on the runner?), speedmasters
+     panel blink timing, lookeditor segfault (exit 139). mastertimer
+     startStopFunction failed once and passed once -- timing.
+  4. Not code-signed (SmartScreen will warn). No `-Werror` on MinGW, by design.
+  5. `QLCIOPlugin` signals are connected by member pointer from the UI too, but
+     its moc lives in each plugin DLL as well as the engine; not annotated.
+  6. First install on a Windows 10 VM (2026-10-15), Branson's report and what
+     was done: unreadable buttons/combos/spin boxes on a dark theme (the
+     native windowsvista style ignores the palette's Button colour) -> Fusion
+     off macOS (main.cpp) plus theme-derived shade roles (App::applyTheme);
+     invisible splitter handles -> same; "Win+Shift+R does nothing" -> it is
+     Ctrl+Shift+R, now also in the Window menu, and the help spells keys as
+     Ctrl/Alt/Shift off a Mac (HelpBrowser::keysForPlatform); sluggishness ->
+     Art-Net/E1.31/OSC walked every network interface (~20 ms each on
+     Windows) on every outputs()/inputs() call, now at most once a second;
+     also fewer repolishes/registry reads on the status-bar timers, NoProxy
+     for WLED, and App::nativeEvent fixed for Qt 6's qintptr* (USB hotplug
+     never reached HotPlugMonitor). Still to confirm on the VM: the main
+     window's outer edges resizing, and whether it still feels slow.
+  7. "Rig Overview wireframed in red, no light" on the VM (GPU and CPU alike):
+     not Direct3D -- the VM had none of DanceHysteria's own definitions, so
+     those fixtures stood in as generic dimmers, 300 mm per channel: a
+     64-channel bar was a 19 m wall of heads in the overlap-warning red. A
+     stand-in now draws as one small box with no overlap warning; the footer's
+     "no definition on this computer" error names the folder to copy the
+     .qxf files into, and Fetch Definitions rereads it. Windows CI now runs
+     the rig view on D3D11 (WARP): GPU-vs-CPU matches as on Metal/GL, and the
+     pictures are kept (rig-shots-windows artifact).
+
+### 2026-10-16 — Fixture sizes and weights in your own units *(feat/unit-aware-dimensions)*
+
+- **One preference: Settings → Units** (`units/length` in qlcconsole's
+  settings: mm / cm / m / in / ft; weight follows, kg for the metric ones,
+  lb for in/ft). The fixture editor reads the same key from qlcconsole's
+  settings (as it does the toolbar style) and re-reads it each time the
+  Physical page is shown; its page has a note saying where to change it.
+- **Parse/format in one place**, `engine/src/measurementunits.*`
+  (`MeasurementUnits`): `7.5"`, `7.5 in`, `0.625'`, `6' 3"`, `6 ft 3 in`,
+  `190.5mm`, `19.05 cm`, `0.19 m`, `1 m 20 cm`, `7,5 in`; `12 kg`,
+  `26.5 lb(s)`, `400 g`, `5 lb 4 oz`. A bare number is the preferred unit;
+  after feet (pounds) a trailing bare number is inches (ounces). Refused:
+  negatives, `1,200` (thousands or decimal?), unknown units, two bare
+  numbers, a weight unit in a length and vice versa.
+- **Field** `ui/src/measurementedit.*` (a QLineEdit): holds the exact
+  typed mm/kg; red + tooltip on nonsense, value unchanged; commits on
+  Return/leaving and before the page is read. Used for width/height/depth/
+  weight on the editor's Physical page (fixture-wide and per-mode); the
+  Fixture Manager info panel shows sizes/weight in the same unit.
+- **Storage unchanged** (stock-QLC+ compatible): whole mm, halves up
+  (`toStoredMm`: 7.5" = 190.5 mm → 191), weight as kg double. A stored
+  whole mm is shown with the fewest decimals that mean that same mm
+  (191 → 7.5 in, 190 → 7.48 in, 300 → 11.8 in). Weight is no longer cut to
+  the old spin box's 2 decimals. Limits as before: 9999 mm, 999.99 kg.
+- Tests: `engine/test/measurementunits` (all forms, invalid, every mm
+  0..9999 round-trips in every unit, preference), `ui/test/editphysical`
+  (offscreen: `7.5"` with inches → 7.5 in / 191 mm, with mm → 190.5 mm,
+  invalid, uncommitted text, follows the preference), appviews
+  `settingsChoosesTheUnits`.
+- **The grid follows it too** (Branson, 2026-10-16). Metres for mm/cm/m,
+  feet for in/ft (`MonitorProperties::gridUnitsFor`); the Grid menu's
+  Meters/Feet combo is now a label pointing at Settings. `App::
+  applyUnitPreference()` after every load, on New and when Settings
+  changes it: the show's saved `Units` only says what its grid size is in;
+  `convertGridUnits()` re-expresses the stage exactly (positions are mm).
+  Seed: the first show ever opened, with no unit chosen, sets ft if it was
+  in feet (`units/seededFromShow`, once). Saved: `Units` from the
+  preference; Width/Height/Depth whole (older readers use toInt -- a
+  "32.8084" was read as 0, a bug this fork already had after a units
+  toggle), `ExactWidth/Height/Depth` beside them when not whole.
+  Tests: monitorproperties (`gridUnitsConvertExactly`,
+  `gridSizeSavedWholeAndExact`), measurementunits (`seedFromFirstShow`),
+  appviews (`theGridFollowsTheUnitPreference`).
+
 ### 2026-10-15 — Linux: a test gate that can't skip quietly, and the app icon *(feat/linux-gate-icon)*
 
 - **Test gate counts what it ran** (`platforms/linux/unittest.sh`). The
@@ -619,7 +948,7 @@ root-only).
   fall-back. **Timecode source saved with the show** (`<Timecode Source>`;
   absent/unknown universe = any; cleared on a new show).
 
-### 2026-10-15 — Sub-cues P1 + P2 *(on feat/sub-cues)*
+### 2026-10-15 — Sub-cues P1 + P2 *(feat/sub-cues, merged into release/0.1.0)*
 
 [SUBCUES_DESIGN.md](SUBCUES_DESIGN.md). A chase used as a cue-list step
 lists its steps under it as 4.1, 4.2…; set to **Sub GO** they wait for Sub
@@ -638,7 +967,7 @@ GO while GO goes on to the next cue.
 - Not yet: P3 show control, P4 step-based effects (TODO.md). Not tried on
   the rig.
 
-### 2026-10-16 — Shows that carry their own definitions and scripts *(on feat/show-embedding, not merged)*
+### 2026-10-16 — Shows that carry their own definitions and scripts *(feat/show-embedding, merged into release/0.1.0)*
 
 SHOW_EMBEDDING_DESIGN.md, P0–P3.
 
@@ -662,7 +991,7 @@ SHOW_EMBEDDING_DESIGN.md, P0–P3.
 - **Not yet tried by hand:** opening a .qlcc on a machine without the
   definitions (the Windows VM), and Review… on a real difference.
 
-### 2026-10-15 — Patch-list labels *(on feat/patch-labels)*
+### 2026-10-15 — Patch-list labels *(feat/patch-labels, merged into release/0.1.0)*
 
 - **Labels…** in the patch list (`engine/src/patchlabels.{h,cpp}`,
   `ui/src/patchlabelsdialog.{h,cpp}`): a label per fixture — all, or the

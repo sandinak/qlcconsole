@@ -472,8 +472,17 @@ of, and doesn't override, the real locks above.
   Properties: the
   plot follows its fields as you change them, **Cancel** puts back
   everything it did, and **OK** is one undo step. Lengths are entered in
-  the show's units (feet-and-inches, or metres); colours are one swatch
+  your units — feet-and-inches, or metres (see below); colours are one swatch
   button showing the colour and its hex value, with **Reset**.
+- **Units are yours, not the show's.** The grid, rulers, H/V/Z readouts,
+  dimension labels and every length field use **Settings → Units**:
+  **metres** for mm, cm or m, **feet-and-inches** for inches or feet (finer
+  units would only crowd a stage grid). The Grid button's menu shows which,
+  and says where to change it. A show opens in your units whatever it was
+  saved in — the stage stays the same size, converted exactly — and is
+  saved in them (whole numbers for older versions, the exact size beside
+  them). The first show you ever open decides for you, once, if you had
+  never chosen: one saved in feet sets **Settings → Units** to feet.
 - **Select All Similar** — on a fixture (plot or list), every fixture of the
   same model and mode; on a fixture group's Layers row, the groups of the
   same fixtures laid out the same way.

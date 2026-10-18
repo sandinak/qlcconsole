@@ -56,6 +56,8 @@ private:
     // Show Tree: Record as new cue, when the choices differ
     QComboBox *m_recordDesignCombo;
     QComboBox *m_recordPerformCombo;
+    // Measurement units (MeasurementUnits::preferredLength)
+    QComboBox *m_unitsCombo;
 };
 
 /** @} */
