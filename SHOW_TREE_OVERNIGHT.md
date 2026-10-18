@@ -532,3 +532,81 @@ cp ~/git/qlcconsole/test-workspaces/DanceHysteria-0.5.qlcc /tmp/dh-p3.qlcc
 - Unchanged: `Generated` on `<Function>`; undo shared with Programming; an
   effect's own Gobo; DanceHysteria Hold-0; Blind; Detach to plain chaser.
 - Not built, recorded: the plain-language command line (TODO.md).
+
+---
+
+## P4 (2026-10-17)
+
+Make reusable / Detach for layers, cues and lists; the Library's Reusable
+section; Convert to tracking (§8 P4). On `feat/show-tree`, pushed, **not
+merged**. Notes: SHOW_TREE_DESIGN.md **§10.14**; open questions **17–20**
+in §10.
+
+| Commit | What |
+|---|---|
+| 26ab4f82e | **Engine:** `ReusableLayer` / `ReusableCue` (`<ReusableLayer>`, `<ReusableCue>`, `Reusable=`); a use is a plain layer/cue with a link, and `syncReusables()` after every edit makes the use the edit changed the reusable's content and pushes it to every other use — so every operation, mouse or typed, edits all uses in one undo step. Make reusable, use, Unlink here, rename, uses, delete (refused / unlinking). `detachList()` (list leaves the tree; chaser, collections, scenes only it plays handed over; a still-shared scene handed over when the tree lets go, never deleted; undo takes them back on the same ids). `planConvertToTracking()` / `convertToTracking()`. Commands `reusable`, `use`, `unlink`, `detach [list]`, `convert [apply]`. Tests. |
+| b09d64864 | **Tab:** ⟲ on uses (with count), Reuse line on cue/layer pages (Make reusable…, Used by…, Unlink here), right-click entries, list page **Convert to tracking…** (the plan, then one step) and **Detach to plain chaser…**; Library → All → **Reusable** (drag / Return = a use; Rename, Used by incl. VC buttons, Delete asks). Tests. |
+| 3fad44da1 | Help `show-tree.md` (+ What's new), design §10.14 + open 17–20, TODO/DONE |
+| ad5ea5c70 | Convert's button enabled by a cheap check (no plan on every list click) |
+| 3d05b94a5 | Unused variable in a test (the first gate's Werror leg) |
+
+**Decided here (Detach to plain chaser, §10 open):** the list **leaves the
+tree** rather than staying as an opaque layer — its chaser's steps *are*
+its cues, so nothing of the tree would be left to edit.
+
+**Convert to tracking** keeps a change only if every cue still has the same
+stage *and* the same generated scenes (target, palettes, exclusions, spans)
+and opaque functions — equal scenes play equal DMX. DanceHysteria-0.5
+(fresh copy, unchanged after): Full Show 5 cues track, 3 includes made
+tracking, 2 releases, 6 values + 2 layers taken out; 00-Preshow 2 track, 5
+releases, 6 values + 2 layers; New Chaser 8 1 tracks, 2 releases, 3 values
++ 1 layer. **0 channels differ** in all 11 cues (imported vs converted,
+every universe), and the import itself still 0 vs the chasers.
+
+- **Gate** (`./check-all.sh`, JOBS=4, `git archive` copies in the
+  scratchpad, JOBS line made to read the environment in the copy only):
+  - after items 1–2, on **b09d64864**: Qt6 **PASS** (465 s), Qt6-Release
+    **PASS** (441 s), **Qt6-Werror FAIL** (build: unused `a2` in
+    showtree_test) → fixed in 3d05b94a5;
+  - final, on **3d05b94a5**: Qt6 **PASS** (480 s), Qt6-Release **PASS**
+    (425 s), Qt6-Werror **PASS** (455 s); 1360 s.
+- **Tests:** showtree_test 121 + 1 opt-in skip (+7: reusable layers, reusable
+  cues in two lists, save/load/undo/batch rollback, detach list, convert on
+  DanceHysteria's shape and on synthetic lists, typed); showtreeview_test
+  52 + 1 skip (+2; the undo walk +13 actions, ≥70); helpbrowser_test green.
+- **Crash reports:** none new in `~/Library/Logs/DiagnosticReports` during
+  this work.
+- **R1** (PROGRAMMING_ROLE_DESIGN.md): nothing of it was needed by P4; left
+  for R1 (noted in TODO).
+- `build/main/qlcconsole` rebuilt. A running app keeps its old binary until
+  it is relaunched.
+
+### What to try in the app (on a COPY of a show)
+
+```sh
+cp ~/git/qlcconsole/test-workspaces/DanceHysteria-0.5.qlcc /tmp/dh-p4.qlcc
+~/git/qlcconsole-showtree/build/main/qlcconsole -o /tmp/dh-p4.qlcc
+```
+
+1. Show Tree → Import chaser… → Full Show; select the list → **Convert to
+   tracking…**: read the plan, Convert; GO through it (it should look the
+   same); ⌘Z puts the import back.
+2. Right-click a layer → **Make reusable…** "BackStage"; select a cue of
+   another list, Library → All → Reusable → drag it in (or Return). Change
+   its colour there: the first list's changes too. **Unlink here** on one.
+3. Right-click a cue → **Make cue reusable…** "Walk-in"; drop it on a cue of
+   another list: a new cue after it, same layers, its own timing.
+4. Right-click a list → **Detach to plain chaser…**: it leaves the tree; the
+   chaser in Functions → Productions is unlocked; ⌘Z brings it back.
+5. Type `reusable`, `use BackStage`, `unlink`, `convert`, `convert apply`,
+   `detach list`, `help reuse`… (`help use`).
+
+### Open for Branson (§10, 17–20)
+
+- 17. What a reusable cue shares: mode yes, timing no — OK?
+- 18. Convert releases rather than making Cue-only cues, leaves cue looks
+  and Mix cues alone (ties to 13) — OK?
+- 19. A detached list's scene shared with another list stays locked until
+  the tree lets go of it — or copy it at once?
+- 20. A "detached from BackStage" badge after Unlink here — wanted?
+- Unchanged: 1, 3, 4 (effect's own Gobo), 5, 8, 12–16.
