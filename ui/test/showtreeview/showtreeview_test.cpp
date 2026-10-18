@@ -310,6 +310,8 @@ void ShowTreeView_Test::groupsDroppedOnALayerJoinIt()
     QCOMPARE(scene->fixtureGroups().count(), 3);
     QCOMPARE(view.currentId(), l1);
     QVERIFY(st->undoText().startsWith("Add USTs, Spots to layer"));
+    // Undo deletes that scene (nothing plays it then): keep its id only.
+    const quint32 sceneId = scene->id();
 
     // Undo, and it is Towers alone again.
     view.slotUndo();
@@ -317,7 +319,7 @@ void ShowTreeView_Test::groupsDroppedOnALayerJoinIt()
 
     // An opaque layer takes no groups.
     Target fn;
-    fn.function = scene->id();
+    fn.function = sceneId;
     const quint32 opaque = st->addLayer(c1, fn);
     QVERIFY(!view.acceptsDrop(c1, opaque, one.data()));
 }

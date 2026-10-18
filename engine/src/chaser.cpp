@@ -67,7 +67,15 @@ Chaser::Chaser(Doc *doc)
 
 Chaser::~Chaser()
 {
+    // Deleted while running (a show closed with a list playing): the runner
+    // is a QObject child and would otherwise go in ~QObject, after m_steps,
+    // and read the steps it hands back (stepFadeOut) once they are gone --
+    // a use after free, found by ASan in the Show Tree's UI tests.
+    QMutexLocker runnerLocker(&m_runnerMutex);
+    delete m_runner;
+    m_runner = NULL;
 }
+
 
 QIcon Chaser::getIcon() const
 {
