@@ -16,7 +16,7 @@
     effect.description = "Pan/tilt fixtures with joystick X/Y axes";
     effect.author      = "QLC+";
     effect.fixtureTypes = ["moving"];
-    effect.notes = "Maps joystick X/Y axes to pan and tilt so you can fly moving heads live. This effect controls POSITION — it never touches colour, and it touches the dimmer only when Fade Near Limit is set, so the scene's own Color/Dimmer palettes otherwise retain control. Fade Near Limit dims a head as the target nears the edge of what it can point at, reaching dark where it cannot follow, so it goes out rather than sticking lit at its limit. Size On Subject zooms each head that has a zoom so its beam is that wide where it lands on the subject, whatever the throw -- a near head zooms out, a far one in -- within the lens's range. Sensitivity and deadzone are global joystick settings (HID device profile / I/O Manager), not configured here. Person Height biases the tilt centre so the beam lands at the subject's head. Bind the followTarget slot to a stage target to seed the initial position from a pre-set Aim palette.";
+    effect.notes = "Maps joystick X/Y axes to pan and tilt so you can fly moving heads live. This effect controls POSITION — it never touches colour, and it touches the dimmer only when Fade Near Limit or Fade When Blocked is set, so the scene's own Color/Dimmer palettes otherwise retain control. Fade Near Limit dims a head as the target nears the edge of what it can point at, reaching dark where it cannot follow, so it goes out rather than sticking lit at its limit. Fade When Blocked takes a head out, over that many milliseconds, while something solid on stage -- a closed drape, a wall, a riser, a tower -- stands between it and the subject, and brings it back once the way is clear. Size On Subject zooms each head that has a zoom so its beam is that wide where it lands on the subject, whatever the throw -- a near head zooms out, a far one in -- within the lens's range. Sensitivity and deadzone are global joystick settings (HID device profile / I/O Manager), not configured here. Person Height biases the tilt centre so the beam lands at the subject's head. Bind the followTarget slot to a stage target to seed the initial position from a pre-set Aim palette.";
 
     // The host injects joystick data automatically when a HID profile is active.
     // Manual input bindings (x / y) are kept as a fallback for non-HID controllers.
@@ -55,6 +55,7 @@
         { name: "followMode",   description: "On scene change: hold the last beam position, or snap to the bound followTarget", values: ["lastPosition", "snapToTarget"], defaultValue: 0 },
         { name: "personHeight", description: "Height of person being followed (cm) — adjusts tilt centre", min: 50, max: 250, defaultValue: 170 },
         { name: "fadeNearLimit", description: "Fade a head out over this many degrees before its pan/tilt limit, dark where it cannot reach the target (0 = off)", min: 0, max: 45, defaultValue: 0 },
+        { name: "fadeWhenBlocked", description: "Fade a head out over this many milliseconds while a drape, wall, riser or tower stands between it and the subject, back when clear (0 = off)", min: 0, max: 5000, defaultValue: 0 },
         { name: "sizeOnSubject", description: "Zoom each head so its beam is this wide on the subject (cm), whatever its distance (0 = off)", min: 0, max: 800, defaultValue: 0 }
     ];
 
@@ -115,8 +116,29 @@
                     // dimmer hands the channel straight back to the scene.
                     var fade = params.fadeNearLimit !== undefined ? params.fadeNearLimit : 0;
                     var margin = f.sceneTarget.reachMargin;
+                    var level = 1;
                     if (fade > 0 && margin !== undefined && margin < fade)
-                        intent.dimmer = Math.max(0, margin / fade);
+                        level = Math.max(0, margin / fade);
+
+                    // Fade when blocked: something solid on stage between
+                    // the head and the subject (the host's line of sight,
+                    // f.sceneTarget.blocked). Ramp out over the set time
+                    // while blocked and back up once clear; same hand-back
+                    // as above -- no dimmer once it is all the way up.
+                    var blockFade = params.fadeWhenBlocked !== undefined ? params.fadeWhenBlocked : 0;
+                    var seenKey = "seen_" + f.id;
+                    if (blockFade > 0 && f.sceneTarget.blocked !== undefined) {
+                        var seen = state[seenKey] !== undefined ? state[seenKey] : 1;
+                        var step = (dt * 1000) / blockFade;
+                        seen = f.sceneTarget.blocked ? Math.max(0, seen - step)
+                                                     : Math.min(1, seen + step);
+                        state[seenKey] = seen;
+                        level = Math.min(level, seen);
+                    } else if (state[seenKey] !== undefined) {
+                        delete state[seenKey];
+                    }
+                    if (level < 1)
+                        intent.dimmer = level;
 
                     // Size on subject: the angle that makes the beam this wide
                     // at this distance, placed within what the lens can do. A

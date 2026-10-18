@@ -37,6 +37,7 @@
 #include "pipe.h"
 #include "hanger.h"
 #include "scenery.h"
+#include "beamocclusion.h"
 #include "stand.h"
 #include "tower.h"
 #include "stagetarget.h"
@@ -191,6 +192,21 @@ public:
     inline void setAimSubjectHeight(float metres) { m_aimSubjectHeight = metres; }
     inline float aimSubjectHeight() const { return m_aimSubjectHeight; }
 
+    /** Line of sight: which stage features stand in a beam's way
+     *  (BeamOcclusion::Kind flags), and how thick a truss, pipe or stand must
+     *  be (metres) before it counts. Only read where line of sight is asked
+     *  for -- a follow spot's Fade When Blocked, an Aim look's "Dim lights
+     *  that can't see the target", the reach warnings and aim traces. */
+    inline void setOcclusionKinds(int kinds) { m_occlusionKinds = kinds; }
+    inline int occlusionKinds() const { return m_occlusionKinds; }
+    inline void setOcclusionMinSize(float metres) { m_occlusionMinSize = qMax(0.0f, metres); }
+    inline float occlusionMinSize() const { return m_occlusionMinSize; }
+    /** This stage's line-of-sight model as it stands now: rebuilt when
+     *  anything that blocks moved, opened or flew since the last call, shared
+     *  otherwise. Safe from any thread. */
+    BeamOcclusion::ModelPtr occlusionModel() const
+    { return m_occlusion.get(this, m_occlusionKinds, m_occlusionMinSize); }
+
     /** The world point (metres, stage coordinates) that the 2D-view rulers and
      *  coordinate readout treat as 0,0. Lets the operator zero measurements at
      *  stage centre / a downstage mark / anywhere. Default (0,0). */
@@ -207,6 +223,9 @@ private:
     int m_snapDivisions;
     float m_aimSubjectHeight;
     QPointF m_stageOrigin;
+    int m_occlusionKinds = BeamOcclusion::defaultKinds();
+    float m_occlusionMinSize = BeamOcclusion::defaultMinSize();
+    mutable BeamOcclusion::Cache m_occlusion;
 
     /********************************************************************
      * Items flags

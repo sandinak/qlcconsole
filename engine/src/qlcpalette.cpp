@@ -51,6 +51,7 @@
 #define KXMLQLCPaletteFanAmount   QStringLiteral("Amount")
 #define KXMLQLCPaletteFanValue    QStringLiteral("FanValue")
 #define KXMLQLCPaletteStageTarget QStringLiteral("StageTarget")
+#define KXMLQLCPaletteDimWhenBlocked QStringLiteral("DimWhenBlocked")
 
 QLCPalette::QLCPalette(QLCPalette::PaletteType type, QObject *parent)
     : QObject(parent)
@@ -73,6 +74,7 @@ QLCPalette *QLCPalette::createCopy()
     copy->setFanningAmount(this->fanningAmount());
     copy->setFanningValue(this->fanningValue());
     copy->setStageTargetId(this->stageTargetId());
+    copy->setDimWhenBlocked(this->dimWhenBlocked());
     copy->setScriptPath(this->scriptPath());
     copy->setPersistent(this->persistent());
     copy->setEffectPreset(this->effectPreset());
@@ -1466,6 +1468,7 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
 
     if (attrs.hasAttribute(KXMLQLCPaletteStageTarget))
         m_stageTargetId = attrs.value(KXMLQLCPaletteStageTarget).toUInt();
+    m_dimWhenBlocked = attrs.value(KXMLQLCPaletteDimWhenBlocked).toString() == QLatin1String("1");
 
     if (attrs.hasAttribute(KXMLQLCPaletteFanning))
     {
@@ -1655,6 +1658,9 @@ bool QLCPalette::saveXML(QXmlStreamWriter *doc)
     /* write stage target linkage */
     if (m_stageTargetId != UINT_MAX)
         doc->writeAttribute(KXMLQLCPaletteStageTarget, QString::number(m_stageTargetId));
+    // Only when on, so a show that never used it saves byte-identical.
+    if (m_dimWhenBlocked)
+        doc->writeAttribute(KXMLQLCPaletteDimWhenBlocked, QStringLiteral("1"));
 
     /* write fanning */
     if (m_fanningType != Flat)

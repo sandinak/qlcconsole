@@ -22,6 +22,9 @@
 
 #include <QVector3D>
 #include <QList>
+#include <QHash>
+
+#include "beamocclusion.h"
 
 class Doc;
 class Scene;
@@ -115,13 +118,30 @@ namespace AimSolver
      *  than the target's own point. */
     bool sceneFollowsSubject(Doc *doc, const Scene *scene);
 
+    /** Line of sight from head @p fixtureId to @p point: whether a solid
+     *  feature of the stage stands between its beam origin and the point, and
+     *  which one (BeamOcclusion). The head's own mount never blocks it. Clear
+     *  when the head has no rig geometry. @p model, when given, is used
+     *  instead of fetching the stage's current one -- a caller asking for
+     *  many heads fetches it once. */
+    BeamOcclusion::Hit lineOfSight(Doc *doc, quint32 fixtureId, const QVector3D &point,
+                                   const BeamOcclusion::Model *model = nullptr);
+    /** The same from a known beam origin. */
+    BeamOcclusion::Hit lineOfSight(Doc *doc, const BeamOcclusion::Model &model, quint32 fixtureId,
+                                   const QVector3D &from, const QVector3D &point);
+
     /** One head a scene's Aim look points, where, and whether it can. */
     struct SceneAim
     {
         quint32   fixtureId;
         quint32   targetId;
+        quint32   paletteId;     ///< the Aim look pointing it
         QVector3D point;         ///< the aim point, as the palette resolves it
         Solution  solution;
+        /** Whether its beam gets there: the first thing on stage in the way. */
+        BeamOcclusion::Hit sight;
+        /** The Aim look dims it while it is blocked (QLCPalette::dimWhenBlocked). */
+        bool dimsWhenBlocked = false;
     };
 
     /** Every aimable head each Aim look in @p scene points at its target --
@@ -130,6 +150,10 @@ namespace AimSolver
      *  palette uses. Heads with no rig geometry are left out: there is no
      *  answer to give for them. */
     QList<SceneAim> sceneAims(Doc *doc, const Scene *scene);
+    /** The heads an Aim look in @p scene that has "Dim lights that can't see
+     *  the target" on points at something they cannot see, and what is in the
+     *  way. Empty -- and cheap -- when no Aim look in it has that on. */
+    QHash<quint32, BeamOcclusion::Hit> blockedDimmedHeads(Doc *doc, const Scene *scene);
 }
 
 /** @} */

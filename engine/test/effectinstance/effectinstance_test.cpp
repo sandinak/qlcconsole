@@ -42,6 +42,7 @@
 #include "qlcphysical.h"
 #include "stagetarget.h"
 #include "truss.h"
+#include "scenery.h"
 #include "aimsolver.h"
 #include <QtMath>
 #include <cmath>
@@ -1075,6 +1076,206 @@ void EffectInstance_Test::followSpotFadesAHeadThatCannotReach()
     who->setPosition(QVector3D(1.67f, 1.872f, 0.0f));
     inst.runTick();
     QCOMPARE(dimmerWrites(), 0);
+}
+
+/* A spot on a downstage pipe, the main drape across the stage, and a person
+   who walks from behind it to in front of it. */
+static Fixture *drapeStageSpot(Doc *doc, Scenery *&drape, StageTarget *&who)
+{
+    MonitorProperties *props = doc->monitorProperties();
+    drape = props->addScenery();
+    drape->setKind(Scenery::MainDrape);
+    drape->setName("Main drape");
+    drape->setWidth(10.0f);
+    drape->setHeight(6.0f);
+    drape->setOpeningWidth(8.0f);
+
+    Truss *pipe = props->addTruss();
+    pipe->setType(Truss::Horizontal);
+    pipe->setOrigin(QVector3D(-3.0f, 4.0f, 6.0f));
+    pipe->setDirection(QPointF(1.0, 0.0));
+    pipe->setLength(6.0f);
+    pipe->setWidth(0.29f);
+
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Spot behind the drape");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("3ch");
+    const QLCChannel::Group groups[] = { QLCChannel::Pan, QLCChannel::Tilt, QLCChannel::Intensity };
+    const char *names[] = { "Pan", "Tilt", "Dimmer" };
+    for (int k = 0; k < 3; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(names[k]);
+        ch->setGroup(groups[k]);
+        ch->setControlByte(QLCChannel::MSB);
+        def->addChannel(ch);
+        mode->insertChannel(ch, k);
+    }
+    QLCPhysical ph;
+    ph.setFocusPanMax(540);
+    ph.setFocusTiltMax(270);
+    mode->setPhysical(ph);
+    QLCFixtureHead head;
+    head.addChannel(0); head.addChannel(1);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+
+    Fixture *spot = new Fixture(doc);
+    spot->setName("FOH spot");
+    spot->setFixtureDefinition(def, mode);
+    spot->setAddress(300);
+    if (!doc->addFixture(spot))
+        return nullptr;
+    FixtureRigProps rp;
+    rp.trussId = pipe->id();
+    rp.trussOffset = 3.0f;
+    rp.mountingType = Truss::TopHung;
+    props->setFixtureRigProps(spot->id(), rp);
+
+    who = props->addStageTarget();
+    who->setName("Vocalist");
+    who->setKind(StageTarget::Kind::Person);
+    who->setPosition(QVector3D(0.0f, -3.0f, 0.0f));     // behind the drape
+    return spot;
+}
+
+void EffectInstance_Test::followSpotFadesAHeadThatCannotSeeTheSubject()
+{
+    Scenery *drape = nullptr;
+    StageTarget *who = nullptr;
+    Fixture *spot = drapeStageSpot(m_doc, drape, who);
+    QVERIFY(spot != nullptr);
+    const quint32 dimmer = spot->masterIntensityChannel();
+
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, m_doc);
+    aim->setStageTargetId(who->id());
+    QVERIFY(m_doc->addPalette(aim));
+    QLCPalette *follow = new QLCPalette(QLCPalette::Effect, m_doc);
+    follow->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/followspot.js");
+    QVERIFY(m_doc->addPalette(follow));
+
+    Scene *scene = new Scene(m_doc);
+    scene->setName("Solo");
+    m_doc->addFunction(scene);
+    scene->addFixture(spot->id());
+    scene->addPalette(aim->id());
+    scene->addPalette(follow->id());
+    MasterTimer timer(m_doc);
+    scene->start(&timer, FunctionParent::master());
+    timer.timerTick();
+    QVERIFY(scene->isRunning());
+
+    EffectInstance inst(m_doc, scene->id(), follow->id());
+    QVERIFY2(inst.isValid(), "followspot.js did not load");
+
+    // The dimmer this tick wrote, as a fraction of full; -1 when it wrote none.
+    auto level = [&]() {
+        inst.runTick();
+        foreach (const EffectInstance::DmxWrite &w, inst.dmxWrites())
+            if (w.fixtureId == spot->id() && w.channel == dimmer)
+                return int(w.value);
+        return -1;
+    };
+
+    // Off (the default): behind the drape or not, it never touches the dimmer.
+    QCOMPARE(level(), -1);
+    QCOMPARE(level(), -1);
+
+    // 100 ms: five ticks from full to dark.
+    inst.setParamValue("fadeWhenBlocked", 100.0);
+    int v = level();
+    QVERIFY2(v > 0 && v < 255, qPrintable(QString("first blocked tick wrote %1").arg(v)));
+    int prev = v;
+    for (int i = 0; i < 6; ++i)
+    {
+        v = level();
+        QVERIFY2(v <= prev, "went up while blocked");
+        prev = v;
+    }
+    QCOMPARE(v, 0);
+
+    // The drape flies out: it comes back up, and once full hands the dimmer back.
+    drape->setState(Scenery::Flown);
+    v = level();
+    QVERIFY2(v > 0, "still dark with nothing in the way");
+    for (int i = 0; i < 6; ++i)
+        v = level();
+    QCOMPARE(v, -1);
+
+    // Down again, then the subject walks out in front of the drape.
+    drape->setState(Scenery::Closed);
+    for (int i = 0; i < 6; ++i)
+        v = level();
+    QCOMPARE(v, 0);
+    who->setPosition(QVector3D(0.0f, 2.0f, 0.0f));
+    for (int i = 0; i < 6; ++i)
+        v = level();
+    QCOMPARE(v, -1);
+
+    // Turned off while dark: hands the dimmer straight back.
+    who->setPosition(QVector3D(0.0f, -3.0f, 0.0f));
+    for (int i = 0; i < 6; ++i)
+        v = level();
+    QCOMPARE(v, 0);
+    inst.setParamValue("fadeWhenBlocked", 0.0);
+    QCOMPARE(level(), -1);
+    scene->stop(FunctionParent::master());
+    timer.timerTick();
+}
+
+void EffectInstance_Test::aScriptIsToldWhatIsInTheWay()
+{
+    Scenery *drape = nullptr;
+    StageTarget *who = nullptr;
+    Fixture *spot = drapeStageSpot(m_doc, drape, who);
+    QVERIFY(spot != nullptr);
+    const quint32 dimmer = spot->masterIntensityChannel();
+
+    // A script that reports what it is told through the dimmer.
+    QTemporaryDir dir;
+    QFile js(dir.filePath("sight.js"));
+    QVERIFY(js.open(QIODevice::WriteOnly));
+    js.write("(function() { var e = {}; e.apiVersion = 1; e.name = 'Sight';"
+             " e.tick = function(fixtures) { return fixtures.map(function(f) {"
+             "   var t = f.sceneTarget; if (!t) return { dimmer: 0.1 };"
+             "   if (t.blocked === true && t.blockedBy === 'Main drape' && t.blockedKind === 'drape'"
+             "       && t.blockedAt > 3 && t.blockedAt < 7 && t.clearance <= 0) return { dimmer: 0.25 };"
+             "   if (t.blocked === false && t.blockedBy === '' && t.blockedKind === ''"
+             "       && t.clearance > 0) return { dimmer: 0.75 };"
+             "   return { dimmer: 0.5 }; }); }; return e; })()");
+    js.close();
+
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, m_doc);
+    aim->setStageTargetId(who->id());
+    QVERIFY(m_doc->addPalette(aim));
+    QLCPalette *eff = new QLCPalette(QLCPalette::Effect, m_doc);
+    eff->setScriptPath(js.fileName());
+    QVERIFY(m_doc->addPalette(eff));
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixture(spot->id());
+    scene->addPalette(aim->id());
+    scene->addPalette(eff->id());
+    MasterTimer timer(m_doc);
+    scene->start(&timer, FunctionParent::master());
+    timer.timerTick();
+
+    EffectInstance inst(m_doc, scene->id(), eff->id());
+    QVERIFY(inst.isValid());
+    auto told = [&]() {
+        inst.runTick();
+        foreach (const EffectInstance::DmxWrite &w, inst.dmxWrites())
+            if (w.fixtureId == spot->id() && w.channel == dimmer)
+                return int(w.value);
+        return -1;
+    };
+    QCOMPARE(told(), int(qRound(255 * 0.25)));
+    drape->setState(Scenery::Open);
+    QCOMPARE(told(), int(qRound(255 * 0.75)));
+    scene->stop(FunctionParent::master());
+    timer.timerTick();
 }
 
 void EffectInstance_Test::followSpotZoomsToHoldSizeOnSubject()

@@ -60,6 +60,8 @@ private slots:
      *  target is out of that head's reach, and leaves the dimmer to the scene
      *  when it is comfortably within it. */
     void followSpotFadesAHeadThatCannotReach();
+    void followSpotFadesAHeadThatCannotSeeTheSubject();
+    void aScriptIsToldWhatIsInTheWay();
     /** Size On Subject zooms a head so its beam is that wide where it lands,
      *  whatever the throw, within the lens's range. */
     void followSpotZoomsToHoldSizeOnSubject();

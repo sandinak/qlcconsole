@@ -224,9 +224,43 @@ bool AimSolver::sceneFollowsSubject(Doc *doc, const Scene *scene)
     return false;
 }
 
-QList<AimSolver::SceneAim> AimSolver::sceneAims(Doc *doc, const Scene *scene)
+BeamOcclusion::Hit AimSolver::lineOfSight(Doc *doc, const BeamOcclusion::Model &model,
+                                          quint32 fixtureId, const QVector3D &from,
+                                          const QVector3D &point)
 {
-    QList<SceneAim> out;
+    MonitorProperties *mProps = (doc != nullptr) ? doc->monitorProperties() : nullptr;
+    if (mProps == nullptr || model.isEmpty())
+    {
+        BeamOcclusion::Hit clear;
+        clear.clearance = BeamOcclusion::clearanceReach();
+        clear.distance = (point - from).length();
+        clear.point = point;
+        return clear;
+    }
+    return model.segment(from, point, BeamOcclusion::ownMounts(mProps, fixtureId));
+}
+
+BeamOcclusion::Hit AimSolver::lineOfSight(Doc *doc, quint32 fixtureId, const QVector3D &point,
+                                          const BeamOcclusion::Model *model)
+{
+    Frame frame;
+    MonitorProperties *mProps = (doc != nullptr) ? doc->monitorProperties() : nullptr;
+    if (mProps == nullptr || !frameFor(doc, fixtureId, frame))
+    {
+        BeamOcclusion::Hit clear;
+        clear.clearance = BeamOcclusion::clearanceReach();
+        clear.point = point;
+        return clear;
+    }
+    if (model != nullptr)
+        return lineOfSight(doc, *model, fixtureId, frame.position, point);
+    const BeamOcclusion::ModelPtr current = mProps->occlusionModel();
+    return lineOfSight(doc, *current, fixtureId, frame.position, point);
+}
+
+static QList<AimSolver::SceneAim> collectAims(Doc *doc, const Scene *scene, bool dimmingOnly)
+{
+    QList<AimSolver::SceneAim> out;
     if (doc == NULL || scene == NULL)
         return out;
     MonitorProperties *mProps = doc->monitorProperties();
@@ -248,12 +282,17 @@ QList<AimSolver::SceneAim> AimSolver::sceneAims(Doc *doc, const Scene *scene)
                 heads << fid;
     }
 
-    const bool subject = sceneFollowsSubject(doc, scene);
+    const bool subject = AimSolver::sceneFollowsSubject(doc, scene);
+    BeamOcclusion::ModelPtr sightModel;
     foreach (quint32 pid, scene->runtimePalettes())   // a tried-on Aim draws too
     {
         QLCPalette *pal = doc->palette(pid);
         if (pal == NULL || pal->type() != QLCPalette::Aim)
             continue;
+        if (dimmingOnly && !pal->dimWhenBlocked())
+            continue;
+        if (sightModel.isNull())
+            sightModel = mProps->occlusionModel();
         StageTarget *tgt = mProps->stageTarget(pal->stageTargetId());
         if (tgt == NULL)
             continue;
@@ -265,14 +304,49 @@ QList<AimSolver::SceneAim> AimSolver::sceneAims(Doc *doc, const Scene *scene)
             if (fxi->channelNumber(QLCChannel::Pan,  QLCChannel::MSB) == QLCChannel::invalid()
                 && fxi->channelNumber(QLCChannel::Tilt, QLCChannel::MSB) == QLCChannel::invalid())
                 continue;               // nothing to point
-            const QVector3D point = aimPointFor(doc, fid, tgt, subject);
-            SceneAim aim;
+            AimSolver::Frame frame;
+            if (!AimSolver::frameFor(doc, fid, frame))
+                continue;
+            const QVector3D point = AimSolver::aimPointFor(doc, fid, tgt, subject);
+            AimSolver::SceneAim aim;
             aim.fixtureId = fid;
             aim.targetId = tgt->id();
+            aim.paletteId = pal->id();
             aim.point = point;
-            if (reach(doc, fid, point, aim.solution))
-                out << aim;
+            aim.solution = AimSolver::solve(frame, point);
+            aim.sight = AimSolver::lineOfSight(doc, *sightModel, fid, frame.position, point);
+            aim.dimsWhenBlocked = pal->dimWhenBlocked();
+            out << aim;
         }
     }
+    return out;
+}
+
+QList<AimSolver::SceneAim> AimSolver::sceneAims(Doc *doc, const Scene *scene)
+{
+    return collectAims(doc, scene, false);
+}
+
+QHash<quint32, BeamOcclusion::Hit> AimSolver::blockedDimmedHeads(Doc *doc, const Scene *scene)
+{
+    QHash<quint32, BeamOcclusion::Hit> out;
+    if (doc == NULL || scene == NULL)
+        return out;
+    // The cheap question first: does any Aim look here ask for it at all?
+    bool asked = false;
+    foreach (quint32 pid, scene->runtimePalettes())
+    {
+        QLCPalette *pal = doc->palette(pid);
+        if (pal != NULL && pal->type() == QLCPalette::Aim && pal->dimWhenBlocked())
+        {
+            asked = true;
+            break;
+        }
+    }
+    if (!asked)
+        return out;
+    foreach (const SceneAim &a, collectAims(doc, scene, true))
+        if (a.sight.blocked && !out.contains(a.fixtureId))
+            out.insert(a.fixtureId, a.sight);
     return out;
 }

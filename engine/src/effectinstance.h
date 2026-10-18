@@ -19,6 +19,8 @@
 #include "spreadlayer.h"
 #include <QMutex>
 #include <QJSValue>
+
+#include "beamocclusion.h"
 #include <QColor>
 #include <QHash>
 #include <QList>
@@ -203,8 +205,12 @@ private:
     QJSValue buildFixturesArray(const QList<EffectCell> &cells, int gridCols, int gridRows);
     struct FixtureFacts;
     void readFixtureFacts(const Fixture *fxi, FixtureFacts &f) const;
-    QJSValue aimAtObject(quint32 fid, const QVector3D &pos, QLCPalette *effectPal);
-    QJSValue sceneTargetObject(quint32 fid, StageTarget *st);
+    QJSValue aimAtObject(quint32 fid, const QVector3D &pos, QLCPalette *effectPal,
+                         const BeamOcclusion::Model &sight);
+    QJSValue sceneTargetObject(quint32 fid, StageTarget *st, const BeamOcclusion::Model &sight);
+    /** Line of sight onto a script's aim object: blocked, blockedBy,
+     *  blockedKind, blockedAt, clearance (see EFFECTSCRIPT_API.md). */
+    void setSight(QJSValue &obj, const BeamOcclusion::Hit &hit) const;
     QJSValue buildInputsObject() const;
     /** What it runs on (a SpeedMasters::Assignment): its own "__speedMaster"
      *  param, else its look's effective speed master. */
