@@ -1708,10 +1708,16 @@ QStringList LookEditor::colourSlotNames(QList<QColor> *colours) const
         foreach (quint32 fid, m_contextScene->fixtures())
             ids << fid;
         foreach (quint32 gid, m_contextScene->fixtureGroups())
-            if (FixtureGroup *g = m_doc->fixtureGroup(gid))
-                foreach (quint32 fid, g->fixtureList())
-                    if (!ids.contains(fid))
-                        ids << fid;
+        {
+            FixtureGroup *g = m_doc->fixtureGroup(gid);
+            if (g == NULL)
+                continue;
+            foreach (quint32 fid, g->fixtureList())
+            {
+                if (!ids.contains(fid))
+                    ids << fid;
+            }
+        }
     }
     auto collect = [this, colours](const QList<quint32> &fids) {
         QStringList out;
