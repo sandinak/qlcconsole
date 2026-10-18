@@ -99,6 +99,11 @@ public:
     QStringList m_probed;
     /** Number of lines outputs()/inputs() advertise; 4 unless a test says otherwise. */
     int m_lineCount;
+    /** When set, outputs()/inputs() advertise exactly these line names
+     *  (e.g. interface addresses, like Art-Net) instead of m_lineCount stubs. */
+    QStringList m_lineNames;
+    /** When set, name() returns this (e.g. "ArtNet", to load real show XML). */
+    QString m_nameOverride;
 
     /*********************************************************************
      * Outputs

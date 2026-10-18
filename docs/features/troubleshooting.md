@@ -26,6 +26,14 @@ connectors, terminator, a failed fixture. Each clears by itself once fixed
 clean). See
 [When an output is in trouble](other-improvements.md#when-an-output-is-in-trouble).
 
+**Universes say "not present — kept, will reconnect" after opening a
+show.** The show was patched to a network this computer isn't on (a laptop
+away from the show VLAN, typically). Nothing is wrong and nothing is lost:
+the patches are kept and saved unchanged, and reconnect by themselves when
+any interface on that network appears — no re-patching. If the computer
+*is* on that network, check that the interface has an address on it. See
+[Patches follow the network](other-improvements.md#patches-follow-the-network).
+
 **A new Art-Net node doesn't show up, or shows amber "set its IP".** It's
 still on its factory address (2.x.x.x, 10.x.x.x, its maker's default) or
 self-assigned (169.254.x.x), not on your network. Press **Rescan**; if it

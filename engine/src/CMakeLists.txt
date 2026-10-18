@@ -66,6 +66,7 @@ add_library(${module_name} SHARED
     tower.cpp tower.h
     stagetarget.cpp stagetarget.h
     truss.cpp truss.h
+    networkroute.cpp networkroute.h
     outputpatch.cpp outputpatch.h
     patchplanner.cpp patchplanner.h
     qlccapability.cpp qlccapability.h
@@ -136,6 +137,7 @@ target_link_libraries(${module_name} PUBLIC
     Qt6::Core
     Qt6::Gui
     Qt6::Multimedia
+    Qt6::Network
 )
 
 target_link_libraries(${module_name} PRIVATE qlcplusaudio)

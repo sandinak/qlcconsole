@@ -44,6 +44,7 @@
 #include <QTreeWidgetItemIterator>
 
 #include "connectionstree.h"
+#include "networkroute.h"
 #include "universeoutputview.h"
 #include "deviceprofile.h"
 #include "qlcioplugin.h"
@@ -952,7 +953,11 @@ void ConnectionsTree::refresh()
             QStringList roles;
             if (line < outLines.count()) roles << tr("output");
             if (line < inLines.count()) roles << tr("input");
-            litem->setText(COL_DETAIL, roles.join(", "));
+            /* Patches follow the network, not the interface (NetworkRoute):
+               say which network this line puts them on. */
+            const QString lineNet = NetworkRoute::networkForLine(label);
+            litem->setText(COL_DETAIL, lineNet.isEmpty() ? roles.join(", ")
+                : tr("%1 · network %2").arg(roles.join(", "), lineNet));
 
             /* Plugins already write a description of a line for their own
                config dialogs -- widget type and serial for DMX USB, the port
@@ -1498,15 +1503,26 @@ void ConnectionsTree::refresh()
             {
                 QTreeWidgetItem *ghostLine = new QTreeWidgetItem(pitem);
                 ghostLine->setText(COL_NAME, it.key());
-                ghostLine->setText(COL_DETAIL, tr("not present on this machine"));
+                QString ghostNet;
+                foreach (Universe *u, it.value())
+                    for (int i = 0; i < u->outputPatchesCount() && ghostNet.isEmpty(); i++)
+                        if (u->outputPatch(i) != NULL && u->outputPatch(i)->isPending())
+                            ghostNet = u->outputPatch(i)->pendingNetwork();
+                ghostLine->setText(COL_DETAIL, ghostNet.isEmpty()
+                    ? tr("not present — kept, will reconnect")
+                    : tr("network %1 not present — kept, will reconnect").arg(ghostNet));
                 const QBrush errBrush(QColor(220, 90, 90));
                 ghostLine->setForeground(COL_NAME, errBrush);
                 ghostLine->setForeground(COL_DETAIL, errBrush);
                 setRowTooltip(ghostLine, tr(
-                    "<b>%1</b><br>This interface is not present on this machine "
-                    "-- the workspace was likely built on a different network. "
-                    "Nothing patched to it will output until it is opened "
-                    "somewhere that has this interface.").arg(it.key().toHtmlEscaped()));
+                    "<b>%1</b><br>No interface on this machine reaches the network "
+                    "these universes were patched to -- typically a laptop away from "
+                    "the show network. The patches are kept exactly as they are and "
+                    "saved unchanged; nothing is sent meanwhile. They reconnect by "
+                    "themselves as soon as any interface on that network (or a route "
+                    "to its targets) appears -- this machine joining the show VLAN, "
+                    "or the show opened on another console there. No re-patching "
+                    "needed.").arg(it.key().toHtmlEscaped()));
 
                 /* Same target/port breakout a resolved patch on this
                    interface would show -- device, then port, with the
@@ -1812,7 +1828,26 @@ void ConnectionsTree::refresh()
                 QTreeWidgetItem *uitem = new QTreeWidgetItem(folder);
                 uitem->setFlags(uitem->flags() | Qt::ItemIsEditable);
                 uitem->setText(COL_NAME, tr("%1: %2").arg(u->id() + 1).arg(u->name()));
-                uitem->setText(COL_DETAIL, tr("not patched"));
+                QStringList kept;
+                foreach (const Universe::OfflinePatch &p, u->offlinePatches())
+                    kept << tr("%1 %2 \"%3\"")
+                            .arg(p.tag == Universe::InputPatchTag ? tr("input")
+                                 : p.tag == Universe::FeedbackPatchTag ? tr("feedback")
+                                 : tr("output"))
+                            .arg(p.plugin, p.uid.isEmpty() ? p.plugin : p.uid);
+                if (kept.isEmpty())
+                {
+                    uitem->setText(COL_DETAIL, tr("not patched"));
+                }
+                else
+                {
+                    uitem->setText(COL_DETAIL, tr("offline: %1 not present — kept, will reconnect")
+                                                   .arg(kept.join(", ")));
+                    uitem->setForeground(COL_DETAIL, QBrush(QColor(138, 142, 153)));
+                    setRowTooltip(uitem, tr("This universe's patch names an interface, device "
+                        "or plugin this machine does not have. It is kept and saved "
+                        "unchanged, and reconnects by itself when it appears."));
+                }
                 uitem->setData(COL_NAME, ROLE_KIND, KIND_UNPATCHED_UNIVERSE);
                 uitem->setData(COL_NAME, ROLE_UNIVERSE, u->id());
                 setCarriesFixtures(uitem, u->id());
@@ -3088,14 +3123,8 @@ void ConnectionsTree::forgetPendingPatch(quint32 universe)
         iomap->patchUndo()->capture(QList<quint32>() << universe,
                                     tr("forget pending patch on universe %1").arg(universe + 1));
 
-    // Clear from the end so removing one index does not shift the others
-    // out from under indices not yet visited.
-    for (int i = uni->outputPatchesCount() - 1; i >= 0; i--)
-    {
-        OutputPatch *op = uni->outputPatch(i);
-        if (op != NULL && op->isPending())
-            iomap->setOutputPatch(universe, QString(), QString(), 0, false, i);
-    }
+    // Pending outputs and any input/feedback patch kept offline alike.
+    iomap->forgetOfflinePatches(universe);
 
     m_doc->setModified();
     refresh();
@@ -4509,7 +4538,7 @@ void ConnectionsTree::buildUniverseList()
         if (u == NULL)
             continue;
         const bool inUse = carrying.contains(u->id()) || u->outputPatchesCount() > 0
-                           || u->inputPatch() != NULL;
+                           || u->inputPatch() != NULL || u->offlinePatches().isEmpty() == false;
         if (!inUse && !showUnused)
         {
             ++hidden;
@@ -4534,6 +4563,12 @@ void ConnectionsTree::buildUniverseList()
         QStringList detail = legs;
         if (InputPatch *ip = u->inputPatch())
             detail << tr("in: %1").arg(ip->pluginName());
+        foreach (const Universe::OfflinePatch &p, u->offlinePatches())
+            detail << tr("%1 %2 \"%3\" not present — kept, will reconnect")
+                          .arg(p.tag == Universe::InputPatchTag ? tr("in:")
+                               : p.tag == Universe::FeedbackPatchTag ? tr("feedback:")
+                               : tr("out:"))
+                          .arg(p.plugin, p.uid.isEmpty() ? p.plugin : p.uid);
         item->setText(COL_DETAIL, detail.isEmpty() ? tr("not patched") : detail.join(QStringLiteral(" · ")));
         if (legs.size() > 1)
             setRowTooltip(item, tr("<b>%1</b> goes out %2 ways:<br>%3")

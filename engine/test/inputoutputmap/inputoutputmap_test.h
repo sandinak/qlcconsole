@@ -54,6 +54,20 @@ private slots:
      *  mistaken for one and sent pending. */
     void noneSentinelDoesNotGoPending();
 
+    /* Patches follow the network, and are never lost offline */
+    void offlineShowSavesPatchesByteIdentical();
+    void offlinePatchIsInertAndListed();
+    void followsNetworkToAnotherMachine();
+    void followsRoutedPath();
+    void defaultRouteIsNotTheShowNetwork();
+    void storedNetworkResolves();
+    void offlinePatchReconnectsWhenNetworkAppears();
+    void userUnpatchOfflineRemovesIt();
+    void inputAndFeedbackKeptOffline();
+    void missingPluginKept();
+    void routeLookupLoopback();
+    void cleanup();
+
     void universeNames();
     void addUniverse();
     void removeUniverse();
