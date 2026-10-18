@@ -443,3 +443,92 @@ Found while writing docs/features/show-tree.md (7cf0c70c5); design §10.12.
 **Try** (on a COPY): select a cue, ⌘-click two of its layers, Merge. Open Functions
 (Window menu) → Productions → the list's chaser: it is locked, and Show in Show Tree
 works.
+
+---
+
+## P3 (2026-10-17)
+
+Group sets, child layers and overlap, cue-level effects, line aims (§8 P3),
+plus what Branson asked for while it was being built. On `feat/show-tree`,
+pushed, **not merged**. Notes: SHOW_TREE_DESIGN.md **§10.13**; open
+questions **12–16** in §10.
+
+| Commit | What |
+|---|---|
+| 979a29253 | Merge `feat/line-targets` (P1–P3). Conflicts: `QLCPalette::loadXML` (Gobo's and Aim's children both kept), DONE / what's new (both sides). monitor_test's Add-menu test now expects "Target Here" and "Target Line Here". |
+| 00ec68dcd | **Engine:** `Scene::setExcludedFixtures` / `setLayoutSpan` per look — fader map (under `m_valueListMutex`), re-aim path, CueOutput, line aims (`AimSolver::aimHeads(scene, palette)`), effects (cells over the span, writes its own). XML `<Exclude>` / `<Span>`. Thread test. |
+| a528f4891 | **Group sets** (model, undo, XML), **child layers** (`Layer::parent`), **overlap** in the bake (per attribute and fixture, the nearer source wins, the rest leave that fixture out — no HTP show-through), `Cue::mixOverlap` for imports. |
+| 3027802ec | Tab: Library → Group sets, Make set; ⇧-drop child layers, Add child layer; nested rows; "from Steps (parent)"; Overlap check box; **rename in place** (Return/F2); command words. |
+| 6dab53671 | **D10** cue effect as one across layers; **line aims**: Spread / Grouping / Cross keys, D18, D17 formation by hang position, inline Aim palettes for a layer's own settings, D19; Library → Targets, rows, order strip, Line ⋯. |
+| 477bcf711 | **`help`** from the command table (did-you-mean, examples clickable); **⌘C / ⌘V / ⌘D** and `copy` / `paste` for cues and layers. |
+| 6f08c4a54 | Help, design §10.13, TODO (incl. the plain-language command line, not built) / DONE; an Aim palette edit re-bakes. |
+| 0df1d15f7 | **Library \| Tree \| Editor** (Look Editor under the page); Return / double-click in the Library and ⌘F or / to add without dragging; a drop below the tree's rows. |
+| 2cc1eb612 | A named layer says what it holds (page "Contains:" with links and ✕; command line). |
+| 6ccb01dc0 | **Several layers edited together** (shared / mixed values, tri-state Release, one undo step, right-click, command line); a named layer is just its name in the tree (Branson's correction). |
+
+- **Gate** (`./check-all.sh` with JOBS=4, on `git archive` copies in the
+  scratchpad — the script's `JOBS` line made to read the environment in
+  the copy only):
+  - after item 2, on **3027802ec**: Qt6 **PASS** (494 s), Qt6-Release
+    **PASS** (626 s), Qt6-Werror **PASS** (710 s);
+  - final, on **6ccb01dc0** (everything; only this file after it): Qt6
+    **PASS** (2263 s — the machine was at load 220–300 from other checks),
+    Qt6-Release **PASS** (438 s), Qt6-Werror **PASS** (466 s).
+- **Tests:** showtree_test 114 + 1 opt-in skip (+17), showtreeview_test
+  50 + 1 skip (+9; the undo walk covers 13 more actions), helpbrowser_test
+  green.
+- **DanceHysteria-0.5 dry run** (a fresh copy, unchanged after; the file
+  now has a third chaser): **0 channels differ** in all 11 cues. It found a
+  real issue first: two overlapping StepTops scenes in New Chaser 8 mix RGB
+  highest-wins, which the tree's overlap rule changed (1056 channels) — so
+  imported cues keep mixing (`Overlap: Mix`, said in the report).
+- **Crash reports**, all from my test drafts, none from the gates:
+  `showtree_test-…-180653.ips` (QTest watchdog: my first D10 test ticked the
+  MasterTimer on the main thread while previewing a scripted effect —
+  EffectScriptRunner's direct `functionStopped` slot re-claimed the
+  universes the tick held; a test-only deadlock, the real timer runs on its
+  own thread; the test no longer does it); `showtreeview_test-…-193322` /
+  `-193330.ips` (my test looked up the layer page as a `QLabel`, null).
+- `build/main/qlcconsole` rebuilt.
+
+### What to try in the app (on a COPY of a show)
+
+```sh
+cp ~/git/qlcconsole/test-workspaces/DanceHysteria-0.5.qlcc /tmp/dh-p3.qlcc
+~/git/qlcconsole-showtree/build/main/qlcconsole -o /tmp/dh-p3.qlcc
+```
+
+(It patches the show's outputs as usual; use Blind for the 2D view only.)
+
+1. Show Tree (⇧⌘6): the Library is on the left now. ⌘-click two tower
+   groups → right-click → **Make set…** "Towers". Select a cue, select the
+   set, press **Return** (or drag it): one layer. ⌥Return: one each.
+2. **⇧-drag** a group that is part of a layer onto it: a child layer. Set
+   its Dimmer low — the parent's full doesn't show through.
+3. Drop an effect on the **cue**: one effect across its layers.
+4. Draw a line target in the Lighting Studio (Add → Target Line), then
+   Library → Targets → drop it on a cue with two layers of movers: one
+   formation; the cue page's **Line ⋯** → Spread 0, then +5 in the next
+   cue with a fade: the beams sweep. The layer page's order strip numbers
+   the lights across both layers.
+5. ⌘-click three layers: Release, a colour, a dimmer — all at once, one
+   undo each. Type `dimmer 45` with them selected.
+6. Return on a layer row renames it; ⌘C / ⌘V a cue; type `help`, `help
+   spread`.
+
+### Open for Branson (§10, 12–16)
+
+- 12. D10/D17 built as a shared layout span (each layer's own scene keeps
+  its own base under the effect), not one extra scene. OK?
+- 13. Overlap: a layer's own value beats a cue look reaching a lower layer
+  (D5's nearer scope) — OK? Imports keep mixing; should Convert to tracking
+  (P4) clear it?
+- 14. The plan view (top view, beams, the previous cue's rings) is not
+  built; the order strip is. Now or later?
+- 15. A Mix cue in the Design preview shows the lower layer where they
+  overlap (the preview's edit-override writes on top).
+- 16. A child's Dimmer on fixtures with no dimmer channel doesn't dim the
+  colour its parent gives them.
+- Unchanged: `Generated` on `<Function>`; undo shared with Programming; an
+  effect's own Gobo; DanceHysteria Hold-0; Blind; Detach to plain chaser.
+- Not built, recorded: the plain-language command line (TODO.md).
