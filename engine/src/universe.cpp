@@ -1202,8 +1202,6 @@ bool Universe::loadXML(QXmlStreamReader &root, int index, InputOutputMap *ioMap)
         return false;
     }
 
-    int outputIndex = 0;
-
     QXmlStreamAttributes attrs = root.attributes();
 
     if (attrs.hasAttribute(KXMLQLCUniverseName))
