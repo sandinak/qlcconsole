@@ -116,12 +116,13 @@ QString UsedBy::deletePalettesQuestion(Doc *doc, const QList<quint32> &paletteId
         return msg + QStringLiteral("\n\n") + tr("Nothing uses it.");
     msg += used + QStringLiteral("\n");
     if (anyTree)
-        msg += QStringLiteral("\n") + tr("Those cues and looks show it as (missing) until it comes back -- "
-                                         "Undo brings it back.");
+        msg += QStringLiteral("\n") + tr("Those cues, layers and looks lose it: a look with nothing else "
+                                         "left is cleared.");
     if (anyScene)
         msg += QStringLiteral("\n") + tr("Those scenes lose that look; their other looks and values stay.");
     if (anySlot)
         msg += QStringLiteral("\n") + tr("Those effect looks lose that slot's palette and use their look's "
                                          "colours instead.");
+    msg += QStringLiteral("\n\n") + tr("Undo brings it back, and every use with it.");
     return msg;
 }

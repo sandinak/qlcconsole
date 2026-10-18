@@ -141,6 +141,7 @@ private slots:
     void paletteFoldersHoldAnyTypeInBothViews();
     void libraryAndProgrammingAgreeOnFolders();
     void undoHereReachesTheSharedHistory();
+    void deletingHereClearsTheShowTreesUses();
 
 private:
     Doc* m_doc;

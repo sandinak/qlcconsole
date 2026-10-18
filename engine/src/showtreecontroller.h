@@ -602,6 +602,22 @@ public:
     QString sharedUndoText() const;
     QString sharedRedoText() const;
 
+    /** Deleting palettes (open 26, PaletteOps::remove): take @a paletteIds
+     *  off every look of the tree -- cue looks, layers, the Looks
+     *  sections, reusable layers and cues; a look left without a palette
+     *  goes (its key is unset, not None) -- then run @a deleteThem and
+     *  bake once. No undo step of its own: the palette step carries
+     *  outsideUndoState() from either side. False: the tree had none
+     *  (@a deleteThem has still run). */
+    bool removePaletteUses(const QList<quint32> &paletteIds, const std::function<void()> &deleteThem);
+    /** The tree as another stack's undo step keeps it: an undo snapshot
+     *  plus the generated scenes and Collections as they are, so undoing
+     *  that step brings back the very functions (and ids) it had. */
+    QByteArray outsideUndoState() const;
+    /** Put back outsideUndoState(): generated functions gone since are
+     *  made again with their ids, then the tree is restored and baked. */
+    void restoreOutsideUndoState(const QByteArray &state);
+
 private:
     struct Snapshot
     {

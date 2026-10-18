@@ -226,7 +226,7 @@ const QList<ShowTreeCommand::Word> &ShowTreeCommand::words()
             "Palettes as the Library keeps them: a new one of a type (colour, dimmer, position, aim, beam, gobo, "
             "zoom, shutter, strobe, effect), named, valued and filed if you say so, opened in the Look Editor; a "
             "palette renamed, moved to a folder (folders hold any type), duplicated, deleted (refused while "
-            "something uses it, unless anyway) or edited; folders made, renamed, deleted (what is in one moves "
+            "something uses it, unless anyway -- then every use is cleared with it) or edited; folders made, renamed, deleted (what is in one moves "
             "up). One undo step each.",
             { "palette colour \"Amber 2\" #ffb000", "palette dimmer \"Half\" 50 in \"Levels\"",
               "palette Blue rename \"Navy\"", "palette Blue move \"01-Song\"", "palette Blue dup",
@@ -1893,11 +1893,12 @@ ShowTreeCommand::Result ShowTreeCommand::runPalette(const QString &line, const C
         const bool anyway = r.word().toLower() == QLatin1String("anyway");
         const QList<PaletteOps::Use> uses = ops->usage(pid);
         if (!uses.isEmpty() && !anyway)
-            return fail(tr("“%1” is used by %2. To delete it all the same: palette %3 delete anyway")
+            return fail(tr("“%1” is used by %2. To delete it and clear those uses: palette %3 delete anyway")
                         .arg(name, PaletteOps::usageSummary(uses), typed(name, name.contains(QLatin1Char(' ')))));
         if (!ops->remove({ pid }))
             return fail(tr("Couldn't delete “%1”.").arg(name));
-        res.message = tr("deleted “%1”").arg(name);
+        res.message = uses.isEmpty() ? tr("deleted “%1”").arg(name)
+                                     : tr("deleted “%1”, cleared from %2").arg(name, PaletteOps::usageSummary(uses));
     }
     else
         return fail(tr("palette <name> rename \"new\" | move <folder> | dup | delete | edit"));

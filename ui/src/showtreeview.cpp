@@ -6264,7 +6264,7 @@ bool ShowTreeView::deleteLibrarySelection()
         return false;
     if (editing)
         editPalette(QLCPalette::invalidId());
-    // The cues still name them: "(missing)" until Undo brings them back.
+    // Their uses went with them (open 26); Undo brings both back.
     updateInspector();
     return true;
 }

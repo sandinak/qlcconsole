@@ -2592,8 +2592,9 @@ bool ProgrammingManager::deletePalettes(const QList<quint32> &pids, bool confirm
             QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
         return false;
 
-    // One palette undo step (PaletteOps): Undo in the Show Tree brings
-    // them back, in every scene and slot they were in.
+    // One palette undo step (PaletteOps), every use cleared with them (open
+    // 26): Undo -- here or in the Show Tree -- brings them back, in every
+    // scene, slot, cue and look they were in.
     if (!m_doc->paletteOps()->remove(pids))
         return false;
     m_paletteTree->updateTree();

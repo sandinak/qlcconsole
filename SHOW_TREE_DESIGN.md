@@ -1624,7 +1624,7 @@ page and Adopt with re-pointing). programmingmanager_test unchanged, green.
 
 ### 10.16 Answers 12–25 (2026-10-18)
 
-Branson's answers to open 12–20, then 21–25 (26 still open).
+Branson's answers to open 12–20, then 21–25 (26: §10.17).
 
 **One precedence rule (13).** The bake already ranked a fixture's
 attribute by (source, recency, depth, position): tracked 0 (a later cue's
@@ -1763,6 +1763,38 @@ would now be a real folder). Tests: `qlcpalette_test::
 aUserFolderNamedLikeATypeIsKept`, `programmingmanager_test::
 libraryAndProgrammingAgreeOnFolders`, `undoHereReachesTheSharedHistory`.
 
+### 10.17 Answer 26 (2026-10-18): Delete clears every use
+
+Branson 2026-10-18: "delete". `PaletteOps::remove` (Library ⌫, the
+Programming tab's Delete, `palette X delete anyway` -- one code path) now:
+
+- takes the palettes off every look of the tree first
+  (`ShowTreeController::removePaletteUses`): cue looks, layers, the Looks
+  sections, reusable layers and cues (and so their uses), `palettes` and an
+  effect's `own`. A look left without a palette is removed -- the key is
+  unset, not None; one that keeps others (colour 2 of 3) keeps them in
+  order. Then `Doc::deletePalette` (scenes, effect slots, as before), then
+  **one** bake. VC buttons fire functions, untouched: a cue's / look's
+  Collection keeps its id.
+- **One undo step.** The palette step carries the tree on either side
+  (`outsideUndoState()`: the undo snapshot plus every generated scene and
+  Collection as XML). Undo: the palette back with its id in every scene and
+  slot (as before), then the generated functions the bake let go of come
+  back **with their ids**, then the tree snapshot is restored and baked
+  once -- the show saves byte for byte as before. Redo: the delete again.
+  The tree's own stack gets no step; the shared stamp orders it.
+- The question says those cues, layers and looks lose it and that Undo
+  brings back every use; the command line's refusal says `anyway` clears
+  them.
+
+Tests: showtree_test `deletingAPaletteClearsEveryUse` (two cues -- a layer
+and a cue look --, a reusable layer and its use, a Looks-section look
+keeping its Colour, a plain scene, an effect slot: nothing names it after;
+undo = byte-identical show XML and the same DMX for every cue and the look;
+redo = the post-delete XML), showtreeview_test
+`aPaletteDeletedFromTheLibraryComesBackWithUndo` (no *(missing)*),
+programmingmanager_test `deletingHereClearsTheShowTreesUses` (⌘Z there).
+
 ### Open for Branson
 
 1. **`Generated` mark on `<Function>`** as well as in `<ShowTree>`? (10.2;
@@ -1842,6 +1874,6 @@ libraryAndProgrammingAgreeOnFolders`, `undoHereReachesTheSharedHistory`.
     the step.
 25. ~~**feat/palette-folders**~~ — **resolved 2026-10-18:** "yes" — merged,
     with its migration fixed to strip only the genuine old layout (§10.16).
-26. **Deleting a palette cues use:** as built, the cues keep naming it
-    ("(missing)") and Undo brings it back everywhere. Or should Delete also
-    take the looks off the cues (a tree step)?
+26. ~~**Deleting a palette cues use**~~ — **resolved 2026-10-18:** Branson
+    2026-10-18: "delete" — Delete takes it off everything that uses it; one
+    Undo puts the palette and every use back. Built (§10.17).

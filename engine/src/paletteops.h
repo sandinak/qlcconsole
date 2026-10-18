@@ -115,10 +115,12 @@ public:
     /** Store @a paletteIds at the raw @a path (the Programming tab's "Move to
      *  folder…", which takes a path). */
     bool setPath(const QList<quint32> &paletteIds, const QString &path);
-    /** Delete: scenes lose that look, effect slots their palette (as
-     *  Doc::deletePalette); cues and looks of the Show Tree keep pointing at
-     *  it ("(missing)") until it comes back. Undo brings it back with its
-     *  id, in every scene and slot it was in. */
+    /** Delete, and clear every use (open 26): scenes lose that look,
+     *  effect slots their palette (as Doc::deletePalette), and the Show
+     *  Tree's cues, layers, looks and reusables lose it too -- a look left
+     *  without a palette goes; the tree bakes once. Undo brings it back
+     *  with its id, in every scene, slot and look it was in, in its place;
+     *  redo deletes again. */
     bool remove(const QList<quint32> &paletteIds);
 
     /** Palettes the operations here leave alone (the Show Tree's one-off
@@ -202,6 +204,10 @@ private:
         QList<State> after;
         QStringList foldersBefore;
         QStringList foldersAfter;
+        /** A delete that cleared the tree's uses: the tree on either side
+         *  (ShowTreeController::outsideUndoState()); empty: untouched. */
+        QByteArray treeBefore;
+        QByteArray treeAfter;
     };
     State capture(quint32 id) const;
     void apply(const QList<State> &states, const QStringList &folders);

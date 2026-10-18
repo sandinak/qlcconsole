@@ -141,8 +141,10 @@ Library](show-tree.md#palettes-in-the-library)), and each is one step on the
 **one history** the two tabs share: **⌘Z** here (or the Show Tree's) takes
 back whatever was done last — an edit to the look open on the canvas, a
 Bundle stamp, a palette made, renamed, filed or deleted in either tab, or a
-Show Tree change — and **⇧⌘Z** puts back what was undone last. A deleted
-palette comes back with its id, in every scene and effect slot it was in.
+Show Tree change — and **⇧⌘Z** puts back what was undone last. Deleting a
+palette here clears it from everything that uses it — scenes, effect slots
+and the Show Tree's cues and looks, as the Library's Delete does — and one
+⌘Z brings it back with its id, in every one of them.
 The **Edit** menu's Undo / Redo name the step. Effect design, `.qxfx` files
 and Bundles stay here.
 

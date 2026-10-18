@@ -188,7 +188,7 @@ help (DONE.md 2026-10-16). Handoff: SHOW_TREE_OVERNIGHT.md.
   estimate to the app; Stage bar
   (P-D10). **Left of R2:** Open in Palettes. **Left of R3:** per-look fades /
   transition / speed master (and on cue layers), Fire as, a look's MIDI
-  trigger in the tab. **Open (§10): 26.** **Try:** + Look on a
+  trigger in the tab. **Open (§10): none.** **Try:** + Look on a
   production, drop groups and palettes on it, Make VC page, press the
   button over a running list; + Palette in a Library folder, F2, drag,
   delete one a cue uses and ⌘Z.
@@ -204,6 +204,12 @@ help (DONE.md 2026-10-16). Handoff: SHOW_TREE_OVERNIGHT.md.
   cue 1 stays ≈ mix); a line aim's plan view while sliding Spread; Make VC
   page twice after adding a look; Programming → New palette, ⌘Z there;
   open an older show and check its palette folders.
+- **Answer 26 done 2026-10-18** (DONE.md, §10.17; Branson: "delete"):
+  deleting a used palette clears it from every cue, layer, look and
+  reusable (a look left empty goes), as well as scenes and effect slots;
+  one Undo puts back the palette and every use. **Try:** delete a palette
+  three cues and a look use (Library, Programming, `palette X delete
+  anyway`), check the cues, ⌘Z.
 - **P5 next:** multiple productions (switcher, current production for VC /
   footer GO / show control, per-production timecode).
 

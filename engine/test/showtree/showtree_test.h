@@ -143,6 +143,7 @@ private slots:
     // R1/R2: palette housekeeping (PaletteOps), Used by, one history
     void paletteOpsFoldersAnyType();
     void paletteOpsUndoBringsADeletedPaletteBack();
+    void deletingAPaletteClearsEveryUse();
     void paletteUsageNamesCuesLooksAndScenes();
     void oneHistoryForTreeAndPalettes();
     void paletteCommands();

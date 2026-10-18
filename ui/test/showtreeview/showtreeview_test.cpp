@@ -3928,22 +3928,32 @@ void ShowTreeView_Test::aPaletteDeletedFromTheLibraryComesBackWithUndo()
         QVERIFY2(asked.first().contains("VC button “Busk”"), qPrintable(asked.first()));
         QVERIFY(!asked.first().contains(" · Towers"));                 // no generated scene name
         QVERIFY(m_doc->palette(blue) != nullptr);
-        // ⌫ in the Library, answered yes: gone; the cue says (missing).
+        // It says the uses go with it, and Undo brings them back (open 26).
+        QVERIFY2(asked.first().contains("lose it"), qPrintable(asked.first()));
+        QVERIFY2(asked.first().contains("Undo brings it back, and every use with it"), qPrintable(asked.first()));
+        QVERIFY(!asked.first().contains("(missing)"));
+        // ⌫ in the Library, answered yes: gone, and so is the cue's Colour
+        // -- unset, not (missing), not None.
         answer = true;
         QTest::keyClick(view.library(), Qt::Key_Backspace);
         QVERIFY(m_doc->palette(blue) == nullptr);
         QVERIFY(old->palettes().isEmpty());
+        QVERIFY(st->cue(c1)->layer(l1)->looks.isEmpty());
         QVERIFY(view.selectNode(l1, c1));
-        QVERIFY(rowFor(view.attributeRows(), "Colour").contains("(missing)"));
+        QVERIFY(!rowFor(view.attributeRows(), "Colour").contains("(missing)"));
+        QVERIFY(!rowFor(view.attributeRows(), "Colour").contains("Blue"));
+        QCOMPARE(st->sharedUndoText(), QString("Delete Blue"));      // one step
         // Undo: back, with its id, in the scene, and the cue plays it.
         view.findChild<QToolButton *>("stUndo")->click();
         QVERIFY(m_doc->palette(blue) != nullptr);
         QCOMPARE(old->palettes(), QList<quint32>({ blue }));
         QVERIFY(view.selectNode(l1, c1));
         QVERIFY(rowFor(view.attributeRows(), "Colour").contains("Blue"));
-        // Redo deletes it again.
+        QCOMPARE(st->cue(c1)->layer(l1)->looks.first().palettes, QList<quint32>({ blue }));
+        // Redo deletes it again, and its use.
         view.findChild<QToolButton *>("stRedo")->click();
         QVERIFY(m_doc->palette(blue) == nullptr);
+        QVERIFY(st->cue(c1)->layer(l1)->looks.isEmpty());
     }
 }
 

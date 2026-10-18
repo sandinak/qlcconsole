@@ -19,6 +19,7 @@
 
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
+#include <QDataStream>
 #include <QBuffer>
 #include <QColor>
 #include <QRegularExpression>
@@ -3382,6 +3383,125 @@ static QSet<quint32> opaqueFunctions(const QList<Production> &productions)
                     if (layer.target.isOpaque())
                         out.insert(layer.target.function);
     return out;
+}
+
+/* Take @a pids off @a looks: a look left with no palette goes (with an
+   effect's own looks); one keeping others (colour 2 of 3, Tilt without
+   Pan) keeps them in their order. */
+static bool stripPalettes(QList<Look> &looks, const QSet<quint32> &pids)
+{
+    bool changed = false;
+    for (int i = looks.count() - 1; i >= 0; --i)
+    {
+        Look &l = looks[i];
+        const int had = int(l.palettes.count());
+        const int hadOwn = int(l.own.count());
+        l.palettes.erase(std::remove_if(l.palettes.begin(), l.palettes.end(),
+                                        [&pids](quint32 p) { return pids.contains(p); }),
+                         l.palettes.end());
+        l.own.erase(std::remove_if(l.own.begin(), l.own.end(),
+                                   [&pids](quint32 p) { return pids.contains(p); }),
+                    l.own.end());
+        if (l.palettes.count() == had && l.own.count() == hadOwn)
+            continue;
+        changed = true;
+        if (had > 0 && l.palettes.isEmpty())
+            looks.removeAt(i);
+    }
+    return changed;
+}
+
+bool ShowTreeController::removePaletteUses(const QList<quint32> &paletteIds,
+                                           const std::function<void()> &deleteThem)
+{
+    const QSet<quint32> pids(paletteIds.begin(), paletteIds.end());
+    bool any = false;
+    auto strip = [&](QList<Layer> &layers) {
+        for (Layer &layer : layers)
+            any |= stripPalettes(layer.looks, pids);
+    };
+    for (Production &p : m_productions)
+        for (CueList &l : p.lists)
+            for (Cue &c : l.cues)
+            {
+                any |= stripPalettes(c.looks, pids);
+                strip(c.layers);
+            }
+    for (ReusableLayer &r : m_reusableLayers)
+        any |= stripPalettes(r.looks, pids);
+    for (ReusableCue &r : m_reusableCues)
+    {
+        any |= stripPalettes(r.looks, pids);
+        strip(r.layers);
+    }
+    if (deleteThem)
+        deleteThem();
+    if (!any)
+        return false;
+    // One bake for the lot, after the palettes have gone.
+    bake();
+    m_doc->setModified();
+    emit changed();
+    return true;
+}
+
+QByteArray ShowTreeController::outsideUndoState() const
+{
+    // Two parts: the generated functions as they are, and the tree's own
+    // undo snapshot.
+    QByteArray functions;
+    QBuffer buffer(&functions);
+    buffer.open(QIODevice::WriteOnly);
+    QXmlStreamWriter w(&buffer);
+    w.writeStartDocument();
+    w.writeStartElement(QStringLiteral("Generated"));
+    QList<quint32> gen = m_generatedScenes.values() + m_generatedCollections.values();
+    std::sort(gen.begin(), gen.end());
+    for (quint32 id : gen)
+        if (Function *f = m_doc->function(id))
+            f->saveXML(&w);
+    w.writeEndElement();
+    w.writeEndDocument();
+
+    QByteArray state;
+    QDataStream out(&state, QIODevice::WriteOnly);
+    out << functions << snapshotXml();
+    return state;
+}
+
+void ShowTreeController::restoreOutsideUndoState(const QByteArray &state)
+{
+    QByteArray functions, tree;
+    QDataStream in(state);
+    in >> functions >> tree;
+    if (tree.isEmpty())
+        return;
+
+    // The generated functions the bake let go of since: back with their
+    // ids, so the bake of the restored tree finds them again by what they
+    // play and every cue's Collection holds the same functions as before.
+    QXmlStreamReader r(functions);
+    while (!r.atEnd() && !r.isStartElement())
+        r.readNext();
+    while (r.readNextStartElement())
+    {
+        const quint32 id = r.attributes().value(QStringLiteral("ID")).toString().toUInt();
+        if (r.name() != QLatin1String("Function") || m_doc->function(id) != nullptr)
+        {
+            r.skipCurrentElement();
+            continue;
+        }
+        if (!Function::loader(r, m_doc))
+            continue;
+        if (Function *f = m_doc->function(id))
+        {
+            if (f->type() == Function::SceneType)
+                m_generatedScenes.insert(id);
+            else
+                m_generatedCollections.insert(id);
+        }
+    }
+    restoreSnapshot(tree);
 }
 
 QByteArray ShowTreeController::snapshotXml() const

@@ -6,6 +6,22 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-18 — Show Tree answer 26: deleting a palette clears every use *(on feat/show-tree, not merged)*
+
+Branson: "delete" (SHOW_TREE_DESIGN.md §10.17). Deleting a used palette —
+Library, Programming tab, `palette X delete anyway` (all `PaletteOps::
+remove`) — takes it off every cue look, layer, Looks-section look and
+reusable layer/cue (a look left empty goes, not None), as well as scenes and
+effect slots, and bakes once; nothing shows *(missing)*. One Undo restores
+the palette with its id and every use in place, the generated functions with
+their ids (show XML byte-identical, same DMX); redo deletes again. The
+question and the command line say so. Tests: showtree_test
+`deletingAPaletteClearsEveryUse`, showtreeview_test
+`aPaletteDeletedFromTheLibraryComesBackWithUndo`, programmingmanager_test
+`deletingHereClearsTheShowTreesUses`.
+
+---
+
 ### 2026-10-18 — Show Tree answers 12–25: one precedence rule, the plan view, preview = GO, palette folders merged *(on feat/show-tree, not merged)*
 
 Branson's answers to SHOW_TREE_DESIGN.md §10 open 12–25 (26 still open);

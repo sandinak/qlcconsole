@@ -349,11 +349,29 @@ bool PaletteOps::remove(const QList<quint32> &paletteIds)
         return false;
     const QString label = ids.count() == 1 ? tr("Delete %1").arg(m_doc->palette(ids.first())->name())
                                            : tr("Delete %1 palettes").arg(ids.count());
-    return step(label, ids, [&](QList<quint32> &) {
-        for (quint32 id : ids)
-            m_doc->deletePalette(id);
+    // The tree's uses go with it (open 26), in the same step: the tree on
+    // either side rides on it, so one Undo puts back the palette and every
+    // look that named it.
+    ShowTreeController *tree = m_doc->showTree();
+    const QByteArray treeBefore = tree != nullptr ? tree->outsideUndoState() : QByteArray();
+    bool treeChanged = false;
+    const bool ok = step(label, ids, [&](QList<quint32> &) {
+        auto deleteThem = [&]() {
+            for (quint32 id : ids)
+                m_doc->deletePalette(id);
+        };
+        if (tree != nullptr)
+            treeChanged = tree->removePaletteUses(ids, deleteThem);
+        else
+            deleteThem();
         return true;
     });
+    if (ok && treeChanged)
+    {
+        m_undo.last().treeBefore = treeBefore;
+        m_undo.last().treeAfter = tree->outsideUndoState();
+    }
+    return ok;
 }
 
 /****************************************************************************
@@ -639,7 +657,12 @@ bool PaletteOps::undo()
     if (m_undo.isEmpty())
         return false;
     Step st = m_undo.takeLast();
+    // The palettes first (back in their scenes and slots), then the tree
+    // that names them, baked once.
     apply(st.before, st.foldersBefore);
+    if (!st.treeBefore.isEmpty())
+        if (ShowTreeController *tree = m_doc->showTree())
+            tree->restoreOutsideUndoState(st.treeBefore);
     m_redo << st;
     emit changed();
     return true;
@@ -651,6 +674,9 @@ bool PaletteOps::redo()
         return false;
     Step st = m_redo.takeLast();
     apply(st.after, st.foldersAfter);
+    if (!st.treeAfter.isEmpty())
+        if (ShowTreeController *tree = m_doc->showTree())
+            tree->restoreOutsideUndoState(st.treeAfter);
     m_undo << st;
     emit changed();
     return true;

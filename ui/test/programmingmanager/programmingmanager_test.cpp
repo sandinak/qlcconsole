@@ -2518,3 +2518,65 @@ void ProgrammingManager_Test::undoHereReachesTheSharedHistory()
     mgr.slotRedo();
     QVERIFY(!st->productions().isEmpty());
 }
+
+/* Open 26 from the Programming tab (the same PaletteOps): deleting a palette
+   cues and a look use clears them; ⌘Z here brings back the palette and
+   every use, the show as it was; ⇧⌘Z deletes again. */
+void ProgrammingManager_Test::deletingHereClearsTheShowTreesUses()
+{
+    ProgrammingManager mgr(nullptr, m_doc);
+    ShowTreeController *st = m_doc->showTree();
+    QLCPalette *red = new QLCPalette(QLCPalette::Color, m_doc);
+    red->setName("Red");
+    red->setValue(QColor(Qt::red).name());
+    m_doc->addPalette(red);
+    QLCPalette *full = new QLCPalette(QLCPalette::Dimmer, m_doc);
+    full->setName("Full");
+    full->setValue(255);
+    m_doc->addPalette(full);
+    const quint32 redId = red->id();
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    grp->setName("All");
+    m_doc->addFixtureGroup(grp);
+
+    const quint32 prod = st->addProduction("Gig");
+    const quint32 list = st->addCueList(prod, "Songs");
+    const quint32 c1 = st->addCueNumbered(list, "1", "One");
+    QVERIFY(st->setCueLook(c1, st->lookForPalette(redId)));
+    const quint32 l1 = st->addLayer(c1, ShowTree::Target { { grp->id() }, {}, {}, 0xFFFFFFFF });
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(full->id())));
+    const quint32 hit = st->addLook(prod, "Hit");
+    const quint32 hl = st->addLayer(hit, ShowTree::Target { { grp->id() }, {}, {}, 0xFFFFFFFF });
+    QVERIFY(st->setLayerLook(hit, hl, st->lookForPalette(redId)));
+    QVERIFY(st->setLayerLook(hit, hl, st->lookForPalette(full->id())));
+
+    QVERIFY(mgr.deletePalettesMessage({ redId }).contains("Cue 1 One in Songs"));
+    QVERIFY(mgr.deletePalettesMessage({ redId }).contains("lose it"));
+    auto showXml = [this]() {
+        QByteArray xml;
+        QBuffer buffer(&xml);
+        buffer.open(QIODevice::WriteOnly);
+        QXmlStreamWriter w(&buffer);
+        w.writeStartDocument();
+        m_doc->saveXML(&w);
+        w.writeEndDocument();
+        return QString::fromUtf8(xml);
+    };
+    const QString before = showXml();
+
+    QVERIFY(mgr.deletePalettes({ redId }, false));
+    QVERIFY(m_doc->palette(redId) == nullptr);
+    QVERIFY(st->cue(c1)->looks.isEmpty());
+    QCOMPARE(st->cue(hit)->layer(hl)->looks.count(), 1);        // Full stays
+    QCOMPARE(mgr.undoText(), QString("Delete Red"));
+
+    mgr.slotUndo();                                             // one ⌘Z
+    QVERIFY(m_doc->palette(redId) != nullptr);
+    QCOMPARE(st->cue(c1)->looks.first().palettes, QList<quint32>({ redId }));
+    QCOMPARE(st->cue(hit)->layer(hl)->looks.count(), 2);
+    QCOMPARE(showXml(), before);
+
+    mgr.slotRedo();
+    QVERIFY(m_doc->palette(redId) == nullptr);
+    QVERIFY(st->cue(c1)->looks.isEmpty());
+}

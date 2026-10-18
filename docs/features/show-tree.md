@@ -747,7 +747,7 @@ is always there and calls the same operations as the mouse.
 | `convert` · `convert apply` | **Convert to tracking**: what would change, in the help pane; then do it |
 | `palette colour "Amber 2" #ffb000` · `palette dimmer "Half" 50 in "Levels"` | A **new palette** of that type (colour, dimmer, position, aim, beam, gobo, zoom, shutter, strobe, effect), valued and filed if you say so; it opens in the Look Editor |
 | `palette Amber rename "Amber 3"` · `move "01-Song"` · `move none` · `dup` · `edit` | Rename, file in a folder (or none), duplicate, open in the Look Editor |
-| `palette Amber delete` · `delete anyway` | Delete: refused while something uses it (it says what), unless `anyway` |
+| `palette Amber delete` · `delete anyway` | Delete: refused while something uses it (it says what), unless `anyway` — then every use is cleared with it (Undo puts them back) |
 | `palette folder "01-Song"` · `rename "02-Song"` · `delete` | A palette folder: new, renamed, deleted (what is in it moves up) |
 | `look "Hit 1"` · `look "Hit 1" in "Hits"` | Selects that **look** of the production, or makes it (and the Looks section); `in` files it. Then set its layers as on a cue |
 | `vcpage` | **Make VC page** for the selected look's folder (else every look) |
@@ -844,9 +844,9 @@ In the command line, ⌘Z undoes your typing. Type `undo` to undo the tree
   duplicated, filed or deleted — in the Library, typed, or in the
   Programming tab's palette list — is a step too, and Undo takes back
   whichever came last: a tree change or a palette change. Undoing a
-  palette's delete brings it back with its id, so every cue and look that
-  named it plays it again, and every scene and effect slot it was in has it
-  back in its place.
+  palette's delete brings it back with its id, and every cue, layer, look,
+  reusable, scene and effect slot the delete cleared has it back in its
+  place — one step, the show exactly as it was.
 - **What undo doesn't cover:**
   - a palette's values changed in the Look Editor (a colour dragged, a
     level moved): those are the palette's, as in the Programming tab;
@@ -909,8 +909,11 @@ operation is one undo step on the tab's [Undo](#undo).
   look by number and layer, scenes, effect slots, and the VC buttons that
   fire them; click a cue or look to go there).
 - **Delete** (⌫, or right-click → Delete…) asks first and names everything
-  that uses it. Cues and looks that use it then show *(missing)*; Undo brings
-  it back everywhere.
+  that uses it — and everything that uses it lets go of it: every cue,
+  layer and look (a look with nothing else left is cleared, not set to
+  None), reusable layers and cues, scenes and effect slots. Nothing is left
+  showing *(missing)*. One Undo brings the palette back with every use, each
+  in its place.
 - **Two views.** Right-click the Palettes heading → **Group by type**:
   ticked (the default), Colour, Dimmer… each with your folders under it;
   unticked, your folders first with every type inside, and the palettes in

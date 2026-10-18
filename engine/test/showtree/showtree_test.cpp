@@ -4941,6 +4941,146 @@ void ShowTree_Test::paletteOpsUndoBringsADeletedPaletteBack()
     QCOMPARE(sc->palettes(), QList<quint32>({ full, blue }));
 }
 
+/* Open 26 (Branson 2026-10-18: "delete"): deleting a used palette takes it
+   off everything that uses it -- two cues (a layer, a cue look), a reusable
+   layer and its use, a look of the Looks section, a plain scene and an
+   effect slot -- nothing left naming it ("(missing)"), a look with nothing
+   else left gone (not None). One Undo puts back the palette and every use:
+   the show saves byte for byte as before and plays the same; redo deletes
+   again. */
+void ShowTree_Test::deletingAPaletteClearsEveryUse()
+{
+    PaletteOps *ops = m_doc->paletteOps();
+    ShowTreeController *st = m_doc->showTree();
+    FixtureGroup *a = group("A", { m_fixtures[0], m_fixtures[1] });
+    FixtureGroup *b = group("B", { m_fixtures[2], m_fixtures[3] });
+    FixtureGroup *c = group("C", { m_fixtures[4], m_fixtures[5] });
+    const quint32 half = dimmer(127, "Half");
+    const quint32 hot = dimmer(200, "Hot");
+    const quint32 blue = colour("Blue");
+
+    const quint32 prod = st->addProduction("P");
+    const quint32 listId = st->addCueList(prod, "Full Show");
+    // Cue 1: A at Hot (its only look), B at Half.
+    const quint32 c1 = st->addCueNumbered(listId, "1", "One");
+    const quint32 c1a = st->addLayer(c1, groupTarget(a->id()));
+    QVERIFY(st->setLayerLook(c1, c1a, st->lookForPalette(hot)));
+    QVERIFY(st->setLayerLook(c1, st->addLayer(c1, groupTarget(b->id())), st->lookForPalette(half)));
+    // Cue 2: Hot as the cue look, reaching B (Blue).
+    const quint32 c2 = st->addCueNumbered(listId, "2", "Two");
+    QVERIFY(st->setCueLook(c2, st->lookForPalette(hot)));
+    QVERIFY(st->setLayerLook(c2, st->addLayer(c2, groupTarget(b->id())), st->lookForPalette(blue)));
+    // Cue 3: C at Hot, made a reusable layer; used again in cue 4.
+    const quint32 c3 = st->addCueNumbered(listId, "3", "Three");
+    const quint32 c3c = st->addLayer(c3, groupTarget(c->id()));
+    QVERIFY(st->setLayerLook(c3, c3c, st->lookForPalette(hot)));
+    const quint32 reusable = st->makeLayerReusable(c3, c3c, "Side");
+    QVERIFY(reusable != invalidId());
+    const quint32 c4 = st->addCueNumbered(listId, "4", "Four");
+    QVERIFY(st->insertReusableLayer(c4, reusable) != invalidId());
+    // A look of the Looks section: A at Hot in Blue (Blue stays).
+    const quint32 hit = st->addLook(prod, "Hit 1");
+    const quint32 hitA = st->addLayer(hit, groupTarget(a->id()));
+    QVERIFY(st->setLayerLook(hit, hitA, st->lookForPalette(blue)));
+    QVERIFY(st->setLayerLook(hit, hitA, st->lookForPalette(hot)));
+    // A plain scene and an effect slot.
+    Scene *old = new Scene(m_doc);
+    old->setName("Old");
+    old->addPalette(half);
+    old->addPalette(hot);
+    old->addPalette(blue);
+    m_doc->addFunction(old);
+    QLCPalette *fx = new QLCPalette(QLCPalette::Effect, m_doc);
+    fx->setName("Chase");
+    fx->setEffectPaletteBinding("dimmer", hot);
+    m_doc->addPalette(fx);
+
+    const QList<PaletteOps::Use> uses = ops->usage(hot);
+    QCOMPARE(PaletteOps::usageSummary(uses),
+             QString("4 cue(s), 1 look(s), 1 reusable(s), 1 scene(s), 1 effect slot(s)"));
+
+    const CueList *list = st->cueList(listId);
+    QVERIFY(list != nullptr);
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(list->chaser));
+    QVERIFY(chaser != nullptr);
+    const quint32 hitCollection = st->cue(hit)->collection;
+    auto playLook = [&]() {
+        stopAll();
+        m_doc->function(hitCollection)->start(m_doc->masterTimer(), FunctionParent::master());
+        const QHash<quint32, uchar> out = settle(10);
+        stopAll();
+        return out;
+    };
+    // Anything in the tree still naming @a pid.
+    auto named = [&](quint32 pid) {
+        int n = 0;
+        auto count = [&](const QList<Look> &looks) {
+            for (const Look &l : looks)
+                n += int(l.palettes.count(pid) + l.own.count(pid));
+        };
+        for (const Production &p : st->productions())
+            for (const CueList &l : p.lists)
+                for (const Cue &cue : l.cues)
+                {
+                    count(cue.looks);
+                    for (const Layer &layer : cue.layers)
+                        count(layer.looks);
+                }
+        for (const ReusableLayer &r : st->reusableLayers())
+            count(r.looks);
+        return n;
+    };
+
+    const QByteArray before = engineXml(m_doc);
+    const QList<QHash<quint32, uchar>> playedBefore = playAll(chaser);
+    const QHash<quint32, uchar> lookBefore = playLook();
+    QCOMPARE(playedBefore.at(0).value(0), uchar(200));
+    QCOMPARE(lookBefore.value(0), uchar(200));
+
+    QVERIFY(ops->remove({ hot }));
+    QVERIFY(m_doc->palette(hot) == nullptr);
+    QCOMPARE(named(hot), 0);                                    // no "(missing)"
+    QCOMPARE(ops->undoText(), QString("Delete Hot"));
+    QCOMPARE(st->sharedUndoText(), QString("Delete Hot"));     // one step
+    // Cue 1's A had only Hot: no look left there (not None); B unchanged.
+    QVERIFY(st->cue(c1)->layer(c1a)->looks.isEmpty());
+    QCOMPARE(st->cue(c1)->layers.at(1).looks.first().palettes, QList<quint32>({ half }));
+    QVERIFY(st->cue(c2)->looks.isEmpty());
+    QCOMPARE(st->cue(c2)->layers.first().looks.first().palettes, QList<quint32>({ blue }));
+    QVERIFY(st->reusableLayer(reusable)->looks.isEmpty());
+    QVERIFY(st->cue(c4)->layers.first().looks.isEmpty());
+    // The look keeps its Blue, without a Dimmer key.
+    QCOMPARE(st->cue(hit)->layer(hitA)->looks.count(), 1);
+    QCOMPARE(st->cue(hit)->layer(hitA)->looks.first().palettes, QList<quint32>({ blue }));
+    QVERIFY(!st->cue(hit)->layer(hitA)->looks.first().none);
+    QCOMPARE(st->cue(hit)->collection, hitCollection);          // VC buttons keep firing it
+    QCOMPARE(old->palettes(), QList<quint32>({ half, blue }));
+    QVERIFY(!fx->effectPaletteBindings().contains("dimmer"));
+    // No generated scene plays it either.
+    for (const Function *f : m_doc->functions())
+        if (const Scene *s = qobject_cast<const Scene *>(f))
+            QVERIFY2(!s->palettes().contains(hot), qPrintable(s->name()));
+    const QByteArray deleted = engineXml(m_doc);
+    QVERIFY(playAll(chaser).at(0).value(0) != uchar(200));
+
+    // One Undo: the palette and every use, exactly.
+    QVERIFY(st->undoShared());
+    QVERIFY(m_doc->palette(hot) != nullptr);
+    QCOMPARE(QString::fromUtf8(engineXml(m_doc)), QString::fromUtf8(before));
+    QCOMPARE(playAll(chaser), playedBefore);
+    QCOMPARE(playLook(), lookBefore);
+    QCOMPARE(QString::fromUtf8(engineXml(m_doc)), QString::fromUtf8(before));
+
+    // Redo deletes again, as the first time; undo once more.
+    QVERIFY(st->redoShared());
+    QVERIFY(m_doc->palette(hot) == nullptr);
+    QCOMPARE(named(hot), 0);
+    QCOMPARE(QString::fromUtf8(engineXml(m_doc)), QString::fromUtf8(deleted));
+    QVERIFY(st->undoShared());
+    QCOMPARE(QString::fromUtf8(engineXml(m_doc)), QString::fromUtf8(before));
+    QCOMPARE(playAll(chaser), playedBefore);
+}
+
 /* Used by (P-D13) names cues and looks -- not the scenes the tree made for
    them -- and plain scenes. */
 void ShowTree_Test::paletteUsageNamesCuesLooksAndScenes()
