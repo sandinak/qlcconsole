@@ -746,6 +746,21 @@ int findColourRing(const Fixture *fx, int *head)
     const QLCFixtureMode *mode = fx != nullptr ? const_cast<Fixture *>(fx)->fixtureMode() : nullptr;
     if (mode == nullptr)
         return -1;
+
+    /* A ring is driven by a colour channel with no colour of its own (a
+       macro or wheel). Most fixtures have none -- a pixel bar's channels are
+       all Red/Green/Blue/White -- so stop here, before the per-head typing
+       below, which is heads x channels and runs on every paint. */
+    bool anyMacro = false;
+    for (quint32 c = 0; !anyMacro && c < quint32(mode->channels().size()); ++c)
+    {
+        const QLCChannel *ch = mode->channel(c);
+        anyMacro = ch != nullptr && ch->group() == QLCChannel::Colour
+                   && ch->colour() == QLCChannel::NoColour;
+    }
+    if (!anyMacro)
+        return -1;
+
     auto firstColour = [mode](const QList<quint32> &chans) {
         for (quint32 c : chans)
         {
