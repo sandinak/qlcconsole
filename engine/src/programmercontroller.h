@@ -37,6 +37,7 @@
 
 class ProgrammerFlasher;
 class HighlightEffect;
+class FocusSession;
 class ParkEffect;
 class MarkEffect;
 class MarkPlanner;
@@ -157,6 +158,17 @@ public:
      *  full white on every DMX tick (bypasses running functions). */
     bool isHighlightActive() const;
     void setHighlightActive(bool active);
+
+    /*********************************************************************
+     * Focus mode (FOCUS_MODE_DESIGN.md)
+     *********************************************************************/
+public:
+    /** The rig-alignment session. While it is active it owns the
+     *  controller: the bound stick (the follow spot's path) nudges the
+     *  current head's calibration offsets instead of moving an aim target,
+     *  the right stick nudges finely, and the buttons step, save, revert...
+     *  by gamepad role. Never null. */
+    FocusSession *focusSession() const { return m_focusSession; }
 
     /*********************************************************************
      * Park (hold fixtures out of cue output)
@@ -406,6 +418,9 @@ public:
 signals:
     /** Emitted whenever the programmer selection changes. */
     void programmerSelectionChanged();
+    /** View + Menu (Back + Start) held together on the controller while
+     *  Focus mode is off: the UI opens it. */
+    void focusModeRequested();
     /** Emitted when highlight active state changes. */
     void highlightActiveChanged(bool active);
     /** Emitted when the parked-fixtures set changes. */
@@ -546,6 +561,16 @@ private:
     /** Persistent highlight DMXSource — holds selected fixtures at white. */
     HighlightEffect *m_highlightEffect = nullptr;
     bool m_highlightActive = false;
+    /** Focus mode: see focusSession(). */
+    FocusSession *m_focusSession = nullptr;
+    /** Controller buttons held, by gamepad role, for the View+Menu combo. */
+    QSet<int> m_heldRoles;
+    float m_fineNormX = 0.5f, m_fineNormY = 0.5f;
+    /** The gamepad role of an input channel, from its device profile. */
+    int controllerRole(quint32 universe, quint32 channel) const;
+    /** Focus mode's share of slotControllerInputChanged(). True if it took
+     *  the event. */
+    bool routeFocusInput(quint32 universe, quint32 channel, uchar value);
     /** Persistent park DMXSource — holds parked fixtures at captured values. */
     ParkEffect *m_parkEffect = nullptr;
     /** Persistent mark DMXSource — pre-positions dark fixtures (non-intensity). */

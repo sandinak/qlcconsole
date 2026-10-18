@@ -14,25 +14,33 @@
     <Product id="0x02EA" name="Xbox One S"/>
     <Product id="0x0B12" name="Xbox Series X/S"/>
   </Products>
+  <!-- role= is the control's standard gamepad role (QLCIOPlugin::inputChannelRole):
+       tools that use the controller as a gamepad, such as Focus mode, map by
+       role, so any controller whose profile declares the same roles works the
+       same way. -->
   <Axes>
-    <Axis index="0" slot="pan">Left Stick X</Axis>
-    <Axis index="1" slot="tilt">Left Stick Y</Axis>
-    <Axis index="2">Left Trigger</Axis>
-    <Axis index="3">Right Stick X</Axis>
-    <Axis index="4">Right Stick Y</Axis>
-    <Axis index="5">Right Trigger</Axis>
+    <Axis index="0" slot="pan" role="lx">Left Stick X</Axis>
+    <Axis index="1" slot="tilt" role="ly">Left Stick Y</Axis>
+    <Axis index="2" role="lt">Left Trigger</Axis>
+    <Axis index="3" role="rx">Right Stick X</Axis>
+    <Axis index="4" role="ry">Right Stick Y</Axis>
+    <Axis index="5" role="rt">Right Trigger</Axis>
   </Axes>
   <Buttons>
-    <Button index="0" action="chaser_step_forward">A</Button>
-    <Button index="1" action="chaser_step_back">B</Button>
-    <Button index="2">X</Button>
-    <Button index="3">Y</Button>
-    <Button index="4">LB</Button>
-    <Button index="5">RB</Button>
-    <Button index="6">Back</Button>
-    <Button index="7">Start</Button>
-    <Button index="8">Left Stick</Button>
-    <Button index="9">Right Stick</Button>
-    <Button index="10" action="followspot_toggle">Xbox</Button>
+    <Button index="0" action="chaser_step_forward" role="a">A</Button>
+    <Button index="1" action="chaser_step_back" role="b">B</Button>
+    <Button index="2" role="x">X</Button>
+    <Button index="3" role="y">Y</Button>
+    <Button index="4" role="lb">LB</Button>
+    <Button index="5" role="rb">RB</Button>
+    <Button index="6" role="back">Back</Button>
+    <Button index="7" role="start">Start</Button>
+    <Button index="8" role="ls">Left Stick</Button>
+    <Button index="9" role="rs">Right Stick</Button>
+    <Button index="10" action="followspot_toggle" role="guide">Xbox</Button>
+    <Button index="11" role="dpad_up">D-pad Up</Button>
+    <Button index="12" role="dpad_down">D-pad Down</Button>
+    <Button index="13" role="dpad_left">D-pad Left</Button>
+    <Button index="14" role="dpad_right">D-pad Right</Button>
   </Buttons>
 </HIDProfile>

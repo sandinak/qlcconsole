@@ -88,9 +88,15 @@ public:
     /** Say the problems changed, as a real plugin would */
     void emitTargetProblemsChanged() { emit targetProblemsChanged(); }
 
+    /** @reimp m_channelRoles for @p channel, whatever the line */
+    QString inputChannelRole(quint32 input, quint32 channel) const override
+    { Q_UNUSED(input) return m_channelRoles.value(channel); }
+
 public:
     /** What outputProblems() reports, by universe */
     QMap<quint32, QStringList> m_outputProblems;
+    /** What inputChannelRole() reports, by channel ("a", "lb", "rx"...) */
+    QMap<quint32, QString> m_channelRoles;
     QList<Device> m_devices;
     QMap<int, QString> m_lineDescriptions;
     bool m_linesAreHardware;
