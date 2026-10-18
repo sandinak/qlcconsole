@@ -28,6 +28,9 @@
 #include "function.h"
 #include "fixture.h"
 #include "qlcpalette.h"
+#include "qlcfixturemode.h"
+#include "qlccapability.h"
+#include "qlcchannel.h"
 #include "monitorproperties.h"
 #include "stagetarget.h"
 #include "paletteops.h"
@@ -471,7 +474,116 @@ QStringList ShowTreeCommand::targetNames() const
     for (const Fixture *f : m_doc->fixtures())
         if (!f->name().isEmpty() && !out.contains(f->name(), Qt::CaseInsensitive))
             out << f->name();
+    const QHash<QString, quint32> shorts = groupShortNames();
+    for (auto it = shorts.constBegin(); it != shorts.constEnd(); ++it)
+        if (const FixtureGroup *g = m_doc->fixtureGroup(it.value()))
+            out << g->name().section(QStringLiteral(" · "), -1).trimmed();
     return out;
+}
+
+QHash<QString, quint32> ShowTreeCommand::groupShortNames() const
+{
+    QHash<QString, quint32> out;
+    QSet<QString> twice;
+    for (const FixtureGroup *g : m_doc->fixtureGroups())
+    {
+        if (!g->name().contains(QStringLiteral(" · ")))
+            continue;
+        const QString s = g->name().section(QStringLiteral(" · "), -1).trimmed().toLower();
+        if (s.isEmpty())
+            continue;
+        if (out.contains(s))
+            twice.insert(s);
+        out.insert(s, g->id());
+    }
+    for (const QString &s : twice)
+        out.remove(s);
+    // Never instead of something that is called that.
+    auto taken = [](const QString &n, QHash<QString, quint32> &shorts) { shorts.remove(n.toLower()); };
+    for (const FixtureGroup *g : m_doc->fixtureGroups())
+        taken(g->name(), out);
+    for (const GroupSet &gs : m_st->groupSets())
+        taken(gs.name, out);
+    for (const Fixture *f : m_doc->fixtures())
+        taken(f->name(), out);
+    return out;
+}
+
+QStringList ShowTreeCommand::colourMacroNames() const
+{
+    // The slots of every colour ring/macro a Colour look can set (QLCPalette::
+    // colourSlotChannels()): its named colours, its chases, "off".
+    QStringList out;
+    QSet<const QLCChannel *> seen;
+    for (const Fixture *f : m_doc->fixtures())
+    {
+        const QLCFixtureMode *mode = f->fixtureMode();
+        if (mode == nullptr)
+            continue;
+        QList<quint32> chans = QLCPalette::colourSlotChannels(f, -1);
+        for (int h = 0; h < f->heads(); ++h)
+            chans << QLCPalette::colourSlotChannels(f, h);
+        for (quint32 c : chans)
+        {
+            const QLCChannel *ch = mode->channel(c);
+            if (ch == nullptr || seen.contains(ch))
+                continue;
+            seen.insert(ch);
+            for (const QLCCapability *cap : ch->capabilities())
+                if (!cap->name().trimmed().isEmpty() && !out.contains(cap->name().trimmed(), Qt::CaseInsensitive))
+                    out << cap->name().trimmed();
+        }
+    }
+    return out;
+}
+
+quint32 ShowTreeCommand::macroPalette(const QString &slot, QList<quint32> *madeNew)
+{
+    for (const QLCPalette *p : m_doc->palettes())
+        if (p->type() == QLCPalette::Color && !m_st->isInlinePalette(p->id())
+            && QLCPalette::sameGoboName(p->colourMacro(), slot))
+            return p->id();
+
+    // Its colour, for the fixtures that mix theirs: the slot's own, else its
+    // first colour ("Red/Yellow-Chase": red), else white.
+    QColor rgb;
+    for (const Fixture *f : m_doc->fixtures())
+    {
+        const QLCFixtureMode *mode = f->fixtureMode();
+        for (quint32 c = 0; mode != nullptr && !rgb.isValid() && c < quint32(mode->channels().size()); ++c)
+            if (const QLCChannel *ch = mode->channel(c))
+                for (const QLCCapability *cap : ch->capabilities())
+                    if (QLCPalette::sameGoboName(cap->name(), slot))
+                        rgb = QLCPalette::capabilityColour(cap);
+        if (rgb.isValid())
+            break;
+    }
+    if (!rgb.isValid())
+        rgb = QColor::fromString(slot.section(QRegularExpression(QStringLiteral("[/\\-+ ]")), 0, 0).trimmed().toLower());
+    if (!rgb.isValid())
+        rgb = QColor(Qt::white);
+
+    const QVariantList v { QLCPalette::colorToString(rgb, QColor(Qt::black)) };
+    const quint32 pid = m_st->createNamedPalette(QLCPalette::Color, v);
+    QLCPalette *p = m_doc->palette(pid);
+    if (p == nullptr)
+        return QLCPalette::invalidId();
+    p->setColourMacro(slot);
+    QString name = slot;
+    for (int n = 2; ; ++n)
+    {
+        bool taken = false;
+        for (const QLCPalette *o : m_doc->palettes())
+            if (o != p && o->type() == QLCPalette::Color && o->name().compare(name, Qt::CaseInsensitive) == 0)
+                taken = true;
+        if (!taken)
+            break;
+        name = QStringLiteral("%1 (%2)").arg(slot).arg(n);
+    }
+    p->setName(name);
+    if (madeNew != nullptr)
+        *madeNew << pid;
+    return pid;
 }
 
 QStringList ShowTreeCommand::functionNames() const
@@ -904,6 +1016,10 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
                         t.fixtures << f->id();
                     return;
                 }
+            // "Ring" for the one "Mover · Ring" (groupShortNames()).
+            const quint32 sg = groupShortNames().value(n.toLower(), FixtureGroup::invalidId());
+            if (sg != FixtureGroup::invalidId() && !t.groups.contains(sg))
+                t.groups << sg;
         };
         for (;;)
         {
@@ -1088,6 +1204,7 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
                 static const QRegularExpression hex(QStringLiteral("^#[0-9a-fA-F]{6}$"));
                 const QString w = r.peek();
                 const QRegularExpressionMatch m = level.match(w);
+                QString macroName;
                 if (key == KeyDimmer && m.hasMatch() && m.captured(1).toInt() <= 100)
                 {
                     r.word();
@@ -1113,6 +1230,15 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
                         pid = m_st->createNamedPalette(QLCPalette::Color, v);
                         madeNew << pid;
                     }
+                    valuePalettes << pid;
+                }
+                else if (key == KeyColour && !(macroName = r.name(colourMacroNames())).isEmpty())
+                {
+                    // A slot of a colour ring by name ("Red/Yellow-Chase"):
+                    // the palette that plays it, else a new one named so.
+                    pid = macroPalette(macroName, &madeNew);
+                    if (pid == QLCPalette::invalidId())
+                        return tr("Couldn't make that value.");
                     valuePalettes << pid;
                 }
                 else
@@ -2066,6 +2192,15 @@ bool ShowTreeCommand::candidates(const QString &head, const Context &context, QS
                     *out = QStringList({ "swap", "mirror" }) + none;
                 else if (aim)
                     *out = stageTargetNames() + paletteNames(key) + none;
+                else if (key == KeyColour)
+                {
+                    // Palettes, then a ring's slots no palette is named for.
+                    *out = paletteNames(key);
+                    for (const QString &m : colourMacroNames())
+                        if (!out->contains(m, Qt::CaseInsensitive))
+                            *out << m;
+                    *out += none;
+                }
                 else
                     *out = paletteNames(key) + none;
                 return true;
@@ -2085,6 +2220,8 @@ bool ShowTreeCommand::candidates(const QString &head, const Context &context, QS
             if (aim && !r.name(stageTargetNames()).isEmpty())
                 continue;
             if (!r.name(paletteNames(key)).isEmpty())
+                continue;
+            if (key == KeyColour && !r.name(colourMacroNames()).isEmpty())
                 continue;
             static const QRegularExpression value(QStringLiteral("^(\\d{1,3}%?|#[0-9a-fA-F]{6})$"));
             if (key == KeyEffectPrefix || !value.match(next).hasMatch())

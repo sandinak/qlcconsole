@@ -73,6 +73,10 @@ private slots:
     /** One group of fixtures is what the old one-click item made of them,
      *  off the stage and on it. */
     void oneGroupMatchesTheOldCreateGroup();
+    /** Branson's mover with a colour ring: as two heads, a Spot ("Movers")
+     *  and a Ring; as he made it (one head), just Movers. Groups per head
+     *  type make "Mover · Movers" and "Mover · Ring". */
+    void aColourRingIsAHeadTypeOfItsOwn();
 
 private:
     QList<Fixture *> addBars(int count, const QString &prefix = QStringLiteral("Bar"));

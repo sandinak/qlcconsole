@@ -32,6 +32,8 @@ class QXmlStreamWriter;
 class SceneValue;
 class Doc;
 class Scene;
+class QLCChannel;
+class QLCCapability;
 
 /** @addtogroup engine Engine
  * @{
@@ -405,6 +407,54 @@ public:
 private:
     QString m_goboName;
     QMap<QString, int> m_goboValues;
+
+    /************************************************************************
+     * Colour wheels and colour macros (type == Color)
+     ************************************************************************/
+public:
+    /** A slot this Colour look means by NAME on colour-macro channels: a
+     *  mover's colour ring ("Red/Yellow-Chase", "RGB/Random-Chase") has
+     *  slots that are no single colour, so no colour picks them. Empty: the
+     *  look's colour picks each wheel's/macro's nearest slot (as it always
+     *  did). A channel with no slot of that name takes the nearest to the
+     *  look's colour instead. */
+    QString colourMacro() const { return m_colourMacro; }
+    void setColourMacro(const QString &name) { m_colourMacro = name; }
+
+    /** The one colour a wheel/macro slot shows: its picture colour, else the
+     *  colour its name says ("Blue", "Light Blue", "off" = black, "Open" =
+     *  white). Invalid for a slot that is no single colour: a split
+     *  ("Blue/Purple"), a chase, a rainbow, a random. */
+    static QColor capabilityColour(const QLCCapability *cap);
+
+    /** The DMX value (a slot's middle) of the slot on colour wheel/macro
+     *  @p ch nearest to @p col, or -1 when it has no slot of one colour.
+     *  Black is "off" where the channel has one (else the open/white slot);
+     *  a grey or white is the white slot; anything else is the slot of the
+     *  nearest HUE -- RGB distance alone made black green and pink white.
+     *  @p slotName, when given, gets the slot's name. */
+    static int nearestColourValue(const QLCChannel *ch, const QColor &col,
+                                  QString *slotName = nullptr);
+
+    /** The DMX value of the slot named @p name on @p ch (case, spaces, '-'
+     *  and '_' ignored; its middle), or -1. */
+    static int namedSlotValue(const QLCChannel *ch, const QString &name);
+
+    /** What this Colour look puts on colour wheel/macro channel @p ch: the
+     *  slot named colourMacro() if the channel has one, else the nearest to
+     *  @p col (nearestColourValue()). */
+    int colourSlotValue(const QLCChannel *ch, const QColor &col) const;
+
+    /** The colour wheel/macro channels a Colour look sets on @p fixture's
+     *  head @p head: the head's own when it mixes no colour (no RGB set, no
+     *  CMY); empty for a head that mixes its colour. @p head -1: the ones in
+     *  no head, which belong to the whole fixture (a ring channel left out
+     *  of every head) -- only on a fixture that mixes colour nowhere, since
+     *  an RGB par's "colour macros" channel would override its mix. */
+    static QList<quint32> colourSlotChannels(const Fixture *fixture, int head);
+
+private:
+    QString m_colourMacro;
 
     /************************************************************************
      * Effect script (type == Effect only)

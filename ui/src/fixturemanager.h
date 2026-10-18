@@ -298,6 +298,16 @@ public:
      *  and the Fixture Manager's menu. True when something changed. */
     static bool editDefinitionAndMode(QWidget *parent, Doc *doc, quint32 fid);
 
+    /** Definitions that can stand in for the one @p fids share (same
+     *  manufacturer, another model): every mode they use is there by name,
+     *  with the same channels in the same order -- only the heads or the
+     *  details may differ ("LED Movinghead+Circle (2 heads)" for "LED
+     *  Movinghead+Circle"). Empty when the fixtures' definitions differ. */
+    static QList<QLCFixtureDef *> dropInDefinitions(Doc *doc, const QList<quint32> &fids);
+    /** Put @p fids on @p def, each in its mode of the same name, keeping
+     *  address, name and groups. Returns how many changed. */
+    static int changeDefinition(Doc *doc, const QList<quint32> &fids, QLCFixtureDef *def);
+
 private:
 
     /** Edit properties for the selected channels group */

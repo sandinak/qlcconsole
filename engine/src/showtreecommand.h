@@ -21,6 +21,7 @@
 #define SHOWTREECOMMAND_H
 
 #include <QStringList>
+#include <QHash>
 #include <QString>
 #include <functional>
 
@@ -193,6 +194,16 @@ public:
     typedef std::function<bool(quint32 listId, const QString &folder, QString *message)> VcPageMaker;
     void setVcPageMaker(const VcPageMaker &maker) { m_vcPageMaker = maker; }
 
+public:
+    /** A group made per head type is named "<fixtures> · <type>" ("Mover ·
+     *  Ring"): its type alone ("Ring") names it too, when one group only
+     *  ends so and nothing else is called that. Short name (lower case) ->
+     *  group id. */
+    QHash<QString, quint32> groupShortNames() const;
+    /** The named slots of the show's colour rings/macros ("Blue",
+     *  "Red/Yellow-Chase", "off"): a colour value by name. */
+    QStringList colourMacroNames() const;
+
 private:
     /** What Tab would do with @a line: the text before the word, the
      *  matches (sorted), and whether the word was begun with a quote. */
@@ -214,6 +225,9 @@ private:
     /** Groups (and, for those in a folder, "Movers/Front/Spots"), then
      *  fixtures: every name a layer can be made on. */
     QStringList targetNames() const;
+    /** The Colour palette that plays ring slot @p slot by name, else a new
+     *  one named so (added to @p madeNew). */
+    quint32 macroPalette(const QString &slot, QList<quint32> *madeNew);
     QStringList functionNames() const;
     QStringList listNames(const Context &context) const;
     QStringList paletteNames(const QString &key) const;

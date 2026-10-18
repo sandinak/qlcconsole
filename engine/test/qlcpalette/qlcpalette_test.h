@@ -54,6 +54,22 @@ private slots:
      *  plural, then a unique prefix/contains; several in a tier: none. */
     void goboNamesMatchInTiers_data();
     void goboNamesMatchInTiers();
+
+    /** A colour ring (Branson's "LED Movinghead+Circle"): a colour picks
+     *  the nearest named slot -- by hue, black is "off", white/grey is
+     *  White -- on the ring and on the wheel alike. */
+    void slotColoursComeFromTheirNames();
+    void colourPicksTheNearestSlot_data();
+    void colourPicksTheNearestSlot();
+    /** The two-head definition: a look on the Spot heads sets only the
+     *  wheel, on the Ring heads only the ring, on both each its nearest. */
+    void spotAndRingAreIndependent();
+    /** The old one-head definition: the wheel AND the ring follow a colour
+     *  in both modes (the 10-channel mode's ring is in no head). */
+    void oldDefinitionSetsWheelAndRing();
+    /** A look can name a ring slot that is no colour (a chase): the ring
+     *  plays it, everything else the look's colour; saved with the show. */
+    void aLookCanNameARingMacro();
 };
 
 #endif

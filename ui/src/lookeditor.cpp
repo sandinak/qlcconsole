@@ -400,6 +400,25 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     xl->addWidget(m_uvRow);
     cl->addWidget(extras, 0);
 
+    // A slot of the colour wheels / rings by name: a ring's chase is no
+    // colour the picker can make.
+    m_macroRow = new QWidget(colorPage);
+    QHBoxLayout *ml = new QHBoxLayout(m_macroRow);
+    ml->setContentsMargins(0, 0, 0, 0);
+    QLabel *macroLabel = new QLabel(tr("Wheel / ring:"), m_macroRow);
+    ml->addWidget(macroLabel);
+    m_macroCombo = new QComboBox(m_macroRow);
+    m_macroCombo->setObjectName("lookColourMacro");
+    m_macroCombo->setToolTip(tr("What colour wheels and colour rings play. Nearest to the colour: "
+                                "each its slot nearest the colour above (black is a ring's off). "
+                                "A slot by name -- a ring's chase, say -- plays that slot where a "
+                                "wheel or ring has it, and the colour everywhere else."));
+    macroLabel->setBuddy(m_macroCombo);
+    ml->addWidget(m_macroCombo, 1);
+    cv->addWidget(m_macroRow, 0);
+    m_macroRow->setVisible(false);
+    connect(m_macroCombo, SIGNAL(activated(int)), this, SLOT(slotColourMacroChanged(int)));
+
     m_colorWarning = new QLabel(colorPage);
     m_colorWarning->setWordWrap(true);
     m_colorWarning->setStyleSheet(QStringLiteral("color: #e0a030;"));
@@ -1228,6 +1247,7 @@ void LookEditor::setPalette(quint32 paletteId)
         m_whiteRow->setVisible(true);
         m_amberRow->setVisible(unknown || targetsHaveColour(QLCChannel::Amber));
         m_uvRow->setVisible(unknown || targetsHaveColour(QLCChannel::UV));
+        fillColourMacros(p);
 
         m_stack->setCurrentIndex(m_pageColor);
         setMaximumHeight(340);
@@ -1493,6 +1513,11 @@ void LookEditor::maybeAutoName(QLCPalette *p)
     {
     case QLCPalette::Color:
     {
+        if (!p->colourMacro().isEmpty())
+        {
+            autoName = p->colourMacro();        // the ring's slot it plays
+            break;
+        }
         QColor c = p->rgbValue();
         struct { int r, g, b; const char *name; } table[] = {
             { 255,   0,   0, "Red" },
@@ -1673,6 +1698,129 @@ void LookEditor::updateColorWarning()
         QColor(m_whiteSlider->value(), m_amberSlider->value(), m_uvSlider->value()));
     m_colorWarning->setText(text);
     m_colorWarning->setVisible(!text.isEmpty());
+}
+
+QStringList LookEditor::colourSlotNames(QList<QColor> *colours) const
+{
+    QList<quint32> ids;
+    if (m_contextScene != NULL)
+    {
+        foreach (quint32 fid, m_contextScene->fixtures())
+            ids << fid;
+        foreach (quint32 gid, m_contextScene->fixtureGroups())
+            if (FixtureGroup *g = m_doc->fixtureGroup(gid))
+                foreach (quint32 fid, g->fixtureList())
+                    if (!ids.contains(fid))
+                        ids << fid;
+    }
+    auto collect = [this, colours](const QList<quint32> &fids) {
+        QStringList out;
+        QSet<const QLCChannel *> seen;
+        for (quint32 fid : fids)
+        {
+            const Fixture *f = m_doc->fixture(fid);
+            const QLCFixtureMode *mode = f != NULL ? f->fixtureMode() : NULL;
+            if (mode == NULL)
+                continue;
+            QList<quint32> chans;
+            for (int h = 0; h < f->heads(); ++h)
+                chans << QLCPalette::colourSlotChannels(f, h);
+            chans << QLCPalette::colourSlotChannels(f, -1);
+            for (quint32 c : chans)
+            {
+                const QLCChannel *ch = mode->channel(c);
+                if (ch == NULL || seen.contains(ch))
+                    continue;
+                seen.insert(ch);
+                for (const QLCCapability *cap : ch->capabilities())
+                {
+                    const QString n = cap->name().trimmed();
+                    bool have = n.isEmpty();
+                    for (const QString &o : out)
+                        if (QLCPalette::sameGoboName(o, n))
+                            have = true;
+                    if (have)
+                        continue;
+                    out << n;
+                    if (colours != NULL)
+                        *colours << QLCPalette::capabilityColour(cap);
+                }
+            }
+        }
+        return out;
+    };
+    QStringList out = collect(ids);
+    if (out.isEmpty())
+    {
+        // A colour made from the palette list has no look yet: the show's.
+        if (colours != NULL)
+            colours->clear();
+        QList<quint32> all;
+        foreach (Fixture *f, m_doc->fixtures())
+            all << f->id();
+        out = collect(all);
+    }
+    return out;
+}
+
+void LookEditor::fillColourMacros(const QLCPalette *p)
+{
+    if (m_macroCombo == NULL)
+        return;
+    QList<QColor> colours;
+    const QStringList names = colourSlotNames(&colours);
+    QSignalBlocker block(m_macroCombo);
+    m_macroCombo->clear();
+    m_macroCombo->addItem(tr("Nearest to the colour"), QString());
+    int at = 0;
+    for (int i = 0; i < names.count(); ++i)
+    {
+        const QColor c = colours.value(i);
+        QIcon icon;
+        if (c.isValid())
+        {
+            QPixmap px(12, 12);
+            px.fill(c);
+            icon = QIcon(px);
+        }
+        m_macroCombo->addItem(icon, names.at(i), names.at(i));
+        if (p != NULL && QLCPalette::sameGoboName(p->colourMacro(), names.at(i)))
+            at = m_macroCombo->count() - 1;
+    }
+    // A name no target has (the show's rings changed): keep it, say so.
+    if (p != NULL && !p->colourMacro().isEmpty() && at == 0)
+    {
+        m_macroCombo->addItem(tr("%1 (not on these)").arg(p->colourMacro()), p->colourMacro());
+        at = m_macroCombo->count() - 1;
+    }
+    m_macroCombo->setCurrentIndex(at);
+    m_macroRow->setVisible(!names.isEmpty() || at > 0);
+}
+
+void LookEditor::slotColourMacroChanged(int index)
+{
+    if (m_loading)
+        return;
+    QLCPalette *p = m_doc->palette(m_paletteId);
+    if (p == NULL || p->type() != QLCPalette::Color)
+        return;
+    const QString name = m_macroCombo->itemData(index).toString();
+    if (name == p->colourMacro())
+        return;
+    p->setColourMacro(name);
+    // A slot of one colour: the picker shows it too (and RGB fixtures play it).
+    QList<QColor> colours;
+    const QStringList names = colourSlotNames(&colours);
+    const int i = names.indexOf(name);
+    const QColor c = i >= 0 ? colours.value(i) : QColor();
+    if (!name.isEmpty() && c.isValid() && c != Qt::black && c.rgb() != m_colorDialog->currentColor().rgb())
+    {
+        m_colorDialog->setCurrentColor(c);      // commits, as a pick does
+        return;
+    }
+    maybeAutoName(p);
+    m_doc->setModified();
+    emit paletteChanged(m_paletteId);
 }
 
 bool LookEditor::targetsHaveColour(int primaryColour) const

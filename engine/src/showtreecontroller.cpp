@@ -82,6 +82,47 @@ static QList<quint32> fixturesOfTarget(const Doc *doc, const Target &target)
     return ids;
 }
 
+/* The heads of each fixture @p target lights, as units "fixture|head": a
+   group lights the heads it holds -- a mover's Ring group only its ring
+   head -- and a fixture named alone all of its own. Two layers overlap
+   where they share a unit, so a Movers layer and a Ring layer on the same
+   fixtures are not one over the other. */
+static QHash<quint32, QList<qint64>> unitsOfTarget(const Doc *doc, const Target &target)
+{
+    auto unit = [](quint32 f, int h) { return (qint64(f) << 16) | qint64(h & 0xFFFF); };
+    auto allHeads = [doc, &unit](quint32 f) {
+        QList<qint64> out;
+        const Fixture *fx = const_cast<Doc *>(doc)->fixture(f);
+        const int n = fx != nullptr ? qMax(1, fx->heads()) : 1;
+        for (int h = 0; h < n; ++h)
+            out << unit(f, h);
+        return out;
+    };
+    QHash<quint32, QList<qint64>> out;
+    for (quint32 g : target.groups)
+    {
+        const FixtureGroup *grp = doc->fixtureGroup(g);
+        if (grp == nullptr)
+            continue;
+        for (const GroupHead &gh : grp->headList())
+        {
+            if (!gh.isValid())
+                continue;
+            QList<qint64> &u = out[gh.fxi];
+            const QList<qint64> add = gh.head < 0 ? allHeads(gh.fxi) : QList<qint64>{ unit(gh.fxi, gh.head) };
+            for (qint64 x : add)
+                if (!u.contains(x))
+                    u << x;
+        }
+        for (quint32 f : grp->fixtureList())
+            if (!out.contains(f))
+                out.insert(f, allHeads(f));
+    }
+    for (quint32 f : target.fixtures)
+        out.insert(f, allHeads(f));
+    return out;
+}
+
 ShowTreeController::ShowTreeController(Doc *doc)
     : QObject(doc)
     , m_doc(doc)
@@ -2364,6 +2405,7 @@ QList<ShowTreeController::ScenePlan> ShowTreeController::planCue(const CueList &
     // What each layer lights.
     QVector<Target> targets(n);
     QVector<QList<quint32>> fixtures(n);
+    QVector<QHash<quint32, QList<qint64>>> units(n);   // per fixture: the heads it lights
     for (int i = 0; i < n; ++i)
     {
         const ResolvedLayer &rl = rc.layers.at(i);
@@ -2371,6 +2413,7 @@ QList<ShowTreeController::ScenePlan> ShowTreeController::planCue(const CueList &
             continue;
         targets[i] = expandTarget(rl.target);
         fixtures[i] = fixturesOfTarget(m_doc, targets.at(i));
+        units[i] = unitsOfTarget(m_doc, targets.at(i));
     }
 
     /* Who sets each attribute on each fixture (§2, "Overlap"; §3.5): this
@@ -2391,6 +2434,9 @@ QList<ShowTreeController::ScenePlan> ShowTreeController::planCue(const CueList &
     };
     QHash<QString, QHash<quint32, int>> winner;
     QHash<QString, QHash<quint32, std::tuple<int, int, int, int>>> best;
+    // The same per head ("fixture|head"): what leaves a layer out.
+    QHash<QString, QHash<qint64, int>> unitWinner;
+    QHash<QString, QHash<qint64, std::tuple<int, int, int, int>>> unitBest;
     for (int i = 0; i < n; ++i)
     {
         const ResolvedLayer &rl = rc.layers.at(i);
@@ -2409,6 +2455,15 @@ QList<ShowTreeController::ScenePlan> ShowTreeController::planCue(const CueList &
                     w.insert(f, i);
                     b.insert(f, r);
                 }
+            QHash<qint64, int> &wu = unitWinner[it.key()];
+            QHash<qint64, std::tuple<int, int, int, int>> &bu = unitBest[it.key()];
+            for (quint32 f : fixtures.at(i))
+                for (qint64 u : units.at(i).value(f))
+                    if (!wu.contains(u) || bu.value(u) < r)
+                    {
+                        wu.insert(u, i);
+                        bu.insert(u, r);
+                    }
         }
     }
 
@@ -2478,7 +2533,18 @@ QList<ShowTreeController::ScenePlan> ShowTreeController::planCue(const CueList &
 
             // Left out: what it would light where it doesn't win -- a lower
             // layer (or a child) sets that attribute there.
-            const QHash<quint32, int> w = winner.value(look.key);
+            const QHash<qint64, int> wu = unitWinner.value(look.key);
+            /* Left out of fixture f when layer m wins none of the heads it
+               lights there: @p lost says whether a winner beats it. */
+            auto losesAll = [&](int m, quint32 f, const std::function<bool(int)> &lost) {
+                const QList<qint64> us = units.at(m).value(f);
+                if (us.isEmpty())
+                    return false;
+                for (qint64 u : us)
+                    if (!lost(wu.value(u, -1)))
+                        return false;
+                return true;
+            };
             QList<quint32> excluded;
             QList<quint32> spanG, spanF;
             if (members.count() > 1)
@@ -2493,9 +2559,10 @@ QList<ShowTreeController::ScenePlan> ShowTreeController::planCue(const CueList &
                             spanF << f;
                     for (quint32 f : fixtures.at(m))
                     {
-                        const int by = w.value(f, -1);
-                        if (!members.contains(by) && !excluded.contains(f)
-                            && (!mix || (by >= 0 && rc.layers.at(by).depth > rc.layers.at(m).depth)))
+                        if (!excluded.contains(f) && losesAll(m, f, [&](int by) {
+                                return !members.contains(by)
+                                       && (!mix || (by >= 0 && rc.layers.at(by).depth > rc.layers.at(m).depth));
+                            }))
                             excluded << f;
                     }
                 }
@@ -2504,8 +2571,9 @@ QList<ShowTreeController::ScenePlan> ShowTreeController::planCue(const CueList &
             {
                 for (quint32 f : fixtures.at(i))
                 {
-                    const int by = w.value(f, -1);
-                    if (by != i && (!mix || (by >= 0 && rc.layers.at(by).depth > rl.depth)))
+                    if (losesAll(i, f, [&](int by) {
+                            return by != i && (!mix || (by >= 0 && rc.layers.at(by).depth > rl.depth));
+                        }))
                         excluded << f;
                 }
             }
@@ -2818,6 +2886,9 @@ static bool playsExactly(const QLCPalette *p, QLCPalette::PaletteType type, cons
     }
     if (type == QLCPalette::Color)
     {
+        // A colour macro by name plays the macro, not its colour.
+        if (!p->colourMacro().isEmpty())
+            return false;
         QColor ra, wa, rb, wb;
         if (!QLCPalette::stringToColor(p->values().first().toString(), ra, wa)
             || !QLCPalette::stringToColor(values.first().toString(), rb, wb))

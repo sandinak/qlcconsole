@@ -1046,6 +1046,146 @@ void ShowTree_Test::lookReachCountsFixturesThatHaveIt()
     QVERIFY(m_doc->showTree()->lookMisses(t, KeyDimmer).isEmpty());
 }
 
+void ShowTree_Test::ringGroupsAreLayersOfTheirOwn()
+{
+    QDir dir(TEST_FIXTURE_DIR);
+    dir.setFilter(QDir::Files);
+    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtFixture));
+    QVERIFY(m_doc->fixtureDefCache()->load(dir));
+    QLCFixtureDef *def = m_doc->fixtureDefCache()->fixtureDef("Branson", "LED Movinghead+Circle (2 heads)");
+    QVERIFY(def != nullptr);
+    QList<Fixture *> movers;
+    for (int i = 0; i < 2; ++i)
+    {
+        Fixture *f = new Fixture(m_doc);
+        f->setName(QString("Mover %1").arg(i + 1));
+        f->setFixtureDefinition(def, def->mode("12 Channel"));
+        f->setAddress(quint32(100 + 20 * i));
+        m_doc->addFixture(f);
+        movers << f;
+    }
+    // As Create Group(s) from Selection makes them, a group per head type.
+    auto headGroup = [this, &movers](const QString &name, int head) {
+        FixtureGroup *g = new FixtureGroup(m_doc);
+        g->setName(name);
+        m_doc->addFixtureGroup(g);
+        g->setSize(QSize(movers.count(), 1));
+        for (int i = 0; i < movers.count(); ++i)
+            g->assignHead(QLCPoint(i, 0), GroupHead(movers[i]->id(), head));
+        return g;
+    };
+    FixtureGroup *spots = headGroup(QString::fromUtf8("Mover · Movers"), 0);
+    FixtureGroup *rings = headGroup(QString::fromUtf8("Mover · Ring"), 1);
+    const quint32 blue = colour("Blue");
+    QLCPalette *red = new QLCPalette(QLCPalette::Color, m_doc);
+    red->setName("Red");
+    red->setValue(QLCPalette::colorToString(QColor(Qt::red), QColor(Qt::black)));
+    m_doc->addPalette(red);
+
+    // 12 Channel: the wheel is channel 4, the ring 11.
+    auto dmx = [this](quint32 address) {
+        QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+        const int v = uchar(ua.first()->preGMValues().at(int(address)));
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        return v;
+    };
+
+    ShowTreeController *st = m_doc->showTree();
+    ShowTreeCommand cmd(m_doc, st);
+    ShowTreeCommand::Context ctx;
+    ctx.production = st->addProduction("P");
+    ShowTreeCommand::Result r = cmd.run("list \"Song\"", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    ctx = r.context;
+    r = cmd.run("cue 1 block", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    ctx = r.context;
+    const quint32 c1 = ctx.cue;
+
+    // "Ring" names the one "Mover · Ring"; the full name works as ever.
+    QCOMPARE(cmd.groupShortNames().value("ring"), rings->id());
+    r = cmd.run("Ring colour Blue", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    r = cmd.run(QString::fromUtf8("\"Mover · Movers\" colour Red"), ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(st->cue(c1)->layers.count(), 2);
+    QCOMPARE(st->cue(c1)->layers.at(0).target.groups, QList<quint32>({ rings->id() }));
+    QCOMPARE(st->cue(c1)->layers.at(1).target.groups, QList<quint32>({ spots->id() }));
+
+    // Both reach every fixture of their group.
+    int n = 0, total = 0;
+    st->lookReach(groupTarget(rings->id()), KeyColour, &n, &total);
+    QCOMPARE(n, 2);
+    QCOMPARE(total, 2);
+
+    // 2: the ring runs a chase, typed by its slot's name; the wheel tracks.
+    r = cmd.run("cue 2", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    ctx = r.context;
+    const quint32 c2 = ctx.cue;
+    QVERIFY(cmd.colourMacroNames().contains("Red/Yellow-Chase"));
+    r = cmd.run("Ring colour Red/Yellow-Chase", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    const Layer &ringLayer = st->cue(c2)->layers.first();
+    const QLCPalette *chase = m_doc->palette(ringLayer.look(KeyColour)->palettes.value(0));
+    QVERIFY(chase != nullptr);
+    QCOMPARE(chase->name(), QString("Red/Yellow-Chase"));
+    QCOMPARE(chase->colourMacro(), QString("Red/Yellow-Chase"));
+    // Typed again, the same palette.
+    r = cmd.run("Ring colour Red/Yellow-Chase", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(st->cue(c2)->layers.first().look(KeyColour)->palettes.value(0), chase->id());
+
+    const QList<ResolvedCue> rc = st->resolved(*st->cueList(ctx.list));
+    QCOMPARE(rc.count(), 2);
+    CHECK_VALUE(rc[1], spots->id(), KeyColour, red->id(), Origin::Tracked, c1);
+    CHECK_VALUE(rc[1], rings->id(), KeyColour, chase->id(), Origin::Own, c2);
+
+    // The preview plays it: wheel and ring each their own.
+    st->previewCue(c1);
+    tick(5);
+    QCOMPARE(dmx(104), 14);     // Red on the wheel
+    QCOMPARE(dmx(111), 42);     // Blue on the ring
+    QCOMPARE(dmx(124), 14);
+    QCOMPARE(dmx(131), 42);
+    st->previewCue(c2);
+    tick(5);
+    QCOMPARE(dmx(104), 14);     // tracked
+    QCOMPARE(dmx(111), 117);    // the chase
+    QCOMPARE(dmx(131), 117);
+
+    // 3: Mover 1 alone, Blue: its wheel and its ring; Mover 2's ring keeps
+    // the chase tracked from 2.
+    r = cmd.run("cue 3", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    ctx = r.context;
+    r = cmd.run("\"Mover 1\" colour Blue", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    st->previewCue(ctx.cue);
+    tick(5);
+    QCOMPARE(dmx(104), 34);     // Blue on Mover 1's wheel
+    QCOMPARE(dmx(111), 42);     // ...and on its ring
+    QCOMPARE(dmx(124), 14);     // Mover 2: red tracked
+    QCOMPARE(dmx(131), 117);    // ...and the chase
+
+    // 4: Mover 1 Red, the ring group under it Blue: the lower layer wins
+    // the ring, the upper keeps the wheel.
+    r = cmd.run("cue 4", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    ctx = r.context;
+    r = cmd.run("\"Mover 1\" colour Red", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    r = cmd.run("Ring colour Blue", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    st->previewCue(ctx.cue);
+    tick(5);
+    QCOMPARE(dmx(104), 14);
+    QCOMPARE(dmx(111), 42);
+    QCOMPARE(dmx(131), 42);
+    st->stopPreview();
+    Q_UNUSED(blue)
+}
+
 /* §3A / §10.7: a gobo look by name finds that gobo on each type's own wheel
    (or the slot picked for the type); a type without it ignores it. */
 void ShowTree_Test::goboPalettesMatchByNamePerFixtureType()

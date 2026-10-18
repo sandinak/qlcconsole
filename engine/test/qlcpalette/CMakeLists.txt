@@ -12,3 +12,7 @@ target_link_libraries(qlcpalette_test PRIVATE
     Qt6::Test
     qlcplusengine
 )
+
+target_compile_definitions(qlcpalette_test PRIVATE
+    TEST_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../common/fixtures/"
+)

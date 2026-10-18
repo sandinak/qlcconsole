@@ -61,6 +61,8 @@
 #include "linespread.h"
 #include "stagetarget.h"
 #include "lookeditor_test.h"
+#include "qlcfixturedefcache.h"
+#include "qlcfile.h"
 
 void LookEditor_Test::aColourDarkerThanAFifthIsCalledOut()
 {
@@ -102,6 +104,69 @@ void LookEditor_Test::aDarkRedLookWarnsUntilItIsBrightened()
     ed.m_redSlider->setValue(20);
     QVERIFY(!ed.m_colorWarning->isHidden());
     QVERIFY(ed.m_colorWarning->text().contains("8%"));
+}
+
+void LookEditor_Test::aColourLookCanPickARingSlot()
+{
+    Doc doc(this);
+    QDir dir(TEST_FIXTURE_DIR);
+    dir.setFilter(QDir::Files);
+    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtFixture));
+    QVERIFY(doc.fixtureDefCache()->load(dir));
+    QLCFixtureDef *def = doc.fixtureDefCache()->fixtureDef("Branson", "LED Movinghead+Circle (2 heads)");
+    QVERIFY(def != nullptr);
+
+    QLCPalette *look = new QLCPalette(QLCPalette::Color, &doc);
+    look->setName("New Color");
+    look->setValue(QLCPalette::colorToString(QColor(Qt::blue), QColor()));
+    QVERIFY(doc.addPalette(look));
+
+    // No ring anywhere: no chooser.
+    LookEditor ed(&doc);
+    ed.setPalette(look->id());
+    QVERIFY(ed.m_macroRow->isHidden());
+
+    Fixture *f = new Fixture(&doc);
+    f->setFixtureDefinition(def, def->mode("12 Channel"));
+    QVERIFY(doc.addFixture(f));
+    ed.setPalette(QLCPalette::invalidId());
+    ed.setPalette(look->id());
+    QVERIFY(!ed.m_macroRow->isHidden());
+    QCOMPARE(ed.m_macroCombo->currentIndex(), 0);           // nearest to the colour
+    QList<QColor> colours;
+    const QStringList names = ed.colourSlotNames(&colours);
+    QVERIFY(names.contains("off"));
+    QVERIFY(names.contains("Red/Yellow-Chase"));
+    QVERIFY(names.contains("Blue/Purple"));                 // the wheel's split
+    QCOMPARE(names.count(QStringLiteral("Blue")), 1);       // wheel and ring: once
+    QVERIFY(!colours.at(names.indexOf("Red/Yellow-Chase")).isValid());
+
+    // A chase: the look names it, and is named after it.
+    const int chase = ed.m_macroCombo->findData("Red/Yellow-Chase");
+    QVERIFY(chase > 0);
+    ed.m_macroCombo->setCurrentIndex(chase);
+    emit ed.m_macroCombo->activated(chase);
+    QCOMPARE(look->colourMacro(), QString("Red/Yellow-Chase"));
+    QCOMPARE(look->name(), QString("Red/Yellow-Chase"));
+    QCOMPARE(look->rgbValue(), QColor(Qt::blue));           // the colour stays
+
+    // A colour slot sets the picker too.
+    const int yellow = ed.m_macroCombo->findData("Yellow");
+    ed.m_macroCombo->setCurrentIndex(yellow);
+    emit ed.m_macroCombo->activated(yellow);
+    QCOMPARE(look->colourMacro(), QString("Yellow"));
+    QCOMPARE(look->rgbValue(), QColor(Qt::yellow));
+
+    // Back to the colour alone.
+    ed.m_macroCombo->setCurrentIndex(0);
+    emit ed.m_macroCombo->activated(0);
+    QVERIFY(look->colourMacro().isEmpty());
+
+    // Shown as it is when opened again.
+    look->setColourMacro("RGB/Random-Chase");
+    ed.setPalette(QLCPalette::invalidId());
+    ed.setPalette(look->id());
+    QCOMPARE(ed.m_macroCombo->currentData().toString(), QString("RGB/Random-Chase"));
 }
 
 /* A one-channel fixture type whose channel is a gobo wheel with the given

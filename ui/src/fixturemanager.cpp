@@ -2070,6 +2070,78 @@ void FixtureManager::editFixtureProperties()
     editDefinitionAndMode(this, m_doc, var.toUInt());
 }
 
+QList<QLCFixtureDef *> FixtureManager::dropInDefinitions(Doc *doc, const QList<quint32> &fids)
+{
+    QList<QLCFixtureDef *> out;
+    if (doc == NULL || fids.isEmpty())
+        return out;
+    QLCFixtureDef *current = NULL;
+    QSet<QString> modes;
+    for (quint32 fid : fids)
+    {
+        Fixture *fxi = doc->fixture(fid);
+        if (fxi == NULL || fxi->fixtureDef() == NULL || fxi->fixtureMode() == NULL)
+            return out;
+        if (current != NULL && fxi->fixtureDef() != current)
+            return out;                         // one definition at a time
+        current = fxi->fixtureDef();
+        modes.insert(fxi->fixtureMode()->name());
+    }
+    if (current->manufacturer() == KXMLFixtureGeneric)
+        return out;
+
+    QLCFixtureDefCache *cache = doc->fixtureDefCache();
+    for (const QString &model : cache->models(current->manufacturer()))
+    {
+        if (model == current->model())
+            continue;
+        QLCFixtureDef *def = cache->fixtureDef(current->manufacturer(), model);
+        if (def == NULL)
+            continue;
+        bool fits = true;
+        for (const QString &m : modes)
+        {
+            const QLCFixtureMode *was = current->mode(m), *now = def->mode(m);
+            if (was == NULL || now == NULL || was->channels().size() != now->channels().size())
+            {
+                fits = false;
+                break;
+            }
+            for (int c = 0; fits && c < was->channels().size(); ++c)
+            {
+                const QLCChannel *a = was->channels().at(c), *b = now->channels().at(c);
+                if (a->name() != b->name() || a->group() != b->group() || a->controlByte() != b->controlByte())
+                    fits = false;
+            }
+            if (!fits)
+                break;
+        }
+        if (fits)
+            out << def;
+    }
+    return out;
+}
+
+int FixtureManager::changeDefinition(Doc *doc, const QList<quint32> &fids, QLCFixtureDef *def)
+{
+    if (doc == NULL || def == NULL || !dropInDefinitions(doc, fids).contains(def))
+        return 0;
+    int n = 0;
+    for (quint32 fid : fids)
+    {
+        Fixture *fxi = doc->fixture(fid);
+        QLCFixtureMode *mode = fxi != NULL ? def->mode(fxi->fixtureMode()->name()) : NULL;
+        if (mode == NULL)
+            continue;
+        fxi->setFixtureDefinition(def, mode);
+        fxi->setID(fxi->id());                  // tell everyone it changed
+        ++n;
+    }
+    if (n > 0)
+        doc->setModified();
+    return n;
+}
+
 bool FixtureManager::editDefinitionAndMode(QWidget *parent, Doc *doc, quint32 fid)
 {
     Fixture* fxi = (doc != NULL) ? doc->fixture(fid) : NULL;
@@ -2682,6 +2754,31 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
             menu.addAction(tr("Definition && Mode…"), this, [this, fid]() {
                 editDefinitionAndMode(this, m_doc, fid);
             });
+        }
+        /* Another version of their definition, the same channels with
+           other heads (a mover's colour ring as a head of its own): every
+           fixture selected moves to it, each keeping its mode. */
+        if (!selFixtures.isEmpty() && selGroups.isEmpty() && m_doc->mode() != Doc::Operate)
+        {
+            const QList<QLCFixtureDef *> dropIns = dropInDefinitions(m_doc, selFixtures);
+            if (!dropIns.isEmpty())
+            {
+                const QList<quint32> fids = selFixtures;
+                menu.addAction(tr("Change Definition…"), this, [this, fids, dropIns]() {
+                    QStringList names;
+                    for (QLCFixtureDef *d : dropIns)
+                        names << d->model();
+                    bool ok = false;
+                    const QString pick = QInputDialog::getItem(this, tr("Change Definition"),
+                        tr("%n fixture(s) to the definition (same channels, same addresses):", "",
+                           int(fids.count())), names, 0, false, &ok);
+                    if (!ok || names.indexOf(pick) < 0)
+                        return;
+                    changeDefinition(m_doc, fids, dropIns.at(names.indexOf(pick)));
+                    updateView();
+                    slotSelectionChanged();
+                });
+            }
         }
         /* The definition file itself, in the Fixture Editor -- one real
            fixture with a .qxf; a generic dimmer has none. */

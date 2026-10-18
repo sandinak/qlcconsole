@@ -33,6 +33,9 @@
 #include "qlcfixturehead.h"
 #include "grouphead.h"
 #include "fixturegroup.h"
+#include "qlcfixturedefcache.h"
+#include "qlccapability.h"
+#include "qlcfile.h"
 
 void QLCPalette_Test::initialization()
 {
@@ -602,4 +605,231 @@ void QLCPalette_Test::aUserFolderNamedLikeATypeIsKept()
     QCOMPARE(load({ { "Color", "Palettes/Color/", "marked" },
                     { "Dimmer", "Palettes/Color/01-Song/" } }),
              QStringList({ "Palettes/Color/", "Palettes/Color/01-Song/" }));
+}
+
+/*****************************************************************************
+ * Colour rings
+ *****************************************************************************/
+
+/* Branson's mover with a colour ring, as he made it (one head; the ring in
+   it in 12 Channel, in no head in 10 Channel) and as two heads. */
+static QLCFixtureDef *ringDef(Doc *doc, bool twoHeads)
+{
+    QDir dir(TEST_FIXTURE_DIR);
+    dir.setFilter(QDir::Files);
+    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtFixture));
+    if (doc->fixtureDefCache()->fixtureDef("Branson", "LED Movinghead+Circle") == nullptr)
+        doc->fixtureDefCache()->load(dir);
+    return doc->fixtureDefCache()->fixtureDef("Branson", twoHeads ? "LED Movinghead+Circle (2 heads)"
+                                                                  : "LED Movinghead+Circle");
+}
+
+static Fixture *addRingFixture(Doc *doc, bool twoHeads, const QString &mode, quint32 address)
+{
+    QLCFixtureDef *def = ringDef(doc, twoHeads);
+    if (def == nullptr)
+        return nullptr;
+    Fixture *f = new Fixture(doc);
+    f->setName(QString("Mover %1").arg(address));
+    f->setFixtureDefinition(def, def->mode(mode));
+    f->setAddress(address);
+    doc->addFixture(f);
+    return f;
+}
+
+/* Channel -> value of what @p vals sets on @p fid. */
+static QMap<quint32, int> valuesOn(const QList<SceneValue> &vals, quint32 fid)
+{
+    QMap<quint32, int> out;
+    for (const SceneValue &sv : vals)
+        if (sv.fxi == fid)
+            out.insert(sv.channel, sv.value);
+    return out;
+}
+
+void QLCPalette_Test::slotColoursComeFromTheirNames()
+{
+    auto colourOf = [](const QString &name) {
+        QLCCapability cap(0, 9, name);
+        return QLCPalette::capabilityColour(&cap);
+    };
+    QCOMPARE(colourOf("Blue"), QColor(Qt::blue));
+    QCOMPARE(colourOf("off"), QColor(Qt::black));
+    QCOMPARE(colourOf("Open"), QColor(Qt::white));
+    QCOMPARE(colourOf("Light Blue"), QColor("lightblue"));
+    QCOMPARE(colourOf("Red 2"), QColor(Qt::red));
+    QVERIFY(colourOf("Purple").isValid());
+    // Not one colour: never picked by a colour, only by name.
+    QVERIFY(!colourOf("Blue/Purple").isValid());
+    QVERIFY(!colourOf("Red/Yellow-Chase").isValid());
+    QVERIFY(!colourOf("RGB/Random-Chase").isValid());
+    QVERIFY(!colourOf("Rainbow").isValid());
+    QVERIFY(!colourOf("").isValid());
+
+    // A picture colour wins; two of them is a split.
+    QLCCapability split(0, 9, "Whatever");
+    split.setResource(0, QColor(Qt::red));
+    QCOMPARE(QLCPalette::capabilityColour(&split), QColor(Qt::red));
+    split.setResource(1, QColor(Qt::blue));
+    QVERIFY(!QLCPalette::capabilityColour(&split).isValid());
+}
+
+void QLCPalette_Test::colourPicksTheNearestSlot_data()
+{
+    QTest::addColumn<QColor>("colour");
+    QTest::addColumn<QString>("ring");      // the ring slot it picks
+    QTest::addColumn<int>("ringValue");
+    QTest::addColumn<QString>("wheel");     // the wheel slot
+    QTest::addColumn<int>("wheelValue");
+
+    // Named colours: their slot (the middle of its range).
+    QTest::newRow("blue") << QColor(Qt::blue) << "Blue" << 42 << "Blue" << 34;
+    QTest::newRow("red") << QColor(Qt::red) << "Red" << 12 << "Red" << 14;
+    QTest::newRow("green") << QColor(Qt::green) << "Green" << 27 << "Green" << 44;
+    QTest::newRow("yellow") << QColor(Qt::yellow) << "Yellow" << 57 << "Yellow" << 24;
+    QTest::newRow("magenta") << QColor(Qt::magenta) << "Purple" << 72 << "Purple" << 64;
+    QTest::newRow("cyan") << QColor(Qt::cyan) << "Cyan" << 87 << "Cyan" << 74;
+    QTest::newRow("white") << QColor(Qt::white) << "White" << 102 << "White" << 4;
+    // Black: the ring goes off; a wheel has no off and stays open.
+    QTest::newRow("black") << QColor(Qt::black) << "off" << 2 << "White" << 4;
+    // Arbitrary colours: the nearest hue.
+    QTest::newRow("dark orange") << QColor(255, 140, 0) << "Yellow" << 57 << "Orange" << 54;
+    QTest::newRow("pink") << QColor(255, 192, 203) << "Red" << 12 << "Red" << 14;
+    QTest::newRow("teal") << QColor(0, 128, 128) << "Cyan" << 87 << "Cyan" << 74;
+    QTest::newRow("dim blue") << QColor(0, 0, 48) << "Blue" << 42 << "Blue" << 34;
+    QTest::newRow("grey") << QColor(128, 128, 128) << "White" << 102 << "White" << 4;
+}
+
+void QLCPalette_Test::colourPicksTheNearestSlot()
+{
+    QFETCH(QColor, colour);
+    QFETCH(QString, ring);
+    QFETCH(int, ringValue);
+    QFETCH(QString, wheel);
+    QFETCH(int, wheelValue);
+
+    Doc doc(this);
+    QLCFixtureDef *def = ringDef(&doc, true);
+    QVERIFY(def != nullptr);
+    const QLCChannel *ringCh = def->channel("Circle Color");
+    const QLCChannel *wheelCh = def->channel("Color wheel");
+    QVERIFY(ringCh != nullptr && wheelCh != nullptr);
+
+    QString name;
+    QCOMPARE(QLCPalette::nearestColourValue(ringCh, colour, &name), ringValue);
+    QCOMPARE(name, ring);
+    QCOMPARE(QLCPalette::nearestColourValue(wheelCh, colour, &name), wheelValue);
+    QCOMPARE(name, wheel);
+}
+
+void QLCPalette_Test::spotAndRingAreIndependent()
+{
+    Doc doc(this);
+    Fixture *m1 = addRingFixture(&doc, true, "12 Channel", 0);
+    Fixture *m2 = addRingFixture(&doc, true, "10 Channel", 20);
+    QVERIFY(m1 != nullptr && m2 != nullptr);
+    QCOMPARE(m1->heads(), 2);
+    QCOMPARE(m2->heads(), 2);
+
+    auto group = [&doc](const QString &name, const QList<GroupHead> &heads) {
+        FixtureGroup *g = new FixtureGroup(&doc);
+        g->setName(name);
+        doc.addFixtureGroup(g);
+        g->setSize(QSize(heads.size(), 1));
+        for (int i = 0; i < heads.size(); ++i)
+            g->assignHead(QLCPoint(i, 0), heads.at(i));
+        return g->id();
+    };
+    const quint32 spots = group("Movers", { GroupHead(m1->id(), 0), GroupHead(m2->id(), 0) });
+    const quint32 rings = group("Ring", { GroupHead(m1->id(), 1), GroupHead(m2->id(), 1) });
+    const quint32 all = group("All", { GroupHead(m1->id(), 0), GroupHead(m1->id(), 1),
+                                       GroupHead(m2->id(), 0), GroupHead(m2->id(), 1) });
+
+    QLCPalette blue(QLCPalette::Color);
+    blue.setValue(QLCPalette::colorToString(QColor(Qt::blue), QColor()));
+
+    // 12 Channel: wheel 4, ring 11; 10 Channel: wheel 2, ring 9.
+    QList<SceneValue> vals = blue.valuesFromFixtureGroups(&doc, { spots });
+    QCOMPARE(valuesOn(vals, m1->id()), (QMap<quint32, int>{ { 4, 34 } }));
+    QCOMPARE(valuesOn(vals, m2->id()), (QMap<quint32, int>{ { 2, 34 } }));
+
+    vals = blue.valuesFromFixtureGroups(&doc, { rings });
+    QCOMPARE(valuesOn(vals, m1->id()), (QMap<quint32, int>{ { 11, 42 } }));
+    QCOMPARE(valuesOn(vals, m2->id()), (QMap<quint32, int>{ { 9, 42 } }));
+
+    // Both heads: each its own nearest.
+    vals = blue.valuesFromFixtureGroups(&doc, { all });
+    QCOMPARE(valuesOn(vals, m1->id()), (QMap<quint32, int>{ { 4, 34 }, { 11, 42 } }));
+    QCOMPARE(valuesOn(vals, m2->id()), (QMap<quint32, int>{ { 2, 34 }, { 9, 42 } }));
+    // ...as the fixtures themselves.
+    vals = blue.valuesFromFixtures(&doc, { m1->id() });
+    QCOMPARE(valuesOn(vals, m1->id()), (QMap<quint32, int>{ { 4, 34 }, { 11, 42 } }));
+
+    // A dimmer look on the ring has nothing to set: the dimmer is the spot's.
+    QLCPalette full(QLCPalette::Dimmer);
+    full.setValue(255);
+    QVERIFY(full.valuesFromFixtureGroups(&doc, { rings }).isEmpty());
+    QCOMPARE(valuesOn(full.valuesFromFixtureGroups(&doc, { spots }), m1->id()),
+             (QMap<quint32, int>{ { 7, 255 } }));
+}
+
+void QLCPalette_Test::oldDefinitionSetsWheelAndRing()
+{
+    Doc doc(this);
+    Fixture *m12 = addRingFixture(&doc, false, "12 Channel", 0);
+    Fixture *m10 = addRingFixture(&doc, false, "10 Channel", 20);
+    QVERIFY(m12 != nullptr && m10 != nullptr);
+    QCOMPARE(m12->heads(), 1);
+    QCOMPARE(m10->heads(), 1);
+
+    QLCPalette blue(QLCPalette::Color);
+    blue.setValue(QLCPalette::colorToString(QColor(Qt::blue), QColor()));
+    QList<SceneValue> vals = blue.valuesFromFixtures(&doc, { m12->id(), m10->id() });
+    QCOMPARE(valuesOn(vals, m12->id()), (QMap<quint32, int>{ { 4, 34 }, { 11, 42 } }));
+    // The ring in no head is the fixture's: it follows too (it was left alone).
+    QCOMPARE(valuesOn(vals, m10->id()), (QMap<quint32, int>{ { 2, 34 }, { 9, 42 } }));
+
+    // Black: the ring off, the wheel open (it was green on both).
+    QLCPalette black(QLCPalette::Color);
+    black.setValue(QLCPalette::colorToString(QColor(Qt::black), QColor()));
+    vals = black.valuesFromFixtures(&doc, { m12->id() });
+    QCOMPARE(valuesOn(vals, m12->id()), (QMap<quint32, int>{ { 4, 4 }, { 11, 2 } }));
+
+    // A second colour (for a second RGB set) moves neither.
+    QVERIFY(blue.valuesFromFixtures(&doc, { m12->id(), m10->id() }, nullptr, 1).isEmpty());
+}
+
+void QLCPalette_Test::aLookCanNameARingMacro()
+{
+    Doc doc(this);
+    Fixture *m = addRingFixture(&doc, true, "12 Channel", 0);
+    QVERIFY(m != nullptr);
+
+    QLCPalette chase(QLCPalette::Color);
+    chase.setName("Red/Yellow-Chase");
+    chase.setValue(QLCPalette::colorToString(QColor(Qt::red), QColor()));
+    chase.setColourMacro("red/yellow chase");
+    QList<SceneValue> vals = chase.valuesFromFixtures(&doc, { m->id() });
+    // The ring plays the chase (110-124); the wheel, which has none, red.
+    QCOMPARE(valuesOn(vals, m->id()), (QMap<quint32, int>{ { 4, 14 }, { 11, 117 } }));
+    QCOMPARE(QLCPalette::namedSlotValue(m->fixtureMode()->channel(11), "RGB/Random-Chase"), 250);
+    QCOMPARE(QLCPalette::namedSlotValue(m->fixtureMode()->channel(11), "Sparkle"), -1);
+
+    // Saved and loaded with it; copied with it.
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter xmlWriter(&buffer);
+    QVERIFY(chase.saveXML(&xmlWriter));
+    xmlWriter.setDevice(NULL);
+    buffer.close();
+    QVERIFY(buffer.data().contains("ColourMacro=\"red/yellow chase\""));
+    buffer.open(QIODevice::ReadOnly | QIODevice::Text);
+    QXmlStreamReader xmlReader(&buffer);
+    xmlReader.readNextStartElement();
+    QLCPalette loaded(QLCPalette::Color);
+    QVERIFY(loaded.loadXML(xmlReader));
+    QCOMPARE(loaded.colourMacro(), QString("red/yellow chase"));
+    QLCPalette *copy = chase.createCopy();
+    QCOMPARE(copy->colourMacro(), QString("red/yellow chase"));
+    delete copy;
 }

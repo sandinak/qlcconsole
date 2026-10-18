@@ -64,6 +64,10 @@ private slots:
     void theTreeSavesAndLoadsWithTheShow();
     void aShowWithoutATreeSavesAsBefore();
     void lookReachCountsFixturesThatHaveIt();
+    /** Branson's mover with a colour ring as two heads: layers on its
+     *  Movers and Ring groups set the wheel and the ring apart, track,
+     *  preview, and the command line names the ring group and its chases. */
+    void ringGroupsAreLayersOfTheirOwn();
     void goboPalettesMatchByNamePerFixtureType();
 
     // Preview: the selected cue on the rig (Design mode)

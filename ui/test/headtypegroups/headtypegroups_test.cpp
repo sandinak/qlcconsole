@@ -45,6 +45,8 @@
 #include "headlayout.h"
 #include "fixture.h"
 #include "truss.h"
+#include "qlcfixturedefcache.h"
+#include "qlcfile.h"
 #include "doc.h"
 
 #include "headtypegroups_test.h"
@@ -737,3 +739,87 @@ void HeadTypeGroups_Test::oneGroupMatchesTheOldCreateGroup()
 }
 
 QTEST_MAIN(HeadTypeGroups_Test)
+
+void HeadTypeGroups_Test::aColourRingIsAHeadTypeOfItsOwn()
+{
+    QDir dir(TEST_FIXTURE_DIR);
+    dir.setFilter(QDir::Files);
+    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtFixture));
+    QVERIFY(m_doc->fixtureDefCache()->load(dir));
+    QLCFixtureDef *two = m_doc->fixtureDefCache()->fixtureDef("Branson", "LED Movinghead+Circle (2 heads)");
+    QLCFixtureDef *one = m_doc->fixtureDefCache()->fixtureDef("Branson", "LED Movinghead+Circle");
+    QVERIFY(two != nullptr && one != nullptr);
+
+    // The new definition: the same channels, the same DMX, two heads.
+    QCOMPARE(two->channels().size(), one->channels().size());
+    for (const QString &mode : { QString("12 Channel"), QString("10 Channel") })
+    {
+        const QLCFixtureMode *m2 = two->mode(mode), *m1 = one->mode(mode);
+        QVERIFY(m1 != nullptr && m2 != nullptr);
+        QCOMPARE(m2->channels().size(), m1->channels().size());
+        for (int c = 0; c < m1->channels().size(); ++c)
+            QCOMPARE(m2->channels().at(c)->name(), m1->channels().at(c)->name());
+        QCOMPARE(m2->heads().size(), 2);
+        QCOMPARE(m2->heads().at(1).channels(), QVector<quint32>({ quint32(m2->channels().size() - 1) }));
+        QCOMPARE(HeadKinds::typeOf(m2, 0), QString("I/PT"));
+        QCOMPARE(HeadKinds::typeOf(m2, 1), QString("Ring"));
+        QCOMPARE(HeadKinds::typeOf(m1, 0), QString("I/PT"));
+    }
+    QCOMPARE(HeadKinds::typeName("I/PT"), QString("Movers"));
+    QCOMPARE(HeadKinds::typeName("Ring"), QString("Ring"));
+    QCOMPARE(HeadKinds::typeName("Macro"), QString("Colour macro"));
+
+    QList<quint32> ids;
+    for (int k = 0; k < 4; ++k)
+    {
+        Fixture *f = new Fixture(m_doc);
+        f->setName(QString("Mover %1").arg(k + 1));
+        f->setFixtureDefinition(two, two->mode(k < 2 ? "12 Channel" : "10 Channel"));
+        f->setAddress(quint32(k) * 12);
+        m_doc->addFixture(f);
+        ids << f->id();
+    }
+    const QList<QPair<QString, int> > counts = HeadTypeGroups::typeCounts(m_doc, ids);
+    QCOMPARE(counts.size(), 2);
+    QCOMPARE(counts[0], qMakePair(QString("I/PT"), 4));
+    QCOMPARE(counts[1], qMakePair(QString("Ring"), 4));
+
+    HeadTypeGroups::Options opt;
+    const QList<HeadTypeGroups::Planned> plan = HeadTypeGroups::plan(m_doc, ids, opt);
+    QCOMPARE(plan.size(), 2);
+    QCOMPARE(plan[0].name, QString::fromUtf8("Mover · Movers"));
+    QCOMPARE(plan[1].name, QString::fromUtf8("Mover · Ring"));
+    QCOMPARE(plan[1].heads.size(), 4);
+    for (const GroupHead &gh : plan[1].heads)
+        QCOMPARE(gh.head, 1);
+
+    // As he made it: one head each, one group.
+    Fixture *old = new Fixture(m_doc);
+    old->setName("Old 1");
+    old->setFixtureDefinition(one, one->mode("12 Channel"));
+    old->setAddress(100);
+    m_doc->addFixture(old);
+    QCOMPARE(HeadTypeGroups::plan(m_doc, { old->id() }, opt).size(), 1);
+
+    // Moving his fixtures to the two-head definition: Change Definition.
+    Fixture *old10 = new Fixture(m_doc);
+    old10->setName("Old 2");
+    old10->setFixtureDefinition(one, one->mode("10 Channel"));
+    old10->setAddress(120);
+    m_doc->addFixture(old10);
+    QCOMPARE(FixtureManager::dropInDefinitions(m_doc, { old->id(), old10->id() }),
+             QList<QLCFixtureDef *>({ two }));
+    QVERIFY(FixtureManager::dropInDefinitions(m_doc, { old->id(), ids.first() }).isEmpty());  // two definitions
+    QCOMPARE(FixtureManager::changeDefinition(m_doc, { old->id(), old10->id() }, two), 2);
+    QCOMPARE(old->fixtureDef(), two);
+    QCOMPARE(old->fixtureMode()->name(), QString("12 Channel"));
+    QCOMPARE(old10->fixtureMode()->name(), QString("10 Channel"));
+    QCOMPARE(old->heads(), 2);
+    QCOMPARE(old->address(), quint32(100));
+    QCOMPARE(old10->address(), quint32(120));
+    QCOMPARE(old->name(), QString("Old 1"));
+    // ...and back.
+    QCOMPARE(FixtureManager::dropInDefinitions(m_doc, { old->id() }), QList<QLCFixtureDef *>({ one }));
+    QCOMPARE(FixtureManager::changeDefinition(m_doc, { old->id() }, one), 1);
+    QCOMPARE(old->heads(), 1);
+}

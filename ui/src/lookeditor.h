@@ -106,6 +106,8 @@ signals:
 
 private slots:
     void slotColorChanged(const QColor &c);
+    /** "Wheel / ring" picked: the look names that slot (or none). */
+    void slotColourMacroChanged(int index);
     void slotRgbSliderChanged();  //!< numbered R/G/B sliders (1-3)
     void slotColorExtraChanged(); //!< White/Amber/UV sliders
     void slotDimmerChanged(int v);
@@ -177,6 +179,12 @@ public:
      *  colour-wheel head, which only takes the hue, still shines. */
     static QString darkColourWarning(const QColor &rgb, const QColor &wauv);
 
+    /** The named slots a Colour look can name on the colour wheels and
+     *  rings of the look's targets (else of every fixture in the show):
+     *  "off", "Blue", "Red/Yellow-Chase"... each once, wheel order. With
+     *  @p colours, each one's colour (invalid for a chase). */
+    QStringList colourSlotNames(QList<QColor> *colours = nullptr) const;
+
 private:
 
     /** Capability name covering value v on the channel, or empty. */
@@ -223,6 +231,13 @@ private:
     QWidget *m_whiteRow, *m_amberRow, *m_uvRow;          //!< hidden when absent
     CapabilityBar *m_dimmerBar; //!< gradient + strobe region marks
     QLabel *m_colorWarning;    //!< "nearly dark" note under the colour page
+    /* "Wheel / ring": a slot of the targets' colour wheels and rings by
+       name -- a ring's chases are no colour, so only a name picks them. */
+    QWidget   *m_macroRow = nullptr;
+    QComboBox *m_macroCombo = nullptr;   //!< data: the slot name ("" nearest)
+    /** Fill the "Wheel / ring" chooser for @p p; hidden when no target has
+     *  a colour wheel or ring. */
+    void fillColourMacros(const QLCPalette *p);
     QLabel *m_dimmerValue;
     QLabel *m_dimmerCap;       //!< capability name at current intensity (strobe etc.)
     VCXYPadArea *m_xyPad;

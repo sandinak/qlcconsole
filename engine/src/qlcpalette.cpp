@@ -82,6 +82,7 @@ QLCPalette *QLCPalette::createCopy()
     copy->setStageTargetId(this->stageTargetId());
     copy->setGoboName(this->goboName());
     copy->setGoboValues(this->goboValues());
+    copy->setColourMacro(this->colourMacro());
     copy->setScriptPath(this->scriptPath());
     copy->setPersistent(this->persistent());
     copy->setEffectPreset(this->effectPreset());
@@ -616,6 +617,7 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                     col.setBlue(startColor.blue() + qRound(bDelta * factor));
                 }
 
+                bool anyHead = false;
                 for (int i = 0; i < fixture->heads(); i++)
                 {
                     /* Only the group's own heads: a group of a bar's RGB pixels
@@ -623,6 +625,7 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                        the white leds as well as the RGB"). */
                     if (!headWanted(id, i))
                         continue;
+                    anyHead = true;
                     // White/Amber/UV emitter values: explicit wauv, else auto
                     // White = min(R,G,B) so RGBW fixtures light their white LED.
                     QColor emitters = wauv;
@@ -671,51 +674,18 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                         list << SceneValue(id, cmyCh.at(2), uchar(col.yellow()));
                     }
 
-                    // Color-wheel fixtures: snap to the nearest wheel slot.
-                    // Only applies when the fixture has no RGB/CMY channels
-                    // (those are already handled above with exact mixing).
-                    if (primary && rgbSets.isEmpty() && cmyCh.size() < 3)
+                    // Colour wheels and colour macros (a mover's ring): the
+                    // slot nearest the colour, or the macro the look names.
+                    // Only on a head that mixes no colour (RGB/CMY above
+                    // already made it exactly).
+                    if (primary)
                     {
-                        QLCFixtureMode *mode = fixture->fixtureMode();
-                        QLCFixtureHead fHead = fixture->head(i);
-                        const QVector<quint32> &wheels = fHead.colorWheels();
-                        for (quint32 wheelCh : wheels)
+                        const QLCFixtureMode *mode = fixture->fixtureMode();
+                        for (quint32 wheelCh : colourSlotChannels(fixture, i))
                         {
-                            QLCChannel *ch = mode ? mode->channel(wheelCh) : nullptr;
-                            if (!ch)
-                                continue;
-                            // Walk all 256 gobos; keep the one whose colour is
-                            // closest (squared RGB distance) to col.
-                            int bestDmx  = -1;
-                            qint64 bestDist = LLONG_MAX;
-                            for (int v = 0; v < 256; ++v)
-                            {
-                                QLCCapability *cap = ch->searchCapability(uchar(v));
-                                if (!cap)
-                                    continue;
-                                QColor slotCol = cap->resource(0).value<QColor>();
-                                if (!slotCol.isValid())
-                                {
-                                    // Fall back to name-based colour (e.g. "Blue")
-                                    slotCol = QColor(cap->name().trimmed());
-                                }
-                                if (!slotCol.isValid())
-                                    continue;
-                                qint64 dr = col.red()   - slotCol.red();
-                                qint64 dg = col.green() - slotCol.green();
-                                qint64 db = col.blue()  - slotCol.blue();
-                                qint64 dist = dr*dr + dg*dg + db*db;
-                                if (dist < bestDist)
-                                {
-                                    bestDist = dist;
-                                    bestDmx  = cap->middle();   // the slot's middle, as effects pick it
-                                }
-                                // Advance v to skip identical caps in the range
-                                if (cap->max() > uchar(v))
-                                    v = int(cap->max());
-                            }
-                            if (bestDmx >= 0)
-                                list << SceneValue(id, wheelCh, uchar(bestDmx));
+                            const int v = colourSlotValue(mode != nullptr ? mode->channel(wheelCh) : nullptr, col);
+                            if (v >= 0)
+                                list << SceneValue(id, wheelCh, uchar(v));
                         }
                     }
 
@@ -732,6 +702,20 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                         channel = fixture->channelNumber(QLCChannel::UV, QLCChannel::MSB, i);
                         if (channel != QLCChannel::invalid())
                             list << SceneValue(id, channel, uchar(emitters.blue()));
+                    }
+                }
+                /* A wheel or ring in no head is the whole fixture's: a look on
+                   any of its heads sets it, as a master dimmer is (the old
+                   one-head definitions of a mover with a ring left the ring
+                   out of the head in one mode and in it in the other). */
+                if (anyHead && colorSetOffset == 0)
+                {
+                    const QLCFixtureMode *mode = fixture->fixtureMode();
+                    for (quint32 wheelCh : colourSlotChannels(fixture, -1))
+                    {
+                        const int v = colourSlotValue(mode != nullptr ? mode->channel(wheelCh) : nullptr, col);
+                        if (v >= 0)
+                            list << SceneValue(id, wheelCh, uchar(v));
                     }
                 }
             }
@@ -1605,6 +1589,10 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
     if (attrs.hasAttribute(KXMLQLCPaletteStageTarget))
         m_stageTargetId = attrs.value(KXMLQLCPaletteStageTarget).toUInt();
 
+    /* a colour macro by name */
+    if (m_type == Color)
+        m_colourMacro = attrs.value(QStringLiteral("ColourMacro")).toString();
+
     if (attrs.hasAttribute(KXMLQLCPaletteFanning))
     {
         setFanningType(stringToFanningType(attrs.value(KXMLQLCPaletteFanning).toString()));
@@ -1824,6 +1812,10 @@ bool QLCPalette::saveXML(QXmlStreamWriter *doc)
     /* a gobo by name */
     if (m_type == Gobo && !m_goboName.isEmpty())
         doc->writeAttribute(QStringLiteral("GoboName"), m_goboName);
+
+    /* a colour macro by name */
+    if (m_type == Color && !m_colourMacro.isEmpty())
+        doc->writeAttribute(QStringLiteral("ColourMacro"), m_colourMacro);
 
     /* write stage target linkage */
     if (m_stageTargetId != UINT_MAX)
@@ -2125,4 +2117,209 @@ QLCPalette::GoboResolution QLCPalette::resolveGobo(const Fixture *fixture) const
     for (int i : ambiguous)
         r.candidates << caps.at(i)->name();
     return r;
+}
+
+/*****************************************************************************
+ * Colour wheels and colour macros
+ *****************************************************************************/
+
+QColor QLCPalette::capabilityColour(const QLCCapability *cap)
+{
+    if (cap == nullptr)
+        return QColor();
+    QLCCapability *c = const_cast<QLCCapability *>(cap);
+    const QColor c1 = c->resource(0).value<QColor>();
+    const QColor c2 = c->resource(1).value<QColor>();
+    if (c1.isValid())
+        return c2.isValid() && c2 != c1 ? QColor() : c1;   // a split is no one colour
+
+    QString name = cap->name().trimmed().toLower();
+    // "Red 2", "Blue (deep)": the colour is the words before.
+    const int paren = name.indexOf(QLatin1Char('('));
+    if (paren > 0)
+        name = name.left(paren).trimmed();
+    while (!name.isEmpty() && (name.at(name.size() - 1).isDigit() || name.at(name.size() - 1).isSpace()))
+        name.chop(1);
+    if (name.isEmpty())
+        return QColor();
+
+    static const QStringList off = { "off", "none", "no color", "no colour", "blackout", "black",
+                                     "dark", "closed", "close" };
+    static const QStringList open = { "open", "white", "open white", "open/white", "no filter" };
+    if (off.contains(name))
+        return QColor(Qt::black);
+    if (open.contains(name))
+        return QColor(Qt::white);
+
+    // Not one colour: a split, a mix of two, a chase, a rainbow...
+    static const QStringList moving = { "/", "+", "&", " and ", "chase", "random", "rainbow", "scroll",
+                                        "rotat", "fade", "jump", "auto", "sound", "music", "strobe",
+                                        "split", "half", "cycle", "change", "speed", "mix", "effect" };
+    for (const QString &m : moving)
+        if (name.contains(m))
+            return QColor();
+
+    QString key = name;
+    key.remove(QLatin1Char(' ')).remove(QLatin1Char('-')).remove(QLatin1Char('_'));
+    static const QHash<QString, QColor> extra = {
+        { "amber", QColor(255, 191, 0) }, { "uv", QColor(148, 0, 211) },
+        { "ultraviolet", QColor(148, 0, 211) }, { "warmwhite", QColor(255, 220, 180) },
+        { "coolwhite", QColor(220, 235, 255) }, { "coldwhite", QColor(220, 235, 255) },
+        { "cto", QColor(255, 200, 140) }, { "ctb", QColor(200, 220, 255) },
+        { "lightgreen", QColor(144, 238, 144) }, { "darkblue", QColor(0, 0, 139) } };
+    if (extra.contains(key))
+        return extra.value(key);
+    const QColor named = QColor::fromString(key);
+    return named.isValid() ? named : QColor();
+}
+
+int QLCPalette::nearestColourValue(const QLCChannel *ch, const QColor &col, QString *slotName)
+{
+    if (ch == nullptr || !col.isValid())
+        return -1;
+
+    struct Slot { int value; QColor colour; QString name; };
+    QList<Slot> black, grey, chroma;
+    for (const QLCCapability *cap : ch->capabilities())
+    {
+        const QColor c = capabilityColour(cap);
+        if (!c.isValid())
+            continue;
+        Slot s { int(cap->middle()), c, cap->name() };
+        if (c.value() < 16)
+            black << s;
+        else if (c.hsvSaturation() < 51)
+            grey << s;
+        else
+            chroma << s;
+    }
+    if (black.isEmpty() && grey.isEmpty() && chroma.isEmpty())
+        return -1;
+
+    auto pick = [slotName](const Slot &s) {
+        if (slotName != nullptr)
+            *slotName = s.name;
+        return s.value;
+    };
+    // The plain RGB distance: the last word, between slots of one kind.
+    auto nearestRgb = [&col](const QList<Slot> &cands) {
+        int best = 0;
+        qint64 bestDist = LLONG_MAX;
+        for (int i = 0; i < cands.size(); ++i)
+        {
+            const qint64 dr = col.red() - cands.at(i).colour.red();
+            const qint64 dg = col.green() - cands.at(i).colour.green();
+            const qint64 db = col.blue() - cands.at(i).colour.blue();
+            const qint64 d = dr * dr + dg * dg + db * db;
+            if (d < bestDist)
+            {
+                bestDist = d;
+                best = i;
+            }
+        }
+        return cands.at(best);
+    };
+
+    if (col.value() < 16)
+    {
+        // Black: off where there is an off; a wheel has none, and stays open
+        // (its dimmer makes it dark).
+        if (!black.isEmpty())
+            return pick(black.first());
+        if (!grey.isEmpty())
+            return pick(nearestRgb(QList<Slot>() << grey));
+        return -1;
+    }
+    if (col.hsvSaturation() < 51 || chroma.isEmpty())
+    {
+        // White or a grey: the white slot -- a grey is a dim white.
+        if (!grey.isEmpty())
+        {
+            Slot best = grey.first();
+            for (const Slot &s : grey)
+                if (s.colour.value() > best.colour.value())
+                    best = s;
+            return pick(best);
+        }
+        return chroma.isEmpty() ? -1 : pick(nearestRgb(chroma));
+    }
+
+    // A colour: the slot of the nearest hue, then the nearest saturation.
+    const int hue = col.hsvHue();
+    int best = -1, bestHue = INT_MAX, bestSat = INT_MAX;
+    for (int i = 0; i < chroma.size(); ++i)
+    {
+        int d = qAbs(chroma.at(i).colour.hsvHue() - hue);
+        d = qMin(d, 360 - d);
+        const int ds = qAbs(chroma.at(i).colour.hsvSaturation() - col.hsvSaturation());
+        if (d < bestHue || (d == bestHue && ds < bestSat))
+        {
+            best = i;
+            bestHue = d;
+            bestSat = ds;
+        }
+    }
+    return pick(chroma.at(best));
+}
+
+int QLCPalette::namedSlotValue(const QLCChannel *ch, const QString &name)
+{
+    if (ch == nullptr || name.trimmed().isEmpty())
+        return -1;
+    for (const QLCCapability *cap : ch->capabilities())
+        if (sameGoboName(cap->name(), name))
+            return int(cap->middle());
+    return -1;
+}
+
+int QLCPalette::colourSlotValue(const QLCChannel *ch, const QColor &col) const
+{
+    if (!m_colourMacro.isEmpty())
+    {
+        const int v = namedSlotValue(ch, m_colourMacro);
+        if (v >= 0)
+            return v;
+    }
+    return nearestColourValue(ch, col);
+}
+
+QList<quint32> QLCPalette::colourSlotChannels(const Fixture *fixture, int head)
+{
+    QList<quint32> out;
+    const QLCFixtureMode *mode = fixture != nullptr ? fixture->fixtureMode() : nullptr;
+    if (mode == nullptr)
+        return out;
+    if (head >= 0)
+    {
+        if (head >= fixture->heads() || !fixture->rgbChannelSets(head).isEmpty()
+            || fixture->cmyChannels(head).size() >= 3)
+            return out;
+        for (quint32 c : fixture->head(head).colorWheels())
+            out << c;
+        return out;
+    }
+
+    // In no head: the fixture's, when it mixes colour nowhere.
+    QList<quint32> loose;
+    for (quint32 c = 0; c < quint32(mode->channels().size()); ++c)
+    {
+        const QLCChannel *ch = mode->channel(c);
+        if (ch == nullptr)
+            continue;
+        if (ch->group() == QLCChannel::Intensity)
+        {
+            switch (ch->colour())
+            {
+            case QLCChannel::Red: case QLCChannel::Green: case QLCChannel::Blue:
+            case QLCChannel::Cyan: case QLCChannel::Magenta: case QLCChannel::Yellow:
+                return out;                 // it mixes: leave its macros alone
+            default:
+                break;
+            }
+        }
+        if (ch->group() == QLCChannel::Colour && ch->controlByte() == QLCChannel::MSB
+            && mode->headForChannel(c) < 0)
+            loose << c;
+    }
+    return loose;
 }

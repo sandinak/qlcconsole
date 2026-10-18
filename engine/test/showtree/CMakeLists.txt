@@ -13,3 +13,7 @@ target_link_libraries(showtree_test PRIVATE
     Qt6::Test
     qlcplusengine
 )
+
+target_compile_definitions(showtree_test PRIVATE
+    TEST_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../common/fixtures/"
+)

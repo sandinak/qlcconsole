@@ -253,6 +253,29 @@ QString HeadKinds::typeOf(const QLCFixtureMode *mode, int head)
             moving = true;
 
     QString t = kindOf(mode, head);
+    if (t.isEmpty() && !moving)
+    {
+        /* No light of its own to mix or dim, only a colour wheel or macro
+           channel: a mover's colour ring (a ring of LEDs round the lens,
+           driven by one "colour" channel of named colours and chases). On a
+           fixture whose other head moves it is the ring; elsewhere, a colour
+           macro head. */
+        bool colourSlots = false;
+        foreach (quint32 ci, mode->heads().at(head).channels())
+        {
+            const QLCChannel *ch = mode->channel(ci);
+            if (ch != nullptr && ch->group() == QLCChannel::Colour)
+                colourSlots = true;
+        }
+        if (colourSlots)
+        {
+            bool bodyMoves = false;
+            for (quint32 ci = 0; ci < quint32(mode->channels().size()); ++ci)
+                if (moves(mode->channel(ci)))
+                    bodyMoves = true;
+            return bodyMoves ? QStringLiteral("Ring") : QStringLiteral("Macro");
+        }
+    }
     if (moving)
         t += t.isEmpty() ? QStringLiteral("PT") : QStringLiteral("/PT");
     if (t.isEmpty())
@@ -283,6 +306,13 @@ QString HeadKinds::typeName(const QString &type)
         kind.chop(kind.endsWith(QLatin1String("/PT")) ? 3 : 2);
     if (kind.isEmpty())
         return moving ? QStringLiteral("Movers") : QString();
+    if (type == QLatin1String("Ring"))
+        return QStringLiteral("Ring");
+    if (type == QLatin1String("Macro"))
+        return QStringLiteral("Colour macro");
+    // A mover's plain dimmer is no colour: it is just a mover (a spot).
+    if (moving && kind == QLatin1String("I"))
+        return QStringLiteral("Movers");
     QString name = kind;
     if (kind == QLatin1String("W"))       name = QStringLiteral("White");
     else if (kind == QLatin1String("I"))  name = QStringLiteral("Dimmer");
