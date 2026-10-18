@@ -100,7 +100,7 @@ running for the heads it uses, without touching any function.
 ### What it does
 
 - **Enter** from the Lighting Studio toolbar (Focus), the Rig Overview bar
-  (Focus), View → Focus Mode… (⇧⌘F), or by holding **View + Menu** on the
+  (Focus), View → Focus Mode… (⌘⌥F), or by holding **View + Menu** on the
   controller. A short setup asks which fixtures, in what order, what to aim
   at, and what the others do.
 - **Design mode only.** In Perform it refuses; in Design it warns when
@@ -130,13 +130,14 @@ running for the heads it uses, without touching any function.
 | Nudge offset (coarse, accelerating) | left stick | Shift+arrows (1° steps) |
 | Nudge offset (fine) | right stick | — |
 | Step offset by the step size (0.1°) | D-pad | arrows |
+| Step size ×10 / ÷10 | — | + / − |
 | Save this head's offset | A | Enter |
 | Revert to saved | B | Backspace |
 | Zero the offset | X | 0 |
 | Toggle reference A / B | Y | R |
 | Undo the last save | View (Back) | ⌘Z |
 | Exit (asks if unsaved) | Menu (Start) | Esc |
-| Enter Focus mode | hold View + Menu | ⇧⌘F |
+| Enter Focus mode | hold View + Menu | ⌘⌥F |
 
 Sticks: the follow spot's response — the HID profile's deadzone and
 sensitivity, velocity in proportion to deflection past the deadzone, integrated
@@ -158,7 +159,11 @@ HUD shows the numbers either way.
 - **B** puts back the saved offset, **X** zeroes the live one (unsaved until
   A).
 - **Exit** with unsaved heads asks: Save all / Discard / Cancel. Discard puts
-  every head back to its saved offset.
+  every head back to its saved offset. Switching to Perform ends Focus mode
+  and discards unsaved nudges (the show is about to run).
+- A **File → Save** while a head is nudged but unsaved writes the nudged
+  offset (it is in the rig while you work on it); Discard on exit still puts
+  the rig back, so save the show again after that if it matters.
 - After exit, the whole session is **one** step on the Lighting Studio's own
   undo (⌘Z there puts every offset back as it was before Focus mode).
 - HUD: head name and number (*N of M*), reference, live and saved offsets,
