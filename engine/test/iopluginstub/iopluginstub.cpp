@@ -40,11 +40,15 @@ void IOPluginStub::init()
     m_rescanCalled = 0;
     m_probed.clear();
     m_lineCount = 4;
+    m_lineNames.clear();
+    m_nameOverride.clear();
     m_outputProblems.clear();
 }
 
 QString IOPluginStub::name() const
 {
+    if (m_nameOverride.isEmpty() == false)
+        return m_nameOverride;
     return QString("I/O Plugin Stub");
 }
 
@@ -87,6 +91,8 @@ void IOPluginStub::closeOutput(quint32 output, quint32 universe)
 
 QStringList IOPluginStub::outputs()
 {
+    if (m_lineNames.isEmpty() == false)
+        return m_lineNames;
     QStringList list;
     for (int i = 0; i < m_lineCount; i++)
         list << QString("%1: Stub %1").arg(i + 1);
@@ -137,6 +143,8 @@ void IOPluginStub::closeInput(quint32 input, quint32 universe)
 
 QStringList IOPluginStub::inputs()
 {
+    if (m_lineNames.isEmpty() == false)
+        return m_lineNames;
     QStringList list;
     for (int i = 0; i < m_lineCount; i++)
         list << QString("%1: Stub %1").arg(i + 1);

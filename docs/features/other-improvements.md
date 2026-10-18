@@ -103,6 +103,49 @@ controllers, rescan working on every plugin type, hardware lines no longer
 silently filtered from the "heard on" liveness view, and manual
 targets/ports/aliases that persist with the workspace.
 
+### Patches follow the network
+
+Art-Net, E1.31 (sACN) and OSC universes are patched to a **network**, not
+to one computer's network card. A show built on one console opens on
+another on the same show network — or on the same laptop after its address
+changed — already patched, with every target and port as it was; nothing
+needs re-patching.
+
+When a show opens (and whenever a universe is waiting, every few seconds),
+each such patch picks the interface that reaches its network:
+
+1. For a **unicast** universe (a target address such as 172.18.2.60), the
+   interface this computer would send to that address through — a network
+   it is plugged into, or a route to it (a router, a VPN). The ordinary
+   default route (home Wi-Fi out to the internet) doesn't count.
+2. The very interface address it was saved with, if this computer has it.
+3. Any interface on the **same network** — the one saved with the show
+   (for example 172.18.2.0/24), or for shows saved before this, the network
+   of the saved address (using the interface's own netmask, or /24 if that
+   isn't known).
+
+If several interfaces qualify, the first one in the interface list is used.
+Devices shows the network each interface is on ("output, input · network
+172.18.2.0/24").
+
+**Away from the show network**, nothing is lost: universes whose network
+isn't present are **kept, offline** — in Devices under a red row named
+after the missing interface ("172.18.2.219 · not present — kept, will
+reconnect"), "172.18.2.219 — not present" in the universe list, and one
+footer notice ("N universes patched to interfaces not present
+(172.18.2.219) — kept, will reconnect"). Nothing
+is sent to them meanwhile. Saving writes them back exactly as they were.
+When the network appears — the laptop joins the show VLAN, a cable goes in,
+the VPN comes up — they reconnect by themselves within a few seconds. The
+same holds for **inputs and feedback** patched to a device or interface
+that isn't present, and for any patch whose plugin isn't installed on this
+computer. Patching or unpatching an offline universe by hand works as
+usual; **Forget patch** (right-click it) drops a kept patch for good.
+
+Saved shows keep the interface address and line number older versions
+read, plus the network they're on (a `Network` attribute older versions
+ignore).
+
 ### When an output is in trouble
 
 The Art-Net and E1.31 outputs say when where a universe goes stops working,

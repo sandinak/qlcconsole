@@ -22,6 +22,7 @@
 
 #include <QObject>
 #include <QMap>
+#include <climits>
 
 class QLCIOPlugin;
 
@@ -73,7 +74,18 @@ public:
      * that interface, but opens nothing: isPatched() is false and no
      * hardware line is ever opened while pending. See isPending().
      */
-    void setPending(QLCIOPlugin *plugin, const QString &uid);
+    void setPending(QLCIOPlugin *plugin, const QString &uid,
+                    quint32 savedLine = UINT_MAX, const QString &network = QString());
+
+    /** The numeric line and network ("172.18.2.0/24", may be empty) this
+     *  pending patch was loaded with, written back unchanged by saveXML()
+     *  so a show saved while offline is byte-for-byte what it was. */
+    quint32 pendingLine() const { return m_pendingLine; }
+    QString pendingNetwork() const { return m_pendingNetwork; }
+
+    /** A pending patch found its network again: open @p line and replay
+     *  every plugin parameter (target IP, port universe...) onto it. */
+    bool resolvePending(quint32 line);
 
     /** True while this patch remembers an interface identity that did not
      *  resolve to any line the plugin currently offers -- see setPending().
@@ -132,6 +144,8 @@ private:
     /** The interface identity this patch is waiting to find again, or
      *  empty when not pending -- see setPending()/isPending(). */
     QString m_pendingUID;
+    quint32 m_pendingLine;
+    QString m_pendingNetwork;
     /** The patch parameters cache */
     QMap<QString, QVariant>m_parametersCache;
 

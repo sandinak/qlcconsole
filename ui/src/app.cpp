@@ -631,6 +631,10 @@ void App::init()
     // Listen to blackout changes and toggle m_controlBlackoutAction
     connect(m_doc->inputOutputMap(), SIGNAL(blackoutChanged(bool)), this, SLOT(slotBlackoutChanged(bool)));
     connect(m_doc->inputOutputMap(), SIGNAL(outputInhibitedChanged(bool)), this, SLOT(slotOutputInhibitedChanged(bool)));
+    /* A patch kept offline reconnected (its network appeared): the footer
+       notice has to drop it without waiting for the next mode change. */
+    connect(m_doc->inputOutputMap(), &InputOutputMap::offlinePatchesChanged,
+            this, [this]() { updateOutputReadiness(); });
 
     // Listen to DMX value changes and update each Fixture values array
     connect(m_doc->inputOutputMap(), SIGNAL(universeWritten(quint32, const QByteArray&)),
@@ -1272,19 +1276,27 @@ void App::updateOutputReadiness()
     }
 
     QStringList items;
-    int pendingCount = 0, rangeCount = 0;
+    int rangeCount = 0;
+    QSet<quint32> keptUniverses;
+    QStringList missing;
     foreach (const InputOutputMap::DanglingPatch &p, bad)
     {
         if (p.missingInterface.isEmpty() == false)
         {
-            // Pending: the interface this patch names (an ArtNet IP, most
-            // often) just isn't one this machine has -- typically because
-            // the workspace was built on a different network. The mapping
-            // itself is untouched and will resolve again on a machine that
-            // does have it; nothing is being output in the meantime.
-            pendingCount++;
-            items << tr("Universe %1 — %2 \"%3\" not present here")
-                        .arg(p.universe + 1).arg(p.pluginName).arg(p.missingInterface);
+            // Kept offline: the interface/network (an Art-Net address, most
+            // often), device or plugin this patch names is not present here
+            // -- typically a laptop away from the show network. The patch is
+            // untouched, saved unchanged, and reconnects by itself.
+            keptUniverses.insert(p.universe);
+            if (missing.contains(p.missingInterface) == false)
+                missing << p.missingInterface;
+            const QString kind = p.kind == "input" ? tr("input")
+                               : p.kind == "feedback" ? tr("feedback") : tr("output");
+            items << (p.pluginMissing
+                ? tr("Universe %1 — %2 %3 \"%4\": plugin not installed here — kept")
+                      .arg(p.universe + 1).arg(kind, p.pluginName, p.missingInterface)
+                : tr("Universe %1 — %2 %3 \"%4\" not present — kept, will reconnect")
+                      .arg(p.universe + 1).arg(kind, p.pluginName, p.missingInterface));
         }
         else
         {
@@ -1299,9 +1311,11 @@ void App::updateOutputReadiness()
     // configuration mistake to fix, when on a laptop away from the show
     // network it is simply expected and will resolve itself back on-site.
     QStringList summaryParts;
-    if (pendingCount > 0)
-        summaryParts << tr("%1 patched network interface%2 not present on this machine")
-                            .arg(pendingCount).arg(pendingCount == 1 ? QString() : "s");
+    if (keptUniverses.isEmpty() == false)
+        summaryParts << tr("%1 universe%2 patched to interfaces not present (%3) — kept, will reconnect")
+                            .arg(keptUniverses.count())
+                            .arg(keptUniverses.count() == 1 ? QString() : "s")
+                            .arg(missing.join(", "));
     if (rangeCount > 0)
         summaryParts << tr("%1 universe%2 patched to a line this machine doesn't have")
                             .arg(rangeCount).arg(rangeCount == 1 ? QString() : "s");
@@ -1312,8 +1326,11 @@ void App::updateOutputReadiness()
     // closing sentence that applies to all of them.
     ShowStatus::instance()->setStatus("output.dangling", ShowStatus::Warning,
         summaryParts.join(" · "),
-        tr("Re-patch these universes in Connections, or open the workspace "
-           "on the machine it was built for."),
+        rangeCount > 0
+            ? tr("Re-patch these universes in Connections, or open the workspace "
+                 "on the machine it was built for.")
+            : tr("Patches follow the network: they reconnect by themselves when "
+                 "any interface on that network appears. Nothing is sent meanwhile."),
         items);
 
     foreach (const QString &line, items)

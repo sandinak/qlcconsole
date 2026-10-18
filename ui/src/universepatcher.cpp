@@ -25,6 +25,7 @@
 #include <QVariant>
 
 #include "universepatcher.h"
+#include "networkroute.h"
 #include "qlcioplugin.h"
 #include "ioplugincache.h"
 #include "inputoutputmap.h"
@@ -116,16 +117,25 @@ QString UniversePatcher::outputLegText(OutputPatch *op,
         /* And which interface it leaves by, when there is a choice: the
            device view files it under that interface, so a node fed from two
            NICs is listed under each. */
-        if (op->plugin() != NULL && op->plugin()->outputs().count() > 1 && iomap != NULL)
+        if (op->isPending())
+        {
+            /* Kept offline: nothing here reaches its network (yet). */
+            where += tr(" · no route (%1 not present) — kept, will reconnect")
+                         .arg(op->outputName());
+        }
+        else if (op->plugin() != NULL && op->plugin()->outputs().count() > 1 && iomap != NULL)
         {
             const QString lname = op->plugin()->outputs().value(int(op->output()));
             const QString lalias = iomap->lineAlias(plugin, lname);
-            where += tr(" · via %1").arg(lalias.isEmpty() ? lname : lalias);
+            where += tr(" · via %1").arg(lalias.isEmpty() ? NetworkRoute::describeLine(lname)
+                                                          : lalias);
         }
     }
     else
     {
         where = op->outputName();
+        if (op->isPending())
+            where += tr(" — not present, kept, will reconnect");
     }
     return where.isEmpty() ? plugin : QStringLiteral("%1 → %2").arg(plugin, where);
 }
@@ -175,6 +185,9 @@ QList<UniversePatcher::UnpatchLeg> UniversePatcher::outputLegs(const QList<quint
             leg.output = true;
             legs << leg;
         }
+        // Input/feedback (or plugin-less) patches kept offline count too.
+        if (u->offlinePatches().isEmpty() == false)
+            pending = true;
         if (pending)
         {
             UnpatchLeg leg;
@@ -1195,13 +1208,9 @@ void UniversePatcher::unpatchLegs(const QList<UnpatchLeg> &legs)
             continue;
         if (l.pending)
         {
-            // From the end, so a removal does not shift what is still to visit.
-            for (int i = u->outputPatchesCount() - 1; i >= 0; i--)
-            {
-                OutputPatch *op = u->outputPatch(i);
-                if (op != NULL && op->isPending())
-                    iomap->setOutputPatch(l.universe, QString(), QString(), 0, false, i);
-            }
+            // Every kept offline patch on it: pending outputs, and any
+            // input/feedback/plugin-less patch kept for its network.
+            iomap->forgetOfflinePatches(l.universe);
         }
         else if (l.output)
         {
