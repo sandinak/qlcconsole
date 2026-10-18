@@ -30,6 +30,7 @@
 #include "qlcpalette.h"
 #include "monitorproperties.h"
 #include "stagetarget.h"
+#include "paletteops.h"
 #include "doc.h"
 #include <QUrl>
 #include <QVector>
@@ -218,8 +219,36 @@ const QList<ShowTreeCommand::Word> &ShowTreeCommand::words()
             "that only repeat what tracks in taken out, includes of the cue before made tracking -- then "
             "convert apply does it, one undo step. Every cue plays exactly as before.",
             { "convert", "convert apply" }, { "track" });
+        // palettes (R2): the Library's housekeeping, typed
+        add("palette", "palettes", "palette <type> [\"name\"] [#rrggbb | <0-100>] [in <folder>] | "
+                                   "palette <name> rename \"new\" | move <folder>|none | dup | delete [anyway] | edit | "
+                                   "palette folder <folder> [rename \"new\" | delete]",
+            "Palettes as the Library keeps them: a new one of a type (colour, dimmer, position, aim, beam, gobo, "
+            "zoom, shutter, strobe, effect), named, valued and filed if you say so, opened in the Look Editor; a "
+            "palette renamed, moved to a folder (folders hold any type), duplicated, deleted (refused while "
+            "something uses it, unless anyway) or edited; folders made, renamed, deleted (what is in one moves "
+            "up). One undo step each.",
+            { "palette colour \"Amber 2\" #ffb000", "palette dimmer \"Half\" 50 in \"Levels\"",
+              "palette Blue rename \"Navy\"", "palette Blue move \"01-Song\"", "palette Blue dup",
+              "palette Blue edit", "palette folder \"01-Song\"", "palette folder \"01-Song\" rename \"02-Song\"" },
+            { "colour", "look" }, { "pal" });
+        // looks (R3): busking looks beside the cue lists
+        add("look", "busking", "look \"name\" [in <folder>]",
+            "Selects that busking look of the selected production, or makes it in its Looks section (made too, "
+            "the first time); in files it in a folder. Then set its layers as on a cue: Towers colour Blue. A "
+            "look never tracks; a VC button fires it.",
+            { "look \"Hit 1\"", "look \"Blackout Hit\" in \"Hits\"" }, { "vcpage", "adopt" });
+        add("vcpage", "busking", "vcpage",
+            "Make VC page: a frame on the Virtual Console with one button per look of the selected look's "
+            "folder (else every look), captioned with its name, coloured by its first colour.",
+            { "vcpage" }, { "look" });
+        add("adopt", "busking", "adopt <scene>",
+            "Adopt as look: a scene (say a Programming one) becomes a look of the selected production -- its "
+            "groups and palettes a layer, or else the scene played as it is. The scene stays.",
+            { "adopt Haze" }, { "look" });
         // undo
-        add("undo", "undo", "undo | redo", "Undoes (redoes) the last change to the tree.",
+        add("undo", "undo", "undo | redo", "Undoes (redoes) the last change: to the tree, or to a palette "
+            "(made, renamed, filed, deleted) -- whichever came last.",
             { "undo", "redo" }, {}, { "redo" });
         add("help", "help", "help [<word>] | ?", "This: every word, or one word's syntax and examples.",
             { "help", "help spread", "?" }, {}, { "?" });
@@ -317,7 +346,8 @@ QString ShowTreeCommand::helpText(const QString &w)
     const QList<QPair<QString, QString>> groups = {
         { "navigate", tr("Navigate") }, { "build", tr("Build") }, { "looks", tr("Looks") },
         { "tracking", tr("Tracking") }, { "record", tr("Record and copy") },
-        { "reuse", tr("Reuse, detach, convert") }, { "undo", tr("Undo") },
+        { "reuse", tr("Reuse, detach, convert") }, { "palettes", tr("Palettes") },
+        { "busking", tr("Looks (busking)") }, { "undo", tr("Undo") },
         { "help", tr("Help") } };
     QString out = tr("Every word (<code>help &lt;word&gt;</code> for one, with examples; Tab completes):");
     for (const auto &g : groups)
@@ -343,10 +373,10 @@ QStringList ShowTreeCommand::keywords()
             continue;
         out << w.word;
         for (const QString &a : w.aliases)
-            if (a != QLatin1String("cue-only") && a != QLatin1String("new") && a != QLatin1String("fn"))
+            if (a != QLatin1String("cue-only") && a != QLatin1String("new") && a != QLatin1String("fn")
+                && a != QLatin1String("pal"))
                 out << a;
     }
-    out << QStringLiteral("look");
     return out;
 }
 
@@ -498,6 +528,68 @@ QStringList ShowTreeCommand::reusableNames() const
     return out;
 }
 
+QStringList ShowTreeCommand::allPaletteNames() const
+{
+    QStringList out;
+    const PaletteOps *ops = m_doc->paletteOps();
+    for (const QLCPalette *p : m_doc->palettes())
+        if (!p->name().isEmpty() && ops->isManaged(p->id()) && !out.contains(p->name(), Qt::CaseInsensitive))
+            out << p->name();
+    return out;
+}
+
+QStringList ShowTreeCommand::paletteFolders() const
+{
+    return m_doc->paletteOps()->folders();
+}
+
+QStringList ShowTreeCommand::lookNames(const Context &context) const
+{
+    QStringList out;
+    const CueList *l = m_st->cueList(m_st->looksSection(context.production));
+    if (l != nullptr)
+        for (const Cue &c : l->cues)
+            if (!c.name.isEmpty() && !out.contains(c.name, Qt::CaseInsensitive))
+                out << c.name;
+    return out;
+}
+
+QStringList ShowTreeCommand::lookFolderNames(const Context &context) const
+{
+    return m_st->lookFolders(m_st->looksSection(context.production));
+}
+
+int ShowTreeCommand::paletteTypeWord(const QString &word)
+{
+    const QString w = word.toLower();
+    if (w == QLatin1String("colour") || w == QLatin1String("color"))
+        return QLCPalette::Color;
+    if (w == QLatin1String("dimmer") || w == QLatin1String("intensity"))
+        return QLCPalette::Dimmer;
+    if (w == QLatin1String("position") || w == QLatin1String("pantilt"))
+        return QLCPalette::PanTilt;
+    if (w == QLatin1String("aim"))
+        return QLCPalette::Aim;
+    if (w == QLatin1String("beam"))
+        return QLCPalette::Beam;
+    if (w == QLatin1String("gobo"))
+        return QLCPalette::Gobo;
+    if (w == QLatin1String("zoom"))
+        return QLCPalette::Zoom;
+    if (w == QLatin1String("shutter"))
+        return QLCPalette::Shutter;
+    if (w == QLatin1String("strobe"))
+        return QLCPalette::Strobe;
+    if (w == QLatin1String("effect"))
+        return QLCPalette::Effect;
+    return QLCPalette::Undefined;
+}
+
+QStringList ShowTreeCommand::paletteTypeWords()
+{
+    return { "colour", "dimmer", "position", "aim", "beam", "gobo", "zoom", "shutter", "strobe", "effect" };
+}
+
 QStringList ShowTreeCommand::cueNumbers(const Context &context) const
 {
     QStringList out;
@@ -636,13 +728,19 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
     }
     if (w0 == QLatin1String("undo") || w0 == QLatin1String("redo"))
     {
+        // One history: the tree's steps and the palettes' (P-D14).
         const bool undo = w0 == QLatin1String("undo");
-        const QString what = undo ? m_st->undoText() : m_st->redoText();
-        res.ok = undo ? m_st->undo() : m_st->redo();
+        const QString what = undo ? m_st->sharedUndoText() : m_st->sharedRedoText();
+        res.ok = undo ? m_st->undoShared() : m_st->redoShared();
         res.message = res.ok ? (undo ? tr("Undid: %1") : tr("Redid: %1")).arg(what)
                              : (undo ? tr("Nothing to undo") : tr("Nothing to redo"));
         return res;
     }
+
+    if (w0 == QLatin1String("palette") || w0 == QLatin1String("pal"))
+        return runPalette(r.src, context);
+    if (w0 == QLatin1String("look") || w0 == QLatin1String("vcpage") || w0 == QLatin1String("adopt"))
+        return runLook(r.src, context);
 
     Context ctx = context;
     QString error;
@@ -1615,6 +1713,315 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
 }
 
 /****************************************************************************
+ * Palettes (R2) and looks (R3)
+ ****************************************************************************/
+
+ShowTreeCommand::Result ShowTreeCommand::runPalette(const QString &line, const Context &context)
+{
+    // Each one PaletteOps step: one undo step, on the history the tab's
+    // Undo shares with the tree.
+    Result res;
+    res.context = context;
+    Reader r;
+    r.src = line.trimmed();
+    r.word();
+    PaletteOps *ops = m_doc->paletteOps();
+
+    // A folder: quoted, one the show has (spaces and all), or a word.
+    auto folderArg = [&]() -> QString {
+        const QString q = r.quoted();
+        if (!q.isNull())
+            return q;
+        const QString known = r.name(paletteFolders());
+        return known.isEmpty() ? r.word() : known;
+    };
+    auto fail = [&res](const QString &why) {
+        res.message = why;
+        return res;
+    };
+
+    const QString w1 = r.peek().toLower();
+    if (w1.isEmpty())
+        return fail(tr("palette <type> \"name\" · palette <name> rename|move|dup|delete|edit · "
+                       "palette folder \"name\""));
+
+    if (w1 == QLatin1String("folder"))
+    {
+        r.word();
+        const QString folder = PaletteOps::cleanFolder(folderArg());
+        if (folder.isEmpty())
+            return fail(tr("palette folder \"name\" [rename \"new\" | delete]"));
+        const QString op = r.word().toLower();
+        if (op.isEmpty())
+        {
+            if (!ops->addFolder(folder))
+                return fail(tr("There is a folder “%1” already.").arg(folder));
+            res.message = tr("new folder “%1”").arg(folder);
+        }
+        else if (op == QLatin1String("rename") || op == QLatin1String("name"))
+        {
+            QString to = r.quoted();
+            if (to.isNull())
+                to = r.src.mid(r.i).trimmed();
+            if (!ops->renameFolder(folder, to))
+                return fail(tr("Couldn't rename “%1” to “%2”.").arg(folder, to));
+            res.message = tr("folder “%1” is “%2”").arg(folder, to);
+        }
+        else if (op == QLatin1String("delete"))
+        {
+            const int n = ops->folderCount(folder);
+            if (!ops->removeFolder(folder))
+                return fail(tr("No folder “%1”.").arg(folder));
+            res.message = tr("folder “%1” deleted; %2 palette(s) moved up").arg(folder).arg(n);
+        }
+        else
+            return fail(tr("palette folder \"name\" [rename \"new\" | delete]"));
+        if (!r.atEnd())
+            return fail(tr("Don't know “%1”.").arg(r.peek()));
+        res.ok = true;
+        res.message = QStringLiteral("✓ %1").arg(res.message);
+        res.keepSelection = true;
+        return res;
+    }
+
+    const QLCPalette::PaletteType type = QLCPalette::PaletteType(paletteTypeWord(w1));
+    if (type != QLCPalette::Undefined)
+    {
+        // A new palette: palette <type> ["name"] [value] [in <folder>].
+        r.word();
+        const QString name = r.quoted();
+        QVariantList values;
+        static const QRegularExpression level(QStringLiteral("^(\\d{1,3})%?$"));
+        static const QRegularExpression hex(QStringLiteral("^#[0-9a-fA-F]{6}$"));
+        const QString v = r.peek();
+        if (type == QLCPalette::Dimmer && level.match(v).hasMatch() && level.match(v).captured(1).toInt() <= 100)
+        {
+            r.word();
+            values << qRound(level.match(v).captured(1).toInt() * 255.0 / 100.0);
+        }
+        else if (type == QLCPalette::Color && hex.match(v).hasMatch())
+        {
+            r.word();
+            values << QLCPalette::colorToString(QColor(v), QColor(Qt::black));
+        }
+        QString path = m_st->suggestPaletteFolder(type);
+        if (r.peek().toLower() == QLatin1String("in"))
+        {
+            r.word();
+            const QString folder = PaletteOps::cleanFolder(folderArg());
+            if (folder.isEmpty())
+                return fail(tr("… in \"folder\""));
+            path = PaletteOps::pathForFolder(folder);
+        }
+        if (!r.atEnd())
+            return fail(tr("palette %1 \"name\" %2 [in \"folder\"] -- don't know “%3”")
+                        .arg(w1, type == QLCPalette::Dimmer ? QStringLiteral("[0-100]")
+                                 : type == QLCPalette::Color ? QStringLiteral("[#rrggbb]") : QString(), r.peek()));
+        QString nm = name.isNull() ? QString() : name.trimmed();
+        if (nm.isEmpty())
+            nm = values.isEmpty() ? ops->newName(type) : m_st->suggestPaletteName(type, values);
+        for (const QLCPalette *have : m_doc->palettes())
+            if (have->type() == type && have->name().compare(nm, Qt::CaseInsensitive) == 0)
+                return fail(tr("There is a %1 palette “%2” already.").arg(w1, have->name()));
+        const quint32 id = ops->create(type, path, nm, values);
+        if (id == QLCPalette::invalidId())
+            return fail(tr("Couldn't make the palette."));
+        const QString folder = PaletteOps::folderOf(m_doc->palette(id));
+        res.ok = true;
+        res.editPalette = id;
+        res.keepSelection = true;
+        res.message = folder.isEmpty() ? tr("✓ new %1 palette “%2”").arg(w1, nm)
+                                       : tr("✓ new %1 palette “%2” in %3").arg(w1, nm, folder);
+        return res;
+    }
+
+    // An existing palette by name, then what to do with it.
+    const QString name = r.name(allPaletteNames());
+    if (name.isEmpty())
+        return fail(tr("No palette “%1”; palette <type> \"name\" makes one. Tab lists them.").arg(r.peek()));
+    quint32 pid = QLCPalette::invalidId();
+    QList<QLCPalette *> pl = m_doc->palettes();
+    std::sort(pl.begin(), pl.end(), [](const QLCPalette *a, const QLCPalette *b) { return a->id() < b->id(); });
+    for (const QLCPalette *have : pl)
+        if (pid == QLCPalette::invalidId() && ops->isManaged(have->id())
+            && have->name().compare(name, Qt::CaseInsensitive) == 0)
+            pid = have->id();
+    const QString op = r.word().toLower();
+    res.keepSelection = true;
+    if (op.isEmpty() || op == QLatin1String("edit"))
+    {
+        if (!r.atEnd())
+            return fail(tr("Don't know “%1”.").arg(r.peek()));
+        res.ok = true;
+        res.editPalette = pid;
+        res.message = tr("✓ editing “%1”").arg(name);
+        return res;
+    }
+    if (op == QLatin1String("rename") || op == QLatin1String("name"))
+    {
+        QString to = r.quoted();
+        if (to.isNull())
+            to = r.src.mid(r.i).trimmed();
+        else if (!r.atEnd())
+            return fail(tr("palette <name> rename \"new\" -- then nothing more"));
+        if (!ops->rename(pid, to))
+            return fail(to.trimmed().isEmpty() ? tr("rename \"new name\"") : tr("It is called that already."));
+        res.message = tr("“%1” is “%2”").arg(name, to.trimmed());
+    }
+    else if (op == QLatin1String("move") || op == QLatin1String("in"))
+    {
+        QString folder = folderArg();
+        if (folder.toLower() == QLatin1String("none"))
+            folder.clear();
+        if (!r.atEnd())
+            return fail(tr("palette <name> move \"folder\" | none -- then nothing more"));
+        if (!ops->move({ pid }, folder))
+            return fail(tr("“%1” is there already.").arg(name));
+        res.message = folder.isEmpty() ? tr("“%1” in no folder").arg(name)
+                                       : tr("“%1” in %2").arg(name, PaletteOps::cleanFolder(folder));
+    }
+    else if (op == QLatin1String("dup") || op == QLatin1String("duplicate"))
+    {
+        const quint32 id = ops->duplicate(pid);
+        if (id == QLCPalette::invalidId())
+            return fail(tr("Couldn't duplicate “%1”.").arg(name));
+        res.editPalette = id;
+        res.message = tr("“%1”").arg(m_doc->palette(id)->name());
+    }
+    else if (op == QLatin1String("delete"))
+    {
+        const bool anyway = r.word().toLower() == QLatin1String("anyway");
+        const QList<PaletteOps::Use> uses = ops->usage(pid);
+        if (!uses.isEmpty() && !anyway)
+            return fail(tr("“%1” is used by %2. To delete it all the same: palette %3 delete anyway")
+                        .arg(name, PaletteOps::usageSummary(uses), typed(name, name.contains(QLatin1Char(' ')))));
+        if (!ops->remove({ pid }))
+            return fail(tr("Couldn't delete “%1”.").arg(name));
+        res.message = tr("deleted “%1”").arg(name);
+    }
+    else
+        return fail(tr("palette <name> rename \"new\" | move <folder> | dup | delete | edit"));
+    res.ok = true;
+    res.message = QStringLiteral("✓ %1").arg(res.message);
+    return res;
+}
+
+ShowTreeCommand::Result ShowTreeCommand::runLook(const QString &line, const Context &context)
+{
+    Result res;
+    res.context = context;
+    Context &ctx = res.context;
+    Reader r;
+    r.src = line.trimmed();
+    const QString w0 = r.word().toLower();
+    auto fail = [&res, &context](const QString &why) {
+        res.message = why;
+        res.context = context;
+        return res;
+    };
+    if (m_st->production(ctx.production) == nullptr)
+        return fail(tr("Select a production first (+ Production)."));
+    const quint32 section = m_st->looksSection(ctx.production);
+
+    if (w0 == QLatin1String("look"))
+    {
+        QString name = r.quoted();
+        if (name.isNull())
+            name = r.name(lookNames(ctx));
+        if (name.isEmpty())
+            name = r.word();
+        if (name.trimmed().isEmpty())
+            return fail(tr("look \"name\" [in \"folder\"]"));
+        QString folder;
+        bool folderGiven = false;
+        if (r.peek().toLower() == QLatin1String("in"))
+        {
+            r.word();
+            folder = r.quoted();
+            if (folder.isNull())
+                folder = r.name(lookFolderNames(ctx));
+            if (folder.isEmpty())
+                folder = r.word();
+            folderGiven = true;
+        }
+        if (!r.atEnd())
+            return fail(tr("look \"name\" [in \"folder\"] -- don't know “%1”").arg(r.peek()));
+        quint32 have = invalidId();
+        if (const CueList *l = m_st->cueList(section))
+            for (const Cue &c : l->cues)
+                if (have == invalidId() && c.name.compare(name.trimmed(), Qt::CaseInsensitive) == 0)
+                    have = c.id;
+        if (have != invalidId())
+        {
+            if (folderGiven)
+                m_st->setLookFolder({ have }, folder);
+            ctx.list = section;
+            ctx.cue = have;
+            ctx.layer = invalidId();
+            res.message = tr("look “%1”").arg(name.trimmed());
+        }
+        else
+        {
+            // After the selected look, else at the end.
+            const quint32 after = m_st->isLook(ctx.cue) ? ctx.cue : invalidId();
+            if (!folderGiven && after != invalidId())
+                if (const Cue *c = m_st->cue(after))
+                    folder = c->folder;
+            const quint32 id = m_st->addLook(ctx.production, name.trimmed(), folder, after);
+            if (id == invalidId())
+                return fail(tr("Couldn't make the look."));
+            ctx.list = m_st->looksSection(ctx.production);
+            ctx.cue = id;
+            ctx.layer = invalidId();
+            res.message = tr("new look “%1”").arg(name.trimmed());
+        }
+    }
+    else if (w0 == QLatin1String("vcpage"))
+    {
+        if (!r.atEnd())
+            return fail(tr("vcpage -- then nothing more"));
+        if (section == invalidId() || m_st->looksIn(section, QString()).isEmpty())
+            return fail(tr("No looks yet: look \"name\" makes one."));
+        QString folder;
+        if (m_st->isLook(ctx.cue))
+            if (const Cue *c = m_st->cue(ctx.cue))
+                folder = c->folder;
+        if (!m_vcPageMaker)
+            return fail(tr("No Virtual Console here."));
+        QString msg;
+        if (!m_vcPageMaker(section, folder, &msg))
+            return fail(msg.isEmpty() ? tr("Couldn't make the VC page.") : msg);
+        res.message = msg;
+        res.keepSelection = true;
+    }
+    else
+    {
+        // adopt <scene>
+        const QString name = r.name(functionNames());
+        if (name.isEmpty())
+            return fail(tr("adopt <scene>: no function “%1”. Tab lists them.").arg(r.peek()));
+        if (!r.atEnd())
+            return fail(tr("adopt <scene> -- then nothing more"));
+        quint32 fid = invalidId();
+        for (const Function *f : m_doc->functions())
+            if (fid == invalidId() && !m_st->isGenerated(f->id()) && f->name().compare(name, Qt::CaseInsensitive) == 0)
+                fid = f->id();
+        QString why;
+        const quint32 id = m_st->adoptAsLook(ctx.production, fid, &why);
+        if (id == invalidId())
+            return fail(why);
+        ctx.list = m_st->looksSection(ctx.production);
+        ctx.cue = id;
+        ctx.layer = invalidId();
+        res.message = why.isEmpty() ? tr("“%1” is a look").arg(name)
+                                    : tr("“%1” is a look, played as it is (%2)").arg(name, why);
+    }
+    res.ok = true;
+    res.message = QStringLiteral("✓ %1").arg(res.message);
+    return res;
+}
+
+/****************************************************************************
  * Tab completion
  ****************************************************************************/
 
@@ -1756,6 +2163,141 @@ bool ShowTreeCommand::candidates(const QString &head, const Context &context, QS
             return true;
         }
         return !r.name(reusableNames()).isEmpty() && r.atEnd();
+    }
+    // A name: quoted (any), or one of @a known; false: none there.
+    auto nameOr = [&r](const QStringList &known) {
+        if (r.src.mid(r.i).trimmed().startsWith(QLatin1Char('"')))
+            return !r.quoted().isNull();
+        return !r.name(known).isEmpty() || !r.word().isEmpty();
+    };
+    if (w0 == QLatin1String("palette") || w0 == QLatin1String("pal"))
+    {
+        r.word();
+        if (r.atEnd())
+        {
+            *out = paletteTypeWords() + allPaletteNames() + QStringList(QStringLiteral("folder"));
+            return true;
+        }
+        const QString w1 = r.peek().toLower();
+        if (w1 == QLatin1String("folder"))
+        {
+            r.word();
+            if (r.atEnd())
+            {
+                *out = paletteFolders();
+                return true;
+            }
+            if (!nameOr(paletteFolders()))
+                return false;
+            if (r.atEnd())
+            {
+                *out = QStringList({ "rename", "delete" });
+                return true;
+            }
+            const QString op = r.word().toLower();
+            if (op == QLatin1String("delete"))
+                return r.atEnd();
+            if (op != QLatin1String("rename"))
+                return false;
+            if (!r.atEnd())
+                r.quoted();
+            return r.atEnd();
+        }
+        if (paletteTypeWord(w1) != QLCPalette::Undefined)
+        {
+            // palette <type> ["name"] [value] [in <folder>]
+            r.word();
+            if (r.src.mid(r.i).trimmed().startsWith(QLatin1Char('"')))
+                r.quoted();
+            static const QRegularExpression value(QStringLiteral("^(\\d{1,3}%?|#[0-9a-fA-F]{6})$"));
+            if (value.match(r.peek()).hasMatch())
+                r.word();
+            if (r.atEnd())
+            {
+                *out = QStringList({ "in" });
+                return true;
+            }
+            if (r.word().toLower() != QLatin1String("in"))
+                return false;
+            if (r.atEnd())
+            {
+                *out = paletteFolders();
+                return true;
+            }
+            return nameOr(paletteFolders()) && r.atEnd();
+        }
+        if (r.name(allPaletteNames()).isEmpty())
+            return false;
+        if (r.atEnd())
+        {
+            *out = QStringList({ "rename", "move", "dup", "delete", "edit" });
+            return true;
+        }
+        const QString op = r.word().toLower();
+        if (op == QLatin1String("move") || op == QLatin1String("in"))
+        {
+            if (r.atEnd())
+            {
+                *out = paletteFolders() + QStringList(QStringLiteral("none"));
+                return true;
+            }
+            return nameOr(paletteFolders()) && r.atEnd();
+        }
+        if (op == QLatin1String("delete"))
+        {
+            if (r.atEnd())
+            {
+                *out = QStringList({ "anyway" });
+                return true;
+            }
+            return r.word().toLower() == QLatin1String("anyway") && r.atEnd();
+        }
+        if (op == QLatin1String("rename") || op == QLatin1String("name"))
+        {
+            if (!r.atEnd())
+                r.quoted();
+            return r.atEnd();
+        }
+        return (op == QLatin1String("dup") || op == QLatin1String("edit")) && r.atEnd();
+    }
+    if (w0 == QLatin1String("look"))
+    {
+        r.word();
+        if (r.atEnd())
+        {
+            *out = lookNames(context);
+            return true;
+        }
+        if (!nameOr(lookNames(context)))
+            return false;
+        if (r.atEnd())
+        {
+            *out = QStringList({ "in" });
+            return true;
+        }
+        if (r.word().toLower() != QLatin1String("in"))
+            return false;
+        if (r.atEnd())
+        {
+            *out = lookFolderNames(context);
+            return true;
+        }
+        return nameOr(lookFolderNames(context)) && r.atEnd();
+    }
+    if (w0 == QLatin1String("vcpage"))
+    {
+        r.word();
+        return r.atEnd();
+    }
+    if (w0 == QLatin1String("adopt"))
+    {
+        r.word();
+        if (r.atEnd())
+        {
+            *out = functionNames();
+            return true;
+        }
+        return !r.name(functionNames()).isEmpty() && r.atEnd();
     }
     if (w0 == QLatin1String("convert") || w0 == QLatin1String("detach"))
     {

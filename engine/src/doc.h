@@ -194,6 +194,7 @@ private:
     SpeedMasters *m_speedMasters;
     class ShowControl *m_showControl;
     class ShowTreeController *m_showTree = nullptr;
+    class PaletteOps *m_paletteOps = nullptr;
     class PowerLimiter *m_powerLimiter = nullptr;
     NetworkTopology *m_networkTopology;
     TimecodeSource *m_timecodeSource;
@@ -1141,6 +1142,9 @@ public:
     /** The Show Tree: productions and what they bake to
      *  (ShowTreeController). Never null. */
     class ShowTreeController *showTree() const { return m_showTree; }
+    /** The everyday palette operations and their one undo stack, shared
+     *  by the Show Tree and the Programming tab (PaletteOps). Never null. */
+    class PaletteOps *paletteOps() const { return m_paletteOps; }
     /** Holds fixtures to their maximum draw (PowerLimiter) */
     class PowerLimiter *powerLimiter() const { return m_powerLimiter; }
 

@@ -32,6 +32,7 @@
 #undef private
 #include "showtreecontroller.h"
 #include "showtreecommand.h"
+#include "paletteops.h"
 #include "inputoutputmap.h"
 #include "functionparent.h"
 #include "qlcfixturedefcache.h"
@@ -4049,7 +4050,7 @@ void ShowTree_Test::everyCommandWordHasHelpAndItsExamplesParse()
                                  "colour", "color", "dimmer", "dim", "level", "position", "pos", "aim", "spread",
                                  "group", "grouping", "cross", "gobo", "zoom", "beam", "focus", "frost", "iris",
                                  "shutter", "strobe", "effect", "fx", "reusable", "use", "unlink", "detach",
-                                 "convert" };
+                                 "convert", "palette", "pal", "look", "vcpage", "adopt" };
     for (const QString &w : parsed)
         QVERIFY2(ShowTreeCommand::word(w) != nullptr, qPrintable(QString("no help for “%1”").arg(w)));
     int examples = 0;
@@ -4782,6 +4783,632 @@ void ShowTree_Test::reuseDetachAndConvertTyped()
 
     // help knows the new words.
     for (const char *w : { "reusable", "use", "unlink", "detach", "convert" })
+        QVERIFY2(ShowTreeCommand::helpText(w).contains(QString("<b>%1</b>").arg(w)), w);
+}
+
+/****************************************************************************
+ * R1/R2: palette housekeeping, Used by, one history
+ ****************************************************************************/
+
+/* PaletteOps (PROGRAMMING_ROLE_DESIGN.md §5, P-D8): folders hold any type,
+   a path stored the old way (type first) reads as its folder, folder
+   rename/delete act on every type, each operation one undo step. */
+void ShowTree_Test::paletteOpsFoldersAnyType()
+{
+    PaletteOps *ops = m_doc->paletteOps();
+    QCOMPARE(PaletteOps::folderOfPath("Palettes/Color/01-Song/", QLCPalette::Color), QString("01-Song"));
+    QCOMPARE(PaletteOps::folderOfPath("Palettes/01-Song/Verse/", QLCPalette::Dimmer), QString("01-Song/Verse"));
+    QCOMPARE(PaletteOps::folderOfPath("Palettes/Effect/Color/Sinelon/", QLCPalette::Effect), QString());
+    QCOMPARE(PaletteOps::folderOfPath("Palettes/Dimmer", QLCPalette::Dimmer), QString());
+    QCOMPARE(PaletteOps::folderOfPath(QString(), QLCPalette::Dimmer), QString());
+    QCOMPARE(PaletteOps::pathForFolder(" 01-Song / Verse "), QString("Palettes/01-Song/Verse/"));
+
+    // Create by type: a start value, a name nobody has, the path given.
+    const quint32 c1 = ops->create(QLCPalette::Color, PaletteOps::pathForFolder("01-Song"));
+    QVERIFY(c1 != QLCPalette::invalidId());
+    QCOMPARE(m_doc->palette(c1)->name(), QString("New Color"));
+    QCOMPARE(m_doc->palette(c1)->values().count(), 1);
+    const quint32 c2 = ops->create(QLCPalette::Color, QString());
+    QCOMPARE(m_doc->palette(c2)->name(), QString("New Color 2"));
+    // An older show's palette: its type is its first folder.
+    QLCPalette *old = new QLCPalette(QLCPalette::Dimmer, m_doc);
+    old->setName("Half");
+    old->setValue(127);
+    old->setPath("Palettes/Dimmer/01-Song/");
+    m_doc->addPalette(old);
+    QCOMPARE(PaletteOps::folderOf(old), QString("01-Song"));
+    QCOMPARE(ops->folders(), QStringList({ "01-Song" }));
+    QCOMPARE(ops->folderCount("01-Song"), 2);
+
+    // Rename the folder: both types follow, stored the new way.
+    QVERIFY(ops->renameFolder("01-Song", "02-Song"));
+    QCOMPARE(m_doc->palette(c1)->path(), QString("Palettes/02-Song/"));
+    QCOMPARE(old->path(), QString("Palettes/02-Song/"));
+    QCOMPARE(ops->undoText(), QString("Rename folder 01-Song"));
+    QVERIFY(ops->undo());
+    QCOMPARE(old->path(), QString("Palettes/Dimmer/01-Song/"));     // exactly as it was
+    QCOMPARE(m_doc->palette(c1)->path(), QString("Palettes/01-Song/"));
+    QVERIFY(ops->redo());
+    QCOMPARE(PaletteOps::folderOf(old), QString("02-Song"));
+
+    // Move, rename, duplicate.
+    QVERIFY(ops->move({ c2 }, "02-Song/Verse"));
+    QCOMPARE(ops->folders(), QStringList({ "02-Song", "02-Song/Verse" }));
+    QVERIFY(!ops->move({ c2 }, "02-Song/Verse"));                   // there already: no step
+    QVERIFY(ops->rename(c2, "Amber"));
+    QVERIFY(!ops->rename(c2, "Amber"));
+    const quint32 dup = ops->duplicate(c2);
+    QCOMPARE(m_doc->palette(dup)->name(), QString("Amber (copy)"));
+    QCOMPARE(PaletteOps::folderOf(m_doc->palette(dup)), QString("02-Song/Verse"));
+    QVERIFY(ops->undo());
+    QVERIFY(m_doc->palette(dup) == nullptr);
+    QVERIFY(ops->redo());
+    QVERIFY(m_doc->palette(dup) != nullptr);
+    QCOMPARE(m_doc->palette(dup)->name(), QString("Amber (copy)"));
+
+    // An empty folder; delete a folder: what is in it moves up a level.
+    QVERIFY(ops->addFolder("Spare"));
+    QVERIFY(ops->folders().contains("Spare"));
+    QVERIFY(!ops->addFolder("Spare"));
+    QVERIFY(ops->removeFolder("02-Song/Verse"));
+    QCOMPARE(PaletteOps::folderOf(m_doc->palette(c2)), QString("02-Song"));
+    QVERIFY(ops->removeFolder("02-Song"));
+    QCOMPARE(PaletteOps::folderOf(m_doc->palette(c2)), QString());
+    QCOMPARE(PaletteOps::folderOf(old), QString());
+    QCOMPARE(ops->folders(), QStringList({ "Spare" }));
+    QVERIFY(ops->undo());
+    QVERIFY(ops->undo());
+    QCOMPARE(PaletteOps::folderOf(m_doc->palette(c2)), QString("02-Song/Verse"));
+
+    // The tree's one-off values are the tree's: left alone.
+    const quint32 inl = m_doc->showTree()->createInlinePalette(QLCPalette::Dimmer, { 10 }, "4% · 1 Towers");
+    QVERIFY(!ops->isManaged(inl));
+    QVERIFY(!ops->rename(inl, "x"));
+    QVERIFY(!ops->remove({ inl }));
+}
+
+/* Delete asks (the UI) and goes; undo brings the palette back with its id,
+   at its place in every scene and in the effect slot that bound it. */
+void ShowTree_Test::paletteOpsUndoBringsADeletedPaletteBack()
+{
+    PaletteOps *ops = m_doc->paletteOps();
+    const quint32 blue = colour("Blue");
+    const quint32 full = dimmer(255, "Full");
+    Scene *sc = new Scene(m_doc);
+    sc->setName("Old");
+    sc->addPalette(full);
+    sc->addPalette(blue);
+    m_doc->addFunction(sc);
+    QLCPalette *fx = new QLCPalette(QLCPalette::Effect, m_doc);
+    fx->setName("Chase");
+    fx->setEffectPaletteBinding("colour1", blue);
+    m_doc->addPalette(fx);
+
+    const QList<PaletteOps::Use> uses = ops->usage(blue);
+    QCOMPARE(uses.count(), 2);
+    QCOMPARE(uses.at(0).label, QString("Scene “Old” — look 2"));
+    QCOMPARE(uses.at(1).label, QString("Effect look “Chase” — its “colour1” slot"));
+    QCOMPARE(PaletteOps::usageSummary(uses), QString("1 scene(s), 1 effect slot(s)"));
+
+    QVERIFY(ops->remove({ blue }));
+    QVERIFY(m_doc->palette(blue) == nullptr);
+    QCOMPARE(sc->palettes(), QList<quint32>({ full }));
+    QVERIFY(!fx->effectPaletteBindings().contains("colour1"));
+    QCOMPARE(ops->undoText(), QString("Delete Blue"));
+
+    QVERIFY(ops->undo());
+    QVERIFY(m_doc->palette(blue) != nullptr);
+    QCOMPARE(m_doc->palette(blue)->name(), QString("Blue"));
+    QCOMPARE(m_doc->palette(blue)->type(), QLCPalette::Color);
+    QCOMPARE(sc->palettes(), QList<quint32>({ full, blue }));
+    QCOMPARE(fx->effectPaletteBindings().value("colour1"), blue);
+    QVERIFY(ops->redo());
+    QVERIFY(m_doc->palette(blue) == nullptr);
+    QVERIFY(ops->undo());
+    QCOMPARE(sc->palettes(), QList<quint32>({ full, blue }));
+}
+
+/* Used by (P-D13) names cues and looks -- not the scenes the tree made for
+   them -- and plain scenes. */
+void ShowTree_Test::paletteUsageNamesCuesLooksAndScenes()
+{
+    FixtureGroup *towers = group("Towers", { m_fixtures[0] });
+    const quint32 blue = colour("Blue");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 list = st->addCueList(prod, "Full Show");
+    const quint32 c1 = st->addCueNumbered(list, "1.0.0", "Verse");
+    st->setLayerLook(c1, st->addLayer(c1, groupTarget(towers->id())), st->lookForPalette(blue));
+    const quint32 c2 = st->addCueNumbered(list, "1.0.1", "Chorus");
+    st->setCueLook(c2, st->lookForPalette(blue));
+    const quint32 hit = st->addLook(prod, "Hit 1");
+    st->setLayerLook(hit, st->addLayer(hit, groupTarget(towers->id())), st->lookForPalette(blue));
+
+    const QList<PaletteOps::Use> uses = m_doc->paletteOps()->usage(blue);
+    QStringList labels;
+    for (const PaletteOps::Use &u : uses)
+        labels << u.label;
+    QCOMPARE(labels, QStringList({ "Cue 1.0.0 Verse in Full Show — Towers", "Cue 1.0.1 Chorus in Full Show — cue look",
+                                   "Look Hit 1 — Towers" }));
+    QCOMPARE(uses.at(2).kind, PaletteOps::Use::Look);
+    QCOMPARE(uses.at(2).function, st->lookFunction(hit));
+    QCOMPARE(PaletteOps::usageSummary(uses), QString("2 cue(s), 1 look(s)"));
+    // The generated scenes play it, but are never listed: their cues are.
+    for (const PaletteOps::Use &u : uses)
+        QVERIFY(u.kind != PaletteOps::Use::Scene);
+}
+
+/* P-D14: the tab's Undo is one history -- tree steps and palette steps,
+   undone newest first, redone in the order they were undone; a new step on
+   either side makes the other's redo stale. */
+void ShowTree_Test::oneHistoryForTreeAndPalettes()
+{
+    ShowTreeController *st = m_doc->showTree();
+    PaletteOps *ops = m_doc->paletteOps();
+    const quint32 prod = st->addProduction("P");                         // tree 1
+    const quint32 pid = ops->create(QLCPalette::Dimmer, QString(), "Half"); // palette 1
+    const quint32 list = st->addCueList(prod, "L");                       // tree 2
+    QVERIFY(ops->rename(pid, "Half 2"));                                   // palette 2
+
+    QCOMPARE(st->sharedUndoText(), QString("Rename Half"));
+    QVERIFY(st->undoShared());
+    QCOMPARE(m_doc->palette(pid)->name(), QString("Half"));
+    QVERIFY(st->cueList(list) != nullptr);
+    QVERIFY(st->undoShared());                                             // the list
+    QVERIFY(st->cueList(list) == nullptr);
+    QVERIFY(m_doc->palette(pid) != nullptr);
+    QVERIFY(st->undoShared());                                             // the palette
+    QVERIFY(m_doc->palette(pid) == nullptr);
+    QVERIFY(st->production(prod) != nullptr);
+
+    // Redo: the one undone last first.
+    QVERIFY(st->redoShared());
+    QVERIFY(m_doc->palette(pid) != nullptr);
+    QVERIFY(st->cueList(list) == nullptr);
+    QVERIFY(st->redoShared());
+    QVERIFY(st->cueList(list) != nullptr);
+    QCOMPARE(m_doc->palette(pid)->name(), QString("Half"));
+    QVERIFY(st->canRedoShared());
+
+    // A new tree step: the palette rename can't be redone any more.
+    st->addCueList(prod, "M");
+    QVERIFY(!st->canRedoShared());
+    QVERIFY(!ops->canRedo());
+    // ...and a palette step clears the tree's redo.
+    QVERIFY(st->undoShared());
+    QVERIFY(st->canRedo());
+    ops->create(QLCPalette::Color, QString());
+    QVERIFY(!st->canRedo());
+}
+
+void ShowTree_Test::paletteCommands()
+{
+    FixtureGroup *towers = group("Towers", { m_fixtures[0] });
+    const quint32 blue = colour("Blue");
+    ShowTreeController *st = m_doc->showTree();
+    PaletteOps *ops = m_doc->paletteOps();
+    ShowTreeCommand::Context ctx;
+    ctx.production = st->addProduction("P");
+    ctx.list = st->addCueList(ctx.production, "L");
+    ctx.cue = st->addCueNumbered(ctx.list, "1.0.0", "One");
+    ShowTreeCommand cmd(m_doc, st);
+
+    // A new palette, valued and filed; it opens in the Look Editor.
+    ShowTreeCommand::Result r = cmd.run("palette colour \"Amber 2\" #ffb000 in \"01-Song\"", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QLCPalette *amber = m_doc->palette(r.editPalette);
+    QVERIFY(amber != nullptr);
+    QCOMPARE(amber->name(), QString("Amber 2"));
+    QCOMPARE(amber->type(), QLCPalette::Color);
+    QCOMPARE(amber->rgbValue(), QColor("#ffb000"));
+    QCOMPARE(PaletteOps::folderOf(amber), QString("01-Song"));
+    QVERIFY(r.message.contains("in 01-Song"));
+    QVERIFY(!cmd.run("palette colour \"Amber 2\"", ctx).ok);           // that name is taken
+    // A dimmer by value, named as the show names them.
+    r = cmd.run("palette dimmer 50", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(m_doc->palette(r.editPalette)->name(), QString("Dimmer 50%"));
+    QCOMPARE(m_doc->palette(r.editPalette)->values().value(0).toInt(), 128);
+
+    // Rename, move, dup, edit.
+    QVERIFY(cmd.run("palette \"Amber 2\" rename \"Amber\"", ctx).ok);
+    QCOMPARE(amber->name(), QString("Amber"));
+    QVERIFY(cmd.run("palette Amber move \"02-Song\"", ctx).ok);
+    QCOMPARE(PaletteOps::folderOf(amber), QString("02-Song"));
+    QVERIFY(cmd.run("palette Amber move none", ctx).ok);
+    QCOMPARE(PaletteOps::folderOf(amber), QString());
+    r = cmd.run("palette Amber dup", ctx);
+    QVERIFY(r.ok);
+    QCOMPARE(m_doc->palette(r.editPalette)->name(), QString("Amber (copy)"));
+    r = cmd.run("palette Blue edit", ctx);
+    QVERIFY(r.ok);
+    QCOMPARE(r.editPalette, blue);
+
+    // Folders.
+    QVERIFY(cmd.run("palette folder \"Spare\"", ctx).ok);
+    QVERIFY(ops->folders().contains("Spare"));
+    QVERIFY(cmd.run("palette folder Spare rename \"Extra\"", ctx).ok);
+    QVERIFY(ops->folders().contains("Extra"));
+    QVERIFY(cmd.run("palette folder Extra delete", ctx).ok);
+    QVERIFY(!ops->folders().contains("Extra"));
+
+    // Delete: refused while used (it says by what), unless anyway.
+    QVERIFY(cmd.run("Towers colour Blue", ctx).ok);
+    r = cmd.run("palette Blue delete", ctx);
+    QVERIFY(!r.ok);
+    QVERIFY2(r.message.contains("1 cue(s)"), qPrintable(r.message));
+    QVERIFY(m_doc->palette(blue) != nullptr);
+    QVERIFY(cmd.run("palette Blue delete anyway", ctx).ok);
+    QVERIFY(m_doc->palette(blue) == nullptr);
+    // undo (one history) brings it back.
+    r = cmd.run("undo", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QVERIFY(m_doc->palette(blue) != nullptr);
+    QCOMPARE(st->cue(ctx.cue)->layers.first().looks.first().palettes, QList<quint32>({ blue }));
+    Q_UNUSED(towers)
+
+    // Tab.
+    QStringList next;
+    QVERIFY(cmd.candidates("palette ", ctx, &next));
+    QVERIFY(next.contains("colour") && next.contains("folder") && next.contains("Blue"));
+    QVERIFY(cmd.candidates("palette Blue ", ctx, &next));
+    QCOMPARE(next, QStringList({ "rename", "move", "dup", "delete", "edit" }));
+    QVERIFY(cmd.candidates("palette Blue move ", ctx, &next));
+    QVERIFY(next.contains("none"));
+    QCOMPARE(cmd.complete("palette Blue d", ctx), QString("palette Blue d"));   // dup / delete
+    QCOMPARE(cmd.complete("palette Blue du", ctx), QString("palette Blue dup "));
+    QCOMPARE(cmd.complete("palette fo", ctx), QString("palette folder "));
+    QVERIFY(ShowTreeCommand::helpText("palette").contains("<b>palette</b>"));
+}
+
+/****************************************************************************
+ * R3: the Looks section
+ ****************************************************************************/
+
+/* A look (P-D5) is built as a cue is, and bakes to one Collection of its
+   own: shown (VC function pickers list it by name), filed under
+   Productions/<p>/Looks/<folder>, locked; no chaser. Its id stays as it is
+   edited, so a VC button keeps firing it. */
+void ShowTree_Test::aLookBakesToACollectionOfItsOwn()
+{
+    FixtureGroup *towers = group("Towers", { m_fixtures[0], m_fixtures[1] });
+    FixtureGroup *usts = group("USTs", { m_fixtures[2] });
+    const quint32 full = dimmer(255, "Full");
+    const quint32 half = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("DanceHysteria");
+    QCOMPARE(st->looksSection(prod), invalidId());
+
+    const quint32 hit = st->addLook(prod, "Hit 1", "Hits");
+    const quint32 section = st->looksSection(prod);
+    QVERIFY(section != invalidId());
+    QVERIFY(st->isLooks(section));
+    QVERIFY(st->isLook(hit));
+    QCOMPARE(st->cueList(section)->name, QString("Looks"));
+    QCOMPARE(st->undoText(), QString("New look"));                 // section and look: one step
+    QCOMPARE(st->cueList(section)->chaser, invalidId());
+
+    const quint32 l1 = st->addLayer(hit, groupTarget(towers->id()));
+    st->setLayerLook(hit, l1, st->lookForPalette(full));
+    const quint32 fid = st->lookFunction(hit);
+    Collection *coll = qobject_cast<Collection *>(m_doc->function(fid));
+    QVERIFY(coll != nullptr);
+    QVERIFY(st->isGenerated(fid));
+    QVERIFY(coll->isVisible());
+    QCOMPARE(coll->name(), QString("Hit 1"));
+    QCOMPARE(coll->path(true), QString("Productions/DanceHysteria/Looks/Hits"));
+    QCOMPARE(coll->functions().count(), 1);
+    QCOMPARE(st->describeGenerated(fid), QString("Look Hit 1 in DanceHysteria"));
+    QCOMPARE(st->lookOfFunction(fid), hit);
+    for (const Function *f : m_doc->functions())
+        QVERIFY(f->type() != Function::ChaserType);
+
+    // Edited: the same Collection, new members.
+    st->setLayerLook(hit, st->addLayer(hit, groupTarget(usts->id())), st->lookForPalette(half));
+    QCOMPARE(st->lookFunction(hit), fid);
+    QCOMPARE(coll->functions().count(), 2);
+    st->renameNode(hit, "Big Hit");
+    QCOMPARE(coll->name(), QString("Big Hit"));
+    QVERIFY(st->setLookFolder({ hit }, QString()));
+    QCOMPARE(coll->path(true), QString("Productions/DanceHysteria/Looks"));
+
+    // It plays what it has.
+    coll->start(m_doc->masterTimer(), FunctionParent(FunctionParent::ManualVCWidget, 7));
+    QHash<quint32, uchar> v = settle();
+    QCOMPARE(int(v[0]), 255);
+    QCOMPARE(int(v[2]), 127);
+    coll->stop(FunctionParent(FunctionParent::ManualVCWidget, 7));
+    v = settle();
+    QCOMPARE(int(v[0]), 0);
+
+    // Selected in Design: it previews; in Perform nothing does.
+    st->previewCue(hit);
+    QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Playing));
+    QCOMPARE(int(settle()[0]), 255);
+    m_doc->setMode(Doc::Operate);
+    QCoreApplication::processEvents();
+    QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::NotDesign));
+    QCOMPARE(int(settle()[0]), 0);
+    st->stopPreview();
+    m_doc->setMode(Doc::Design);
+
+    // Deleted: its Collection goes with it.
+    QVERIFY(st->removeCue(hit));
+    QVERIFY(m_doc->function(fid) == nullptr);
+}
+
+/* A look never tracks (P-D5): the second look starts from nothing, and the
+   operations that would make it track are refused. */
+void ShowTree_Test::looksNeverTrack()
+{
+    FixtureGroup *towers = group("Towers", { m_fixtures[0] });
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 a = st->addLook(prod, "A");
+    st->setLayerLook(a, st->addLayer(a, groupTarget(towers->id())), st->lookForPalette(full));
+    const quint32 b = st->addLook(prod, "B");
+    const quint32 section = st->looksSection(prod);
+    QCOMPARE(st->cueList(section)->indexOf(b), 1);
+    const QList<ResolvedCue> r = st->resolved(*st->cueList(section));
+    QCOMPARE(r.at(1).layers.count(), 0);                        // nothing carried in
+    QCOMPARE(effectiveMode(*st->cueList(section), *st->cue(b)), CueMode::Block);
+
+    QVERIFY(!st->setCueMode(b, CueMode::Track));
+    QVERIFY(!st->setListMode(section, ListMode::Tracking));
+    QVERIFY(!st->setBaseCue(section, a));
+    QString why;
+    QVERIFY(!st->addInclude(b, a, &why));
+    QVERIFY(why.contains("no includes"));
+    QVERIFY(!st->planConvertToTracking(section).ok);
+    QCOMPARE(st->detachList(section), Function::invalidId());
+    QVERIFY(!st->renameNode(section, "Other"));
+    // A cue pasted into the section is a look: its mode and includes go.
+    const quint32 list = st->addCueList(prod, "L");
+    const quint32 c1 = st->addCueNumbered(list, "1", "One");
+    const quint32 c2 = st->addCueNumbered(list, "2", "Two");
+    st->setCueMode(c2, CueMode::CueOnly);
+    st->addInclude(c2, c1);
+    const QList<quint32> pasted = st->pasteCues({ c2 }, b);
+    QCOMPARE(pasted.count(), 1);
+    QCOMPARE(st->cue(pasted.first())->mode, CueMode::ListDefault);
+    QVERIFY(st->cue(pasted.first())->includes.isEmpty());
+    // And a look pasted into a list leaves its folder behind.
+    st->setLookFolder({ a }, "Hits");
+    const QList<quint32> back = st->pasteCues({ a }, c2);
+    QVERIFY(st->cue(back.first())->folder.isEmpty());
+}
+
+/* P-D6: a look fired over a running cue list mixes as any function does --
+   intensity HTP, the higher wins; stopped, the list's value is back. */
+void ShowTree_Test::aLookPlaysOverARunningListHtpLtp()
+{
+    FixtureGroup *towers = group("Towers", { m_fixtures[0] });
+    const quint32 full = dimmer(255, "Full");
+    const quint32 half = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 list = st->addCueList(prod, "L", ListMode::NonTracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    st->setLayerLook(c1, st->addLayer(c1, groupTarget(towers->id())), st->lookForPalette(half));
+    const quint32 hit = st->addLook(prod, "Hit");
+    st->setLayerLook(hit, st->addLayer(hit, groupTarget(towers->id())), st->lookForPalette(full));
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(list)->chaser));
+    Function *look = m_doc->function(st->lookFunction(hit));
+    const FunctionParent button(FunctionParent::ManualVCWidget, 3);
+
+    go(chaser);
+    QCOMPARE(int(settle()[0]), 127);
+    look->start(m_doc->masterTimer(), button);
+    QCOMPARE(int(settle()[0]), 255);                        // HTP: the look is higher
+    look->stop(button);
+    QCOMPARE(int(settle()[0]), 127);                        // the list's again
+    QVERIFY(chaser->isRunning());
+
+    // A look lower than the list: HTP keeps the list's level.
+    st->setLayerLook(hit, st->cue(hit)->layers.first().id, st->lookForPalette(half));
+    st->setLayerLook(c1, st->cue(c1)->layers.first().id, st->lookForPalette(full));
+    chaser->stop(FunctionParent::master());
+    tick(3);
+    go(chaser);
+    look->start(m_doc->masterTimer(), button);
+    QCOMPARE(int(settle()[0]), 255);
+    look->stop(button);
+    QCOMPARE(int(settle()[0]), 255);
+    // listsRunning() and runningCue() never count the Looks section.
+    QCOMPARE(st->listsRunning(), QStringList({ "L" }));
+}
+
+void ShowTree_Test::lookFoldersSaveLoadAndUndo()
+{
+    FixtureGroup *towers = group("Towers", { m_fixtures[0] });
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 a = st->addLook(prod, "A", "Hits/Big");
+    const quint32 b = st->addLook(prod, "B", "Hits");
+    const quint32 c = st->addLook(prod, "C");
+    st->setLayerLook(a, st->addLayer(a, groupTarget(towers->id())), st->lookForPalette(full));
+    const quint32 section = st->looksSection(prod);
+    QCOMPARE(st->lookFolders(section), QStringList({ "Hits", "Hits/Big" }));
+    QCOMPARE(st->looksIn(section, "Hits"), QList<quint32>({ a, b }));
+    QCOMPARE(st->looksIn(section, QString()), QList<quint32>({ a, b, c }));
+    QVERIFY(st->addLookFolder(section, "Ballads"));
+    QVERIFY(!st->addLookFolder(section, "Ballads"));
+    QCOMPARE(st->lookFolders(section), QStringList({ "Ballads", "Hits", "Hits/Big" }));
+
+    // Rename a folder: what is under it follows.
+    QVERIFY(st->renameLookFolder(section, "Hits", "Stabs"));
+    QCOMPARE(st->cue(a)->folder, QString("Stabs/Big"));
+    QCOMPARE(st->cue(b)->folder, QString("Stabs"));
+    QVERIFY(st->undo());
+    QCOMPARE(st->cue(a)->folder, QString("Hits/Big"));
+    QVERIFY(st->redo());
+    // Delete one: its looks move up.
+    QVERIFY(st->removeLookFolder(section, "Stabs"));
+    QCOMPARE(st->cue(a)->folder, QString("Big"));
+    QCOMPARE(st->cue(b)->folder, QString());
+    QVERIFY(st->undo());
+
+    // Saved and read back: the section, its folders (empty ones too) and
+    // its looks; the Collection is the same.
+    const quint32 fid = st->lookFunction(a);
+    QByteArray xml;
+    {
+        QBuffer buf(&xml);
+        buf.open(QIODevice::WriteOnly);
+        QXmlStreamWriter w(&buf);
+        w.writeStartDocument();
+        st->saveXML(&w);
+        w.writeEndDocument();
+    }
+    QVERIFY(xml.contains("<Looks "));
+    QVERIFY(xml.contains("Folder=\"Stabs/Big\""));
+    QVERIFY(xml.contains("<Folder Path=\"Ballads\"/>"));
+    st->reset();
+    QXmlStreamReader r(xml);
+    while (!r.atEnd() && !r.isStartElement())
+        r.readNext();
+    QVERIFY(st->loadXML(r));
+    const quint32 section2 = st->looksSection(prod);
+    QCOMPARE(section2, section);
+    QVERIFY(st->isLook(a));
+    QCOMPARE(st->cue(a)->folder, QString("Stabs/Big"));
+    QCOMPARE(st->lookFolders(section2), QStringList({ "Ballads", "Stabs", "Stabs/Big" }));
+    QCOMPARE(st->lookFunction(a), fid);
+    st->bake();
+    QCOMPARE(st->lookFunction(a), fid);
+}
+
+/* P-D16: a scene of groups + palettes reads as a layer; one of raw values
+   is played as it is. The scene stays. */
+void ShowTree_Test::adoptASceneAsALook()
+{
+    FixtureGroup *towers = group("Towers", { m_fixtures[0] });
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+
+    Scene *busk = new Scene(m_doc);
+    busk->setName("Busk Hit");
+    busk->addFixtureGroup(towers->id());
+    busk->addPalette(full);
+    m_doc->addFunction(busk);
+    Scene *raw = new Scene(m_doc);
+    raw->setName("Haze");
+    raw->setValue(m_fixtures[5], 0, 200);
+    m_doc->addFunction(raw);
+
+    QString why;
+    const quint32 a = st->adoptAsLook(prod, busk->id(), &why);
+    QVERIFY(a != invalidId());
+    QVERIFY2(why.isEmpty(), qPrintable(why));
+    QCOMPARE(st->cue(a)->name, QString("Busk Hit"));
+    QCOMPARE(st->cue(a)->layers.count(), 1);
+    QCOMPARE(st->cue(a)->layers.first().target.groups, QList<quint32>({ towers->id() }));
+    QCOMPARE(st->cue(a)->layers.first().looks.first().palettes, QList<quint32>({ full }));
+    QCOMPARE(st->undoText(), QString("Adopt Busk Hit as look"));
+    QVERIFY(m_doc->function(busk->id()) != nullptr);
+
+    const quint32 h = st->adoptAsLook(prod, raw->id(), &why);
+    QVERIFY(h != invalidId());
+    QVERIFY(!why.isEmpty());
+    QCOMPARE(st->cue(h)->layers.first().target.function, raw->id());
+    // Generated functions are the tree's already.
+    QVERIFY(st->adoptAsLook(prod, st->lookFunction(a), &why) == invalidId());
+
+    // Both play as the scenes did.
+    Function *f = m_doc->function(st->lookFunction(a));
+    f->start(m_doc->masterTimer(), FunctionParent::master());
+    QCOMPARE(int(settle()[0]), 255);
+}
+
+/* Record as new cue "everything lit" takes a look fired from VC as the
+   look's layers, not its generated scenes. */
+void ShowTree_Test::recordLitTakesARunningLooksLayers()
+{
+    FixtureGroup *towers = group("Towers", { m_fixtures[0] });
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 list = st->addCueList(prod, "L");
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 hit = st->addLook(prod, "Hit");
+    st->setLayerLook(hit, st->addLayer(hit, groupTarget(towers->id())), st->lookForPalette(full));
+    QVERIFY(!st->canRecord(c1, ShowTreeController::RecordSource::Lit));
+    Function *look = m_doc->function(st->lookFunction(hit));
+    look->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(2);
+    const QList<Layer> layers = st->recordLayers(c1, ShowTreeController::RecordSource::Lit);
+    QCOMPARE(layers.count(), 1);
+    QCOMPARE(layers.first().target.groups, QList<quint32>({ towers->id() }));
+    QVERIFY(!layers.first().target.isOpaque());
+    QCOMPARE(layers.first().looks.first().palettes, QList<quint32>({ full }));
+}
+
+void ShowTree_Test::lookCommands()
+{
+    FixtureGroup *towers = group("Towers", { m_fixtures[0] });
+    dimmer(255, "Full");
+    Scene *old = new Scene(m_doc);
+    old->setName("Old Busk");
+    old->addFixtureGroup(towers->id());
+    m_doc->addFunction(old);
+    ShowTreeController *st = m_doc->showTree();
+    ShowTreeCommand::Context ctx;
+    ShowTreeCommand cmd(m_doc, st);
+    QVERIFY(!cmd.run("look \"Hit 1\"", ctx).ok);              // no production yet
+    ctx.production = st->addProduction("P");
+
+    ShowTreeCommand::Result r = cmd.run("look \"Hit 1\" in \"Hits\"", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    const quint32 hit = r.context.cue;
+    QVERIFY(st->isLook(hit));
+    QCOMPARE(st->cue(hit)->folder, QString("Hits"));
+    // Its layers as on a cue.
+    r = cmd.run("Towers dimmer Full", r.context);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(st->cue(hit)->layers.count(), 1);
+    // The same name selects it; a new one goes after it, in its folder.
+    r = cmd.run("look \"Hit 1\"", ctx);
+    QCOMPARE(r.context.cue, hit);
+    r = cmd.run("look Hit2", r.context);
+    QVERIFY(r.ok);
+    QCOMPARE(st->cue(r.context.cue)->folder, QString("Hits"));
+    QCOMPARE(st->cueList(st->looksSection(ctx.production))->indexOf(r.context.cue), 1);
+    // Mode words don't apply.
+    QVERIFY(!cmd.run("track", r.context).ok || st->cue(r.context.cue)->mode == CueMode::ListDefault);
+    QCOMPARE(st->cue(r.context.cue)->mode, CueMode::ListDefault);
+
+    // vcpage asks the UI's maker, with the selected look's folder.
+    QVERIFY(!cmd.run("vcpage", r.context).ok);                // no VC here
+    quint32 madeList = invalidId();
+    QString madeFolder("-");
+    cmd.setVcPageMaker([&](quint32 listId, const QString &folder, QString *msg) {
+        madeList = listId;
+        madeFolder = folder;
+        *msg = "VC page Looks: 2 buttons";
+        return true;
+    });
+    r = cmd.run("vcpage", r.context);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(madeList, st->looksSection(ctx.production));
+    QCOMPARE(madeFolder, QString("Hits"));
+
+    // adopt.
+    r = cmd.run("adopt \"Old Busk\"", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(st->cue(r.context.cue)->name, QString("Old Busk"));
+
+    // Tab.
+    QStringList next;
+    QVERIFY(cmd.candidates("look ", ctx, &next));
+    QVERIFY(next.contains("Hit 1"));
+    QVERIFY(cmd.candidates("look \"Hit 1\" in ", ctx, &next));
+    QCOMPARE(next, QStringList({ "Hits" }));
+    QCOMPARE(cmd.complete("vcp", ctx), QString("vcpage "));
+    QCOMPARE(cmd.complete("adopt Old", ctx), QString("adopt Old Busk "));
+    for (const char *w : { "look", "vcpage", "adopt", "palette" })
         QVERIFY2(ShowTreeCommand::helpText(w).contains(QString("<b>%1</b>").arg(w)), w);
 }
 

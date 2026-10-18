@@ -29,6 +29,7 @@
 #include <algorithm>
 
 #include "showtreecontroller.h"
+#include "paletteops.h"
 #include "monitorproperties.h"
 #include "stagetarget.h"
 #include "linespread.h"
@@ -200,6 +201,30 @@ ShowTree::Cue *ShowTreeController::findCue(quint32 cueId, CueList **list)
  * Editing
  ****************************************************************************/
 
+/* A Looks section's rules (R3), whatever an edit did: a look plays only what
+   it has -- no mode, includes or base cue -- and only looks are filed in
+   folders (a look pasted into a cue list leaves its folder behind). */
+static void normalizeLooks(QList<Production> &ps)
+{
+    for (Production &p : ps)
+        for (CueList &l : p.lists)
+        {
+            if (!l.looks)
+            {
+                for (Cue &c : l.cues)
+                    c.folder.clear();
+                continue;
+            }
+            l.mode = ListMode::NonTracking;
+            l.baseCue = invalidId();
+            for (Cue &c : l.cues)
+            {
+                c.mode = CueMode::ListDefault;
+                c.includes.clear();
+            }
+        }
+}
+
 bool ShowTreeController::edit(const QString &label,
                               const std::function<bool(QList<Production> &)> &change)
 {
@@ -209,6 +234,7 @@ bool ShowTreeController::edit(const QString &label,
         QList<Production> work = m_productions;
         if (!change(work))
             return false;
+        normalizeLooks(work);
         syncReusables(m_productions, work);
         m_productions = work;
         m_batchChanged = true;
@@ -219,6 +245,7 @@ bool ShowTreeController::edit(const QString &label,
     QList<Production> work = m_productions;
     if (!change(work))
         return false;
+    normalizeLooks(work);
 
     // A reusable's use edited: every use (P4).
     syncReusables(m_productions, work);
@@ -233,10 +260,13 @@ bool ShowTreeController::edit(const QString &label,
 
 void ShowTreeController::pushUndo(const QString &label, const QByteArray &before)
 {
-    m_undo.append(Snapshot { label, before });
+    m_undo.append(Snapshot { label, before, PaletteOps::nextUndoStamp() });
     while (m_undo.count() > kUndoLimit)
         m_undo.removeFirst();
     m_redo.clear();
+    // One history with the palette steps: a new step makes their redo stale.
+    if (PaletteOps *ops = m_doc->paletteOps())
+        ops->clearRedo();
 }
 
 void ShowTreeController::beginBatch(const QString &label)
@@ -654,7 +684,7 @@ bool ShowTreeController::setListMode(quint32 listId, ListMode mode)
 {
     return edit(tr("Cue list mode"), [&](QList<Production> &ps) {
         CueList *l = listIn(ps, listId);
-        if (l == nullptr || l->mode == mode)
+        if (l == nullptr || l->looks || l->mode == mode)
             return false;
         l->mode = mode;
         return true;
@@ -665,7 +695,7 @@ bool ShowTreeController::setBaseCue(quint32 listId, quint32 cueId)
 {
     return edit(tr("Base cue"), [&](QList<Production> &ps) {
         CueList *l = listIn(ps, listId);
-        if (l == nullptr || l->baseCue == cueId)
+        if (l == nullptr || l->looks || l->baseCue == cueId)
             return false;
         if (cueId != invalidId() && l->indexOf(cueId) < 0)
             return false;
@@ -677,8 +707,9 @@ bool ShowTreeController::setBaseCue(quint32 listId, quint32 cueId)
 bool ShowTreeController::setCueMode(quint32 cueId, CueMode mode)
 {
     return edit(tr("Cue mode"), [&](QList<Production> &ps) {
-        Cue *c = cueIn(ps, cueId);
-        if (c == nullptr || c->mode == mode)
+        CueList *l = nullptr;
+        Cue *c = cueIn(ps, cueId, &l);
+        if (c == nullptr || l->looks || c->mode == mode)
             return false;
         c->mode = mode;
         return true;
@@ -1093,6 +1124,15 @@ QList<Layer> ShowTreeController::recordLayers(quint32 cueId, RecordSource source
                     const quint32 running = runningCue(l.id);
                     if (running != invalidId())
                         cueStage(l, running);
+                    // A busking look fired from VC (R3): its layers, not
+                    // its generated scenes (those are the tree's).
+                    if (l.looks)
+                        for (const Cue &c : l.cues)
+                        {
+                            const Function *f = m_doc->function(c.collection);
+                            if (f != nullptr && f->isRunning())
+                                cueStage(l, c.id);
+                        }
                     for (const Cue &c : l.cues)
                         for (const Layer &layer : c.layers)
                             if (layer.target.isOpaque())
@@ -1742,7 +1782,7 @@ bool ShowTreeController::renameNode(quint32 nodeId, const QString &name)
             for (CueList &l : p.lists)
             {
                 if (l.id == nodeId)
-                    return !name.isEmpty() && set(l.name);
+                    return !name.isEmpty() && !l.looks && set(l.name);
                 for (Cue &c : l.cues)
                 {
                     if (c.id == nodeId)
@@ -3110,6 +3150,9 @@ QString ShowTreeController::cueLabel(const CueList &list, int index) const
     if (index < 0 || index >= list.cues.count())
         return QString();
     const Cue &c = list.cues.at(index);
+    // A look goes by its name alone: its number is only the tree's.
+    if (list.looks)
+        return c.name.isEmpty() ? tr("Look %1").arg(index + 1) : c.name;
     const QString number = c.number.isEmpty() ? QString::number(index + 1) : c.number;
     return c.name.isEmpty() ? number : QStringLiteral("%1 %2").arg(number, c.name);
 }
@@ -3133,7 +3176,7 @@ bool ShowTreeController::undo()
     if (m_undo.isEmpty())
         return false;
     const Snapshot s = m_undo.takeLast();
-    m_redo.append(Snapshot { s.label, snapshotXml() });
+    m_redo.append(Snapshot { s.label, snapshotXml(), s.stamp });
     restoreSnapshot(s.xml);
     return true;
 }
@@ -3143,9 +3186,63 @@ bool ShowTreeController::redo()
     if (m_redo.isEmpty())
         return false;
     const Snapshot s = m_redo.takeLast();
-    m_undo.append(Snapshot { s.label, snapshotXml() });
+    m_undo.append(Snapshot { s.label, snapshotXml(), s.stamp });
     restoreSnapshot(s.xml);
     return true;
+}
+
+/* The tab's one history (P-D14): the step taken last is undone first; the
+   step undone last is redone first (its stamp is the lowest of the redo
+   tops, as undo walks the stamps down). */
+static bool paletteFirst(quint64 tree, quint64 palette, bool undo)
+{
+    if (palette == 0)
+        return false;
+    if (tree == 0)
+        return true;
+    return undo ? palette > tree : palette < tree;
+}
+
+bool ShowTreeController::undoShared()
+{
+    PaletteOps *ops = m_doc->paletteOps();
+    if (ops != nullptr && paletteFirst(undoStamp(), ops->undoStamp(), true))
+        return ops->undo();
+    return undo();
+}
+
+bool ShowTreeController::redoShared()
+{
+    PaletteOps *ops = m_doc->paletteOps();
+    if (ops != nullptr && paletteFirst(redoStamp(), ops->redoStamp(), false))
+        return ops->redo();
+    return redo();
+}
+
+bool ShowTreeController::canUndoShared() const
+{
+    return canUndo() || (m_doc->paletteOps() != nullptr && m_doc->paletteOps()->canUndo());
+}
+
+bool ShowTreeController::canRedoShared() const
+{
+    return canRedo() || (m_doc->paletteOps() != nullptr && m_doc->paletteOps()->canRedo());
+}
+
+QString ShowTreeController::sharedUndoText() const
+{
+    const PaletteOps *ops = m_doc->paletteOps();
+    if (ops != nullptr && paletteFirst(undoStamp(), ops->undoStamp(), true))
+        return ops->undoText();
+    return undoText();
+}
+
+QString ShowTreeController::sharedRedoText() const
+{
+    const PaletteOps *ops = m_doc->paletteOps();
+    if (ops != nullptr && paletteFirst(redoStamp(), ops->redoStamp(), false))
+        return ops->redoText();
+    return redoText();
 }
 
 void ShowTreeController::clearUndo()
@@ -3301,8 +3398,10 @@ void ShowTreeController::bake()
             const QString folder = QStringLiteral("%1/%2/%3").arg(kProductionsFolder, prod.name, list.name);
             const QList<ResolvedCue> resolved = this->resolved(list);
 
-            Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(list.chaser));
-            if (chaser == nullptr || !m_generatedChasers.contains(list.chaser))
+            // A Looks section (R3) has no chaser: each look is a Collection
+            // of its own, fired from VC like any function.
+            Chaser *chaser = list.looks ? nullptr : qobject_cast<Chaser *>(m_doc->function(list.chaser));
+            if (!list.looks && (chaser == nullptr || !m_generatedChasers.contains(list.chaser)))
             {
                 chaser = new Chaser(m_doc);
                 chaser->setFadeInMode(Chaser::PerStep);
@@ -3317,20 +3416,27 @@ void ShowTreeController::bake()
                 list.chaser = chaser->id();
                 m_generatedChasers.insert(chaser->id());
             }
-            if (chaser->name() != list.name)
-                chaser->setName(list.name);
-            const QString chaserPath = QStringLiteral("%1/%2").arg(kProductionsFolder, prod.name);
-            if (chaser->path(true) != chaserPath)
-                chaser->setPath(chaserPath);
-            keepChasers.insert(chaser->id());
-            m_generatedLabels.insert(chaser->id(), tr("Cue list %1").arg(list.name));
+            if (chaser != nullptr)
+            {
+                if (chaser->name() != list.name)
+                    chaser->setName(list.name);
+                const QString chaserPath = QStringLiteral("%1/%2").arg(kProductionsFolder, prod.name);
+                if (chaser->path(true) != chaserPath)
+                    chaser->setPath(chaserPath);
+                keepChasers.insert(chaser->id());
+                m_generatedLabels.insert(chaser->id(), tr("Cue list %1").arg(list.name));
+            }
+            else
+            {
+                list.chaser = invalidId();
+            }
 
             QList<ChaserStep> steps;
             for (int i = 0; i < list.cues.count(); ++i)
             {
                 Cue &cue = list.cues[i];
                 const QString label = cueLabel(list, i);
-                const QString collName = cue.name.isEmpty()
+                const QString collName = list.looks ? label : cue.name.isEmpty()
                                          ? (cue.number.isEmpty() ? QString::number(i + 1) : cue.number)
                                          : QStringLiteral("%1-%2").arg(cue.number.isEmpty()
                                                                        ? QString::number(i + 1) : cue.number,
@@ -3345,7 +3451,7 @@ void ShowTreeController::bake()
                     if (!rl.target.isOpaque())
                         continue;
                     const quint32 fid = rl.target.function;
-                    if (m_doc->function(fid) != nullptr && fid != chaser->id())
+                    if (m_doc->function(fid) != nullptr && (chaser == nullptr || fid != chaser->id()))
                         opaqueAt.insert(k, fid);
                 }
                 const QList<ScenePlan> plans = planCue(list, resolved, i, true);
@@ -3398,8 +3504,11 @@ void ShowTreeController::bake()
                         if (scene->path(true) != folder)
                             scene->setPath(folder);
                         keepScenes.insert(sid);
-                        m_generatedLabels.insert(sid, tr("Layer %1 in cue %2 of %3")
-                                                      .arg(layerName, label, list.name));
+                        m_generatedLabels.insert(sid, list.looks
+                                                      ? tr("Layer %1 in look %2 of %3")
+                                                        .arg(layerName, label, prod.name)
+                                                      : tr("Layer %1 in cue %2 of %3")
+                                                        .arg(layerName, label, list.name));
                     }
                     sceneAt.insert(plan.layer, sid);
                     const QString lk = layerKey(cue.id, rl.target);
@@ -3436,8 +3545,15 @@ void ShowTreeController::bake()
                 }
                 if (coll->name() != collName)
                     coll->setName(collName);
-                if (coll->path(true) != folder)
-                    coll->setPath(folder);
+                // A look's Collection is what a VC button fires: shown (the
+                // function pickers list it by the look's name), filed in its
+                // folder, still the tree's (locked, D13).
+                const QString collPath = list.looks && !cue.folder.isEmpty()
+                                         ? folder + QLatin1Char('/') + cue.folder : folder;
+                if (coll->path(true) != collPath)
+                    coll->setPath(collPath);
+                if (coll->isVisible() != list.looks)
+                    coll->setVisible(list.looks);
                 if (coll->functions() != members)
                 {
                     m_lastChanged << cue.id;
@@ -3447,7 +3563,10 @@ void ShowTreeController::bake()
                         coll->addFunction(fid);
                 }
                 keepCollections.insert(coll->id());
-                m_generatedLabels.insert(coll->id(), tr("Cue %1 in %2").arg(label, list.name));
+                m_generatedLabels.insert(coll->id(), list.looks ? tr("Look %1 in %2").arg(label, prod.name)
+                                                                : tr("Cue %1 in %2").arg(label, list.name));
+                if (list.looks)
+                    continue;
 
                 ChaserStep step(coll->id(), cue.fadeIn, cue.hold, cue.fadeOut);
                 // As ChaserStep::loadXML: an infinite hold is the duration
@@ -3458,6 +3577,8 @@ void ShowTreeController::bake()
                 steps << step;
             }
 
+            if (chaser == nullptr)
+                continue;
             const QList<ChaserStep> have = chaser->steps();
             if (!sameSteps(have, steps))
             {

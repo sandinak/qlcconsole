@@ -43,12 +43,14 @@ add_library(${module_name} SHARED
     monitorproperties.cpp monitorproperties.h
     networkreport.cpp networkreport.h
     patchlabels.cpp patchlabels.h
+    paletteops.cpp paletteops.h
     patchlist.cpp patchlist.h
     speedmasters.cpp speedmasters.h
     showcontrol.cpp showcontrol.h
     showtreecommand.cpp showtreecommand.h
     showtreecontroller.cpp showtreecontroller.h
     showtreeconvert.cpp
+    showtreelooks.cpp
     showtreereusable.cpp
     showtreemodel.cpp showtreemodel.h
     spreadlayer.cpp spreadlayer.h

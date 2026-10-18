@@ -51,6 +51,11 @@ ShowTreeController::ConvertPlan ShowTreeController::planConvertToTracking(quint3
         plan.why = tr("No such cue list.");
         return plan;
     }
+    if (src->looks)
+    {
+        plan.why = tr("Looks never track: each plays only what it has.");
+        return plan;
+    }
     const LineAimTest aimTest = lineAimTest();
     quint32 next = m_nextId;
 

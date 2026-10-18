@@ -29,6 +29,7 @@
 
 #define KXMLShowTreeProduction  QStringLiteral("Production")
 #define KXMLShowTreeCueList     QStringLiteral("CueList")
+#define KXMLShowTreeLooks       QStringLiteral("Looks")
 #define KXMLShowTreeCue         QStringLiteral("Cue")
 #define KXMLShowTreeLayer       QStringLiteral("Layer")
 #define KXMLShowTreeLook        QStringLiteral("Look")
@@ -291,6 +292,22 @@ CueList *Production::list(quint32 lid)
     return nullptr;
 }
 
+CueList *Production::looks()
+{
+    for (CueList &l : lists)
+        if (l.looks)
+            return &l;
+    return nullptr;
+}
+
+const CueList *Production::looks() const
+{
+    for (const CueList &l : lists)
+        if (l.looks)
+            return &l;
+    return nullptr;
+}
+
 const CueList *Production::list(quint32 lid) const
 {
     for (const CueList &l : lists)
@@ -333,6 +350,9 @@ const ResolvedLayer *ResolvedCue::layer(const Target &target) const
 
 CueMode effectiveMode(const CueList &list, const Cue &cue)
 {
+    // A busking look never tracks (P-D5): what it has is all it plays.
+    if (list.looks)
+        return CueMode::Block;
     if (cue.mode != CueMode::ListDefault)
         return cue.mode;
     return list.mode == ListMode::Tracking ? CueMode::Track : CueMode::Block;
@@ -677,6 +697,12 @@ bool dependsOn(const CueList &list, quint32 fromCue, quint32 onCue)
 
 bool canInclude(const CueList &list, quint32 cueId, quint32 includedId, QString *why)
 {
+    if (list.looks)
+    {
+        if (why != nullptr)
+            *why = QStringLiteral("a look plays only what it has (no includes)");
+        return false;
+    }
     auto no = [why](const QString &text) {
         if (why != nullptr)
             *why = text;
@@ -1083,14 +1109,25 @@ void saveXML(QXmlStreamWriter *doc, const Production &production)
 
     for (const CueList &list : production.lists)
     {
-        doc->writeStartElement(KXMLShowTreeCueList);
+        // The Looks section is an element of its own: an older build skips
+        // it (and plays the looks' generated collections as they are).
+        doc->writeStartElement(list.looks ? KXMLShowTreeLooks : KXMLShowTreeCueList);
         writeId(doc, QStringLiteral("ID"), list.id);
         doc->writeAttribute(QStringLiteral("Name"), list.name);
-        doc->writeAttribute(QStringLiteral("Mode"), list.mode == ListMode::Tracking
-                                                    ? QStringLiteral("Tracking")
-                                                    : QStringLiteral("NonTracking"));
-        writeId(doc, QStringLiteral("Base"), list.baseCue);
-        writeId(doc, QStringLiteral("Chaser"), list.chaser);
+        if (!list.looks)
+        {
+            doc->writeAttribute(QStringLiteral("Mode"), list.mode == ListMode::Tracking
+                                                        ? QStringLiteral("Tracking")
+                                                        : QStringLiteral("NonTracking"));
+            writeId(doc, QStringLiteral("Base"), list.baseCue);
+            writeId(doc, QStringLiteral("Chaser"), list.chaser);
+        }
+        for (const QString &f : list.folders)
+        {
+            doc->writeStartElement(QStringLiteral("Folder"));
+            doc->writeAttribute(QStringLiteral("Path"), f);
+            doc->writeEndElement();
+        }
 
         for (const Cue &cue : list.cues)
         {
@@ -1112,6 +1149,8 @@ void saveXML(QXmlStreamWriter *doc, const Production &production)
                 doc->writeAttribute(QStringLiteral("Overlap"), QStringLiteral("Mix"));
             writeId(doc, QStringLiteral("Reusable"), cue.reusable);
             writeId(doc, QStringLiteral("Collection"), cue.collection);
+            if (list.looks && !cue.folder.isEmpty())
+                doc->writeAttribute(QStringLiteral("Folder"), cue.folder);
 
             saveLooks(doc, cue.looks);
             for (const Layer &layer : cue.layers)
@@ -1203,13 +1242,15 @@ bool loadXML(QXmlStreamReader &root, Production &production)
 
     while (root.readNextStartElement())
     {
-        if (root.name() != KXMLShowTreeCueList)
+        const bool looks = root.name() == KXMLShowTreeLooks;
+        if (root.name() != KXMLShowTreeCueList && (!looks || production.looks() != nullptr))
         {
             root.skipCurrentElement();
             continue;
         }
         a = root.attributes();
         CueList list;
+        list.looks = looks;
         list.id = readId(a, QStringLiteral("ID"));
         list.name = a.value(QStringLiteral("Name")).toString();
         list.mode = a.value(QStringLiteral("Mode")).toString() == QLatin1String("Tracking")
@@ -1219,6 +1260,14 @@ bool loadXML(QXmlStreamReader &root, Production &production)
 
         while (root.readNextStartElement())
         {
+            if (looks && root.name() == QLatin1String("Folder"))
+            {
+                const QString f = root.attributes().value(QStringLiteral("Path")).toString();
+                if (!f.isEmpty() && !list.folders.contains(f))
+                    list.folders << f;
+                root.skipCurrentElement();
+                continue;
+            }
             if (root.name() != KXMLShowTreeCue)
             {
                 root.skipCurrentElement();
@@ -1239,6 +1288,12 @@ bool loadXML(QXmlStreamReader &root, Production &production)
             cue.mixOverlap = a.value(QStringLiteral("Overlap")).toString() == QLatin1String("Mix");
             cue.reusable = readId(a, QStringLiteral("Reusable"));
             cue.collection = readId(a, QStringLiteral("Collection"));
+            if (looks)
+            {
+                cue.folder = a.value(QStringLiteral("Folder")).toString();
+                cue.mode = CueMode::ListDefault;
+                cue.includes.clear();
+            }
 
             while (root.readNextStartElement())
             {

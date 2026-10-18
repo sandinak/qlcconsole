@@ -214,6 +214,9 @@ namespace ShowTree
         quint32 reusable = 0xFFFFFFFF;
         /** Generated: the Collection this cue bakes to. */
         quint32 collection = 0xFFFFFFFF;
+        /** A look of a production's Looks section (CueList::looks): the
+         *  folder it is filed in there ("Hits", "Hits/Big"; empty: none). */
+        QString folder;
 
         const Look *look(const QString &key) const;
         void setLook(const Look &look);
@@ -230,6 +233,16 @@ namespace ShowTree
         QList<Cue> cues;
         /** Generated: the Chaser this list bakes to. */
         quint32 chaser = 0xFFFFFFFF;
+        /** A production's Looks section (PROGRAMMING_ROLE_DESIGN.md §4.1,
+         *  P-D5): its "cues" are busking looks, fired from VC buttons, not
+         *  cues of a list. Each always resolves as a Block cue would (no
+         *  tracking, includes or base) and bakes to a Collection of its
+         *  own; there is no chaser. One per production at most. Saved as
+         *  <Looks> beside the <CueList>s. */
+        bool looks = false;
+        /** A Looks section's folders kept although no look is in them yet
+         *  (New folder); a folder a look is in needs no entry. */
+        QStringList folders;
 
         int indexOf(quint32 cueId) const;
         Cue *cue(quint32 id);
@@ -244,6 +257,9 @@ namespace ShowTree
 
         CueList *list(quint32 id);
         const CueList *list(quint32 id) const;
+        /** The Looks section (null: the production has none yet). */
+        CueList *looks();
+        const CueList *looks() const;
     };
 
     /** A reusable layer in the Library (Make reusable, P4): a named target
@@ -372,7 +388,7 @@ namespace ShowTree
                                         const LineAimTest &isLineAim = LineAimTest());
 
     /** The mode @a cue really plays in, in @a list (List default made
-     *  Track or Block). */
+     *  Track or Block; a look of a Looks section is always Block). */
     QLC_ENGINE_EXPORT CueMode effectiveMode(const CueList &list, const Cue &cue);
 
     /** Whether resolving cue @a fromCue needs cue @a onCue, at any depth:

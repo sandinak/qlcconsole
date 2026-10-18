@@ -379,6 +379,53 @@ public:
     bool removeReusable(quint32 reusableId, bool unlinkUses = false, QString *why = nullptr);
 
     /************************************************************************
+     * The Looks section (PROGRAMMING_ROLE_DESIGN.md §4.1, P-D5..P-D7, R3):
+     * busking looks beside a production's cue lists. A look is a cue of the
+     * production's Looks list (CueList::looks) -- the same layers, rows and
+     * cascade, never tracking -- baked to a Collection of its own that VC
+     * buttons fire like any function.
+     ************************************************************************/
+public:
+    /** Production @a productionId's Looks section (invalid: none yet). */
+    quint32 looksSection(quint32 productionId) const;
+    /** Make it (one undo step); its id, or the one already there. */
+    quint32 addLooksSection(quint32 productionId);
+    bool isLooks(quint32 listId) const;
+    /** Whether cue @a cueId is a look (of a Looks section). */
+    bool isLook(quint32 cueId) const;
+    /** A new look in production @a productionId's Looks section (made
+     *  first, in the same undo step, when there is none), after look
+     *  @a afterId (invalid: at the end), filed in @a folder. One undo step. */
+    quint32 addLook(quint32 productionId, const QString &name, const QString &folder = QString(),
+                    quint32 afterId = ShowTree::invalidId());
+    /** File looks @a lookIds in @a folder ("": none). One undo step. */
+    bool setLookFolder(const QList<quint32> &lookIds, const QString &folder);
+    /** A folder with no look in it yet (New folder). One undo step. */
+    bool addLookFolder(quint32 listId, const QString &folder);
+    /** Every folder of a Looks section ("Hits", "Hits/Big"), parents too,
+     *  sorted. */
+    QStringList lookFolders(quint32 listId) const;
+    /** Rename folder @a folder (its last part) to @a name: its looks and
+     *  folders under it follow. One undo step. */
+    bool renameLookFolder(quint32 listId, const QString &folder, const QString &name);
+    /** Delete folder @a folder: what is in it moves up one level. One undo
+     *  step. */
+    bool removeLookFolder(quint32 listId, const QString &folder);
+    /** The looks in @a folder and under it ("": every look), in order. */
+    QList<quint32> looksIn(quint32 listId, const QString &folder) const;
+    /** What a VC button fires for look @a lookId: its Collection (invalid:
+     *  not baked yet). */
+    quint32 lookFunction(quint32 lookId) const;
+    /** The look whose Collection is @a functionId (invalid: none). */
+    quint32 lookOfFunction(quint32 functionId) const;
+    /** Adopt as look (P-D16): scene @a functionId as a new look of
+     *  production @a productionId -- its targets and palettes as a layer
+     *  when it reads as one (as an import does), else the scene played as
+     *  it is (an opaque layer). The scene stays. One undo step; the new
+     *  look (invalid, @a why: refused). */
+    quint32 adoptAsLook(quint32 productionId, quint32 functionId, QString *why = nullptr);
+
+    /************************************************************************
      * Detach a cue list to a plain chaser (D13 for lists, P4)
      ************************************************************************/
 public:
@@ -508,12 +555,30 @@ public:
     bool undo();
     bool redo();
     void clearUndo();
+    void clearRedo() { m_redo.clear(); }
+    /** When the top undo / redo step was taken (0: none), comparable with
+     *  the palette stack's (PaletteOps::nextUndoStamp()). */
+    quint64 undoStamp() const { return m_undo.isEmpty() ? 0 : m_undo.last().stamp; }
+    quint64 redoStamp() const { return m_redo.isEmpty() ? 0 : m_redo.last().stamp; }
+
+    /** The tab's Undo / Redo (P-D14): the tree's steps and the palette
+     *  steps (PaletteOps: + Palette, rename, folders, delete -- from the
+     *  Library, the command line or the Programming tab) are one history;
+     *  undo takes back whichever was done last, redo puts back whichever
+     *  was undone last. */
+    bool undoShared();
+    bool redoShared();
+    bool canUndoShared() const;
+    bool canRedoShared() const;
+    QString sharedUndoText() const;
+    QString sharedRedoText() const;
 
 private:
     struct Snapshot
     {
         QString label;
         QByteArray xml;
+        quint64 stamp = 0;
     };
     QByteArray snapshotXml() const;
     void restoreSnapshot(const QByteArray &xml);

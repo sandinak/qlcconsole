@@ -140,6 +140,22 @@ private slots:
     void convertToTrackingSyntheticLists();
     void reuseDetachAndConvertTyped();
 
+    // R1/R2: palette housekeeping (PaletteOps), Used by, one history
+    void paletteOpsFoldersAnyType();
+    void paletteOpsUndoBringsADeletedPaletteBack();
+    void paletteUsageNamesCuesLooksAndScenes();
+    void oneHistoryForTreeAndPalettes();
+    void paletteCommands();
+
+    // R3: the Looks section
+    void aLookBakesToACollectionOfItsOwn();
+    void looksNeverTrack();
+    void aLookPlaysOverARunningListHtpLtp();
+    void lookFoldersSaveLoadAndUndo();
+    void adoptASceneAsALook();
+    void recordLitTakesARunningLooksLayers();
+    void lookCommands();
+
 private:
     quint32 dimmer(int level, const QString &name);
     quint32 colour(const QString &name);

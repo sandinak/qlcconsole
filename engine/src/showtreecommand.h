@@ -71,6 +71,12 @@ class Doc;
  *   unlink                       Unlink here: a plain copy of its own
  *   detach · detach list         a layer to a plain scene; the list to a plain chaser
  *   convert · convert apply      Convert to tracking: the plan, then do it
+ *   palette colour "Amber 2" #ffb000 [in "01-Song"]   a new palette (R2)
+ *   palette "Amber 2" rename "Amber" · move "01-Song" · dup · delete · edit
+ *   palette folder "01-Song" [rename "02-Song" | delete]
+ *   look "Hit 1" [in "Hits"]     select that busking look, or make it (R3)
+ *   vcpage                       Make VC page: a button per look
+ *   adopt "Old Scene"            Adopt as look: a scene becomes a look
  *   dup · undo · redo
  *
  * Names are the Library's (groups, fixtures, palettes, functions), matched
@@ -112,6 +118,9 @@ public:
         quint32 layer = 0xFFFFFFFF;
         /** It acted on the layers selected: leave the selection as it is. */
         bool keepSelection = false;
+        /** A palette to open in the Look Editor (`palette … edit`, a new
+         *  palette); invalid: none. */
+        quint32 editPalette = 0xFFFFFFFF;
     };
 
     Result run(const QString &line, const Context &context);
@@ -178,6 +187,12 @@ public:
                                ShowTreeController::RecordSource *chosen)> RecordChooser;
     void setRecordChooser(const RecordChooser &chooser) { m_recordChooser = chooser; }
 
+    /** `vcpage`: Make VC page for the looks of Looks section @a listId in
+     *  @a folder ("": all of them) -- the VC is the UI's. Returns false
+     *  (and @a message why) when nothing was made. */
+    typedef std::function<bool(quint32 listId, const QString &folder, QString *message)> VcPageMaker;
+    void setVcPageMaker(const VcPageMaker &maker) { m_vcPageMaker = maker; }
+
 private:
     /** What Tab would do with @a line: the text before the word, the
      *  matches (sorted), and whether the word was begun with a quote. */
@@ -202,6 +217,21 @@ private:
     QStringList functionNames() const;
     QStringList listNames(const Context &context) const;
     QStringList paletteNames(const QString &key) const;
+    /** Every named palette the Library manages, any type: what `palette`
+     *  takes. */
+    QStringList allPaletteNames() const;
+    /** The palette folders ("01-Song"), and the selected production's look
+     *  names / folders. */
+    QStringList paletteFolders() const;
+    QStringList lookNames(const Context &context) const;
+    QStringList lookFolderNames(const Context &context) const;
+    /** "colour" -> QLCPalette::Color for `palette <type>`; Undefined: no. */
+    static int paletteTypeWord(const QString &word);
+    static QStringList paletteTypeWords();
+    /** `palette …` and `look …`: palette housekeeping and the Looks
+     *  section (R2, R3). */
+    Result runPalette(const QString &line, const Context &context);
+    Result runLook(const QString &line, const Context &context);
     QStringList cueNumbers(const Context &context) const;
     /** Reusable layers and cues by name: what `use` takes. */
     QStringList reusableNames() const;
@@ -213,6 +243,7 @@ private:
     Doc *m_doc;
     ShowTreeController *m_st;
     RecordChooser m_recordChooser;
+    VcPageMaker m_vcPageMaker;
 
     // Tab pressed again: the next match.
     QString m_tabLast;
