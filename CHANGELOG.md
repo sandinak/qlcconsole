@@ -318,6 +318,9 @@ a shorter Windows re-soak is planned.
   the rig view about 9 ms a frame on a 200-fixture show (was 51).
 
 ### Fixed
+- **Saving a fixture definition could stall for minutes on a busy Mac:**
+  it flushed every disk instead of the one file. It now writes the file
+  whole (or not at all) and flushes only that file.
 - **Universe patches were lost when a show was opened away from its
   network.** Opening a show on a computer without the interface it was
   patched to (a laptop off the show VLAN) and saving it wrote the show

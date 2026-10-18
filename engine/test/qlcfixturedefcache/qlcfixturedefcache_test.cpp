@@ -260,6 +260,10 @@ void QLCFixtureDefCache_Test::storeDef()
 
     QDir dir = QLCFixtureDefCache::userDefinitionDirectory();
     QFile file (dir.absoluteFilePath("storeTest.qxf"));
+    // Written whole (QSaveFile), as given.
+    QVERIFY(file.open(QIODevice::ReadOnly | QIODevice::Text));
+    QCOMPARE(QString::fromUtf8(file.readAll()), defBuffer);
+    file.close();
     file.remove();
 }
 
