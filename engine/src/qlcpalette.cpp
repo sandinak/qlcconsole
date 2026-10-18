@@ -47,6 +47,10 @@
 #define KXMLQLCPaletteType      QStringLiteral("Type")
 #define KXMLQLCPaletteName      QStringLiteral("Name")
 #define KXMLQLCPalettePath      QStringLiteral("Path")
+/* Present (="1") on palettes whose Path is type-independent ("Palettes/01-Song/").
+   Absent: an older show, whose paths start with the palette type -- migrated
+   on load. Older versions ignore it and show the folders at the top level. */
+#define KXMLQLCPaletteFolders   QStringLiteral("Folders")
 #define KXMLQLCPalettePersistent QStringLiteral("Persistent")
 #define KXMLQLCPaletteValue     QStringLiteral("Value")
 #define KXMLQLCPaletteFanning     QStringLiteral("Fan")
@@ -224,6 +228,92 @@ QString QLCPalette::path() const
 void QLCPalette::setPath(const QString &path)
 {
     m_path = path;
+}
+
+bool QLCPalette::isTypeFolderName(const QString &name)
+{
+    static const PaletteType kTypes[] = { Dimmer, Color, Pan, Tilt, PanTilt, Aim,
+                                          Shutter, Strobe, Gobo, Zoom, Beam, Effect };
+    for (PaletteType t : kTypes)
+        if (name == typeToString(t))
+            return true;
+    return false;
+}
+
+QString QLCPalette::migrateLegacyPath(const QString &path, PaletteType type, bool anyTypeFolder)
+{
+    QString norm = path;
+    while (norm.endsWith('/'))
+        norm.chop(1);
+    if (norm.isEmpty() || norm == QLatin1String("Palettes"))
+        return QString();
+
+    QStringList segs = norm.split('/');
+    if (segs.first() != QLatin1String("Palettes") || segs.size() < 2)
+        return path;
+
+    /* Only what is genuinely the old layout is taken apart. Older versions
+       showed palettes under a heading per TYPE, and stored that heading as
+       the path's first folder: each palette under its own type
+       ("Palettes/Color/01-Song/" for a colour) -- or, dragged there, under
+       another type's ("Palettes/Color/01-Song/" for an effect). So:
+         - its own type's name first: the old layout, always dropped;
+         - another type's name first: dropped only when the whole show is
+           in the old layout (@a anyTypeFolder, see migrateLegacyPaths());
+           otherwise it is a folder the user made and named so -- kept;
+         - anything else ("Colour", "Warm", "01-Song"): the user's, kept. */
+    if (type == Undefined || !isTypeFolderName(segs.at(1))
+        || (segs.at(1) != typeToString(type) && !anyTypeFolder))
+        return path;
+
+    // An effect auto-filed under Palettes/Effect/<Category>/<Engine>: that
+    // was bookkeeping, not the user's folder.
+    static const char *kEffectCategories[] = { "Color", "Dimmer", "Position", "Beam",
+                                               "Other", "WLED" };
+    if (type == Effect && segs.at(1) == QLatin1String("Effect") && segs.size() == 4)
+    {
+        for (const char *c : kEffectCategories)
+            if (segs.at(2) == QLatin1String(c))
+                return QString();
+    }
+
+    segs.removeAt(1);
+    return segs.size() < 2 ? QString() : segs.join('/') + '/';
+}
+
+void QLCPalette::migrateLegacyPaths(const QList<QLCPalette *> &palettes)
+{
+    /* The whole show in the old layout: every palette loaded without the
+       Folders marker that has a folder has a palette TYPE's name as its
+       first one (as the old per-type headings stored it). Then any type
+       name first was a heading, and goes. One folder that isn't a type's
+       name (a show saved by a build with shared folders but no marker yet)
+       and only a palette's own type name goes. */
+    bool oldLayout = true, any = false;
+    for (const QLCPalette *p : palettes)
+    {
+        // A marked path: the show was saved with shared folders.
+        if (p != nullptr && p->m_loadedMarked)
+            oldLayout = false;
+        if (p == nullptr || p->m_unmarkedPath.isNull())
+            continue;
+        QStringList segs = p->m_unmarkedPath.split('/', Qt::SkipEmptyParts);
+        if (segs.size() < 2 || segs.first() != QLatin1String("Palettes"))
+            continue;
+        any = true;
+        if (!isTypeFolderName(segs.at(1)))
+            oldLayout = false;
+    }
+    for (QLCPalette *p : palettes)
+    {
+        if (p != nullptr)
+            p->m_loadedMarked = false;
+        if (p == nullptr || p->m_unmarkedPath.isNull())
+            continue;
+        if (any && oldLayout)
+            p->setPath(migrateLegacyPath(p->m_unmarkedPath, p->type(), true));
+        p->m_unmarkedPath = QString();
+    }
 }
 
 QVariant QLCPalette::value() const
@@ -1443,7 +1533,22 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
         setName(attrs.value(KXMLQLCPaletteName).toString());
 
     if (attrs.hasAttribute(KXMLQLCPalettePath))
-        setPath(attrs.value(KXMLQLCPalettePath).toString());
+    {
+        const QString path = attrs.value(KXMLQLCPalettePath).toString();
+        if (attrs.value(KXMLQLCPaletteFolders) == QLatin1String("1"))
+        {
+            setPath(path);
+            m_loadedMarked = true;
+        }
+        else
+        {
+            // The palette's own type first is the old layout whatever else
+            // the show holds; another type's name waits for the whole show
+            // (Doc load: migrateLegacyPaths()).
+            setPath(migrateLegacyPath(path, m_type));
+            m_unmarkedPath = path;
+        }
+    }
 
     // Effect looks only: keep the script engine alive across stop/start.
     if (attrs.hasAttribute(KXMLQLCPalettePersistent))
@@ -1661,7 +1766,10 @@ bool QLCPalette::saveXML(QXmlStreamWriter *doc)
     if (m_type == Effect && m_persistent)
         doc->writeAttribute(KXMLQLCPalettePersistent, QStringLiteral("1"));
     if (m_path.isEmpty() == false)
+    {
         doc->writeAttribute(KXMLQLCPalettePath, m_path);
+        doc->writeAttribute(KXMLQLCPaletteFolders, QStringLiteral("1"));
+    }
 
     /* write value */
     switch (m_type)

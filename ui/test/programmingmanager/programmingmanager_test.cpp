@@ -58,6 +58,7 @@
 #include <QPushButton>
 #include <QTreeWidget>
 #include "doc.h"
+#include "paletteops.h"
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
 #include "qlcphysical.h"
@@ -2326,4 +2327,156 @@ void ProgrammingManager_Test::deletingAPaletteSaysWhereItIsUsed()
     tree->setFocus();
     QTest::keyClick(tree, Qt::Key_Backspace);
     QTRY_VERIFY(tree->m_foldersMap.contains("Palettes/Empty") == false);
+}
+
+void ProgrammingManager_Test::paletteFoldersHoldAnyTypeInBothViews()
+{
+    auto palette = [this](QLCPalette::PaletteType type, const QString &name, const QString &path) {
+        QLCPalette *p = new QLCPalette(type, m_doc);
+        p->setName(name);
+        if (type == QLCPalette::Color)
+            p->setValue(QColor(Qt::red).name());
+        else if (type == QLCPalette::Dimmer)
+            p->setValue(200);
+        m_doc->addPalette(p);
+        p->setPath(path);
+        return p;
+    };
+    QLCPalette *red = palette(QLCPalette::Color, "Red", "Palettes/01-Everybody Scream/");
+    QLCPalette *aim = palette(QLCPalette::Aim, "Announcer", "Palettes/01-Everybody Scream/");
+    QLCPalette *full = palette(QLCPalette::Dimmer, "Full", QString());
+
+    ProgrammingManager mgr(nullptr, m_doc);
+    FunctionsTreeWidget *tree = mgr.m_paletteTree;
+    tree->setPaletteTypesFirst(false);
+    tree->updateTree();
+
+    // Folders first: one top-level folder holding both types; unfiled at root.
+    QTreeWidgetItem *song = tree->m_foldersMap.value("Palettes/01-Everybody Scream");
+    QVERIFY(song != nullptr);
+    QVERIFY(song->parent() == nullptr);
+    QCOMPARE(song->childCount(), 2);
+    QVERIFY(tree->paletteItem(full)->parent() == nullptr);
+
+    // A new top-level folder takes a palette of any type.
+    QTreeWidgetItem *two = tree->ensurePaletteFolder("Palettes/02-Next");
+    QScopedPointer<QMimeData> mime(treeMimeData(tree, { tree->paletteItem(full) }));
+    QVERIFY(mime != nullptr);
+    QVERIFY(tree->dropMimeOn(mime.data(), two));
+    QCOMPARE(full->path(), QString("Palettes/02-Next/"));
+    QCoreApplication::processEvents();
+
+    // Grouped by type: the same folder under each type.
+    tree->setPaletteTypesFirst(true);
+    QTreeWidgetItem *colorSong = tree->m_foldersMap.value("Palettes/Color/01-Everybody Scream");
+    QTreeWidgetItem *aimSong = tree->m_foldersMap.value("Palettes/Aim/01-Everybody Scream");
+    QVERIFY(colorSong != nullptr && aimSong != nullptr);
+    QVERIFY(tree->isUserFolder(colorSong));
+    QVERIFY(tree->isUserFolder(colorSong->parent()) == false); // the type heading
+    QCOMPARE(colorSong->childCount(), 1);
+    QCOMPARE(tree->paletteItem(red)->parent(), colorSong);
+    QCOMPARE(tree->paletteItem(aim)->parent(), aimSong);
+    QVERIFY(tree->m_foldersMap.value("Palettes/Dimmer/02-Next") != nullptr);
+
+    // Dropping the Dimmer palette into the folder under Color files it in the
+    // shared folder (it shows under Dimmer).
+    mime.reset(treeMimeData(tree, { tree->paletteItem(full) }));
+    QVERIFY(mime != nullptr);
+    QVERIFY(tree->dropMimeOn(mime.data(), colorSong));
+    QCOMPARE(full->path(), QString("Palettes/01-Everybody Scream/"));
+    QCoreApplication::processEvents();
+    QVERIFY(tree->m_foldersMap.value("Palettes/Dimmer/01-Everybody Scream") != nullptr);
+
+    // Renaming the folder under Color renames it for every type.
+    colorSong = tree->m_foldersMap.value("Palettes/Color/01-Everybody Scream");
+    colorSong->setText(0, "01-Everybody Scream!");
+    QCOMPARE(red->path(), QString("Palettes/01-Everybody Scream!/"));
+    QCOMPARE(aim->path(), QString("Palettes/01-Everybody Scream!/"));
+    QCOMPARE(full->path(), QString("Palettes/01-Everybody Scream!/"));
+    QTRY_VERIFY(tree->m_foldersMap.value("Palettes/Aim/01-Everybody Scream!") != nullptr);
+
+    // Deleting it (by type, under Aim) unfiles every type's palettes.
+    QVERIFY(mgr.deleteTreeFolder(tree, tree->m_foldersMap.value("Palettes/Aim/01-Everybody Scream!"), false));
+    QCOMPARE(red->path(), QString());
+    QCOMPARE(aim->path(), QString());
+    QCOMPARE(full->path(), QString());
+    QTRY_VERIFY(tree->paletteItem(red) != nullptr
+                && tree->paletteItem(red)->parent() == tree->m_foldersMap.value("Palettes/Color"));
+
+    // Folders first again: the palettes are at the top level.
+    tree->setPaletteTypesFirst(false);
+    QVERIFY(tree->paletteItem(red)->parent() == nullptr);
+
+    // A new palette created with a folder selected lands in that folder (any type).
+    QTreeWidgetItem *f = tree->ensurePaletteFolder("Palettes/03-Encore");
+    tree->clearSelection();
+    f->setSelected(true);
+    mgr.createPalette(QLCPalette::Dimmer);
+    bool found = false;
+    foreach (QLCPalette *p, m_doc->palettes())
+        if (p->type() == QLCPalette::Dimmer && p != full)
+        {
+            QCOMPARE(p->path(), QString("Palettes/03-Encore/"));
+            found = true;
+        }
+    QVERIFY(found);
+}
+
+/* Open 25: one folder model. The Show Tree's Library (PaletteOps) and this
+   tab's palette tree put every palette in the same folder -- a user folder
+   named like a type ("Color", holding dimmers) or "Colour" included -- and
+   what one files, the other shows. */
+void ProgrammingManager_Test::libraryAndProgrammingAgreeOnFolders()
+{
+    auto palette = [this](QLCPalette::PaletteType type, const QString &name, const QString &path) {
+        QLCPalette *p = new QLCPalette(type, m_doc);
+        p->setName(name);
+        if (type == QLCPalette::Color)
+            p->setValue(QColor(Qt::red).name());
+        else if (type == QLCPalette::Dimmer)
+            p->setValue(200);
+        m_doc->addPalette(p);
+        p->setPath(path);
+        return p;
+    };
+    QList<QLCPalette *> all {
+        palette(QLCPalette::Color, "Red", "Palettes/01-Song/"),
+        palette(QLCPalette::Dimmer, "Half", "Palettes/Color/"),           // a user folder named like a type
+        palette(QLCPalette::Color, "Amber", "Palettes/Colour/Warm/"),
+        palette(QLCPalette::Aim, "Announcer", "Palettes/01-Song/Verse/"),
+        palette(QLCPalette::Dimmer, "Full", QString()) };
+
+    ProgrammingManager mgr(nullptr, m_doc);
+    FunctionsTreeWidget *tree = mgr.m_paletteTree;
+    tree->setPaletteTypesFirst(false);
+    tree->updateTree();
+    PaletteOps *ops = m_doc->paletteOps();
+    auto treeFolder = [tree](QLCPalette *p) {
+        QTreeWidgetItem *item = tree->paletteItem(p);
+        if (item == nullptr || item->parent() == nullptr)
+            return QString();
+        QString path = item->parent()->text(1);
+        if (path.startsWith("Palettes/"))
+            path = path.mid(9);
+        while (path.endsWith('/'))
+            path.chop(1);
+        return path == "Palettes" ? QString() : path;
+    };
+    for (QLCPalette *p : all)
+        QVERIFY2(treeFolder(p) == PaletteOps::folderOf(p),
+                 qPrintable(QString("%1: tree %2, Library %3").arg(p->name(), treeFolder(p), PaletteOps::folderOf(p))));
+    QCOMPARE(ops->folders(), QStringList({ "01-Song", "01-Song/Verse", "Color", "Colour", "Colour/Warm" }));
+
+    // Filed from the Library: this tab shows it there.
+    QVERIFY(ops->move({ all[4]->id() }, "Color"));
+    tree->updateTree();
+    QCOMPARE(treeFolder(all[4]), QString("Color"));
+    // Filed here (a drop on a folder): the Library reads the same.
+    QTreeWidgetItem *song = tree->m_foldersMap.value("Palettes/01-Song");
+    QVERIFY(song != nullptr);
+    QScopedPointer<QMimeData> mime(treeMimeData(tree, { tree->paletteItem(all[2]) }));
+    QVERIFY(tree->dropMimeOn(mime.data(), song));
+    QCOMPARE(PaletteOps::folderOf(all[2]), QString("01-Song"));
+    QCoreApplication::processEvents();
+    QCOMPARE(treeFolder(all[2]), QString("01-Song"));
 }

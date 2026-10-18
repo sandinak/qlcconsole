@@ -126,6 +126,24 @@ public:
     QString path() const;
     void setPath(const QString& path);
 
+    /** A palette folder path as older shows stored it — the palette's OWN
+     *  TYPE as the first folder ("Palettes/Color/01-Song/" for a Color
+     *  palette, an effect auto-filed as "Palettes/Effect/<Category>/<Engine>/")
+     *  — made type-independent ("Palettes/01-Song/"; an auto-filed effect is
+     *  unfiled, ""). A first folder named like ANOTHER type, or like none
+     *  ("Colour"), is a user folder and is kept. Applied on load only, to
+     *  palettes without the Folders="1" marker. Paths not under "Palettes/"
+     *  are returned unchanged. */
+    static QString migrateLegacyPath(const QString &path, PaletteType type, bool anyTypeFolder = false);
+    /** After a show's palettes are loaded (Doc::loadXML): when every
+     *  unmarked palette path has a type's name first -- the old per-type
+     *  layout throughout -- a first folder named like ANY type is dropped
+     *  (an effect dragged under Color/01-Song joins 01-Song). Otherwise
+     *  only each palette's own type name was (loadXML). */
+    static void migrateLegacyPaths(const QList<QLCPalette *> &palettes);
+    /** Whether @p name is a palette type's name as typeToString() gives it. */
+    static bool isTypeFolderName(const QString &name);
+
     /** Get/Set the value(s) for this Palette.
      *  Some types like Position will store 2 values */
     QVariant value() const;
@@ -221,6 +239,12 @@ private:
     PaletteType m_type;
     QString m_name;
     QString m_path;
+    /** The path as loaded without the Folders marker, until the show is
+     *  loaded (migrateLegacyPaths()); null otherwise. */
+    QString m_unmarkedPath;
+    /** Loaded with the Folders marker: the show was saved with shared
+     *  folders (until migrateLegacyPaths()). */
+    bool m_loadedMarked = false;
     QVariantList m_values;
 
     /************************************************************************

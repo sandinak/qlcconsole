@@ -107,6 +107,11 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Programming
 
+- **Palette folders hold any type.** A song's folder can hold its colours,
+  aims and effects together; the Palettes tab shows folders first, or
+  **Group by type** (right-click) for type first with the same folders under
+  each. Older shows' per-type folders merge on open. See
+  [Filing into folders](programming-tab.md#filing-into-folders).
 - **Drag scenes and palettes into folders.** In the Programming tab, a scene
   (or several, or a whole folder) dragged onto a folder moves into it, and
   onto the type's heading or empty space moves back out; pressing on a row

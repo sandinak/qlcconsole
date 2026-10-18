@@ -371,13 +371,6 @@ private:
      *  default name ("New Color", "New Dimmer", "New Effect"). */
     void maybeAutoName(QLCPalette *p);
 
-    /** True if @p path is the bare default or an auto-generated
-     *  Effect/<Category>/<Engine> folder (i.e. safe to re-derive). */
-    bool isAutoEffectPath(const QString &path) const;
-
-    /** Move an Effect palette into Palettes/Effect/<category>/<engine>/ to
-     *  mirror the picker, unless the user has chosen a custom folder. */
-    void maybeAutoPath(QLCPalette *p, const QString &category, const QString &engine);
 };
 
 /** @} */

@@ -213,11 +213,6 @@ private:
      *  creating a palette or auto-renaming an effect, so it's easy to find). */
     void revealPalette(quint32 paletteId);
 
-    /** Move Effect palettes still on the bare default folder into
-     *  Palettes/Effect/<Category>/<Engine>/ so the tree mirrors the picker.
-     *  Idempotent; leaves user-chosen folders alone. Cosmetic (no setModified).
-     *  Returns true if any path changed. */
-    bool organizeEffectPalettes();
 
     /** Duplicate palette $pid ("… (copy)"), add it, and open it for editing. */
     void duplicatePalette(quint32 pid);

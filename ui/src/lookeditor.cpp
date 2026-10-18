@@ -1565,38 +1565,6 @@ void LookEditor::maybeAutoName(QLCPalette *p)
     emit paletteRenamed(p->id());
 }
 
-bool LookEditor::isAutoEffectPath(const QString &path) const
-{
-    QString p = path;
-    if (p.endsWith('/')) p.chop(1);
-    if (p.isEmpty() || p == QLatin1String("Palettes/Effect"))
-        return true;   // the bare default
-
-    // An auto path looks exactly like Palettes/Effect/<Category>/<Engine>, where
-    // the category is one we use and the engine is a real script display name.
-    // Anything else (e.g. a user folder "Palettes/Effect/My Faves") is left be.
-    const QStringList seg = p.split('/');
-    if (seg.size() != 4 || seg[0] != QLatin1String("Palettes")
-        || seg[1] != QLatin1String("Effect"))
-        return false;
-    bool knownCat = false;
-    for (const char *c : kEffectCategoryOrder)
-        if (seg[2] == QLatin1String(c)) { knownCat = true; break; }
-    if (!knownCat)
-        return false;
-    return m_doc->effectScriptRunner()
-        && m_doc->effectScriptRunner()->cache()->scriptNames().contains(seg[3]);
-}
-
-void LookEditor::maybeAutoPath(QLCPalette *p, const QString &category, const QString &engine)
-{
-    if (!p || category.isEmpty() || engine.isEmpty())
-        return;
-    if (!isAutoEffectPath(p->path()))
-        return;   // user organized this palette — don't clobber their folder
-    p->setPath(QString("Palettes/Effect/%1/%2/").arg(category, engine));
-}
-
 void LookEditor::slotNameEdited()
 {
     QLCPalette *p = m_doc->palette(m_paletteId);
@@ -3307,24 +3275,6 @@ void LookEditor::slotEffectScriptChanged(int /*index*/)
     p->clearEffectInputBindings();
     maybeAutoName(p);
 
-    // Organize the palette FOLDER to mirror the picker hierarchy:
-    //   Palettes/Effect/<Category>/<Engine>/
-    // so browsing effect palettes reads the same as the script picker.
-    {
-        QString engineBase;
-        if (kind == EffectKindWled)
-            maybeAutoPath(p, QStringLiteral("WLED"), name);
-        else if (kind == EffectKindPreset)
-            engineBase = m_doc->effectScriptRunner()->presetCache()->preset(name).script;
-        else if (!name.isEmpty())
-            engineBase = EffectScriptCache::portableName(scache->scriptPath(name));
-        if (!engineBase.isEmpty())
-        {
-            const EffectScriptCache::ScriptMeta meta = scache->scriptMeta(engineBase);
-            const QString engineDisplay = meta.displayName.isEmpty() ? engineBase : meta.displayName;
-            maybeAutoPath(p, scriptCategory(meta.fixtureTypes), engineDisplay);
-        }
-    }
 
     m_doc->setModified();
     emit paletteChanged(m_paletteId);

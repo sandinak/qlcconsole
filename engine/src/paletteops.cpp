@@ -57,31 +57,15 @@ QString PaletteOps::cleanFolder(const QString &folder)
 
 QString PaletteOps::folderOfPath(const QString &path, QLCPalette::PaletteType type)
 {
-    // As feat/palette-folders' QLCPalette::migrateLegacyPath, read only: a
-    // first folder named like a palette type was the old per-type layout,
-    // and an effect auto-filed under Effect/<category>/<engine> is unfiled.
+    // One folder model (feat/palette-folders): stored paths are
+    // type-independent ("Palettes/01-Song/"); an older show's per-type
+    // layout was migrated when it loaded (QLCPalette::migrateLegacyPath),
+    // so a folder is simply the path under "Palettes" -- as the
+    // Programming tab's tree reads it.
+    Q_UNUSED(type)
     QStringList segs = cleanFolder(path).split(QLatin1Char('/'), Qt::SkipEmptyParts);
-    if (segs.isEmpty())
-        return QString();
-    if (segs.first() == QLatin1String("Palettes"))
+    if (!segs.isEmpty() && segs.first() == QLatin1String("Palettes"))
         segs.removeFirst();
-    if (segs.isEmpty())
-        return QString();
-    static const QLCPalette::PaletteType kTypes[] = {
-        QLCPalette::Dimmer, QLCPalette::Color, QLCPalette::Pan, QLCPalette::Tilt, QLCPalette::PanTilt,
-        QLCPalette::Aim, QLCPalette::Shutter, QLCPalette::Strobe, QLCPalette::Gobo, QLCPalette::Zoom,
-        QLCPalette::Beam, QLCPalette::Effect };
-    bool typeFolder = false;
-    for (QLCPalette::PaletteType t : kTypes)
-        if (segs.first() == QLCPalette::typeToString(t))
-            typeFolder = true;
-    if (!typeFolder)
-        return segs.join(QLatin1Char('/'));
-    static const QStringList kEffectCategories = { "Color", "Dimmer", "Position", "Beam", "Other", "WLED" };
-    if (type == QLCPalette::Effect && segs.first() == QLatin1String("Effect") && segs.count() == 3
-        && kEffectCategories.contains(segs.at(1)))
-        return QString();
-    segs.removeFirst();
     return segs.join(QLatin1Char('/'));
 }
 

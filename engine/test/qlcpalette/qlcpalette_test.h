@@ -39,6 +39,11 @@ private slots:
     void load();
     void loadWrongRoot();
     void save();
+    /** Palette folders are type-independent: an older show's type folders
+     *  ("Palettes/Color/01-Song/") migrate on load, a saved show is marked so
+     *  it never migrates again, and a folder named like a type survives. */
+    void olderShowsTypeFoldersBecomeSharedFolders();
+    void aUserFolderNamedLikeATypeIsKept();
 
     /** A gobo look writes its value to the fixture's gobo channel -- which
      *  a head's channel map never lists, so it has to be found per fixture. */

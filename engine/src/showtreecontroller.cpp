@@ -2893,8 +2893,8 @@ QString ShowTreeController::suggestPaletteFolder(QLCPalette::PaletteType type) c
             || (it.value() == count.value(best) && it.key().length() < best.length()))
             best = it.key();
     }
-    if (best.isEmpty())
-        return QStringLiteral("Palettes/%1").arg(QLCPalette::typeToString(type));
+    // None yet: unfiled (folders hold any type; a type-named folder would
+    // be a folder of its own now).
     return best;
 }
 

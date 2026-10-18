@@ -141,6 +141,23 @@ public:
      *  any missing levels, and return its node. */
     QTreeWidgetItem* ensurePaletteFolder(const QString& fullPath);
 
+    /** Palette folders are shared by all palette types. By default the tree
+     *  shows them first (top level = folders, any type inside). With
+     *  $enable it groups by type first (Color › 01-Song, Aim › 01-Song …),
+     *  the same folders under each type. Rebuilds the tree. */
+    void setPaletteTypesFirst(bool enable);
+    bool paletteTypesFirst() const { return m_paletteTypesFirst; }
+
+    /** Tree path of $p's folder ("Palettes/01-Song", or by type
+     *  "Palettes/Color/01-Song"). */
+    QString paletteDisplayPath(const QLCPalette *p) const;
+
+    /** The stored (type-independent) folder path for a tree folder path. */
+    QString paletteStorePath(const QString &displayPath) const;
+
+    /** File $p into the tree folder $displayFolder. */
+    void filePalette(QLCPalette *p, const QString &displayFolder);
+
 private:
     /** Update $item's contents from the given $function */
     void updateFunctionItem(QTreeWidgetItem* item, const Function* function);
@@ -154,6 +171,9 @@ private:
 
     /** Ensure the synthetic "Palettes" category item exists; returns it. */
     QTreeWidgetItem* palettesCategoryItem();
+
+    /** The type heading for palette type $type (grouping by type). */
+    QTreeWidgetItem* paletteTypeItem(int type);
 
 private:
     Doc* m_doc;
@@ -300,6 +320,7 @@ private:
      *  root-level drop highlights the whole viewport via m_dropOnRoot). */
     QPersistentModelIndex m_dropHighlight;
     bool m_dropOnRoot;
+    bool m_paletteTypesFirst;
 };
 
 /** @} */

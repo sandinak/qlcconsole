@@ -2901,7 +2901,6 @@ void Monitor::pasteClipboard(float dxM, float dyM)
         pal->setName(t->name());
         pal->setValue(0, 0);
         pal->setStageTargetId(t->id());
-        pal->setPath(QString("Palettes/%1/").arg(QLCPalette::typeToString(QLCPalette::PanTilt)));
         m_doc->addPalette(pal);
         newPaletteIds.append(pal->id());
     }
@@ -5389,7 +5388,6 @@ void Monitor::addTarget(bool line)
         // Aim carries no values of its own: the target IS the value, and each
         // fixture solves its own pan/tilt from where it sits on the rig.
         pal->setStageTargetId(tid);
-        pal->setPath(QString("Palettes/%1/").arg(QLCPalette::typeToString(QLCPalette::Aim)));
         m_doc->addPalette(pal);
         m_doc->setModified();
     }

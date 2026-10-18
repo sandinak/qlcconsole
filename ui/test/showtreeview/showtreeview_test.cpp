@@ -3785,8 +3785,8 @@ void ShowTreeView_Test::palettesInTheLibrary()
     FixtureGroup *towers = group("Towers", 0, 2);
     const quint32 blue = colour(Qt::blue, "Blue");
     const quint32 full = dimmer(255, "Full");
-    // An older show's layout: the type is the first folder.
-    m_doc->palette(blue)->setPath("Palettes/Color/01-Song/");
+    // An older show's layout (the type the first folder) as loading reads it.
+    m_doc->palette(blue)->setPath(QLCPalette::migrateLegacyPath("Palettes/Color/01-Song/", QLCPalette::Color));
     m_doc->palette(full)->setPath("Palettes/01-Song/");
     ShowTreeController *st = m_doc->showTree();
     const quint32 prod = st->addProduction("P");

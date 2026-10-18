@@ -456,3 +456,150 @@ void QLCPalette_Test::goboNamesMatchInTiers()
 }
 
 QTEST_GUILESS_MAIN(QLCPalette_Test)
+
+static QString loadedPath(const QString &type, const QString &path, bool marked)
+{
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter w(&buffer);
+    w.writeStartElement("Palette");
+    w.writeAttribute("ID", "7");
+    w.writeAttribute("Type", type);
+    w.writeAttribute("Name", "P");
+    w.writeAttribute("Path", path);
+    if (marked)
+        w.writeAttribute("Folders", "1");
+    if (type == "Color")
+        w.writeAttribute("Value", "#ff0000");
+    else if (type == "Dimmer")
+        w.writeAttribute("Value", "100");
+    w.writeEndElement();
+    w.setDevice(NULL);
+    buffer.close();
+
+    buffer.open(QIODevice::ReadOnly | QIODevice::Text);
+    QXmlStreamReader r(&buffer);
+    r.readNextStartElement();
+    QLCPalette p(QLCPalette::Undefined);
+    if (p.loadXML(r) == false)
+        return QString("<load failed>");
+    return p.path();
+}
+
+void QLCPalette_Test::olderShowsTypeFoldersBecomeSharedFolders()
+{
+    // The rule itself.
+    QCOMPARE(QLCPalette::migrateLegacyPath("Palettes/Color/01-Song/", QLCPalette::Color),
+             QString("Palettes/01-Song/"));
+    QCOMPARE(QLCPalette::migrateLegacyPath("Palettes/Color/", QLCPalette::Color), QString());
+    QCOMPARE(QLCPalette::migrateLegacyPath("Palettes/Color", QLCPalette::Color), QString());
+    // An effect filed under a colour folder joins the same shared folder --
+    // when the whole show is in the old layout (anyTypeFolder); alone, a
+    // folder named like ANOTHER type may be the user's: kept.
+    QCOMPARE(QLCPalette::migrateLegacyPath("Palettes/Color/01-Song/", QLCPalette::Effect, true),
+             QString("Palettes/01-Song/"));
+    QCOMPARE(QLCPalette::migrateLegacyPath("Palettes/Color/01-Song/", QLCPalette::Effect),
+             QString("Palettes/Color/01-Song/"));
+    QCOMPARE(QLCPalette::migrateLegacyPath("Palettes/Color/", QLCPalette::Dimmer),
+             QString("Palettes/Color/"));
+    // Not a type's name at all: never touched.
+    QCOMPARE(QLCPalette::migrateLegacyPath("Palettes/Colour/", QLCPalette::Color, true),
+             QString("Palettes/Colour/"));
+    // Auto-filed effects (Effect/<Category>/<Engine>) were bookkeeping: unfiled.
+    QCOMPARE(QLCPalette::migrateLegacyPath("Palettes/Effect/Color/Sinelon/", QLCPalette::Effect),
+             QString());
+    QCOMPARE(QLCPalette::migrateLegacyPath("Palettes/Effect/WLED/Fire 2012/", QLCPalette::Effect),
+             QString());
+    // A user folder under Effect is kept.
+    QCOMPARE(QLCPalette::migrateLegacyPath("Palettes/Effect/My Faves/", QLCPalette::Effect),
+             QString("Palettes/My Faves/"));
+    QCOMPARE(QLCPalette::migrateLegacyPath("Palettes/Aim/01-Song/Verse/", QLCPalette::Aim),
+             QString("Palettes/01-Song/Verse/"));
+    // Not a type folder / not a palette path / empty: unchanged.
+    QCOMPARE(QLCPalette::migrateLegacyPath("Palettes/Warm/", QLCPalette::Color),
+             QString("Palettes/Warm/"));
+    QCOMPARE(QLCPalette::migrateLegacyPath("Shutters", QLCPalette::Shutter), QString("Shutters"));
+    QCOMPARE(QLCPalette::migrateLegacyPath("", QLCPalette::Color), QString());
+
+    // On load: an older show (no Folders marker) migrates...
+    QCOMPARE(loadedPath("Color", "Palettes/Color/01-Song/", false), QString("Palettes/01-Song/"));
+    QCOMPARE(loadedPath("Dimmer", "Palettes/Dimmer/", false), QString());
+    // ...a show saved by this version doesn't: a folder named "Color" stays.
+    QCOMPARE(loadedPath("Color", "Palettes/Color/", true), QString("Palettes/Color/"));
+
+    // Saving marks the path, so the round trip keeps it as it is.
+    QLCPalette p(QLCPalette::Dimmer);
+    p.setID(9);
+    p.setName("Full");
+    p.setValue(255);
+    p.setPath("Palettes/Dimmer/");   // a user folder called "Dimmer"
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter w(&buffer);
+    QVERIFY(p.saveXML(&w));
+    w.setDevice(NULL);
+    buffer.close();
+    buffer.open(QIODevice::ReadOnly | QIODevice::Text);
+    QXmlStreamReader r(&buffer);
+    r.readNextStartElement();
+    QCOMPARE(r.attributes().value("Folders").toString(), QString("1"));
+    QLCPalette back(QLCPalette::Undefined);
+    QVERIFY(back.loadXML(r));
+    QCOMPARE(back.path(), QString("Palettes/Dimmer/"));
+}
+
+/* The merge of feat/palette-folders into feat/show-tree (open 25): the old
+   per-type layout is migrated only where it is genuinely that. A show all
+   in the old layout (every unmarked folder starts with a type's name):
+   any type name first goes, so an effect dragged under Color/01-Song
+   joins 01-Song. A show with shared folders but no marker yet (saved by
+   a build between): only a palette's own type name goes -- a user folder
+   "Color" holding dimmers stays, and "Colour" is never touched. */
+void QLCPalette_Test::aUserFolderNamedLikeATypeIsKept()
+{
+    auto load = [](const QList<QStringList> &pals) {
+        QString xml = "<Engine>";
+        int id = 1;
+        for (const QStringList &p : pals)
+        {
+            xml += QString("<Palette ID=\"%1\" Type=\"%2\" Name=\"P%1\" Path=\"%3\"%4")
+                   .arg(id++).arg(p.at(0), p.at(1), p.value(2) == "marked" ? " Folders=\"1\"" : "");
+            if (p.at(0) == "Color")
+                xml += " Value=\"#ff0000\"";
+            else if (p.at(0) == "Dimmer")
+                xml += " Value=\"100\"";
+            xml += "/>";
+        }
+        xml += "</Engine>";
+        Doc *doc = new Doc(nullptr);
+        QXmlStreamReader r(xml);
+        r.readNextStartElement();
+        doc->loadXML(r, false);
+        QStringList out;
+        for (int i = 1; i < id; ++i)
+            out << (doc->palette(quint32(i)) ? doc->palette(quint32(i))->path() : QString("<none>"));
+        delete doc;
+        return out;
+    };
+
+    // Old layout throughout.
+    QCOMPARE(load({ { "Color", "Palettes/Color/01-Song/" },
+                    { "Effect", "Palettes/Color/01-Song/" },
+                    { "Dimmer", "Palettes/Dimmer/" } }),
+             QStringList({ "Palettes/01-Song/", "Palettes/01-Song/", "" }));
+
+    // Shared folders, no marker (a build in between): the user's "Color"
+    // (dimmers in it) and "Colour" stay; a colour under its own type's
+    // name is still the old layout.
+    QCOMPARE(load({ { "Color", "Palettes/01-Song/" },
+                    { "Dimmer", "Palettes/Color/" },
+                    { "Color", "Palettes/Colour/" },
+                    { "Color", "Palettes/Color/Verse/" } }),
+             QStringList({ "Palettes/01-Song/", "Palettes/Color/", "Palettes/Colour/", "Palettes/Verse/" }));
+
+    // Marked: never migrated, whatever the name -- and a show with marks
+    // was saved with shared folders, so another type's name is the user's.
+    QCOMPARE(load({ { "Color", "Palettes/Color/", "marked" },
+                    { "Dimmer", "Palettes/Color/01-Song/" } }),
+             QStringList({ "Palettes/Color/", "Palettes/Color/01-Song/" }));
+}

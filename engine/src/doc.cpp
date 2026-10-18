@@ -2390,6 +2390,9 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
         }
     }
 
+    // Palette folders from an older show, now the whole show is read.
+    QLCPalette::migrateLegacyPaths(palettes());
+
     postLoad();
 
     /* Locks are by layer now: objects pinned on their own move onto a locked

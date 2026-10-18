@@ -2270,7 +2270,7 @@ void ShowTree_Test::commandLine()
     const quint32 d45 = both.look(KeyDimmer)->palettes.first();
     QVERIFY(!st->isInlinePalette(d45));
     QCOMPARE(m_doc->palette(d45)->name(), QString("Dimmer 45%"));
-    QCOMPARE(m_doc->palette(d45)->path(), QString("Palettes/Dimmer"));
+    QCOMPARE(m_doc->palette(d45)->path(), QString());     // unfiled: folders hold any type
     QVERIFY(r.message.contains("new palette"));
     QVERIFY(r.layer == both.id);
     // A comma: a layer each, as an ⌥-drop; 45 again reuses the palette.
@@ -3010,9 +3010,10 @@ void ShowTree_Test::aTypedValueReusesAPalette()
 void ShowTree_Test::aNewPaletteIsNamedAsTheShowsAre()
 {
     ShowTreeController *st = m_doc->showTree();
-    // No siblings: plain names, the type's own folder.
+    // No siblings: plain names, unfiled (a folder named after the type
+    // would be a folder of its own: folders hold any type).
     QCOMPARE(st->suggestPaletteName(QLCPalette::Dimmer, { 77 }), QString("Dimmer 30%"));
-    QCOMPARE(st->suggestPaletteFolder(QLCPalette::Dimmer), QString("Palettes/Dimmer"));
+    QCOMPARE(st->suggestPaletteFolder(QLCPalette::Dimmer), QString());
     const QVariantList red { QLCPalette::colorToString(QColor("#ff0000"), QColor(Qt::black)) };
     const QVariantList green { QLCPalette::colorToString(QColor("#33aa55"), QColor(Qt::black)) };
     QCOMPARE(st->suggestPaletteName(QLCPalette::Color, red), QString("Red"));
@@ -4824,10 +4825,13 @@ void ShowTree_Test::reuseDetachAndConvertTyped()
 void ShowTree_Test::paletteOpsFoldersAnyType()
 {
     PaletteOps *ops = m_doc->paletteOps();
-    QCOMPARE(PaletteOps::folderOfPath("Palettes/Color/01-Song/", QLCPalette::Color), QString("01-Song"));
+    // One folder model (feat/palette-folders merged): an older show's
+    // per-type paths were migrated on load, so a folder is the path under
+    // Palettes -- one named like a type is a folder like any other.
+    QCOMPARE(PaletteOps::folderOfPath("Palettes/01-Song/", QLCPalette::Color), QString("01-Song"));
     QCOMPARE(PaletteOps::folderOfPath("Palettes/01-Song/Verse/", QLCPalette::Dimmer), QString("01-Song/Verse"));
-    QCOMPARE(PaletteOps::folderOfPath("Palettes/Effect/Color/Sinelon/", QLCPalette::Effect), QString());
-    QCOMPARE(PaletteOps::folderOfPath("Palettes/Dimmer", QLCPalette::Dimmer), QString());
+    QCOMPARE(PaletteOps::folderOfPath("Palettes/Color/", QLCPalette::Dimmer), QString("Color"));
+    QCOMPARE(PaletteOps::folderOfPath("Palettes/Colour", QLCPalette::Color), QString("Colour"));
     QCOMPARE(PaletteOps::folderOfPath(QString(), QLCPalette::Dimmer), QString());
     QCOMPARE(PaletteOps::pathForFolder(" 01-Song / Verse "), QString("Palettes/01-Song/Verse/"));
 
@@ -4838,11 +4842,12 @@ void ShowTree_Test::paletteOpsFoldersAnyType()
     QCOMPARE(m_doc->palette(c1)->values().count(), 1);
     const quint32 c2 = ops->create(QLCPalette::Color, QString());
     QCOMPARE(m_doc->palette(c2)->name(), QString("New Color 2"));
-    // An older show's palette: its type is its first folder.
+    // An older show's palette: its type was its first folder, dropped as
+    // the show loads (QLCPalette::migrateLegacyPath).
     QLCPalette *old = new QLCPalette(QLCPalette::Dimmer, m_doc);
     old->setName("Half");
     old->setValue(127);
-    old->setPath("Palettes/Dimmer/01-Song/");
+    old->setPath(QLCPalette::migrateLegacyPath("Palettes/Dimmer/01-Song/", QLCPalette::Dimmer));
     m_doc->addPalette(old);
     QCOMPARE(PaletteOps::folderOf(old), QString("01-Song"));
     QCOMPARE(ops->folders(), QStringList({ "01-Song" }));
@@ -4854,7 +4859,7 @@ void ShowTree_Test::paletteOpsFoldersAnyType()
     QCOMPARE(old->path(), QString("Palettes/02-Song/"));
     QCOMPARE(ops->undoText(), QString("Rename folder 01-Song"));
     QVERIFY(ops->undo());
-    QCOMPARE(old->path(), QString("Palettes/Dimmer/01-Song/"));     // exactly as it was
+    QCOMPARE(old->path(), QString("Palettes/01-Song/"));            // exactly as it was
     QCOMPARE(m_doc->palette(c1)->path(), QString("Palettes/01-Song/"));
     QVERIFY(ops->redo());
     QCOMPARE(PaletteOps::folderOf(old), QString("02-Song"));

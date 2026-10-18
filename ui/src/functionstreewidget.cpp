@@ -94,11 +94,24 @@ static QString functionFullPath(const Function *f)
     return rel.isEmpty() ? type : type + "/" + rel;
 }
 
-// Full folder path a palette lives in, e.g. "Palettes" or "Palettes/Color".
-static QString paletteFullPath(const QLCPalette *p)
+// Stored folder path of a palette, e.g. "Palettes" (unfiled) or
+// "Palettes/01-Song" -- type-independent (see QLCPalette::migrateLegacyPath).
+static QString paletteStoredPath(const QLCPalette *p)
 {
     const QString path = strippedPath(p->path());
     return path.isEmpty() ? QString(PALETTE_CATEGORY) : path;
+}
+
+static bool isPaletteTypeName(const QString &name)
+{
+    static const QLCPalette::PaletteType kTypes[] = {
+        QLCPalette::Dimmer, QLCPalette::Color, QLCPalette::Pan, QLCPalette::Tilt,
+        QLCPalette::PanTilt, QLCPalette::Aim, QLCPalette::Shutter, QLCPalette::Strobe,
+        QLCPalette::Gobo, QLCPalette::Zoom, QLCPalette::Beam, QLCPalette::Effect };
+    for (QLCPalette::PaletteType t : kTypes)
+        if (name == QLCPalette::typeToString(t))
+            return true;
+    return false;
 }
 
 static void setFunctionFullPath(Function *f, const QString &full)
@@ -109,10 +122,10 @@ static void setFunctionFullPath(Function *f, const QString &full)
     f->setPath(full == type ? type + "/" : full);
 }
 
-static void setPaletteFullPath(QLCPalette *p, const QString &full)
+static void setPaletteStoredPath(QLCPalette *p, const QString &stored)
 {
-    // Stored like new palettes are ("Palettes/Color/"); the bare root is "".
-    p->setPath(full == QString(PALETTE_CATEGORY) ? QString() : full + "/");
+    // Stored as "Palettes/01-Song/"; unfiled is "".
+    p->setPath(stored == QString(PALETTE_CATEGORY) ? QString() : stored + "/");
 }
 
 // Is $path the folder $folder itself or inside it?
@@ -181,6 +194,7 @@ FunctionsTreeWidget::FunctionsTreeWidget(Doc *doc, QWidget *parent) :
   , m_typeOrderByRole(false)
   , m_externalDragMode(false)
   , m_dropOnRoot(false)
+  , m_paletteTypesFirst(false)
 {
     sortItems(COL_NAME, Qt::AscendingOrder);
 
@@ -487,15 +501,20 @@ QTreeWidgetItem* FunctionsTreeWidget::paletteParentItem(const QLCPalette* palett
 
     QTreeWidgetItem* category = palettesCategoryItem();
 
-    QString path = palette->path();
-    // Paths are stored with a trailing '/' (e.g. "Palettes/Color/") but
-    // folderItem() returns NULL for any name ending in '/', so strip it.
-    while (path.endsWith('/'))
-        path.chop(1);
+    // Display path (type node first when grouping by type), no trailing '/'
+    // (folderItem() returns NULL for any name ending in '/').
+    const QString path = paletteDisplayPath(palette);
 
     const QString basePath = QString(PALETTE_CATEGORY);
     if (path.isEmpty() || path == basePath)
         return category;
+
+    if (m_paletteTypesFirst)
+    {
+        QTreeWidgetItem *typeNode = paletteTypeItem(palette->type());
+        if (typeNode != NULL && path.count('/') == 1)
+            return typeNode;
+    }
 
     QTreeWidgetItem* pItem = ensurePaletteFolder(path);
     return pItem != NULL ? pItem : category;
@@ -826,16 +845,36 @@ void FunctionsTreeWidget::slotItemChanged(QTreeWidgetItem *item)
         return;
     }
 
+    // A top-level folder of a palettes-only tree hangs off the invisible
+    // root, which stands for the "Palettes/" category.
     QTreeWidgetItem *parent = item->parent();
+    if (parent == NULL && m_displayFilter == PalettesOnly)
+        parent = invisibleRootItem();
     if (parent != NULL)
     {
-        QString fullPath = parent->text(COL_PATH);
+        QString fullPath = (parent == invisibleRootItem())
+                ? QString(PALETTE_CATEGORY) + "/" : parent->text(COL_PATH);
 
         if (fullPath.endsWith('/') == false)
             fullPath.append("/");
         fullPath.append(item->text(COL_NAME));
 
         const bool renamed = (item->text(COL_PATH) != fullPath);
+        if (renamed && itemNodeKind(item) == PaletteNode && isUserFolder(item))
+        {
+            // A palette folder is shared by all palette types: rename it for
+            // all of them (by type, the tree shows a copy under each type).
+            const QString oldPath = strippedPath(item->text(COL_PATH));
+            m_foldersMap.remove(item->text(COL_PATH));
+            item->setText(COL_PATH, fullPath);
+            m_foldersMap[fullPath] = item;
+            QStringList keep = reRootFolder(oldPath, fullPath);
+            keep << fullPath;
+            m_doc->setModified();
+            scheduleRebuild(keep, fullPath);
+            blockSignals(false);
+            return;
+        }
         m_foldersMap.remove(item->text(COL_PATH));
         item->setText(COL_PATH, fullPath);
         m_foldersMap[fullPath] = item;
@@ -863,7 +902,7 @@ void FunctionsTreeWidget::slotUpdateChildrenPath(QTreeWidgetItem *root)
             {
                 QLCPalette *p = m_doc->palette(itemPaletteId(child));
                 if (p != NULL)
-                    p->setPath(root->text(COL_PATH));
+                    setPaletteStoredPath(p, paletteStorePath(root->text(COL_PATH)));
             }
             else
             {
@@ -1287,9 +1326,10 @@ bool FunctionsTreeWidget::handleFolderDrop(const QMimeData *mime, QTreeWidgetIte
             if (dest.isEmpty())
                 continue;
             noteDest(dest);
-            if (apply && paletteFullPath(p) != dest)
+            const QString stored = paletteStorePath(dest);
+            if (apply && paletteStoredPath(p) != stored)
             {
-                setPaletteFullPath(p, dest);
+                setPaletteStoredPath(p, stored);
                 changed = true;
             }
         }
@@ -1416,13 +1456,20 @@ QStringList FunctionsTreeWidget::reRootFolder(const QString &oldPath, const QStr
 
     if (oldPath.startsWith(QString(PALETTE_CATEGORY) + "/"))
     {
-        foreach (QLCPalette *p, m_doc->palettes())
+        // On the stored, type-independent paths: a folder is the same folder
+        // for every palette type, even when the tree shows it under each type.
+        const QString oldStored = paletteStorePath(oldPath);
+        const QString newStored = paletteStorePath(newPath);
+        if (oldStored != QString(PALETTE_CATEGORY))
         {
-            if (p == NULL)
-                continue;
-            const QString full = paletteFullPath(p);
-            if (pathIsUnder(full, oldPath))
-                setPaletteFullPath(p, newPath + full.mid(oldPath.length()));
+            foreach (QLCPalette *p, m_doc->palettes())
+            {
+                if (p == NULL)
+                    continue;
+                const QString stored = paletteStoredPath(p);
+                if (pathIsUnder(stored, oldStored))
+                    setPaletteStoredPath(p, newStored + stored.mid(oldStored.length()));
+            }
         }
     }
     else
@@ -1462,6 +1509,70 @@ void FunctionsTreeWidget::scheduleRebuild(const QStringList &keepFolders, const 
     });
 }
 
+void FunctionsTreeWidget::setPaletteTypesFirst(bool enable)
+{
+    if (enable == m_paletteTypesFirst)
+        return;
+    m_paletteTypesFirst = enable;
+    updateTree();
+}
+
+QString FunctionsTreeWidget::paletteDisplayPath(const QLCPalette *p) const
+{
+    const QString stored = paletteStoredPath(p);
+    const QString type = QLCPalette::typeToString(p->type());
+    if (m_paletteTypesFirst == false || type.isEmpty()
+            || stored.startsWith(QString(PALETTE_CATEGORY)) == false)
+        return stored;
+    // "Palettes/01-Song" -> "Palettes/Color/01-Song"
+    return QString(PALETTE_CATEGORY) + "/" + type
+            + stored.mid(QString(PALETTE_CATEGORY).length());
+}
+
+QString FunctionsTreeWidget::paletteStorePath(const QString &displayPath) const
+{
+    const QString d = strippedPath(displayPath);
+    if (d.isEmpty())
+        return QString(PALETTE_CATEGORY);
+    if (m_paletteTypesFirst == false)
+        return d;
+    QStringList segs = d.split('/');
+    if (segs.size() >= 2 && segs.first() == QString(PALETTE_CATEGORY)
+            && isPaletteTypeName(segs.at(1)))
+        segs.removeAt(1);
+    return segs.join('/');
+}
+
+void FunctionsTreeWidget::filePalette(QLCPalette *p, const QString &displayFolder)
+{
+    if (p != NULL)
+        setPaletteStoredPath(p, paletteStorePath(displayFolder));
+}
+
+QTreeWidgetItem *FunctionsTreeWidget::paletteTypeItem(int type)
+{
+    const QString name = QLCPalette::typeToString(QLCPalette::PaletteType(type));
+    if (name.isEmpty())
+        return NULL;
+    const QString key = QString(PALETTE_CATEGORY) + "/" + name;
+    if (m_foldersMap.contains(key))
+        return m_foldersMap.value(key);
+
+    // A type heading: like a category (COL_PATH ends in '/', so it is not a
+    // user folder: no rename/delete/drag), keyed without the slash so
+    // folderItem() hangs that type's folders under it.
+    QTreeWidgetItem *item = new QTreeWidgetItem(palettesCategoryItem());
+    item->setText(COL_NAME, name);
+    item->setIcon(COL_NAME, QIcon(":/folder.png"));
+    item->setData(COL_NAME, Qt::UserRole, Function::invalidId());
+    item->setData(COL_NAME, Qt::UserRole + 1, Function::Undefined);
+    item->setData(COL_NAME, NODE_KIND_ROLE, PaletteNode);
+    item->setText(COL_PATH, key + "/");
+    item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDropEnabled);
+    m_foldersMap[key] = item;
+    return item;
+}
+
 bool FunctionsTreeWidget::isUserFolder(const QTreeWidgetItem *item) const
 {
     if (item == NULL || item == invisibleRootItem())
@@ -1479,8 +1590,9 @@ int FunctionsTreeWidget::folderContentCount(const QTreeWidgetItem *item) const
     int count = 0;
     if (itemNodeKind(item) == PaletteNode)
     {
+        const QString stored = paletteStorePath(folder);
         foreach (QLCPalette *p, m_doc->palettes())
-            if (p != NULL && pathIsUnder(paletteFullPath(p), folder))
+            if (p != NULL && pathIsUnder(paletteStoredPath(p), stored))
                 count++;
     }
     else

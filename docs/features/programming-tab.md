@@ -89,6 +89,23 @@ Both the scenes/functions tree and the Palettes tab keep things in folders.
 
 Folders are saved with the show and show the same in the Functions tab.
 
+**Palette folders hold any type.** A folder in the Palettes tab can hold
+colours, aims, dimmers and effects together — say a folder per song,
+"01-Everybody Scream", with everything that song uses. Right-click empty
+space → **New folder…** makes one at the top level. The tab shows folders
+first, each palette with its type's icon, and the palettes in no folder
+below them. Tick **Group by type** in the right-click menu to see it the
+other way round: Aim, Color, Dimmer… first, with the same folders under each
+type (it is remembered). In that view a folder is still one folder: renaming
+or deleting it under Color does it for every type, and dropping a palette on
+it files the palette there whatever its type.
+
+Shows saved before this had a folder per type (Color › 01-Song, Aim ›
+01-Song); they open with those merged into one folder per name, and effect
+looks that had been filed automatically under Effect › category › engine are
+left in no folder. Saving keeps the new layout; an older version of
+qlcconsole opening such a show shows the same folders at the top level.
+
 ### Taking something out of a collection, chaser or show
 
 An open collection, chaser or show lists what is in it underneath its row.
