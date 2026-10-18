@@ -1108,6 +1108,9 @@ void saveXML(QXmlStreamWriter *doc, const Production &production)
     doc->writeStartElement(KXMLShowTreeProduction);
     writeId(doc, QStringLiteral("ID"), production.id);
     doc->writeAttribute(QStringLiteral("Name"), production.name);
+    writeId(doc, QStringLiteral("MainList"), production.mainList);
+    if (production.timecode >= -1)
+        doc->writeAttribute(QStringLiteral("Timecode"), QString::number(production.timecode));
 
     for (const CueList &list : production.lists)
     {
@@ -1244,6 +1247,13 @@ bool loadXML(QXmlStreamReader &root, Production &production)
     production = Production();
     production.id = readId(a, QStringLiteral("ID"));
     production.name = a.value(QStringLiteral("Name")).toString();
+    production.mainList = readId(a, QStringLiteral("MainList"));
+    if (a.hasAttribute(QStringLiteral("Timecode")))
+    {
+        bool ok = false;
+        const int tc = a.value(QStringLiteral("Timecode")).toString().toInt(&ok);
+        production.timecode = ok && tc >= -1 ? tc : -2;
+    }
 
     while (root.readNextStartElement())
     {

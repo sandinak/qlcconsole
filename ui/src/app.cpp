@@ -5446,6 +5446,9 @@ void App::slotUpdateStandby()
     const QString sub = standbySubCueText(list);
     if (!sub.isEmpty())
         text = sub + QStringLiteral(" \u00b7 ") + text;
+    // The Show Tree's current production (P5): whose GO this is.
+    if (const ShowTree::Production *prod = m_doc->showTree()->production(m_doc->currentProduction()))
+        text = prod->name + QStringLiteral(" \u25b8 ") + text;
     if (m_statusStandby->text() != text)
         m_statusStandby->setText(text);
     m_statusStandby->show();
@@ -5509,6 +5512,27 @@ void App::slotFillStandbyMenu()
         });
         a->setCheckable(true);
         a->setChecked(i == sc->standbyStep(list));
+    }
+    // Which production GO plays (P5): the same choice as the Show Tree's
+    // switcher.
+    ShowTreeController *tree = m_doc->showTree();
+    if (!tree->productions().isEmpty())
+    {
+        QMenu *prods = menu->addMenu(tr("Production"));
+        QActionGroup *group = new QActionGroup(prods);
+        QList<QPair<quint32, QString>> choices { { ShowTree::invalidId(), tr("None (the main cue list)") } };
+        for (const ShowTree::Production &p : tree->productions())
+            choices << qMakePair(p.id, p.name);
+        for (const auto &c : choices)
+        {
+            const quint32 pid = c.first;
+            QAction *a = prods->addAction(c.second, this, [tree, pid]() {
+                tree->setCurrentProduction(pid);
+            });
+            a->setCheckable(true);
+            a->setChecked(pid == tree->currentProduction());
+            group->addAction(a);
+        }
     }
     menu->addSeparator();
     const quint32 id = list->id();

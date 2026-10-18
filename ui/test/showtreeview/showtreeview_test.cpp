@@ -59,6 +59,8 @@
 #include <QRegularExpression>
 
 #include "showtreecontroller.h"
+#include "showcontrol.h"
+#include "timecodesource.h"
 #include "paletteops.h"
 #include "virtualconsole.h"
 #include "vcbutton.h"
@@ -4366,6 +4368,116 @@ void ShowTreeView_Test::looksAreOneUndoStepAndTyped()
     // vcpage with no Virtual Console: said, nothing made.
     QVERIFY(!view.runCommand("vcpage"));
     QVERIFY(view.commandMessage().contains("No Virtual Console"));
+}
+
+/* P5: the header's switcher sets the current production (what GO plays),
+   the tree marks it and its main list, the production page sets its main
+   list and timecode source (each one undo step), the context menu offers
+   Make current / Make main list. */
+void ShowTreeView_Test::theProductionSwitcherAndPage()
+{
+    FixtureGroup *a = group("A", 0, 2);
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 pa = st->addProduction("Dance");
+    const quint32 la = st->addCueList(pa, "Full Show");
+    const quint32 ca = st->addCue(la, -1, "One");
+    Target t;
+    t.groups << a->id();
+    st->setLayerLook(ca, st->addLayer(ca, t), st->lookForPalette(full));
+    const quint32 pb = st->addProduction("Corporate");
+    const quint32 lb = st->addCueList(pb, "Keynote");
+    st->addCue(lb, -1, "Walk-in");
+    const quint32 lb2 = st->addCueList(pb, "Awards");
+    st->addCue(lb2, -1, "Fanfare");
+
+    ShowTreeView view(nullptr, m_doc);
+    QComboBox *sw = view.findChild<QComboBox *>("stProduction");
+    QVERIFY(sw != nullptr);
+    QCOMPARE(sw, view.productionSwitcher());
+    QCOMPARE(sw->count(), 3);                       // none + two
+    QCOMPARE(sw->currentIndex(), 0);
+
+    // Choose Corporate: current, GO plays its first list.
+    const int at = sw->findData(pb);
+    sw->setCurrentIndex(at);
+    emit sw->activated(at);
+    QCOMPARE(st->currentProduction(), pb);
+    QCOMPARE(m_doc->showControl()->mainCueList(), st->cueList(lb)->chaser);
+    QTreeWidget *tree = view.tree();
+    QTreeWidgetItem *prow = nullptr, *mainRow = nullptr;
+    for (QTreeWidgetItemIterator it(tree); *it; ++it)
+    {
+        if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::ProductionNode
+            && (*it)->data(0, ShowTreeView::IdRole).toUInt() == pb)
+            prow = *it;
+        if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::ListNode
+            && (*it)->data(0, ShowTreeView::IdRole).toUInt() == lb)
+            mainRow = *it;
+    }
+    QVERIFY(prow != nullptr && mainRow != nullptr);
+    QVERIFY(prow->text(1).contains("current"));
+    QVERIFY(mainRow->text(1).contains("main"));
+
+    // The production page.
+    QVERIFY(view.selectNode(pb));
+    QCOMPARE(view.findChild<QStackedWidget *>("stInspector")->currentWidget(),
+             view.findChild<QPushButton *>("stProdCurrent")->parentWidget());
+    QVERIFY(view.findChild<QPushButton *>("stProdCurrent")->text().contains("Current"));
+    QComboBox *mainList = view.findChild<QComboBox *>("stProdMainList");
+    QCOMPARE(mainList->count(), 2);
+    const int awards = mainList->findData(lb2);
+    mainList->setCurrentIndex(awards);
+    emit mainList->activated(awards);
+    QCOMPARE(st->mainList(pb), lb2);
+    QCOMPARE(m_doc->showControl()->mainCueList(), st->cueList(lb2)->chaser);
+    QCOMPARE(st->undoText(), QString("Main list"));
+
+    QComboBox *tc = view.findChild<QComboBox *>("stProdTimecode");
+    QCOMPARE(tc->itemData(0).toInt(), -2);          // the show's setting first
+    const int any = tc->findData(-1);
+    tc->setCurrentIndex(any);
+    emit tc->activated(any);
+    QCOMPARE(st->production(pb)->timecode, -1);
+    QCOMPARE(m_doc->timecodeSource()->effectiveUniverse(), -1);
+    QVERIFY(st->undo());
+    QCOMPARE(st->production(pb)->timecode, -2);
+
+    // Make current from the page; the switcher follows.
+    QVERIFY(view.selectNode(pa));
+    view.findChild<QPushButton *>("stProdCurrent")->click();
+    QCOMPARE(st->currentProduction(), pa);
+    QCOMPARE(sw->currentData().toUInt(), pa);
+
+    // The context menu of a list of the other production offers Play on GO.
+    {
+        QStringList names;
+        ModalCloser closer([&](QWidget *w) {
+            if (QMenu *m = qobject_cast<QMenu *>(w))
+                for (QAction *act : m->actions())
+                    if (act->objectName() == QLatin1String("stPlayOnGo"))
+                    {
+                        names << act->objectName();
+                        m->close();
+                        act->trigger();
+                        return true;
+                    }
+            return false;
+        });
+        QVERIFY(view.selectNode(lb));
+        QTreeWidgetItem *row = tree->currentItem();
+        QMetaObject::invokeMethod(&view, "slotTreeContextMenu",
+                                  Q_ARG(QPoint, tree->visualItemRect(row).center()));
+        QCOMPARE(names, QStringList({ "stPlayOnGo" }));
+    }
+    QCOMPARE(st->currentProduction(), pb);
+    QCOMPARE(st->mainList(pb), lb);
+    QCOMPARE(sw->currentData().toUInt(), pb);
+
+    // Typed.
+    QVERIFY(view.runCommand("production none"));
+    QCOMPARE(st->currentProduction(), invalidId());
+    QCOMPARE(sw->currentIndex(), 0);
 }
 
 QTEST_MAIN(ShowTreeView_Test)

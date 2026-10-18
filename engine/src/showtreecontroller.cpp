@@ -29,6 +29,7 @@
 #include <algorithm>
 
 #include "showtreecontroller.h"
+#include "showcontrol.h"
 #include "paletteops.h"
 #include "monitorproperties.h"
 #include "stagetarget.h"
@@ -97,6 +98,11 @@ ShowTreeController::ShowTreeController(Doc *doc)
             this, &ShowTreeController::slotTimerFunctionStarted, Qt::QueuedConnection);
     connect(m_doc->masterTimer(), &MasterTimer::functionStopped,
             this, &ShowTreeController::slotTimerFunctionStopped, Qt::QueuedConnection);
+    // The main cue list set elsewhere (a chaser editor) moves the current
+    // production with it (P5): one source of truth for what GO plays.
+    if (m_doc->showControl() != nullptr)
+        connect(m_doc->showControl(), &ShowControl::mainCueListChanged,
+                this, &ShowTreeController::slotMainCueListChanged);
 }
 
 ShowTreeController::~ShowTreeController()
@@ -3723,6 +3729,9 @@ void ShowTreeController::bake()
 
     m_baking = false;
 
+    // The current production's main list may have a (new) chaser now.
+    syncCurrentProduction();
+
     // The previewed cue may play something else now: re-take it, so an
     // edit shows on the rig at once.
     syncPreview();
@@ -4350,6 +4359,9 @@ void ShowTreeController::saveState(QXmlStreamWriter *doc, bool snapshot) const
 {
     doc->writeStartElement(KXMLQLCShowTree);
     doc->writeAttribute(KXMLShowTreeNextId, QString::number(m_nextId));
+    // What GO plays is the operator's, not an edit: never on undo.
+    if (!snapshot && m_current != invalidId())
+        doc->writeAttribute(QStringLiteral("Current"), QString::number(m_current));
 
     for (const GroupSet &gs : m_groupSets)
         ShowTree::saveXML(doc, gs);
@@ -4453,6 +4465,12 @@ void ShowTreeController::loadState(QXmlStreamReader &root, bool snapshot)
     m_snapshotHasDetachedLists = false;
     m_snapshotDetachedLists.clear();
     const quint32 next = root.attributes().value(KXMLShowTreeNextId).toString().toUInt();
+    if (!snapshot)
+    {
+        bool ok = false;
+        const quint32 cur = root.attributes().value(QStringLiteral("Current")).toString().toUInt(&ok);
+        m_current = ok ? cur : invalidId();
+    }
     if (next > m_nextId || !snapshot)
         m_nextId = qMax<quint32>(next, 1);
 
@@ -4663,6 +4681,9 @@ bool ShowTreeController::loadXML(QXmlStreamReader &root)
     }
     reset();
     loadState(root, false);
+    if (production(m_current) == nullptr)
+        m_current = invalidId();
+    applyProductionTimecode();
     emit changed();
     return true;
 }
@@ -4728,6 +4749,8 @@ void ShowTreeController::reset()
     m_undo.clear();
     m_redo.clear();
     m_nextId = 1;
+    m_current = invalidId();
+    applyProductionTimecode();
     emit changed();
 }
 

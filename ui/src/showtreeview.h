@@ -556,6 +556,22 @@ private:
     QStackedWidget *m_pages;
     QLabel *m_emptyPage;
     QWidget *m_listPage;
+    /** P5: the production page (current, main list, timecode) and the
+     *  header's switcher of the current production. */
+    QWidget *m_prodPage = nullptr;
+    QLabel *m_prodTitle = nullptr;
+    QPushButton *m_prodCurrent = nullptr;
+    QComboBox *m_prodMainList = nullptr;
+    QComboBox *m_prodTimecode = nullptr;
+    QLabel *m_prodInfo = nullptr;
+    QComboBox *m_production = nullptr;
+    void showProductionPage(quint32 productionId);
+    void updateProductionSwitcher();
+    /** The timecode choices: (label, universe) -- the show's, any, each universe. */
+    QList<QPair<QString, qint32>> timecodeChoices() const;
+public:
+    QComboBox *productionSwitcher() const { return m_production; }
+private:
     QLabel *m_listTitle;
     QComboBox *m_listMode;
     QComboBox *m_listBase;

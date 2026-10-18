@@ -106,6 +106,10 @@ public:
     int standbyStep(const Chaser *chaser) const;
 
 signals:
+    /** The main cue list was set (by the chaser editor, the Show Tree's
+     *  current production), or let go of with its chaser. Not on load. */
+    void mainCueListChanged(quint32 chaserId);
+
     /** A command arrived and was carried out (@a done), or not, with a
      *  line saying which and why: "GO cue 12.5 — Main", "GO cue 9: no such
      *  cue in Main". */

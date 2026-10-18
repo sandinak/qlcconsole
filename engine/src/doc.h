@@ -1142,6 +1142,11 @@ public:
     /** The Show Tree: productions and what they bake to
      *  (ShowTreeController). Never null. */
     class ShowTreeController *showTree() const { return m_showTree; }
+    /** The Show Tree's current production (P5): what GO, the footer, VC
+     *  and show control play. Forwarders only; ShowTreeController keeps it.
+     *  Invalid: none (GO plays the main cue list as it is set). */
+    quint32 currentProduction() const;
+    bool setCurrentProduction(quint32 productionId);
     /** The everyday palette operations and their one undo stack, shared
      *  by the Show Tree and the Programming tab (PaletteOps). Never null. */
     class PaletteOps *paletteOps() const { return m_paletteOps; }

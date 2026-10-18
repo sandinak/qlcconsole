@@ -103,6 +103,9 @@ private slots:
     void makeVcPageUpdatesItsFrame();
     void looksAreOneUndoStepAndTyped();
 
+    // P5: multiple productions
+    void theProductionSwitcherAndPage();
+
 private:
     quint32 dimmer(int level, const QString &name);
     quint32 colour(const QColor &c, const QString &name);

@@ -74,6 +74,7 @@ void ShowControl::setMainCueList(quint32 chaserId)
     m_mainCueList = chaserId;
     if (m_doc != nullptr)
         m_doc->setModified();
+    emit mainCueListChanged(m_mainCueList);
 }
 
 Chaser *ShowControl::cueList(const QString &list) const
@@ -264,7 +265,10 @@ void ShowControl::slotFunctionRemoved(quint32 id)
 {
     m_loaded.remove(id);
     if (id == m_mainCueList)
+    {
         m_mainCueList = UINT_MAX;
+        emit mainCueListChanged(m_mainCueList);
+    }
 }
 
 /*****************************************************************************

@@ -259,6 +259,12 @@ namespace ShowTree
         quint32 id = 0xFFFFFFFF;
         QString name;
         QList<CueList> lists;
+        /** The cue list GO, the footer and show control play while this is
+         *  the current production (P5). Invalid: its first cue list. */
+        quint32 mainList = 0xFFFFFFFF;
+        /** Where its timecode comes from while it is current (P5): a
+         *  universe, -1 any source, -2 (default) the show's own setting. */
+        qint32 timecode = -2;
 
         CueList *list(quint32 id);
         const CueList *list(quint32 id) const;

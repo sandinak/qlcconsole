@@ -87,6 +87,16 @@ const QList<ShowTreeCommand::Word> &ShowTreeCommand::words()
             t << w;
         };
         // navigate
+        add("production", "navigate", "production \"name\" [current] | production current | production none",
+            "Selects that production, or makes a new one. current makes it the current production: the "
+            "one GO, the footer, show control and the Cue Runner play (its main list). none: no current "
+            "production (GO plays the show's main cue list as set).",
+            { "production \"Corporate Gig\"", "production \"Corporate Gig\" current", "production current",
+              "production none" }, { "list", "main" });
+        add("main", "navigate", "main",
+            "Makes the selected cue list its production's main list: what GO plays while the production "
+            "is current.",
+            { "main" }, { "production", "list" });
         add("list", "navigate", "list \"name\"",
             "Selects that cue list, or makes a new Tracking one in the selected production.",
             { "list \"01-Opener\"" }, { "cue" });
@@ -1218,6 +1228,80 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
         if (error.isEmpty() && ctx.layer != invalidId())
             res.layer = ctx.layer;
     }
+    else if (w0 == QLatin1String("production"))
+    {
+        // production "name" [current] | production current | production none
+        r.word();
+        QString nm = r.quoted();
+        bool makeCurrent = false, none = false;
+        if (nm.isNull())
+        {
+            const QString rest = r.src.mid(r.i).trimmed();
+            if (rest.compare(QLatin1String("current"), Qt::CaseInsensitive) == 0)
+                makeCurrent = true;
+            else if (rest.compare(QLatin1String("none"), Qt::CaseInsensitive) == 0)
+                none = true;
+            else if (rest.endsWith(QLatin1String(" current"), Qt::CaseInsensitive))
+            {
+                nm = rest.left(rest.length() - 8).trimmed();
+                makeCurrent = true;
+            }
+            else
+                nm = rest;
+            r.i = int(r.src.length());
+        }
+        else
+        {
+            const QString rest = r.src.mid(r.i).trimmed();
+            if (rest.compare(QLatin1String("current"), Qt::CaseInsensitive) == 0)
+                makeCurrent = true;
+            else if (!rest.isEmpty())
+                error = tr("production \"name\" [current]");
+            r.i = int(r.src.length());
+        }
+        if (none)
+        {
+            m_st->setCurrentProduction(invalidId());
+            res.message = tr("No current production: GO plays the main cue list as it is set.");
+        }
+        else if (error.isEmpty())
+        {
+            if (!nm.isEmpty())
+            {
+                quint32 have = invalidId();
+                for (const Production &p : m_st->productions())
+                    if (have == invalidId() && p.name.compare(nm, Qt::CaseInsensitive) == 0)
+                        have = p.id;
+                if (have == invalidId())
+                    have = m_st->addProduction(nm);
+                ctx.production = have;
+                ctx.list = invalidId();
+                ctx.cue = invalidId();
+            }
+            if (makeCurrent)
+            {
+                if (m_st->production(ctx.production) == nullptr)
+                    error = tr("Select a production first (production \"name\").");
+                else
+                {
+                    m_st->setCurrentProduction(ctx.production);
+                    res.message = tr("%1 is the current production.").arg(m_st->production(ctx.production)->name);
+                }
+            }
+            else if (nm.isEmpty())
+                error = tr("production \"name\" [current] | production current | production none");
+        }
+    }
+    else if (w0 == QLatin1String("main"))
+    {
+        r.word();
+        if (!r.atEnd())
+            error = tr("main -- then nothing more");
+        else if (m_st->cueList(ctx.list) == nullptr || m_st->isLooks(ctx.list))
+            error = tr("Select a cue list first (or: list \"name\").");
+        else
+            m_st->setMainList(ctx.list);
+    }
     else if (w0 == QLatin1String("list"))
     {
         r.word();
@@ -2152,7 +2236,7 @@ bool ShowTreeCommand::candidates(const QString &head, const Context &context, QS
     }
     if (w0 == QLatin1String("undo") || w0 == QLatin1String("redo") || w0 == QLatin1String("dup")
         || w0 == QLatin1String("name") || w0 == QLatin1String("paste") || w0 == QLatin1String("reusable")
-        || w0 == QLatin1String("unlink"))
+        || w0 == QLatin1String("unlink") || w0 == QLatin1String("main"))
         return true;
     if (w0 == QLatin1String("use"))
     {
@@ -2359,6 +2443,24 @@ bool ShowTreeCommand::candidates(const QString &head, const Context &context, QS
         r.word();
         if (r.atEnd())
             *out = listNames(context);
+        return true;
+    }
+    if (w0 == QLatin1String("production"))
+    {
+        r.word();
+        if (r.atEnd())
+        {
+            *out << QStringLiteral("current") << QStringLiteral("none");
+            for (const Production &p : m_st->productions())
+                *out << p.name;
+            return true;
+        }
+        if (r.src.mid(r.i).trimmed().startsWith(QLatin1Char('"')))
+        {
+            r.quoted();
+            if (r.atEnd())
+                *out << QStringLiteral("current");
+        }
         return true;
     }
     if (w0 == QLatin1String("include"))
