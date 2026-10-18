@@ -859,7 +859,26 @@ int PatchPlanner::apply(const QList<Assignment> &assignments, QStringList *probl
                 continue;
             }
             if (!fx->ipAddress().isEmpty())
+            {
+                /* The fixture's IP is the primary. Backup lanterns on the
+                   patch ("outputIP2"...) stay -- and one that was made the
+                   primary by hand trades places back rather than being
+                   sent to twice. */
+                const QMap<QString, QVariant> pp = wop->getPluginParameters();
+                const QString was = pp.value(QStringLiteral("outputIP")).toString();
                 wop->setPluginParameter(QStringLiteral("outputIP"), fx->ipAddress());
+                for (auto it = pp.constBegin(); it != pp.constEnd(); ++it)
+                {
+                    if (!it.key().startsWith(QLatin1String("outputIP"))
+                        || it.key() == QLatin1String("outputIP")
+                        || it.value().toString() != fx->ipAddress())
+                        continue;
+                    if (!was.isEmpty() && was != fx->ipAddress())
+                        wop->setPluginParameter(it.key(), was);
+                    else
+                        wop->unSetPluginParameter(it.key());
+                }
+            }
             else if (problems != NULL)
                 *problems << QStringLiteral("WLED fixture %1 has no IP address").arg(name);
             wop->setPluginParameter(QStringLiteral("wledAddress"), fx->address() + 1);

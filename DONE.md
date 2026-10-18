@@ -6,6 +6,49 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-18 — Backup WLED lanterns: several devices per universe *(feat/wled-multi-device)*
+
+A backup lantern mirrors the primary without double programming.
+
+- **File format** (backward compatible): `outputIP` stays the primary;
+  backups are `outputIP2`…`outputIP16`, each with optional `wledAddress2`/
+  `wledChannels2`… (absent = the primary's). Older builds' WLED plugin
+  drops unknown keys in `setParameter()`, so they drive the primary alone.
+  The plugin now routes every numbered key (`WledPlugin::parameterSlot()`)
+  into its base parameter store, so an open patch saves them; a kept
+  (offline / plugin-missing) patch writes its cache verbatim as before.
+  Round trips byte-identical for 1/2/3 devices, and old single-device shows
+  unchanged (`wleddevices_test`, `inputoutputmap_test`).
+- **Plugin** (`plugins/wled/src/wledplugin.*`): `Target` now holds a
+  `QVector<Device>`; each device has its own sent cache, in-flight flag,
+  info poll, answer, live-clear, and a 1 s retry after a failed send. A
+  device that answers again after not answering has its sent cache and
+  live-clear reset, so it gets the full look (`live:false` too). New
+  `unSetParameter()` override (removing a backup), `outputProblems()` for
+  the Connections row ("1 of 2 answering — X not answering"; single device:
+  "X not answering"), per-device lines in `outputInfo()`, and
+  `targetProblems()` lines get " · 1 of 2 answering". The rig view's
+  `/json/live` goes to the first answering device (`Target::liveSlot()`).
+- **UI:** `WledDevicesDialog` (`ui/src/wleddevicesdialog.*`): table of IP /
+  Address / Channels, Add Backup / Remove / Move Up / Move Down, validation
+  (IP or host[:port], duplicates, a device another WLED universe uses),
+  suggestions from the show's WLED fixture IPs (WLED has no discovery). It
+  is what `UniversePatcher::retargetPatch()` opens for a WLED patch, so both
+  Connections and the Fixture Manager reach it; the menu entry reads **WLED
+  Devices / Backup Lanterns…**. One `PatchUndo` step. The leg text reads
+  "WLED → ip + 1 backup". The footer names a silent backup "Lantern SL
+  backup" and no longer double-reports WLED through `outputs.problems`.
+- **Patch planner:** re-patching a WLED fixture keeps the backups; a
+  backup that was made the primary by hand swaps back instead of
+  duplicating.
+- Tests: `wled_test` (+5: parameters, same look to every device, a hanging
+  device doesn't hold the backup up, a device that comes back is resynced,
+  rig view uses the first answering device; all on 127.0.0.1 fakes),
+  new `wleddevices_test` (UI + round trips through the real plugin),
+  `inputoutputmap_test` (kept offline with backups), `inventory_test`.
+
+---
+
 ### 2026-10-18 — Offline patches kept; patches follow the network *(fix/keep-offline-patches)*
 
 Release blocker from Branson's DanceHysteria 0.5: saved on the laptop off the

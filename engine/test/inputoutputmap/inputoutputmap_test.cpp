@@ -442,6 +442,34 @@ void InputOutputMap_Test::offlinePatchIsInertAndListed()
     QVERIFY(op->isPending());
 }
 
+/* Backup lanterns ("outputIP2"...) on a WLED patch kept because the WLED
+   output is not here: every device is written back as it was loaded. */
+void InputOutputMap_Test::wledBackupsKeptOfflineUnchanged()
+{
+    mockMachine(QList<NetworkRoute::LocalAddress>() << localAddr("en0", "192.168.1.5", 24),
+                QMap<QString, QString>{ { "*", "192.168.1.5" } });
+    namedStub(m_doc, "ArtNet", QStringList() << "192.168.1.5");
+
+    const QString original =
+        "<InputOutputMap>\n"
+        " <Universe Name=\"Lantern SL\" ID=\"0\">\n"
+        "  <Output Plugin=\"WLED\" UID=\"WLED (JSON over Wi-Fi)\" Line=\"0\">\n"
+        "   <PluginParameters outputIP=\"172.18.2.50\" outputIP2=\"172.18.2.51\" "
+        "outputIP3=\"172.18.2.52\" wledAddress=\"1\" wledAddress3=\"16\" "
+        "wledChannels=\"15\" wledChannels3=\"4\"/>\n"
+        "  </Output>\n"
+        " </Universe>\n"
+        "</InputOutputMap>\n";
+    InputOutputMap iom(m_doc, 1);
+    QVERIFY(loadIOMap(iom, original));
+    QVERIFY(iom.hasOfflinePatches());
+
+    const QStringList before = patchElements(original);
+    const QStringList after = patchElements(saveIOMap(iom));
+    QCOMPARE(before.count(), 1);
+    QCOMPARE(after, before);
+}
+
 void InputOutputMap_Test::followsNetworkToAnotherMachine()
 {
     /* Same show opened on kronk: 172.18.2.197 on the show VLAN, not .219. */

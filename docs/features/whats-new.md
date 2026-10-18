@@ -53,6 +53,13 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Outputs
 
+- **Backup WLED lanterns.** A WLED universe can drive several devices: a
+  backup lantern mirrors the primary, nothing programmed twice. Right-click
+  the universe → **WLED Devices / Backup Lanterns…** → **Add Backup**. Each
+  device is sent to on its own, so a dead one never holds up the others,
+  and one that comes back is sent the look again. Connections says "1 of 2
+  answering" while one is down. See
+  [Backup lanterns](other-improvements.md#backup-lanterns).
 - **Patch a universe from the Fixture Manager.** Right-click a universe row
   in the fixtures list: **Patch output…**, or on a patched one the menu says
   where it goes and offers **Change interface / target…** and **Unpatch

@@ -2984,7 +2984,7 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
             QAction *where = menu.addAction(tr("Output: %1").arg(legs.join(QStringLiteral(" · "))));
             where->setEnabled(false);
             if (ctxPlugin.isEmpty() == false && m_patcher->supportsTargets(ctxPlugin))
-                retargetOut = menu.addAction(tr("Change interface / target…"));
+                retargetOut = menu.addAction(UniversePatcher::retargetText(ctxPlugin));
             else
                 patchOut = menu.addAction(tr("Patch output…"));
             unpatchOut = menu.addAction(tr("Unpatch output"));

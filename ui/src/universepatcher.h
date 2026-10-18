@@ -63,6 +63,8 @@ public:
     /** The plural menu entries, worded once for every list that offers them. */
     static QString patchSelectionText(int count);
     static QString unpatchSelectionText(int patchedCount);
+    /** The menu entry that runs retargetPatch() for a patch to @p pluginName. */
+    static QString retargetText(const QString &pluginName);
 
     /*********************************************************************
      * Where a patch goes

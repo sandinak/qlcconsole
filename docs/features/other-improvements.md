@@ -286,6 +286,51 @@ agree, then reads it back.
 Effects that the WLED device runs itself are picked in the look editor —
 see [WLED effects](programming-tab.md#wled-effects).
 
+#### Backup lanterns
+
+A WLED universe can drive **more than one device**: a backup lantern beside
+the primary shows the same look, with nothing programmed twice. If the
+primary dies mid-show, the backup carries on.
+
+**To add one:** in **Connections** (or the Fixture Manager's universe
+row), right-click the WLED universe → **WLED Devices / Backup Lanterns…**.
+Click **Add Backup**, type its IP (the show's WLED fixture addresses are
+offered as you type), and **OK**. The patch now reads "WLED → 172.18.2.50
++ 1 backup".
+
+- Each device gets the **same state**, read from the same channels — or,
+  for a backup that is a different kind of device, from its own
+  **Address** and **Channels** (leave them on *As primary* otherwise).
+- **Move Up** / **Move Down** reorder the list; the top one is the
+  **primary**. It's the one older versions of the app send to, and the one
+  whose address and channels the backups follow.
+- **Remove** takes a backup off. OK stays off while something is wrong:
+  an empty or malformed IP, a device listed twice, or a device another
+  universe already sends to (a device follows one universe).
+- The change is **one step for Undo Patch Change** in Connections, like any
+  patch change.
+
+Every device is handled separately. Each has its own request in flight and
+its own idea of what it was last sent, so a device that is off or hanging
+**never slows the others**. A device that comes back after not answering
+(switched off and on, out of Wi-Fi range) is sent the whole look again
+straight away, even if nothing changed meanwhile.
+
+**Status:** the universe's row in Connections says "1 of 2 answering —
+172.18.2.51 not answering" while one is down. The readiness footer lists
+the silent device by name ("Lantern SL backup"), and the WLED output's info
+in Connections lists every device with its own answer. The Lighting Studio
+and Rig Overview show the live pixels of the **first device that
+answers**, so a dead primary doesn't leave the picture dark.
+
+In the show file the extra devices are saved as `outputIP2`, `outputIP3`…
+(with `wledAddress2`/`wledChannels2`… only when a backup has its own) next
+to the primary's `outputIP`. Older versions of the app ignore them and send
+to the primary alone. Up to 16 devices per universe. A universe whose
+network isn't present is kept offline with its whole device list and
+reconnects with it; the network is chosen by the primary's address, so
+keep the backups on the same network as the primary.
+
 So far the WLED output has been checked against a stand-in that answers
 like a WLED device, not yet against real WLED hardware on a show network —
 try it on your own devices before relying on it for a show.

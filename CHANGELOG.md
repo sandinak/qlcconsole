@@ -10,6 +10,21 @@ active work in [TODO.md](TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 
+## [0.1.1] - Unreleased
+
+### Added
+- **Backup WLED lanterns.** A WLED universe can drive several devices: a
+  backup lantern mirrors the primary without programming anything twice.
+  Right-click the universe in Connections (or the Fixture Manager) →
+  **WLED Devices / Backup Lanterns…** to add, remove and reorder devices
+  (the top one is the primary), each with its own address and channel count
+  if it needs one; one undo step. Every device is sent to on its own, so a
+  dead or hanging one never holds up the others, and one that comes back is
+  sent the whole look again. Connections says "1 of 2 answering — … not
+  answering", the footer names the silent backup, and the rig view shows
+  the first device that answers. Saved as `outputIP2`, `outputIP3`… beside
+  `outputIP`; older versions ignore them and drive the primary alone.
+
 ## [0.1.0] - Unreleased
 
 First public release. qlcconsole is a fork of
