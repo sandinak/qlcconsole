@@ -1686,6 +1686,39 @@ void ShowTree_Test::importARealShow()
             qInfo().noquote() << QString("  play cue %1: %2 channels lit by the chaser, %3 differ in the cue list")
                                  .arg(m_doc->showTree()->cueLabel(*list, i)).arg(lit).arg(differ);
         }
+
+        // Convert to tracking (P4) and play it again: the converted list
+        // against the imported one, every channel of every universe.
+        ShowTreeController::ConvertPlan plan;
+        const quint32 listId = rep.list;
+        if (!m_doc->showTree()->convertToTracking(listId, &plan))
+        {
+            qInfo().noquote() << "  convert: not converted --" << plan.why;
+            continue;
+        }
+        qInfo().noquote() << QString("  convert: %1 cues track, %2 stay Block, %3 values and %4 layers taken out, "
+                                     "%5 includes made tracking, %6 releases")
+                             .arg(plan.tracking).arg(plan.blocks).arg(plan.looksRemoved).arg(plan.layersRemoved)
+                             .arg(plan.includesRemoved).arg(plan.releases);
+        for (const QString &line : plan.changes)
+            qInfo().noquote() << "    " << line;
+        const CueList *conv = m_doc->showTree()->cueList(listId);
+        Chaser *converted = qobject_cast<Chaser *>(m_doc->function(conv->chaser));
+        QVERIFY(converted != nullptr);
+        const QList<QByteArray> c = playAll(converted);
+        QCOMPARE(c.count(), b.count());
+        int total = 0;
+        for (int i = 0; i < c.count(); ++i)
+        {
+            int differ = 0;
+            for (int k = 0; k < qMax(b[i].size(), c[i].size()); ++k)
+                if (k >= b[i].size() || k >= c[i].size() || b[i].at(k) != c[i].at(k))
+                    ++differ;
+            total += differ;
+            qInfo().noquote() << QString("  converted cue %1: %2 channels differ from the imported list")
+                                 .arg(m_doc->showTree()->cueLabel(*conv, i)).arg(differ);
+        }
+        QCOMPARE(total, 0);
     }
 }
 
@@ -2426,6 +2459,12 @@ ShowTreeCommand::Context ShowTree_Test::completionShow()
     ctx.cue = st->addCue(ctx.list, -1, "One");
     st->addCueNumbered(ctx.list, "1.2", "Two");
     st->addCueNumbered(ctx.list, "1.25", "Three");
+    // Reusables (P4): a layer "BackStage" in the Library (its use in cue
+    // One), a cue "Walk-in" (no use).
+    st->makeLayerReusable(ctx.cue, st->addLayer(ctx.cue, groupTarget(m_doc->fixtureGroups().at(1)->id())), "BackStage");
+    const quint32 tmp = st->addCue(ctx.list, 2, "Walk-in");
+    st->makeCueReusable(tmp);
+    st->removeCue(tmp);
     return ctx;
 }
 
@@ -3995,6 +4034,12 @@ void ShowTree_Test::everyCommandWordHasHelpAndItsExamplesParse()
     ctx.list = st->addCueList(ctx.production, "L");
     st->addCueNumbered(ctx.list, "0.0.3", "Announcer");
     ctx.cue = st->addCueNumbered(ctx.list, "1.0.1", "Verse");
+    // Reusables for `use`: a layer BackStage, a cue Walk-in.
+    st->makeLayerReusable(ctx.cue, st->addLayer(ctx.cue, groupTarget(m_doc->fixtureGroups().first()->id())),
+                          "BackStage");
+    const quint32 walk = st->addCueNumbered(ctx.list, "1.0.2", "Walk-in");
+    st->makeCueReusable(walk);
+    st->removeCue(walk);
     ShowTreeCommand cmd(m_doc, st);
 
     // The words run() dispatches on, and the ones after a group.
@@ -4003,7 +4048,8 @@ void ShowTree_Test::everyCommandWordHasHelpAndItsExamplesParse()
                                  "layer", "copy", "paste", "help", "?", "in", "none", "off", "clear",
                                  "colour", "color", "dimmer", "dim", "level", "position", "pos", "aim", "spread",
                                  "group", "grouping", "cross", "gobo", "zoom", "beam", "focus", "frost", "iris",
-                                 "shutter", "strobe", "effect", "fx" };
+                                 "shutter", "strobe", "effect", "fx", "reusable", "use", "unlink", "detach",
+                                 "convert" };
     for (const QString &w : parsed)
         QVERIFY2(ShowTreeCommand::word(w) != nullptr, qPrintable(QString("no help for “%1”").arg(w)));
     int examples = 0;
@@ -4132,6 +4178,610 @@ void ShowTree_Test::copyAndPasteCues()
     QCOMPARE(st->cue(r.context.cue)->name, QString("Two"));
     QVERIFY(st->undo());
     QCOMPARE(st->undoText(), before);
+}
+
+/****************************************************************************
+ * P4: reusable layers and cues, Detach a list, Convert to tracking
+ ****************************************************************************/
+
+namespace
+{
+QList<quint32> cueIds(const CueList *l)
+{
+    QList<quint32> out;
+    for (const Cue &c : l->cues)
+        out << c.id;
+    return out;
+}
+}
+
+/* Make reusable on a layer: its uses in any cue of any list stay one --
+   an edit to any use (looks, groups, name) is an edit to all, and a use
+   tracks on as any layer does; Unlink here makes a local copy; a reusable
+   in use is deleted only by unlinking its uses. Each is one undo step. */
+void ShowTree_Test::reusableLayersAreLiveLinked()
+{
+    FixtureGroup *bs = group("BackStage", { m_fixtures[0], m_fixtures[1] });
+    FixtureGroup *steps = group("StepTops", { m_fixtures[2] });
+    FixtureGroup *extra = group("Extra", { m_fixtures[3] });
+    const quint32 d45 = dimmer(115, "45%");
+    const quint32 full = dimmer(255, "Full");
+    const quint32 blue = colour("Blue");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 listA = st->addCueList(prod, "A");
+    const quint32 a1 = st->addCue(listA, -1, "One");
+    const quint32 a2 = st->addCue(listA, 0, "Two");
+    const quint32 a3 = st->addCue(listA, 1, "Three");
+    const quint32 la1 = st->addLayer(a1, groupTarget(bs->id()));
+    QVERIFY(st->setLayerLook(a1, la1, st->lookForPalette(blue)));
+    QVERIFY(st->setLayerLook(a1, la1, st->lookForPalette(d45)));
+    QVERIFY(st->setCueMode(a3, CueMode::Block));
+    QVERIFY(st->setLayerLook(a3, st->addLayer(a3, groupTarget(steps->id())), st->lookForPalette(full)));
+    const quint32 listB = st->addCueList(prod, "B");
+    const quint32 b1 = st->addCue(listB, -1, "Walk");
+
+    QString why;
+    const QString undoBefore = st->undoText();
+    const quint32 rid = st->makeLayerReusable(a1, la1, "BackStage Wash", &why);
+    QVERIFY2(rid != invalidId(), qPrintable(why));
+    QCOMPARE(st->cue(a1)->layer(la1)->reusable, rid);
+    QCOMPARE(st->cue(a1)->layer(la1)->name, QString("BackStage Wash"));
+    QCOMPARE(st->reusableLayer(rid)->looks.count(), 2);
+    QVERIFY(st->undo());                                    // one step
+    QCOMPARE(st->undoText(), undoBefore);
+    QVERIFY(st->reusableLayers().isEmpty());
+    QCOMPARE(st->cue(a1)->layer(la1)->reusable, invalidId());
+    QVERIFY(st->redo());
+    QCOMPARE(st->cue(a1)->layer(la1)->reusable, rid);
+    QCOMPARE(st->makeLayerReusable(a1, la1, "Again", &why), invalidId());   // already
+    QVERIFY(why.contains("reusable already"));
+
+    // Uses in a Block cue of the same list and in another list.
+    const quint32 la3 = st->insertReusableLayer(a3, rid);
+    const quint32 lb1 = st->insertReusableLayer(b1, rid);
+    QVERIFY(la3 != invalidId() && lb1 != invalidId());
+    QCOMPARE(st->reusableUses(rid).count(), 3);
+    QCOMPARE(st->cue(b1)->layer(lb1)->look(KeyDimmer)->palettes, QList<quint32>({ d45 }));
+
+    // Cue 2 tracks it from cue 1: the same layer (its target).
+    QList<ResolvedCue> r = st->resolved(*st->cueList(listA));
+    CHECK_VALUE(r[1], bs->id(), KeyDimmer, d45, Origin::Tracked, a1);
+    QCOMPARE(r[1].layer(groupTarget(bs->id()))->name, QString("BackStage Wash"));
+
+    // An edit to the use in list B: every use.
+    QVERIFY(st->setLayerLook(b1, lb1, st->lookForPalette(full)));
+    QCOMPARE(st->cue(a1)->layer(la1)->look(KeyDimmer)->palettes, QList<quint32>({ full }));
+    QCOMPARE(st->cue(a3)->layer(la3)->look(KeyDimmer)->palettes, QList<quint32>({ full }));
+    QCOMPARE(st->reusableLayer(rid)->target.groups, QList<quint32>({ bs->id() }));
+    // ...on the rig: list A's three cues (cue 2 tracked) and list B's.
+    Chaser *chA = qobject_cast<Chaser *>(m_doc->function(st->cueList(listA)->chaser));
+    Chaser *chB = qobject_cast<Chaser *>(m_doc->function(st->cueList(listB)->chaser));
+    QList<QHash<quint32, uchar>> v = playAll(chA);
+    QCOMPARE(int(v[0][0]), 255);
+    QCOMPARE(int(v[1][1]), 255);
+    QCOMPARE(int(v[2][0]), 255);
+    QCOMPARE(int(v[2][2]), 255);
+    QCOMPARE(int(playAll(chB)[0][1]), 255);
+    // ...one undo step puts 45% back in every use.
+    QVERIFY(st->undo());
+    QCOMPARE(st->cue(a1)->layer(la1)->look(KeyDimmer)->palettes, QList<quint32>({ d45 }));
+    QCOMPARE(st->cue(a3)->layer(la3)->look(KeyDimmer)->palettes, QList<quint32>({ d45 }));
+    QCOMPARE(int(playAll(chB)[0][1]), 115);
+    QVERIFY(st->redo());
+
+    // A group added to one use: every use lights it; cue 2 still tracks it.
+    QVERIFY(st->addToLayer(a3, la3, { extra->id() }, {}));
+    Target both;
+    both.groups << bs->id() << extra->id();
+    QVERIFY(st->cue(a1)->layer(la1)->target == both);
+    QVERIFY(st->cue(b1)->layer(lb1)->target == both);
+    r = st->resolved(*st->cueList(listA));
+    QVERIFY(r[1].layer(both) != nullptr);
+    QCOMPARE(int(r[1].layer(both)->origin), int(Origin::Tracked));
+    QCOMPARE(int(playAll(chA)[1][3]), 255);
+
+    // Rename: the reusable, or any use -- every use is called that.
+    QVERIFY(st->renameReusable(rid, "Back"));
+    QCOMPARE(st->cue(b1)->layer(lb1)->name, QString("Back"));
+    QVERIFY(st->renameNode(lb1, "Backline"));
+    QCOMPARE(st->reusableLayer(rid)->name, QString("Backline"));
+    QCOMPARE(st->cue(a1)->layer(la1)->name, QString("Backline"));
+
+    // Split / merge a use: refused (every use would change), with why.
+    QVERIFY(!st->splitLayer(a1, la1, nullptr, &why));
+    QVERIFY(why.contains("Unlink"));
+
+    // Unlink here: a3's use is its own now; the others stay linked.
+    QVERIFY(st->unlinkLayer(a3, la3));
+    QCOMPARE(st->cue(a3)->layer(la3)->reusable, invalidId());
+    QVERIFY(st->setLayerLook(a3, la3, st->lookForPalette(d45)));
+    QCOMPARE(st->cue(a1)->layer(la1)->look(KeyDimmer)->palettes, QList<quint32>({ full }));
+    QCOMPARE(st->reusableUses(rid).count(), 2);
+
+    // Delete: refused while used (the uses named); unlinking them all, one step.
+    QVERIFY(!st->removeReusable(rid, false, &why));
+    QVERIFY2(why.contains("used in 2"), qPrintable(why));
+    QVERIFY(why.contains("A 1"));
+    QVERIFY(st->removeReusable(rid, true));
+    QVERIFY(st->reusableLayers().isEmpty());
+    QCOMPARE(st->cue(a1)->layer(la1)->reusable, invalidId());
+    QCOMPARE(st->cue(a1)->layer(la1)->look(KeyDimmer)->palettes, QList<quint32>({ full }));
+    QVERIFY(st->undo());
+    QCOMPARE(st->reusableUses(rid).count(), 2);
+}
+
+/* Make reusable on a cue: a "Blackout" put in two lists. Its layers and
+   looks are the same in every use; number, timing and includes each use's
+   own. Edits in either list reach both. */
+void ShowTree_Test::reusableCuesInSeveralLists()
+{
+    FixtureGroup *all = group("All", { m_fixtures[0], m_fixtures[1], m_fixtures[2] });
+    FixtureGroup *works = group("Works", { m_fixtures[4] });
+    const quint32 full = dimmer(255, "Full");
+    const quint32 low = dimmer(20, "Low");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 listA = st->addCueList(prod, "A");
+    const quint32 a1 = st->addCue(listA, -1, "Song");
+    QVERIFY(st->setLayerLook(a1, st->addLayer(a1, groupTarget(all->id())), st->lookForPalette(full)));
+    const quint32 a2 = st->addCue(listA, 0, "Walk-in");
+    QVERIFY(st->setCueMode(a2, CueMode::Block));
+    QVERIFY(st->setLayerLook(a2, st->addLayer(a2, groupTarget(works->id())), st->lookForPalette(low)));
+    Cue timed = *st->cue(a2);
+    timed.fadeIn = 1500;
+    QVERIFY(st->setCue(timed));
+    const quint32 listB = st->addCueList(prod, "B");
+    const quint32 b1 = st->addCue(listB, -1, "Opener");
+    QVERIFY(st->setLayerLook(b1, st->addLayer(b1, groupTarget(all->id())), st->lookForPalette(low)));
+
+    QString why;
+    const quint32 rid = st->makeCueReusable(a2, QString(), &why);
+    QVERIFY2(rid != invalidId(), qPrintable(why));
+    QCOMPARE(st->reusableCue(rid)->name, QString("Walk-in"));
+    QCOMPARE(st->reusableCue(rid)->mode, CueMode::Block);
+    QCOMPARE(st->reusableCue(rid)->fadeIn, uint(1500));
+    // Used in B after its first cue: numbered there, its timing to start.
+    const quint32 b2 = st->insertReusableCue(listB, 0, rid);
+    QVERIFY(b2 != invalidId());
+    QCOMPARE(st->cueList(listB)->indexOf(b2), 1);
+    QCOMPARE(st->cue(b2)->number, QString("2"));
+    QCOMPARE(st->cue(b2)->fadeIn, uint(1500));
+    QCOMPARE(st->cue(b2)->name, QString("Walk-in"));
+    QCOMPARE(st->cue(b2)->layers.count(), 1);
+    QVERIFY(st->cue(b2)->layers.first().id != st->cue(a2)->layers.first().id);   // ids its own
+    // Its own timing per use: not shared.
+    Cue t = *st->cue(b2);
+    t.fadeIn = 0;
+    QVERIFY(st->setCue(t));
+    QCOMPARE(st->cue(a2)->fadeIn, uint(1500));
+
+    // A layer added in B's use: A's has it too; a look changed in A: B too.
+    QVERIFY(st->setLayerLook(b2, st->addLayer(b2, groupTarget(all->id())), st->lookForPalette(low)));
+    QCOMPARE(st->cue(a2)->layers.count(), 2);
+    QCOMPARE(st->reusableCue(rid)->layers.count(), 2);
+    const quint32 aw = st->cue(a2)->layers.first().id;
+    QVERIFY(st->setLayerLook(a2, aw, st->lookForPalette(full)));
+    QCOMPARE(st->cue(b2)->layers.first().look(KeyDimmer)->palettes, QList<quint32>({ full }));
+    // Mode: the reusable's too.
+    QVERIFY(st->setCueMode(b2, CueMode::Track));
+    QCOMPARE(st->cue(a2)->mode, CueMode::Track);
+    QVERIFY(st->undo());
+    QCOMPARE(st->cue(a2)->mode, CueMode::Block);
+
+    // On the rig the use plays the same in both lists (A's fade made the
+    // same as B's for the compare).
+    Cue noFade = *st->cue(a2);
+    noFade.fadeIn = 0;
+    QVERIFY(st->setCue(noFade));
+    Chaser *chA = qobject_cast<Chaser *>(m_doc->function(st->cueList(listA)->chaser));
+    Chaser *chB = qobject_cast<Chaser *>(m_doc->function(st->cueList(listB)->chaser));
+    const QHash<quint32, uchar> inA = playAll(chA)[1];
+    const QHash<quint32, uchar> inB = playAll(chB)[1];
+    QCOMPARE(int(inA[4]), 255);
+    QCOMPARE(int(inA[0]), 20);
+    QCOMPARE(inA, inB);
+
+    // Make reusable on a layer of a use: refused (its layers are the cue's).
+    QCOMPARE(st->makeLayerReusable(b2, st->cue(b2)->layers.first().id, "X", &why), invalidId());
+    QVERIFY(why.contains("reusable cue"));
+    // Used by: both cues, by list and number.
+    const QList<ShowTreeController::ReusableUse> uses = st->reusableUses(rid);
+    QCOMPARE(uses.count(), 2);
+    QCOMPARE(uses.at(0).cue, a2);
+    QCOMPARE(uses.at(1).cue, b2);
+    QVERIFY(uses.at(1).label.startsWith("B "));
+    // Unlink B's: a copy of its own.
+    QVERIFY(st->unlinkCue(b2));
+    QVERIFY(st->setLayerLook(b2, st->cue(b2)->layers.first().id, st->lookForPalette(low)));
+    QCOMPARE(st->cue(a2)->layers.first().look(KeyDimmer)->palettes, QList<quint32>({ full }));
+}
+
+/* Reusables are part of the show and of every undo step. */
+void ShowTree_Test::reusablesSaveLoadAndUndo()
+{
+    FixtureGroup *bs = group("BackStage", { m_fixtures[0] });
+    const quint32 half = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 listId = st->addCueList(prod, "L");
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 l1 = st->addLayer(c1, groupTarget(bs->id()));
+    // A one-off value in it: kept while only the reusable holds it.
+    const quint32 inl = st->createInlinePalette(QLCPalette::Dimmer, { 33 }, "13%");
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(inl)));
+    const quint32 rl = st->makeLayerReusable(c1, l1, "Wash");
+    const quint32 rc = st->makeCueReusable(c1, "State");
+    QVERIFY(rl != invalidId() && rc != invalidId());
+    QCOMPARE(st->reusableCue(rc)->layers.first().reusable, rl);   // a reusable layer inside
+    QVERIFY(st->removeCue(c1));
+    QVERIFY(m_doc->palette(inl) != nullptr);                      // the reusable holds it
+    QVERIFY(st->undo());
+
+    const QByteArray xml = engineXml(m_doc);
+    QVERIFY(xml.contains("<ReusableLayer"));
+    QVERIFY(xml.contains("<ReusableCue"));
+    Doc *other = new Doc(this);
+    QXmlStreamReader r(xml);
+    r.readNextStartElement();
+    QVERIFY(other->loadXML(r, false));
+    ShowTreeController *ost = other->showTree();
+    QCOMPARE(ost->reusableLayers().count(), 1);
+    QCOMPARE(ost->reusableLayer(rl)->name, QString("Wash"));
+    QCOMPARE(ost->reusableCue(rc)->layers.count(), 1);
+    QCOMPARE(ost->cue(c1)->reusable, rc);
+    QCOMPARE(ost->cue(c1)->layers.first().reusable, rl);
+    QVERIFY(ost->newId() > qMax(rl, rc));
+    // A use edited after load: the reusable follows.
+    QVERIFY(ost->setLayerLook(c1, l1, ost->lookForPalette(half)));
+    QCOMPARE(ost->reusableLayer(rl)->looks.first().palettes, QList<quint32>({ half }));
+    QCOMPARE(ost->reusableCue(rc)->layers.first().looks.first().palettes, QList<quint32>({ half }));
+    delete other;
+
+    // A command that fails puts the reusables back as they were.
+    ShowTreeCommand cmd(m_doc, st);
+    ShowTreeCommand::Context ctx;
+    ctx.production = prod;
+    ctx.list = listId;
+    ctx.cue = c1;
+    st->beginBatch("test");
+    QVERIFY(st->renameReusable(rl, "Gone"));
+    st->endBatch(false);
+    QCOMPARE(st->reusableLayer(rl)->name, QString("Wash"));
+}
+
+/* Detach a cue list to a plain chaser: its chaser and collections become
+   the show's own (unlocked, shown); the scenes only it plays go with them;
+   one another list also plays stays the tree's until the tree lets go of it
+   -- then it is handed over, never deleted from under the plain chaser. It
+   plays as before. One undo step: the list comes back on the same
+   functions; redo hands them over again. */
+void ShowTree_Test::detachAListToAPlainChaser()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    FixtureGroup *b = group("B", { m_fixtures[1] });
+    const quint32 full = dimmer(255, "Full");
+    const quint32 half = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 l1 = st->addCueList(prod, "Song");
+    const quint32 c1 = st->addCue(l1, -1, "One");
+    const quint32 c2 = st->addCue(l1, 0, "Two");
+    QVERIFY(st->setLayerLook(c1, st->addLayer(c1, groupTarget(a->id())), st->lookForPalette(full)));
+    QVERIFY(st->setLayerLook(c2, st->addLayer(c2, groupTarget(b->id())), st->lookForPalette(half)));
+    const quint32 l2 = st->addCueList(prod, "Other");
+    const quint32 o1 = st->addCue(l2, -1, "Same A");
+    const quint32 ol = st->addLayer(o1, groupTarget(a->id()));
+    QVERIFY(st->setLayerLook(o1, ol, st->lookForPalette(full)));     // shares A·Full with Song
+
+    const quint32 chaserId = st->cueList(l1)->chaser;
+    const QList<quint32> colls { st->cue(c1)->collection, st->cue(c2)->collection };
+    const quint32 shared = st->layerScene(c1, groupTarget(a->id()));
+    const quint32 own = st->layerScene(c2, groupTarget(b->id()));
+    QCOMPARE(shared, st->layerScene(o1, groupTarget(a->id())));
+    Chaser *ch = qobject_cast<Chaser *>(m_doc->function(chaserId));
+    const QList<QHash<quint32, uchar>> before = playAll(ch);
+
+    QCOMPARE(st->detachList(l1), chaserId);
+    QVERIFY(st->cueList(l1) == nullptr);
+    QVERIFY(!st->isGenerated(chaserId));
+    for (quint32 c : colls)
+    {
+        QVERIFY(!st->isGenerated(c));
+        QVERIFY(m_doc->function(c)->isVisible());
+    }
+    QVERIFY(!st->isGenerated(own));
+    QVERIFY(m_doc->function(own)->isVisible());
+    QVERIFY(st->isGenerated(shared));                   // Other still plays it
+    QCOMPARE(playAll(ch), before);
+    QCOMPARE(ch->stepsCount(), 2);
+
+    // Other lets go of the shared scene: handed over, not deleted.
+    QVERIFY(st->setLayerLook(o1, ol, st->lookForPalette(half)));
+    QVERIFY(m_doc->function(shared) != nullptr);
+    QVERIFY(!st->isGenerated(shared));
+    QVERIFY(qobject_cast<Collection *>(m_doc->function(colls.first()))->functions().contains(shared));
+    QCOMPARE(playAll(ch), before);
+
+    // Undo (the look, then the detach): the list is back on its functions.
+    QVERIFY(st->undo());
+    QVERIFY(st->undo());
+    QVERIFY(st->cueList(l1) != nullptr);
+    QCOMPARE(st->cueList(l1)->chaser, chaserId);
+    QVERIFY(st->isGenerated(chaserId));
+    for (quint32 c : colls)
+        QVERIFY(st->isGenerated(c));
+    QVERIFY(st->isGenerated(own));
+    QVERIFY(!m_doc->function(own)->isVisible());
+    QCOMPARE(playAll(ch), before);
+    // Redo: plain again.
+    QVERIFY(st->redo());
+    QVERIFY(st->cueList(l1) == nullptr);
+    QVERIFY(!st->isGenerated(chaserId));
+    QVERIFY(!st->isGenerated(own));
+    QCOMPARE(playAll(ch), before);
+    // A plain chaser can't be detached again; an unknown list neither.
+    QCOMPARE(st->detachList(l1), Function::invalidId());
+}
+
+/* Convert to tracking (§7) on DanceHysteria's shape: every cue plays the
+   same, channel by channel, before and after; the includes of the cue
+   before become tracking, values that only repeat go. One undo step. */
+void ShowTree_Test::convertToTrackingPlaysTheSame()
+{
+    FixtureGroup *at = group("AT-Spots", { m_fixtures[0] });
+    FixtureGroup *bs = group("BackStage", { m_fixtures[1], m_fixtures[2] });
+    FixtureGroup *stp = group("StepTops", { m_fixtures[3] });
+    FixtureGroup *aw = group("AT-W-ALL", { m_fixtures[4] });
+    const quint32 base = dimmer(60, "Base");
+    const quint32 d45 = dimmer(115, "45%");
+    const quint32 full = dimmer(255, "Full");
+    const quint32 white = colour("White");
+    const quint32 blue = colour("Blue");
+    Scene *atBase = groupScene(m_doc, "AT-Base", at->id(), { white, base });
+    Scene *atFull = groupScene(m_doc, "AT-Full", at->id(), { white, full });
+    Scene *backStage = groupScene(m_doc, "BackStage", bs->id(), { blue, d45 });
+    Scene *stepBright = groupScene(m_doc, "StepTops-Bright", stp->id(), { white, full });
+    Scene *step45 = groupScene(m_doc, "StepTops-45", stp->id(), { d45 });
+    Scene *flash = groupScene(m_doc, "FlashWashes", aw->id(), { white, full });
+    Scene *at45 = groupScene(m_doc, "AT-45", at->id(), { d45 });
+    Collection *q0 = collection(m_doc, "0.0.0-base", { atBase->id() });
+    Collection *q3 = collection(m_doc, "0.0.3-Announcer", { atFull->id(), backStage->id() });
+    Collection *q4 = collection(m_doc, "0.0.4-SHOUT", { atBase->id(), backStage->id(), stepBright->id() });
+    Collection *q5 = collection(m_doc, "0.0.5-WHO ARE WE", { q4->id(), step45->id() });
+    Collection *q6 = collection(m_doc, "0.0.6-STOMP", { q5->id(), flash->id() });
+    Collection *q7 = collection(m_doc, "0.0.7-After", { q5->id() });
+    Collection *q9 = collection(m_doc, "0.0.9-AnnouncerFinish", { q3->id(), at45->id() });
+    Chaser *chaser = new Chaser(m_doc);
+    chaser->setName("Full Show");
+    chaser->setDurationMode(Chaser::PerStep);
+    m_doc->addFunction(chaser);
+    for (Collection *coll : { q0, q3, q4, q5, q6, q7, q9 })
+        chaser->addStep(ChaserStep(coll->id(), 0, Function::infiniteSpeed(), 0));
+
+    ShowTreeController *st = m_doc->showTree();
+    const ShowTreeController::ImportReport rep = st->importChaser(chaser->id());
+    const quint32 listId = rep.list;
+    Chaser *list = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    const QList<QHash<quint32, uchar>> imported = playAll(list);
+    const QList<quint32> c = cueIds(st->cueList(listId));
+
+    // The plan first: nothing changes yet.
+    const QByteArray treeBefore = productionXml(*st->production(rep.production));
+    const ShowTreeController::ConvertPlan plan = st->planConvertToTracking(listId);
+    QVERIFY2(plan.ok, qPrintable(plan.why));
+    QCOMPARE(productionXml(*st->production(rep.production)), treeBefore);
+    for (const QString &line : plan.changes)
+        qInfo().noquote() << "  plan:" << line;
+    QVERIFY(plan.tracking >= 4);
+    QCOMPARE(plan.includesRemoved, 2);         // 0.0.5 ⊃ 0.0.4, 0.0.6 ⊃ 0.0.5: the cue before
+    QVERIFY(plan.layersRemoved >= 1);           // 0.0.4's BackStage only repeats 0.0.3's
+    QVERIFY(plan.looksRemoved >= 2);
+    QVERIFY(!plan.changes.isEmpty());
+
+    const QString undoBefore = st->undoText();
+    QVERIFY(st->convertToTracking(listId));
+    const CueList *after = st->cueList(listId);
+    QCOMPARE(after->mode, ListMode::Tracking);
+    QCOMPARE(cueIds(after), c);
+    QCOMPARE(after->chaser, list->id());
+    QVERIFY(after->cue(c[3])->includes.isEmpty());       // 0.0.5: tracks from 0.0.4 now
+    QCOMPARE(after->cue(c[6])->includes, QList<quint32>({ c[1] }));   // 0.0.9 still includes 0.0.3
+    int looksAfter = 0, looksBefore = 0;
+    for (const Cue &cue : after->cues)
+        for (const Layer &l : cue.layers)
+            looksAfter += l.looks.count();
+    QXmlStreamReader pr(treeBefore);
+    while (!pr.atEnd())
+        if (pr.readNext() == QXmlStreamReader::StartElement && pr.name() == QLatin1String("Look"))
+            ++looksBefore;
+    QVERIFY2(looksAfter < looksBefore, qPrintable(QString("%1 looks, %2 before").arg(looksAfter).arg(looksBefore)));
+
+    // 0 channels differ, cue by cue.
+    const QList<QHash<quint32, uchar>> converted = playAll(list);
+    QCOMPARE(converted.count(), imported.count());
+    for (int i = 0; i < converted.count(); ++i)
+        for (quint32 ch = 0; ch < quint32(m_fixtures.count()); ++ch)
+            QVERIFY2(converted[i].value(ch) == imported[i].value(ch),
+                     qPrintable(QString("cue %1, channel %2: %3, before %4").arg(i + 1).arg(ch)
+                                .arg(converted[i].value(ch)).arg(imported[i].value(ch))));
+
+    // One undo step back to the imported list; converting again: nothing to do.
+    QVERIFY(st->undo());
+    QCOMPARE(st->undoText(), undoBefore);
+    QCOMPARE(st->cueList(listId)->mode, ListMode::NonTracking);
+    QCOMPARE(productionXml(*st->production(rep.production)), treeBefore);
+    QVERIFY(st->redo());
+    const ShowTreeController::ConvertPlan again = st->planConvertToTracking(listId);
+    QVERIFY(!again.ok);
+    QVERIFY(again.why.contains("Nothing to convert"));
+}
+
+/* Convert on lists made to catch it out: overlapping layers, a mixing cue,
+   an opaque function, a base cue, a cue that drops a layer. Each cue plays
+   the same before and after, and what can't be made tracking stays. */
+void ShowTree_Test::convertToTrackingSyntheticLists()
+{
+    FixtureGroup *wide = group("Wide", { m_fixtures[0], m_fixtures[1], m_fixtures[2] });
+    FixtureGroup *mid = group("Mid", { m_fixtures[1] });
+    FixtureGroup *side = group("Side", { m_fixtures[3] });
+    FixtureGroup *back = group("Back", { m_fixtures[4], m_fixtures[5] });
+    const quint32 low = dimmer(40, "Low");
+    const quint32 half = dimmer(127, "Half");
+    const quint32 full = dimmer(255, "Full");
+    Scene *raw = new Scene(m_doc);
+    raw->setName("Haze");
+    raw->setValue(m_fixtures[6], 0, 90);
+    m_doc->addFunction(raw);
+
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 listId = st->addCueList(prod, "Synthetic", ListMode::NonTracking);
+    QList<quint32> c;
+    for (int i = 0; i < 7; ++i)
+        c << st->addCue(listId, i - 1, QString("C%1").arg(i + 1));
+    auto set = [&](int i, FixtureGroup *g, quint32 pal) {
+        quint32 lid = invalidId();
+        for (const Layer &l : st->cue(c[i])->layers)
+            if (l.target == groupTarget(g->id()))
+                lid = l.id;
+        if (lid == invalidId())
+            lid = st->addLayer(c[i], groupTarget(g->id()));
+        QVERIFY(st->setLayerLook(c[i], lid, st->lookForPalette(pal)));
+    };
+    // C1: Wide full + Side half
+    set(0, wide, full); set(0, side, half);
+    // C2: the same, and Mid low over Wide (overlap: the lower wins on Mid)
+    set(1, wide, full); set(1, side, half); set(1, mid, low);
+    // C3: the same again, Back half
+    set(2, wide, full); set(2, side, half); set(2, mid, low); set(2, back, half);
+    // C4: Side gone (dropped), the haze as it is
+    set(3, wide, full); set(3, mid, low); set(3, back, half);
+    {
+        Target t;
+        t.function = raw->id();
+        QVERIFY(st->addLayer(c[3], t) != invalidId());
+    }
+    // C5: mixing overlap (as an import keeps it)
+    set(4, wide, half); set(4, mid, full); set(4, back, half);
+    QVERIFY(st->setCueMixOverlap(c[4], true));
+    // C6: base-like: all different
+    set(5, side, low);
+    // C7: Side low again and Back
+    set(6, side, low); set(6, back, full);
+    QVERIFY(st->setBaseCue(listId, c[0]));
+
+    Chaser *ch = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    const QList<QHash<quint32, uchar>> before = playAll(ch);
+    ShowTreeController::ConvertPlan plan;
+    QVERIFY(st->convertToTracking(listId, &plan));
+    for (const QString &line : plan.changes)
+        qInfo().noquote() << "  plan:" << line;
+    QVERIFY(plan.tracking >= 3);
+    QVERIFY(plan.looksRemoved >= 4);
+    const QList<QHash<quint32, uchar>> after = playAll(ch);
+    QCOMPARE(after.count(), before.count());
+    for (int i = 0; i < after.count(); ++i)
+        for (quint32 k = 0; k < quint32(m_fixtures.count()); ++k)
+            QVERIFY2(after[i].value(k) == before[i].value(k),
+                     qPrintable(QString("cue %1, channel %2: %3, before %4").arg(i + 1).arg(k)
+                                .arg(after[i].value(k)).arg(before[i].value(k))));
+    // The mixing cue kept its mix; C2's Mid (overlapping Wide) kept its own value.
+    QVERIFY(st->cue(c[4])->mixOverlap);
+    QVERIFY(st->cue(c[1])->layers.count() >= 1);
+}
+
+/* reusable / use / unlink / detach / convert typed, with help and Tab. */
+void ShowTree_Test::reuseDetachAndConvertTyped()
+{
+    FixtureGroup *bs = group("BackStage", { m_fixtures[0] });
+    group("Steps", { m_fixtures[1] });
+    dimmer(255, "Full");
+    dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    ShowTreeCommand cmd(m_doc, st);
+    ShowTreeCommand::Context ctx;
+    ctx.production = st->addProduction("P");
+    ShowTreeCommand::Result r = cmd.run("list \"Song\"", ctx);
+    ctx = r.context;
+    r = cmd.run("cue 1 \"One\"", ctx);
+    ctx = r.context;
+    const quint32 c1 = ctx.cue;
+    r = cmd.run("BackStage dimmer Full", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    ctx.layer = r.layer;
+    r = cmd.run("reusable \"Back Wash\"", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(st->reusableLayers().count(), 1);
+    QCOMPARE(st->undoText(), QString("reusable \"Back Wash\""));
+    const quint32 rid = st->reusableLayers().first().id;
+
+    ctx.layer = invalidId();
+    r = cmd.run("cue 2 \"Two\" block", ctx);
+    ctx = r.context;
+    QStringList opts;
+    QCOMPARE(cmd.complete("use Ba", ctx, &opts), QString("use Back Wash "));
+    r = cmd.run("use \"Back Wash\"", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(st->reusableUses(rid).count(), 2);
+    ctx.layer = r.layer;
+    ctx.layers = { qMakePair(ctx.cue, r.layer) };
+    r = cmd.run("dimmer Half", ctx);
+    ctx.layers.clear();
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(st->cue(c1)->layers.first().look(KeyDimmer)->palettes, st->cue(ctx.cue)->layers.first().look(KeyDimmer)->palettes);
+    r = cmd.run("unlink", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(st->reusableUses(rid).count(), 1);
+    QVERIFY(!cmd.run("unlink", ctx).ok);            // not a use any more
+
+    // The cue as a reusable, used after it.
+    ctx.layer = invalidId();
+    r = cmd.run("reusable", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(st->reusableCues().count(), 1);
+    QCOMPARE(st->reusableCues().first().name, QString("Two"));
+    r = cmd.run("use Two", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(st->cueList(ctx.list)->cues.count(), 3);
+
+    // convert: the plan (nothing changes), convert apply: one step.
+    r = cmd.run("list \"Imported\"", ctx);
+    ctx = r.context;
+    QVERIFY(st->setListMode(ctx.list, ListMode::NonTracking));
+    r = cmd.run("cue 1 \"A\"", ctx);
+    ctx = r.context;
+    QVERIFY(cmd.run("BackStage dimmer Full", ctx).ok);
+    r = cmd.run("cue 2 \"B\"", ctx);
+    ctx = r.context;
+    QVERIFY(cmd.run("BackStage dimmer Full", ctx).ok);
+    QVERIFY(cmd.run("Steps dimmer Half", ctx).ok);
+    const QString undoBefore = st->undoText();
+    r = cmd.run("convert", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QVERIFY(r.help.contains("convert apply"));
+    QCOMPARE(st->undoText(), undoBefore);
+    QCOMPARE(st->cueList(ctx.list)->mode, ListMode::NonTracking);
+    QCOMPARE(cmd.complete("convert a", ctx), QString("convert apply "));
+    r = cmd.run("convert apply", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(st->cueList(ctx.list)->mode, ListMode::Tracking);
+    QCOMPARE(st->cue(ctx.cue)->layers.count(), 1);   // BackStage tracks in from 1
+    Q_UNUSED(bs)
+
+    // detach list: a plain chaser, the list gone.
+    const quint32 chaser = st->cueList(ctx.list)->chaser;
+    QCOMPARE(cmd.complete("detach l", ctx), QString("detach list "));
+    r = cmd.run("detach list", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QVERIFY(!st->isGenerated(chaser));
+    QVERIFY(m_doc->function(chaser) != nullptr);
+    QVERIFY(cmd.run("undo", r.context).ok);
+    QVERIFY(st->isGenerated(chaser));
+
+    // help knows the new words.
+    for (const char *w : { "reusable", "use", "unlink", "detach", "convert" })
+        QVERIFY2(ShowTreeCommand::helpText(w).contains(QString("<b>%1</b>").arg(w)), w);
 }
 
 QTEST_MAIN(ShowTree_Test)

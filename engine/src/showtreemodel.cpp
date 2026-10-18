@@ -1036,6 +1036,45 @@ static quint32 readId(const QXmlStreamAttributes &a, const QString &name)
     return ok ? id : invalidId();
 }
 
+static void saveLayer(QXmlStreamWriter *doc, const Layer &layer)
+{
+    doc->writeStartElement(KXMLShowTreeLayer);
+    writeId(doc, QStringLiteral("ID"), layer.id);
+    if (!layer.name.isEmpty())
+        doc->writeAttribute(QStringLiteral("Name"), layer.name);
+    if (!layer.target.groups.isEmpty())
+        doc->writeAttribute(QStringLiteral("Groups"), idsToString(layer.target.groups));
+    if (!layer.target.fixtures.isEmpty())
+        doc->writeAttribute(QStringLiteral("Fixtures"), idsToString(layer.target.fixtures));
+    if (!layer.target.sets.isEmpty())
+        doc->writeAttribute(QStringLiteral("Sets"), idsToString(layer.target.sets));
+    writeId(doc, QStringLiteral("Function"), layer.target.function);
+    writeId(doc, QStringLiteral("Parent"), layer.parent);
+    if (layer.release)
+        doc->writeAttribute(QStringLiteral("Release"), QStringLiteral("1"));
+    writeId(doc, QStringLiteral("Reusable"), layer.reusable);
+    if (!layer.continues.groups.isEmpty())
+        doc->writeAttribute(QStringLiteral("ContinuesGroups"), idsToString(layer.continues.groups));
+    if (!layer.continues.fixtures.isEmpty())
+        doc->writeAttribute(QStringLiteral("ContinuesFixtures"),
+                            idsToString(layer.continues.fixtures));
+    if (!layer.continues.sets.isEmpty())
+        doc->writeAttribute(QStringLiteral("ContinuesSets"), idsToString(layer.continues.sets));
+    for (const Target &also : layer.continuesAlso)
+    {
+        doc->writeStartElement(KXMLShowTreeContinues);
+        if (!also.groups.isEmpty())
+            doc->writeAttribute(QStringLiteral("Groups"), idsToString(also.groups));
+        if (!also.fixtures.isEmpty())
+            doc->writeAttribute(QStringLiteral("Fixtures"), idsToString(also.fixtures));
+        if (!also.sets.isEmpty())
+            doc->writeAttribute(QStringLiteral("Sets"), idsToString(also.sets));
+        doc->writeEndElement();
+    }
+    saveLooks(doc, layer.looks);
+    doc->writeEndElement();
+}
+
 void saveXML(QXmlStreamWriter *doc, const Production &production)
 {
     doc->writeStartElement(KXMLShowTreeProduction);
@@ -1071,46 +1110,12 @@ void saveXML(QXmlStreamWriter *doc, const Production &production)
                 doc->writeAttribute(QStringLiteral("Includes"), idsToString(cue.includes));
             if (cue.mixOverlap)
                 doc->writeAttribute(QStringLiteral("Overlap"), QStringLiteral("Mix"));
+            writeId(doc, QStringLiteral("Reusable"), cue.reusable);
             writeId(doc, QStringLiteral("Collection"), cue.collection);
 
             saveLooks(doc, cue.looks);
             for (const Layer &layer : cue.layers)
-            {
-                doc->writeStartElement(KXMLShowTreeLayer);
-                writeId(doc, QStringLiteral("ID"), layer.id);
-                if (!layer.name.isEmpty())
-                    doc->writeAttribute(QStringLiteral("Name"), layer.name);
-                if (!layer.target.groups.isEmpty())
-                    doc->writeAttribute(QStringLiteral("Groups"), idsToString(layer.target.groups));
-                if (!layer.target.fixtures.isEmpty())
-                    doc->writeAttribute(QStringLiteral("Fixtures"), idsToString(layer.target.fixtures));
-                if (!layer.target.sets.isEmpty())
-                    doc->writeAttribute(QStringLiteral("Sets"), idsToString(layer.target.sets));
-                writeId(doc, QStringLiteral("Function"), layer.target.function);
-                writeId(doc, QStringLiteral("Parent"), layer.parent);
-                if (layer.release)
-                    doc->writeAttribute(QStringLiteral("Release"), QStringLiteral("1"));
-                if (!layer.continues.groups.isEmpty())
-                    doc->writeAttribute(QStringLiteral("ContinuesGroups"), idsToString(layer.continues.groups));
-                if (!layer.continues.fixtures.isEmpty())
-                    doc->writeAttribute(QStringLiteral("ContinuesFixtures"),
-                                        idsToString(layer.continues.fixtures));
-                if (!layer.continues.sets.isEmpty())
-                    doc->writeAttribute(QStringLiteral("ContinuesSets"), idsToString(layer.continues.sets));
-                for (const Target &also : layer.continuesAlso)
-                {
-                    doc->writeStartElement(KXMLShowTreeContinues);
-                    if (!also.groups.isEmpty())
-                        doc->writeAttribute(QStringLiteral("Groups"), idsToString(also.groups));
-                    if (!also.fixtures.isEmpty())
-                        doc->writeAttribute(QStringLiteral("Fixtures"), idsToString(also.fixtures));
-                    if (!also.sets.isEmpty())
-                        doc->writeAttribute(QStringLiteral("Sets"), idsToString(also.sets));
-                    doc->writeEndElement();
-                }
-                saveLooks(doc, layer.looks);
-                doc->writeEndElement();
-            }
+                saveLayer(doc, layer);
             doc->writeEndElement();
         }
         doc->writeEndElement();
@@ -1142,6 +1147,48 @@ bool loadXML(QXmlStreamReader &root, GroupSet &set)
     set.fixtures = stringToIds(a.value(QStringLiteral("Fixtures")).toString());
     root.skipCurrentElement();
     return set.id != invalidId();
+}
+
+/** A <Layer> (the reader on its start element). */
+static Layer loadLayer(QXmlStreamReader &root)
+{
+    const QXmlStreamAttributes a = root.attributes();
+    Layer layer;
+    layer.id = readId(a, QStringLiteral("ID"));
+    layer.name = a.value(QStringLiteral("Name")).toString();
+    layer.target.groups = stringToIds(a.value(QStringLiteral("Groups")).toString());
+    layer.target.fixtures = stringToIds(a.value(QStringLiteral("Fixtures")).toString());
+    layer.target.sets = stringToIds(a.value(QStringLiteral("Sets")).toString());
+    layer.target.function = readId(a, QStringLiteral("Function"));
+    layer.parent = readId(a, QStringLiteral("Parent"));
+    layer.release = a.value(QStringLiteral("Release")).toString() == QLatin1String("1");
+    layer.reusable = readId(a, QStringLiteral("Reusable"));
+    layer.continues.groups = stringToIds(a.value(QStringLiteral("ContinuesGroups")).toString());
+    layer.continues.fixtures = stringToIds(a.value(QStringLiteral("ContinuesFixtures")).toString());
+    layer.continues.sets = stringToIds(a.value(QStringLiteral("ContinuesSets")).toString());
+    while (root.readNextStartElement())
+    {
+        if (root.name() == KXMLShowTreeLook)
+        {
+            layer.looks << loadLook(root);
+        }
+        else if (root.name() == KXMLShowTreeContinues)
+        {
+            const QXmlStreamAttributes ca = root.attributes();
+            Target also;
+            also.groups = stringToIds(ca.value(QStringLiteral("Groups")).toString());
+            also.fixtures = stringToIds(ca.value(QStringLiteral("Fixtures")).toString());
+            also.sets = stringToIds(ca.value(QStringLiteral("Sets")).toString());
+            if (!also.isEmpty())
+                layer.continuesAlso << also;
+            root.skipCurrentElement();
+        }
+        else
+        {
+            root.skipCurrentElement();
+        }
+    }
+    return layer;
 }
 
 bool loadXML(QXmlStreamReader &root, Production &production)
@@ -1190,6 +1237,7 @@ bool loadXML(QXmlStreamReader &root, Production &production)
                 cue.hold = a.value(QStringLiteral("Hold")).toString().toUInt();
             cue.includes = stringToIds(a.value(QStringLiteral("Includes")).toString());
             cue.mixOverlap = a.value(QStringLiteral("Overlap")).toString() == QLatin1String("Mix");
+            cue.reusable = readId(a, QStringLiteral("Reusable"));
             cue.collection = readId(a, QStringLiteral("Collection"));
 
             while (root.readNextStartElement())
@@ -1200,42 +1248,7 @@ bool loadXML(QXmlStreamReader &root, Production &production)
                 }
                 else if (root.name() == KXMLShowTreeLayer)
                 {
-                    a = root.attributes();
-                    Layer layer;
-                    layer.id = readId(a, QStringLiteral("ID"));
-                    layer.name = a.value(QStringLiteral("Name")).toString();
-                    layer.target.groups = stringToIds(a.value(QStringLiteral("Groups")).toString());
-                    layer.target.fixtures = stringToIds(a.value(QStringLiteral("Fixtures")).toString());
-                    layer.target.sets = stringToIds(a.value(QStringLiteral("Sets")).toString());
-                    layer.target.function = readId(a, QStringLiteral("Function"));
-                    layer.parent = readId(a, QStringLiteral("Parent"));
-                    layer.release = a.value(QStringLiteral("Release")).toString() == QLatin1String("1");
-                    layer.continues.groups = stringToIds(a.value(QStringLiteral("ContinuesGroups")).toString());
-                    layer.continues.fixtures = stringToIds(a.value(QStringLiteral("ContinuesFixtures")).toString());
-                    layer.continues.sets = stringToIds(a.value(QStringLiteral("ContinuesSets")).toString());
-                    while (root.readNextStartElement())
-                    {
-                        if (root.name() == KXMLShowTreeLook)
-                        {
-                            layer.looks << loadLook(root);
-                        }
-                        else if (root.name() == KXMLShowTreeContinues)
-                        {
-                            const QXmlStreamAttributes ca = root.attributes();
-                            Target also;
-                            also.groups = stringToIds(ca.value(QStringLiteral("Groups")).toString());
-                            also.fixtures = stringToIds(ca.value(QStringLiteral("Fixtures")).toString());
-                            also.sets = stringToIds(ca.value(QStringLiteral("Sets")).toString());
-                            if (!also.isEmpty())
-                                layer.continuesAlso << also;
-                            root.skipCurrentElement();
-                        }
-                        else
-                        {
-                            root.skipCurrentElement();
-                        }
-                    }
-                    cue.layers << layer;
+                    cue.layers << loadLayer(root);
                 }
                 else
                 {
@@ -1247,6 +1260,127 @@ bool loadXML(QXmlStreamReader &root, Production &production)
         production.lists << list;
     }
     return true;
+}
+
+void saveXML(QXmlStreamWriter *doc, const ReusableLayer &reusable)
+{
+    // A layer's own element, inside: the same reader takes it.
+    doc->writeStartElement(QStringLiteral("ReusableLayer"));
+    writeId(doc, QStringLiteral("ID"), reusable.id);
+    doc->writeAttribute(QStringLiteral("Name"), reusable.name);
+    Layer l;
+    l.name = reusable.name;
+    l.target = reusable.target;
+    l.looks = reusable.looks;
+    saveLayer(doc, l);
+    doc->writeEndElement();
+}
+
+bool loadXML(QXmlStreamReader &root, ReusableLayer &reusable)
+{
+    if (root.name() != QLatin1String("ReusableLayer"))
+        return false;
+    const QXmlStreamAttributes a = root.attributes();
+    reusable = ReusableLayer();
+    reusable.id = readId(a, QStringLiteral("ID"));
+    reusable.name = a.value(QStringLiteral("Name")).toString();
+    while (root.readNextStartElement())
+    {
+        if (root.name() == KXMLShowTreeLayer)
+        {
+            const Layer l = loadLayer(root);
+            reusable.target = l.target;
+            reusable.looks = l.looks;
+        }
+        else
+        {
+            root.skipCurrentElement();
+        }
+    }
+    return reusable.id != invalidId();
+}
+
+void saveXML(QXmlStreamWriter *doc, const ReusableCue &reusable)
+{
+    doc->writeStartElement(QStringLiteral("ReusableCue"));
+    writeId(doc, QStringLiteral("ID"), reusable.id);
+    doc->writeAttribute(QStringLiteral("Name"), reusable.name);
+    if (reusable.mode != CueMode::ListDefault)
+        doc->writeAttribute(QStringLiteral("Mode"), cueModeToString(reusable.mode));
+    if (reusable.mixOverlap)
+        doc->writeAttribute(QStringLiteral("Overlap"), QStringLiteral("Mix"));
+    if (!reusable.note.isEmpty())
+        doc->writeAttribute(QStringLiteral("Note"), reusable.note);
+    doc->writeAttribute(QStringLiteral("FadeIn"), QString::number(reusable.fadeIn));
+    doc->writeAttribute(QStringLiteral("FadeOut"), QString::number(reusable.fadeOut));
+    doc->writeAttribute(QStringLiteral("Hold"), QString::number(reusable.hold));
+    saveLooks(doc, reusable.looks);
+    for (const Layer &l : reusable.layers)
+        saveLayer(doc, l);
+    doc->writeEndElement();
+}
+
+bool loadXML(QXmlStreamReader &root, ReusableCue &reusable)
+{
+    if (root.name() != QLatin1String("ReusableCue"))
+        return false;
+    const QXmlStreamAttributes a = root.attributes();
+    reusable = ReusableCue();
+    reusable.id = readId(a, QStringLiteral("ID"));
+    reusable.name = a.value(QStringLiteral("Name")).toString();
+    reusable.mode = stringToCueMode(a.value(QStringLiteral("Mode")).toString());
+    reusable.mixOverlap = a.value(QStringLiteral("Overlap")).toString() == QLatin1String("Mix");
+    reusable.note = a.value(QStringLiteral("Note")).toString();
+    reusable.fadeIn = a.value(QStringLiteral("FadeIn")).toString().toUInt();
+    reusable.fadeOut = a.value(QStringLiteral("FadeOut")).toString().toUInt();
+    if (a.hasAttribute(QStringLiteral("Hold")))
+        reusable.hold = a.value(QStringLiteral("Hold")).toString().toUInt();
+    while (root.readNextStartElement())
+    {
+        if (root.name() == KXMLShowTreeLook)
+            reusable.looks << loadLook(root);
+        else if (root.name() == KXMLShowTreeLayer)
+            reusable.layers << loadLayer(root);
+        else
+            root.skipCurrentElement();
+    }
+    return reusable.id != invalidId();
+}
+
+/****************************************************************************
+ * Reusable content (P4)
+ ****************************************************************************/
+
+static QString looksContent(const QList<Look> &looks)
+{
+    QStringList parts;
+    for (const Look &l : looks)
+        parts << QStringLiteral("%1=%2/%3/%4/%5").arg(l.key, idsToString(l.palettes), idsToString(l.own),
+                                                      l.none ? QStringLiteral("none") : QString(), l.value);
+    parts.sort();
+    return parts.join(QLatin1Char(';'));
+}
+
+QString layerContent(const Layer &layer)
+{
+    return QStringLiteral("%1|%2|%3").arg(layer.name, layer.target.signature(), looksContent(layer.looks));
+}
+
+QString cueContent(const Cue &cue)
+{
+    QStringList parts;
+    parts << cue.name << cueModeToString(cue.mode) << (cue.mixOverlap ? QStringLiteral("mix") : QString())
+          << looksContent(cue.looks);
+    for (const Layer &l : cue.layers)
+    {
+        int parent = -1;
+        for (int k = 0; k < cue.layers.count(); ++k)
+            if (l.parent != invalidId() && cue.layers.at(k).id == l.parent)
+                parent = k;
+        parts << QStringLiteral("[%1|%2|%3|%4]").arg(layerContent(l)).arg(l.release ? 1 : 0).arg(parent)
+                 .arg(l.reusable == invalidId() ? QString() : QString::number(l.reusable));
+    }
+    return parts.join(QLatin1Char('#'));
 }
 
 } // namespace ShowTree

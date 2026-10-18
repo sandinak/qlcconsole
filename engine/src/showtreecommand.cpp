@@ -55,7 +55,8 @@ QString ShowTreeCommand::grammar()
               "Towers aim DS-Edge spread 0 group pairs cross mirror · cue look spread +5 · "
               "cue look colour Red · Steps effect Sinelon colour Red · gobo none · release Towers · "
               "name \"Hero\" · T1-CW … (a fixture) · function Haze · include 0.0.3 · "
-              "record [selected|running|lit] · list \"name\" · dup · undo — Tab completes every word "
+              "record [selected|running|lit] · list \"name\" · dup · reusable · use BackStage · unlink · "
+              "detach [list] · convert [apply] · undo — Tab completes every word "
               "(again: the next), ↑ recalls");
 }
 
@@ -193,6 +194,30 @@ const QList<ShowTreeCommand::Word> &ShowTreeCommand::words()
             "Pastes what copy took: cues right after the selected cue (numbered in turn, never "
             "renumbering), or layers into the selected cue. One undo step. ⌘V in the tree.",
             { "paste" }, { "copy" });
+        // reuse (P4)
+        add("reusable", "reuse", "reusable [\"name\"]",
+            "Make reusable: the selected layer (else the selected cue) goes into the Library as a "
+            "reusable layer (cue), named as given (else its own name), and stays its first use. Every use "
+            "is live-linked: change one, they all change.",
+            { "reusable", "reusable \"BackStage\"" }, { "use", "unlink" });
+        add("use", "reuse", "use <reusable>",
+            "Puts a reusable in: a reusable layer as a layer of the selected cue, a reusable cue as a new "
+            "cue after it. Live-linked to the others.",
+            { "use BackStage", "use \"Walk-in\"" }, { "reusable", "unlink" });
+        add("unlink", "reuse", "unlink",
+            "Unlink here: the selected layer (else cue) stops being a use of its reusable and keeps what "
+            "it is now as a plain copy of its own. The other uses stay linked.",
+            { "unlink" }, { "reusable", "detach" });
+        add("detach", "reuse", "detach | detach list",
+            "Detach the selected layer to a plain scene (the cue then plays that scene as it is), or the "
+            "selected cue list to a plain chaser: its chaser and collections become ordinary functions "
+            "and the list leaves the tree.",
+            { "detach", "detach list" }, { "unlink" });
+        add("convert", "reuse", "convert | convert apply",
+            "Convert to tracking: shows what would change in the selected (imported) cue list -- values "
+            "that only repeat what tracks in taken out, includes of the cue before made tracking -- then "
+            "convert apply does it, one undo step. Every cue plays exactly as before.",
+            { "convert", "convert apply" }, { "track" });
         // undo
         add("undo", "undo", "undo | redo", "Undoes (redoes) the last change to the tree.",
             { "undo", "redo" }, {}, { "redo" });
@@ -291,7 +316,8 @@ QString ShowTreeCommand::helpText(const QString &w)
     }
     const QList<QPair<QString, QString>> groups = {
         { "navigate", tr("Navigate") }, { "build", tr("Build") }, { "looks", tr("Looks") },
-        { "tracking", tr("Tracking") }, { "record", tr("Record and copy") }, { "undo", tr("Undo") },
+        { "tracking", tr("Tracking") }, { "record", tr("Record and copy") },
+        { "reuse", tr("Reuse, detach, convert") }, { "undo", tr("Undo") },
         { "help", tr("Help") } };
     QString out = tr("Every word (<code>help &lt;word&gt;</code> for one, with examples; Tab completes):");
     for (const auto &g : groups)
@@ -457,6 +483,18 @@ QStringList ShowTreeCommand::paletteNames(const QString &key) const
             && !out.contains(p->name(), Qt::CaseInsensitive))
             out << p->name();
     }
+    return out;
+}
+
+QStringList ShowTreeCommand::reusableNames() const
+{
+    QStringList out;
+    for (const ReusableLayer &r : m_st->reusableLayers())
+        if (!r.name.isEmpty() && !out.contains(r.name, Qt::CaseInsensitive))
+            out << r.name;
+    for (const ReusableCue &r : m_st->reusableCues())
+        if (!r.name.isEmpty() && !out.contains(r.name, Qt::CaseInsensitive))
+            out << r.name;
     return out;
 }
 
@@ -1120,6 +1158,51 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
     {
         error = tr("Select a cue list first (or: list \"name\").");
     }
+    else if (w0 == QLatin1String("convert"))
+    {
+        // Convert to tracking (§7): the plan first, `convert apply` does it.
+        r.word();
+        const QString what = r.word().toLower();
+        if (!what.isEmpty() && what != QLatin1String("apply"))
+            error = tr("convert · convert apply");
+        else
+        {
+            ShowTreeController::ConvertPlan plan = m_st->planConvertToTracking(ctx.list);
+            if (!plan.ok)
+                error = plan.why;
+            else if (what.isEmpty())
+            {
+                QString html = tr("<b>Convert %1 to tracking</b> — every cue plays as it does now:").arg(list->name.toHtmlEscaped());
+                for (const QString &c : plan.changes)
+                    html += QStringLiteral("<br>&nbsp;&nbsp;") + c.toHtmlEscaped();
+                html += tr("<br><a href=\"ex:convert apply\"><code>convert apply</code></a> does it (one undo step).");
+                res.help = html;
+                res.message = tr("%1 cue(s) track, %2 value(s) and %3 layer(s) only repeated what tracks in; "
+                                 "convert apply does it").arg(plan.tracking).arg(plan.looksRemoved).arg(plan.layersRemoved);
+                res.keepSelection = true;
+            }
+            else if (!m_st->convertToTracking(ctx.list, &plan))
+                error = plan.why.isEmpty() ? tr("Couldn't convert.") : plan.why;
+            else
+                res.message = tr("converted: %1 cue(s) track, %2 value(s) and %3 layer(s) taken out, %4 include(s) "
+                                 "made tracking").arg(plan.tracking).arg(plan.looksRemoved).arg(plan.layersRemoved)
+                              .arg(plan.includesRemoved);
+        }
+    }
+    else if (w0 == QLatin1String("detach") && r.src.mid(r.i).trimmed().toLower() == QLatin1String("detach list"))
+    {
+        r.word();
+        r.word();
+        const QString nm = list->name;
+        if (m_st->detachList(ctx.list) == invalidId())
+            error = tr("Couldn't detach %1.").arg(nm);
+        else
+        {
+            res.message = tr("%1 is a plain chaser now (Functions → %2)").arg(nm, nm);
+            ctx.list = invalidId();
+            ctx.cue = invalidId();
+        }
+    }
     else if (w0 == QLatin1String("cue"))
     {
         r.word();
@@ -1165,6 +1248,89 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
     else if (ctx.cue == invalidId() || list->indexOf(ctx.cue) < 0)
     {
         error = tr("Select a cue first (or: cue 1.0.0 \"name\").");
+    }
+    else if (w0 == QLatin1String("reusable"))
+    {
+        // Make reusable: the selected layer, else the cue.
+        r.word();
+        QString nm = r.quoted();
+        if (nm.isNull())
+            nm = r.src.mid(r.i).trimmed();
+        QString why;
+        const quint32 id = ctx.layer != invalidId() ? m_st->makeLayerReusable(ctx.cue, ctx.layer, nm, &why)
+                                                    : m_st->makeCueReusable(ctx.cue, nm, &why);
+        if (id == invalidId())
+            error = why;
+        else
+        {
+            res.message = tr("%1 is reusable (Library → All → Reusable)").arg(m_st->reusableName(id));
+            res.layer = ctx.layer;
+        }
+    }
+    else if (w0 == QLatin1String("use"))
+    {
+        r.word();
+        const QString nm = r.name(reusableNames());
+        quint32 rid = invalidId();
+        for (const ReusableLayer &x : m_st->reusableLayers())
+            if (rid == invalidId() && x.name.compare(nm, Qt::CaseInsensitive) == 0)
+                rid = x.id;
+        bool isCue = false;
+        for (const ReusableCue &x : m_st->reusableCues())
+            if (rid == invalidId() && x.name.compare(nm, Qt::CaseInsensitive) == 0)
+            {
+                rid = x.id;
+                isCue = true;
+            }
+        if (nm.isEmpty() || rid == invalidId())
+            error = tr("use <reusable>: no reusable “%1”. Tab lists them.").arg(r.peek());
+        else if (!r.atEnd())
+            error = tr("Don't know “%1”.").arg(r.peek());
+        else if (isCue)
+        {
+            const quint32 id = m_st->insertReusableCue(ctx.list, list->indexOf(ctx.cue), rid);
+            if (id == invalidId())
+                error = tr("Couldn't put %1 in.").arg(nm);
+            else
+                ctx.cue = id;
+        }
+        else
+        {
+            const quint32 id = m_st->insertReusableLayer(ctx.cue, rid);
+            if (id == invalidId())
+                error = tr("Couldn't put %1 in.").arg(nm);
+            else
+                res.layer = id;
+        }
+    }
+    else if (w0 == QLatin1String("unlink"))
+    {
+        r.word();
+        const Cue *c = list->cue(ctx.cue);
+        const Layer *l = ctx.layer == invalidId() ? nullptr : c->layer(ctx.layer);
+        if (!r.atEnd())
+            error = tr("unlink -- then nothing more");
+        else if (l != nullptr && l->reusable != invalidId())
+        {
+            m_st->unlinkLayer(ctx.cue, ctx.layer);
+            res.layer = ctx.layer;
+        }
+        else if (l == nullptr && c->reusable != invalidId())
+            m_st->unlinkCue(ctx.cue);
+        else
+            error = tr("The selected %1 isn't a use of a reusable.").arg(l != nullptr ? tr("layer") : tr("cue"));
+    }
+    else if (w0 == QLatin1String("detach"))
+    {
+        r.word();
+        if (!r.atEnd())
+            error = tr("detach · detach list");
+        else if (ctx.layer == invalidId())
+            error = tr("Select a layer to detach (or: detach list).");
+        else if (m_st->detachLayer(ctx.cue, ctx.layer) == invalidId())
+            error = tr("Couldn't detach that layer.");
+        else
+            res.layer = ctx.layer;
     }
     else if (w0 == QLatin1String("dup"))
     {
@@ -1365,7 +1531,8 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
         {
             const QString near = nearestWord(r.peek());
             error = tr("Don't know “%1”.%2 Start with cue, a group or fixture, a mode, base, release, include, "
-                       "function, record, list, set, name, copy, paste, dup, undo — type help.")
+                       "function, record, list, set, name, copy, paste, dup, reusable, use, unlink, detach, "
+                       "convert, undo — type help.")
                     .arg(r.peek(), near.isEmpty() ? QString() : tr(" Did you mean “%1”? (help %1)").arg(near));
         }
         else
@@ -1577,8 +1744,30 @@ bool ShowTreeCommand::candidates(const QString &head, const Context &context, QS
         return true;
     }
     if (w0 == QLatin1String("undo") || w0 == QLatin1String("redo") || w0 == QLatin1String("dup")
-        || w0 == QLatin1String("name") || w0 == QLatin1String("paste"))
+        || w0 == QLatin1String("name") || w0 == QLatin1String("paste") || w0 == QLatin1String("reusable")
+        || w0 == QLatin1String("unlink"))
         return true;
+    if (w0 == QLatin1String("use"))
+    {
+        r.word();
+        if (r.atEnd())
+        {
+            *out = reusableNames();
+            return true;
+        }
+        return !r.name(reusableNames()).isEmpty() && r.atEnd();
+    }
+    if (w0 == QLatin1String("convert") || w0 == QLatin1String("detach"))
+    {
+        r.word();
+        if (r.atEnd())
+        {
+            *out = QStringList(w0 == QLatin1String("convert") ? QStringLiteral("apply") : QStringLiteral("list"));
+            return true;
+        }
+        r.word();
+        return r.atEnd();
+    }
     if (w0 == QLatin1String("help") || w0 == QLatin1String("?"))
     {
         r.word();

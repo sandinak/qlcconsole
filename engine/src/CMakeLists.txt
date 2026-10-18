@@ -48,6 +48,8 @@ add_library(${module_name} SHARED
     showcontrol.cpp showcontrol.h
     showtreecommand.cpp showtreecommand.h
     showtreecontroller.cpp showtreecontroller.h
+    showtreeconvert.cpp
+    showtreereusable.cpp
     showtreemodel.cpp showtreemodel.h
     spreadlayer.cpp spreadlayer.h
     linecurve.cpp linecurve.h

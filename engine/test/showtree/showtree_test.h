@@ -131,6 +131,15 @@ private slots:
     void everyCommandWordHasHelpAndItsExamplesParse();
     void copyAndPasteCues();
 
+    // P4: reusable layers and cues, Detach a list, Convert to tracking
+    void reusableLayersAreLiveLinked();
+    void reusableCuesInSeveralLists();
+    void reusablesSaveLoadAndUndo();
+    void detachAListToAPlainChaser();
+    void convertToTrackingPlaysTheSame();
+    void convertToTrackingSyntheticLists();
+    void reuseDetachAndConvertTyped();
+
 private:
     quint32 dimmer(int level, const QString &name);
     quint32 colour(const QString &name);

@@ -66,6 +66,11 @@ class Doc;
  *                                a line aim and its parameters (§3B)
  *   cue look spread +5           a cue's Spread: line aims only (D18)
  *   name "Hero"                  name the selected layer (or cue); "" = automatic
+ *   reusable ["name"]            Make reusable: the selected layer (else cue)
+ *   use BackStage                a reusable layer in the cue / a reusable cue after it
+ *   unlink                       Unlink here: a plain copy of its own
+ *   detach · detach list         a layer to a plain scene; the list to a plain chaser
+ *   convert · convert apply      Convert to tracking: the plan, then do it
  *   dup · undo · redo
  *
  * Names are the Library's (groups, fixtures, palettes, functions), matched
@@ -198,6 +203,8 @@ private:
     QStringList listNames(const Context &context) const;
     QStringList paletteNames(const QString &key) const;
     QStringList cueNumbers(const Context &context) const;
+    /** Reusable layers and cues by name: what `use` takes. */
+    QStringList reusableNames() const;
     static QStringList keywords();
     static QStringList attributeWords();
     /** "colour" -> ShowTree::KeyColour; empty: not an attribute. */

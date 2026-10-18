@@ -326,6 +326,103 @@ public:
     bool removeProduction(quint32 productionId);
 
     /************************************************************************
+     * Reusable layers and cues (P4): Make reusable, uses, Unlink here
+     ************************************************************************/
+public:
+    const QList<ShowTree::ReusableLayer> &reusableLayers() const { return m_reusableLayers; }
+    const QList<ShowTree::ReusableCue> &reusableCues() const { return m_reusableCues; }
+    const ShowTree::ReusableLayer *reusableLayer(quint32 id) const;
+    const ShowTree::ReusableCue *reusableCue(quint32 id) const;
+    /** The name of reusable @a id (a layer or a cue); empty: none. */
+    QString reusableName(quint32 id) const;
+
+    /** Make reusable (§1): the layer's name, target and looks become a
+     *  reusable layer in the Library named @a name (empty: the layer's
+     *  name, else its groups'), and the layer its first use. Every use
+     *  stays live-linked: an edit to any of them is an edit to all. One
+     *  undo step. Refused (invalid, @a why) for a child layer, a layer
+     *  already reusable, or a layer of a reusable cue's use. */
+    quint32 makeLayerReusable(quint32 cueId, quint32 layerId, const QString &name = QString(),
+                              QString *why = nullptr);
+    /** Make reusable for a cue: its name, mode, overlap, cue looks and
+     *  layers become a reusable cue (a "Blackout", a "Walk-in"), the cue
+     *  its first use. Number, timing, note and includes stay each use's
+     *  own. One undo step. */
+    quint32 makeCueReusable(quint32 cueId, const QString &name = QString(), QString *why = nullptr);
+    /** A use of reusable layer @a reusableId in cue @a cueId (a new layer,
+     *  linked). One undo step. Invalid: no such cue or reusable. */
+    quint32 insertReusableLayer(quint32 cueId, quint32 reusableId);
+    /** A use of reusable cue @a reusableId as a new cue of list @a listId
+     *  after @a afterIndex (-1: at the top), numbered per D23, starting
+     *  with the reusable's timing. One undo step. */
+    quint32 insertReusableCue(quint32 listId, int afterIndex, quint32 reusableId);
+    /** Unlink here: this use becomes a plain local copy, as it is now; the
+     *  other uses stay linked. One undo step. */
+    bool unlinkLayer(quint32 cueId, quint32 layerId);
+    bool unlinkCue(quint32 cueId);
+    /** Rename a reusable: every use takes the name. One undo step. */
+    bool renameReusable(quint32 reusableId, const QString &name);
+
+    /** One use of a reusable: its list, cue and (a layer's) layer. */
+    struct ReusableUse
+    {
+        quint32 list = 0xFFFFFFFF;
+        quint32 cue = 0xFFFFFFFF;
+        quint32 layer = 0xFFFFFFFF;     //!< invalid for a reusable cue's use
+        QString label;                  //!< "Full Show 0.0.3 Announcer" (+ " — BackStage")
+    };
+    /** Every use of reusable @a reusableId, in tree order. */
+    QList<ReusableUse> reusableUses(quint32 reusableId) const;
+    /** Delete a reusable. While it is used it is refused (@a why names the
+     *  uses), unless @a unlinkUses: then every use becomes a plain copy as
+     *  it is, and the reusable goes -- one undo step. */
+    bool removeReusable(quint32 reusableId, bool unlinkUses = false, QString *why = nullptr);
+
+    /************************************************************************
+     * Detach a cue list to a plain chaser (D13 for lists, P4)
+     ************************************************************************/
+public:
+    /** The list's generated Chaser and its cue Collections become the
+     *  show's own, ordinary unlocked functions (shown in the Functions
+     *  window, where they are) and the list leaves the tree. The scenes
+     *  they play that no other list plays go with them; one another list
+     *  still plays stays the tree's (locked) until the tree lets go of it,
+     *  then it is handed over too, never deleted. One-off palettes they
+     *  play become ordinary palettes. One undo step: undo puts the list
+     *  back on the same functions. The chaser (invalid: refused). */
+    quint32 detachList(quint32 listId);
+
+    /************************************************************************
+     * Convert to tracking (§7, P4)
+     ************************************************************************/
+public:
+    /** What Convert to tracking… would do to a list: the list as it would
+     *  be, and what changes, as a person reads it. */
+    struct ConvertPlan
+    {
+        bool ok = false;
+        QString why;                        //!< not ok: why not
+        ShowTree::CueList list;             //!< the list after
+        QStringList changes;                //!< "0.0.4 SHOUT: tracks from 0.0.3 (include taken out)"
+        int tracking = 0;                   //!< cues that now track
+        int blocks = 0;                     //!< cues kept Block (they'd change otherwise)
+        int looksRemoved = 0;               //!< values that only repeated what tracks in
+        int layersRemoved = 0;              //!< layers left with nothing of their own
+        int includesRemoved = 0;            //!< "includes the cue before" made tracking
+        int releases = 0;                   //!< Release set so a layer doesn't track on
+    };
+    /** Plan Convert to tracking for an imported (non-tracking) list (§7):
+     *  each cue tracks where it then plays exactly as before (else it stays
+     *  Block); an include of the cue before becomes tracking; a layer that
+     *  the next cue doesn't light is released there; a value equal to what
+     *  tracks in is taken out (a layer left with nothing is taken out, if it
+     *  overlaps no other). What every cue puts on stage is unchanged, checked
+     *  cue by cue. Reusable uses are left as they are. Nothing is changed. */
+    ConvertPlan planConvertToTracking(quint32 listId) const;
+    /** Apply the plan: one undo step. False: nothing to do, or refused. */
+    bool convertToTracking(quint32 listId, ConvertPlan *plan = nullptr);
+
+    /************************************************************************
      * Looks and palettes
      ************************************************************************/
 public:
@@ -632,6 +729,27 @@ private:
     void saveState(QXmlStreamWriter *doc, bool snapshot) const;
 
     ShowTree::Cue *findCue(quint32 cueId, ShowTree::CueList **list = nullptr);
+
+    /** After an edit (@a before, @a after): a use of a reusable that the
+     *  edit changed gives the reusable its content, and every other use
+     *  takes it (P4). Uses the edit didn't touch take the reusable's. */
+    void syncReusables(const QList<ShowTree::Production> &before, QList<ShowTree::Production> &after);
+    QList<ShowTree::ReusableLayer> m_reusableLayers;
+    QList<ShowTree::ReusableCue> m_reusableCues;
+    QList<ShowTree::ReusableLayer> m_batchReusableLayers;
+    QList<ShowTree::ReusableCue> m_batchReusableCues;
+    /** Functions a list Detach handed over (chaser, collections, scenes):
+     *  an undo past it takes them back, a redo hands them over again. */
+    QSet<quint32> m_detachedLists;
+    QSet<quint32> m_snapshotDetachedLists;
+    bool m_snapshotHasDetachedLists = false;
+    /** Hand generated function @a id over to the show (no longer the tree's). */
+    void handOver(quint32 id);
+    /** After a snapshot is read: take back what a list Detach handed over
+     *  that the snapshot's state didn't have, hand over what it did. */
+    void applyDetachedLists();
+    /** Whether a function the tree didn't generate plays generated @a id. */
+    bool usedOutsideTree(quint32 id);
 
     /** Run @a change on the group sets as one undo step, then bake. */
     bool editSets(const QString &label, const std::function<bool(QList<ShowTree::GroupSet> &)> &change);

@@ -209,6 +209,7 @@ bool ShowTreeController::edit(const QString &label,
         QList<Production> work = m_productions;
         if (!change(work))
             return false;
+        syncReusables(m_productions, work);
         m_productions = work;
         m_batchChanged = true;
         return true;
@@ -219,6 +220,8 @@ bool ShowTreeController::edit(const QString &label,
     if (!change(work))
         return false;
 
+    // A reusable's use edited: every use (P4).
+    syncReusables(m_productions, work);
     m_productions = work;
     pushUndo(label, before);
 
@@ -245,6 +248,8 @@ void ShowTreeController::beginBatch(const QString &label)
     m_batchBefore = snapshotXml();
     m_batchProductions = m_productions;
     m_batchSets = m_groupSets;
+    m_batchReusableLayers = m_reusableLayers;
+    m_batchReusableCues = m_reusableCues;
     m_batchChanged = false;
 }
 
@@ -278,6 +283,8 @@ void ShowTreeController::endBatch(bool keep)
         // Back as it was; a bake drops a one-off value made on the way.
         m_productions = m_batchProductions;
         m_groupSets = m_batchSets;
+        m_reusableLayers = m_batchReusableLayers;
+        m_reusableCues = m_batchReusableCues;
         bake();
         emit changed();
         return;
@@ -1297,6 +1304,12 @@ bool ShowTreeController::splitLayer(quint32 cueId, quint32 layerId, QList<quint3
             *why = tr("%1 has child layers: take them out first.").arg(targetLabel(l->target));
         return false;
     }
+    if (l->reusable != invalidId())
+    {
+        if (why != nullptr)
+            *why = tr("%1 is reusable: Unlink here first (every use would split).").arg(reusableName(l->reusable));
+        return false;
+    }
     const QList<Target> pieces = l->pieces();
     if (pieces.count() < 2)
     {
@@ -1410,6 +1423,8 @@ quint32 ShowTreeController::mergeLayers(quint32 cueId, const QList<quint32> &lay
             return refuse(tr("%1 plays a function as it is: it can't be merged.").arg(targetLabel(l->target)));
         if (!childLayers(cueId, lid).isEmpty())
             return refuse(tr("%1 has child layers: take them out first.").arg(targetLabel(l->target)));
+        if (l->reusable != invalidId())
+            return refuse(tr("%1 is reusable: Unlink here first.").arg(reusableName(l->reusable)));
         if (!layers.isEmpty() && l->parent != layers.first()->parent)
             return refuse(tr("Only layers under the same parent can be merged."));
         if (!layers.contains(l))
@@ -1924,6 +1939,13 @@ bool ShowTreeController::removeGroupSet(quint32 setId, QString *why)
                         if (!used.contains(label))
                             used << label;
                     }
+    for (const ReusableLayer &r : m_reusableLayers)
+        if (r.target.sets.contains(setId))
+            used << tr("reusable %1").arg(r.name);
+    for (const ReusableCue &r : m_reusableCues)
+        for (const Layer &layer : r.layers)
+            if (layer.target.sets.contains(setId) && !used.contains(tr("reusable %1").arg(r.name)))
+                used << tr("reusable %1").arg(r.name);
     if (!used.isEmpty())
     {
         if (why != nullptr)
@@ -3165,6 +3187,7 @@ void ShowTreeController::restoreSnapshot(const QByteArray &xml)
     m_snapshotDetached.clear();
     if (r.name() == KXMLQLCShowTree)
         loadState(r, true);
+    applyDetachedLists();
     bake();
     // A scene Detach made after this snapshot (the detach is undone) goes,
     // once the bake has let go of it; the redo snapshot holds it as it was.
@@ -3482,6 +3505,13 @@ void ShowTreeController::deleteUnused(const QSet<quint32> &keep, QSet<quint32> &
         // an edit never pulls a running look out from under the show.
         if (f->isRunning())
             continue;
+        // Played by a function of the show's own (a detached list's cue):
+        // handed over to it, never deleted from under it.
+        if (usedOutsideTree(id))
+        {
+            handOver(id);
+            continue;
+        }
         generated.remove(id);
         m_doc->deleteFunction(id);
     }
@@ -3507,6 +3537,15 @@ void ShowTreeController::dropUnusedInlinePalettes()
                 for (const Layer &layer : c.layers)
                     addLooks(layer.looks);
             }
+    // A reusable no cue uses (yet) keeps its one-off values.
+    for (const ReusableLayer &r : m_reusableLayers)
+        addLooks(r.looks);
+    for (const ReusableCue &r : m_reusableCues)
+    {
+        addLooks(r.looks);
+        for (const Layer &layer : r.layers)
+            addLooks(layer.looks);
+    }
 
     QList<quint32> ids = m_inlinePalettes.values();
     std::sort(ids.begin(), ids.end());
@@ -3594,6 +3633,7 @@ quint32 ShowTreeController::detachLayer(quint32 cueId, quint32 layerId)
         l->target = Target();
         l->target.function = sid;
         l->looks.clear();
+        l->reusable = invalidId();      // this use only: the reusable stays
         return true;
     });
     if (!ok)
@@ -4060,6 +4100,10 @@ void ShowTreeController::saveState(QXmlStreamWriter *doc, bool snapshot) const
 
     for (const GroupSet &gs : m_groupSets)
         ShowTree::saveXML(doc, gs);
+    for (const ReusableLayer &r : m_reusableLayers)
+        ShowTree::saveXML(doc, r);
+    for (const ReusableCue &r : m_reusableCues)
+        ShowTree::saveXML(doc, r);
     for (const Production &p : m_productions)
         ShowTree::saveXML(doc, p);
 
@@ -4122,6 +4166,14 @@ void ShowTreeController::saveState(QXmlStreamWriter *doc, bool snapshot) const
             if (Function *f = m_doc->function(id))
                 f->saveXML(doc);
         doc->writeEndElement();
+
+        // ...and the functions a list Detach handed over (an undo past it
+        // takes them back, a redo hands them over again).
+        QList<quint32> lists = m_detachedLists.values();
+        std::sort(lists.begin(), lists.end());
+        doc->writeStartElement(QStringLiteral("DetachedLists"));
+        doc->writeAttribute(QStringLiteral("IDs"), idsToString(lists));
+        doc->writeEndElement();
     }
 
     doc->writeEndElement();
@@ -4131,6 +4183,10 @@ void ShowTreeController::loadState(QXmlStreamReader &root, bool snapshot)
 {
     m_productions.clear();
     m_groupSets.clear();
+    m_reusableLayers.clear();
+    m_reusableCues.clear();
+    m_snapshotHasDetachedLists = false;
+    m_snapshotDetachedLists.clear();
     const quint32 next = root.attributes().value(KXMLShowTreeNextId).toString().toUInt();
     if (next > m_nextId || !snapshot)
         m_nextId = qMax<quint32>(next, 1);
@@ -4148,6 +4204,25 @@ void ShowTreeController::loadState(QXmlStreamReader &root, bool snapshot)
             GroupSet gs;
             if (ShowTree::loadXML(root, gs))
                 m_groupSets << gs;
+        }
+        else if (root.name() == QLatin1String("ReusableLayer"))
+        {
+            ReusableLayer r;
+            if (ShowTree::loadXML(root, r))
+                m_reusableLayers << r;
+        }
+        else if (root.name() == QLatin1String("ReusableCue"))
+        {
+            ReusableCue r;
+            if (ShowTree::loadXML(root, r))
+                m_reusableCues << r;
+        }
+        else if (root.name() == QLatin1String("DetachedLists") && snapshot)
+        {
+            m_snapshotHasDetachedLists = true;
+            for (quint32 id : stringToIds(root.attributes().value(QStringLiteral("IDs")).toString()))
+                m_snapshotDetachedLists.insert(id);
+            root.skipCurrentElement();
         }
         else if (root.name() == KXMLShowTreeGenerated && !snapshot)
         {
@@ -4278,6 +4353,14 @@ void ShowTreeController::loadState(QXmlStreamReader &root, bool snapshot)
     // Ids above anything in the tree, whatever the file said.
     for (const GroupSet &gs : m_groupSets)
         m_nextId = qMax(m_nextId, gs.id + 1);
+    for (const ReusableLayer &r : m_reusableLayers)
+        m_nextId = qMax(m_nextId, r.id + 1);
+    for (const ReusableCue &r : m_reusableCues)
+    {
+        m_nextId = qMax(m_nextId, r.id + 1);
+        for (const Layer &layer : r.layers)
+            m_nextId = qMax(m_nextId, layer.id + 1);
+    }
     for (const Production &p : m_productions)
     {
         m_nextId = qMax(m_nextId, p.id + 1);
@@ -4310,7 +4393,8 @@ bool ShowTreeController::loadXML(QXmlStreamReader &root)
 void ShowTreeController::saveXML(QXmlStreamWriter *doc) const
 {
     if (m_productions.isEmpty() && m_generatedScenes.isEmpty() && m_generatedCollections.isEmpty()
-        && m_generatedChasers.isEmpty() && m_inlinePalettes.isEmpty() && m_groupSets.isEmpty())
+        && m_generatedChasers.isEmpty() && m_inlinePalettes.isEmpty() && m_groupSets.isEmpty()
+        && m_reusableLayers.isEmpty() && m_reusableCues.isEmpty())
         return;     // a show without a tree saves as it always did
     saveState(doc, false);
 }
@@ -4323,6 +4407,9 @@ void ShowTreeController::reset()
     m_sweepTimer->stop();     // nothing of the old show is left to sweep
     m_productions.clear();
     m_groupSets.clear();
+    m_reusableLayers.clear();
+    m_reusableCues.clear();
+    m_detachedLists.clear();
     m_generatedScenes.clear();
     m_generatedCollections.clear();
     m_generatedChasers.clear();
@@ -4346,6 +4433,7 @@ void ShowTreeController::slotFunctionRemoved(quint32 fid)
     m_generatedChasers.remove(fid);
     m_generatedLabels.remove(fid);
     m_detached.remove(fid);
+    m_detachedLists.remove(fid);
 }
 
 void ShowTreeController::slotPaletteRemoved(quint32 pid)

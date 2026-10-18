@@ -172,6 +172,11 @@ namespace ShowTree
          *  doesn't light what the child sets on the child's fixtures. Cue
          *  looks reach the parent, not the child. Invalid: a top layer. */
         quint32 parent = 0xFFFFFFFF;
+        /** A use of a reusable layer (ReusableLayer id, P4): its name,
+         *  target and looks are the reusable's, kept the same in every use
+         *  (an edit to one is an edit to all). Release, what it carries on
+         *  from and its parent stay this use's. Invalid: a plain layer. */
+        quint32 reusable = 0xFFFFFFFF;
 
         /** The pieces a split makes: one per group, per set, and one on the
          *  fixtures. */
@@ -202,6 +207,11 @@ namespace ShowTree
          *  does (intensity and RGB highest-wins), which an imported cue keeps
          *  so it plays as its chaser did. Child layers always win. */
         bool mixOverlap = false;
+        /** A use of a reusable cue (ReusableCue id, P4): its name, mode,
+         *  overlap, cue looks and layers are the reusable's, kept the same
+         *  in every use. Number, note, timing and includes stay this use's.
+         *  Invalid: a plain cue. */
+        quint32 reusable = 0xFFFFFFFF;
         /** Generated: the Collection this cue bakes to. */
         quint32 collection = 0xFFFFFFFF;
 
@@ -235,6 +245,43 @@ namespace ShowTree
         CueList *list(quint32 id);
         const CueList *list(quint32 id) const;
     };
+
+    /** A reusable layer in the Library (Make reusable, P4): a named target
+     *  and its looks, used by layers in any cue of any list (Layer::
+     *  reusable). Editing it -- or any of its uses -- changes every use. */
+    struct QLC_ENGINE_EXPORT ReusableLayer
+    {
+        quint32 id = 0xFFFFFFFF;
+        QString name;
+        Target target;
+        QList<Look> looks;
+    };
+
+    /** A reusable cue in the Library (Make reusable, P4): a named state --
+     *  a "Blackout", a "Walk-in" -- put in any list as a cue (Cue::
+     *  reusable). Its layers' ids are its own; each use has its own ids
+     *  for the same layers, in the same order. Timing and note are what a
+     *  new use starts with. */
+    struct QLC_ENGINE_EXPORT ReusableCue
+    {
+        quint32 id = 0xFFFFFFFF;
+        QString name;
+        CueMode mode = CueMode::ListDefault;
+        bool mixOverlap = false;
+        QList<Look> looks;
+        QList<Layer> layers;
+        QString note;
+        uint fadeIn = 0;
+        uint fadeOut = 0;
+        uint hold = 0xFFFFFFFE;
+    };
+
+    /** What makes two uses of a reusable the same (P4): a layer's name,
+     *  target and looks; a cue's name, mode, overlap, cue looks and its
+     *  layers' content (with release, their parents by position and
+     *  their own links), not ids, timing, includes or tracking. */
+    QLC_ENGINE_EXPORT QString layerContent(const Layer &layer);
+    QLC_ENGINE_EXPORT QString cueContent(const Cue &cue);
 
     /************************************************************************
      * Resolution: what each cue really plays (§2)
@@ -377,6 +424,12 @@ namespace ShowTree
 
     QLC_ENGINE_EXPORT void saveXML(QXmlStreamWriter *doc, const Production &production);
     QLC_ENGINE_EXPORT void saveXML(QXmlStreamWriter *doc, const GroupSet &set);
+    QLC_ENGINE_EXPORT void saveXML(QXmlStreamWriter *doc, const ReusableLayer &reusable);
+    QLC_ENGINE_EXPORT void saveXML(QXmlStreamWriter *doc, const ReusableCue &reusable);
+    /** Read a <ReusableLayer> / <ReusableCue> (the reader on its start
+     *  element). */
+    QLC_ENGINE_EXPORT bool loadXML(QXmlStreamReader &root, ReusableLayer &reusable);
+    QLC_ENGINE_EXPORT bool loadXML(QXmlStreamReader &root, ReusableCue &reusable);
     /** Read a <GroupSet> (the reader on its start element). */
     QLC_ENGINE_EXPORT bool loadXML(QXmlStreamReader &root, GroupSet &set);
     /** Read a <Production> (the reader on its start element). */
