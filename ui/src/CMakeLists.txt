@@ -149,6 +149,7 @@ add_library(${module_name}
     speedmasterspanel.cpp speedmasterspanel.h
     spreadpreview.cpp spreadpreview.h
     linespreadpreview.cpp linespreadpreview.h
+    lineplanview.cpp lineplanview.h
     networktopologydialog.cpp networktopologydialog.h
     patchinventorydialog.cpp patchinventorydialog.h
     helpbrowser.cpp helpbrowser.h

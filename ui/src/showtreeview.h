@@ -357,6 +357,8 @@ public:
     QString layerContentsText() const;
     /** The order strip under a line aim's Position row (null: none). */
     QWidget *lineStrip() const;
+    /** The plan view under it (D19), a LinePlanView (tests). */
+    QWidget *linePlan() const;
     /** The attribute rows the inspector shows for the selected layer, as
      *  text: "Colour | Blue | from cue 1" -- for the tests. */
     QStringList attributeRows() const;

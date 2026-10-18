@@ -74,6 +74,7 @@
 #include "qlcfixturemode.h"
 #include "showtreeview.h"
 #include "linespreadpreview.h"
+#include "lineplanview.h"
 #include "monitorproperties.h"
 #include "stagetarget.h"
 #include "qlcphysical.h"
@@ -3086,6 +3087,94 @@ Fixture *placedSpot(Doc *doc, const QString &name, double x)
     doc->monitorProperties()->setFixturePosition(fxi->id(), 0, 0, QVector3D(float(x * 1000.0), 0, 6));
     return fxi;
 }
+}
+
+/* D19 / open 14: the plan view under a line aim's order strip -- the line
+   from above, each light's beam to its point, and the previous cue's
+   points as rings; it follows Spread at once. Rendered offscreen. */
+void ShowTreeView_Test::planViewOfALineAim()
+{
+    QList<Fixture *> spots { placedSpot(m_doc, "L1", -4), placedSpot(m_doc, "L2", -1),
+                             placedSpot(m_doc, "R1", 2), placedSpot(m_doc, "R2", 4) };
+    FixtureGroup *all = new FixtureGroup(m_doc);
+    all->setName("All");
+    m_doc->addFixtureGroup(all);
+    for (Fixture *f : spots)
+        all->assignFixture(f->id());
+    StageTarget *edge = m_doc->monitorProperties()->addStageTarget();
+    edge->setName("DS-Edge");
+    edge->setPosition(QVector3D(0, 3, 0));
+    edge->setLinePoints({ QVector3D(-5, 0, 0), QVector3D(5, 0, 0) });
+    edge->makeLine();
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(list, -1, "Wide");
+    const quint32 c2 = st->addCue(list, 0, "Tight");
+    Target t;
+    t.groups << all->id();
+    const quint32 l1 = st->addLayer(c1, t);
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(st->aimPaletteFor(edge->id()))));
+    QVERIFY(st->setLayerLook(c1, l1, ShowTreeController::lineParamLook(KeySpread, "5")));
+    // Cue 2: the same lights, Spread 0 (all to the centre) -- tracked aim.
+    const quint32 l2 = st->addLayer(c2, t);
+    QVERIFY(st->setLayerLook(c2, l2, ShowTreeController::lineParamLook(KeySpread, "0")));
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 900);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+
+    // Cue 1: four beams, no cue before it, no rings.
+    QVERIFY(view.selectNode(l1, c1));
+    LinePlanView *planView = qobject_cast<LinePlanView *>(view.linePlan());
+    QVERIFY(planView != nullptr);
+    QCOMPARE(planView->beams().count(), 4);
+    QVERIFY(!planView->line().isEmpty());
+    QStringList order;
+    for (const LinePlanView::Beam &b : planView->beams())
+    {
+        order << b.name;
+        QVERIFY(!b.hasPrevious);
+    }
+    QCOMPARE(order, QStringList({ "L1", "L2", "R1", "R2" }));
+    const double wide = planView->beams().last().to.x() - planView->beams().first().to.x();
+    QVERIFY2(wide > 5.0, qPrintable(QString::number(wide)));
+
+    // Cue 2: Spread 0 puts every light on one point; the rings are cue 1's.
+    QVERIFY(view.selectNode(l2, c2));
+    planView = qobject_cast<LinePlanView *>(view.linePlan());
+    QVERIFY(planView != nullptr);
+    QCOMPARE(planView->beams().count(), 4);
+    for (const LinePlanView::Beam &b : planView->beams())
+    {
+        QVERIFY(b.hasPrevious);
+        QVERIFY(qAbs(b.to.x() - planView->beams().first().to.x()) < 0.01);
+    }
+    QVERIFY(planView->beams().last().previous.x() - planView->beams().first().previous.x() > 5.0);
+
+    // Live: Spread changed in cue 2, the plan follows.
+    QVERIFY(view.setLineParam(c2, l2, KeySpread, "3"));
+    QVERIFY(view.selectNode(l2, c2));
+    planView = qobject_cast<LinePlanView *>(view.linePlan());
+    QVERIFY(planView->beams().last().to.x() - planView->beams().first().to.x() > 0.5);
+
+    // Rendered offscreen: the line (amber), the points, the rings drawn.
+    planView->resize(320, 200);
+    const QImage img = planView->grab().toImage();
+    int amber = 0, ring = 0;
+    for (int y = 0; y < img.height(); ++y)
+        for (int x = 0; x < img.width(); ++x)
+        {
+            const QColor px = img.pixelColor(x, y);
+            if (px.red() > 200 && px.green() > 140 && px.blue() < 140)
+                ++amber;
+            if (px.blue() > 200 && px.red() < 180 && px.green() > 140)
+                ++ring;
+        }
+    QVERIFY2(amber > 100, qPrintable(QString::number(amber)));
+    QVERIFY2(ring > 10, qPrintable(QString::number(ring)));
+    if (qEnvironmentVariableIsSet("QLC_SHOWTREE_SHOT"))
+        img.save(qEnvironmentVariable("QLC_SHOWTREE_SHOT") + "-plan.png");
 }
 
 /* §3B in the tab: Library → Targets; a line dropped on the cue is one

@@ -63,6 +63,7 @@
 #include "fixturegroupsource.h"
 #include "functionstreewidget.h"
 #include "linespreadpreview.h"
+#include "lineplanview.h"
 #include "monitorproperties.h"
 #include "stagetarget.h"
 #include "linespread.h"
@@ -2953,6 +2954,25 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
             strip->setLook(sc, aimPal);
             m_rows->addWidget(strip, row, 1, 1, 4);
             ++row;
+            // The plan view (D19): from above, the beams now and, as rings,
+            // where the cue before put the same lights.
+            const Scene *prevSc = nullptr;
+            const QLCPalette *prevPal = nullptr;
+            if (index > 0)
+            {
+                prevSc = qobject_cast<const Scene *>(
+                    m_doc->function(m_st->layerScene(list.cues.at(index - 1).id, rl->target)));
+                if (prevSc != nullptr)
+                    for (quint32 pid : prevSc->palettes())
+                        if (const QLCPalette *pp = m_doc->palette(pid))
+                            if (pp->type() == QLCPalette::Aim)
+                                prevPal = pp;
+            }
+            LinePlanView *planView = new LinePlanView(m_doc, m_rowsHost);
+            planView->setObjectName("stLinePlan");
+            planView->setFormation(sc, aimPal, prevSc, prevPal);
+            m_rows->addWidget(planView, row, 1, 1, 4);
+            ++row;
         }
     }
     m_rows->setRowStretch(row, 1);
@@ -2974,6 +2994,14 @@ QString ShowTreeView::layerContentsText() const
 QWidget *ShowTreeView::lineStrip() const
 {
     return m_rowsHost == nullptr ? nullptr : m_rowsHost->findChild<QWidget *>("stLineStrip");
+}
+
+QWidget *ShowTreeView::linePlan() const
+{
+    // The newest: the page's old rows go later (deleteLater).
+    const QList<QWidget *> all = m_rowsHost == nullptr ? QList<QWidget *>()
+                                 : m_rowsHost->findChildren<QWidget *>("stLinePlan");
+    return all.isEmpty() ? nullptr : all.last();
 }
 
 bool ShowTreeView::setLineParam(quint32 cueId, quint32 layerId, const QString &key, const QString &value,

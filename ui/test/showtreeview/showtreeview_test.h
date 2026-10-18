@@ -84,6 +84,7 @@ private slots:
     void childLayersByMouse();
     void renameInPlace();
     void lineAimsInTheTab();
+    void planViewOfALineAim();
     void copyPasteAndHelp();
     void libraryTreeEditorAndAddingWithoutDragging();
     void namedLayersShowWhatTheyHold();
