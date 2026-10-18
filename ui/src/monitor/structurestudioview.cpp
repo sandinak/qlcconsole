@@ -10,6 +10,7 @@
 */
 
 #include <QPainter>
+#include <QMatrix4x4>
 #include <QFontMetricsF>
 #include <QMouseEvent>
 #include <QWheelEvent>
@@ -4233,6 +4234,24 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
     int axisSurface = 0;
     const double len = beamThrow(apex, d, &lands, &landNormal, &axisSurface);
 
+    /* A pool lies just off its surface, toward the eye -- unless it is on the
+       far side of a cloth. A drape has no thickness, so a pool on its back
+       (steps lighting it from upstage) lifted toward the eye sat in front of
+       the cloth and showed through it. On the far side it sinks instead. */
+    const Trig &tr = angledTrig();
+    const QVector3D eye(float(tr.sA * tr.cE), float(tr.cA * tr.cE), float(tr.sE));
+    MonitorProperties *props = m_doc->monitorProperties();
+    auto poolLift = [&](int surface, const QVector3D &normal) {
+        if (surface < 0 && QVector3D::dotProduct(normal, eye) < 0.0f)
+        {
+            const Scenery *sc = props->scenery(quint32(-1 - surface));
+            if (sc != nullptr && !sc->isSeeThrough())
+                return -1e-4;
+        }
+        return 1e-4;
+    };
+    const double axisLift = poolLift(axisSurface, landNormal);
+
     /* Brighter in a dark room, which is both true and useful: at work light you
        want to see the rig, at blackout you want to see the light. */
     const double room = 1.25 - 0.65 * m_ambient;
@@ -4428,7 +4447,7 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
             for (int k = 0; k < N; ++k)
             {
                 px[k] = w2s(kept->q.at(k));
-                pz[k] = viewDepth(kept->q.at(k)) + 1e-4;
+                pz[k] = viewDepth(kept->q.at(k)) + poolLift(kept->surf.at(k), kept->normal.at(k));
             }
             surf = kept->surf;
             landed = kept->landed;
@@ -4438,6 +4457,7 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
         {
             BeamMesh fresh;
             fresh.q.resize(N);
+            fresh.normal.resize(N);
             for (int ri = 0; ri <= RINGS; ++ri)
                 for (int si = 0; si < SECTORS; ++si)
                 {
@@ -4446,12 +4466,14 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
                     const QVector3D ray = (ri == 0) ? d : rayAt(r, a);
                     bool h = false;
                     int sf = 0;
-                    const double run = beamThrow(apex, ray, &h, nullptr, &sf);
+                    QVector3D nrm(0, 0, 1);
+                    const double run = beamThrow(apex, ray, &h, &nrm, &sf);
                     const QVector3D q = apex + ray * float(run);
                     const int k = ri * SECTORS + si;
                     fresh.q[k] = q;
+                    fresh.normal[k] = nrm;
                     px[k] = w2s(q);
-                    pz[k] = viewDepth(q) + 1e-4;
+                    pz[k] = viewDepth(q) + poolLift(sf, nrm);
                     surf[k] = sf;
                     landed[k] = h;
                     const double rs = qMin(r, 0.985);
@@ -4529,7 +4551,7 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
                 const QVector3D q = landAt(r, a);
                 const int k = ri * SECTORS + si;
                 px[k] = w2s(q);
-                pz[k] = viewDepth(q) + 1e-4;
+                pz[k] = viewDepth(q) + axisLift;
                 // Just inside the rim, so the outer ring isn't sampled dark.
                 const double rs = qMin(r, 0.985);
                 pt[k] = BeamOptics::sample(optics->mask, rs * qCos(a), rs * qSin(a));
@@ -4576,7 +4598,7 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
             for (const QVector3D &q : ring)
             {
                 px << w2s(q);
-                zs << viewDepth(q) + 1e-4;
+                zs << viewDepth(q) + axisLift;
             }
             ringPx << px;
             ringZ << zs;
@@ -5596,7 +5618,158 @@ void StructureStudioView::drawSocks(QPainter &p) const
     }
 }
 
-void StructureStudioView::drawHazeGlow(QPainter &p, const QVector<BarLight> &sources) const
+QVector<StructureStudioView::Occluder> StructureStudioView::occluders() const
+{
+    /* What can stand between a light and the eye: opaque scenery as it hangs
+       now (a drape's open or flown part is not in its pieces(), so it stops
+       nothing; a scrim is seen through), and every block of every platform.
+       Each with the box it fits in, so a light can pass over everything not
+       within its reach without asking. Once a frame, while painting. */
+    if (m_decksValid)
+        return m_occluders;
+    QVector<Occluder> out;
+    MonitorProperties *props = m_doc->monitorProperties();
+    foreach (Scenery *sc, props->sceneries())
+    {
+        if (sc == nullptr || sc->isSeeThrough() || !layerShown(sc->layerId()))
+            continue;
+        Occluder o;
+        o.scenery = sc;
+        bool first = true;
+        const double half = double(sc->thickness()) / 2.0;
+        for (const Scenery::Piece &pc : sc->pieces())
+            for (int i = 0; i <= 32; ++i)
+            {
+                const double u = pc.u0 + (pc.u1 - pc.u0) * i / 32.0;
+                for (double off : { -half, half })
+                    for (float z : { pc.z0, pc.z1 })
+                    {
+                        const QVector3D w = sc->pointAt(u, double(z), off);
+                        o.lo = first ? w : QVector3D(qMin(o.lo.x(), w.x()), qMin(o.lo.y(), w.y()),
+                                                     qMin(o.lo.z(), w.z()));
+                        o.hi = first ? w : QVector3D(qMax(o.hi.x(), w.x()), qMax(o.hi.y(), w.y()),
+                                                     qMax(o.hi.z(), w.z()));
+                        first = false;
+                    }
+            }
+        if (first)
+            continue;                       // nothing of it hangs anywhere
+        // A bowed cloth bulges between the samples: a little to spare.
+        o.lo -= QVector3D(0.05f, 0.05f, 0.05f);
+        o.hi += QVector3D(0.05f, 0.05f, 0.05f);
+        out << o;
+    }
+    for (const Deck &deck : decks())
+    {
+        if (deck.platform == nullptr)
+            continue;
+        for (const StagePlatform::Block &bk : deck.blocks)
+        {
+            Occluder o;
+            o.platform = deck.platform;
+            o.block = bk;
+            o.baseZ = deck.baseZ;
+            const QList<QPointF> cs = deck.platform->corners(bk);
+            double x0 = cs.first().x(), x1 = x0, y0 = cs.first().y(), y1 = y0;
+            for (const QPointF &c : cs)
+            {
+                x0 = qMin(x0, c.x()); x1 = qMax(x1, c.x());
+                y0 = qMin(y0, c.y()); y1 = qMax(y1, c.y());
+            }
+            o.lo = QVector3D(float(x0), float(y0), float(deck.baseZ));
+            o.hi = QVector3D(float(x1), float(y1), float(deck.baseZ + double(bk.height)));
+            out << o;
+        }
+    }
+    return out;
+}
+
+double StructureStudioView::opaqueTowardTheEye(const QVector3D &from, const QVector3D &eye,
+                                              double maxT, quint32 hostPlatform,
+                                              QVector3D *normal) const
+{
+    double best = maxT;
+    bool hit = false;
+    QVector3D bestN;
+    const QPointF o2(double(from.x()), double(from.y()));
+    const QVector<Occluder> all = occluders();      // const: shares, never copies
+    for (const Occluder &oc : all)
+    {
+        // Out of reach: further from the light than it has to look.
+        const double dx = qMax(0.0, qMax(double(oc.lo.x() - from.x()), double(from.x() - oc.hi.x())));
+        const double dy = qMax(0.0, qMax(double(oc.lo.y() - from.y()), double(from.y() - oc.hi.y())));
+        const double dz = qMax(0.0, qMax(double(oc.lo.z() - from.z()), double(from.z() - oc.hi.z())));
+        if (dx * dx + dy * dy + dz * dz >= best * best)
+            continue;
+
+        if (oc.scenery != nullptr)
+        {
+            double t = 0.0;
+            QVector3D n;
+            if (oc.scenery->rayHit(from, eye, t, best, 16, &n) && t > 1e-4)
+            {
+                best = t;
+                bestN = n;
+                hit = true;
+            }
+            continue;
+        }
+
+        /* A platform's block: a box, turned with its platform. Not the one
+           the light is fixed to -- its body is drawn past that one's near
+           face too (the depth bias in drawOneFixture()). */
+        StagePlatform *pl = oc.platform;
+        if (pl->id() == hostPlatform)
+            continue;
+        const StagePlatform::Block &bk = oc.block;
+        const QPointF lo = pl->toLocal(o2);
+        const QPointF ld = pl->toLocal(o2 + QPointF(double(eye.x()), double(eye.y()))) - lo;
+        const double org[3] = { lo.x(), lo.y(), double(from.z()) };
+        const double dir[3] = { ld.x(), ld.y(), double(eye.z()) };
+        const double mn[3] = { double(bk.x0), double(bk.y0), oc.baseZ };
+        const double mx[3] = { double(bk.x1), double(bk.y1), oc.baseZ + double(bk.height) };
+        double tNear = -1e30, tFar = 1e30;
+        int axis = -1;
+        bool miss = false;
+        for (int k = 0; k < 3 && !miss; ++k)
+        {
+            if (qAbs(dir[k]) < 1e-12)
+            {
+                miss = (org[k] < mn[k] || org[k] > mx[k]);
+                continue;
+            }
+            double t0 = (mn[k] - org[k]) / dir[k], t1 = (mx[k] - org[k]) / dir[k];
+            if (t0 > t1)
+                qSwap(t0, t1);
+            if (t0 > tNear) { tNear = t0; axis = k; }
+            tFar = qMin(tFar, t1);
+            miss = (tNear > tFar);
+        }
+        // Starting inside a block says nothing about what is in front.
+        if (miss || axis < 0 || tNear <= 1e-4 || tNear >= best)
+            continue;
+        const QVector3D at = from + eye * float(tNear + 1e-3);
+        if (!pl->containsPoint(at.x(), at.y()))   // off a rounded front's cut corners
+            continue;
+        best = tNear;
+        hit = true;
+        const double sgn = dir[axis] > 0.0 ? -1.0 : 1.0;   // facing back along the ray
+        if (axis == 2)
+            bestN = QVector3D(0.0f, 0.0f, float(sgn));
+        else
+        {
+            const QPointF a = pl->toWorld(axis == 0 ? QPointF(1.0, 0.0) : QPointF(0.0, 1.0))
+                              - pl->toWorld(QPointF(0.0, 0.0));
+            bestN = QVector3D(float(a.x() * sgn), float(a.y() * sgn), 0.0f);
+        }
+    }
+    if (normal != nullptr)
+        *normal = bestN.normalized();
+    return hit ? best : -1.0;
+}
+
+void StructureStudioView::drawHazeGlow(QPainter &p, const QVector<BarLight> &sources,
+                                       quint32 hostPlatform) const
 {
     if (sources.isEmpty() || m_haze <= 0.0)
         return;
@@ -5606,6 +5779,9 @@ void StructureStudioView::drawHazeGlow(QPainter &p, const QVector<BarLight> &sou
     const double share = 1.0 / qSqrt(double(sources.size()));
     const double radius = 0.25 + 0.25 * haze;               // metres of lit air
     const int n = 20;
+    // Toward the eye: viewDepth() grows by one for each metre along it.
+    const Trig &tr = angledTrig();
+    const QVector3D eye(float(tr.sA * tr.cE), float(tr.cA * tr.cE), float(tr.sE));
     for (const BarLight &src : sources)
     {
         const double peak = qMax(src.colour.redF(), qMax(src.colour.greenF(), src.colour.blueF()));
@@ -5620,14 +5796,125 @@ void StructureStudioView::drawHazeGlow(QPainter &p, const QVector<BarLight> &sou
                                             + QLineF(c, w2s(src.at + QVector3D(0, 0, float(radius)))).length()));
         // The lit air between us and it: in front of its body, not inside it.
         const double z = viewDepth(src.at) + radius;   // larger is nearer
+
+        /* ...but not in front of what stands between us and it. Lifted a flat
+           half-metre toward the eye, the glow of a row of steps a foot behind
+           the closed main drape sorted in front of the drape and shone through
+           it. Where something opaque is nearer than that, the glow lies just
+           behind its face instead -- following the face's slant across the
+           disc, so a drape seen at an angle hides all of it -- and the face
+           covers it as it covers the step. Nothing in the way: as it was. */
+        QVector3D faceN;
+        const double t = opaqueTowardTheEye(src.at, eye, radius, hostPlatform, &faceN);
+        bool onFace = false;
+        double fd0 = 0.0, fgx = 0.0, fgy = 0.0;      // the face's depth across the screen
+        QPointF fs0;
+        if (t >= 0.0)
+        {
+            const QVector3D at = src.at + eye * float(t);
+            QVector3D a = QVector3D::crossProduct(faceN, QVector3D(0, 0, 1));
+            if (a.lengthSquared() < 1e-6f)
+                a = QVector3D(1, 0, 0);
+            a.normalize();
+            const QVector3D b = QVector3D::crossProduct(faceN, a).normalized();
+            fs0 = w2s(at);
+            fd0 = viewDepth(at);
+            const QPointF s1 = w2s(at + a) - fs0, s2 = w2s(at + b) - fs0;
+            const double d1 = viewDepth(at + a) - fd0, d2 = viewDepth(at + b) - fd0;
+            const double det = s1.x() * s2.y() - s1.y() * s2.x();
+            if (qAbs(det) > 1e-9)
+            {
+                fgx = (d1 * s2.y() - d2 * s1.y()) / det;
+                fgy = (s1.x() * d2 - s2.x() * d1) / det;
+                onFace = true;
+            }
+        }
+        const double behind = 0.02;                   // metres behind the face
+        auto depthAt = [&](const QPointF &q) {
+            if (t < 0.0)
+                return z;
+            if (!onFace)                                  // the face edge-on: its one depth
+                return qMin(z, fd0 - behind);
+            return qMin(z, fd0 + fgx * (q.x() - fs0.x()) + fgy * (q.y() - fs0.y()) - behind);
+        };
+        const double zc = depthAt(c);
+
+        /* Laid behind a face, the disc reaches below the floor where the face
+           meets it -- and the floor is not in the depth buffer, so that part
+           showed as a strip of glow on the floor in front of the drape. Air
+           under the floor is not lit: where the face hides the light, clip the
+           disc to what is above the floor. The world height of what is drawn
+           at a point of the screen at a depth is affine in the three. */
+        QMatrix4x4 toWorld;
+        bool clipFloor = false;
+        if (t >= 0.0)
+        {
+            const QPointF ex = w2s(src.at + QVector3D(1, 0, 0)) - c;
+            const QPointF ey = w2s(src.at + QVector3D(0, 1, 0)) - c;
+            const QPointF ez = w2s(src.at + QVector3D(0, 0, 1)) - c;
+            const QMatrix4x4 toScreen(float(ex.x()), float(ey.x()), float(ez.x()), 0.0f,
+                                      float(ex.y()), float(ey.y()), float(ez.y()), 0.0f,
+                                      eye.x(), eye.y(), eye.z(), 0.0f,
+                                      0.0f, 0.0f, 0.0f, 1.0f);
+            toWorld = toScreen.inverted(&clipFloor);
+        }
+        const double z0 = viewDepth(src.at);
+        auto heightAt = [&](const QPointF &q, double zq) {
+            const QVector3D dw = toWorld.map(QVector3D(float(q.x() - c.x()), float(q.y() - c.y()),
+                                                       float(zq - z0)));
+            return double(src.at.z()) + double(dw.z());
+        };
+
         // A fan, bright at the source and nothing at its rim.
+        QPointF prev(c.x() + rPx, c.y());
+        double zPrev = depthAt(prev);
         for (int i = 0; i < n; ++i)
         {
-            const double a0 = 2.0 * M_PI * i / n, a1 = 2.0 * M_PI * (i + 1) / n;
-            QPolygonF tri;
-            tri << c << QPointF(c.x() + rPx * qCos(a0), c.y() + rPx * qSin(a0))
-                << QPointF(c.x() + rPx * qCos(a1), c.y() + rPx * qSin(a1));
-            emitLight(tri, z, glow, p, QVector<double>{ z, z, z }, QVector<double>{ 1.0, 0.0, 0.0 });
+            const double a1 = 2.0 * M_PI * (i + 1) / n;
+            const QPointF next(c.x() + rPx * qCos(a1), c.y() + rPx * qSin(a1));
+            const double zNext = depthAt(next);
+            const QPointF vp[3] = { c, prev, next };
+            const double vz[3] = { zc, zPrev, zNext };
+            const double va[3] = { 1.0, 0.0, 0.0 };
+            prev = next;
+            zPrev = zNext;
+            double vh[3] = { 1.0, 1.0, 1.0 };
+            int below = 0;
+            if (clipFloor)
+                for (int k = 0; k < 3; ++k)
+                    if ((vh[k] = heightAt(vp[k], vz[k])) < 0.0)
+                        ++below;
+            if (below == 0)
+            {
+                // One mesh for the whole fan (emitLightTri() joins them).
+                emitLightTri(vp[0], vp[1], vp[2], vz[0], vz[1], vz[2], va[0], va[1], va[2], glow, p);
+                continue;
+            }
+            if (below == 3)
+                continue;
+            QPointF cp[4];
+            double cz[4], ca[4];
+            int m = 0;
+            for (int k = 0; k < 3; ++k)
+            {
+                const int j = (k + 1) % 3;
+                if (vh[k] >= 0.0)
+                {
+                    cp[m] = vp[k]; cz[m] = vz[k]; ca[m] = va[k];
+                    ++m;
+                }
+                if ((vh[k] >= 0.0) != (vh[j] >= 0.0))      // crosses the floor
+                {
+                    const double f = vh[k] / (vh[k] - vh[j]);
+                    cp[m] = vp[k] + (vp[j] - vp[k]) * f;
+                    cz[m] = vz[k] + (vz[j] - vz[k]) * f;
+                    ca[m] = va[k] + (va[j] - va[k]) * f;
+                    ++m;
+                }
+            }
+            for (int k = 1; k + 1 < m; ++k)
+                emitLightTri(cp[0], cp[k], cp[k + 1], cz[0], cz[k], cz[k + 1],
+                             ca[0], ca[k], ca[k + 1], glow, p);
         }
     }
 }
@@ -6277,7 +6564,9 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                 if (fixtureLiveState(fx, vals, c, dim, valsComplete) && dim > 2)
                     glows << BarLight{ fixtureCentre(fid), c, 0.0, dim / 255.0 };
             }
-            drawHazeGlow(p, glows);
+            drawHazeGlow(p, glows, rp.onRiser() ? rp.riserPlatformId
+                                 : rp.onDeck() ? rp.deckPlatformId
+                                               : FixtureRigProps::invalidPlatformId());
         }
 
         /* A silk flame: on or off, as its relay is -- past half on -- and when
@@ -8244,6 +8533,7 @@ void StructureStudioView::paintEvent(QPaintEvent *)
     // The decks every beam ray is thrown against, worked out once this frame.
     m_decksValid = false;
     m_decks = decks();
+    m_occluders = occluders();
     m_decksValid = true;
 
     /* Where rays landed last frame still stands if what they land on hasn't
