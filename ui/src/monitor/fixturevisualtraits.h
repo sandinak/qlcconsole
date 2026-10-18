@@ -80,9 +80,44 @@ struct FixtureVisualTraits
      *  past its beam angle; a PC or Fresnel lens a little softer still
      *  (poolEdgeSoftness()). */
     float edgeSoftness = 1.0f;
+    /** A colour ring round the lens (findColourRing()): its macro channel,
+     *  -1 for none. A ring that is a head of its own is not a mover unit:
+     *  it is left out of headCount. */
+    int   ringChannel = -1;
+    int   ringHead = -1;              ///< its head, -1 when it has none of its own
 };
 
 FixtureVisualTraits classifyFixture(Fixture *fx);
+
+/** A mover's colour ring: a ring of LEDs round the lens, driven by one
+ *  colour-macro channel of named colours and chases ("LED Movinghead+Circle":
+ *  off, Red ... White, Red/Yellow-Chase ... RGB/Random-Chase).
+ *
+ *  Found as, in order:
+ *   1. a head whose only colour is a colour wheel/macro channel, on a
+ *      fixture that moves -- HeadKinds::typeOf() "Ring" (or "Macro" beside
+ *      another head): the definition says so;
+ *   2. in a definition that doesn't (the ring channel inside the spot's head,
+ *      or in no head): a Colour channel named "Circle", "Ring" or "Halo";
+ *   3. or a Colour channel after the fixture's first one whose slots
+ *      include an off and a chase -- a wheel has neither.
+ *  A fixture with none of these draws no ring. @p head gets the ring's own
+ *  head (-1: none). Returns the channel, or -1. */
+int findColourRing(const Fixture *fx, int *head = nullptr);
+
+/** What a ring shows for slot @p slotName (a capability's name) at
+ *  @p seconds, as @p segments colours round it (black: dark). Off is all
+ *  dark; a solid colour all that colour; a chase ("Red/Yellow-Chase",
+ *  "RGB/Random-Chase") its colours in alternate segments, stepping round
+ *  four times a second (random: a fresh colour per segment each step).
+ *  @p animated, when given, says whether it moves. */
+QVector<QColor> colourRingSegments(const QString &slotName, double seconds,
+                                   int segments = 12, bool *animated = nullptr);
+
+/** The ring of @p fx from @p values (a snapshot), or an empty list when it
+ *  has none or the channel is off the end of the values. */
+QVector<QColor> colourRingLive(const Fixture *fx, const QByteArray &values, double seconds,
+                               int segments = 12, bool *animated = nullptr);
 
 /** How soft the edge of a fixture's pool is, from what its definition says
  *  about its optics: one that can sharpen or shape its beam -- a gobo wheel,

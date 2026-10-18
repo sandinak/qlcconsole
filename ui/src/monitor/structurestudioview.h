@@ -761,6 +761,9 @@ private:
         double beamLevel = 0.0;
         QColor beamColour;
         BeamOptics::Optics optics;   ///< gobo / prism, for the pool it throws
+        /** Its colour ring round the lens, segment by segment (black:
+         *  dark); empty: it has none (colourRingLive()). */
+        QVector<QColor> ring;
     };
     /** Seconds on the clock gobo and prism rotation turn by; a test may pin
      *  it (m_opticsTime >= 0). Something turning keeps the view redrawing. */

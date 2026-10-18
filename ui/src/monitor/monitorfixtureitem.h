@@ -23,6 +23,7 @@
 #include <QGraphicsItem>
 #include <QAbstractGraphicsShapeItem>
 #include <QFont>
+#include <QElapsedTimer>
 
 #include "fixturevisualtraits.h"
 
@@ -362,6 +363,18 @@ private:
     /** Shape-family classification (Mover/Par/Bar/Generic) shared with the
      *  Structure Studio elevation editor, computed once at construction. */
     FixtureVisualTraits m_traits;
+
+    /** A mover's colour ring (FixtureVisualTraits::ringChannel), drawn as a
+     *  band round its head: a child item over the head, its segments from
+     *  colourRingLive(). Null for a fixture without one. A chase keeps a
+     *  timer stepping it. */
+    class ColourRingGraphic *m_ringItem = nullptr;
+    QTimer *m_ringTimer = nullptr;
+    QElapsedTimer m_ringClock;
+public:
+    /** The ring's segments as drawn now (tests); empty: no ring. */
+    QVector<QColor> ringSegments() const;
+private:
 
     /** True when the canvas's current POV is Front/Side (an elevation), set
      *  via setElevationView(); see there. */

@@ -29,6 +29,11 @@ class Monitor_Test final : public QObject
     Q_OBJECT
 
 private slots:
+    /** A mover's colour ring (Branson's LED Movinghead+Circle): found in
+     *  the two-head definition and the old one-head one, not on a mover
+     *  without; its live segments off / solid / chasing; drawn round the
+     *  head on the 2D plot and in the Rig Overview. */
+    void aColourRingIsFoundAndDrawn();
     void aShowsRigViewDrawTime();
     void theRigOverviewShortcutTogglesIt();
     void layersShowAndHideFromTheRigOverviewInAnyMode();

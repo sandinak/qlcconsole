@@ -102,6 +102,38 @@ static QRectF shapeRect(QAbstractGraphicsShapeItem *s)
     return QRectF();
 }
 
+/* A mover's colour ring: a band of segments just inside its head's
+   outline, over the head (the lens shows through the middle). */
+class ColourRingGraphic final : public QGraphicsItem
+{
+public:
+    explicit ColourRingGraphic(QGraphicsItem *parent) : QGraphicsItem(parent) {}
+    QRectF rect;
+    QVector<QColor> segments;
+    void setRect(const QRectF &r) { prepareGeometryChange(); rect = r; }
+    QRectF boundingRect() const override { return rect.adjusted(-2, -2, 2, 2); }
+    void paint(QPainter *painter, const QStyleOptionGraphicsItem *, QWidget *) override
+    {
+        if (rect.isEmpty() || segments.isEmpty())
+            return;
+        const qreal w = qMax(1.2, qMin(rect.width(), rect.height()) * 0.16);
+        const QRectF band = rect.adjusted(w / 2, w / 2, -w / 2, -w / 2);
+        const int n = segments.size();
+        const int span = 5760 / n;
+        for (int i = 0; i < n; ++i)
+        {
+            const QColor c = segments.at(i);
+            const QColor draw = (c.isValid() && c.value() >= 16) ? c : QColor(46, 46, 50);
+            QPen pen(draw, w);
+            pen.setCapStyle(Qt::FlatCap);
+            painter->setPen(pen);
+            painter->setBrush(Qt::NoBrush);
+            // A hair short of a full segment: the gaps read as separate LEDs.
+            painter->drawArc(band, 90 * 16 - i * span, -(span - qMin(span / 4, 40)));
+        }
+    }
+};
+
 MonitorFixtureItem::MonitorFixtureItem(Doc *doc, quint32 fid)
     : m_doc(doc)
     , m_fid(fid)
@@ -136,6 +168,10 @@ MonitorFixtureItem::MonitorFixtureItem(Doc *doc, quint32 fid)
 
     for (int i = 0; i < fxi->heads(); i++)
     {
+        // A colour ring of its own is drawn round the mover's head, not as
+        // a head beside it.
+        if (i == m_traits.ringHead && fxi->heads() > 1)
+            continue;
         FixtureHead *fxiItem = new FixtureHead;
         fxiItem->m_item = denseHeads
             ? static_cast<QAbstractGraphicsShapeItem*>(new QGraphicsRectItem(this))
@@ -246,6 +282,8 @@ MonitorFixtureItem::MonitorFixtureItem(Doc *doc, quint32 fid)
         {
             foreach (quint32 wheel, head.colorWheels())
             {
+               if (int(wheel) == m_traits.ringChannel)
+                   continue;            // the ring, not the beam's colour
                QList<QColor> values;
                QLCChannel *ch = mode->channel(wheel);
                if (ch == NULL)
@@ -359,8 +397,24 @@ MonitorFixtureItem::MonitorFixtureItem(Doc *doc, quint32 fid)
     if (m_hasPan && m_doc->monitorProperties() != NULL)
         m_facingDeg = m_doc->monitorProperties()->fixtureRigProps(fid).panZeroDir;
 
+    if (m_traits.ringChannel >= 0 && !m_heads.isEmpty())
+    {
+        m_ringItem = new ColourRingGraphic(this);
+        m_ringItem->setZValue(3);
+        m_ringItem->segments.fill(QColor(Qt::black), 12);
+        m_ringClock.start();
+        m_ringTimer = new QTimer(this);
+        m_ringTimer->setInterval(125);      // a chase steps four times a second
+        connect(m_ringTimer, SIGNAL(timeout()), this, SLOT(slotUpdateValues()));
+    }
+
     slotUpdateValues();
     connect(fxi, SIGNAL(valuesChanged()), this, SLOT(slotUpdateValues()));
+}
+
+QVector<QColor> MonitorFixtureItem::ringSegments() const
+{
+    return m_ringItem != nullptr ? m_ringItem->segments : QVector<QColor>();
 }
 
 MonitorFixtureItem::~MonitorFixtureItem()
@@ -492,6 +546,8 @@ void MonitorFixtureItem::setSize(QSize size)
                                                                 -MOVEMENT_THICKNESS - 1, -MOVEMENT_THICKNESS - 1));
 
                 head->setZValue(2);
+                if (index == 0 && m_ringItem != nullptr)
+                    m_ringItem->setRect(shapeRect(head));
                 QAbstractGraphicsShapeItem *back = m_heads.at(index)->m_back;
                 if (back != NULL)
                 {
@@ -654,6 +710,23 @@ void MonitorFixtureItem::slotUpdateValues()
     QByteArray fxValues = fxi->channelValues();
 
     bool needUpdate = false;
+
+    if (m_ringItem != nullptr)
+    {
+        bool chasing = false;
+        QVector<QColor> segs = colourRingLive(fxi, fxValues, m_ringClock.elapsed() / 1000.0, 12, &chasing);
+        if (segs.isEmpty())
+            segs.fill(QColor(Qt::black), 12);
+        if (segs != m_ringItem->segments)
+        {
+            m_ringItem->segments = segs;
+            m_ringItem->update();
+        }
+        if (chasing && !m_ringTimer->isActive())
+            m_ringTimer->start();
+        else if (!chasing && m_ringTimer->isActive())
+            m_ringTimer->stop();
+    }
 
     foreach (FixtureHead *head, m_heads)
     {

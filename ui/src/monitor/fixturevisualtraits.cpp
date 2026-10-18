@@ -27,10 +27,12 @@
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
 #include <QtMath>
+#include <QRegularExpression>
 #include "qlcchannel.h"
 #include "truss.h"
 #include "qlcfixturehead.h"
 #include "qlccapability.h"
+#include "qlcpalette.h"
 #include "monitorproperties.h"
 #include "doc.h"
 #include <QVector3D>
@@ -165,6 +167,11 @@ FixtureVisualTraits classifyFixture(Fixture *fx)
                 panTiltHeads.insert(h);
         }
     }
+    /* A colour ring is not a mover unit: a two-head definition (spot +
+       ring) is still one head on its yoke. */
+    t.ringChannel = findColourRing(fx, &t.ringHead);
+    if (t.ringHead >= 0 && t.headCount > 1)
+        t.headCount -= 1;
     t.rgbw = colours.size() >= 3;   // at least Red+Green+Blue
     t.multiHeadPanTilt = panTiltHeads.size() >= 2;
     t.edgeSoftness = poolEdgeSoftness(shapesItsBeam,
@@ -392,12 +399,15 @@ static bool channelSetLiveState(QLCFixtureMode *mode, const QByteArray &v,
         case QLCChannel::Lime:    li  = qMax(li, val);  break;
         case QLCChannel::Indigo:  ind = qMax(ind, val); break;
         case QLCChannel::NoColour:
-            // A wheel: take the colour its current capability names.
-            if (ch->group() == QLCChannel::Colour)
+            /* A wheel: take the colour its current capability shows -- its
+               picture colour, else the colour its name says ("Blue"; a
+               ring's "off" is black, so no colour). The first wheel lit
+               wins: a mover's own wheel comes before its ring. */
+            if (ch->group() == QLCChannel::Colour && !wheel.isValid())
             {
                 if (QLCCapability *cap = ch->searchCapability(uchar(val)))
                 {
-                    const QColor c1 = cap->resource(0).value<QColor>();
+                    const QColor c1 = QLCPalette::capabilityColour(cap);
                     if (c1.isValid() && c1 != Qt::black)
                         wheel = c1;
                 }
@@ -723,4 +733,158 @@ QVector3D fixtureWorldCentre(Doc *doc, quint32 fid)
 {
     // The rule lives in the engine, where effects lay their grids out from it.
     return RigHeads::fixtureCentre(doc, fid);
+}
+
+/*****************************************************************************
+ * Colour rings
+ *****************************************************************************/
+
+int findColourRing(const Fixture *fx, int *head)
+{
+    if (head != nullptr)
+        *head = -1;
+    const QLCFixtureMode *mode = fx != nullptr ? const_cast<Fixture *>(fx)->fixtureMode() : nullptr;
+    if (mode == nullptr)
+        return -1;
+    auto firstColour = [mode](const QList<quint32> &chans) {
+        for (quint32 c : chans)
+        {
+            const QLCChannel *ch = mode->channel(c);
+            if (ch != nullptr && ch->group() == QLCChannel::Colour && ch->controlByte() == QLCChannel::MSB)
+                return int(c);
+        }
+        return -1;
+    };
+
+    // 1. The definition says so: a ring (or colour-macro) head.
+    for (int h = 0; h < mode->heads().size(); ++h)
+    {
+        const QString type = HeadKinds::typeOf(mode, h);
+        if (type == QLatin1String("Ring")
+            || (type == QLatin1String("Macro") && mode->heads().size() > 1))
+        {
+            const int c = firstColour(mode->heads().at(h).channels());
+            if (c >= 0)
+            {
+                if (head != nullptr)
+                    *head = h;
+                return c;
+            }
+        }
+    }
+
+    // 2./3. One that doesn't: by name, else by its slots.
+    int first = -1;
+    for (quint32 c = 0; c < quint32(mode->channels().size()); ++c)
+    {
+        const QLCChannel *ch = mode->channel(c);
+        if (ch == nullptr || ch->group() != QLCChannel::Colour || ch->controlByte() != QLCChannel::MSB
+            || ch->colour() != QLCChannel::NoColour)
+            continue;
+        const QString name = ch->name().toLower();
+        if (name.contains(QLatin1String("circle")) || name.contains(QLatin1String("ring"))
+            || name.contains(QLatin1String("halo")))
+            return int(c);
+        if (first < 0)
+        {
+            first = int(c);
+            continue;
+        }
+        bool off = false, chase = false;
+        for (const QLCCapability *cap : ch->capabilities())
+        {
+            const QColor col = QLCPalette::capabilityColour(cap);
+            if (col.isValid() && col.value() < 16)
+                off = true;
+            if (cap->name().contains(QLatin1String("chase"), Qt::CaseInsensitive))
+                chase = true;
+        }
+        if (off && chase)
+            return int(c);
+    }
+    return -1;
+}
+
+/* A word of a slot's name as a colour ("Red", "Purple"), or invalid. */
+static QColor ringWordColour(const QString &word)
+{
+    QLCCapability cap(0, 0, word);
+    return QLCPalette::capabilityColour(&cap);
+}
+
+QVector<QColor> colourRingSegments(const QString &slotName, double seconds, int segments,
+                                   bool *animated)
+{
+    if (animated != nullptr)
+        *animated = false;
+    segments = qMax(1, segments);
+    QVector<QColor> out(segments, QColor(Qt::black));
+
+    QLCCapability cap(0, 0, slotName);
+    const QColor solid = QLCPalette::capabilityColour(&cap);
+    if (solid.isValid())
+    {
+        out.fill(solid);                        // black for off
+        return out;
+    }
+
+    // Not one colour: a chase of the colours it names.
+    QString n = slotName.toLower();
+    n.replace(QLatin1String("chase"), QLatin1String(" "));
+    const QStringList words = n.split(QRegularExpression(QStringLiteral("[/\\-+&,\\s]+")),
+                                      Qt::SkipEmptyParts);
+    QVector<QColor> cols;
+    bool random = false;
+    for (const QString &w : words)
+    {
+        if (w == QLatin1String("rgb"))
+            cols << QColor(Qt::red) << QColor(Qt::green) << QColor(Qt::blue);
+        else if (w == QLatin1String("random") || w == QLatin1String("rainbow"))
+            random = true;
+        else
+        {
+            const QColor c = ringWordColour(w);
+            if (c.isValid() && c.value() >= 16)
+                cols << c;
+        }
+    }
+    if (cols.isEmpty() && !random)
+        return out;                             // nothing we can read: dark
+
+    if (animated != nullptr)
+        *animated = true;
+    const int step = int(qFloor(seconds * 4.0));
+    for (int i = 0; i < segments; ++i)
+    {
+        if (random)
+        {
+            // A fresh colour per segment each step: the same for one instant.
+            quint32 x = quint32(i * 2654435761u) ^ quint32(step * 40503u);
+            x ^= x >> 13;
+            x *= 0x5bd1e995u;
+            x ^= x >> 15;
+            out[i] = cols.isEmpty() || (x & 1u) ? QColor::fromHsv(int(x % 360u), 255, 255)
+                                                 : cols.at(int((x >> 1) % quint32(cols.size())));
+        }
+        else
+        {
+            out[i] = cols.at(((i + step) % cols.size() + cols.size()) % cols.size());
+        }
+    }
+    return out;
+}
+
+QVector<QColor> colourRingLive(const Fixture *fx, const QByteArray &values, double seconds,
+                               int segments, bool *animated)
+{
+    if (animated != nullptr)
+        *animated = false;
+    const int c = findColourRing(fx);
+    if (c < 0 || c >= values.size())
+        return QVector<QColor>();
+    const QLCChannel *ch = const_cast<Fixture *>(fx)->fixtureMode()->channel(quint32(c));
+    if (ch == nullptr)
+        return QVector<QColor>();
+    const QLCCapability *cap = ch->searchCapability(uchar(values.at(c)));
+    return colourRingSegments(cap != nullptr ? cap->name() : QString(), seconds, segments, animated);
 }

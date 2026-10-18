@@ -21,6 +21,7 @@
 #include <QShortcut>
 #include <memory>
 #include <QGraphicsItem>
+#include <QGraphicsScene>
 #include <QElapsedTimer>
 #include <QTimer>
 #include <QApplication>
@@ -20220,3 +20221,191 @@ void Monitor_Test::theTrussEditorSpansTwoStands()
     delete doc;
 }
 
+
+void Monitor_Test::aColourRingIsFoundAndDrawn()
+{
+    Doc doc(this);
+    QDir dir(TEST_FIXTURE_DIR);
+    dir.setFilter(QDir::Files);
+    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtFixture));
+    QVERIFY(doc.fixtureDefCache()->load(dir));
+    QLCFixtureDef *two = doc.fixtureDefCache()->fixtureDef("Branson", "LED Movinghead+Circle (2 heads)");
+    QLCFixtureDef *one = doc.fixtureDefCache()->fixtureDef("Branson", "LED Movinghead+Circle");
+    QVERIFY(two != nullptr && one != nullptr);
+
+    auto add = [&doc](QLCFixtureDef *def, const QString &mode, quint32 address) {
+        Fixture *f = new Fixture(&doc);
+        f->setName(QString("%1 %2").arg(def->model(), mode));
+        f->setFixtureDefinition(def, def->mode(mode));
+        f->setAddress(address);
+        doc.addFixture(f);
+        return f;
+    };
+    Fixture *new12 = add(two, "12 Channel", 0);
+    Fixture *new10 = add(two, "10 Channel", 20);
+    Fixture *old12 = add(one, "12 Channel", 40);
+    Fixture *old10 = add(one, "10 Channel", 60);
+
+    // Found: by its head in the new definition, by its name in the old.
+    int head = -2;
+    QCOMPARE(findColourRing(new12, &head), 11);
+    QCOMPARE(head, 1);
+    QCOMPARE(findColourRing(new10, &head), 9);
+    QCOMPARE(head, 1);
+    QCOMPARE(findColourRing(old12, &head), 11);
+    QCOMPARE(head, -1);
+    QCOMPARE(findColourRing(old10, &head), 9);
+    QCOMPARE(head, -1);
+    // The ring is no mover unit: one head on the yoke, either way.
+    QCOMPARE(classifyFixture(new12).headCount, 1);
+    QCOMPARE(classifyFixture(new12).ringChannel, 11);
+    QCOMPARE(classifyFixture(old12).headCount, 1);
+
+    // A mover with only a wheel (and a wheel's slots): no ring.
+    QLCFixtureDef plain;
+    plain.setManufacturer("Test");
+    plain.setModel("Wheel spot");
+    QLCFixtureMode *pm = new QLCFixtureMode(&plain);
+    pm->setName("3ch");
+    const QList<QLCChannel::Preset> presets = { QLCChannel::PositionPan, QLCChannel::PositionTilt,
+                                                QLCChannel::IntensityDimmer };
+    for (int i = 0; i < presets.size(); ++i)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(QString("Ch %1").arg(i));
+        ch->setPreset(presets.at(i));
+        plain.addChannel(ch);
+        pm->insertChannel(ch, i);
+    }
+    for (int w = 0; w < 2; ++w)
+    {
+        QLCChannel *wheel = new QLCChannel();
+        wheel->setName(w == 0 ? "Colour wheel" : "Colour wheel 2");
+        wheel->setGroup(QLCChannel::Colour);
+        wheel->addCapability(new QLCCapability(0, 9, "White"));
+        wheel->addCapability(new QLCCapability(10, 19, "Red"));
+        wheel->addCapability(new QLCCapability(20, 255, "Rainbow"));
+        plain.addChannel(wheel);
+        pm->insertChannel(wheel, pm->channels().size());
+    }
+    plain.addMode(pm);
+    Fixture *spot = new Fixture(&doc);
+    spot->setFixtureDefinition(&plain, pm);
+    spot->setAddress(100);
+    doc.addFixture(spot);
+    QCOMPARE(findColourRing(spot), -1);
+
+    // What a ring shows: off dark; a colour all round; a chase alternating
+    // and stepping round.
+    bool moving = true;
+    QVector<QColor> segs = colourRingSegments("off", 0.0, 8, &moving);
+    QVERIFY(!moving);
+    QCOMPARE(segs, QVector<QColor>(8, QColor(Qt::black)));
+    segs = colourRingSegments("Blue", 0.0, 8, &moving);
+    QVERIFY(!moving);
+    QCOMPARE(segs, QVector<QColor>(8, QColor(Qt::blue)));
+    segs = colourRingSegments("Red/Yellow-Chase", 0.0, 4, &moving);
+    QVERIFY(moving);
+    QCOMPARE(segs, QVector<QColor>({ Qt::red, Qt::yellow, Qt::red, Qt::yellow }));
+    QCOMPARE(colourRingSegments("Red/Yellow-Chase", 0.25, 4),
+             QVector<QColor>({ Qt::yellow, Qt::red, Qt::yellow, Qt::red }));
+    QCOMPARE(colourRingSegments("Red/Yellow-Chase", 0.5, 4), segs);
+    segs = colourRingSegments("RGB/Random-Chase", 0.0, 12, &moving);
+    QVERIFY(moving);
+    int lit = 0;
+    for (const QColor &c : segs)
+        if (c.value() >= 16)
+            ++lit;
+    QCOMPARE(lit, 12);
+    QVERIFY(colourRingSegments("RGB/Random-Chase", 1.0, 12) != segs);
+
+    // From the fixture's values: the ring channel, whatever the definition.
+    QByteArray v(12, 0);
+    v[11] = char(42);                                       // Blue
+    QCOMPARE(colourRingLive(new12, v, 0.0, 6), QVector<QColor>(6, QColor(Qt::blue)));
+    QCOMPARE(colourRingLive(old12, v, 0.0, 6), QVector<QColor>(6, QColor(Qt::blue)));
+    v[11] = char(117);                                      // Red/Yellow-Chase
+    QCOMPARE(colourRingLive(new12, v, 0.0, 2, &moving), QVector<QColor>({ Qt::red, Qt::yellow }));
+    QVERIFY(moving);
+    QVERIFY(colourRingLive(spot, QByteArray(5, 0), 0.0).isEmpty());
+
+    // The 2D plot: one head with the ring round it, live.
+    {
+        MonitorFixtureItem item(&doc, new12->id());
+        item.setSize(QSize(40, 40));
+        QCOMPARE(item.headsCount(), 1);
+        QCOMPARE(item.ringSegments().size(), 12);
+        QByteArray live(12, 0);
+        live[11] = char(87);                                // Cyan
+        new12->setChannelValues(live);
+        item.slotUpdateValues();
+        QCOMPARE(item.ringSegments(), QVector<QColor>(12, QColor(Qt::cyan)));
+        QVERIFY(!item.m_ringTimer->isActive());
+        live[11] = char(250);                               // RGB/Random-Chase
+        new12->setChannelValues(live);
+        item.slotUpdateValues();
+        QVERIFY(item.m_ringTimer->isActive());               // keeps stepping
+        new12->setChannelValues(QByteArray(12, 0));
+    }
+    {
+        // Drawn: the ring's colour round the head.
+        QGraphicsScene sc;
+        MonitorFixtureItem *item = new MonitorFixtureItem(&doc, new12->id());
+        sc.addItem(item);
+        item->setSize(QSize(40, 40));
+        QByteArray live(12, 0);
+        live[11] = char(42);                                // Blue
+        new12->setChannelValues(live);
+        item->slotUpdateValues();
+        QImage img(40, 40, QImage::Format_ARGB32);
+        img.fill(Qt::black);
+        QPainter pt(&img);
+        sc.render(&pt, QRectF(0, 0, 40, 40), QRectF(0, 0, 40, 40));
+        pt.end();
+        int blue = 0;
+        for (int y = 0; y < 40; ++y)
+            for (int x = 0; x < 40; ++x)
+            {
+                const QColor c = img.pixelColor(x, y);
+                if (c.blue() > 200 && c.red() < 60 && c.green() < 60)
+                    ++blue;
+            }
+        QVERIFY2(blue > 20, qPrintable(QString("only %1 blue pixels").arg(blue)));
+    }
+    {
+        MonitorFixtureItem item(&doc, old10->id());
+        QCOMPARE(item.ringSegments().size(), 12);           // old definition, by name
+        MonitorFixtureItem none(&doc, spot->id());
+        QVERIFY(none.ringSegments().isEmpty());
+        QVERIFY(none.m_ringItem == nullptr);
+    }
+
+    // The Rig Overview draws them (a smoke test: rings, chasing, no crash).
+    doc.monitorProperties()->setFixturePosition(new12->id(), 0, 0, QVector3D(2000.0f, 2000.0f, 3000.0f));
+    doc.monitorProperties()->setFixturePosition(old12->id(), 0, 0, QVector3D(3000.0f, 2000.0f, 3000.0f));
+    StructureStudioView ov(&doc, StructureStudioView::StageKind, 0);
+    ov.resize(500, 400);
+    ov.reload();
+    ov.setPlane(StructureStudioView::Angled);
+    ov.setAngledView(0.0, 20.0);
+    ov.setLiveValues(true);
+    QVERIFY(!ov.grab().isNull());
+    QByteArray live(512, 0);
+    live[2] = char(200);                                    // tilted up towards the eye
+    live[7] = char(255);
+    live[11] = char(117);
+    live[42] = char(200);
+    live[47] = char(255);
+    live[51] = char(42);
+    new12->setChannelValues(live);
+    old12->setChannelValues(live);
+    QVERIFY(!ov.grab().isNull());
+    if (!qEnvironmentVariableIsEmpty("QLC_RING_SHOT"))
+    {
+        ov.zoomAt(ov.w2s(fixtureWorldCentre(&doc, new12->id())), 250.0);
+        ov.grab().save(qEnvironmentVariable("QLC_RING_SHOT"));
+    }
+    ov.setLiveValues(false);
+
+    spot->setFixtureDefinition(nullptr, nullptr);           // plain is on the stack
+}

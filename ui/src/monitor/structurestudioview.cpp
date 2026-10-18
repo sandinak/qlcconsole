@@ -4859,6 +4859,26 @@ void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
                 emitDots(dots, viewDepth(face) + 0.003, qMax(0.8, pitch * 0.36 * m_scale), led, p);
             }
 
+            /* A colour ring round the lens: a dot per segment just inside the
+               face's edge, each its segment's colour, dark glass when off.
+               On the face, so it turns with pan and tilt and hides behind
+               the head when the face is turned away. */
+            if (!look.ring.isEmpty())
+            {
+                const QVector3D face = headMid + beam * float(h * 0.265);
+                const double radius = qMin(slice, d) * 0.26 * 0.92;
+                const int n = look.ring.size();
+                const double dotPx = qMax(1.0, radius * 2.0 * M_PI / n * 0.42 * m_scale);
+                for (int i = 0; i < n; ++i)
+                {
+                    const double a = 2.0 * M_PI * i / n;
+                    const QVector3D at = face + side * float(radius * qCos(a)) + up * float(radius * qSin(a));
+                    const QColor rc = look.ring.at(i);
+                    const QColor dot = (rc.isValid() && rc.value() >= 16) ? rc : QColor(46, 46, 50);
+                    emitDots(QVector<QPointF>{ w2s(at) }, viewDepth(face) + 0.004, dotPx, dot, p);
+                }
+            }
+
             // A stub of beam, so the direction reads at overview scale where the
             // head itself is only a few pixels across. Kept even when the full
             // cone is drawn: it is what makes an UNLIT head's aim readable.
@@ -6238,6 +6258,21 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                             markOpticsAnimating();
                     }
                 }
+            }
+            /* Its colour ring, from the same snapshot: what the ring's
+               macro channel says (off, a colour, a chase stepping round on
+               the optics clock). Dark glass when output isn't shown. */
+            if (traits.ringChannel >= 0)
+            {
+                bool chasing = false;
+                QVector<QColor> ring;
+                if (showingOutput)
+                    ring = colourRingLive(fx, vals, opticsTime(), 16, &chasing);
+                if (ring.isEmpty())
+                    ring.fill(QColor(Qt::black), 16);
+                looks[0].ring = ring;
+                if (chasing)
+                    markOpticsAnimating();
             }
             drawMoverSolid(p, fid, traits, col, looks, !showingOutput,
                            beamNow);
