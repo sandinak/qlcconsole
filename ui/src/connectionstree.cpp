@@ -2355,7 +2355,7 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
             QAction *ren = menu.addAction(tr("Rename universe…"));
             QAction *retgt = (item->data(COL_NAME, ROLE_OUTPUT).toBool()
                               && pluginSupportsTargetsIn(m_doc, plugin))
-                ? menu.addAction(tr("Change interface / target…")) : NULL;
+                ? menu.addAction(UniversePatcher::retargetText(plugin)) : NULL;
             QAction *unp = menu.addAction(tr("Unpatch from this interface"));
             menu.addSeparator();
             QAction *del = menu.addAction(tr("Delete universe entirely…"));
@@ -2576,7 +2576,7 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
            over -- which is what a node swapped for a spare, or renumbered on
            its front panel, used to cost. */
         QAction *retgt = (output && pluginSupportsTargetsIn(m_doc, plugin))
-            ? menu.addAction(tr("Change interface / target…")) : NULL;
+            ? menu.addAction(UniversePatcher::retargetText(plugin)) : NULL;
 
         /* DMX-USB and MIDI widgets have no per-patch parameters at all --
            their real settings (DMX output speed/mode, MIDI init template,

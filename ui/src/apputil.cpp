@@ -655,6 +655,31 @@ void AppUtil::updateFixtureReadiness(Doc *doc)
                 foreach (Fixture *fx, doc->fixtures())
                     if (fx != NULL && fx->connection() == Fixture::Network && fx->ipAddress() == ip)
                         names << fx->name();
+                /* A backup lantern has no fixture of its own: it is named
+                   after the universe it mirrors ("Lantern SL backup"). */
+                if (names.isEmpty())
+                {
+                    InputOutputMap *io = doc->inputOutputMap();
+                    foreach (Universe *u, io->universes())
+                        for (int i = 0; u != NULL && i < u->outputPatchesCount(); i++)
+                        {
+                            OutputPatch *op = u->outputPatch(i);
+                            if (op == NULL || op->pluginName() != QLatin1String("WLED"))
+                                continue;
+                            const QMap<QString, QVariant> pp = op->getPluginParameters();
+                            bool backup = false;
+                            for (auto it = pp.constBegin(); it != pp.constEnd(); ++it)
+                                backup = backup || (it.key().startsWith(QLatin1String("outputIP"))
+                                                    && it.key() != QLatin1String("outputIP")
+                                                    && it.value().toString().trimmed() == ip);
+                            if (!backup)
+                                continue;
+                            foreach (Fixture *fx, doc->fixtures())
+                                if (fx != NULL && fx->isPatched() && fx->universe() == u->id())
+                                    names << QCoreApplication::translate("AppUtil", "%1 backup")
+                                                 .arg(fx->name());
+                        }
+                }
                 items << (names.isEmpty() ? problem
                                           : QString("%1 (%2)").arg(names.join(", "), problem));
                 ips << ip;
@@ -688,7 +713,10 @@ void AppUtil::updateFixtureReadiness(Doc *doc)
             for (int i = 0; i < u->outputPatchesCount(); i++)
             {
                 OutputPatch *op = u->outputPatch(i);
-                if (op == NULL || op->plugin() == NULL)
+                /* WLED says its own, by fixture name, above: its
+                   outputProblems() are for its rows in Connections. */
+                if (op == NULL || op->plugin() == NULL
+                    || op->plugin()->name() == QLatin1String("WLED"))
                     continue;
                 foreach (const QString &problem, op->plugin()->outputProblems(op->output(), u->id()))
                 {

@@ -57,6 +57,7 @@ private slots:
     /* Patches follow the network, and are never lost offline */
     void offlineShowSavesPatchesByteIdentical();
     void offlinePatchIsInertAndListed();
+    void wledBackupsKeptOfflineUnchanged();
     void followsNetworkToAnotherMachine();
     void followsRoutedPath();
     void defaultRouteIsNotTheShowNetwork();

@@ -25,6 +25,7 @@
 #include <QVariant>
 
 #include "universepatcher.h"
+#include "wleddevicesdialog.h"
 #include "networkroute.h"
 #include "qlcioplugin.h"
 #include "ioplugincache.h"
@@ -62,6 +63,12 @@ QString UniversePatcher::unpatchSelectionText(int patchedCount)
     return patchedCount == 1
         ? tr("Unpatch the 1 patched universe of the selection")
         : tr("Unpatch %1 selected universes").arg(patchedCount);
+}
+
+QString UniversePatcher::retargetText(const QString &pluginName)
+{
+    return pluginName == QLatin1String("WLED") ? tr("WLED Devices / Backup Lanterns…")
+                                               : tr("Change interface / target…");
 }
 
 bool UniversePatcher::supportsTargets(const QString &pluginName) const
@@ -113,6 +120,13 @@ QString UniversePatcher::outputLegText(OutputPatch *op,
         }
         if (pp.contains(QStringLiteral("outputUni")))
             where += QStringLiteral(" · ") + portWhereText(number, pa);
+        /* "WLED → 172.18.2.50 + 1 backup": the lanterns mirroring it. */
+        if (plugin == QLatin1String("WLED"))
+        {
+            const int backups = WledDevicesDialog::fromParameters(pp).count() - 1;
+            if (backups > 0)
+                where += backups == 1 ? tr(" + 1 backup") : tr(" + %1 backups").arg(backups);
+        }
 
         /* And which interface it leaves by, when there is a choice: the
            device view files it under that interface, so a node fed from two
@@ -458,6 +472,15 @@ bool UniversePatcher::applyTarget(quint32 universe, const QString &pluginName,
 void UniversePatcher::retargetPatch(quint32 universe, const QString &pluginName,
                                     quint32 line)
 {
+    /* A WLED universe is aimed at devices, not at a node's port: its own
+       editor -- the primary, and any backup lanterns mirroring it. */
+    if (pluginName == QLatin1String("WLED"))
+    {
+        if (WledDevicesDialog::edit(m_doc, universe, line, m_parent))
+            emit patchChanged();
+        return;
+    }
+
     QString curAddr;
     quint32 curPort = 0;
     const bool targeted = patchTarget(universe, pluginName, line, curAddr, curPort);

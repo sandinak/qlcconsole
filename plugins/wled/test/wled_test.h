@@ -24,6 +24,13 @@ private slots:
     void onlyChangesAreSentAndBurstsCollapse();
     void aWeakOrSilentLanternIsAProblem();
     void aWatchedLanternSaysWhatItsLedsShow();
+
+    /* Backup lanterns: several devices on one universe. */
+    void backupDevicesAreParametersOfTheirOwn();
+    void everyDeviceIsSentTheSameLook();
+    void aDeadDeviceDoesNotHoldUpTheOthers();
+    void aDeviceThatComesBackIsSentTheLookAgain();
+    void theRigViewWatchesTheFirstDeviceThatAnswers();
     /** Against a real WLED, when WLED_REAL_IP names one (skipped otherwise):
      *  the look reaches it, and it answers. Its state is put back after. */
     void aRealLanternShowsTheLook();

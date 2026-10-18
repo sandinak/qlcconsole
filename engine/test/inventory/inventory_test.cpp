@@ -791,6 +791,20 @@ void Inventory_Test::aWledFixtureGetsTheWledOutputAimedAtIt()
     QCOMPARE(wled->m_params.value(uni).value("wledAddress").toInt(), int(lantern->address()) + 1);
     QCOMPARE(wled->m_params.value(uni).value("wledChannels").toInt(), 3);
     QVERIFY(!artnet->m_params.value(uni).contains("outputIP"));
+
+    /* A backup lantern on the patch outlives patching again -- and one made
+       the primary by hand trades places back, never sent to twice. */
+    op->setPluginParameter("outputIP2", "192.168.20.186");
+    QVERIFY(g_doc->unpatchFixture(lantern->id()));
+    QCOMPARE(pp.apply(plan, &problems), 1);
+    QCOMPARE(wled->m_params.value(uni).value("outputIP").toString(), QString("192.168.20.185"));
+    QCOMPARE(wled->m_params.value(uni).value("outputIP2").toString(), QString("192.168.20.186"));
+    op->setPluginParameter("outputIP", "192.168.20.186");
+    op->setPluginParameter("outputIP2", "192.168.20.185");
+    QVERIFY(g_doc->unpatchFixture(lantern->id()));
+    QCOMPARE(pp.apply(plan, &problems), 1);
+    QCOMPARE(wled->m_params.value(uni).value("outputIP").toString(), QString("192.168.20.185"));
+    QCOMPARE(wled->m_params.value(uni).value("outputIP2").toString(), QString("192.168.20.186"));
 }
 
 void Inventory_Test::theTransportRoundTrips()
