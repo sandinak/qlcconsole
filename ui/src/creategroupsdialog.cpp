@@ -28,6 +28,7 @@
 #include <QCheckBox>
 #include <QLineEdit>
 #include <QSplitter>
+#include <QSpinBox>
 #include <QLabel>
 
 #include "createfixturegroup.h"
@@ -43,12 +44,15 @@
 #define COL_NOTE  3
 
 CreateGroupsDialog::CreateGroupsDialog(Doc *doc, const QList<quint32> &fixtureIds,
+                                       const QList<quint32> &groupIds,
                                        const QString &baseName, QWidget *parent)
     : QDialog(parent)
     , m_doc(doc)
-    , m_ids(fixtureIds)
+    , m_loose(fixtureIds)
+    , m_groupIds(groupIds)
+    , m_ids(HeadTypeGroups::fixturesOf(doc, fixtureIds, groupIds))
 {
-    setWindowTitle(tr("Create Groups from Selection"));
+    setWindowTitle(tr("Create Group(s) from Selection"));
     setProperty("helpTopic", QStringLiteral("fixture-manager.md#create-groups-from-selection"));
     QVBoxLayout *root = new QVBoxLayout(this);
 
@@ -60,11 +64,15 @@ CreateGroupsDialog::CreateGroupsDialog(Doc *doc, const QList<quint32> &fixtureId
         parts << tr("%1 %2").arg(tc.second).arg(HeadKinds::typeName(tc.first));
         heads += tc.second;
     }
+    m_headCount = heads;
     const QString types = parts.join(QStringLiteral(", "));
-    QLabel *what = new QLabel(m_ids.size() == 1
-                                  ? tr("1 fixture, %1 heads: %2").arg(heads).arg(types)
-                                  : tr("%1 fixtures, %2 heads: %3").arg(m_ids.size()).arg(heads).arg(types),
-                              this);
+    QString whatText = m_ids.size() == 1
+                           ? tr("1 fixture, %1 heads: %2").arg(heads).arg(types)
+                           : tr("%1 fixtures, %2 heads: %3").arg(m_ids.size()).arg(heads).arg(types);
+    if (!m_groupIds.isEmpty())
+        whatText = (m_groupIds.size() == 1 ? tr("1 group (%1)").arg(whatText)
+                                           : tr("%1 groups (%2)").arg(m_groupIds.size()).arg(whatText));
+    QLabel *what = new QLabel(whatText, this);
     what->setWordWrap(true);
     root->addWidget(what);
 
@@ -81,6 +89,19 @@ CreateGroupsDialog::CreateGroupsDialog(Doc *doc, const QList<quint32> &fixtureId
     splits->addButton(m_perTypeRadio, HeadTypeGroups::PerType);
     splits->addButton(m_perFixtureRadio, HeadTypeGroups::PerTypePerFixture);
     root->addWidget(m_oneRadio);
+    if (!m_groupIds.isEmpty())
+    {
+        QHBoxLayout *blocksRow = new QHBoxLayout;
+        blocksRow->addSpacing(24);
+        m_keepBlocks = new QCheckBox(tr("Each group selected as a block, as it is laid out"), this);
+        m_keepBlocks->setChecked(true);
+        m_keepBlocks->setToolTip(tr("Each group goes in keeping its own layout, one under the "
+                                    "other, tagged so it moves as a unit; fixtures selected go "
+                                    "in a row below. Unticked, every fixture is laid out afresh."));
+        blocksRow->addWidget(m_keepBlocks);
+        blocksRow->addStretch();
+        root->addLayout(blocksRow);
+    }
     root->addWidget(m_perTypeRadio);
     QHBoxLayout *apartRow = new QHBoxLayout;
     apartRow->addSpacing(24);
@@ -91,14 +112,24 @@ CreateGroupsDialog::CreateGroupsDialog(Doc *doc, const QList<quint32> &fixtureId
     apartRow->addStretch();
     root->addLayout(apartRow);
     root->addWidget(m_perFixtureRadio);
-    // The usual want for heads of more than one type is a group per type.
+    /* The usual want for heads of more than one type is a group per type;
+       for groups selected, one group of them as blocks. */
     const bool severalTypes = parts.size() > 1;
-    (severalTypes ? m_perTypeRadio : m_oneRadio)->setChecked(true);
+    (severalTypes && m_groupIds.isEmpty() ? m_perTypeRadio : m_oneRadio)->setChecked(true);
 
     QFormLayout *form = new QFormLayout;
+    m_form = form;
     /* Given a name (the groups selected), every group is named after it;
        left as suggested, each group after its own fixtures. */
     m_givenBase = baseName.trimmed();
+    if (m_givenBase.isEmpty() && m_loose.isEmpty() && !m_groupIds.isEmpty())
+    {
+        QStringList names;
+        foreach (quint32 gid, m_groupIds)
+            if (const FixtureGroup *g = m_doc->fixtureGroup(gid))
+                names << g->name();
+        m_givenBase = names.join(QStringLiteral(" + "));
+    }
     m_suggestedBase = m_givenBase.isEmpty() ? HeadTypeGroups::baseNameFor(m_doc, m_ids) : QString();
     m_baseEdit = new QLineEdit(m_givenBase.isEmpty() ? m_suggestedBase : m_givenBase, this);
     m_baseEdit->setToolTip(tr("The groups are named after this and the head type: "
@@ -109,6 +140,28 @@ CreateGroupsDialog::CreateGroupsDialog(Doc *doc, const QList<quint32> &fixtureId
     m_folderEdit->setToolTip(tr("The folder the groups go in (“Bars/Front”); a group per "
                                 "fixture goes in one named after the selection."));
     form->addRow(tr("Folder:"), m_folderEdit);
+
+    /* One group off the stage fills a grid, row by row, in the fixtures'
+       order on the 2D plot -- this size, suggested from the plot. */
+    m_gridRow = new QWidget(this);
+    {
+        QHBoxLayout *gl = new QHBoxLayout(m_gridRow);
+        gl->setContentsMargins(0, 0, 0, 0);
+        const QSize g = CreateFixtureGroup::suggestGrid(m_doc, m_ids);
+        m_gridWidth = new QSpinBox(m_gridRow);
+        m_gridHeight = new QSpinBox(m_gridRow);
+        m_gridWidth->setRange(1, 999);
+        m_gridHeight->setRange(1, 999);
+        m_gridWidth->setValue(g.width());
+        m_gridHeight->setValue(g.height());
+        m_gridWidth->setToolTip(tr("Columns. The heads fill the grid row by row."));
+        m_gridHeight->setToolTip(tr("Rows. The group can be resized after it is made."));
+        gl->addWidget(m_gridWidth);
+        gl->addWidget(new QLabel(QStringLiteral("×"), m_gridRow));
+        gl->addWidget(m_gridHeight);
+        gl->addStretch();
+    }
+    form->addRow(tr("Grid:"), m_gridRow);
 
     m_viewCombo = new QComboBox(this);
     m_viewCombo->addItem(tr("From the front — as the audience sees it"), int(CreateFixtureGroup::ViewFront));
@@ -131,12 +184,10 @@ CreateGroupsDialog::CreateGroupsDialog(Doc *doc, const QList<quint32> &fixtureId
         // Nowhere to take a picture from: say how they will be laid out.
         m_viewCombo->hide();
         m_closeGaps->hide();
-        QLabel *how = new QLabel(tr("Not placed in the Lighting Studio: each fixture's heads "
-                                    "go on rows of their own, one fixture under the other "
-                                    "(single-head fixtures fill a square)."), this);
-        how->setWordWrap(true);
-        how->setEnabled(false);
-        form->addRow(tr("Laid out:"), how);
+        m_howLabel = new QLabel(this);
+        m_howLabel->setWordWrap(true);
+        m_howLabel->setEnabled(false);
+        form->addRow(tr("Laid out:"), m_howLabel);
     }
     root->addLayout(form);
 
@@ -167,6 +218,12 @@ CreateGroupsDialog::CreateGroupsDialog(Doc *doc, const QList<quint32> &fixtureId
     connect(m_viewCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &CreateGroupsDialog::slotReplan);
     connect(m_closeGaps, &QCheckBox::toggled, this, &CreateGroupsDialog::slotReplan);
+    if (m_keepBlocks != nullptr)
+        connect(m_keepBlocks, &QCheckBox::toggled, this, &CreateGroupsDialog::slotReplan);
+    connect(m_gridWidth, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, &CreateGroupsDialog::slotReplan);
+    connect(m_gridHeight, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, &CreateGroupsDialog::slotReplan);
     connect(m_baseEdit, &QLineEdit::textEdited, this, &CreateGroupsDialog::slotReplan);
     connect(m_folderEdit, &QLineEdit::textEdited, this, [this]() {
         m_folderEdited = true;
@@ -192,6 +249,9 @@ HeadTypeGroups::Options CreateGroupsDialog::options() const
             : m_perTypeRadio->isChecked() ? HeadTypeGroups::PerType
                                           : HeadTypeGroups::PerTypePerFixture;
     o.keepModelsApart = m_modelsApart->isChecked();
+    o.groupIds = m_groupIds;
+    o.groupsAsBlocks = m_keepBlocks == nullptr || m_keepBlocks->isChecked();
+    o.grid = QSize(m_gridWidth->value(), m_gridHeight->value());
     o.view = m_viewCombo->currentData().toInt();
     o.closeGaps = m_closeGaps->isChecked();
     o.baseName = m_baseEdit->text().trimmed() == m_suggestedBase ? QString() : m_baseEdit->text();
@@ -199,10 +259,18 @@ HeadTypeGroups::Options CreateGroupsDialog::options() const
     return o;
 }
 
+bool CreateGroupsDialog::tickedByDefault(const HeadTypeGroups::Planned &p) const
+{
+    return m_oneRadio->isChecked() || m_doc->fixtureGroup(p.sameAs) == nullptr;
+}
+
 void CreateGroupsDialog::slotReplan()
 {
     const bool perFixture = m_perFixtureRadio->isChecked();
+    const bool one = m_oneRadio->isChecked();
     m_modelsApart->setEnabled(m_perTypeRadio->isChecked());
+    if (m_keepBlocks != nullptr)
+        m_keepBlocks->setEnabled(one);
     /* A group per fixture is many groups: they go in a folder named after
        the selection, until a folder is typed. */
     if (!m_folderEdited)
@@ -211,7 +279,18 @@ void CreateGroupsDialog::slotReplan()
     const QString keep = m_list->currentItem() != nullptr
                              ? m_list->currentItem()->data(COL_NAME, Qt::UserRole).toString()
                              : QString();
-    m_plan = HeadTypeGroups::plan(m_doc, m_ids, options());
+    m_plan = HeadTypeGroups::plan(m_doc, m_loose, options());
+    const bool byGrid = m_plan.size() == 1 && m_plan.first().byGrid;
+    m_form->setRowVisible(m_gridRow, byGrid);
+    if (m_howLabel != nullptr)
+        m_howLabel->setText(m_plan.size() == 1 && m_plan.first().asBlocks
+            ? tr("Each group selected as a block, one under the other; fixtures selected in "
+                 "a row below them.")
+            : byGrid
+            ? tr("Not placed in the Lighting Studio: the heads fill the grid row by row, the "
+                 "fixtures in their order on the 2D plot.")
+            : tr("Not placed in the Lighting Studio: each fixture's heads go on rows of their "
+                 "own, one fixture under the other (single-head fixtures fill a square)."));
 
     m_filling = true;
     m_list->clear();
@@ -225,14 +304,16 @@ void CreateGroupsDialog::slotReplan()
         item->setText(COL_HEADS, QString::number(p.heads.size()));
         item->setTextAlignment(COL_HEADS, Qt::AlignRight | Qt::AlignVCenter);
         item->setText(COL_GRID, QStringLiteral("%1 × %2").arg(p.size.width()).arg(p.size.height()));
-        // One already holding exactly these heads is left out unless ticked.
-        bool make = true;
+        /* One already holding exactly these heads is left out unless
+           ticked -- but the one group, asked for, is only flagged. */
+        const bool make = tickedByDefault(p);
         if (FixtureGroup *same = m_doc->fixtureGroup(p.sameAs))
         {
             item->setText(COL_NOTE, tr("exists as “%1”").arg(same->name()));
-            item->setToolTip(COL_NOTE, tr("A group with exactly these heads already exists. "
-                                          "Tick it to make another anyway."));
-            make = false;
+            item->setToolTip(COL_NOTE, make ? tr("A group with exactly these heads already "
+                                                 "exists. Untick it to leave this one out.")
+                                            : tr("A group with exactly these heads already "
+                                                 "exists. Tick it to make another anyway."));
         }
         item->setCheckState(COL_NAME, m_ticks.value(p.key, make) ? Qt::Checked : Qt::Unchecked);
         if (p.key == keep)
@@ -265,7 +346,7 @@ void CreateGroupsDialog::slotItemChanged(QTreeWidgetItem *item, int column)
                 else
                     m_names.insert(key, name);
                 const bool make = item->checkState(COL_NAME) == Qt::Checked;
-                const bool byDefault = (m_doc->fixtureGroup(p.sameAs) == nullptr);
+                const bool byDefault = tickedByDefault(p);
                 if (make == byDefault)
                     m_ticks.remove(key);
                 else

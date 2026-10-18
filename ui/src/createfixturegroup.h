@@ -61,6 +61,24 @@ public:
                                             const QList<quint32> &fixtureIds,
                                             QWidget *parent);
 
+    /** The grid half of createFromFixtures(), off the stage: @p fixtureIds
+     *  sorted into physical order by their place on the 2D plot (rows top to
+     *  bottom, columns left to right; unplaced ones after, as picked), and
+     *  every head of each assigned in turn to the next free cell of
+     *  @p target's grid, row by row. Set @p target's size first. */
+    static void layoutFixturesInGrid(Doc *doc, const QList<quint32> &fixtureIds,
+                                     FixtureGroup *target);
+
+    /** Copy @p groupIds (each as a block keeping its own layout, tagged as a
+     *  sub-group so it moves as a unit, one block under the other) and then
+     *  @p fixtureIds (every head, in a row of their own) into @p target,
+     *  below whatever it already holds, growing its grid to fit. Heads it
+     *  already has are skipped. No signals blocked, no Doc modified flag:
+     *  the caller's to do. */
+    static void appendSelection(Doc *doc, FixtureGroup *target,
+                                const QList<quint32> &fixtureIds,
+                                const QList<quint32> &groupIds);
+
     /** A group OF GROUPS, laid out the way they stand on stage: each group in
      *  @p groupIds goes in as a block keeping its own head layout (tagged as a
      *  sub-group, so it moves as a unit), placed where its fixtures are --

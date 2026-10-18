@@ -23,6 +23,8 @@
 #include <QPushButton>
 #include <QDialogButtonBox>
 #include <QTimer>
+#include <QSpinBox>
+#include <QFormLayout>
 
 #define protected public
 #define private public
@@ -200,11 +202,20 @@ void HeadTypeGroups_Test::oneGroupHoldsEveryHead()
     QCOMPARE(plan[0].name, QString("Bar"));
     QCOMPARE(plan[0].heads.size(), 3 * 20);
     QVERIFY(!plan[0].onStage);
-    // Not placed: a row per bar, in order.
-    QCOMPARE(plan[0].size, QSize(20, 3));
+    QVERIFY(plan[0].byGrid);
+    QVERIFY(plan[0].subGroups.isEmpty());
+    // Not placed: as the old one-click group, a near-square filled row by row.
+    QCOMPARE(plan[0].size, QSize(8, 8));
     QCOMPARE(cellOf(plan[0].heads, bars[0]->id(), 0), QLCPoint(0, 0));
-    QCOMPARE(cellOf(plan[0].heads, bars[0]->id(), 19), QLCPoint(19, 0));
-    QCOMPARE(cellOf(plan[0].heads, bars[2]->id(), 5), QLCPoint(5, 2));
+    QCOMPARE(cellOf(plan[0].heads, bars[0]->id(), 8), QLCPoint(0, 1));
+    QCOMPARE(cellOf(plan[0].heads, bars[1]->id(), 0), QLCPoint(4, 2));
+    QCOMPARE(cellOf(plan[0].heads, bars[2]->id(), 19), QLCPoint(3, 7));
+
+    // A grid given: a row per bar.
+    opt.grid = QSize(20, 3);
+    const QList<HeadTypeGroups::Planned> rows = HeadTypeGroups::plan(m_doc, idsOf(bars), opt);
+    QCOMPARE(rows[0].size, QSize(20, 3));
+    QCOMPARE(cellOf(rows[0].heads, bars[2]->id(), 5), QLCPoint(5, 2));
 }
 
 void HeadTypeGroups_Test::aGroupPerTypeAcrossTheBars()
@@ -218,11 +229,11 @@ void HeadTypeGroups_Test::aGroupPerTypeAcrossTheBars()
     HeadTypeGroups::Options opt;      // PerType by default
     const QList<HeadTypeGroups::Planned> plan = HeadTypeGroups::plan(m_doc, idsOf(bars), opt);
     QCOMPARE(plan.size(), 2);
-    QCOMPARE(plan[0].name, QString("Bar · RGB"));
+    QCOMPARE(plan[0].name, QString("Bar · RGB pixels"));
     QCOMPARE(plan[0].type, QString("RGB"));
     QCOMPARE(plan[0].heads.size(), 128);
     QCOMPARE(plan[0].size, QSize(16, 8));
-    QCOMPARE(plan[1].name, QString("Bar · White"));
+    QCOMPARE(plan[1].name, QString("Bar · White pixels"));
     QCOMPARE(plan[1].heads.size(), 32);
     QCOMPARE(plan[1].size, QSize(4, 8));
     // The white heads are 16..19 of each bar, squeezed to the left.
@@ -256,19 +267,19 @@ void HeadTypeGroups_Test::sameTypeOnAnotherModelSharesItsGroup()
     QCOMPARE(plan[0].heads.size(), 2 * 16 + 2 * 8);
     QCOMPARE(plan[0].fixtures.size(), 4);
     // Bars and strips share no name: the group falls back to "Group".
-    QCOMPARE(plan[0].name, QString("Group · RGB"));
+    QCOMPARE(plan[0].name, QString("Group · RGB pixels"));
     // Only the bars have white heads: named after them.
-    QCOMPARE(plan[1].name, QString("Bar · White"));
+    QCOMPARE(plan[1].name, QString("Bar · White pixels"));
     QCOMPARE(plan[1].heads.size(), 2 * 4);
 
     opt.keepModelsApart = true;
     plan = HeadTypeGroups::plan(m_doc, ids, opt);
     QCOMPARE(plan.size(), 3);
-    QCOMPARE(plan[0].name, QString("Bar · RGB"));
+    QCOMPARE(plan[0].name, QString("Bar · RGB pixels"));
     QCOMPARE(plan[0].heads.size(), 32);
-    QCOMPARE(plan[1].name, QString("Strip · RGB"));
+    QCOMPARE(plan[1].name, QString("Strip · RGB pixels"));
     QCOMPARE(plan[1].heads.size(), 16);
-    QCOMPARE(plan[2].name, QString("Bar · White"));
+    QCOMPARE(plan[2].name, QString("Bar · White pixels"));
     QVERIFY(plan[0].key != plan[1].key);
 }
 
@@ -280,9 +291,9 @@ void HeadTypeGroups_Test::aGroupPerTypeForEachFixture()
     opt.folder = "Bar";
     const QList<HeadTypeGroups::Planned> plan = HeadTypeGroups::plan(m_doc, idsOf(bars), opt);
     QCOMPARE(plan.size(), 16);
-    QCOMPARE(plan[0].name, QString("Bar 1 · RGB"));
-    QCOMPARE(plan[1].name, QString("Bar 1 · White"));
-    QCOMPARE(plan[15].name, QString("Bar 8 · White"));
+    QCOMPARE(plan[0].name, QString("Bar 1 · RGB pixels"));
+    QCOMPARE(plan[1].name, QString("Bar 1 · White pixels"));
+    QCOMPARE(plan[15].name, QString("Bar 8 · White pixels"));
     QCOMPARE(plan[0].size, QSize(16, 1));
     QCOMPARE(plan[1].size, QSize(4, 1));
     QCOMPARE(plan[1].fixtures, QList<quint32>() << bars[0]->id());
@@ -370,8 +381,8 @@ void HeadTypeGroups_Test::namesFromAGivenBase()
     HeadTypeGroups::Options opt;
     opt.baseName = "Upstage";
     QList<HeadTypeGroups::Planned> plan = HeadTypeGroups::plan(m_doc, idsOf(bars), opt);
-    QCOMPARE(plan[0].name, QString("Upstage · RGB"));
-    QCOMPARE(plan[1].name, QString("Upstage · White"));
+    QCOMPARE(plan[0].name, QString("Upstage · RGB pixels"));
+    QCOMPARE(plan[1].name, QString("Upstage · White pixels"));
 
     opt.split = HeadTypeGroups::OneGroup;
     plan = HeadTypeGroups::plan(m_doc, idsOf(bars), opt);
@@ -382,8 +393,8 @@ void HeadTypeGroups_Test::namesFromAGivenBase()
     opt.split = HeadTypeGroups::PerTypePerFixture;
     plan = HeadTypeGroups::plan(m_doc, idsOf(bars), opt);
     QCOMPARE(plan.size(), 4);
-    QCOMPARE(plan[0].name, QString("Bar 1 · RGB"));
-    QCOMPARE(plan[2].name, QString("Bar 1 · RGB 2"));
+    QCOMPARE(plan[0].name, QString("Bar 1 · RGB pixels"));
+    QCOMPARE(plan[2].name, QString("Bar 1 · RGB pixels 2"));
 }
 
 void HeadTypeGroups_Test::createMakesThePlannedGroups()
@@ -418,9 +429,9 @@ void HeadTypeGroups_Test::dialogPreviewsAndCreates()
     QVERIFY(dlg.m_perTypeRadio->isChecked());
     QCOMPARE(dlg.m_baseEdit->text(), QString("Bar"));
     QCOMPARE(dlg.m_list->topLevelItemCount(), 2);
-    QCOMPARE(dlg.m_list->topLevelItem(0)->text(0), QString("Bar · RGB"));
+    QCOMPARE(dlg.m_list->topLevelItem(0)->text(0), QString("Bar · RGB pixels"));
     QCOMPARE(dlg.m_list->topLevelItem(0)->text(1), QString("128"));
-    QCOMPARE(dlg.m_list->topLevelItem(1)->text(0), QString("Bar · White"));
+    QCOMPARE(dlg.m_list->topLevelItem(1)->text(0), QString("Bar · White pixels"));
     QCOMPARE(dlg.m_list->topLevelItem(1)->text(1), QString("32"));
     QVERIFY(dlg.m_createButton->isEnabled());
     QCOMPARE(dlg.m_preview->m_heads.size(), 128);   // the current one's layout
@@ -434,7 +445,7 @@ void HeadTypeGroups_Test::dialogPreviewsAndCreates()
     dlg.m_perFixtureRadio->setChecked(true);
     QCOMPARE(dlg.m_list->topLevelItemCount(), 16);
     QCOMPARE(dlg.m_folderEdit->text(), QString("Bar"));
-    QCOMPARE(dlg.m_list->topLevelItem(2)->text(0), QString("Bar 2 · RGB"));
+    QCOMPARE(dlg.m_list->topLevelItem(2)->text(0), QString("Bar 2 · RGB pixels"));
 
     // Rename one, leave one out; both survive a re-plan.
     dlg.m_list->topLevelItem(0)->setText(0, QString("Left end RGB"));
@@ -462,17 +473,32 @@ void HeadTypeGroups_Test::dialogPreviewsAndCreates()
     QCOMPARE(again.chosenGroups().size(), 1);
 }
 
+/* Accept whichever dialog is up next, as its OK button would. */
+static void acceptNextDialog(bool *seen = nullptr)
+{
+    QTimer::singleShot(0, [seen]() {
+        if (QDialog *d = qobject_cast<QDialog *>(QApplication::activeModalWidget()))
+        {
+            if (seen != nullptr)
+                *seen = true;
+            d->accept();
+        }
+    });
+}
+
 void HeadTypeGroups_Test::fixtureManagerCreatesFromSelectedGroups()
 {
     const QList<Fixture *> bars = addBars(3);
     FixtureGroup *grp = new FixtureGroup(m_doc);
     grp->setName("Upstage bars");
-    grp->setSize(QSize(1, 1));
+    grp->setSize(QSize(20, 3));
     m_doc->addFixtureGroup(grp);
     foreach (Fixture *f, bars)
         grp->assignFixture(f->id());
 
     FixtureManager mgr(nullptr, m_doc);
+
+    // A group selected: one group of it, as a block, is offered first.
     bool seen = false;
     QTimer::singleShot(0, [&seen]() {
         CreateGroupsDialog *dlg = qobject_cast<CreateGroupsDialog *>(QApplication::activeModalWidget());
@@ -482,17 +508,232 @@ void HeadTypeGroups_Test::fixtureManagerCreatesFromSelectedGroups()
                 w->close();
             return;
         }
-        seen = dlg->m_baseEdit->text() == QString("Upstage bars")
-               && dlg->m_list->topLevelItemCount() == 2;
+        seen = dlg->m_oneRadio->isChecked()
+               && dlg->m_keepBlocks != nullptr && dlg->m_keepBlocks->isChecked()
+               && dlg->m_baseEdit->text() == QString("Upstage bars")
+               && dlg->m_list->topLevelItemCount() == 1
+               // The same heads as the group: flagged, but made -- it was asked for.
+               && !dlg->m_list->topLevelItem(0)->text(3).isEmpty()
+               && dlg->m_list->topLevelItem(0)->checkState(0) == Qt::Checked;
         dlg->m_createButton->click();
     });
-    const QList<FixtureGroup *> made = mgr.createGroupsFromSelection(QList<quint32>(), { grp->id() });
+    QList<FixtureGroup *> made = mgr.createGroupsFromSelection(QList<quint32>(), { grp->id() });
+    QVERIFY(seen);
+    QCOMPARE(made.size(), 1);
+    QCOMPARE(made[0]->name(), QString("Upstage bars"));
+    QCOMPARE(made[0]->headsMap(), grp->headsMap());
+    QCOMPARE(made[0]->size(), QSize(20, 3));
+    foreach (quint32 tag, made[0]->headSubGroupMap().values())
+        QCOMPARE(tag, FixtureGroup::subGroupTagFor(grp->id()));
+    QCOMPARE(made[0]->headSubGroupMap().size(), 60);
+
+    // A group per type: its fixtures' heads.
+    seen = false;
+    QTimer::singleShot(0, [&seen]() {
+        CreateGroupsDialog *dlg = qobject_cast<CreateGroupsDialog *>(QApplication::activeModalWidget());
+        if (dlg == nullptr)
+        {
+            if (QWidget *w = QApplication::activeModalWidget())
+                w->close();
+            return;
+        }
+        dlg->m_perTypeRadio->setChecked(true);
+        seen = !dlg->m_keepBlocks->isEnabled() && dlg->m_list->topLevelItemCount() == 2;
+        dlg->m_createButton->click();
+    });
+    made = mgr.createGroupsFromSelection(QList<quint32>(), { grp->id() });
     QVERIFY(seen);
     QCOMPARE(made.size(), 2);
-    QCOMPARE(made[0]->name(), QString("Upstage bars · RGB"));
+    QCOMPARE(made[0]->name(), QString("Upstage bars · RGB pixels"));
     QCOMPARE(made[0]->headList().size(), 48);
-    QCOMPARE(made[1]->name(), QString("Upstage bars · White"));
-    QCOMPARE(m_doc->fixtureGroups().size(), 3);
+    QCOMPARE(made[1]->name(), QString("Upstage bars · White pixels"));
+    QCOMPARE(m_doc->fixtureGroups().size(), 4);
+}
+
+void HeadTypeGroups_Test::pixelsOnlyForManyHeadsOfAType()
+{
+    const QList<Fixture *> bars = addBars(1);
+    Fixture *par = new Fixture(m_doc);
+    par->setName("Par 1");
+    par->setFixtureDefinition(m_parDef, m_parDef->modes().first());
+    par->setUniverse(2);
+    m_doc->addFixture(par);
+
+    QVERIFY(HeadTypeGroups::arePixels(m_doc, idsOf(bars), "RGB"));
+    QVERIFY(HeadTypeGroups::arePixels(m_doc, idsOf(bars), "W"));
+    QVERIFY(!HeadTypeGroups::arePixels(m_doc, { par->id() }, "RGB"));
+    // A bar and a par in one group: not every one of them is pixels.
+    QVERIFY(!HeadTypeGroups::arePixels(m_doc, { bars[0]->id(), par->id() }, "RGB"));
+    // Movers stay movers, however many heads.
+    QVERIFY(!HeadTypeGroups::arePixels(m_doc, idsOf(bars), "RGB/PT"));
+    QCOMPARE(HeadTypeGroups::groupName("Spot", "RGBW/PT", false), QString("Spot · RGBW movers"));
+    QCOMPARE(HeadTypeGroups::groupName("Spot", "PT", false), QString("Spot · Movers"));
+    QCOMPARE(HeadTypeGroups::groupName("Bar", "RGB", true), QString("Bar · RGB pixels"));
+
+    HeadTypeGroups::Options opt;
+    opt.split = HeadTypeGroups::PerTypePerFixture;
+    const QList<HeadTypeGroups::Planned> plan
+        = HeadTypeGroups::plan(m_doc, { bars[0]->id(), par->id() }, opt);
+    QCOMPARE(plan.size(), 3);
+    QCOMPARE(plan[0].name, QString("Bar 1 · RGB pixels"));
+    QCOMPARE(plan[1].name, QString("Bar 1 · White pixels"));
+    QCOMPARE(plan[2].name, QString("Par 1 · RGB"));
+}
+
+QList<Fixture *> HeadTypeGroups_Test::addStrips(int count)
+{
+    QList<Fixture *> out;
+    for (int k = 0; k < count; ++k)
+    {
+        Fixture *f = new Fixture(m_doc);
+        f->setName(QString("Strip %1").arg(k + 1));
+        f->setFixtureDefinition(m_stripDef, m_stripDef->modes().first());
+        f->setUniverse(1);
+        f->setAddress(quint32(k) * 24);
+        m_doc->addFixture(f);
+        out << f;
+    }
+    return out;
+}
+
+void HeadTypeGroups_Test::oneGroupOfGroupsKeepsThemAsBlocks()
+{
+    const QList<Fixture *> strips = addStrips(4);
+    Fixture *par = new Fixture(m_doc);
+    par->setName("Par 1");
+    par->setFixtureDefinition(m_parDef, m_parDef->modes().first());
+    par->setUniverse(2);
+    m_doc->addFixture(par);
+
+    // A: strips 1 and 2, a row each. B: strip 3 off in a corner of its grid.
+    FixtureGroup *a = new FixtureGroup(m_doc);
+    a->setName("A");
+    a->setSize(QSize(8, 2));
+    m_doc->addFixtureGroup(a);
+    a->assignFixture(strips[0]->id());
+    a->assignFixture(strips[1]->id());
+    FixtureGroup *b = new FixtureGroup(m_doc);
+    b->setName("B");
+    b->setSize(QSize(10, 6));
+    m_doc->addFixtureGroup(b);
+    b->assignFixture(strips[2]->id(), QLCPoint(2, 5));
+
+    // Strip 1 again (already in A, so skipped), the par and strip 4 loose.
+    const QList<quint32> loose = { strips[0]->id(), par->id(), strips[3]->id() };
+    HeadTypeGroups::Options opt;
+    opt.split = HeadTypeGroups::OneGroup;
+    opt.groupIds = { a->id(), b->id() };
+    const QList<HeadTypeGroups::Planned> plan = HeadTypeGroups::plan(m_doc, loose, opt);
+    QCOMPARE(plan.size(), 1);
+    const HeadTypeGroups::Planned &p = plan[0];
+    QVERIFY(p.asBlocks);
+    QCOMPARE(p.size, QSize(9, 4));
+    QCOMPARE(p.heads.size(), 8 * 4 + 1);
+    QCOMPARE(cellOf(p.heads, strips[0]->id(), 0), QLCPoint(0, 0));
+    QCOMPARE(cellOf(p.heads, strips[1]->id(), 7), QLCPoint(7, 1));
+    QCOMPARE(cellOf(p.heads, strips[2]->id(), 0), QLCPoint(0, 2));   // B to its corner
+    QCOMPARE(cellOf(p.heads, par->id(), 0), QLCPoint(0, 3));
+    QCOMPARE(cellOf(p.heads, strips[3]->id(), 7), QLCPoint(8, 3));
+    QCOMPARE(p.subGroups.value(QLCPoint(3, 1)), FixtureGroup::subGroupTagFor(a->id()));
+    QCOMPARE(p.subGroups.value(QLCPoint(3, 2)), FixtureGroup::subGroupTagFor(b->id()));
+    QVERIFY(!p.subGroups.contains(QLCPoint(3, 3)));
+
+    // The same as "Add to Group" into an empty group -- the old one-click result.
+    FixtureGroup *old = new FixtureGroup(m_doc);
+    old->setSize(QSize(1, 1));
+    m_doc->addFixtureGroup(old);
+    FixtureManager mgr(nullptr, m_doc);
+    mgr.copySelectionIntoGroup(old, loose, opt.groupIds);
+    QCOMPARE(p.heads, old->headsMap());
+    QCOMPARE(p.subGroups, old->headSubGroupMap());
+    QCOMPARE(p.size, old->size());
+
+    // Made: tags and all.
+    const QList<FixtureGroup *> made = HeadTypeGroups::create(m_doc, plan);
+    QCOMPARE(made.size(), 1);
+    QCOMPARE(made[0]->headSubGroupMap(), p.subGroups);
+
+    // Not as blocks: every fixture afresh, in a grid.
+    opt.groupsAsBlocks = false;
+    const QList<HeadTypeGroups::Planned> fresh = HeadTypeGroups::plan(m_doc, loose, opt);
+    QVERIFY(!fresh[0].asBlocks);
+    QVERIFY(fresh[0].subGroups.isEmpty());
+    QCOMPARE(fresh[0].heads.size(), 33);
+}
+
+void HeadTypeGroups_Test::oneGroupMatchesTheOldCreateGroup()
+{
+    const QList<Fixture *> strips = addStrips(3);
+    const QList<quint32> ids = idsOf(strips);
+
+    // Off the stage: the old name-and-size dialog, accepted as offered.
+    bool seen = false;
+    acceptNextDialog(&seen);
+    FixtureGroup *old = CreateFixtureGroup::createFromFixtures(m_doc, ids, nullptr);
+    QVERIFY(seen);
+    QVERIFY(old != nullptr);
+
+    HeadTypeGroups::Options opt;
+    opt.split = HeadTypeGroups::OneGroup;
+    QList<HeadTypeGroups::Planned> plan = HeadTypeGroups::plan(m_doc, ids, opt);
+    QCOMPARE(plan.size(), 1);
+    QCOMPARE(plan[0].size, old->size());
+    QCOMPARE(plan[0].heads, old->headsMap());
+    QCOMPARE(plan[0].size, QSize(5, 5));
+    QCOMPARE(cellOf(plan[0].heads, strips[1]->id(), 0), QLCPoint(3, 1));
+    QCOMPARE(plan[0].sameAs, old->id());
+
+    // The dialog: one group (one type), the grid offered and used.
+    {
+        CreateGroupsDialog dlg(m_doc, ids);
+        QVERIFY(dlg.m_oneRadio->isChecked());
+        QVERIFY(dlg.m_form->isRowVisible(dlg.m_gridRow));
+        QCOMPARE(dlg.m_gridWidth->value(), 5);
+        QCOMPARE(dlg.m_gridHeight->value(), 5);
+        QCOMPARE(dlg.chosenGroups().size(), 1);     // flagged as old's twin, still made
+        QCOMPARE(dlg.chosenGroups().first().heads, old->headsMap());
+        dlg.m_gridWidth->setValue(24);
+        dlg.m_gridHeight->setValue(1);
+        QCOMPARE(dlg.chosenGroups().first().size, QSize(24, 1));
+        QCOMPARE(cellOf(dlg.chosenGroups().first().heads, strips[2]->id(), 7), QLCPoint(23, 0));
+        dlg.m_perTypeRadio->setChecked(true);
+        QVERIFY(!dlg.m_form->isRowVisible(dlg.m_gridRow));
+    }
+
+    // On the stage: the old stage dialog, accepted as offered (with no twin
+    // of it about, which it would ask about).
+    QVERIFY(m_doc->deleteFixtureGroup(old->id()));
+    MonitorProperties *props = m_doc->monitorProperties();
+    Truss *t = props->addTruss();
+    t->setType(Truss::Horizontal);
+    t->setOrigin(QVector3D(0.0f, 2.0f, 5.0f));
+    t->setDirection(QPointF(1.0, 0.0));
+    t->setLength(6.0f);
+    for (int k = 0; k < strips.size(); ++k)
+    {
+        props->setFixturePosition(strips[k]->id(), 0, 0, QVector3D(0, 0, 0));
+        FixtureRigProps rp;
+        rp.trussId = t->id();
+        rp.trussOffset = 0.5f + 1.0f * k;
+        rp.studioMount = 1;
+        rp.studioFaceChosen = true;
+        props->setFixtureRigProps(strips[k]->id(), rp);
+    }
+    seen = false;
+    acceptNextDialog(&seen);
+    FixtureGroup *stage = CreateFixtureGroup::createFromFixtures(m_doc, ids, nullptr);
+    QVERIFY(seen);
+    QVERIFY(stage != nullptr);
+    {
+        CreateGroupsDialog dlg(m_doc, ids);
+        QVERIFY(!dlg.m_form->isRowVisible(dlg.m_gridRow));
+        const QList<HeadTypeGroups::Planned> chosen = dlg.chosenGroups();
+        QCOMPARE(chosen.size(), 1);
+        QVERIFY(chosen[0].onStage);
+        QCOMPARE(chosen[0].size, stage->size());
+        QCOMPARE(chosen[0].heads, stage->headsMap());
+        QCOMPARE(chosen[0].size, QSize(24, 1));
+    }
 }
 
 QTEST_MAIN(HeadTypeGroups_Test)

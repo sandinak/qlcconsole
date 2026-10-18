@@ -50,11 +50,57 @@ QString HeadTypeGroups::baseNameFor(Doc *doc, const QList<quint32> &fixtureIds)
     return tr("Group");
 }
 
-QString HeadTypeGroups::groupName(const QString &base, const QString &type)
+QList<quint32> HeadTypeGroups::fixturesOf(Doc *doc, const QList<quint32> &fixtureIds,
+                                          const QList<quint32> &groupIds)
 {
-    const QString t = HeadKinds::typeName(type);
+    QList<quint32> ids;
+    foreach (quint32 fid, fixtureIds)
+        if (!ids.contains(fid))
+            ids << fid;
+    foreach (quint32 gid, groupIds)
+    {
+        const FixtureGroup *g = doc != nullptr ? doc->fixtureGroup(gid) : nullptr;
+        if (g == nullptr)
+            continue;
+        foreach (quint32 fid, g->fixtureList())
+        {
+            if (!ids.contains(fid))
+                ids << fid;
+        }
+    }
+    return ids;
+}
+
+bool HeadTypeGroups::arePixels(Doc *doc, const QList<quint32> &fixtureIds, const QString &type)
+{
+    // A mover's heads move together: "RGBW movers", never pixels.
+    if (doc == nullptr || type.isEmpty() || type.endsWith(QLatin1String("PT")))
+        return false;
+    bool any = false;
+    foreach (quint32 fid, fixtureIds)
+    {
+        const Fixture *fx = doc->fixture(fid);
+        const QLCFixtureMode *mode = fx != nullptr ? fx->fixtureMode() : nullptr;
+        if (mode == nullptr)
+            continue;
+        int n = 0;
+        for (int h = 0; h < mode->heads().size(); ++h)
+            if (HeadKinds::typeOf(mode, h) == type)
+                ++n;
+        if (n < 2)
+            return false;
+        any = true;
+    }
+    return any;
+}
+
+QString HeadTypeGroups::groupName(const QString &base, const QString &type, bool pixels)
+{
+    QString t = HeadKinds::typeName(type);
     if (t.isEmpty())
         return base;
+    if (pixels)
+        t = tr("%1 pixels").arg(t);
     if (base.trimmed().isEmpty())
         return t;
     return QStringLiteral("%1 · %2").arg(base.trimmed(), t);
@@ -115,7 +161,8 @@ static QList<quint32> plotOrder(Doc *doc, const QList<quint32> &fixtureIds)
    placed there, else each fixture's heads of the type as a row (its own LED
    grid, for a panel) one under the other -- or, for fixtures of a single head
    each, a near-square of them in plot order. */
-static void layOut(Doc *doc, HeadTypeGroups::Planned &p, const HeadTypeGroups::Options &opt)
+static void layOut(Doc *doc, HeadTypeGroups::Planned &p, const HeadTypeGroups::Options &opt,
+                   const QList<quint32> &looseIds)
 {
     MonitorProperties *mp = doc->monitorProperties();
     FixtureGroup probe(doc);
@@ -129,7 +176,26 @@ static void layOut(Doc *doc, HeadTypeGroups::Planned &p, const HeadTypeGroups::O
                 p.onStage = true;
     }
 
-    if (p.onStage)
+    /* One group is made as Group > Create Group from Selection always made
+       it: the groups selected as blocks, one under the other, the fixtures
+       in a row below; else on the stage as below; else the heads fill a
+       grid, row by row, in the fixtures' order on the 2D plot. */
+    if (opt.split == HeadTypeGroups::OneGroup && !opt.groupIds.isEmpty() && opt.groupsAsBlocks)
+    {
+        p.asBlocks = true;
+        CreateFixtureGroup::appendSelection(doc, &probe, looseIds, opt.groupIds);
+    }
+    else if (opt.split == HeadTypeGroups::OneGroup && !p.onStage)
+    {
+        p.byGrid = true;
+        QSize grid = opt.grid.isValid() ? opt.grid
+                                        : CreateFixtureGroup::suggestGrid(doc, p.fixtures);
+        // As far as the old dialog's size boxes went.
+        grid = QSize(qBound(1, grid.width(), 999), qBound(1, grid.height(), 999));
+        probe.setSize(grid);
+        CreateFixtureGroup::layoutFixturesInGrid(doc, p.fixtures, &probe);
+    }
+    else if (p.onStage)
     {
         int vertical = -1;
         const QList<CreateFixtureGroup::StageBlock> blocks =
@@ -182,6 +248,7 @@ static void layOut(Doc *doc, HeadTypeGroups::Planned &p, const HeadTypeGroups::O
     }
     p.size = probe.size();
     p.heads = probe.headsMap();
+    p.subGroups = probe.headSubGroupMap();
     if (FixtureGroup *same = CreateFixtureGroup::findSameGroup(doc, p.heads))
         p.sameAs = same->id();
 }
@@ -193,10 +260,10 @@ QList<HeadTypeGroups::Planned> HeadTypeGroups::plan(Doc *doc, const QList<quint3
     if (doc == nullptr)
         return out;
     QList<quint32> ids;
-    foreach (quint32 fid, fixtureIds)
+    foreach (quint32 fid, fixturesOf(doc, fixtureIds, opt.groupIds))
     {
         const Fixture *fx = doc->fixture(fid);
-        if (fx != nullptr && fx->fixtureMode() != nullptr && !ids.contains(fid))
+        if (fx != nullptr && fx->fixtureMode() != nullptr)
             ids << fid;
     }
     if (ids.isEmpty())
@@ -246,7 +313,7 @@ QList<HeadTypeGroups::Planned> HeadTypeGroups::plan(Doc *doc, const QList<quint3
                    White" when only the bars have them. */
                 const QString b = opt.baseName.trimmed().isEmpty()
                                       ? groupBase(doc, p.fixtures, base) : base;
-                p.name = groupName(b, t);
+                p.name = groupName(b, t, arePixels(doc, p.fixtures, t));
                 out << p;
             }
         }
@@ -262,7 +329,7 @@ QList<HeadTypeGroups::Planned> HeadTypeGroups::plan(Doc *doc, const QList<quint3
                 p.type = t;
                 p.fixtures << fid;
                 p.key = QStringLiteral("%1|%2").arg(fid).arg(t);
-                p.name = groupName(fx->name(), t);
+                p.name = groupName(fx->name(), t, arePixels(doc, p.fixtures, t));
                 out << p;
             }
         }
@@ -287,7 +354,7 @@ QList<HeadTypeGroups::Planned> HeadTypeGroups::plan(Doc *doc, const QList<quint3
     }
 
     for (Planned &p : out)
-        layOut(doc, p, opt);
+        layOut(doc, p, opt, fixtureIds);
     // A type with no head that could be laid out (none: every head has a type).
     for (int i = out.size() - 1; i >= 0; --i)
         if (out.at(i).heads.isEmpty())
@@ -308,7 +375,7 @@ QList<FixtureGroup *> HeadTypeGroups::create(Doc *doc, const QList<Planned> &gro
         grp->setName(p.name.trimmed().isEmpty() ? HeadKinds::typeName(p.type) : p.name.trimmed());
         grp->setPath(p.path);
         // Complete before Doc announces it, so whoever listens sees it whole.
-        grp->restoreState(p.size, p.heads, QMap<QLCPoint, quint32>());
+        grp->restoreState(p.size, p.heads, p.subGroups);
         if (!doc->addFixtureGroup(grp))
         {
             delete grp;

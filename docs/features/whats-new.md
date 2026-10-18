@@ -6,13 +6,17 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Fixture Manager
 
-- **A group per head type, in one step.** Select fixtures (or groups) →
-  **Group → Create Groups from Selection…**: one group of every head, a
-  group per head type across them ("Bar · RGB" with all 128 RGB pixels of
-  eight bars, "Bar · White" with their 32 whites), or a group per head
-  type for each fixture, in a folder. The groups are listed — names, head
-  counts, layout — before any is made. See
-  [Create Groups from Selection](fixture-manager.md#create-groups-from-selection).
+- **One menu item for one group or many.** Select fixtures and/or groups
+  → **Group → Create Group(s) from Selection…**: one group of every head
+  (made as the old *Create Group from Selection…* made it — groups
+  selected go in as blocks keeping their layout, fixtures off the stage
+  fill a grid you can size), a group per head type across them ("Bar · RGB
+  pixels" with all 128 RGB pixels of eight bars, "Bar · White pixels" with
+  their 32 whites; a par's single head stays "Par · RGB"), or a group per
+  head type for each fixture, in a folder. The groups are listed — names,
+  head counts, layout — before any is made. It replaces the two separate
+  items. See
+  [Create Group(s) from Selection](fixture-manager.md#create-groups-from-selection).
 
 ### Programming
 

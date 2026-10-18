@@ -61,11 +61,22 @@ private slots:
     /** The dialog: options re-plan the list, names and ticks are kept,
      *  Create makes the ticked ones. */
     void dialogPreviewsAndCreates();
-    /** From the Fixture Manager: groups selected bring their fixtures. */
+    /** From the Fixture Manager: a group selected is one group of it as a
+     *  block, or its fixtures' heads a group per type. */
     void fixtureManagerCreatesFromSelectedGroups();
+    /** "pixels" for a type a fixture has many heads of; not for one head,
+     *  nor for movers. */
+    void pixelsOnlyForManyHeadsOfAType();
+    /** One group of groups and fixtures: the groups as blocks, tagged, the
+     *  fixtures in a row under them -- as the old one-click item made it. */
+    void oneGroupOfGroupsKeepsThemAsBlocks();
+    /** One group of fixtures is what the old one-click item made of them,
+     *  off the stage and on it. */
+    void oneGroupMatchesTheOldCreateGroup();
 
 private:
     QList<Fixture *> addBars(int count, const QString &prefix = QStringLiteral("Bar"));
+    QList<Fixture *> addStrips(int count);
 
     Doc *m_doc = nullptr;
     QLCFixtureDef *m_barDef = nullptr;     ///< 16 RGB + 4 white heads
