@@ -873,6 +873,52 @@ EffectInstance::effectiveCells(int &gridCols, int &gridRows) const
         return cells;
     }
 
+    /* No laid-out group, but a fixture that is a grid of its own (a pixel
+       box: the XL-450 is 15 x 5, by its head map or its definition's
+       layout): each as its grid, side by side in fixture order, so a matrix
+       effect on one loose box draws on the box and not on a 75-pixel strip.
+       Fixtures of one row stay a run of their heads, as below. */
+    const MonitorProperties *props = m_doc->monitorProperties();
+    QList<HeadLayout> loose;
+    bool anyGrid = false;
+    for (quint32 fid : fxIds)
+    {
+        Fixture *fxi = m_doc->fixture(fid);
+        HeadLayout l = (fxi != nullptr && props != nullptr) ? props->headLayoutFor(fxi) : HeadLayout();
+        if (fxi != nullptr && (!l.isValid() || l.cells.size() < fxi->heads()))
+            l = HeadLayout();
+        anyGrid = anyGrid || (l.isValid() && l.size.height() > 1);
+        loose << l;
+    }
+    if (anyGrid)
+    {
+        int x = 0, tallest = 1;
+        for (int i = 0; i < fxIds.size(); ++i)
+        {
+            Fixture *fxi = m_doc->fixture(fxIds.at(i));
+            if (fxi == nullptr)
+                continue;
+            const HeadLayout &l = loose.at(i);
+            const int nh = qMax(1, fxi->heads());
+            if (!l.isValid())
+            {
+                for (int h = 0; h < nh; ++h)
+                    cells.append({fxIds.at(i), h, x++, 0});
+                continue;
+            }
+            for (int h = 0; h < nh; ++h)
+            {
+                const QPoint at = l.cellOf(h);
+                cells.append({fxIds.at(i), h, x + qMax(0, at.x()), qMax(0, at.y())});
+            }
+            x += l.size.width();
+            tallest = qMax(tallest, l.size.height());
+        }
+        gridCols = qMax(1, x);
+        gridRows = tallest;
+        return cells;
+    }
+
     // Fallback: no laid-out group → a 1-D strip of every head of the loose
     // fixtures, in fixture order.
     int col = 0;
@@ -1039,6 +1085,38 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
             obj.setProperty("hasDimmer",     f.hasDimmer);
             obj.setProperty("hasGobo",       f.hasGobo);
             obj.setProperty("hasShutter",    f.hasShutter);
+            // What THIS head emits. hasRGB is the whole fixture's: a box of
+            // RGB pixel rows and white pixel rows (the XL-450's 165ch mode)
+            // has it on every head, the white ones too, and a pixel effect
+            // needs to know which of its heads can show a colour and which
+            // only white.
+            {
+                bool hr = false, hg = false, hb = false, hw = false;
+                const QLCFixtureMode *mode = f.fixture->fixtureMode();
+                QList<quint32> chans;
+                if (mode != nullptr && cell.head >= 0 && cell.head < mode->heads().size())
+                    chans = mode->heads().at(cell.head).channels();
+                if (chans.isEmpty())
+                    for (quint32 c = 0; c < f.fixture->channels(); ++c)
+                        chans << c;
+                for (quint32 c : chans)
+                {
+                    const QLCChannel *ch = mode != nullptr ? mode->channel(c) : nullptr;
+                    if (ch == nullptr || (ch->group() != QLCChannel::Intensity
+                                          && ch->group() != QLCChannel::Colour))
+                        continue;
+                    switch (ch->colour())
+                    {
+                        case QLCChannel::Red:   hr = true; break;
+                        case QLCChannel::Green: hg = true; break;
+                        case QLCChannel::Blue:  hb = true; break;
+                        case QLCChannel::White: hw = true; break;
+                        default: break;
+                    }
+                }
+                obj.setProperty("headRGB",   hr && hg && hb);
+                obj.setProperty("headWhite", hw);
+            }
             // The lens a zoom channel sweeps: its intent 0..1 runs lensMin..lensMax.
             obj.setProperty("hasZoom",       f.hasZoom && f.lensMax > f.lensMin);
             obj.setProperty("lensMin",       double(f.lensMin));

@@ -103,7 +103,7 @@ enum { EffectKindHeader = 0, EffectKindScript = 1, EffectKindPreset = 2, EffectK
 static const int EffectKindRole = Qt::UserRole + 1;
 
 // Display order for the category groups in the effect picker.
-static const char *kEffectCategoryOrder[] = { "Color", "Dimmer", "Position", "Beam", "Other" };
+static const char *kEffectCategoryOrder[] = { "Color", "Dimmer", "Matrix", "Position", "Beam", "Other" };
 
 // Category for a RAW script from its fixtureTypes (shared with the engine cache
 // so the picker grouping and the palette-folder pathing never drift apart).
@@ -2033,6 +2033,7 @@ void LookEditor::rebuildEffectDynWidget()
         ftLabels["rgb"]     = tr("RGB/LED Wash");
         ftLabels["dimmer"]  = tr("Dimmer");
         ftLabels["shutter"] = tr("Strobe/Shutter");
+        ftLabels["matrix"]  = tr("Pixel matrix");
         QStringList human;
         for (const QString &t : tmpScript.fixtureTypes())
             human << ftLabels.value(t, t);

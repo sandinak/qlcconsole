@@ -659,7 +659,7 @@ void SceneGroupLooks::reload()
                 cat = EffectScriptCache::categoryForTypes(
                           cache->scriptMeta(cache->nameFromPath(p->scriptPath())).fixtureTypes);
             }
-            if (cat == QLatin1String("Color"))
+            if (cat == QLatin1String("Color") || cat == QLatin1String("Matrix"))
                 coveredTypes.insert(QLCPalette::Color);
             else if (cat == QLatin1String("Dimmer"))
                 coveredTypes.insert(QLCPalette::Dimmer);

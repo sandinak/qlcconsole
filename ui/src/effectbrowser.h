@@ -115,9 +115,10 @@ public:
     /** What a row's preview shows: what the effect does, now. */
     struct Preview
     {
-        enum Kind { Lights, Position, Gobo, Beam };
+        enum Kind { Lights, Position, Gobo, Beam, Matrix };
         Kind kind = Lights;
-        QVector<QColor> lights;     ///< Lights: the strip of 16
+        QVector<QColor> lights;     ///< Lights: the strip of 16; Matrix: the box, row by row
+        int cols = 0, rows = 0;     ///< Matrix: the box's size
         QVector<QPointF> spots;     ///< Position: where each head points, 0..1 (pan, tilt)
         QVector<double> beams;      ///< Beam: each head's beam size 0..1; Gobo: the slot
     };
@@ -130,6 +131,9 @@ private:
     struct Run;
     /** The preview of @p run at @p t seconds. */
     Preview previewWith(Run *run, double t, bool steer = false);
+    /** A matrix effect's preview at @p t: on a pixel box (previewWith()
+     *  hands those over here). */
+    Preview previewMatrix(Run *run, double t);
     /** A position effect's shape: four heads' paths over eight seconds. */
     QVector<QVector<QPointF> > samplePaths(const QString &scriptPath);
 

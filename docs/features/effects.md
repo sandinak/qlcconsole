@@ -76,7 +76,8 @@ where it is.
 
 These draw on a **grid**: the look's group as laid out in its head layout
 (a run of strips, a matrix), or, across several groups, the rig as it
-stands on stage.
+stands on stage. For pixel boxes and panels see also
+[Matrix effects](#matrix-effects).
 
 | Effect | What it does |
 |---|---|
@@ -85,6 +86,80 @@ stands on stage.
 | **Plasma** | Smooth shifting colour fields |
 | **Text** | Words on the grid — scrolling, or still in the middle; see [Text](programming-tab.md#text) |
 | **Wand** | A bright wand sweeps across once, then clears |
+
+## Matrix effects
+
+Effects for **pixel boxes and panels** — the looks a pixel-mapping desk
+throws across a festival box rig, done as effects. Each draws on a
+**canvas**: the look's group as laid out in its head layout (eight boxes
+side by side are one 120 × 5 picture), the rig as it stands on stage for
+a look on several groups, or — a box in a look with no group — the box's
+own grid (an XL-450 is 15 × 5). They're under the **Matrix** tab of the
+effect browser, and work on any RGB matrix, strip or row of pars as well.
+
+| Effect | What it does | Main settings |
+|---|---|---|
+| **Matrix Bars** | Bars of colour scan across, up or down, or bounce between the edges | Direction, Bars, Width, Tail |
+| **Matrix Box Chase** | Whole boxes light in turn round the rig, a white hit as each comes on; on one box, its fifths take turns | Order (left to right, bounce, out from the middle, odd/even, random…), Lit, Fade, Flash |
+| **Matrix Checker** | A checkerboard that swaps on the beat — colours trade squares, squares go on and off, or crossfade | Swap, Square, Fade, Flash |
+| **Matrix Chevrons** | Arrows march the way they point: right, left, up, down, out from or in to the middle | Direction, Spacing, Thickness, Angle |
+| **Matrix EQ** | Equaliser bars with falling peak dots, from the live audio input — simulated on the beat while there's none | Source, Bar width, Gain, Peaks, From (bottom / middle), Colours |
+| **Matrix Iris** | An eye opens and closes in the middle — breathing, blinking, or snapping open on the beat | Motion, Shape (eye, circle, box, slit), Edge, Background |
+| **Matrix Noise** | Drifting clouds of colour sized for big pixels, with white glints at the peaks | Scale, Drift, Contrast, Palette (look, rainbow, fire, ocean), Glints |
+| **Matrix Radar** | A line (or two, three, four blades) turns round the middle with a fading wake | Blades, Width, Wake, Direction |
+| **Matrix Rain** | Drops fall down the columns with fading trails, each column at its own pace | Density, Trail, Direction |
+| **Matrix Ripple** | Rings spread out from the middle, an edge, or anywhere — free running or one a beat | Timing, Spacing, Width, Fade, Origin |
+| **Matrix Snake** | Snakes wind along a path: along the rows, up and down the columns, spiralling in, round the edge | Path, Snakes, Length, Colours |
+| **Matrix Sparkle** | Colour twinkles that fade, with quick white flashes | Density, Decay, Flashes, Background |
+| **Matrix Strobe** | Strobe hits on the beat: the whole canvas, alternate boxes, a random box, random blocks, halves or rows | Pattern, Colour, Flash length, Decay |
+| **Matrix Wipe** | Colour fills and empties — across, from the middle, diagonally, as a circle — or wipes each look colour over the last | Direction, Cycle, Edge |
+
+Colours come from the look, in its order (each bar, ring, chevron or step
+takes the next); with no colour in the look each has colours of its own.
+
+**Speed.** **speed** is in sweeps, rings or steps a second — or a beat
+when the look is on a speed master ([Speed masters](#speed-masters)).
+Effects with a **timing** setting can instead step **On the beat**, with a
+**division** (every bar, every 2 beats, every beat, twice or four times a
+beat); on the beat, every one lands on the same beat as the rest of the
+show. With no beat running they fall back to their speed.
+
+**Scope.** **Whole canvas** draws one picture across every box; **Each
+box** draws the same picture in each — a ripple from the middle of every
+box, a radar in each. Only a fixture that is itself a grid counts as a
+box: a strip in a matrix built of strips, or a par in a row of them, is
+just a place on the canvas.
+
+**Spread.** Matrix Noise and Matrix Box Chase take the look's
+[Spread](#spread) row: with it on, the spread decides how far along each
+head is (Noise) or which box goes when (Box Chase, in place of its Order).
+
+### The white pixels
+
+A box like the Warmdance XL-450 has rows of RGB pixels and rows of white
+ones (RGB, W, RGB, W, RGB). Every matrix effect has a **white** setting
+for them and a **whiteLevel** to scale them:
+
+| white | The white pixels… |
+|---|---|
+| **Colour + accents** (default) | carry the white part of the colour — none for a saturated red, all of it for white — plus the effect's **accents**: a bar's leading edge, a sparkle's flash, a drop's head, a strobe hit |
+| **Follow brightness** | light wherever the picture is lit (Matrix EQ's default, so the bars are solid) |
+| **Accents only** | light only for the accents |
+| **RGB only** | stay out of it; the accents go on the RGB pixels |
+| **White only** | show the picture; the RGB pixels stay out of it |
+
+It degrades gracefully: on a canvas with no white pixels (the XL-450 in its
+135ch RGB mode, any RGB matrix) the accents flash white on the RGB pixels,
+and **White only** draws the picture in white on them; on one with no RGB
+pixels (its 30ch white mode) the picture is drawn in white whatever the
+setting, and two-colour effects (the checker) go on and off instead.
+
+**Set the box up first.** The XL-450's 165ch mode numbers its 45 RGB heads
+before its 30 white ones, so its head map must say which row is which — see
+[Split by Head Type](fixture-manager.md#split-by-head-type) (or check with
+**Grid Probe**). Make one group of the boxes as they hang for a whole-rig
+canvas, or use a group per kind (RGB rows, white rows) when you want them
+driven apart.
 
 ## Music and control
 

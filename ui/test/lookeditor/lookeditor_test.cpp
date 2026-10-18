@@ -398,6 +398,27 @@ void LookEditor_Test::previewsShowWhatEachEffectDoes()
     foreach (const QColor &c, amber.lights)
         lit += (c.red() > 60 && c.blue() < c.red()) ? 1 : 0;
     QVERIFY2(lit > 0, "amber pulse should light amber");
+
+    // A matrix effect is shown on a pixel box -- RGB rows and white rows --
+    // and a strobe hit lights the white rows too.
+    const EffectBrowser::Preview bars = browser->previewFrame(cache->scriptPath("Matrix Bars"));
+    QCOMPARE(bars.kind, EffectBrowser::Preview::Matrix);
+    QCOMPARE(bars.cols * bars.rows, bars.lights.size());
+    QVERIFY(bars.rows > 1);
+    const QString strobePath = cache->scriptPath("Matrix Strobe");
+    QCOMPARE(browser->previewFrame(strobePath).kind, EffectBrowser::Preview::Matrix);
+    QVERIFY(!browser->m_runs.value(strobePath).isNull());
+    bool whiteRowLit = false;
+    for (int k = 0; k < 40 && !whiteRowLit; ++k)
+    {
+        // Row 1 is a white row; a hit is a few hundredths of a second in.
+        const EffectBrowser::Preview strobe = browser->previewWith(browser->m_runs.value(strobePath).data(),
+                                                                   k * 0.05);
+        QCOMPARE(strobe.lights.size(), strobe.cols * strobe.rows);
+        for (int x = 0; x < strobe.cols; ++x)
+            whiteRowLit = whiteRowLit || strobe.lights.at(strobe.cols + x).red() > 200;
+    }
+    QVERIFY2(whiteRowLit, "a strobe hit lights the box's white rows");
 }
 
 /* An effect with words to show (the Text effect) gets a box to type them in,
