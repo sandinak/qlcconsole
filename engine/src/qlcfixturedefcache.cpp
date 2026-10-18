@@ -20,6 +20,7 @@
 #include <QCoreApplication>
 #include <QXmlStreamReader>
 #include <QDebug>
+#include <QSaveFile>
 #include <QList>
 #include <QSet>
 
@@ -174,15 +175,22 @@ bool QLCFixtureDefCache::storeFixtureDef(QString filename, QString data)
 {
     QDir userFolder = userDefinitionDirectory();
 
-    QFile file(userFolder.absoluteFilePath(filename));
+    /* Written whole or not at all, and only THIS file flushed to disk.
+       A global sync() used to follow, which flushes every mounted volume --
+       a Time Machine backup over SMB, an external disk, another build's
+       output -- and could stall for minutes on a busy machine (it timed the
+       storeDef test out at 300 s under load). */
+    QSaveFile file(userFolder.absoluteFilePath(filename));
     if (file.open(QIODevice::WriteOnly | QIODevice::Text) == false)
         return false;
 
-    file.write(data.toUtf8());
-    file.close();
-#ifdef Q_OS_UNIX
-    sync();
-#endif
+    if (file.write(data.toUtf8()) < 0)
+    {
+        file.cancelWriting();
+        return false;
+    }
+    if (file.commit() == false)
+        return false;
 
     // reload user definitions
     load(userDefinitionDirectory());
