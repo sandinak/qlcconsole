@@ -599,7 +599,7 @@ cp ~/git/qlcconsole/test-workspaces/DanceHysteria-0.5.qlcc /tmp/dh-p4.qlcc
 4. Right-click a list → **Detach to plain chaser…**: it leaves the tree; the
    chaser in Functions → Productions is unlocked; ⌘Z brings it back.
 5. Type `reusable`, `use BackStage`, `unlink`, `convert`, `convert apply`,
-   `detach list`, `help reuse`… (`help use`).
+   `detach list`, `help use`, `help convert`.
 
 ### Open for Branson (§10, 17–20)
 
