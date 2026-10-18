@@ -15,9 +15,9 @@
     effect.author      = "qlcconsole";
     effect.requires    = ["matrix"];
     effect.fixtureTypes = ["matrix", "rgb", "dimmer"];
-    // The host's spread: each head's phase moves it along in time.
+    // The host's spread: each head's phase is its place in the clouds.
     effect.hostSpread  = "";
-    effect.notes = "A smooth field of noise drifts across the pixels and is coloured from a palette: the look's colours (blended), a rainbow, fire or ocean. Scale: the size of the clouds (bigger = broader shapes); Speed: how fast they change (per beat on a speed master); Drift: how fast they slide across; Contrast: soft and even, or punchy with dark gaps; Glints: white glints where the field peaks (the accent). Spread (the look's Spread row) puts each head further along in time.";
+    effect.notes = "A smooth field of noise drifts across the pixels and is coloured from a palette: the look's colours (blended), a rainbow, fire or ocean. Scale: the size of the clouds (bigger = broader shapes); Speed: how fast they change (per beat on a speed master); Drift: how fast they slide across; Contrast: soft and even, or punchy with dark gaps; Glints: white glints where the field peaks (the accent). Spread (the look's Spread row), when on, places each head in the clouds by its phase instead of its pixel.";
 
     effect.parameters = [
         { name: "speed",    description: "How fast it changes (per beat on a speed master)", min: 0.02, max: 3, defaultValue: 0.3 },
@@ -47,8 +47,14 @@
 
         return fixtures.map(function(f) {
             var g = f.grid || { col: 0, row: 0 };
-            var z = (t + (host ? num(f.phase, 0) : 0)) * speed;
+            var z = t * speed;
             var x = (g.col - t * drift) / scale, y = g.row / scale;
+            if (host) {
+                // The spread places each head in the clouds: one spread
+                // cycle is four clouds across, whatever the grid says.
+                x = num(f.phase, 0) * 4 - t * drift / scale;
+                y = 0;
+            }
             // Two octaves, blended between two moments so it changes smoothly.
             var zi = Math.floor(z), zf = z - zi;
             zf = zf * zf * (3 - 2 * zf);

@@ -131,8 +131,8 @@ box: a strip in a matrix built of strips, or a par in a row of them, is
 just a place on the canvas.
 
 **Spread.** Matrix Noise and Matrix Box Chase take the look's
-[Spread](#spread) row: with it on, the spread decides how far along each
-head is (Noise) or which box goes when (Box Chase, in place of its Order).
+[Spread](#spread) row: with it on, the spread decides where each head
+sits in the clouds (Noise) or which box goes when (Box Chase, in place of its Order).
 
 ### The white pixels
 
