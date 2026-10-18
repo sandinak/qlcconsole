@@ -610,3 +610,105 @@ cp ~/git/qlcconsole/test-workspaces/DanceHysteria-0.5.qlcc /tmp/dh-p4.qlcc
   the tree lets go of it — or copy it at once?
 - 20. A "detached from BackStage" badge after Unlink here — wanted?
 - Unchanged: 1, 3, 4 (effect's own Gobo), 5, 8, 12–16.
+
+---
+
+## Looks + Library palettes (2026-10-18)
+
+PROGRAMMING_ROLE_DESIGN.md **R1** (the parts R2/R3 need), **R2** (palettes
+in the Library) and **R3** (the Looks section), after Branson's "yes" to
+*Looks/busking + palettes in the Library next*. On `feat/show-tree`,
+pushed, **not merged**. Notes: SHOW_TREE_DESIGN.md **§10.15**; open
+questions **21–26** in §10.
+
+| Commit | What |
+|---|---|
+| 45ad2e89f | Merge `design/programming-role` (PROGRAMMING_ROLE_DESIGN.md, P-D1…P-D16 approved, and the release/0.1.0 work it sits on; conflicts in appsettings, structurestudioview includes, TODO/DONE — both sides kept) |
+| 22bf9f9a6 | **Engine:** `PaletteOps` (Doc-owned: create by type, rename, duplicate, file, folders of any type, delete; one palette undo; `usage()` naming cues/looks/reusables/scenes/slots); **one history** (tree + palette steps stamped; `undoShared`/`redoShared`); the **Looks section** (`CueList::looks`, `<Looks>`, folders, never tracking, a Collection per look whose id survives edits, Adopt as look, Copy to look, Record lit takes a running look's layers); commands `palette …`, `look …`, `vcpage`, `adopt`; tests |
+| 474f2983b | **Tab:** `UsedBy` (VC buttons), Look Editor Used by line; Programming's palette New/Duplicate/Delete/Move through PaletteOps; Library palettes (by type / folders first, + Palette, F2, folders, drag, Used by, Delete asks); the Looks section in the tree (folders, + Look, Fired by, VC ×N, Make VC page, Copy to look, Adopt with VC re-point); `VirtualConsole::placeWidget`; tests |
+| 19be654cb | Help (`show-tree.md` Looks + Library palettes + one Undo, `programming-tab.md`, What's new), design §10.15 + open 21–26, PROGRAMMING_ROLE_DESIGN.md status, TODO/DONE |
+
+**Decided here (deviations, §10.15):**
+- A look is a **cue of a flagged list**, not a new node type — every cue
+  operation works on it for free; `edit()` keeps looks free of mode,
+  includes and base.
+- A look **always bakes to a Collection** (the design: a Scene if one
+  layer): a layer's scene changes id when the look changes, the cue's
+  Collection doesn't, so a VC button keeps firing it. Shown, under
+  `Productions/<p>/Looks/<folder>`, locked (open 21).
+- `PaletteOps` is owned by **Doc** (the design: beside
+  ProgrammerController), a thin accessor, as the tree is.
+- feat/palette-folders is **not merged**: the Library reads type-first
+  folders as one folder (its rule, read only) and writes type-independent
+  paths (open 25).
+
+**R1 left for later:** Look Editor value edits on the palette undo;
+Programming's tree folder rename/delete/drag via PaletteOps (they set paths
+directly, off the history); Programming's ⌘Z reaching the palette history
+(open 24); power estimate to the app; Stage bar (P-D10); the Used by line in
+Programming's editor. **R2 left:** Open in Palettes. **R3 left:** per-look
+fades / transition / speed master (and on cue layers), Fire as, a look's
+MIDI trigger in the tab.
+
+- **Gate** (`./check-all.sh`, JOBS=6, `git archive` copies in the
+  scratchpad, the JOBS line made to read the environment in the copy only):
+  - after R2 (R3 included), on **474f2983b**: Qt6 **PASS** (373 s),
+    Qt6-Release **PASS** (331 s), Qt6-Werror **PASS** (381 s); 1085 s;
+  - final, on **19be654cb**: Qt6 **PASS** (385 s), Qt6-Release **PASS**
+    (352 s), Qt6-Werror **PASS** (401 s); 1138 s.
+- **Tests:** showtree_test 133 + 1 opt-in skip (+12); showtreeview_test 58
+  + 1 skip (+6: palette and look actions each one undo step on the shared
+  history, the Programming tab's New palette undone from the Show Tree);
+  programmingmanager_test and helpbrowser_test green.
+- **DanceHysteria-0.5 dry run** (a fresh copy in the scratchpad, unchanged
+  after, by checksum): New Chaser 8 2 cues, Full Show 6, 00-Preshow 3 —
+  **0 channels differ** in all 11 cues (imported vs the chasers), and 0
+  after Convert to tracking; the plans as P4's (Full Show: 5 cues track, 3
+  includes, 2 releases, 6 values + 2 layers).
+- **Crash reports:** one new, `showtreeview_test-2026-10-18-080734.ips` —
+  `VirtualConsole::VirtualConsole` asserting a second instance: a new test
+  failed before its `delete VirtualConsole::instance()` and the next test
+  made another. Test harness only; fixed with a scoped VC (`ScopedVc`). None
+  since.
+- `build/main/qlcconsole` rebuilt. A running app keeps its old binary until
+  it is relaunched.
+
+### What to try in the app (on a COPY of a show)
+
+```sh
+cp ~/git/qlcconsole/test-workspaces/DanceHysteria-0.5.qlcc /tmp/dh-looks.qlcc
+~/git/qlcconsole-showtree/build/main/qlcconsole -o /tmp/dh-looks.qlcc
+```
+
+1. Show Tree → select the production (import a chaser first if there is
+   none) → **+ Look**. Name it "Hit 1"; drag Towers and a colour onto it.
+   It plays on the rig while selected (Design).
+2. Right-click **Looks** → New folder… "Hits"; drag Hit 1 onto it; **Make
+   VC page**. In the Virtual Console: a frame "Looks — Hits", a red button.
+   GO a cue list, press the button: it plays over the list (highest
+   intensity wins); press again — the list's look is back.
+3. Library → All → Palettes: **+ Palette → Colour** in a folder; **F2**
+   rename; drag a palette onto a folder; right-click → Group by type (off:
+   folders first). Delete a palette a cue uses: the question names the cue
+   (and a VC button firing it); ⌘Z brings it back everywhere.
+4. Programming tab → New Color in its palette list; back in the Show Tree,
+   ⌘Z takes it back (one palette history).
+5. Library → Functions → right-click an old busking scene → **Adopt as
+   look**; with a VC button on it, say yes to re-point.
+6. Type: `palette colour "Amber 2" #ffb000 in "01-Song"`, `palette Amber 2
+   rename "Amber"`, `look "Hit 2" in "Hits"`, `Towers dimmer Full`,
+   `vcpage`, `adopt "Old Scene"`, `help palette`, `help look`.
+
+### Open for Branson (§10, 21–26)
+
+- 21. A look is a Collection always (stable for VC) — OK?
+- 22. Make VC page: a new frame each time, Toggle, six a row, colour from the
+  first colour — or update the frame it made; Flash for some?
+- 23. Library palettes: by type by default (as built) or folders first?
+- 24. Should Programming's ⌘Z reach the palette history too?
+- 25. Merge feat/palette-folders? (a folder named like a type would be
+  stripped by its migration unless PaletteOps writes `Folders="1"`.)
+- 26. Deleting a palette cues use: leave "(missing)" + Undo (as built), or
+  also take it off the cues?
+- Unchanged: 1, 3 (now partly answered by the shared history), 4, 5, 8,
+  12–20.
