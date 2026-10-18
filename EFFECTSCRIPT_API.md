@@ -82,7 +82,8 @@ how it shows up in the look editor and how the host knows what to inject.
 | `description` | string | One-line tooltip. |
 | `notes` | string | Long help shown in the editor panel. |
 | `author` | string | Credit. |
-| `fixtureTypes` | string[] | Capability tags the effect targets: `"moving"`/`"mover"`/`"pantilt"`, `"rgb"`/`"rgbw"`/`"color"`, `"dimmer"`, `"shutter"`, `"colorwheel"`. The host **filters** the scene's fixtures to those matching at least one tag. Empty/omitted = all fixtures. |
+| `fixtureTypes` | string[] | Capability tags the effect targets: `"moving"`/`"mover"`/`"pantilt"`, `"rgb"`/`"rgbw"`/`"color"`, `"dimmer"`, `"shutter"`, `"colorwheel"`. The host **filters** the scene's fixtures to those matching at least one tag. Empty/omitted = all fixtures. `"matrix"` matches no fixture by itself: it files the effect under the browser's **Matrix** tab (give it beside the real tags, `["matrix", "rgb", "dimmer"]`). |
+| `requires` | string[] | Helper libraries from `effectscripts/lib/` evaluated before the script: `"wled"` (the WLED ports' segment and maths) and `"matrix"` (`lib/matrix.js`: the canvas, each head's place on it or in its own box, the shared white-pixel setting, repeatable hash/noise and the beat clock — the matrix effects are built on it). |
 | `dataChannels` | string[] | Real-time host data channels to subscribe to (e.g. `["joystick"]`). Arrive as `data.<name>` each tick. |
 | `inputs` | InputDef[] | Named 0..1 control slots (joystick axis, MIDI CC, OSC…). |
 | `palettes` | PaletteDef[] | Named palette references the host resolves and injects as `palettes.<name>`. |
@@ -155,14 +156,16 @@ One object per (filtered) fixture in the scene. Fields:
 | `panRange` | number | Pan travel in **degrees** (from physical, default 360). |
 | `tiltRange` | number | Tilt travel in **degrees** (default 270). |
 | `hasPanTilt` | bool | Has pan and/or tilt channels. |
-| `hasRGB` | bool | Has additive R **and** G **and** B. |
+| `hasRGB` | bool | Has additive R **and** G **and** B — the whole **fixture**'s (every head of a box with RGB and white pixel rows says yes). |
+| `headRGB` | bool | **This head** has additive R, G and B. |
+| `headWhite` | bool | **This head** has a white emitter. A box of RGB rows and white rows (the Warmdance XL-450's 165ch mode) has heads that are one or the other: send a white head only `w`, an RGB head no `w` (on a head with no white, `w` is made of its R, G and B, and a `w` of 0 there blacks out its colour). |
 | `hasColorWheel` | bool | Has a colour wheel channel. |
 | `hasDimmer` | bool | Has a master/intensity dimmer. |
 | `hasGobo` | bool | Has a gobo channel. |
 | `hasShutter` | bool | Has a shutter/strobe channel. |
 | `pos` | `{x,y,z}` | 3-D rig world position in **metres** (`{0,0,0}` if unplaced). |
 | `phase` | number | Where this head is in the effect's cycle, in **cycles**, from the host's spread (amount × its place along the chosen axis, direction, wings and blocks). 0 when the spread is off. Use it as the offset you'd otherwise compute from `i / n`: `t * rate + (inputs._spread ? f.phase : i * spread / n)`. |
-| `grid` | `{col,row,cols,rows}` | Cell coords for **pixel-style / matrix effects** (ripple, comet, plasma, RGBScript ports). `col,row` = this fixture's cell; `cols,rows` = grid size. Sourced from the fixture group's **head layout** (the same map RGB Matrix uses) when the scene targets a single laid-out group; otherwise the fixtures are a **1-D strip** in list order (`cols = N, rows = 1, row = 0`). Always present, so an effect can render on a grid unconditionally — a 1×N strip is just the degenerate case. |
+| `grid` | `{col,row,cols,rows}` | Cell coords for **pixel-style / matrix effects** (ripple, comet, plasma, RGBScript ports). `col,row` = this fixture's cell; `cols,rows` = grid size. Sourced from the fixture group's **head layout** (the same map RGB Matrix uses) when the scene targets a single laid-out group; with no laid-out group, a fixture that is a grid of its own (its head map, or its definition's layout: an XL-450 is 15 × 5) is laid out as that grid, fixtures side by side; otherwise the fixtures are a **1-D strip** in list order (`cols = N, rows = 1, row = 0`). Always present, so an effect can render on a grid unconditionally — a 1×N strip is just the degenerate case. |
 | `aimAt` | `{ <slot>: {pan,tilt} }` | Per-fixture aim **degrees** toward each bound `effect.targets` slot. Empty object per slot when unbound/unsolvable. |
 | `sceneTarget` | `{x,y,z, pan,tilt}` | The scene's **own Aim look** (implicit target). **Present only when the scene carries an Aim look.** `x,y,z` = the target's **world location** in metres (shared by all fixtures) — centre a shape/formation on it and return world-space aim intents (`aimX/aimY/aimZ`). `pan,tilt` = this fixture's pre-solved aim **degrees** at the target (subject-height biased; present only with usable rig geometry) — the followspot defers to the host's converged aim when these are present. |
 | `lastSpot` | `{pan,tilt}` | Pan/tilt **degrees** where this fixture's beam was left by the previous Operate tick (possibly a different scene). Absent if no prior position. Enables `followMode = lastPosition` handoffs. |

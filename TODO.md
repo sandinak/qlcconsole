@@ -234,6 +234,14 @@ help (DONE.md 2026-10-16). Handoff: SHOW_TREE_OVERNIGHT.md.
 
 ## Needs the real rig / hardware
 
+- **Matrix effects on the XL-450s (built 2026-10-18, feat/matrix-effects)**
+  — the fourteen Matrix effects were checked offscreen only (no DMX from
+  the laptop). On the rig: each on one box, on all eight as one canvas, in
+  the 135ch and 30ch modes, and the white setting's five choices; that the
+  head map's RGB/W/RGB/W/RGB rows are the box as built (Grid Probe); and
+  how a look on the split TrussC-RGB + TrussC-W groups lays out against
+  one group of all 75 heads per box.
+
 - **Re-check the Oppsk wall-washer readings (2026-10-16)** — the 24 bars in
   DanceHysteria-0.4 carry Full 12.3 A / Half 2.7 / Standby 0.4 (White 6.6,
   R/G/B 2.3) against a definition rated 100 W: at 120 V that is 1.48 kW a

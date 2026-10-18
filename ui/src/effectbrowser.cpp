@@ -54,6 +54,13 @@ double num(const QJSValue &v)
     return std::isfinite(d) ? d : 0.0;
 }
 const int kStripW = 16 * 6;
+
+/* A matrix effect is previewed on a pixel box, not a strip: fifteen by five,
+   rows of RGB pixels and of white ones (RGB, W, RGB, W, RGB) as a Warmdance
+   XL-450 is built -- so what its white setting does shows too. */
+const int kBoxCols = 15;
+const int kBoxRows = 5;
+bool boxRowIsWhite(int row) { return row % 2 == 1; }
 }
 
 struct EffectBrowser::Run
@@ -95,7 +102,9 @@ public:
         const EffectBrowser::Preview pv = m_browser->m_frames.value(path);
         const int cell = kStripW / kLights;
         const QRect strip(r.left(), r.center().y() - cell / 2 - 1, kStripW, cell + 2);
-        if (pv.kind == EffectBrowser::Preview::Position)
+        if (pv.kind == EffectBrowser::Preview::Matrix)
+            paintMatrix(p, QRect(r.left(), r.top() + 1, kStripW, r.height() - 2), pv);
+        else if (pv.kind == EffectBrowser::Preview::Position)
             paintPosition(p, QRect(r.left(), r.top() + 1, kStripW, r.height() - 2), pv,
                           m_browser->m_paths.value(path));
         else if (pv.kind == EffectBrowser::Preview::Gobo || pv.kind == EffectBrowser::Preview::Beam)
@@ -140,6 +149,31 @@ public:
     }
 
 private:
+    /* A matrix effect's box: each pixel a square, the white rows' unlit
+       pixels a shade warmer than the RGB rows', so the rows read. */
+    static void paintMatrix(QPainter *p, const QRect &box, const EffectBrowser::Preview &pv)
+    {
+        if (pv.cols <= 0 || pv.rows <= 0)
+            return;
+        const int cell = qMax(2, qMin(box.width() / pv.cols, box.height() / pv.rows));
+        const QRect grid(box.left() + (box.width() - cell * pv.cols) / 2,
+                         box.top() + (box.height() - cell * pv.rows) / 2,
+                         cell * pv.cols, cell * pv.rows);
+        p->setPen(Qt::NoPen);
+        p->setBrush(QColor(20, 20, 24));
+        p->drawRoundedRect(grid.adjusted(-2, -2, 2, 2), 3, 3);
+        for (int y = 0; y < pv.rows; ++y)
+            for (int x = 0; x < pv.cols; ++x)
+            {
+                QColor c = pv.lights.value(y * pv.cols + x, QColor(30, 30, 34));
+                if (c == QColor(30, 30, 34) && boxRowIsWhite(y))
+                    c = QColor(38, 36, 34);
+                p->setBrush(c);
+                p->drawRect(QRectF(grid.left() + x * cell + 0.5, grid.top() + y * cell + 0.5,
+                                   cell - 1, cell - 1));
+            }
+    }
+
     /* The shape the effect draws (four heads' paths over a few seconds,
        faint), every head where it is now, and those four bright on top --
        a circle reads as a circle, and the spread as heads along it. */
@@ -642,6 +676,8 @@ EffectBrowser::Preview EffectBrowser::previewWith(Run *run, double t, bool steer
 {
     Preview pv;
     QJSEngine *eng = run->script.engine();
+    if (run->script.fixtureTypes().contains(QStringLiteral("matrix")))
+        return previewMatrix(run, t);
     QJSValue fixtures = eng->newArray(kLights);
     for (int i = 0; i < kLights; ++i)
     {
@@ -801,6 +837,103 @@ EffectBrowser::Preview EffectBrowser::previewWith(Run *run, double t, bool steer
         }
         else
             out[i] = QColor(30, 30, 34);
+    }
+    return pv;
+}
+
+EffectBrowser::Preview EffectBrowser::previewMatrix(Run *run, double t)
+{
+    Preview pv;
+    QJSEngine *eng = run->script.engine();
+    const int n = kBoxCols * kBoxRows;
+    /* The box's heads as the host hands them over: its 45 RGB heads, then
+       its 30 white ones, each where it is in the box. */
+    QJSValue fixtures = eng->newArray(quint32(n));
+    QVector<QPoint> at;
+    for (int row = 0; row < kBoxRows; ++row)
+        if (!boxRowIsWhite(row))
+            for (int col = 0; col < kBoxCols; ++col)
+                at << QPoint(col, row);
+    for (int row = 0; row < kBoxRows; ++row)
+        if (boxRowIsWhite(row))
+            for (int col = 0; col < kBoxCols; ++col)
+                at << QPoint(col, row);
+    for (int i = 0; i < n; ++i)
+    {
+        const bool white = boxRowIsWhite(at.at(i).y());
+        QJSValue o = eng->newObject();
+        o.setProperty(QStringLiteral("id"), 1);
+        o.setProperty(QStringLiteral("head"), i);
+        o.setProperty(QStringLiteral("heads"), n);
+        o.setProperty(QStringLiteral("hasRGB"), true);
+        o.setProperty(QStringLiteral("hasDimmer"), true);
+        o.setProperty(QStringLiteral("headRGB"), !white);
+        o.setProperty(QStringLiteral("headWhite"), white);
+        o.setProperty(QStringLiteral("phase"), 0.0);
+        QJSValue grid = eng->newObject();
+        grid.setProperty(QStringLiteral("col"), at.at(i).x());
+        grid.setProperty(QStringLiteral("row"), at.at(i).y());
+        grid.setProperty(QStringLiteral("cols"), kBoxCols);
+        grid.setProperty(QStringLiteral("rows"), kBoxRows);
+        o.setProperty(QStringLiteral("grid"), grid);
+        fixtures.setProperty(quint32(i), o);
+    }
+    QJSValue inputs = eng->newObject();
+    inputs.setProperty(QStringLiteral("_time"), t);
+    inputs.setProperty(QStringLiteral("_bpm"), 120.0);
+    inputs.setProperty(QStringLiteral("_beat"), std::fmod(t * 2.0, 1.0));
+    inputs.setProperty(QStringLiteral("_beatPos"), t * 2.0);
+    inputs.setProperty(QStringLiteral("_beatCount"), int(t * 2.0));
+    QJSValue colours = eng->newArray(quint32(m_previewColours.size()));
+    for (int k = 0; k < m_previewColours.size(); ++k)
+    {
+        QJSValue c = eng->newObject();
+        c.setProperty(QStringLiteral("r"), m_previewColours.at(k).red());
+        c.setProperty(QStringLiteral("g"), m_previewColours.at(k).green());
+        c.setProperty(QStringLiteral("b"), m_previewColours.at(k).blue());
+        colours.setProperty(quint32(k), c);
+    }
+    QJSValue look = eng->newObject();
+    look.setProperty(QStringLiteral("colors"), colours);
+    look.setProperty(QStringLiteral("dimmer"), 1.0);
+    QJSValue palettes = eng->newObject();
+    palettes.setProperty(QStringLiteral("look"), look);
+    QJSValue params = eng->newObject();
+    for (const EffectScript::ParamDef &d : run->script.paramDefs())
+        if (d.type != QLatin1String("path"))
+            params.setProperty(d.name, double(d.defaultValue));
+
+    const QJSValue result = run->script.callTick(fixtures, inputs, palettes, params, run->state,
+                                                 eng->newObject());
+    if (!result.isArray())
+        return pv;
+    pv.kind = Preview::Matrix;
+    pv.cols = kBoxCols;
+    pv.rows = kBoxRows;
+    pv.lights.fill(QColor(30, 30, 34), n);
+    for (int i = 0; i < n; ++i)
+    {
+        const QJSValue o = result.property(quint32(i));
+        if (!o.isObject())
+            continue;
+        const auto level = [&o](const char *k) {
+            return qBound(0, qRound(num(o.property(QLatin1String(k)))), 255);
+        };
+        QColor c;
+        if (o.hasProperty(QStringLiteral("w")) && !o.hasProperty(QStringLiteral("r")))
+        {
+            const int w = level("w");
+            c = QColor(w, qRound(w * 0.96), qRound(w * 0.88));      // a white pixel: a touch warm
+        }
+        else if (o.hasProperty(QStringLiteral("r")))
+        {
+            const int w = level("w");
+            c = QColor(qMin(255, level("r") + w), qMin(255, level("g") + w), qMin(255, level("b") + w));
+        }
+        else
+            continue;
+        if (c.red() + c.green() + c.blue() > 0)
+            pv.lights[at.at(i).y() * kBoxCols + at.at(i).x()] = c;
     }
     return pv;
 }

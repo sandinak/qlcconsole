@@ -113,6 +113,10 @@ QString EffectScriptCache::nameFromPath(const QString &path)
 
 QString EffectScriptCache::categoryForTypes(const QStringList &ft)
 {
+    // A pixel-matrix effect ("matrix" beside the fixtures it runs on) is
+    // listed with its kind, not under the first fixture type it names.
+    if (ft.contains(QStringLiteral("matrix")))
+        return QStringLiteral("Matrix");
     if (ft.contains(QStringLiteral("dimmer")))
         return QStringLiteral("Dimmer");
     if (ft.contains(QStringLiteral("rgb"))   || ft.contains(QStringLiteral("rgbw"))

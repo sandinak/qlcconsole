@@ -146,6 +146,18 @@ The latest changes, newest first. Each links to the guide with the detail.
   items. See
   [Create Group(s) from Selection](fixture-manager.md#create-groups-from-selection).
 
+### Effects
+
+- **Matrix effects for pixel boxes.** Fourteen effects in a new **Matrix**
+  tab — bars, chevrons, ripples, rain, a checkerboard, sparkle, radar, an
+  iris, an equaliser, snakes, wipes, colour noise, a box-by-box chase and a
+  strobe — drawn across a whole run of boxes as one picture or in each box,
+  on the beat where it counts. Every one has a **white** setting for boxes
+  with white pixels (the Warmdance XL-450's): the white part of the colour
+  plus accents, follow brightness, accents only, RGB only or white only.
+  A pixel box in a look with no group is now drawn on as its own grid.
+  See [Matrix effects](effects.md#matrix-effects).
+
 ### Programming
 
 - **Palette folders hold any type.** A song's folder can hold its colours,

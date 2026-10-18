@@ -10,6 +10,7 @@ list(SORT SCRIPT_FILES)
 
 # Helpers several scripts share (effect.requires): not effects themselves.
 set(SCRIPT_LIBS
+    lib/matrix.js
     lib/wled.js
 )
 
