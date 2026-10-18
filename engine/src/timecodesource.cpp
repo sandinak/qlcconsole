@@ -90,6 +90,21 @@ void TimecodeSource::setSourceUniverse(qint32 universe)
     emit sourceUniverseChanged(m_sourceUniverse);
 }
 
+void TimecodeSource::setProductionUniverse(qint32 universe)
+{
+    if (universe < -2)
+        universe = -2;
+    if (universe == m_productionUniverse)
+        return;
+    m_productionUniverse = universe;
+    emit sourceUniverseChanged(effectiveUniverse());
+}
+
+qint32 TimecodeSource::effectiveUniverse() const
+{
+    return m_productionUniverse >= -1 ? m_productionUniverse : m_sourceUniverse;
+}
+
 bool TimecodeSource::loadXML(QXmlStreamReader &root)
 {
     if (root.name() != KXMLQLCTimecode)
@@ -163,7 +178,8 @@ TimecodeSource::Health TimecodeSource::health() const
 void TimecodeSource::updateTimeCode(quint32 universe, quint32 msPosition, uchar fps)
 {
     // Override filter: ignore everything but the chosen source universe.
-    if (m_sourceUniverse >= 0 && qint32(universe) != m_sourceUniverse)
+    const qint32 only = effectiveUniverse();
+    if (only >= 0 && qint32(universe) != only)
         return;
 
     // Sync-health measurement: inter-update interval (jitter) + advance rate.

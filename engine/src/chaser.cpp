@@ -67,6 +67,13 @@ Chaser::Chaser(Doc *doc)
 
 Chaser::~Chaser()
 {
+    // Deleted while running (a show closed with a list playing): the runner
+    // is a QObject child and would otherwise go in ~QObject, after m_steps,
+    // and read the steps it hands back (stepFadeOut) once they are gone --
+    // a use after free, found by ASan in the Show Tree's UI tests.
+    QMutexLocker runnerLocker(&m_runnerMutex);
+    delete m_runner;
+    m_runner = NULL;
 }
 
 QIcon Chaser::getIcon() const
@@ -505,7 +512,7 @@ void Chaser::setStepSubCues(int index, ChaserStep::SubCueMode mode)
 
 bool Chaser::isSubGoStep(int index) const
 {
-    return stepSubCues(index) == ChaserStep::SubGo && subCueChase(index) != NULL;
+    return stepSubCues(index) != ChaserStep::Auto && subCueChase(index) != NULL;
 }
 
 bool Chaser::hasSubGoSteps() const
@@ -667,6 +674,14 @@ bool Chaser::beginRestart()
     m_restarting = true;
     m_startupAction.m_action = ChaserNoAction;
     return true;
+}
+
+void Chaser::setSubCueFollow(bool follow)
+{
+    QMutexLocker runnerLocker(&m_runnerMutex);
+    m_subCueFollow = follow;
+    if (m_runner != NULL)
+        m_runner->setSubCueFollow(follow);
 }
 
 bool Chaser::isSubCueHeld() const
@@ -985,6 +1000,7 @@ void Chaser::createRunner(quint32 startTime)
     m_runner->setParent(this);
     m_runner->setExternalClock(m_showClocked);
     m_runner->setSubCueHeld(m_subCueHeld);
+    m_runner->setSubCueFollow(m_subCueFollow);
     m_runner->setAction(m_startupAction);
     m_startupAction.m_action = ChaserNoAction;
 }

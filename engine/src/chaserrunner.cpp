@@ -519,6 +519,7 @@ void ChaserRunner::clearRunningList(bool handOver)
     if (handOver == false)
     {
         stopHandedOverSteps();
+        stopHandedOverSteps();
         // Nothing new is coming: what a step change left goes now too.
         m_handedOverSteps = m_leavingSteps;
         m_leavingSteps.clear();
@@ -532,7 +533,7 @@ void ChaserRunner::clearRunningList(bool handOver)
         {
             // restore the original Function fade out time
             step->m_function->setOverrideFadeOutSpeed(stepFadeOut(step->m_index));
-            if (handOver && step->m_function->type() == Function::CollectionType)
+            if (handOver && (step->m_function->type() == Function::CollectionType || step->m_subCues))
             {
                 m_lastFunctionID = Function::invalidId();
                 m_leavingSteps.append(step);
@@ -544,6 +545,23 @@ void ChaserRunner::clearRunningList(bool handOver)
         delete step;
     }
     m_runnerSteps.clear();
+}
+
+/* What a step plays its cue with, for the hand-over: a Collection itself;
+   a chase held as sub-cues (a Show Tree cue with sub-cues) the Collection of
+   its sub-cue playing -- or, not started yet, the one it starts on. */
+static const Function *playingCollection(const Doc *doc, const Function *f)
+{
+    const Chaser *inner = qobject_cast<const Chaser *>(f);
+    if (inner == NULL || doc == NULL)
+        return f;
+    int index = inner->isRunning() ? inner->currentStepIndex() : -1;
+    if (index < 0)
+        index = inner->firstPlayableStep();
+    const QList<ChaserStep> steps = inner->steps();
+    if (index < 0 || index >= steps.count())
+        return NULL;
+    return doc->function(steps.at(index).fid);
 }
 
 bool ChaserRunner::sharesMembers(const Function *from, const Function *to)
@@ -570,9 +588,13 @@ void ChaserRunner::leaveSteps()
     const ChaserRunnerStep *now = m_runnerSteps.isEmpty() ? NULL : m_runnerSteps.last();
     foreach (ChaserRunnerStep *step, m_leavingSteps)
     {
-        if (now != NULL && sharesMembers(step->m_function, now->m_function))
+        if (now != NULL && sharesMembers(playingCollection(m_doc, step->m_function),
+                                         playingCollection(m_doc, now->m_function)))
         {
-            m_handedOverSteps.append(step);
+            if (step->m_subCues || now->m_subCues)
+                m_handedOverLater.append(step);
+            else
+                m_handedOverSteps.append(step);
             continue;
         }
         stopStepFunction(step, m_chaser->type() == Function::SequenceType);
@@ -588,7 +610,8 @@ void ChaserRunner::stopHandedOverSteps()
         stopStepFunction(step, m_chaser->type() == Function::SequenceType);
         delete step;
     }
-    m_handedOverSteps.clear();
+    m_handedOverSteps = m_handedOverLater;
+    m_handedOverLater.clear();
 }
 
 void ChaserRunner::stopStepFunction(ChaserRunnerStep *step, bool preserveAttributes)
@@ -602,7 +625,10 @@ void ChaserRunner::stopStepFunction(ChaserRunnerStep *step, bool preserveAttribu
     {
         Chaser *inner = qobject_cast<Chaser *>(step->m_function);
         if (inner != NULL)
+        {
             inner->setSubCueHeld(false);
+            inner->setSubCueFollow(false);
+        }
     }
 }
 
@@ -673,6 +699,18 @@ void ChaserRunner::startNewStep(int index, MasterTimer *timer, qreal mIntensity,
     Function *func = m_doc->function(step.fid);
     if (func == NULL)
         return;
+
+    // The same chase as a step just left (consecutive cues on one chase):
+    // it is stopped first, as before the hand-over held sub-cue chases, so
+    // it starts again here (beginRestart) rather than being stopped after.
+    foreach (ChaserRunnerStep *leaving, m_leavingSteps)
+    {
+        if (leaving->m_function != func)
+            continue;
+        m_leavingSteps.removeOne(leaving);
+        stopStepFunction(leaving, m_chaser->type() == Function::SequenceType);
+        delete leaving;
+    }
 
     ChaserRunnerStep *newStep = new ChaserRunnerStep();
     newStep->m_index = index;
@@ -771,7 +809,7 @@ void ChaserRunner::startNewStep(int index, MasterTimer *timer, qreal mIntensity,
        starts on its first playable step and holds there until a Sub GO.
        Its fades are its own steps', not this step's. */
     uint fadeIn = newStep->m_fadeIn, fadeOut = newStep->m_fadeOut;
-    Chaser *inner = step.subCues == ChaserStep::SubGo ? qobject_cast<Chaser *>(func) : NULL;
+    Chaser *inner = step.subCues != ChaserStep::Auto ? qobject_cast<Chaser *>(func) : NULL;
     if (inner != NULL)
     {
         newStep->m_subCues = true;
@@ -779,6 +817,7 @@ void ChaserRunner::startNewStep(int index, MasterTimer *timer, qreal mIntensity,
         // gets what's asked here, not the run being torn down.
         inner->beginRestart();
         inner->setSubCueHeld(true);
+        inner->setSubCueFollow(step.subCues == ChaserStep::SubGoFollow);
         ChaserAction first;
         first.m_action = ChaserSetStepIndex;
         first.m_stepIndex = inner->firstPlayableStep();
@@ -1079,8 +1118,9 @@ bool ChaserRunner::write(MasterTimer *timer, QList<Universe *> universes)
         // elapsed time: the ShowRunner steps them from the show/timecode clock,
         // and infinite-hold cues stay manual-GO barriers. Only explicit actions
         // (SetStepIndex / Next / Previous, handled above) change the step.
-        // Held as sub-cues, likewise: a step changes on a Sub GO.
-        if (m_externalClock == false && m_subCueHeld == false &&
+        // Held as sub-cues, likewise: a step changes on a Sub GO -- unless
+        // it auto-follows (SubGoFollow, a finite hold).
+        if (m_externalClock == false && (m_subCueHeld == false || m_subCueFollow) &&
             step->m_duration != Function::infiniteSpeed() &&
             ((m_chaser->tempoType() == Function::Time && step->m_elapsed >= step->m_duration) ||
              (m_chaser->tempoType() == Function::Beats && step->m_elapsedBeats >= step->m_duration)))
@@ -1090,7 +1130,7 @@ bool ChaserRunner::write(MasterTimer *timer, QList<Universe *> universes)
 
             m_lastFunctionID = step->m_function->type() == Function::SceneType ? step->m_function->id() : Function::invalidId();
             m_runnerSteps.removeOne(step);
-            if (step->m_function->type() == Function::CollectionType)
+            if (step->m_function->type() == Function::CollectionType || step->m_subCues)
             {
                 // Auto-follow into the next cue: hand over as GO does.
                 m_leavingSteps.append(step);

@@ -81,6 +81,20 @@ GO still goes on to cue 5.
 
 One level only: a sub-cue's own chase steps run on their own timing.
 
+- **From outside.** A sub-cue answers to its number: `/go 4.2`,
+  `/cue/4.2/start`, MSC GO 4.2 (a main cue numbered 4.2 wins) play its cue
+  first if it isn't the one playing, then it; `/load 4.2` puts it on
+  standby. **`/subgo`** and **`/subback`** step through the sub-cues of the
+  cue playing (QLab: plain Network cues). MSC has no Sub GO: a numbered GO
+  covers it.
+- **In the Show Tree,** sub-cues are made in the tree (+ Sub-cue) and can
+  **auto-follow**: see [Sub-cues](show-tree.md#sub-cues).
+- **The current production.** With Show Tree productions, a command with no
+  list goes to the **current production's** main list -- the same list the
+  footer GO, ⌘↩ and the Run tab play. See
+  [Productions](show-tree.md#productions) and
+  [The cue runner](show-tree.md#the-cue-runner).
+
 ## What a command does
 
 | Command | What happens |
@@ -89,6 +103,7 @@ One level only: a sub-cue's own chase steps run on their own timing.
 | **LOAD** | Puts a cue on standby: the next GO without a cue goes there. Nothing changes on stage. |
 | **STOP** | Stops the list. With a cue, only if that cue is the one playing. |
 | **BACK** | The cue before the one playing (past skipped ones). |
+| **SUB GO** / **SUB BACK** | The next / previous sub-cue of the cue playing; nothing at the ends. |
 | **PAUSE** / **RESUME** | Holds the list where it is, and carries on. |
 | **RESET** | Stops the list and forgets what's on standby. |
 | **ALL OFF** | Stops everything that's running — the panic button. |
@@ -112,6 +127,8 @@ One level only: a sub-cue's own chase steps run on their own timing.
 | `/cue/12.5/load`, `/load 12.5` | LOAD cue 12.5 |
 | `/cue/12.5/stop` | STOP, if cue 12.5 is playing |
 | `/stop`, `/pause`, `/resume`, `/reset`, `/back` | as named |
+| `/subgo`, `/subback` | SUB GO / SUB BACK |
+| `/go 4.2`, `/load 4.2` | a sub-cue by its number: GO it (its cue first), or LOAD it |
 | `/panic`, `/alloff` | ALL OFF |
 
 Put `/list/2` in front for cue list 2 (`/list/2/cue/5/start`), and

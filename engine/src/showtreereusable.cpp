@@ -412,7 +412,7 @@ quint32 ShowTreeController::insertReusableCue(quint32 listId, int afterIndex, qu
         Cue c;
         c.id = id;
         c.name = def.name;
-        c.number = numberForInsert(*l, afterIndex);
+        c.number = numberForInsert(*l, afterIndex, takenNumbers(ps, *l));
         c.note = def.note;
         c.fadeIn = def.fadeIn;
         c.fadeOut = def.fadeOut;
@@ -644,8 +644,8 @@ void ShowTreeController::applyDetachedLists()
 quint32 ShowTreeController::detachList(quint32 listId)
 {
     const CueList *list = cueList(listId);
-    if (list == nullptr || list->looks || !m_generatedChasers.contains(list->chaser)
-        || m_doc->function(list->chaser) == nullptr)
+    if (list == nullptr || list->looks || list->isSubCues() || subCueListsOf(listId) > 0
+        || !m_generatedChasers.contains(list->chaser) || m_doc->function(list->chaser) == nullptr)
         return Function::invalidId();
     const quint32 chaserId = list->chaser;
 

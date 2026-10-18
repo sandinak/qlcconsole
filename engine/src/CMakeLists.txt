@@ -51,6 +51,9 @@ add_library(${module_name} SHARED
     showtreecontroller.cpp showtreecontroller.h
     showtreeconvert.cpp
     showtreelooks.cpp
+    showtreeproductions.cpp
+    showtreesubcues.cpp
+    showtreerunner.cpp
     showtreereusable.cpp
     showtreemodel.cpp showtreemodel.h
     spreadlayer.cpp spreadlayer.h

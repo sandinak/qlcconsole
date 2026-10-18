@@ -128,6 +128,9 @@ public:
      */
     void setSubCueHeld(bool enable) { m_subCueHeld = enable; }
     bool isSubCueHeld() const { return m_subCueHeld; }
+    /** Held, but a step with a finite hold still goes on by itself after it
+     *  (ChaserStep::SubGoFollow: auto-follow sub-cues). */
+    void setSubCueFollow(bool enable) { m_subCueFollow = enable; }
 
     /**
      * Compute next step for manual fading
@@ -182,11 +185,16 @@ private:
     QList <ChaserRunnerStep *> m_runnerSteps;  //! Queue of the currently running steps
     QList <ChaserRunnerStep *> m_leavingSteps; //! Left by a step change, not yet let go of (leaveSteps())
     QList <ChaserRunnerStep *> m_handedOverSteps; //! Sharing with the new step: stopped on the next write
+    /** Handed over to (or from) a chase held as sub-cues: its Collection
+     *  claims what they share one write later than a Collection step does,
+     *  so these are stopped a write after that. */
+    QList <ChaserRunnerStep *> m_handedOverLater;
     quint32 m_startOffset;                  //! Start step offset time in milliseconds
     ChaserAction m_pendingAction;           //! Action to be performed on steps at the next write call
     int m_lastRunStepIdx;                   //! Index of the last step ran
     bool m_externalClock;                   //! If true, steps advance only on explicit action (show-clock driven)
     bool m_subCueHeld = false;              //! Played as sub-cues: steps change only on an action
+    bool m_subCueFollow = false;            //! ...except a finite hold, which follows on (SubGoFollow)
     ChaserAction m_pendingSubAction;        //! A Sub GO / Sub Back / jump to a sub-cue for the next write
     quint32 m_lastFunctionID;               //! ID of the last Function ran (Scene only)
     QElapsedTimer *m_roundTime;             //! Counts the time between steps

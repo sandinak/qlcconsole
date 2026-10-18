@@ -769,3 +769,123 @@ cp ~/git/qlcconsole/test-workspaces/DanceHysteria-0.5.qlcc /tmp/dh-answers.qlcc
 
 - 26 (deleting a palette cues use) — unanswered.
 - Unchanged: 1, 3, 4, 5, 8.
+
+---
+
+## P5-P7 on the build host (2026-10-18)
+
+Built unattended on **buildhost-qlcplus** (Debian 13, x86_64, Qt 6.8.2, GCC
+14, Ninja, `-Werror`), on `feat/show-tree` from 451ef02bf. **Not pushed**
+(no GitHub from that host): fetch the commits over SSH. Notes in
+SHOW_TREE_DESIGN.md **§10.17-10.19**, open questions **27-35**; help in
+`show-tree.md` (*Productions*, *Sub-cues*, *The cue runner*),
+`show-control.md`, `shortcuts.md`, `whats-new.md`.
+
+| Commit | What |
+|---|---|
+| 7d16d5a6d | **P5 productions:** the current production (= the show's main cue list seen from the tree, kept as one both ways, never on undo); per production a main list and a timecode source (`TimecodeSource::setProductionUniverse`); header switcher, production page, ▶ current / · main, footer "Dance ▸ Next:" + Production menu; `production … [current]`, `main` |
+| 132108f2f | **Fix (pre-existing):** `~Chaser` deletes a running runner before its steps -- a use-after-free on teardown that glibc reported as "double free or corruption" in showtreeview_test (intermittent, Linux only); found with an ASan build. Plus a test reading a Scene after undo deleted it |
+| 1b18f75bb | **P6 sub-cues:** a flagged list per cue (`CueList::subOf`, `<SubCues>`), tracking from the cue then each other, cue-only; baked as a held inner chaser (`SubGo`, new **`SubGoFollow`** for Auto-follow); the hand-over reaches through them (no re-fade); tree rows, + Sub-cue, Advance; `sub`, `follow`, `subgo`, `cue 4.2` |
+| cc4a510fd | **P7 cue runner:** `CueRunner` (Full / Compact / List, no state of its own: everything through `ShowControl::execute`); the **Run** tab (⇧⌘0, Space = GO); `VCCueRunner` + **Swap Widget**; `changeLine()` "what changes"; ShowControl SUB GO / SUB BACK (`/subgo`, `/subback`), sub-cues by number, LOAD of a sub-cue |
+| 652d901e6 | **Fix (P6 regression the P6 gate caught):** the same chase on two consecutive steps is stopped before it restarts (`subcues_test::consecutiveCuesOnOneChaseStartWhereAsked`) |
+| 88dbb3455 | Help, design §10.17-10.19 + open 27-35, TODO/DONE |
+| 043676070 | Test only: a list pointer held across an edit in showtreeplay_test (ASan) |
+
+**Decided here (deviations, §10):**
+- The current production is not a second "what GO plays": it *is* the
+  main cue list (ShowControl), seen from the tree. No current production =
+  exactly the behaviour before P5.
+- Sub-cues are a **flagged list** (as the Looks section), not a new node:
+  every cue operation works on them for free.
+- **Engine change in P6** (the design said none): `ChaserStep::SubGoFollow`,
+  needed for per-sub-cue Auto-follow; and the hand-over into / out of a
+  sub-cue chase waits one more write.
+- The runner keeps no state; LOAD of a sub-cue is ShowControl's
+  (`loadedSubCue`).
+
+### Gate results (real)
+
+Gate = fresh Release and Debug builds of a `git archive` of the commit in
+separate dirs, then `QT_QPA_PLATFORM=minimal xvfb-run -a ./unittest.sh ui
+<release>` and the DanceHysteria dry run.
+
+- **P5 (7d16d5a6d):** Release and Debug builds clean (the only warning is
+  the old `-Werror=reorder` note for C files). **unittest.sh: crashed** in
+  showtreeview_test (`double free or corruption` at
+  `inDesignTheEditShowsOverItsRunningList`, then hung in QtTest's stack
+  dump). Not P5's: an ASan build of that snapshot traced it to the
+  pre-existing Chaser teardown bug, fixed in 132108f2f; the whole
+  showtreeview_test was ASan-clean after it.
+- **P6 (1b18f75bb):** builds clean; **unittest.sh failed** at
+  `subcues_test::consecutiveCuesOnOneChaseStartWhereAsked` (my regression,
+  fixed in 652d901e6); dry run 0 channels differ.
+- **Final (88dbb3455, P5+P6+P7+fixes+docs): PASS** -- Release and Debug
+  clean; unittest.sh **90 engine, 59 of 59 UI test programs, all passed**
+  (623 s for the whole gate); dry run **0 channels differ** in all 18
+  compares; the show copy unchanged (sha256).
+- **Debug-build Show Tree tests** (HEAD 652d901e6+): showtree 136 + 1
+  opt-in skip, showtreeplay 23, cuehandover 11, chaser 24, chaserrunner 22,
+  showcontrol 21, subcues 14, showtreeview 62 + 1 skip, cuerunner 11,
+  appviews 14, helpbrowser 9 -- all pass.
+- **ASan** (Debug, `-fsanitize=address`): showtreeview_test, cuerunner_test,
+  subcues_test, cuehandover_test clean; showtreeplay_test found the test's
+  own dangling pointer (043676070); rerun with it: showtreeplay_test 23
+  and showtree_test 136 (+1 skip) **ASan-clean**.
+- **DanceHysteria:** `~/soak24` has no 0.5, so the newest there,
+  **DanceHysteria-0.3.qlcc**, copied to /tmp each run: New Chaser 8 (2 cues)
+  and Full Show (7 cues) imported, played against the chasers and converted
+  to tracking -- **0 channels differ** in every cue, both ways.
+- **No DMX out:** every test reads the universes in memory.
+- **Not run here:** the macOS `./check-all.sh` legs (Qt6, Qt6-Release,
+  Qt6-Werror). **Run them on the Mac before merging.**
+
+### What's left
+- Tracking sheet (and its sub-cue columns) -- it doesn't exist yet (35).
+- "Stage now" swatch strip in the runner (§6B).
+- Cue Runner VC widget's own MIDI / key inputs (32); Run-tab keys beyond
+  Space (31).
+- Import of a chaser's Sub GO steps as tree sub-cues; Convert to tracking
+  and Detach to plain chaser on a list with sub-cues (34).
+
+### Open for Branson (§10, 27-35)
+- 27. Switching the current production while a list runs: keep it running
+  (as built), ask, or stop it?
+- 28. No current production until one is chosen -- or the first made /
+  imported becomes current?
+- 29. A sub-cue's wait counts from the one before having **faded in** (its
+  hold); QLab counts from its start. Which?
+- 30. With sub-cues, GO plays 4.1 with 4.1's fade; the cue's own fade is
+  unused. Make the first sub-cue take the cue's fade?
+- 31. Run tab keys (↑/↓ STANDBY, Esc, a Sub GO key)?
+- 32. Inputs on the Cue Runner VC widget?
+- 33. Swap: a Cue List on the current main list becomes a runner following
+  "the current production" -- or pinned to that list?
+- 34. Convert / Detach / import with sub-cues -- build them through?
+- 35. Build the tracking sheet next?
+- Unchanged: 1, 3, 4, 5, 8; 26 (palette delete) is being built elsewhere.
+
+### How to try it on the Mac (on a COPY of a show)
+
+```sh
+cd ~/git/qlcconsole
+git fetch ssh://branson@192.168.1.245/home/branson/git/qlcconsole-showtree feat/show-tree:feat/show-tree
+git checkout feat/show-tree
+./check-all.sh                                   # the three macOS legs
+cp test-workspaces/DanceHysteria-0.5.qlcc /tmp/dh-p7.qlcc
+build/main/qlcconsole -o /tmp/dh-p7.qlcc
+```
+
+1. **Productions.** Import a chaser (a new production), make a second one
+   (+ Production, a list, two cues). Header **Production:** → pick one; ⌘↩
+   plays its main list; the footer says "<production> ▸ Next: …". Its page:
+   Main list, Timecode. Right-click a list → Play on GO.
+2. **Sub-cues.** Select a cue → **+ Sub-cue** twice; give 4.1 and 4.2 layers;
+   4.2's page → Advance: Auto-follow after 0.5 s. GO into the cue (4.1
+   plays), ⌥⌘↩ (or wait) for 4.2, GO on: the next cue starts from the cue's
+   own state. Type `sub "Strobe" subgo`, `cue 4.2`, `help sub`.
+3. **Run tab** (⇧⌘0): GO / Sub GO / Back / Sub Back / Pause / Stop, Space
+   = GO; click a cue (STANDBY), double-click (jump); the NEXT and SUB NEXT
+   lines say what changes; LIVE / DESIGN and the timecode in the header.
+4. **VC:** Add → New Cue Runner (properties: plays, Compact / List); put a
+   Cue List on a tree list → Edit → **Swap Widget**. GO from the footer and
+   from QLab (`/go`, `/subgo`, `/go 4.2`): every runner follows.

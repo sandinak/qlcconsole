@@ -90,6 +90,29 @@ const QList<ShowTreeCommand::Word> &ShowTreeCommand::words()
             t << w;
         };
         // navigate
+        add("production", "navigate", "production \"name\" [current] | production current | production none",
+            "Selects that production, or makes a new one. current makes it the current production: the "
+            "one GO, the footer, show control and the Cue Runner play (its main list). none: no current "
+            "production (GO plays the show's main cue list as set).",
+            { "production \"Corporate Gig\"", "production \"Corporate Gig\" current", "production current",
+              "production none" }, { "list", "main" });
+        add("main", "navigate", "main",
+            "Makes the selected cue list its production's main list: what GO plays while the production "
+            "is current.",
+            { "main" }, { "production", "list" });
+        add("sub", "subcues", "sub [+] [\"name\"] [follow <seconds> | subgo]",
+            "A new sub-cue of the selected cue (after the selected sub-cue): 4.1, 4.2... It starts from "
+            "what is on stage before it (4.1 from cue 4); its changes are cue-only (cue 5 starts from cue "
+            "4's own state). Sub GO plays it, or follow <seconds> makes it go on by itself that long after "
+            "the one before has faded in. The first plays with GO.",
+            { "sub \"Hit\"", "sub + \"Sweep\" follow 0.5", "sub \"Strobe\" subgo" }, { "follow", "subgo", "cue" });
+        add("follow", "subcues", "follow [<seconds>]",
+            "The selected sub-cue goes on by itself <seconds> after the sub-cue before has faded in "
+            "(Auto-follow; 0 when left out).",
+            { "follow 0.5", "follow" }, { "subgo", "sub" });
+        add("subgo", "subcues", "subgo",
+            "The selected sub-cue waits for Sub GO (⌥⌘↩).",
+            { "subgo" }, { "follow", "sub" });
         add("list", "navigate", "list \"name\"",
             "Selects that cue list, or makes a new Tracking one in the selected production.",
             { "list \"01-Opener\"" }, { "cue" });
@@ -350,7 +373,7 @@ QString ShowTreeCommand::helpText(const QString &w)
         { "navigate", tr("Navigate") }, { "build", tr("Build") }, { "looks", tr("Looks") },
         { "tracking", tr("Tracking") }, { "record", tr("Record and copy") },
         { "reuse", tr("Reuse, detach, convert") }, { "palettes", tr("Palettes") },
-        { "busking", tr("Looks (busking)") }, { "undo", tr("Undo") },
+        { "busking", tr("Looks (busking)") }, { "subcues", tr("Sub-cues") }, { "undo", tr("Undo") },
         { "help", tr("Help") } };
     QString out = tr("Every word (<code>help &lt;word&gt;</code> for one, with examples; Tab completes):");
     for (const auto &g : groups)
@@ -1344,6 +1367,80 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
         if (error.isEmpty() && ctx.layer != invalidId())
             res.layer = ctx.layer;
     }
+    else if (w0 == QLatin1String("production"))
+    {
+        // production "name" [current] | production current | production none
+        r.word();
+        QString nm = r.quoted();
+        bool makeCurrent = false, none = false;
+        if (nm.isNull())
+        {
+            const QString rest = r.src.mid(r.i).trimmed();
+            if (rest.compare(QLatin1String("current"), Qt::CaseInsensitive) == 0)
+                makeCurrent = true;
+            else if (rest.compare(QLatin1String("none"), Qt::CaseInsensitive) == 0)
+                none = true;
+            else if (rest.endsWith(QLatin1String(" current"), Qt::CaseInsensitive))
+            {
+                nm = rest.left(rest.length() - 8).trimmed();
+                makeCurrent = true;
+            }
+            else
+                nm = rest;
+            r.i = int(r.src.length());
+        }
+        else
+        {
+            const QString rest = r.src.mid(r.i).trimmed();
+            if (rest.compare(QLatin1String("current"), Qt::CaseInsensitive) == 0)
+                makeCurrent = true;
+            else if (!rest.isEmpty())
+                error = tr("production \"name\" [current]");
+            r.i = int(r.src.length());
+        }
+        if (none)
+        {
+            m_st->setCurrentProduction(invalidId());
+            res.message = tr("No current production: GO plays the main cue list as it is set.");
+        }
+        else if (error.isEmpty())
+        {
+            if (!nm.isEmpty())
+            {
+                quint32 have = invalidId();
+                for (const Production &p : m_st->productions())
+                    if (have == invalidId() && p.name.compare(nm, Qt::CaseInsensitive) == 0)
+                        have = p.id;
+                if (have == invalidId())
+                    have = m_st->addProduction(nm);
+                ctx.production = have;
+                ctx.list = invalidId();
+                ctx.cue = invalidId();
+            }
+            if (makeCurrent)
+            {
+                if (m_st->production(ctx.production) == nullptr)
+                    error = tr("Select a production first (production \"name\").");
+                else
+                {
+                    m_st->setCurrentProduction(ctx.production);
+                    res.message = tr("%1 is the current production.").arg(m_st->production(ctx.production)->name);
+                }
+            }
+            else if (nm.isEmpty())
+                error = tr("production \"name\" [current] | production current | production none");
+        }
+    }
+    else if (w0 == QLatin1String("main"))
+    {
+        r.word();
+        if (!r.atEnd())
+            error = tr("main -- then nothing more");
+        else if (m_st->cueList(ctx.list) == nullptr || m_st->isLooks(ctx.list))
+            error = tr("Select a cue list first (or: list \"name\").");
+        else
+            m_st->setMainList(ctx.list);
+    }
     else if (w0 == QLatin1String("list"))
     {
         r.word();
@@ -1441,6 +1538,15 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
         {
             r.word();
             const QString nm = r.quoted();
+            // From a sub-cue: the next main cue after its cue (sub makes
+            // another sub-cue).
+            if (list->isSubCues())
+                if (const CueList *main = m_st->listOfCue(list->subOf))
+                {
+                    ctx.cue = list->subOf;
+                    ctx.list = main->id;
+                    list = main;
+                }
             const int at = ctx.cue == invalidId() ? int(list->cues.count()) - 1 : list->indexOf(ctx.cue);
             ctx.cue = m_st->addCue(ctx.list, at, nm);
             error = ctx.cue == invalidId() ? tr("Couldn't add a cue.") : modeWords();
@@ -1449,8 +1555,39 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
         {
             r.word();
             const QString nm = r.quoted();
-            const int idx = indexOfNumber(*list, w1);
-            if (idx < 0)
+            int idx = indexOfNumber(*list, w1);
+            // A sub-cue by its number ("4.2"), when no cue has it (P6).
+            quint32 subId = invalidId(), subList = invalidId();
+            {
+                const CueList *main = list;
+                if (list->isSubCues())
+                    main = m_st->listOfCue(list->subOf);
+                if (main != nullptr && main != list)
+                    idx = indexOfNumber(*main, w1);
+                if (main != nullptr && idx < 0)
+                    for (const Production &p : m_st->productions())
+                        for (const CueList &s : p.lists)
+                            if (s.isSubCues() && main->indexOf(s.subOf) >= 0)
+                                for (int k = 0; k < s.cues.count(); ++k)
+                                    if (compareCueNumbers(m_st->cueNumber(s, k), w1) == 0)
+                                    {
+                                        subId = s.cues.at(k).id;
+                                        subList = s.id;
+                                    }
+                if (main != nullptr && main != list)
+                {
+                    ctx.list = main->id;
+                    list = main;
+                }
+            }
+            if (subId != invalidId())
+            {
+                ctx.list = subList;
+                ctx.cue = subId;
+                if (!nm.isNull() && nm != m_st->cue(subId)->name)
+                    m_st->renameNode(subId, nm);
+            }
+            else if (idx < 0)
                 ctx.cue = m_st->addCueNumbered(ctx.list, w1, nm);
             else
             {
@@ -1472,6 +1609,69 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
     else if (ctx.cue == invalidId() || list->indexOf(ctx.cue) < 0)
     {
         error = tr("Select a cue first (or: cue 1.0.0 \"name\").");
+    }
+    else if (w0 == QLatin1String("sub"))
+    {
+        // sub [+] ["name"] [follow <s> | subgo]: after the selected sub-cue,
+        // else at the end of the selected cue's.
+        r.word();
+        if (r.peek() == QLatin1String("+") || r.peek().toLower() == QLatin1String("new"))
+            r.word();
+        QString nm = r.quoted();
+        if (nm.isNull() && !r.atEnd() && r.peek().toLower() != QLatin1String("follow")
+            && r.peek().toLower() != QLatin1String("subgo"))
+            nm = r.word();
+        quint32 parent = ctx.cue, after = invalidId();
+        if (m_st->isSubCue(ctx.cue, &parent))
+            after = ctx.cue;
+        QString why;
+        const quint32 id = m_st->addSubCue(parent, nm.isNull() ? QString() : nm, after, &why);
+        if (id == invalidId())
+            error = why;
+        else
+        {
+            ctx.list = m_st->subCueList(parent);
+            ctx.cue = id;
+            ctx.layer = invalidId();
+            const QString w = r.word().toLower();
+            if (w == QLatin1String("follow"))
+            {
+                bool ok = true;
+                const QString secs = r.atEnd() ? QStringLiteral("0") : r.word();
+                const double s = secs.toDouble(&ok);
+                if (!ok || s < 0 || !r.atEnd())
+                    error = tr("follow <seconds>");
+                else
+                    m_st->setSubCueFollow(id, true, uint(qRound(s * 1000)));
+            }
+            else if (w == QLatin1String("subgo") && r.atEnd())
+                ;   // the default
+            else if (!w.isEmpty())
+                error = tr("sub [+] [\"name\"] [follow <seconds> | subgo]");
+        }
+    }
+    else if (w0 == QLatin1String("follow") || w0 == QLatin1String("subgo"))
+    {
+        r.word();
+        if (!m_st->isSubCue(ctx.cue))
+            error = tr("Select a sub-cue first (sub \"name\" makes one).");
+        else if (w0 == QLatin1String("subgo"))
+        {
+            if (!r.atEnd())
+                error = tr("subgo -- then nothing more");
+            else
+                m_st->setSubCueFollow(ctx.cue, false, 0);
+        }
+        else
+        {
+            bool ok = true;
+            const QString secs = r.atEnd() ? QStringLiteral("0") : r.word();
+            const double s = secs.toDouble(&ok);
+            if (!ok || s < 0 || !r.atEnd())
+                error = tr("follow <seconds>");
+            else
+                m_st->setSubCueFollow(ctx.cue, true, uint(qRound(s * 1000)));
+        }
     }
     else if (w0 == QLatin1String("reusable"))
     {
@@ -2290,8 +2490,21 @@ bool ShowTreeCommand::candidates(const QString &head, const Context &context, QS
     }
     if (w0 == QLatin1String("undo") || w0 == QLatin1String("redo") || w0 == QLatin1String("dup")
         || w0 == QLatin1String("name") || w0 == QLatin1String("paste") || w0 == QLatin1String("reusable")
-        || w0 == QLatin1String("unlink"))
+        || w0 == QLatin1String("unlink") || w0 == QLatin1String("main") || w0 == QLatin1String("subgo")
+        || w0 == QLatin1String("follow"))
         return true;
+    if (w0 == QLatin1String("sub"))
+    {
+        // sub [+] ["name"] [follow <s> | subgo]
+        r.word();
+        if (r.peek() == QLatin1String("+"))
+            r.word();
+        if (r.src.mid(r.i).trimmed().startsWith(QLatin1Char('"')))
+            r.quoted();
+        if (r.atEnd())
+            *out << QStringLiteral("follow") << QStringLiteral("subgo");
+        return true;
+    }
     if (w0 == QLatin1String("use"))
     {
         r.word();
@@ -2497,6 +2710,24 @@ bool ShowTreeCommand::candidates(const QString &head, const Context &context, QS
         r.word();
         if (r.atEnd())
             *out = listNames(context);
+        return true;
+    }
+    if (w0 == QLatin1String("production"))
+    {
+        r.word();
+        if (r.atEnd())
+        {
+            *out << QStringLiteral("current") << QStringLiteral("none");
+            for (const Production &p : m_st->productions())
+                *out << p.name;
+            return true;
+        }
+        if (r.src.mid(r.i).trimmed().startsWith(QLatin1Char('"')))
+        {
+            r.quoted();
+            if (r.atEnd())
+                *out << QStringLiteral("current");
+        }
         return true;
     }
     if (w0 == QLatin1String("include"))

@@ -2543,3 +2543,17 @@ QHash<quint32, QString> Doc::effectFailures() const
         return QHash<quint32, QString>();
     return m_effectScriptRunner->failures();
 }
+
+/*****************************************************************************
+ * Show Tree: the current production (forwarders)
+ *****************************************************************************/
+
+quint32 Doc::currentProduction() const
+{
+    return m_showTree->currentProduction();
+}
+
+bool Doc::setCurrentProduction(quint32 productionId)
+{
+    return m_showTree->setCurrentProduction(productionId);
+}

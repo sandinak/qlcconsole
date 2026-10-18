@@ -59,6 +59,8 @@
 #include <QRegularExpression>
 
 #include "showtreecontroller.h"
+#include "showcontrol.h"
+#include "timecodesource.h"
 #include "paletteops.h"
 #include "virtualconsole.h"
 #include "vcbutton.h"
@@ -308,6 +310,8 @@ void ShowTreeView_Test::groupsDroppedOnALayerJoinIt()
     QCOMPARE(scene->fixtureGroups().count(), 3);
     QCOMPARE(view.currentId(), l1);
     QVERIFY(st->undoText().startsWith("Add USTs, Spots to layer"));
+    // Undo deletes that scene (nothing plays it then): keep its id only.
+    const quint32 sceneId = scene->id();
 
     // Undo, and it is Towers alone again.
     view.slotUndo();
@@ -315,7 +319,7 @@ void ShowTreeView_Test::groupsDroppedOnALayerJoinIt()
 
     // An opaque layer takes no groups.
     Target fn;
-    fn.function = scene->id();
+    fn.function = sceneId;
     const quint32 opaque = st->addLayer(c1, fn);
     QVERIFY(!view.acceptsDrop(c1, opaque, one.data()));
 }
@@ -4376,6 +4380,226 @@ void ShowTreeView_Test::looksAreOneUndoStepAndTyped()
     // vcpage with no Virtual Console: said, nothing made.
     QVERIFY(!view.runCommand("vcpage"));
     QVERIFY(view.commandMessage().contains("No Virtual Console"));
+}
+
+/* P5: the header's switcher sets the current production (what GO plays),
+   the tree marks it and its main list, the production page sets its main
+   list and timecode source (each one undo step), the context menu offers
+   Make current / Make main list. */
+void ShowTreeView_Test::theProductionSwitcherAndPage()
+{
+    FixtureGroup *a = group("A", 0, 2);
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 pa = st->addProduction("Dance");
+    const quint32 la = st->addCueList(pa, "Full Show");
+    const quint32 ca = st->addCue(la, -1, "One");
+    Target t;
+    t.groups << a->id();
+    st->setLayerLook(ca, st->addLayer(ca, t), st->lookForPalette(full));
+    const quint32 pb = st->addProduction("Corporate");
+    const quint32 lb = st->addCueList(pb, "Keynote");
+    st->addCue(lb, -1, "Walk-in");
+    const quint32 lb2 = st->addCueList(pb, "Awards");
+    st->addCue(lb2, -1, "Fanfare");
+
+    ShowTreeView view(nullptr, m_doc);
+    QComboBox *sw = view.findChild<QComboBox *>("stProduction");
+    QVERIFY(sw != nullptr);
+    QCOMPARE(sw, view.productionSwitcher());
+    QCOMPARE(sw->count(), 3);                       // none + two
+    QCOMPARE(sw->currentIndex(), 0);
+
+    // Choose Corporate: current, GO plays its first list.
+    const int at = sw->findData(pb);
+    sw->setCurrentIndex(at);
+    emit sw->activated(at);
+    QCOMPARE(st->currentProduction(), pb);
+    QCOMPARE(m_doc->showControl()->mainCueList(), st->cueList(lb)->chaser);
+    QTreeWidget *tree = view.tree();
+    QTreeWidgetItem *prow = nullptr, *mainRow = nullptr;
+    for (QTreeWidgetItemIterator it(tree); *it; ++it)
+    {
+        if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::ProductionNode
+            && (*it)->data(0, ShowTreeView::IdRole).toUInt() == pb)
+            prow = *it;
+        if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::ListNode
+            && (*it)->data(0, ShowTreeView::IdRole).toUInt() == lb)
+            mainRow = *it;
+    }
+    QVERIFY(prow != nullptr && mainRow != nullptr);
+    QVERIFY(prow->text(1).contains("current"));
+    QVERIFY(mainRow->text(1).contains("main"));
+
+    // The production page.
+    QVERIFY(view.selectNode(pb));
+    QCOMPARE(view.findChild<QStackedWidget *>("stInspector")->currentWidget(),
+             view.findChild<QPushButton *>("stProdCurrent")->parentWidget());
+    QVERIFY(view.findChild<QPushButton *>("stProdCurrent")->text().contains("Current"));
+    QComboBox *mainList = view.findChild<QComboBox *>("stProdMainList");
+    QCOMPARE(mainList->count(), 2);
+    const int awards = mainList->findData(lb2);
+    mainList->setCurrentIndex(awards);
+    emit mainList->activated(awards);
+    QCOMPARE(st->mainList(pb), lb2);
+    QCOMPARE(m_doc->showControl()->mainCueList(), st->cueList(lb2)->chaser);
+    QCOMPARE(st->undoText(), QString("Main list"));
+
+    QComboBox *tc = view.findChild<QComboBox *>("stProdTimecode");
+    QCOMPARE(tc->itemData(0).toInt(), -2);          // the show's setting first
+    const int any = tc->findData(-1);
+    tc->setCurrentIndex(any);
+    emit tc->activated(any);
+    QCOMPARE(st->production(pb)->timecode, -1);
+    QCOMPARE(m_doc->timecodeSource()->effectiveUniverse(), -1);
+    QVERIFY(st->undo());
+    QCOMPARE(st->production(pb)->timecode, -2);
+
+    // Make current from the page; the switcher follows.
+    QVERIFY(view.selectNode(pa));
+    view.findChild<QPushButton *>("stProdCurrent")->click();
+    QCOMPARE(st->currentProduction(), pa);
+    QCOMPARE(sw->currentData().toUInt(), pa);
+
+    // The context menu of a list of the other production offers Play on GO.
+    {
+        QStringList names;
+        ModalCloser closer([&](QWidget *w) {
+            if (QMenu *m = qobject_cast<QMenu *>(w))
+                for (QAction *act : m->actions())
+                    if (act->objectName() == QLatin1String("stPlayOnGo"))
+                    {
+                        names << act->objectName();
+                        m->close();
+                        act->trigger();
+                        return true;
+                    }
+            return false;
+        });
+        QVERIFY(view.selectNode(lb));
+        QTreeWidgetItem *row = tree->currentItem();
+        QMetaObject::invokeMethod(&view, "slotTreeContextMenu",
+                                  Q_ARG(QPoint, tree->visualItemRect(row).center()));
+        QCOMPARE(names, QStringList({ "stPlayOnGo" }));
+    }
+    QCOMPARE(st->currentProduction(), pb);
+    QCOMPARE(st->mainList(pb), lb);
+    QCOMPARE(sw->currentData().toUInt(), pb);
+
+    // Typed.
+    QVERIFY(view.runCommand("production none"));
+    QCOMPARE(st->currentProduction(), invalidId());
+    QCOMPARE(sw->currentIndex(), 0);
+}
+
+/* P6 (§3C): a cue's sub-cues sit under it in the tree (↳ 2.1 · with GO,
+   Sub GO, auto 0.5s), each a cue page of its own with Advance instead of a
+   mode; + Sub-cue (header, context menu, the cue page's link) is one undo
+   step each; what tracks from a sub-cue says "from sub-cue 2.1"; Design
+   previews the selected sub-cue's full state. */
+void ShowTreeView_Test::subCuesInTheTree()
+{
+    FixtureGroup *a = group("A", 0, 1);
+    FixtureGroup *b = group("B", 1, 1);
+    const quint32 half = dimmer(127, "Half");
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Dance");
+    const quint32 list = st->addCueList(prod, "Song");
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 c2 = st->addCue(list, 0, "Two");
+    Target ta, tb;
+    ta.groups << a->id();
+    tb.groups << b->id();
+    st->setTargetLook(c1, ta, st->lookForPalette(half));
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 700);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    ModalCloser closer;
+
+    // + Sub-cue with cue 1 selected: 1.1, one undo step.
+    QVERIFY(view.selectNode(c1));
+    QToolButton *plus = view.findChild<QToolButton *>("stNewSubCue");
+    QVERIFY(plus != nullptr && plus->isEnabled());
+    const QString before = treeState(m_doc);
+    plus->click();
+    const quint32 s1 = view.currentId();
+    QVERIFY(st->isSubCue(s1));
+    QCOMPARE(st->undoText(), QString("New sub-cue"));
+    QVERIFY(st->undo());
+    QCOMPARE(treeState(m_doc), before);
+    QVERIFY(st->redo());
+    QVERIFY(view.selectNode(s1));
+    QCOMPARE(view.currentKind(), ShowTreeView::CueNode);
+    // Its row: under cue 1, "↳ 1.1", with GO.
+    QTreeWidgetItem *row = view.tree()->currentItem();
+    QCOMPARE(row->parent()->data(0, ShowTreeView::IdRole).toUInt(), c1);
+    QVERIFY(row->text(0).startsWith(QString::fromUtf8("↳ 1.1")));
+    QVERIFY(row->text(1).contains("with GO"));
+
+    // Another from the selected sub-cue: after it.
+    plus->click();
+    const quint32 s2 = view.currentId();
+    QVERIFY(s2 != s1 && st->isSubCue(s2));
+    const CueList *subs = st->cueList(st->subCueList(c1));
+    QCOMPARE(subs->cues.count(), 2);
+    QCOMPARE(subs->cues.at(1).id, s2);
+    QVERIFY(st->setTargetLook(s1, tb, st->lookForPalette(full)));
+
+    // The page: Advance (not mode / base / hold); Auto-follow is one step.
+    QVERIFY(view.selectNode(s2));
+    QComboBox *adv = view.findChild<QComboBox *>("stSubCueAdvance");
+    QVERIFY(adv->isVisibleTo(&view));
+    QVERIFY(!view.findChild<QComboBox *>("stCueMode")->isVisibleTo(&view));
+    QDoubleSpinBox *wait = view.findChild<QDoubleSpinBox *>("stSubCueWait");
+    wait->setValue(0.5);
+    adv->setCurrentIndex(1);
+    emit adv->activated(1);
+    QVERIFY(st->cue(s2)->follow);
+    QCOMPARE(st->cue(s2)->wait, 500u);
+    QCOMPARE(st->undoText(), QString("Auto-follow"));
+    QTreeWidgetItem *r2 = view.tree()->currentItem();
+    QVERIFY(r2->text(1).contains("auto 0.5s"));
+    // What 1.2 carries from 1.1: "from sub-cue 1.1"; from cue 1: tracked.
+    bool fromSub = false, fromCue = false;
+    for (int i = 0; i < r2->childCount(); ++i)
+    {
+        fromSub = fromSub || r2->child(i)->text(1) == QString("from sub-cue 1.1");
+        fromCue = fromCue || r2->child(i)->text(1) == QString("tracked from 1 One");
+    }
+    QVERIFY(fromSub);
+    QVERIFY(fromCue);
+
+    // A main cue's page lists its sub-cues; + Cue from a sub-cue makes a
+    // main cue after its cue.
+    QVERIFY(view.selectNode(c1));
+    QLabel *line = view.findChild<QLabel *>("stCueSubCues");
+    QVERIFY(line->isVisibleTo(&view));
+    QVERIFY(line->text().contains("1.1"));
+    QVERIFY(view.selectNode(s2));
+    view.findChild<QToolButton *>("stNewCue")->click();
+    const quint32 made = view.currentId();
+    QVERIFY(!st->isSubCue(made));
+    QCOMPARE(st->listOfCue(made)->id, list);
+    QCOMPARE(st->cueList(list)->indexOf(made), 1);
+    QCOMPARE(st->cueList(list)->indexOf(c2), 2);
+
+    // Design: selecting a sub-cue previews its full state (A from cue 1, B).
+    m_doc->setMode(Doc::Design);
+    QVERIFY(view.selectNode(s1));
+    QCOMPARE(st->previewedCue(), s1);
+    const QHash<quint32, uchar> dmx = settleDmx(m_doc);
+    QCOMPARE(int(dmx.value(0)), 127);
+    QCOMPARE(int(dmx.value(1)), 255);
+    m_doc->setMode(Doc::Operate);
+
+    // Typed, and help.
+    QVERIFY(view.runCommand("sub \"Strobe\" subgo"));
+    QCOMPARE(st->cueList(st->subCueList(c1))->cues.count(), 3);
+    QVERIFY(view.runCommand("help sub"));
+    view.hide();
 }
 
 QTEST_MAIN(ShowTreeView_Test)

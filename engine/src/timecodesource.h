@@ -92,6 +92,17 @@ public:
     qint32 sourceUniverse() const;
     void setSourceUniverse(qint32 universe);
 
+    /** The current Show Tree production's own source (P5): while one is
+     *  set it is followed instead of sourceUniverse() -- a universe, or -1
+     *  for any -- and the show's own setting is kept for when it is gone.
+     *  -2: none (the show's setting applies). Not saved here: the
+     *  production carries it. */
+    qint32 productionUniverse() const { return m_productionUniverse; }
+    void setProductionUniverse(qint32 universe);
+    /** The universe timecode is taken from now (-1: any): the production's
+     *  when it has one, else the show's. */
+    qint32 effectiveUniverse() const;
+
     /** The override is the show's: a universe of its patch. Saved with the
      *  workspace as <Timecode Source="N"/> (nothing when it's "any");
      *  Doc drops a loaded one that names no universe of the show. */
@@ -144,6 +155,7 @@ private:
     int m_fps;
     bool m_running;
     qint32 m_sourceUniverse;
+    qint32 m_productionUniverse = -2;
     qint32 m_lastUniverse;
     QTimer *m_watchdog;
 

@@ -42,6 +42,7 @@
 #include "functionmanager.h"
 #include "programmingmanager.h"
 #include "showtreecontroller.h"
+#include "cuerunner.h"
 #include "showtreeview.h"
 #include "inputoutputmap.h"
 #include "inputpatch.h"
@@ -483,7 +484,8 @@ void App::init()
             { QStringLiteral("Show Tree"),       QStringLiteral("show-tree.md") },
             { QStringLiteral("Shows"),           QStringLiteral("shows.md") },
             { QStringLiteral("Virtual Console"), QStringLiteral("getting-started.md#running-the-show") },
-            { QStringLiteral("Simple Desk"),     QStringLiteral("getting-started.md#running-the-show") } };
+            { QStringLiteral("Simple Desk"),     QStringLiteral("getting-started.md#running-the-show") },
+            { QStringLiteral("Run"),             QStringLiteral("show-tree.md#the-cue-runner") } };
         if (!w->property("helpTopic").isValid())
             w->setProperty("helpTopic", guide.value(text, QStringLiteral("getting-started.md")));
         // Stored as tab data (travels with the tab through detach/reattach's
@@ -591,6 +593,13 @@ void App::init()
     addTab(w, QIcon(":/virtualconsole.png"), tr("Virtual Console"));
     w = new SimpleDesk(m_tab, m_doc);
     addTab(w, QIcon(":/slidermatrix.png"), tr("Simple Desk"));
+    /* The cue runner's full-screen home (SHOW_TREE_DESIGN.md §6B, D26):
+       the operator's view -- big targets, keyboard GO, nothing to bump. It
+       follows the current production; the Cue Runner VC widget is its
+       other home. */
+    w = new CueRunner(m_doc, CueRunner::Full, m_tab);
+    w->setObjectName(QStringLiteral("runTab"));
+    addTab(w, QIcon(":/chaser.png"), tr("Run"));
     /* Functions: no tab ("I keep hitting it by mistake instead of
        Programming"), but there to open from the Window menu, in a window of
        its own. Closing that window puts it away again. */
@@ -2219,7 +2228,8 @@ void App::initMenuBar()
                                               m_tabOriginals.at(i).first);
         // Ctrl+Shift+<n> (⇧⌘n on macOS): the plain Ctrl+<n> row is taken by
         // the Function Manager's "add function" shortcuts.
-        jump->setShortcut(QKeySequence(QString("CTRL+SHIFT+%1").arg(i + 1)));
+        // The tenth (Run) is ⇧⌘0.
+        jump->setShortcut(QKeySequence(QString("CTRL+SHIFT+%1").arg((i + 1) % 10)));
         /* Resolve by LABEL, not by construction order. Detaching a view calls
            removeTab(), so every index after it shifts and a raw
            setCurrentIndex(i) lands on the wrong page -- or on nothing at all
@@ -5463,6 +5473,9 @@ void App::slotUpdateStandby()
     const QString sub = standbySubCueText(list);
     if (!sub.isEmpty())
         text = sub + QStringLiteral(" \u00b7 ") + text;
+    // The Show Tree's current production (P5): whose GO this is.
+    if (const ShowTree::Production *prod = m_doc->showTree()->production(m_doc->currentProduction()))
+        text = prod->name + QStringLiteral(" \u25b8 ") + text;
     if (m_statusStandby->text() != text)
         m_statusStandby->setText(text);
     m_statusStandby->show();
@@ -5526,6 +5539,27 @@ void App::slotFillStandbyMenu()
         });
         a->setCheckable(true);
         a->setChecked(i == sc->standbyStep(list));
+    }
+    // Which production GO plays (P5): the same choice as the Show Tree's
+    // switcher.
+    ShowTreeController *tree = m_doc->showTree();
+    if (!tree->productions().isEmpty())
+    {
+        QMenu *prods = menu->addMenu(tr("Production"));
+        QActionGroup *group = new QActionGroup(prods);
+        QList<QPair<quint32, QString>> choices { { ShowTree::invalidId(), tr("None (the main cue list)") } };
+        for (const ShowTree::Production &p : tree->productions())
+            choices << qMakePair(p.id, p.name);
+        for (const auto &c : choices)
+        {
+            const quint32 pid = c.first;
+            QAction *a = prods->addAction(c.second, this, [tree, pid]() {
+                tree->setCurrentProduction(pid);
+            });
+            a->setCheckable(true);
+            a->setChecked(pid == tree->currentProduction());
+            group->addAction(a);
+        }
     }
     menu->addSeparator();
     const quint32 id = list->id();

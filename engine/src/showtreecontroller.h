@@ -87,6 +87,98 @@ public:
     ShowTree::LineAimTest lineAimTest() const;
 
     /************************************************************************
+     * Productions (P5): which one is current -- what GO, the footer, VC
+     * and show control play -- its main list and timecode source
+     ************************************************************************/
+public:
+    /** The current production (invalid: none -- GO plays the show's main
+     *  cue list, whatever it is). Saved with the show, not an undo step:
+     *  what GO plays is the operator's choice, not an edit. */
+    quint32 currentProduction() const { return m_current; }
+    /** Make @a productionId current: its main list's chaser becomes the
+     *  show's main cue list (ShowControl), so the footer GO, ⌘↩, show
+     *  control and every Cue Runner following "the current production" play
+     *  it, and its timecode source is followed. Invalid: none. A running
+     *  list is not stopped. False: no such production. */
+    bool setCurrentProduction(quint32 productionId);
+    /** The list a production plays while current: its main list if that is
+     *  still one of its cue lists, else its first (invalid: none). Never a
+     *  Looks section or a sub-cue list. */
+    quint32 mainList(quint32 productionId) const;
+    /** Make @a listId its production's main list: one undo step. When the
+     *  production is current, GO plays it from now on. */
+    bool setMainList(quint32 listId);
+    /** A production's timecode source while current: a universe, -1 any,
+     *  -2 the show's own (Doc's TimecodeSource setting). One undo step. */
+    bool setProductionTimecode(quint32 productionId, qint32 universe);
+    /** The production whose cue list plays as chaser @a chaserId (invalid:
+     *  none, or not a tree chaser). @a listId: that list. */
+    quint32 productionOfChaser(quint32 chaserId, quint32 *listId = nullptr) const;
+    /** The cue lists of a production that play (no Looks, no sub-cues), in
+     *  order. */
+    QList<quint32> playableLists(quint32 productionId) const;
+
+signals:
+    /** The current production (or its main list) changed. */
+    void currentProductionChanged();
+
+private slots:
+    void slotMainCueListChanged(quint32 chaserId);
+
+private:
+    /** After a bake or an edit: the current production's main list's chaser
+     *  is the show's main cue list. */
+    void syncCurrentProduction();
+    /** Doc's timecode source follows the current production's. */
+    void applyProductionTimecode();
+    quint32 m_current = 0xFFFFFFFF;
+    bool m_settingMain = false;
+
+    /************************************************************************
+     * Sub-cues (P6, §3C, D9, D25): a cue's sub-cues 4.1, 4.2... are a list of
+     * their own (CueList::subOf), so every cue operation works on them
+     ************************************************************************/
+public:
+    /** Cue @a cueId's list of sub-cues (invalid: it has none). */
+    quint32 subCueList(quint32 cueId) const;
+    /** Whether @a cueId is a sub-cue; @a parentCue: its cue. */
+    bool isSubCue(quint32 cueId, quint32 *parentCue = nullptr) const;
+    /** A new sub-cue of cue @a cueId after sub-cue @a afterId (invalid: at
+     *  the end), numbered <cue>.<n> (D23 under the cue). Its list is made
+     *  in the same undo step when the cue has none. Refused (invalid, @a
+     *  why) for a look, a sub-cue (one level) or a cue that isn't there. */
+    quint32 addSubCue(quint32 cueId, const QString &name, quint32 afterId = ShowTree::invalidId(),
+                      QString *why = nullptr);
+    /** A sub-cue's advance: Auto-follow @a wait ms after the one before has
+     *  faded in, or (false) on Sub GO. One undo step. */
+    bool setSubCueFollow(quint32 subCueId, bool follow, uint wait);
+    /** The cue's number as show control reads it: its own, else its
+     *  position; a sub-cue's "4.1" (its cue's and its own). */
+    QString cueNumber(const ShowTree::CueList &list, int index) const;
+    /** The full numbers of the sub-cues of @a list's cues ("4.1", "4.2"):
+     *  taken, so a new cue never gets one (D23). In @a ps. */
+    static QStringList takenNumbers(const QList<ShowTree::Production> &ps, const ShowTree::CueList &list);
+    /** How many of @a listId's cues have sub-cues. */
+    int subCueListsOf(quint32 listId) const;
+
+    /************************************************************************
+     * The cue runner (P7, §6B): what it reads of the tree
+     ************************************************************************/
+public:
+    /** The cue (or sub-cue) step @a step (and sub-cue @a subStep, -1:
+     *  none) of a list's chaser plays (invalid: none). */
+    quint32 cueOfStep(quint32 listId, int step, int subStep = -1) const;
+    /** Cue @a cueId resolved as it plays (tracked, included, its own; a
+     *  sub-cue from its cue). False: no such cue. */
+    bool resolvedCue(quint32 cueId, ShowTree::ResolvedCue *out) const;
+    /** What changes on stage going from cue @a fromCue to cue @a toCue
+     *  (§6B "what changes"): per layer, only the attributes that differ --
+     *  "Towers → Red, spread +5, gobo Breakup; BackStage in → Green,
+     *  Intensity 45%; USTs out". @a fromCue invalid: from dark. Empty: no
+     *  change (or no such cue). */
+    QString changeLine(quint32 fromCue, quint32 toCue) const;
+
+    /************************************************************************
      * Group sets (the Library's "Make set", §1)
      ************************************************************************/
 public:

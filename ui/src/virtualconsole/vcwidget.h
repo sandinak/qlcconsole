@@ -140,7 +140,8 @@ public:
         AudioTriggersWidget,
         AnimationWidget,
         ClockWidget,
-        ShowControlWidget
+        ShowControlWidget,
+        CueRunnerWidget     //!< the Show Tree's cue runner (P7)
     };
 
 public:
