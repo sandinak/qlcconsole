@@ -89,6 +89,10 @@ private slots:
     void namedLayersShowWhatTheyHold();
     void editSeveralLayersAtOnce();
 
+    // P4 (2026-10-17): reusable layers and cues, Detach a list, Convert
+    void reusablesInTheTreeAndTheLibrary();
+    void convertAndDetachFromTheListPage();
+
 private:
     quint32 dimmer(int level, const QString &name);
     quint32 colour(const QColor &c, const QString &name);

@@ -76,6 +76,11 @@
 #include "chaser.h"
 #include "doc.h"
 
+#include "virtualconsole.h"
+#include "vccuelist.h"
+#include "vcbutton.h"
+#include "vcframe.h"
+
 using namespace ShowTree;
 
 #define SETTINGS_PINNED QStringLiteral("showtree/pinned")
@@ -338,11 +343,12 @@ public:
 protected:
     QMimeData *mimeData(const QList<QTreeWidgetItem *> &items) const override
     {
-        QByteArray grp, fx, pal, fn, set, tgt;
+        QByteArray grp, fx, pal, fn, set, tgt, reu;
         QDataStream gs(&grp, QIODevice::WriteOnly), xs(&fx, QIODevice::WriteOnly),
                     ps(&pal, QIODevice::WriteOnly), fs(&fn, QIODevice::WriteOnly),
-                    ss(&set, QIODevice::WriteOnly), ts(&tgt, QIODevice::WriteOnly);
-        int g = 0, x = 0, p = 0, f = 0, t = 0, a = 0;
+                    ss(&set, QIODevice::WriteOnly), ts(&tgt, QIODevice::WriteOnly),
+                    rs(&reu, QIODevice::WriteOnly);
+        int g = 0, x = 0, p = 0, f = 0, t = 0, a = 0, u = 0;
         for (QTreeWidgetItem *item : items)
         {
             const quint32 id = item->data(0, ShowTreeView::IdRole).toUInt();
@@ -354,10 +360,11 @@ protected:
                 case ShowTreeView::LibFunction: fs << id; ++f; break;
                 case ShowTreeView::LibSet: ss << id; ++t; break;
                 case ShowTreeView::LibTarget: ts << id; ++a; break;
+                case ShowTreeView::LibReusable: rs << id; ++u; break;
                 default: break;
             }
         }
-        if (g + x + p + f + t + a == 0)
+        if (g + x + p + f + t + a + u == 0)
             return nullptr;
         QMimeData *mime = new QMimeData();
         if (g > 0)
@@ -372,6 +379,8 @@ protected:
             mime->setData(QLatin1String(ShowTreeView::setMimeType()), set);
         if (a > 0)
             mime->setData(QLatin1String(ShowTreeView::targetMimeType()), tgt);
+        if (u > 0)
+            mime->setData(QLatin1String(ShowTreeView::reusableMimeType()), reu);
         return mime;
     }
 };
@@ -855,6 +864,31 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_listInfo->setWordWrap(true);
         f->addRow(m_listInfo);
         connect(m_listMode, QOverload<int>::of(&QComboBox::activated), this, &ShowTreeView::slotListModeChanged);
+        // P4: an imported list made tracking; the list out of the tree.
+        QWidget *row = new QWidget(m_listPage);
+        QHBoxLayout *h = new QHBoxLayout(row);
+        h->setContentsMargins(0, 0, 0, 0);
+        m_listConvert = new QPushButton(tr("Convert to tracking…"), row);
+        m_listConvert->setObjectName("stListConvert");
+        m_listConvert->setToolTip(tr("Makes the list Tracking without changing what any cue plays: values a "
+                                     "cue only repeats go, \"includes the cue before\" becomes tracking. Shows "
+                                     "what changes first; one undo step."));
+        m_listDetach = new QPushButton(tr("Detach to plain chaser…"), row);
+        m_listDetach->setObjectName("stListDetach");
+        m_listDetach->setToolTip(tr("The list's chaser and its cues' collections become ordinary functions you "
+                                    "edit in the Functions window; the list leaves the Show Tree. One undo step."));
+        h->addWidget(m_listConvert);
+        h->addWidget(m_listDetach);
+        h->addStretch(1);
+        f->addRow(row);
+        connect(m_listConvert, &QPushButton::clicked, this, [this]() {
+            if (currentKind() == ListNode)
+                convertListToTracking(currentId());
+        });
+        connect(m_listDetach, &QPushButton::clicked, this, [this]() {
+            if (currentKind() == ListNode)
+                detachListToChaser(currentId());
+        });
     }
     m_pages->addWidget(m_listPage);
 
@@ -897,6 +931,13 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         f->addRow(tr("Number"), m_cueNumber);
         f->addRow(tr("Name"), m_cueName);
         f->addRow(tr("Note"), m_cueNote);
+        // P4: a use of a reusable cue (Unlink here, Used by), or Make reusable.
+        m_cueReuse = new QLabel(inner);
+        m_cueReuse->setObjectName("stCueReuse");
+        m_cueReuse->setWordWrap(true);
+        m_cueReuse->setTextFormat(Qt::RichText);
+        connect(m_cueReuse, &QLabel::linkActivated, this, &ShowTreeView::reuseLinkActivated);
+        f->addRow(tr("Reuse"), m_cueReuse);
         f->addRow(tr("Mode"), m_cueMode);
         m_cueBase = new QCheckBox(tr("The list's base cue (released layers go back to it)"), inner);
         m_cueBase->setObjectName("stCueBase");
@@ -1118,6 +1159,12 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
             }
         });
         v->addWidget(m_layerContents);
+        m_layerReuse = new QLabel(m_layerPage);
+        m_layerReuse->setObjectName("stLayerReuse");
+        m_layerReuse->setWordWrap(true);
+        m_layerReuse->setTextFormat(Qt::RichText);
+        connect(m_layerReuse, &QLabel::linkActivated, this, &ShowTreeView::reuseLinkActivated);
+        v->addWidget(m_layerReuse);
         m_layerRelease = new QCheckBox(tr("Release when the cue is left (back to the base cue, else dark)"),
                                        m_layerPage);
         m_layerRelease->setObjectName("stLayerRelease");
@@ -1577,8 +1624,16 @@ void ShowTreeView::buildTree()
                 }
                 if (!cue.includes.isEmpty())
                     badges << tr("includes %1").arg(cue.includes.count());
+                if (cue.reusable != invalidId())
+                {
+                    // A use of a reusable cue (P4): ⟲, and how many there are.
+                    ci->setText(0, QStringLiteral("⟲ ") + ci->text(0));
+                    badges << tr("reusable ×%1").arg(m_st->reusableUses(cue.reusable).count());
+                }
                 ci->setText(1, badges.join(QStringLiteral(" ")));
-                ci->setToolTip(0, cue.note);
+                ci->setToolTip(0, cue.reusable == invalidId() ? cue.note
+                               : tr("A use of the reusable cue %1: an edit here is an edit to every use. %2")
+                                 .arg(m_st->reusableName(cue.reusable), cue.note).trimmed());
                 ci->setData(0, KindRole, CueNode);
                 ci->setData(0, IdRole, cue.id);
 
@@ -1594,13 +1649,24 @@ void ShowTreeView::buildTree()
                     QString name = layer.name.isEmpty() ? m_st->targetLabel(layer.target) : layer.name;
                     if (layer.target.isOpaque())
                         name = tr("▣ %1").arg(name);
+                    if (layer.reusable != invalidId())
+                        name = QStringLiteral("⟲ ") + name;
                     yi->setText(0, name);
                     QStringList looks;
                     for (const Look &l : layer.looks)
                         looks << lookText(l);
-                    yi->setText(1, layer.release ? tr("release") : QString());
-                    yi->setToolTip(0, QStringLiteral("%1\n%2").arg(m_st->targetContents(layer.target),
-                                                                   looks.join(QStringLiteral(", "))).trimmed());
+                    QStringList col1;
+                    if (layer.release)
+                        col1 << tr("release");
+                    if (layer.reusable != invalidId())
+                        col1 << tr("×%1").arg(m_st->reusableUses(layer.reusable).count());
+                    yi->setText(1, col1.join(QStringLiteral(" ")));
+                    QString tip = QStringLiteral("%1\n%2").arg(m_st->targetContents(layer.target),
+                                                               looks.join(QStringLiteral(", "))).trimmed();
+                    if (layer.reusable != invalidId())
+                        tip = tr("Reusable layer: an edit here is an edit to every use (%1).\n")
+                              .arg(m_st->reusableUses(layer.reusable).count()) + tip;
+                    yi->setToolTip(0, tip);
                     yi->setData(0, KindRole, LayerNode);
                     yi->setData(0, IdRole, layer.id);
                     yi->setData(0, CueRole, cue.id);
@@ -1912,6 +1978,8 @@ void ShowTreeView::updateInspector()
                                         "starts a cue from nothing, Cue-only keeps its changes to itself.")
                                    : tr("Non-tracking: every cue plays only its own layers and includes, as "
                                         "a chaser does. Make it Tracking to carry values on.")));
+            m_listConvert->setEnabled(m_st->planConvertToTracking(list->id).ok);
+            m_listDetach->setEnabled(true);
             m_pages->setCurrentWidget(m_listPage);
             m_inspectorUpdating = false;
             return;
@@ -1980,6 +2048,7 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
         QSignalBlocker block(m_cueMix);
         m_cueMix->setChecked(cue.mixOverlap);
     }
+    m_cueReuse->setText(reuseLine(cue.id, invalidId()));
 
     // Includes, in order (the later wins); the selected one kept.
     {
@@ -2190,6 +2259,9 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
     }
     m_rowText.clear();
 
+    m_layerReuse->setVisible(own != nullptr);
+    if (own != nullptr)
+        m_layerReuse->setText(reuseLine(cue.id, own->id));
     if (rl == nullptr)
     {
         m_layerContents->setVisible(false);
@@ -3146,6 +3218,11 @@ const char *ShowTreeView::setMimeType()
     return "application/x-qlcconsole-showtree-groupsets";
 }
 
+const char *ShowTreeView::reusableMimeType()
+{
+    return "application/x-qlcconsole-showtree-reusables";
+}
+
 bool ShowTreeView::splitLayer(quint32 cueId, quint32 layerId, QString *why)
 {
     QList<quint32> made;
@@ -3493,6 +3570,9 @@ bool ShowTreeView::acceptsDrop(quint32 cueId, quint32 layerId, const QMimeData *
 {
     if (cueId == invalidId() || mime == nullptr)
         return false;
+    // Reusables: a use in the cue (a layer), or after it (a cue).
+    if (mime->hasFormat(QLatin1String(reusableMimeType())))
+        return !child;
     const bool targets = mime->hasFormat(QLatin1String(FixtureGroupSource::fixtureGroupMimeType()))
                          || mime->hasFormat(QLatin1String(FixtureGroupSource::fixtureMimeType()))
                          || mime->hasFormat(QLatin1String(setMimeType()));
@@ -3565,6 +3645,8 @@ bool ShowTreeView::dropMime(quint32 cueId, quint32 layerId, const QMimeData *mim
 {
     if (!acceptsDrop(cueId, layerId, mime, target, child))
         return false;
+    if (mime->hasFormat(QLatin1String(reusableMimeType())))
+        return dropReusables(cueId, idsFromMime(mime, reusableMimeType()));
     QList<quint32> pals = idsFromMime(mime, FunctionsTreeWidget::paletteDragMimeType());
     // A target dropped: the Aim palette pointing at it (reused, or made).
     for (quint32 tid : idsFromMime(mime, targetMimeType()))
@@ -3648,6 +3730,25 @@ QString ShowTreeView::dropHint(quint32 cueId, quint32 layerId, const QMimeData *
     if (list == nullptr || cue == nullptr)
         return QString();
     const QString cueText = m_st->cueLabel(*list, list->indexOf(cueId));
+    const QList<quint32> reusables = idsFromMime(mime, reusableMimeType());
+    if (!reusables.isEmpty())
+    {
+        QStringList layers, cues;
+        for (quint32 r : reusables)
+        {
+            if (m_st->reusableLayer(r) != nullptr)
+                layers << m_st->reusableName(r);
+            else if (m_st->reusableCue(r) != nullptr)
+                cues << m_st->reusableName(r);
+        }
+        QStringList out;
+        if (!layers.isEmpty())
+            out << tr("⟲ %1 → a layer in %2, linked: an edit to it is an edit to every use")
+                   .arg(layers.join(QStringLiteral(", ")), cueText);
+        if (!cues.isEmpty())
+            out << tr("⟲ %1 → a new cue after %2, linked").arg(cues.join(QStringLiteral(", ")), cueText);
+        return out.join(QStringLiteral("; "));
+    }
     const QList<quint32> pals = idsFromMime(mime, FunctionsTreeWidget::paletteDragMimeType());
     const QList<quint32> stageTargets = idsFromMime(mime, targetMimeType());
     if (!stageTargets.isEmpty() && !child)
@@ -3967,6 +4068,7 @@ bool ShowTreeView::setReleaseOnSelected(bool release)
 void ShowTreeView::showMultiLayerPage(const QList<QPair<quint32, quint32>> &layers)
 {
     m_multi = layers;
+    m_layerReuse->setVisible(false);
     DropPage *page = static_cast<DropPage *>(m_layerPage);
     const quint32 curCue = currentCueId(), curLayer = currentId();
     page->cue = curCue;                 // drops go to all of them (applyLook)
@@ -4185,6 +4287,14 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
                     if (id != invalidId())
                         selectNode(id);
                 });
+                // P4: a reusable cue, or this use unlinked.
+                if (list->cue(cueId)->reusable == invalidId())
+                    menu.addAction(tr("Make cue reusable…"), this, [this]() { reuseLinkActivated(QStringLiteral("make")); })
+                        ->setObjectName("stMakeCueReusable");
+                else
+                    menu.addAction(tr("Unlink here (%1 becomes a cue of its own)")
+                                   .arg(m_st->reusableName(list->cue(cueId)->reusable)), this,
+                                   [this, cueId]() { m_st->unlinkCue(cueId); })->setObjectName("stUnlinkCue");
             }
         }
         if (kind == CueNode)
@@ -4264,6 +4374,19 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
             menu.addAction(tr("Detach to plain scene"), this, [this, cueId, layerId]() {
                 m_st->detachLayer(cueId, layerId);
             });
+            // P4: a reusable layer, or this use unlinked.
+            if (const Cue *rc = m_st->cue(cueId))
+                if (const Layer *rl = rc->layer(layerId))
+                {
+                    if (rl->reusable != invalidId())
+                        menu.addAction(tr("Unlink here (a copy of its own)"), this, [this, cueId, layerId]() {
+                            m_st->unlinkLayer(cueId, layerId);
+                        })->setObjectName("stUnlinkLayer");
+                    else if (rl->parent == invalidId() && rc->reusable == invalidId())
+                        menu.addAction(tr("Make reusable…"), this, [this]() {
+                            reuseLinkActivated(QStringLiteral("make"));
+                        })->setObjectName("stMakeLayerReusable");
+                }
             // A child layer (§3.5) on part of it: a member of its set, a
             // group inside it, or what the Library has selected.
             {
@@ -4366,6 +4489,15 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
                 }
             }
         }
+        if (kind == ListNode)
+        {
+            const quint32 id = item->data(0, IdRole).toUInt();
+            QAction *conv = menu.addAction(tr("Convert to tracking…"), this, [this, id]() { convertListToTracking(id); });
+            conv->setObjectName("stConvertList");
+            conv->setEnabled(m_st->planConvertToTracking(id).ok);
+            menu.addAction(tr("Detach to plain chaser…"), this, [this, id]() { detachListToChaser(id); })
+                ->setObjectName("stDetachList");
+        }
         if (kind == ProductionNode || kind == ListNode)
         {
             const quint32 id = item->data(0, IdRole).toUInt();
@@ -4438,6 +4570,295 @@ void ShowTreeView::importChaser(quint32 chaserId, bool showReport)
     if (!details.isEmpty())
         box.setDetailedText(details.join(QStringLiteral("\n")));
     box.exec();
+}
+
+
+/****************************************************************************
+ * Reusable layers and cues; Detach a list; Convert to tracking (P4)
+ ****************************************************************************/
+
+bool ShowTreeView::confirm(const QString &title, const QString &text, const QString &details)
+{
+    if (m_confirm)
+        return m_confirm(title, text, details);
+    QMessageBox box(QMessageBox::Question, title, text, QMessageBox::Ok | QMessageBox::Cancel, this);
+    if (!details.isEmpty())
+        box.setInformativeText(details);
+    return box.exec() == QMessageBox::Ok;
+}
+
+bool ShowTreeView::dropReusables(quint32 cueId, const QList<quint32> &reusableIds)
+{
+    const CueList *list = m_st->listOfCue(cueId);
+    if (list == nullptr || reusableIds.isEmpty())
+        return false;
+    m_st->beginBatch(tr("Use %1").arg(reusableIds.count() == 1 ? m_st->reusableName(reusableIds.first())
+                                                               : tr("%1 reusables").arg(reusableIds.count())));
+    quint32 lastLayer = invalidId(), lastCue = invalidId();
+    int after = list->indexOf(cueId);
+    const quint32 listId = list->id;
+    bool any = false;
+    for (quint32 r : reusableIds)
+    {
+        if (m_st->reusableLayer(r) != nullptr)
+        {
+            const quint32 id = m_st->insertReusableLayer(cueId, r);
+            any |= id != invalidId();
+            if (id != invalidId())
+                lastLayer = id;
+        }
+        else if (m_st->reusableCue(r) != nullptr)
+        {
+            // Each after the one before: a run after the cue.
+            const quint32 id = m_st->insertReusableCue(listId, after, r);
+            any |= id != invalidId();
+            if (id != invalidId())
+            {
+                lastCue = id;
+                after = m_st->cueList(listId)->indexOf(id);
+            }
+        }
+    }
+    m_st->endBatch(any);
+    if (lastCue != invalidId())
+        selectNode(lastCue);
+    else if (lastLayer != invalidId())
+        selectNode(lastLayer, cueId);
+    return any;
+}
+
+QStringList ShowTreeView::reusableUsedBy(quint32 id) const
+{
+    QStringList out;
+    QSet<quint32> functions;
+    for (const ShowTreeController::ReusableUse &u : m_st->reusableUses(id))
+    {
+        QString text = u.label;
+        if (u.layer == invalidId())
+        {
+            if (const Cue *c = m_st->cue(u.cue))
+                functions.insert(c->collection);
+        }
+        else if (const Cue *c = m_st->cue(u.cue))
+        {
+            if (const Layer *l = c->layer(u.layer))
+            {
+                const quint32 sid = m_st->layerScene(u.cue, l->target);
+                if (sid != invalidId())
+                    functions.insert(sid);
+            }
+        }
+        out << text;
+    }
+    for (const ReusableCue &rc : m_st->reusableCues())
+        for (const Layer &l : rc.layers)
+            if (l.reusable == id)
+                out << tr("reusable cue %1").arg(rc.name);
+    // VC widgets that play one of the uses' cue or layer (cheap: buttons
+    // and cue lists by the function they hold).
+    VirtualConsole *vc = VirtualConsole::instance();
+    if (vc != nullptr && vc->contents() != nullptr && !functions.isEmpty())
+    {
+        for (VCButton *b : vc->contents()->findChildren<VCButton *>())
+            if (functions.contains(b->function()))
+                out << tr("VC button “%1”").arg(b->caption());
+    }
+    return out;
+}
+
+QStringList ShowTreeView::reusableItems() const
+{
+    QStringList out;
+    for (QTreeWidgetItemIterator it(m_library); *it; ++it)
+        if ((*it)->data(0, KindRole).toInt() == LibReusable)
+        {
+            QTreeWidgetItem *top = *it;
+            while (top->parent() != nullptr)
+                top = top->parent();
+            if (top->data(0, IdRole).toUInt() == 2)       // All's
+                out << (*it)->text(0);
+        }
+    return out;
+}
+
+bool ShowTreeView::deleteReusable(quint32 id)
+{
+    const QString name = m_st->reusableName(id);
+    if (name.isEmpty())
+        return false;
+    QString why;
+    if (m_st->removeReusable(id, false, &why))
+        return true;
+    const QStringList used = reusableUsedBy(id);
+    if (!confirm(tr("Delete %1").arg(name),
+                 tr("%1 is used in %n place(s). Delete it anyway? Each use stays as it is, as a plain copy of "
+                    "its own.", "", int(used.count())).arg(name),
+                 used.join(QStringLiteral("\n"))))
+        return false;
+    return m_st->removeReusable(id, true);
+}
+
+bool ShowTreeView::convertListToTracking(quint32 listId)
+{
+    const CueList *list = m_st->cueList(listId);
+    if (list == nullptr)
+        return false;
+    const ShowTreeController::ConvertPlan plan = m_st->planConvertToTracking(listId);
+    if (!plan.ok)
+    {
+        m_hint->setText(plan.why);
+        if (!m_confirm)
+            QMessageBox::information(this, tr("Convert to tracking"), plan.why);
+        return false;
+    }
+    const QString name = list->name;
+    const QString text = tr("Convert %1 to tracking? Every cue plays exactly as it does now: %2 cue(s) track "
+                            "from the cue before, %3 value(s) and %4 layer(s) that only repeat what tracks in go, "
+                            "%5 include(s) of the cue before become tracking, %6 layer(s) are released. "
+                            "One undo step.")
+                         .arg(name).arg(plan.tracking).arg(plan.looksRemoved).arg(plan.layersRemoved)
+                         .arg(plan.includesRemoved).arg(plan.releases);
+    const QString details = plan.changes.join(QStringLiteral("\n"));
+    if (m_confirm)
+    {
+        if (!m_confirm(tr("Convert to tracking"), text, details))
+            return false;
+    }
+    else
+    {
+        // The plan to read before it is applied.
+        QDialog dlg(this);
+        dlg.setWindowTitle(tr("Convert to tracking"));
+        QVBoxLayout *v = new QVBoxLayout(&dlg);
+        QLabel *intro = new QLabel(text, &dlg);
+        intro->setWordWrap(true);
+        v->addWidget(intro);
+        QListWidget *changes = new QListWidget(&dlg);
+        changes->setObjectName("stConvertPlan");
+        changes->addItems(plan.changes);
+        v->addWidget(changes, 1);
+        QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Cancel, &dlg);
+        bb->addButton(tr("Convert"), QDialogButtonBox::AcceptRole);
+        connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+        connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+        v->addWidget(bb);
+        dlg.resize(560, 420);
+        if (dlg.exec() != QDialog::Accepted)
+            return false;
+    }
+    ShowTreeController::ConvertPlan done;
+    if (!m_st->convertToTracking(listId, &done))
+    {
+        m_hint->setText(done.why);
+        return false;
+    }
+    m_hint->setText(tr("%1 tracks now: %2 cue(s) track, %3 value(s) and %4 layer(s) taken out")
+                    .arg(name).arg(done.tracking).arg(done.looksRemoved).arg(done.layersRemoved));
+    selectNode(listId);
+    return true;
+}
+
+bool ShowTreeView::detachListToChaser(quint32 listId)
+{
+    const CueList *list = m_st->cueList(listId);
+    if (list == nullptr)
+        return false;
+    const QString name = list->name;
+    if (!confirm(tr("Detach to plain chaser"),
+                 tr("Detach %1? Its chaser and its cues' collections become ordinary functions you edit in the "
+                    "Functions window (Productions folder), and the list leaves the Show Tree. VC widgets and "
+                    "show control that play the chaser keep playing it. One undo step.").arg(name)))
+        return false;
+    const quint32 chaser = m_st->detachList(listId);
+    if (chaser == Function::invalidId())
+        return false;
+    m_hint->setText(tr("%1 is a plain chaser now (Functions → Productions)").arg(name));
+    return true;
+}
+
+QString ShowTreeView::reuseLine(quint32 cueId, quint32 layerId) const
+{
+    const Cue *c = m_st->cue(cueId);
+    if (c == nullptr)
+        return QString();
+    const quint32 rid = layerId == invalidId() ? c->reusable
+                                               : (c->layer(layerId) == nullptr ? invalidId() : c->layer(layerId)->reusable);
+    if (rid == invalidId())
+    {
+        if (layerId != invalidId())
+        {
+            const Layer *l = c->layer(layerId);
+            if (l == nullptr || l->parent != invalidId() || c->reusable != invalidId())
+                return QString();
+            return tr("<a href=\"make\">Make reusable…</a> — a named layer for several cues and lists, "
+                      "every use live-linked");
+        }
+        return tr("<a href=\"make\">Make reusable…</a> — a named cue (a Walk-in, a Blackout) for several lists, "
+                  "every use live-linked");
+    }
+    const int uses = m_st->reusableUses(rid).count();
+    return tr("⟲ Reusable %1 <b>%2</b> — used in %3 place(s): an edit here is an edit to all. "
+              "<a href=\"uses\">Used by…</a> · <a href=\"unlink\">Unlink here</a>")
+           .arg(layerId == invalidId() ? tr("cue") : tr("layer"), m_st->reusableName(rid).toHtmlEscaped())
+           .arg(uses);
+}
+
+QString ShowTreeView::reuseLineText() const
+{
+    QLabel *l = m_pages->currentWidget() == m_cuePage ? m_cueReuse : m_layerReuse;
+    QTextDocument doc;
+    doc.setHtml(l->text());
+    return doc.toPlainText();
+}
+
+void ShowTreeView::reuseLinkActivated(const QString &link)
+{
+    const quint32 cueId = currentCueId();
+    const quint32 layerId = currentKind() == LayerNode ? currentId() : invalidId();
+    const Cue *c = m_st->cue(cueId);
+    if (c == nullptr)
+        return;
+    const quint32 rid = layerId == invalidId() ? c->reusable
+                                               : (c->layer(layerId) == nullptr ? invalidId() : c->layer(layerId)->reusable);
+    if (link == QLatin1String("make"))
+    {
+        const Layer *l = layerId == invalidId() ? nullptr : c->layer(layerId);
+        const QString suggested = l != nullptr ? (l->name.isEmpty() ? m_st->targetLabel(l->target) : l->name)
+                                               : c->name;
+        bool ok = false;
+        const QString n = QInputDialog::getText(this, tr("Make reusable"), tr("Name"), QLineEdit::Normal,
+                                                suggested, &ok);
+        if (!ok)
+            return;
+        QString why;
+        const quint32 id = layerId != invalidId() ? m_st->makeLayerReusable(cueId, layerId, n.trimmed(), &why)
+                                                  : m_st->makeCueReusable(cueId, n.trimmed(), &why);
+        if (id == invalidId())
+            QMessageBox::information(this, tr("Make reusable"), why);
+    }
+    else if (link == QLatin1String("unlink"))
+    {
+        if (layerId != invalidId())
+            m_st->unlinkLayer(cueId, layerId);
+        else
+            m_st->unlinkCue(cueId);
+    }
+    else if (link == QLatin1String("uses") && rid != invalidId())
+    {
+        QMenu menu(this);
+        for (const ShowTreeController::ReusableUse &u : m_st->reusableUses(rid))
+            menu.addAction(u.label, this, [this, u]() {
+                if (u.layer != invalidId())
+                    selectNode(u.layer, u.cue);
+                else
+                    selectNode(u.cue);
+            });
+        const QStringList all = reusableUsedBy(rid);
+        for (const QString &x : all)
+            if (x.startsWith(tr("VC button")) || x.startsWith(tr("reusable cue")))
+                menu.addAction(x)->setEnabled(false);
+        menu.exec(QCursor::pos());
+    }
 }
 
 /****************************************************************************
@@ -4600,6 +5021,16 @@ void ShowTreeView::reloadLibrary()
             text = tr("%1 (%2)").arg(gs->name, members.join(QStringLiteral(" + ")));
             icon = QIcon(":/group.png");
         }
+        else if (kind == LibReusable)
+        {
+            // P4: a reusable layer or cue, and how many use it.
+            const bool isLayer = m_st->reusableLayer(id) != nullptr;
+            if (!isLayer && m_st->reusableCue(id) == nullptr)
+                return nullptr;
+            text = tr("⟲ %1 — %2, used in %3").arg(m_st->reusableName(id), isLayer ? tr("layer") : tr("cue"))
+                   .arg(m_st->reusableUses(id).count());
+            icon = QIcon(isLayer ? ":/group.png" : ":/collection.png");
+        }
         QTreeWidgetItem *item = new QTreeWidgetItem(parent);
         item->setText(0, text);
         item->setIcon(0, icon);
@@ -4709,6 +5140,33 @@ void ShowTreeView::reloadLibrary()
         {
             QTreeWidgetItem *none = new QTreeWidgetItem(setsFolder);
             none->setText(0, tr("(none yet: select groups, right-click → Make set…)"));
+            none->setFlags(Qt::ItemIsEnabled);
+            none->setData(0, KindRole, LibFolder);
+        }
+    }
+
+    // Reusable layers and cues (P4): drop one on a cue for a use there.
+    {
+        QTreeWidgetItem *reuse = folder(all, tr("Reusable"));
+        reuse->setData(0, PathRole, QStringLiteral("Reusable"));
+        reuse->setToolTip(0, tr("Layers and cues made reusable (right-click a layer or cue in the tree → Make "
+                                "reusable…). Drop one on a cue: a layer in it, or a cue after it -- every use "
+                                "live-linked."));
+        QList<QPair<QString, quint32>> items;
+        for (const ReusableLayer &r : m_st->reusableLayers())
+            items << qMakePair(r.name, r.id);
+        for (const ReusableCue &r : m_st->reusableCues())
+            items << qMakePair(r.name, r.id);
+        std::sort(items.begin(), items.end(), [](const QPair<QString, quint32> &a, const QPair<QString, quint32> &b) {
+            return a.first.compare(b.first, Qt::CaseInsensitive) < 0;
+        });
+        for (const auto &r : items)
+            if (QTreeWidgetItem *it = add(reuse, LibReusable, r.second))
+                it->setToolTip(0, tr("Used by:\n%1").arg(reusableUsedBy(r.second).join(QStringLiteral("\n"))));
+        if (items.isEmpty())
+        {
+            QTreeWidgetItem *none = new QTreeWidgetItem(reuse);
+            none->setText(0, tr("(none yet: right-click a layer or a cue → Make reusable…)"));
             none->setFlags(Qt::ItemIsEnabled);
             none->setData(0, KindRole, LibFolder);
         }
@@ -4866,6 +5324,44 @@ void ShowTreeView::slotLibraryContextMenu(const QPoint &pos)
         return;
     const int kind = item->data(0, KindRole).toInt();
     const quint32 id = item->data(0, IdRole).toUInt();
+    if (kind == LibReusable)
+    {
+        // P4: rename, who uses it, put it in, delete.
+        QMenu menu(this);
+        const QString name = m_st->reusableName(id);
+        menu.addAction(tr("Use in the selected cue"), this, [this, id]() {
+            const quint32 cue = currentCueId();
+            if (cue == invalidId())
+                m_hint->setText(tr("Select a cue in the tree first"));
+            else
+                dropReusables(cue, { id });
+        });
+        menu.addAction(tr("Rename…"), this, [this, id, name]() {
+            bool ok = false;
+            const QString n = QInputDialog::getText(this, tr("Rename"), tr("Name"), QLineEdit::Normal, name, &ok);
+            if (ok)
+                m_st->renameReusable(id, n);
+        });
+        QMenu *usedBy = menu.addMenu(tr("Used by"));
+        usedBy->setObjectName("stReusableUsedBy");
+        const QList<ShowTreeController::ReusableUse> uses = m_st->reusableUses(id);
+        for (const ShowTreeController::ReusableUse &u : uses)
+            usedBy->addAction(u.label, this, [this, u]() {
+                if (u.layer != invalidId())
+                    selectNode(u.layer, u.cue);
+                else
+                    selectNode(u.cue);
+            });
+        for (const QString &x : reusableUsedBy(id))
+            if (x.startsWith(tr("VC button")) || x.startsWith(tr("reusable cue")))
+                usedBy->addAction(x)->setEnabled(false);
+        if (usedBy->isEmpty())
+            usedBy->addAction(tr("(not used)"))->setEnabled(false);
+        menu.addSeparator();
+        menu.addAction(tr("Delete…"), this, [this, id]() { deleteReusable(id); });
+        menu.exec(m_library->viewport()->mapToGlobal(pos));
+        return;
+    }
     if (kind != LibGroup && kind != LibFixture && kind != LibPalette && kind != LibFunction && kind != LibSet)
         return;
     QMenu menu(this);

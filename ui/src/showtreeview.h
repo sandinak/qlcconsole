@@ -95,7 +95,8 @@ public:
     };
 
     /** Library item kinds. */
-    enum LibraryKind { LibSection = 100, LibFolder, LibGroup, LibFixture, LibPalette, LibFunction, LibSet, LibTarget };
+    enum LibraryKind { LibSection = 100, LibFolder, LibGroup, LibFixture, LibPalette, LibFunction, LibSet, LibTarget,
+                       LibReusable };
 
     QTreeWidget *tree() const { return m_tree; }
     QTreeWidget *library() const { return m_library; }
@@ -132,6 +133,42 @@ public:
     /** MIME type of stage targets (points, areas, lines) dragged from the
      *  Library: dropped, a Position "Aim at" that target (§3B). */
     static const char *targetMimeType();
+    /** MIME type of reusable layers and cues dragged from the Library (a
+     *  stream of ids): dropped on a cue, a use of each -- a layer in it, a
+     *  cue after it (P4). */
+    static const char *reusableMimeType();
+    /** Reusables dropped on cue @a cueId: each reusable layer a use in it,
+     *  each reusable cue a new cue (a use) after it. One undo step. */
+    bool dropReusables(quint32 cueId, const QList<quint32> &reusableIds);
+
+    /************************************************************************
+     * Reusable layers and cues; Detach a list; Convert to tracking (P4)
+     ************************************************************************/
+public:
+    /** Who uses reusable @a id, as text: each cue ("Full Show 0.0.3
+     *  Announcer"), and the VC widgets whose function is one of its uses'
+     *  cue or layer ("VC button “Walk-in”"). */
+    QStringList reusableUsedBy(quint32 id) const;
+    /** The Library's Reusable items, as text ("⟲ BackStage — layer, used
+     *  in 2"). */
+    QStringList reusableItems() const;
+    /** Delete a reusable: when it is used, asks first (its uses become
+     *  plain copies). */
+    bool deleteReusable(quint32 id);
+    /** Convert to tracking… for list @a listId: shows what would change
+     *  (the plan) and asks; one undo step. False: cancelled or nothing to
+     *  do (the reason in the hint line). */
+    bool convertListToTracking(quint32 listId);
+    /** Detach to plain chaser: asks, then the list leaves the tree and its
+     *  chaser is the show's own. */
+    bool detachListToChaser(quint32 listId);
+    /** In place of the confirmation dialogs (tests): @a title, @a text,
+     *  @a details; return false to cancel. */
+    typedef std::function<bool(const QString &title, const QString &text, const QString &details)> Confirm;
+    void setConfirm(const Confirm &confirm) { m_confirm = confirm; }
+    /** The reuse line on the cue / layer page, as text (tests). */
+    QString reuseLineText() const;
+
     /** Functions dropped on a cue: opaque function layers. */
     bool dropFunctions(quint32 cueId, const QList<quint32> &functions);
     /** Palettes dropped on a layer (or, with no layer, on the cue's looks;
@@ -509,6 +546,15 @@ private:
     ShowTreeCommand *m_commander = nullptr;
     QStringList m_commandHistory;
     RecordAsker m_recordAsker;
+    Confirm m_confirm;
+    bool confirm(const QString &title, const QString &text, const QString &details = QString());
+    /** The reuse line's text for a layer (own, in cue @a cueId) or a cue. */
+    QString reuseLine(quint32 cueId, quint32 layerId) const;
+    void reuseLinkActivated(const QString &link);
+    QLabel *m_layerReuse = nullptr;
+    QLabel *m_cueReuse = nullptr;
+    QPushButton *m_listConvert = nullptr;
+    QPushButton *m_listDetach = nullptr;
     int m_historyAt = -1;
     QList<quint32> m_expanded;
     quint32 m_pageCue = 0xFFFFFFFF;      //!< the cue the cue page shows

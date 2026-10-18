@@ -2496,6 +2496,10 @@ static QString treeState(Doc *doc)
     w.writeStartElement("S");
     for (const GroupSet &gs : st->groupSets())
         ShowTree::saveXML(&w, gs);
+    for (const ReusableLayer &r : st->reusableLayers())
+        ShowTree::saveXML(&w, r);
+    for (const ReusableCue &r : st->reusableCues())
+        ShowTree::saveXML(&w, r);
     for (const Production &p : st->productions())
         ShowTree::saveXML(&w, p);
     w.writeEndElement();
@@ -2771,7 +2775,43 @@ void ShowTreeView_Test::everyActionIsOneUndoStep()
                      return view.runCommand(QString::fromUtf8(line));
                  }),
                  qPrintable(QStringLiteral("%1: %2").arg(QString::fromUtf8(line), view.commandMessage())));
-    QVERIFY(walked >= 57);
+    // P4: reusables, Detach a list, Convert to tracking.
+    view.setConfirm([](const QString &, const QString &, const QString &) { return true; });
+    const quint32 lastCue = st->cueList(list)->cues.last().id;
+    quint32 reusable = invalidId();
+    QVERIFY(oneStep("Make a layer reusable", [&] {
+        reusable = st->makeLayerReusable(lastCue, big, "Floor");
+        return reusable != invalidId();
+    }));
+    QVERIFY(oneStep("a reusable dropped on a cue (a use)", [&] {
+        return view.dropReusables(st->cueList(list)->cues.first().id, { reusable });
+    }));
+    QVERIFY(oneStep("an edit to one use (all of them)", [&] {
+        return view.dropPalettes(lastCue, big, { blue });
+    }));
+    QVERIFY(oneStep("rename a reusable", [&] { return st->renameReusable(reusable, "Floor 2"); }));
+    QVERIFY(oneStep("Unlink here", [&] { return st->unlinkLayer(lastCue, big); }));
+    QVERIFY(oneStep("delete a reusable in use (asks)", [&] { return view.deleteReusable(reusable); }));
+    quint32 rcue = invalidId();
+    QVERIFY(oneStep("Make a cue reusable", [&] {
+        rcue = st->makeCueReusable(lastCue, "State");
+        return rcue != invalidId();
+    }));
+    QVERIFY(oneStep("a reusable cue dropped on a cue (a cue after it)", [&] {
+        return view.dropReusables(st->cueList(list)->cues.first().id, { rcue });
+    }));
+    // Typed, on the list's first cue (a plain one) and the use after it.
+    for (const char *line : { "reusable \"Typed state\"", "use State", "unlink" })
+        QVERIFY2(oneStep(line, [&] {
+                     const bool second = QByteArray(line) == "unlink";
+                     view.selectNode(st->cueList(list)->cues.at(second ? 1 : 0).id);
+                     return view.runCommand(QString::fromUtf8(line));
+                 }),
+                 qPrintable(QStringLiteral("%1: %2").arg(QString::fromUtf8(line), view.commandMessage())));
+    const quint32 imported = st->productions().at(2).lists.first().id;
+    QVERIFY(oneStep("Convert to tracking", [&] { return view.convertListToTracking(imported); }));
+    QVERIFY(oneStep("Detach to plain chaser", [&] { return view.detachListToChaser(imported); }));
+    QVERIFY(walked >= 70);
 }
 
 /****************************************************************************
@@ -3447,6 +3487,173 @@ void ShowTreeView_Test::editSeveralLayersAtOnce()
     QCOMPARE(st->cue(c2)->layer(ld)->look(KeyColour)->palettes, QList<quint32>({ red }));
     QVERIFY(view.setReleaseOnSelected(true));
     QVERIFY(st->cue(c2)->layer(ld)->release);
+}
+
+/****************************************************************************
+ * P4 (2026-10-17): reusable layers and cues, Detach a list, Convert
+ ****************************************************************************/
+
+/* Make reusable: the tree marks a use ⟲ (and how many), the page says so
+   with Used by and Unlink here, the Library lists it under All → Reusable,
+   and a drop of it on a cue is a use there -- an edit to one is an edit to
+   all. Delete asks while it is used. */
+void ShowTreeView_Test::reusablesInTheTreeAndTheLibrary()
+{
+    FixtureGroup *bs = group("BackStage", 0, 2);
+    FixtureGroup *steps = group("Steps", 2, 1);
+    const quint32 blue = colour(Qt::blue, "Blue");
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 list = st->addCueList(prod, "L");
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 c2 = st->addCue(list, 0, "Two");
+    const quint32 l1 = st->addLayer(c1, Target { { bs->id() }, {}, {}, 0xFFFFFFFF });
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(blue)));
+    const quint32 other = st->addCueList(prod, "Other");
+    const quint32 o1 = st->addCue(other, -1, "Walk-in");
+    QVERIFY(st->setLayerLook(o1, st->addLayer(o1, Target { { steps->id() }, {}, {}, 0xFFFFFFFF }),
+                             st->lookForPalette(full)));
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QStringList asked;
+    view.setConfirm([&asked](const QString &title, const QString &text, const QString &) {
+        asked << title + ": " + text;
+        return true;
+    });
+
+    // Before: the page offers it.
+    QVERIFY(view.selectNode(l1, c1));
+    QVERIFY(view.reuseLineText().contains("Make reusable"));
+    QVERIFY(libraryItem(view.library(), "(none yet: right-click a layer or a cue → Make reusable…)") != nullptr);
+    const quint32 rid = st->makeLayerReusable(c1, l1, "Back Wash");
+    QVERIFY(rid != invalidId());
+    QTRY_VERIFY(treeText(view.tree()).join("\n").contains("⟲ Back Wash"));
+    QTRY_VERIFY(libraryItem(view.library(), "⟲ Back Wash — layer, used in 1") != nullptr);
+    QVERIFY(view.selectNode(l1, c1));
+    QVERIFY2(view.reuseLineText().contains("Reusable layer Back Wash — used in 1"), qPrintable(view.reuseLineText()));
+
+    // Dragged onto the other list's cue page: a use there, said before.
+    QVERIFY(view.selectNode(o1));
+    QLabel *hint = view.findChild<QLabel *>("stDropHint");
+    QWidget *page = view.findChild<QWidget *>("stCuePage");
+    QLabel *zone = view.findChild<QLabel *>("stCueDropZone");
+    QCOMPARE(dragAndDrop(page, zone->mapTo(page, zone->rect().center()),
+                         idsMime(ShowTreeView::reusableMimeType(), { rid }), hint),
+             QString("⟲ Back Wash → a layer in 1 Walk-in, linked: an edit to it is an edit to every use"));
+    QCOMPARE(st->reusableUses(rid).count(), 2);
+    QTRY_VERIFY(libraryItem(view.library(), "⟲ Back Wash — layer, used in 2") != nullptr);
+    const quint32 use = st->cue(o1)->layers.last().id;
+    // An edit there (a palette dropped on its row) reaches list L's.
+    QVERIFY(view.dropPalettes(o1, use, { full }));
+    QCOMPARE(st->cue(c1)->layer(l1)->look(KeyDimmer)->palettes, QList<quint32>({ full }));
+    // Used by: both cues.
+    const QStringList usedBy = view.reusableUsedBy(rid);
+    QCOMPARE(usedBy, QStringList({ "L 1 One", "Other 1 Walk-in" }));
+
+    // A cue made reusable and used in L after cue 2, from the Library (Return).
+    const quint32 rc = st->makeCueReusable(o1);
+    QVERIFY(rc != invalidId());
+    QVERIFY(view.selectNode(c2));
+    QTRY_VERIFY(libraryItem(view.library(), "⟲ Walk-in — cue, used in 1") != nullptr);
+    view.library()->clearSelection();
+    libraryItem(view.library(), "⟲ Walk-in — cue, used in 1")->setSelected(true);
+    QVERIFY(view.applyLibrarySelection());
+    QCOMPARE(st->cueList(list)->cues.count(), 3);
+    const quint32 c3 = st->cueList(list)->cues.last().id;
+    QCOMPARE(st->cue(c3)->reusable, rc);
+    QCOMPARE(view.currentId(), c3);
+    QVERIFY(treeText(view.tree()).join("\n").contains("⟲ 3 Walk-in"));
+    QVERIFY(view.reuseLineText().contains("Reusable cue Walk-in — used in 2"));
+
+    // Unlink here, from the page's link: L's use stays as it is, unlinked.
+    QLabel *line = view.findChild<QLabel *>("stCueReuse");
+    emit line->linkActivated("unlink");
+    QCOMPARE(st->cue(c3)->reusable, invalidId());
+    QCOMPARE(st->reusableUses(rc).count(), 1);
+
+    // Delete while used: asked, then the uses are plain copies.
+    QVERIFY(view.deleteReusable(rid));
+    QCOMPARE(asked.count(), 1);
+    // L 1, Other 1, L 3 (a copy of Walk-in, its layer still a use) and the reusable cue Walk-in
+    QVERIFY2(asked.first().contains("used in 4 place"), qPrintable(asked.first()));
+    QVERIFY(st->reusableLayer(rid) == nullptr);
+    QCOMPARE(st->cue(c1)->layer(l1)->reusable, invalidId());
+    view.setConfirm([](const QString &, const QString &, const QString &) { return false; });
+    QVERIFY(!view.deleteReusable(rc));               // cancelled
+    QVERIFY(st->reusableCue(rc) != nullptr);
+}
+
+/* The list page's Convert to tracking… shows the plan and converts in one
+   step; Detach to plain chaser… asks and hands the chaser over. */
+void ShowTreeView_Test::convertAndDetachFromTheListPage()
+{
+    FixtureGroup *a = group("A", 0, 1);
+    FixtureGroup *b = group("B", 1, 1);
+    const quint32 full = dimmer(255, "Full");
+    const quint32 half = dimmer(127, "Half");
+    Scene *sa = new Scene(m_doc);
+    sa->setName("A-Full");
+    sa->addFixtureGroup(a->id());
+    sa->addPalette(full);
+    m_doc->addFunction(sa);
+    Scene *sb = new Scene(m_doc);
+    sb->setName("B-Half");
+    sb->addFixtureGroup(b->id());
+    sb->addPalette(half);
+    m_doc->addFunction(sb);
+    Collection *one = new Collection(m_doc);
+    one->setName("0.0.1-One");
+    m_doc->addFunction(one);
+    one->addFunction(sa->id());
+    Collection *two = new Collection(m_doc);
+    two->setName("0.0.2-Two");
+    m_doc->addFunction(two);
+    two->addFunction(one->id());
+    two->addFunction(sb->id());
+    Chaser *chaser = new Chaser(m_doc);
+    chaser->setName("Song");
+    m_doc->addFunction(chaser);
+    chaser->addStep(ChaserStep(one->id()));
+    chaser->addStep(ChaserStep(two->id()));
+
+    ShowTreeController *st = m_doc->showTree();
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    view.importChaser(chaser->id(), false);
+    const quint32 listId = st->productions().last().lists.first().id;
+    QVERIFY(view.selectNode(listId));
+    QPushButton *convert = view.findChild<QPushButton *>("stListConvert");
+    QPushButton *detach = view.findChild<QPushButton *>("stListDetach");
+    QVERIFY(convert != nullptr && detach != nullptr);
+    QVERIFY(convert->isEnabled());
+
+    QString details;
+    view.setConfirm([&details](const QString &, const QString &, const QString &d) {
+        details = d;
+        return true;
+    });
+    convert->click();
+    QVERIFY2(details.contains("0.0.2 Two: tracks from 0.0.1 One (its include of 0.0.1 One taken out)"),
+             qPrintable(details));
+    QCOMPARE(st->cueList(listId)->mode, ListMode::Tracking);
+    QVERIFY(st->cueList(listId)->cues.at(1).includes.isEmpty());
+    QTRY_VERIFY(!convert->isEnabled());              // nothing more to convert
+    QVERIFY(view.findChild<QLabel *>("stDropHint")->text().contains("tracks now"));
+
+    const quint32 chaserId = st->cueList(listId)->chaser;
+    detach->click();
+    QVERIFY(st->cueList(listId) == nullptr);
+    QVERIFY(!st->isGenerated(chaserId));
+    QVERIFY(m_doc->function(chaserId) != nullptr);
+    QVERIFY(st->undo());
+    QVERIFY(st->cueList(listId) != nullptr);
+    QVERIFY(st->isGenerated(chaserId));
 }
 
 QTEST_MAIN(ShowTreeView_Test)
