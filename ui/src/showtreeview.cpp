@@ -1946,6 +1946,20 @@ QString ShowTreeView::originText(const CueList &list, const ResolvedValue &value
  * Inspector
  ****************************************************************************/
 
+/* Whether Convert to tracking… has anything to try (cheap: the plan
+   itself resolves the list many times over). */
+static bool mayConvert(const CueList *list)
+{
+    if (list == nullptr || list->cues.count() < 2)
+        return false;
+    if (list->mode == ListMode::NonTracking)
+        return true;
+    for (const Cue &c : list->cues)
+        if (c.mode == CueMode::Block || !c.includes.isEmpty())
+            return true;
+    return false;
+}
+
 void ShowTreeView::updateInspector()
 {
     m_inspectorUpdating = true;
@@ -1978,7 +1992,7 @@ void ShowTreeView::updateInspector()
                                         "starts a cue from nothing, Cue-only keeps its changes to itself.")
                                    : tr("Non-tracking: every cue plays only its own layers and includes, as "
                                         "a chaser does. Make it Tracking to carry values on.")));
-            m_listConvert->setEnabled(m_st->planConvertToTracking(list->id).ok);
+            m_listConvert->setEnabled(mayConvert(list));
             m_listDetach->setEnabled(true);
             m_pages->setCurrentWidget(m_listPage);
             m_inspectorUpdating = false;
@@ -4494,7 +4508,7 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
             const quint32 id = item->data(0, IdRole).toUInt();
             QAction *conv = menu.addAction(tr("Convert to tracking…"), this, [this, id]() { convertListToTracking(id); });
             conv->setObjectName("stConvertList");
-            conv->setEnabled(m_st->planConvertToTracking(id).ok);
+            conv->setEnabled(mayConvert(m_st->cueList(id)));
             menu.addAction(tr("Detach to plain chaser…"), this, [this, id]() { detachListToChaser(id); })
                 ->setObjectName("stDetachList");
         }

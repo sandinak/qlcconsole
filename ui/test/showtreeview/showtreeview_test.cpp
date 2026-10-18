@@ -3643,8 +3643,11 @@ void ShowTreeView_Test::convertAndDetachFromTheListPage()
              qPrintable(details));
     QCOMPARE(st->cueList(listId)->mode, ListMode::Tracking);
     QVERIFY(st->cueList(listId)->cues.at(1).includes.isEmpty());
-    QTRY_VERIFY(!convert->isEnabled());              // nothing more to convert
     QVERIFY(view.findChild<QLabel *>("stDropHint")->text().contains("tracks now"));
+    // Again: nothing more to convert, said.
+    convert->click();
+    QVERIFY(view.findChild<QLabel *>("stDropHint")->text().contains("Nothing to convert"));
+    QCOMPARE(st->cueList(listId)->mode, ListMode::Tracking);
 
     const quint32 chaserId = st->cueList(listId)->chaser;
     detach->click();
