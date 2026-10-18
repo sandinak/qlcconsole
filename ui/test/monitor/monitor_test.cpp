@@ -10798,7 +10798,8 @@ void Monitor_Test::aHeadAimedAtAMarkDrawsItsBeamThere()
     bar->setOrigin(QVector3D(0.0f, 3.0f, 3.0f));
     bar->setLength(6.0f);
 
-    struct Case { const char *what; Truss::MountingType mount; bool panInv; bool tiltInv; QVector3D mark; };
+    struct Case { const char *what; Truss::MountingType mount; bool panInv; bool tiltInv; QVector3D mark;
+                  float panOfs = 0.0f; float tiltOfs = 0.0f; };
     /* A standing head's tilt is centred straight UP, so with this fixture's
        180 degrees of travel it works the sky, not the deck -- which is the
        whole of Branson's point about a 270 degree head on a truss top. */
@@ -10808,6 +10809,12 @@ void Monitor_Test::aHeadAimedAtAMarkDrawsItsBeamThere()
         { "standing on the bar",     Truss::FloorMounted, false, false, QVector3D(4.0f, 1.5f, 5.0f) },
         { "hung, pan inverted",      Truss::TopHung,      true,  false, QVector3D(4.0f, 1.5f, 0.0f) },
         { "standing, tilt inverted", Truss::FloorMounted, false, true,  QVector3D(4.0f, 1.5f, 5.0f) },
+        /* Calibration offsets correct the physical head: in the DMX, out of
+           the picture. A head with offsets aimed at a mark still draws its
+           beam on the mark. */
+        { "hung, calibrated +8/-5",  Truss::TopHung,      false, false, QVector3D(4.0f, 1.5f, 0.0f), 8.0f, -5.0f },
+        { "hung, inverted, calibrated", Truss::TopHung,   true,  true,  QVector3D(-1.0f, 4.5f, 0.0f), -6.0f, 4.0f },
+        { "standing, calibrated",    Truss::FloorMounted, false, false, QVector3D(4.0f, 1.5f, 5.0f), 5.0f, 3.0f },
     };
 
     int addr = 0;
@@ -10822,6 +10829,8 @@ void Monitor_Test::aHeadAimedAtAMarkDrawsItsBeamThere()
         rp.mountingType = c.mount;
         rp.panInvert = c.panInv;
         rp.tiltInvert = c.tiltInv;
+        rp.panOffsetDeg = c.panOfs;
+        rp.tiltOffsetDeg = c.tiltOfs;
         props->setFixtureRigProps(fx->id(), rp);
 
         AimSolver::Solution sol;
@@ -10857,6 +10866,72 @@ void Monitor_Test::aHeadAimedAtAMarkDrawsItsBeamThere()
                             .arg(double(c.mark.z())).arg(double(offBy))
                             .arg(double(dir.x())).arg(double(dir.y())).arg(double(dir.z()))));
     }
+
+    delete doc;
+}
+
+void Monitor_Test::aCalibratedHeadsPoolLandsOnItsMark()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Truss *bar = props->addTruss();
+    bar->setName("T-1");
+    bar->setOrigin(QVector3D(1.0f, 2.0f, 5.0f));
+    bar->setLength(8.0f);
+
+    Fixture *spot = makeMover(doc, 10.0, 0, "Calibrated", QVector3D(3.0f, 2.0f, 5.0f));
+    QVERIFY(spot != nullptr);
+    FixtureRigProps rp;
+    rp.trussId = bar->id();
+    rp.trussOffset = 2.0f;
+    rp.mountingType = Truss::TopHung;
+    rp.panOffsetDeg = 12.0f;
+    rp.tiltOffsetDeg = -6.0f;
+    props->setFixtureRigProps(spot->id(), rp);
+
+    const QVector3D mark(7.0f, 6.0f, 0.0f);
+    AimSolver::Solution sol;
+    QVERIFY(AimSolver::reach(doc, spot->id(), mark, sol));
+    QVERIFY(sol.reachable());
+
+    // The DMX the solver sends, offsets and all, as the head is being driven.
+    QLCFixtureMode *mode = spot->fixtureMode();
+    const QLCPhysical phy = mode->physical();
+    QByteArray v(512, char(0));
+    v[int(spot->address())] = char(uchar(qRound(sol.panDeg * 255.0f / float(phy.focusPanMax()))));
+    v[int(spot->address() + 1)] = char(uchar(qRound(sol.tiltDeg * 255.0f / float(phy.focusTiltMax()))));
+    v[int(spot->address() + 2)] = char(255);
+    spot->setChannelValues(v);
+
+    MonitorGraphicsView view(doc);
+    view.resize(1000, 700);
+    view.setGridMetrics(1000.0);
+    view.setGridSize(QSize(10, 8));
+    view.updateTrusses();
+    view.addFixture(spot->id(), QPointF(3000.0, 2000.0));
+    view.setViewPOV(MonitorGraphicsView::PovTop);
+
+    auto poolOff = [&]() {
+        const QPolygonF poly = view.fixtureProjection(spot->id());
+        if (poly.size() < 3)
+            return -1.0;
+        const QPointF want = view.realPositionToPixels(double(mark.x()) * 1000.0,
+                                                       double(mark.y()) * 1000.0);
+        return QLineF(poly.boundingRect().center(), want).length() / view.m_cellPixels;
+    };
+    const double calibrated = poolOff();
+    QVERIFY2(calibrated >= 0.0 && calibrated < 0.5,
+             qPrintable(QString("a calibrated head's pool is %1 m from its mark").arg(calibrated)));
+
+    // The same DMX read as if there were no calibration lands well off it:
+    // the offset is real, and the view is what takes it out.
+    rp.panOffsetDeg = 0.0f;
+    rp.tiltOffsetDeg = 0.0f;
+    props->setFixtureRigProps(spot->id(), rp);
+    const double raw = poolOff();
+    QVERIFY2(raw < 0.0 || raw > 1.0,
+             qPrintable(QString("without removing the offset the pool is still %1 m from the mark")
+                        .arg(raw)));
 
     delete doc;
 }

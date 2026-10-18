@@ -66,6 +66,7 @@ static QCursor smallOpenHandCursor()
     return QCursor(pm, 5, 0); // hotspot = tip of middle finger
 }
 #include "monitorproperties.h"
+#include "aimsolver.h"
 #include "qlcfixturehead.h"
 #include "qlcfixturemode.h"
 #include "qlcphysical.h"
@@ -1029,8 +1030,16 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
     // centre keeps the cluster at the head's icon-rotated position.
     const int facing16 = qRound(m_facingDeg * 16.0);
     const qreal iconRot = rotation();   // visual icon rotation (degrees)
+    /* The gauges say where the head is AIMED, so the calibration offsets come
+       out (and the invert mirrors are undone) the same way every other view
+       turns DMX back into a direction: AimSolver::intendedAngles(). */
+    const FixtureRigProps rigProps = m_doc->monitorProperties() != NULL
+        ? m_doc->monitorProperties()->fixtureRigProps(m_fid) : FixtureRigProps();
     foreach (FixtureHead *head, m_heads)
     {
+        double panShown = 0.0, tiltShown = 0.0;
+        AimSolver::intendedAngles(rigProps, head->m_panDegrees, head->m_tiltDegrees,
+                                  panShown, tiltShown);
         QRectF rect = shapeRect(head->m_item);
         const QPointF rc = rect.center();
 
@@ -1047,7 +1056,7 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
             painter->drawArc(rect, 270 * 16 + facing16 - head->m_tiltMaxDegrees * 16 / 2 - 8, 16);
             painter->drawArc(rect, 270 * 16 + facing16 + head->m_tiltMaxDegrees * 16 / 2 - 8, 16);
             painter->setPen(QPen(QColor("turquoise"), MOVEMENT_THICKNESS));
-            painter->drawArc(rect, 270 * 16 + facing16, - head->m_tiltDegrees * 16);
+            painter->drawArc(rect, 270 * 16 + facing16, - qRound(tiltShown * 16));
         }
 
         if (head->m_panChannel != UINT_MAX /*QLCChannel::invalid()*/)
@@ -1058,7 +1067,7 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
             painter->drawArc(rect, 270 * 16 + facing16 - head->m_panMaxDegrees * 16 / 2 - 8, 16);
             painter->drawArc(rect, 270 * 16 + facing16 + head->m_panMaxDegrees * 16 / 2 - 8, 16);
             painter->setPen(QPen(QColor("purple"), MOVEMENT_THICKNESS));
-            painter->drawArc(rect, 270 * 16 + facing16, - head->m_panDegrees * 16);
+            painter->drawArc(rect, 270 * 16 + facing16, - qRound(panShown * 16));
         }
 
         painter->restore();
