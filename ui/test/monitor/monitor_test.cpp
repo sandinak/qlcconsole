@@ -33,6 +33,7 @@
 #include <functional>
 #include <QDialogButtonBox>
 #include <QMessageBox>
+#include <QPointer>
 #include <QPushButton>
 #include <QPainter>
 #include <QTemporaryDir>
@@ -55,6 +56,9 @@
 #include "stagegroupdialog.h"
 #include "monitorgraphicsview.h"
 #include "monitorfixtureitem.h"
+#include "focusmodepanel.h"
+#include "focussession.h"
+#include "programmercontroller.h"
 #include "structurestudioview.h"
 #include "rhiraster.h"
 #include "mastertimer.h"
@@ -10933,6 +10937,127 @@ void Monitor_Test::aCalibratedHeadsPoolLandsOnItsMark()
              qPrintable(QString("without removing the offset the pool is still %1 m from the mark")
                         .arg(raw)));
 
+    delete doc;
+}
+
+void Monitor_Test::focusModeSetupOffersTheSceneAimFirst()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Fixture *a = makeMover(doc, 14.0, 0, "FA", QVector3D(2.0f, 2.0f, 5.0f));
+    Fixture *b = makeMover(doc, 14.0, 16, "FB", QVector3D(5.0f, 2.0f, 5.0f));
+    QVERIFY(a != nullptr && b != nullptr);
+    StageTarget *mark = props->addStageTarget();
+    mark->setName("Mark");
+    mark->setPosition(QVector3D(4.0f, 5.0f, 0.0f));
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, doc);
+    aim->setStageTargetId(mark->id());
+    QVERIFY(doc->addPalette(aim));
+    Scene *scene = new Scene(doc);
+    scene->setName("Look");
+    scene->addFixture(a->id());
+    scene->addFixture(b->id());
+    scene->addPalette(aim->id());
+    QVERIFY(doc->addFunction(scene));
+
+    {
+        FocusModeSetupDialog dlg(doc, scene->id(), { b->id() });
+        const FocusSession::Options o = dlg.options();
+        QCOMPARE(o.fixtures, QList<quint32>({ b->id() }));
+        QCOMPARE(o.first.kind, FocusSession::Reference::SceneAim);
+        QCOMPARE(o.first.id, scene->id());
+        QVERIFY(!o.second.isValid());
+        QCOMPARE(o.others, FocusSession::OthersDark);
+    }
+    {
+        // Nothing selected, no scene: every head, aimed at a target.
+        FocusModeSetupDialog dlg(doc, Function::invalidId(), {});
+        const FocusSession::Options o = dlg.options();
+        QCOMPARE(o.fixtures.size(), 2);
+        QCOMPARE(o.first.kind, FocusSession::Reference::Target);
+        QCOMPARE(o.first.id, mark->id());
+    }
+    delete doc;
+}
+
+void Monitor_Test::focusModeRunsFromTheKeyboard()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Fixture *a = makeMover(doc, 14.0, 0, "FA", QVector3D(2.0f, 6.0f, 5.0f));
+    Fixture *b = makeMover(doc, 14.0, 16, "FB", QVector3D(5.0f, 6.0f, 5.0f));
+    QVERIFY(a != nullptr && b != nullptr);
+    StageTarget *mark = props->addStageTarget();
+    mark->setName("Mark");
+    mark->setPosition(QVector3D(4.0f, 3.0f, 0.0f));
+
+    QWidget parent;
+    Monitor *mon = new Monitor(&parent, doc);
+    FocusSession *s = doc->programmer()->focusSession();
+
+    FocusSession::Options o;
+    o.fixtures = { a->id(), b->id() };
+    o.first.kind = FocusSession::Reference::Target;
+    o.first.id = mark->id();
+
+    QString why;
+    QPointer<FocusModePanel> panel = FocusModePanel::startWith(doc, &parent, o, &why);
+    QVERIFY2(panel != nullptr, qPrintable(why));
+    QVERIFY(s->isActive());
+    QCOMPARE(s->currentFixture(), a->id());
+    QLabel *offsets = panel->findChild<QLabel *>("focusOffsets");
+    QLabel *progress = panel->findChild<QLabel *>("focusProgress");
+    QVERIFY(offsets != nullptr && progress != nullptr);
+
+    // Its head is ringed on the plot.
+    MonitorGraphicsView *gv = mon->findChild<MonitorGraphicsView *>();
+    QVERIFY(gv != nullptr);
+    MonitorFixtureItem *ringed = gv->fixtureItemForId(a->id());
+    QVERIFY(ringed != nullptr);
+    QVERIFY(ringed->m_highlighted);
+
+    QTest::keyClick(panel, Qt::Key_Right);                     // one step of pan
+    QTest::keyClick(panel, Qt::Key_Up, Qt::ShiftModifier);     // a degree of tilt
+    QCOMPARE(s->liveOffset(a->id()).pan, 0.1f);
+    QCOMPARE(s->liveOffset(a->id()).tilt, 1.0f);
+    QVERIFY2(offsets->text().contains("+0.10") && offsets->text().contains("+1.00"),
+             qPrintable(offsets->text()));
+    QTest::keyClick(panel, Qt::Key_Return);                     // save
+    QVERIFY(s->isChecked(a->id()));
+    QVERIFY2(progress->text().startsWith("1 of 2"), qPrintable(progress->text()));
+    QTest::keyClick(panel, Qt::Key_BracketRight);               // next
+    QCOMPARE(s->currentFixture(), b->id());
+    QTest::keyClick(panel, Qt::Key_Left);
+    QTest::keyClick(panel, Qt::Key_Backspace);                  // revert
+    QCOMPARE(s->liveOffset(b->id()).pan, 0.0f);
+    QTest::keyClick(panel, Qt::Key_Plus);                       // step x10
+    QCOMPARE(s->stepDegrees(), 1.0f);
+    QTest::keyClick(panel, Qt::Key_Left);
+    QCOMPARE(s->liveOffset(b->id()).pan, -1.0f);
+    QTest::keyClick(panel, Qt::Key_0);                          // zero
+    QCOMPARE(s->liveOffset(b->id()).pan, 0.0f);
+    QTest::keyClick(panel, Qt::Key_Down);
+
+    // Esc with a head unsaved asks; Discard puts it back and ends it.
+    QTimer::singleShot(0, this, []() {
+        for (QWidget *w : QApplication::topLevelWidgets())
+            if (QMessageBox *box = qobject_cast<QMessageBox *>(w))
+                if (box->objectName() == QLatin1String("focusExitQuestion") && box->isVisible())
+                    box->button(QMessageBox::Discard)->click();
+    });
+    QTest::keyClick(panel, Qt::Key_Escape);
+    QTRY_VERIFY(panel.isNull());
+    QVERIFY(!s->isActive());
+    QCOMPARE(props->fixtureRigProps(b->id()).tiltOffsetDeg, 0.0f);
+    QCOMPARE(props->fixtureRigProps(a->id()).tiltOffsetDeg, 1.0f);   // saved stays
+    QVERIFY(!gv->fixtureItemForId(a->id())->m_highlighted);
+
+    // The whole session is one step on the Studio's undo.
+    mon->undo();
+    QCOMPARE(props->fixtureRigProps(a->id()).tiltOffsetDeg, 0.0f);
+    QCOMPARE(props->fixtureRigProps(a->id()).panOffsetDeg, 0.0f);
+
+    delete mon;
     delete doc;
 }
 

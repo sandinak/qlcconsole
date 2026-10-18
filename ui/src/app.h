@@ -304,6 +304,8 @@ public slots:
     /** Open the rig overview (View menu). Delegates to the Monitor, which owns
      *  the window, so the menu and the studio footer share one instance. */
     void slotRigOverview();
+    /** Focus mode: Monitor::openFocusMode(). */
+    void slotFocusMode();
     void slotAddressTool();
     void slotControlBlackout();
     /** Toggle global Blind (output inhibit) from the main toolbar. */

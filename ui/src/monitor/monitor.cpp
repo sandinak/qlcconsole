@@ -89,6 +89,7 @@
 #include <QMutexLocker>
 #include <memory>
 #include "monitorfixtureitem.h"
+#include "focusmodepanel.h"
 #include "aimsolver.h"
 #include "powerdistribution.h"
 #include "networktopology.h"
@@ -1462,6 +1463,25 @@ void Monitor::highlightFixtures(const QList<quint32> &ids)
         m_graphicsView->highlightFixtures(ids);
 }
 
+void Monitor::showFocusFixture(quint32 fid)
+{
+    QList<quint32> ids;
+    if (fid != UINT_MAX)
+        ids << fid;
+    if (m_graphicsView != NULL)
+        m_graphicsView->highlightFixtures(ids);
+    if (m_overviewView != NULL)
+        m_overviewView->setHighlight(ids);
+}
+
+void Monitor::openFocusMode()
+{
+    QList<quint32> selection;
+    if (m_doc->programmer() != NULL)
+        selection = m_doc->programmer()->programmerSelection();
+    FocusModePanel::open(m_doc, window(), m_activeSceneId, selection);
+}
+
 void Monitor::setActiveScene(quint32 sceneId)
 {
     m_activeSceneId = sceneId;
@@ -1788,6 +1808,16 @@ void Monitor::initGraphicsToolbar()
 
     // "More" popup — the secondary view/edit tools, folded off the toolbar to
     // keep it lean. (Most also have shortcuts and/or a right-click equivalent.)
+    /* Focus mode: align the rig before a show, a head at a time
+       (FOCUS_MODE_DESIGN.md). Also View > Focus Mode, the Rig Overview, and
+       View + Menu on the controller. */
+    QAction *focusAct = m_graphicsToolBar->addAction(QIcon(":/target.png"), tr("Focus"));
+    focusAct->setObjectName(QStringLiteral("focusModeAction"));
+    focusAct->setToolTip(tr("Focus mode: aim each moving head at its reference in turn and "
+                            "nudge its calibration offsets until it lands there "
+                            "(controller: View + Menu)"));
+    connect(focusAct, &QAction::triggered, this, &Monitor::openFocusMode);
+
     m_moreBtn = new QToolButton(this);
     QToolButton *moreBtn = m_moreBtn;
     moreBtn->setIcon(QIcon(":/configure.png"));
@@ -2568,6 +2598,16 @@ void Monitor::showStageOverview()
             [view, rateCombo](int) {
         view->setMaxFrameRate(rateCombo->currentData().toInt());
     });
+
+    /* Focus mode from here too: the Overview is where you watch the beams
+       land while you align them. */
+    QToolButton *focusBtn = new QToolButton(&dlg);
+    focusBtn->setObjectName(QStringLiteral("rigFocus"));
+    focusBtn->setText(tr("Focus"));
+    focusBtn->setToolTip(tr("Focus mode: aim each moving head at its reference in turn and "
+                            "nudge its calibration offsets"));
+    bar->addWidget(focusBtn);
+    connect(focusBtn, &QToolButton::clicked, this, &Monitor::openFocusMode);
 
     bar->addStretch();
     bar->addWidget(new QLabel(tr("drag to swing · shift-drag to pan · "
