@@ -148,6 +148,8 @@ private slots:
     void aSockedTrussGlowsWithTheBarsInsideIt();
     void aTowerWearsItsFacesPlainOrPrinted();
     void ledsGlowInTheHaze();
+    void hazeGlowStaysBehindAClosedDrape();
+    void aBigPixelRigPaintsInGoodTime();
     /** Consolidation 3: double-click a fixture = Fixture Properties; click
      *  again picks one out of a group. */
     void doubleClickingAFixtureOpensItWhereverItIs();

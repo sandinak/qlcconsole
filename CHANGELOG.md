@@ -386,6 +386,12 @@ a shorter Windows re-soak is planned.
   the rig view about 9 ms a frame on a 200-fixture show (was 51).
 
 ### Fixed
+- **Lights behind a closed curtain glowed through it in the Rig Overview.**
+  Steps just upstage of the closed main drape showed their haze glow on the
+  drape and on the floor in front of it, and the pools their light made on
+  the back of the cloth. Opaque scenery and platforms now hide a light's
+  glow, and pools on the far side of a drape stay there; where the drape is
+  open the glow shows through the gap, and a scrim is still see-through.
 - **Universe patches were lost when a show was opened away from its
   network.** Opening a show on a computer without the interface it was
   patched to (a laptop off the show VLAN) and saving it wrote the show

@@ -661,6 +661,11 @@ step sends a sheet of **lit air rising** off it, both as bright as the
 pixels (colour × dimmer) and scaled by the haze. Lanterns have their own
 halo; movers show their beams.
 
+The glow is lit air round the light, so it is hidden by what stands in
+front of the light: a row of steps behind the closed main drape shows no
+glow on the drape (or on the floor in front of it), and where the drape
+opens the glow shows through the gap. A scrim is seen through, glow and all.
+
 ### Colour rings
 
 A mover with a **colour ring** round its lens (a ring of LEDs on one

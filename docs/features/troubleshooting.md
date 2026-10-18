@@ -92,6 +92,12 @@ the same switch).
 **The Rig Overview is slow.** Make sure its **GPU** box is ticked, then
 **Quality: Fast**, hide layers you don't need, and use a release build.
 
+**Light shows through a closed curtain.** Lights just behind a closed
+drape used to glow through it (their haze glow and the pools of light on
+the back of the cloth); this build hides them. If a light still shows,
+check the drape is closed where the light is — an open or flown part
+hides nothing — and that it isn't a scrim, which is see-through.
+
 **The Rig Overview draws wrongly** — garbled beams, missing structures,
 black patches. Untick its **GPU** box: it draws on the processor instead,
 and a graphics driver can't get it wrong. See [Keeping it quick](getting-started.md#keeping-it-quick).
