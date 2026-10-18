@@ -13,6 +13,39 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 ## [Unreleased]
 
 ### Added
+- **Show Tree** (new tab, ⇧⌘6): productions → cue lists → cues → layers →
+  looks, with tracking (Block / Cue-only / Release), includes, one
+  precedence rule up and down the chain, a plan view for line targets, and
+  preview that matches GO. **Import chaser…** turns an existing chaser into
+  a tree (0 channels differ on playback); **Convert to tracking** /
+  **Detach to plain chaser** go the other way. A **Looks** section for
+  busking (with **Make VC page**), the **Library** with palettes, Recent and
+  Pinned, one undo history shared with the Programming tab, and a typed
+  command line. Deleting a palette takes it off every look that uses it
+  (one Undo puts it all back).
+- **Productions, sub-cues and the cue runner.** Several productions per
+  show, each with its own main list and timecode; sub-cues 4.1, 4.2… with
+  Sub GO or Auto-follow; the **Run** tab (⇧⌘0, Space = GO) and the **Cue
+  Runner** VC widget (and **Swap Widget** from a Cue List); OSC `/subgo`,
+  `/subback`.
+- **Line targets.** A stage target can be a line (or curve): an Aim look
+  spreads its heads along it, crosses them, groups them in pairs or halves,
+  in hanging or look order.
+- **Colour rings on movers.** A mover's LED ring is a head type of its own
+  (group by head type makes Movers and Ring groups); ring chases by name;
+  drawn live in the 2D plot and Rig Overview; **Change Definition…** moves
+  fixtures to a drop-in definition.
+- **Create Group(s) from Selection** — one group, a group per head type, or
+  a group per head type for each fixture, previewed before anything is made.
+- **Palette folders hold any type** — folders first, or Group by type.
+- **Matrix effects for pixel boxes.** Fourteen effects in a new Matrix tab
+  (bars, chevrons, ripple, rain, checker, sparkle, radar, iris, equaliser,
+  snakes, wipes, colour noise, box chase, strobe), across a run of boxes or
+  in each box, with white-pixel options (the XL-450's).
+- **Curtains that move.** A main drape or traveler can be driven by a
+  curtain fixture (bundled **Generic › Stage Curtain**: Open, Open fine,
+  Fly): it opens and flies as the channel fades, on the plot and in the Rig
+  Overview, and blocks beams where it is (see Line of sight).
 - **Backup WLED lanterns.** A WLED universe can drive several devices: a
   backup lantern mirrors the primary without programming anything twice.
   Right-click the universe in Connections (or the Fixture Manager) →
@@ -36,7 +69,14 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
   plot draws blocked aim lines red to the blocker, and **Show → Line of
   sight** sets which kinds block and whether the 3D views stop beams at
   them. Effect scripts read `sceneTarget.blocked` / `blockedBy` /
-  `blockedKind` / `blockedAt` / `clearance` (also on `aimAt` slots).
+  `blockedKind` / `blockedAt` / `clearance` (also on `aimAt` slots). A
+  line target checks each head's own point on the line; a curtain driven by
+  a fixture blocks where that fixture has it now.
+
+### Fixed
+- **Chaser teardown use-after-free.** Deleting a chaser while its runner was
+  still running freed the steps the runner reads (an intermittent "double
+  free" on Linux).
 
 ## [0.1.0] - Unreleased
 
