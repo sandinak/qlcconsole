@@ -59,6 +59,10 @@
 #include <QRegularExpression>
 
 #include "showtreecontroller.h"
+#include "paletteops.h"
+#include "virtualconsole.h"
+#include "vcbutton.h"
+#include "vcframe.h"
 #include "inputoutputmap.h"
 #include "chaseraction.h"
 #include "functionstreewidget.h"
@@ -3657,6 +3661,531 @@ void ShowTreeView_Test::convertAndDetachFromTheListPage()
     QVERIFY(st->undo());
     QVERIFY(st->cueList(listId) != nullptr);
     QVERIFY(st->isGenerated(chaserId));
+}
+
+/****************************************************************************
+ * R2: palettes in the Library (PROGRAMMING_ROLE_DESIGN.md §4.2, P-D8)
+ ****************************************************************************/
+
+namespace
+{
+/* A Virtual Console for one test, gone however the test ends. */
+struct ScopedVc
+{
+    explicit ScopedVc(Doc *doc) { new VirtualConsole(nullptr, doc); }
+    ~ScopedVc() { delete VirtualConsole::instance(); }
+};
+
+/* The tree's state and the palette folders (an empty folder is PaletteOps'
+   alone). */
+QString paletteState(Doc *doc)
+{
+    return treeState(doc) + QStringLiteral("\nfolders ") + doc->paletteOps()->folders().join(QLatin1Char('|'));
+}
+}
+
+void ShowTreeView_Test::palettesInTheLibrary()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    const quint32 blue = colour(Qt::blue, "Blue");
+    const quint32 full = dimmer(255, "Full");
+    // An older show's layout: the type is the first folder.
+    m_doc->palette(blue)->setPath("Palettes/Color/01-Song/");
+    m_doc->palette(full)->setPath("Palettes/01-Song/");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 list = st->addCueList(prod, "L");
+    const quint32 c1 = st->addCue(list, -1, "One");
+    QVERIFY(st->setLayerLook(c1, st->addLayer(c1, Target { { towers->id() }, {}, {}, 0xFFFFFFFF }),
+                             st->lookForPalette(blue)));
+
+    QSettings().remove("showtree/libraryPalettesByType");
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QVERIFY(view.paletteGroupByType());
+    // By type, the folder under each type -- read the same both ways.
+    QCOMPARE(view.libraryPaletteRows(), QStringList({ "Colour", "  01-Song/", "    Blue", "Dimmer", "  01-Song/",
+                                                      "    Full" }));
+    // Folders first: one folder, any type in it.
+    view.setPaletteGroupByType(false);
+    QCOMPARE(view.libraryPaletteRows(), QStringList({ "01-Song/", "  Blue", "  Full" }));
+
+    // + Palette, in the folder selected: made, selected, in the Look Editor,
+    // Used by: nothing yet.
+    QTreeWidgetItem *song = libraryItem(view.library(), "01-Song");
+    QVERIFY(song != nullptr);
+    view.library()->setCurrentItem(song, 0, QItemSelectionModel::ClearAndSelect);
+    QCOMPARE(view.libraryPaletteFolder(), QString("01-Song"));
+    QToolButton *plus = view.findChild<QToolButton *>("stNewPalette");
+    QVERIFY(plus != nullptr && plus->menu() != nullptr);
+    const quint32 amber = view.newPaletteFromLibrary(QLCPalette::Color);
+    QVERIFY(amber != QLCPalette::invalidId());
+    QCOMPARE(m_doc->palette(amber)->name(), QString("New Color"));
+    QCOMPARE(m_doc->palette(amber)->path(), QString("Palettes/01-Song/"));
+    QCOMPARE(view.editedPalette(), amber);
+    QCOMPARE(view.library()->currentItem()->data(0, ShowTreeView::IdRole).toUInt(), amber);
+    QCOMPARE(view.usedByText(), QString("Used by: nothing yet"));
+
+    // F2: rename in place.
+    QVERIFY(view.startLibraryRename());
+    QVERIFY(view.isLibraryRenaming());
+    QTreeWidgetItem *editing = view.library()->currentItem();
+    view.library()->closePersistentEditor(editing, 0);
+    editing->setText(0, "Amber");
+    QTRY_COMPARE(m_doc->palette(amber)->name(), QString("Amber"));
+    QTRY_VERIFY(view.libraryPaletteRows().contains("  Amber"));
+
+    // New folder; drag (drop) Blue and Amber into it; rename it; delete it.
+    view.library()->setCurrentItem(libraryItem(view.library(), "Palettes"), 0, QItemSelectionModel::ClearAndSelect);
+    QVERIFY(view.newPaletteFolder("Hits"));
+    QVERIFY(m_doc->paletteOps()->folders().contains("Hits"));
+    QVERIFY(view.libraryPaletteRows().contains("Hits/"));
+    QVERIFY(view.dropPalettesOnFolder({ blue, amber }, "Hits"));
+    QCOMPARE(PaletteOps::folderOf(m_doc->palette(blue)), QString("Hits"));
+    QCOMPARE(view.libraryPaletteRows(), QStringList({ "01-Song/", "  Full", "Hits/", "  Amber", "  Blue" }));
+    view.library()->setCurrentItem(libraryItem(view.library(), "Hits"), 0, QItemSelectionModel::ClearAndSelect);
+    QVERIFY(view.startLibraryRename());
+    editing = view.library()->currentItem();
+    view.library()->closePersistentEditor(editing, 0);
+    editing->setText(0, "Stabs");
+    QTRY_COMPARE(PaletteOps::folderOf(m_doc->palette(blue)), QString("Stabs"));
+    QStringList asked;
+    view.setConfirm([&asked](const QString &title, const QString &text, const QString &) {
+        asked << title + ": " + text;
+        return true;
+    });
+    QTRY_VERIFY(libraryItem(view.library(), "Stabs") != nullptr);
+    view.library()->clearSelection();
+    view.library()->setCurrentItem(libraryItem(view.library(), "Stabs"), 0, QItemSelectionModel::ClearAndSelect);
+    QVERIFY(view.deleteLibrarySelection());
+    QCOMPARE(asked.count(), 1);
+    QVERIFY2(asked.first().contains("move up"), qPrintable(asked.first()));
+    QCOMPARE(PaletteOps::folderOf(m_doc->palette(blue)), QString());
+
+    // Used by on the Look Editor line: the cue, by number and layer.
+    view.editPalette(blue);
+    QCOMPARE(view.usedByText(), QString("Used by: 1 cue(s) — which"));
+    // Undo (the shared history) puts the folder back.
+    view.findChild<QToolButton *>("stUndo")->click();
+    QCOMPARE(PaletteOps::folderOf(m_doc->palette(blue)), QString("Stabs"));
+    // Back to by type (remembered).
+    view.setPaletteGroupByType(true);
+    QVERIFY(QSettings().value("showtree/libraryPalettesByType").toBool());
+    QVERIFY(view.libraryPaletteRows().contains("Colour"));
+    // One-off values never show in All (D21) and aren't managed here.
+    const quint32 inl = st->createInlinePalette(QLCPalette::Dimmer, { 10 }, "4% · 1 Towers");
+    view.reload();
+    for (const QString &row : view.libraryPaletteRows())
+        QVERIFY(!row.contains("4% · 1 Towers"));
+    QVERIFY(!m_doc->paletteOps()->isManaged(inl));
+}
+
+void ShowTreeView_Test::aPaletteDeletedFromTheLibraryComesBackWithUndo()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    const quint32 blue = colour(Qt::blue, "Blue");
+    Scene *old = new Scene(m_doc);
+    old->setName("Old Busk");
+    old->addFixtureGroup(towers->id());
+    old->addPalette(blue);
+    m_doc->addFunction(old);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 list = st->addCueList(prod, "L");
+    const quint32 c1 = st->addCueNumbered(list, "1.0.0", "One");
+    const quint32 l1 = st->addLayer(c1, Target { { towers->id() }, {}, {}, 0xFFFFFFFF });
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(blue)));
+    ScopedVc vc(m_doc);
+    VCButton *btn = new VCButton(VirtualConsole::instance()->contents(), m_doc);
+    VirtualConsole::instance()->placeWidget(btn, VirtualConsole::instance()->contents());
+    btn->setCaption("Busk");
+    btn->setFunction(old->id());
+
+    {
+        ShowTreeView view(nullptr, m_doc);
+        view.resize(1200, 800);
+        view.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&view));
+        QStringList asked;
+        bool answer = false;
+        view.setConfirm([&](const QString &title, const QString &text, const QString &) {
+            asked << title + ": " + text;
+            return answer;
+        });
+        view.library()->clearSelection();
+        QTreeWidgetItem *row = nullptr;
+        for (QTreeWidgetItemIterator it(view.library()); *it; ++it)
+            if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::LibPalette
+                && (*it)->data(0, ShowTreeView::IdRole).toUInt() == blue)
+                row = *it;
+        QVERIFY(row != nullptr);
+        view.library()->setCurrentItem(row);
+        row->setSelected(true);
+        // Asked, naming the cue (not its generated scene), the scene and the
+        // VC button firing that scene. Cancelled: nothing goes.
+        QVERIFY(!view.deleteLibrarySelection());
+        QCOMPARE(asked.count(), 1);
+        QVERIFY2(asked.first().contains("Cue 1.0.0 One in L — Towers"), qPrintable(asked.first()));
+        QVERIFY2(asked.first().contains("Scene “Old Busk” — look 1"), qPrintable(asked.first()));
+        QVERIFY2(asked.first().contains("VC button “Busk”"), qPrintable(asked.first()));
+        QVERIFY(!asked.first().contains(" · Towers"));                 // no generated scene name
+        QVERIFY(m_doc->palette(blue) != nullptr);
+        // ⌫ in the Library, answered yes: gone; the cue says (missing).
+        answer = true;
+        QTest::keyClick(view.library(), Qt::Key_Backspace);
+        QVERIFY(m_doc->palette(blue) == nullptr);
+        QVERIFY(old->palettes().isEmpty());
+        QVERIFY(view.selectNode(l1, c1));
+        QVERIFY(rowFor(view.attributeRows(), "Colour").contains("(missing)"));
+        // Undo: back, with its id, in the scene, and the cue plays it.
+        view.findChild<QToolButton *>("stUndo")->click();
+        QVERIFY(m_doc->palette(blue) != nullptr);
+        QCOMPARE(old->palettes(), QList<quint32>({ blue }));
+        QVERIFY(view.selectNode(l1, c1));
+        QVERIFY(rowFor(view.attributeRows(), "Colour").contains("Blue"));
+        // Redo deletes it again.
+        view.findChild<QToolButton *>("stRedo")->click();
+        QVERIFY(m_doc->palette(blue) == nullptr);
+    }
+}
+
+/* One action, one undo step (D22) for the Library's palette operations,
+   on the history the tab shares with the tree -- and with the Programming
+   tab's palette operations (P-D14). */
+void ShowTreeView_Test::paletteStepsAreOneUndoStepAndSharedWithProgramming()
+{
+    const quint32 blue = colour(Qt::blue, "Blue");
+    ShowTreeController *st = m_doc->showTree();
+    st->addProduction("P");
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    view.setConfirm([](const QString &, const QString &, const QString &) { return true; });
+    int walked = 0;
+    auto oneStep = [&](const char *what, const std::function<bool()> &action) -> bool {
+        const QString before = paletteState(m_doc);
+        if (!action())
+        {
+            qWarning() << what << "did nothing";
+            return false;
+        }
+        const QString after = paletteState(m_doc);
+        if (after == before)
+        {
+            qWarning() << what << "changed nothing";
+            return false;
+        }
+        if (!st->undoShared() || paletteState(m_doc) != before)
+        {
+            qWarning() << what << ": one undo didn't give back the state before it";
+            return false;
+        }
+        if (!st->redoShared() || paletteState(m_doc) != after)
+        {
+            qWarning() << what << ": redo didn't give back the state after it";
+            return false;
+        }
+        ++walked;
+        return true;
+    };
+    quint32 made = QLCPalette::invalidId();
+    QVERIFY(oneStep("+ Palette", [&] {
+        made = view.newPaletteFromLibrary(QLCPalette::Dimmer);
+        return made != QLCPalette::invalidId();
+    }));
+    QVERIFY(oneStep("New folder", [&] {
+        view.library()->setCurrentItem(libraryItem(view.library(), "Palettes"));
+        return view.newPaletteFolder("Levels");
+    }));
+    QVERIFY(oneStep("a drop on a folder", [&] { return view.dropPalettesOnFolder({ blue }, "Levels"); }));
+    QVERIFY(oneStep("Duplicate", [&] {
+        return m_doc->paletteOps()->duplicate(blue) != QLCPalette::invalidId();
+    }));
+    QVERIFY(oneStep("Delete", [&] {
+        view.reload();
+        view.library()->clearSelection();
+        for (QTreeWidgetItemIterator it(view.library()); *it; ++it)
+            if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::LibPalette
+                && (*it)->data(0, ShowTreeView::IdRole).toUInt() == blue)
+            {
+                view.library()->setCurrentItem(*it);
+                (*it)->setSelected(true);
+            }
+        return view.deleteLibrarySelection();
+    }));
+    QVERIFY(oneStep("palette typed", [&] { return view.runCommand("palette colour \"Amber\" #ffb000"); }));
+    QVERIFY(oneStep("palette folder typed", [&] { return view.runCommand("palette folder \"Spare\""); }));
+    QCOMPARE(walked, 7);
+
+    // The Programming tab's New palette is a step of the same history: the
+    // Show Tree's Undo takes it back.
+    {
+        ProgrammingManager mgr(nullptr, m_doc);
+        const int before = m_doc->palettes().count();
+        mgr.createPalette(QLCPalette::Gobo);
+        QCOMPARE(m_doc->palettes().count(), before + 1);
+        view.findChild<QToolButton *>("stUndo")->click();
+        QCOMPARE(m_doc->palettes().count(), before);
+        QVERIFY(view.findChild<QToolButton *>("stRedo")->toolTip().startsWith("Redo New Gobo palette"));
+    }
+}
+
+/****************************************************************************
+ * R3: the Looks section (PROGRAMMING_ROLE_DESIGN.md §4.1, P-D5..P-D7)
+ ****************************************************************************/
+
+void ShowTreeView_Test::looksSectionInTheTree()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("DanceHysteria");
+    const quint32 list = st->addCueList(prod, "Full Show");
+    st->addCue(list, -1, "One");
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+
+    // + Look on the production: the section and the look, one step.
+    QVERIFY(view.selectNode(prod));
+    const quint32 hit = view.newLook();
+    QVERIFY(hit != invalidId());
+    QVERIFY(st->isLook(hit));
+    QCOMPARE(view.currentId(), hit);
+    QCOMPARE(view.findChild<QToolButton *>("stNewCue")->text(), QString("+ Look"));
+    // Named on its page; groups dropped on it make a layer, as on a cue.
+    QLineEdit *name = view.findChild<QLineEdit *>("stCueName");
+    name->setText("Hit 1");
+    emit name->editingFinished();
+    QCOMPARE(st->cue(hit)->name, QString("Hit 1"));
+    QVERIFY(view.dropTargets(hit, { towers->id() }, {}));
+    const quint32 layer = st->cue(hit)->layers.first().id;
+    QVERIFY(view.dropPalettes(hit, layer, { full }));
+    QVERIFY(treeText(view.tree()).contains("  Looks [busking]"));
+    QVERIFY(treeText(view.tree()).contains("    Hit 1"));
+    // A look's page: no number, mode, includes or timing; who fires it.
+    QVERIFY(view.selectNode(hit));
+    QVERIFY(!view.findChild<QLineEdit *>("stCueNumber")->isVisibleTo(&view));
+    QVERIFY(!view.findChild<QComboBox *>("stCueMode")->isVisibleTo(&view));
+    QLabel *fired = view.findChild<QLabel *>("stLookFiredBy");
+    QVERIFY(fired->isVisibleTo(&view));
+    QVERIFY(fired->text().contains("no VC button yet"));
+    QVERIFY(fired->text().contains("Make VC page"));
+    // Its layer page has no Release (a look never passes anything on).
+    QVERIFY(view.selectNode(layer, hit));
+    QVERIFY(!view.findChild<QCheckBox *>("stLayerRelease")->isVisibleTo(&view));
+    // Selected in Design, it plays on the rig.
+    QCOMPARE(st->previewedCue(), hit);
+    QCOMPARE(int(settleDmx(m_doc)[0]), 255);
+    // A cue's page still has them all.
+    QVERIFY(view.selectNode(st->cueList(list)->cues.first().id));
+    QVERIFY(view.findChild<QLineEdit *>("stCueNumber")->isVisibleTo(&view));
+    QVERIFY(!fired->isVisibleTo(&view));
+
+    // Folders: new one on the section, a look dragged (dropped) onto it,
+    // renamed in place, deleted (its looks move up).
+    const quint32 section = st->looksSection(prod);
+    QVERIFY(view.selectNode(section));
+    QVERIFY(st->addLookFolder(section, "Hits"));
+    QTreeWidgetItem *folderRow = nullptr;
+    for (QTreeWidgetItemIterator it(view.tree()); *it; ++it)
+        if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::LookFolderNode)
+            folderRow = *it;
+    QVERIFY(folderRow != nullptr);
+    QCOMPARE(view.lookFolderDropHint({ hit }, section, "Hits"), QString("Hit 1 → Hits"));
+    QCOMPARE(view.lookFolderDropHint({ st->cueList(list)->cues.first().id }, section, "Hits"), QString());
+    QVERIFY(view.dropLooksOnFolder({ hit }, section, "Hits"));
+    QVERIFY(treeText(view.tree()).contains("      Hit 1"));            // under Looks › Hits
+    view.tree()->setCurrentItem(nullptr);
+    for (QTreeWidgetItemIterator it(view.tree()); *it; ++it)
+        if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::LookFolderNode)
+            view.tree()->setCurrentItem(*it);
+    QCOMPARE(view.currentLookFolder(), QString("Hits"));
+    QVERIFY(view.findChild<QPushButton *>("stMakeVcPage")->isVisibleTo(&view));
+    QVERIFY(!view.findChild<QComboBox *>("stListMode")->isVisibleTo(&view));
+    // + Look in the folder.
+    const quint32 hit2 = view.newLook();
+    QCOMPARE(st->cue(hit2)->folder, QString("Hits"));
+    for (QTreeWidgetItemIterator it(view.tree()); *it; ++it)
+        if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::LookFolderNode)
+            view.tree()->setCurrentItem(*it);
+    QVERIFY(view.startRename());
+    QTreeWidgetItem *editing = view.tree()->currentItem();
+    view.tree()->closePersistentEditor(editing, 0);
+    editing->setText(0, "Stabs");
+    QTRY_COMPARE(st->cue(hit)->folder, QString("Stabs"));
+    for (QTreeWidgetItemIterator it(view.tree()); *it; ++it)
+        if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::LookFolderNode)
+            view.tree()->setCurrentItem(*it);
+    view.slotDelete();
+    QCOMPARE(st->cue(hit)->folder, QString());
+    QCOMPARE(st->cue(hit2)->folder, QString());
+    QVERIFY(st->lookFolders(section).isEmpty());
+    // The section can't be renamed; its looks can.
+    QVERIFY(view.selectNode(section));
+    QVERIFY(!view.startRename());
+    // Copy to look: a cue's stage frozen as a look.
+    const quint32 one = st->cueList(list)->cues.first().id;
+    QVERIFY(view.dropTargets(one, { towers->id() }, {}));
+    QVERIFY(view.dropPalettes(one, st->cue(one)->layers.first().id, { full }));
+    const quint32 copied = st->copyCueToLook(st->cueList(list)->cues.first().id);
+    QVERIFY(st->isLook(copied));
+    QCOMPARE(st->cue(copied)->name, QString("One"));
+    QCOMPARE(st->cue(copied)->layers.count(), 1);
+}
+
+void ShowTreeView_Test::makeVcPageAndAdoptAsLook()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    const quint32 red = colour(Qt::red, "Red");
+    const quint32 full = dimmer(255, "Full");
+    Scene *old = new Scene(m_doc);
+    old->setName("Old Busk");
+    old->addFixtureGroup(towers->id());
+    old->addPalette(full);
+    m_doc->addFunction(old);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 a = st->addLook(prod, "Red Hit", "Hits");
+    QVERIFY(st->setLayerLook(a, st->addLayer(a, Target { { towers->id() }, {}, {}, 0xFFFFFFFF }),
+                             st->lookForPalette(red)));
+    const quint32 b = st->addLook(prod, "Blackout", "Hits");
+    const quint32 c = st->addLook(prod, "Wash");
+    const quint32 section = st->looksSection(prod);
+    ScopedVc vc(m_doc);
+    VCButton *busk = new VCButton(VirtualConsole::instance()->contents(), m_doc);
+    VirtualConsole::instance()->placeWidget(busk, VirtualConsole::instance()->contents());
+    busk->setCaption("Busk");
+    busk->setFunction(old->id());
+
+    {
+        ShowTreeView view(nullptr, m_doc);
+        view.resize(1200, 800);
+        view.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&view));
+        bool repoint = true;
+        view.setConfirm([&](const QString &, const QString &, const QString &) { return repoint; });
+
+        // Make VC page for the Hits folder: a frame, a Toggle button each.
+        QString msg;
+        QVERIFY(view.makeVcPage(section, "Hits", &msg));
+        QVERIFY2(msg.contains("2 button"), qPrintable(msg));
+        VCFrame *frame = nullptr;
+        for (VCFrame *f : VirtualConsole::instance()->contents()->findChildren<VCFrame *>())
+            if (f->caption() == "Looks — Hits")
+                frame = f;
+        QVERIFY(frame != nullptr);
+        const QList<VCButton *> buttons = frame->findChildren<VCButton *>();
+        QCOMPARE(buttons.count(), 2);
+        QMap<QString, VCButton *> byCaption;
+        for (VCButton *btn : buttons)
+            byCaption.insert(btn->caption(), btn);
+        QCOMPARE(byCaption.keys(), QStringList({ "Blackout", "Red Hit" }));
+        QCOMPARE(byCaption.value("Red Hit")->function(), st->lookFunction(a));
+        QCOMPARE(byCaption.value("Blackout")->function(), st->lookFunction(b));
+        QCOMPARE(byCaption.value("Red Hit")->action(), VCButton::Toggle);
+        QCOMPARE(byCaption.value("Red Hit")->backgroundColor(), QColor(Qt::red));
+        // The look says who fires it; the tree shows it.
+        QCOMPARE(view.lookFiredBy(a), QStringList({ "VC button “Red Hit”" }));
+        QVERIFY(treeText(view.tree()).join("\n").contains("Red Hit [VC ×1]"));
+        // Pressed: it plays (red on the RGB-less dimmers is nothing, so a
+        // look playing Full shows it).
+        QVERIFY(st->setLayerLook(a, st->cue(a)->layers.first().id, st->lookForPalette(full)));
+        QCOMPARE(byCaption.value("Red Hit")->function(), st->lookFunction(a));   // the same Collection
+        // All looks: the section.
+        QVERIFY(view.makeVcPage(section, QString(), &msg));
+        QVERIFY2(msg.contains("3 button"), qPrintable(msg));
+        Q_UNUSED(c)
+
+        // Adopt as look: the scene's groups and palettes a layer; the VC
+        // button firing it re-pointed (asked).
+        QVERIFY(view.selectNode(section));
+        const quint32 adopted = view.adoptAsLook(old->id());
+        QVERIFY(adopted != invalidId());
+        QCOMPARE(st->cue(adopted)->name, QString("Old Busk"));
+        QCOMPARE(st->cue(adopted)->layers.first().looks.first().palettes, QList<quint32>({ full }));
+        QCOMPARE(busk->function(), st->lookFunction(adopted));
+        QVERIFY(m_doc->function(old->id()) != nullptr);
+        // Not re-pointed when declined.
+        busk->setFunction(old->id());
+        repoint = false;
+        const quint32 again = view.adoptAsLook(old->id());
+        QVERIFY(again != invalidId());
+        QCOMPARE(busk->function(), old->id());
+        // The function picker sees the look by its name (visible, in its folder).
+        Function *coll = m_doc->function(st->lookFunction(a));
+        QVERIFY(coll->isVisible());
+        QCOMPARE(coll->name(), QString("Red Hit"));
+    }
+}
+
+void ShowTreeView_Test::looksAreOneUndoStepAndTyped()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    dimmer(255, "Full");
+    Scene *old = new Scene(m_doc);
+    old->setName("Old Busk");
+    old->addFixtureGroup(towers->id());
+    m_doc->addFunction(old);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    view.setConfirm([](const QString &, const QString &, const QString &) { return true; });
+    int walked = 0;
+    auto oneStep = [&](const char *what, const std::function<bool()> &action) -> bool {
+        const QString before = paletteState(m_doc);
+        if (!action())
+        {
+            qWarning() << what << "did nothing";
+            return false;
+        }
+        const QString after = paletteState(m_doc);
+        if (after == before)
+        {
+            qWarning() << what << "changed nothing";
+            return false;
+        }
+        if (!st->undoShared() || paletteState(m_doc) != before)
+        {
+            qWarning() << what << ": one undo didn't give back the state before it";
+            return false;
+        }
+        if (!st->redoShared() || paletteState(m_doc) != after)
+        {
+            qWarning() << what << ": redo didn't give back the state after it";
+            return false;
+        }
+        ++walked;
+        return true;
+    };
+    QVERIFY(view.selectNode(prod));
+    QVERIFY(oneStep("+ Look (and the section)", [&] { return view.newLook() != invalidId(); }));
+    const quint32 section = st->looksSection(prod);
+    const quint32 first = st->cueList(section)->cues.first().id;
+    QVERIFY(oneStep("a group dropped on a look", [&] { return view.dropTargets(first, { towers->id() }, {}); }));
+    QVERIFY(oneStep("New folder", [&] { return st->addLookFolder(section, "Hits"); }));
+    QVERIFY(oneStep("a look onto a folder", [&] { return view.dropLooksOnFolder({ first }, section, "Hits"); }));
+    QVERIFY(oneStep("Adopt as look", [&] { return view.adoptAsLook(old->id()) != invalidId(); }));
+    QVERIFY(view.selectNode(prod));
+    QVERIFY(oneStep("look typed", [&] { return view.runCommand("look \"Hit 2\" in \"Hits\""); }));
+    // (undo + redo of the step before left the selection elsewhere)
+    for (const Cue &c : st->cueList(section)->cues)
+        if (c.name == "Hit 2")
+            QVERIFY(view.selectNode(c.id));
+    QVERIFY(oneStep("its layer typed", [&] { return view.runCommand("Towers dimmer Full"); }));
+    QVERIFY(oneStep("adopt typed", [&] { return view.runCommand("adopt \"Old Busk\""); }));
+    QCOMPARE(walked, 8);
+    // vcpage with no Virtual Console: said, nothing made.
+    QVERIFY(!view.runCommand("vcpage"));
+    QVERIFY(view.commandMessage().contains("No Virtual Console"));
 }
 
 QTEST_MAIN(ShowTreeView_Test)

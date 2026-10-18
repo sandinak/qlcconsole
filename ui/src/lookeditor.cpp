@@ -18,6 +18,7 @@
 #include <QDoubleSpinBox>
 #include <QSlider>
 #include <QLabel>
+#include <QTextDocument>
 #include <QFrame>
 #include <QPixmap>
 #include <QIcon>
@@ -284,6 +285,14 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     m_trialNote->setWordWrap(true);
     m_trialNote->hide();
     root->addWidget(m_trialNote);
+
+    m_usedBy = new QLabel(this);
+    m_usedBy->setObjectName("lookEditorUsedBy");
+    m_usedBy->setWordWrap(true);
+    m_usedBy->setTextFormat(Qt::RichText);
+    m_usedBy->hide();
+    connect(m_usedBy, &QLabel::linkActivated, this, &LookEditor::usedByLinkActivated);
+    root->addWidget(m_usedBy);
 
     // Per-look fade override row: "Fade in [ step ] s   out [ step ] s". Each
     // spin's minimum reads "step" — meaning fall back to the chaser step /
@@ -950,6 +959,21 @@ void LookEditor::setTrialNote(const QString &text)
 {
     m_trialNote->setText(text);
     m_trialNote->setVisible(!text.isEmpty());
+}
+
+void LookEditor::setUsedBy(const QString &html)
+{
+    m_usedBy->setText(html);
+    m_usedBy->setVisible(!html.isEmpty());
+}
+
+QString LookEditor::usedByText() const
+{
+    if (m_usedBy->isHidden())
+        return QString();
+    QTextDocument doc;
+    doc.setHtml(m_usedBy->text());
+    return doc.toPlainText();
 }
 
 QString LookEditor::trialNote() const

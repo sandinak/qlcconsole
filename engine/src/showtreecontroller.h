@@ -424,6 +424,10 @@ public:
      *  it is (an opaque layer). The scene stays. One undo step; the new
      *  look (invalid, @a why: refused). */
     quint32 adoptAsLook(quint32 productionId, quint32 functionId, QString *why = nullptr);
+    /** Copy to look (§4.1): what cue @a cueId puts on stage -- tracked,
+     *  included and its own, resolved -- frozen into a new look of its
+     *  production, named after the cue. No live link. One undo step. */
+    quint32 copyCueToLook(quint32 cueId);
 
     /************************************************************************
      * Detach a cue list to a plain chaser (D13 for lists, P4)

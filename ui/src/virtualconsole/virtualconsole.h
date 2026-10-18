@@ -353,6 +353,10 @@ public:
 
     void addWidgetInMap(VCWidget* widget);
     void setupWidget(VCWidget *widget, VCWidget *parent);
+    /** Put @a widget, made outside the Add menu (the Show Tree's Make VC
+     *  page), in @a parent: its id, its page in a multipage frame, shown.
+     *  Placing and selecting it is the caller's. */
+    void placeWidget(VCWidget *widget, VCWidget *parent);
 
     VCWidget *widget(quint32 id);
 

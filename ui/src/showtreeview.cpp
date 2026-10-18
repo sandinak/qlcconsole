@@ -53,6 +53,7 @@
 #include <QLabel>
 #include <QTimer>
 #include <QMenu>
+#include <QCursor>
 #include <QDrag>
 #include <QPainter>
 #include <algorithm>
@@ -66,6 +67,8 @@
 #include "stagetarget.h"
 #include "linespread.h"
 #include "showtreeview.h"
+#include "paletteops.h"
+#include "usedby.h"
 #include "effectscriptrunner.h"
 #include "lookeditor.h"
 #include "scene.h"
@@ -218,6 +221,23 @@ protected:
         {
             const QList<quint32> cues = idsFromMime(e->mimeData(), ShowTreeView::cueMimeType());
             const bool include = e->modifiers() & Qt::AltModifier;
+            // Looks onto a folder of their section (or the section): filed there.
+            quint32 folderList = ShowTree::invalidId();
+            QString folder;
+            if (lookFolderAt(e->position().toPoint(), &folderList, &folder))
+            {
+                const QString hint = m_view->lookFolderDropHint(cues, folderList, folder);
+                if (hint.isEmpty())
+                    e->ignore();
+                else
+                {
+                    e->setDropAction(Qt::MoveAction);
+                    e->accept();
+                }
+                if (m_hint != nullptr)
+                    m_hint->setText(hint);
+                return;
+            }
             if (cues.count() > 1)
             {
                 // Several cues have no one place to go: refused, and said.
@@ -275,7 +295,11 @@ protected:
         target(e->position().toPoint(), &cue, &layer, &carried);
         if (m_hint != nullptr)
             m_hint->setText(QString());
-        if (cue == ShowTree::invalidId())
+        quint32 fl = ShowTree::invalidId();
+        QString fp;
+        if (cue == ShowTree::invalidId()
+            && !(e->mimeData()->hasFormat(QLatin1String(ShowTreeView::cueMimeType()))
+                 && lookFolderAt(e->position().toPoint(), &fl, &fp)))
         {
             e->ignore();
             return;
@@ -284,6 +308,19 @@ protected:
         if (mime->hasFormat(QLatin1String(ShowTreeView::cueMimeType())))
         {
             const QList<quint32> cues = idsFromMime(mime, ShowTreeView::cueMimeType());
+            quint32 folderList = ShowTree::invalidId();
+            QString folder;
+            if (lookFolderAt(e->position().toPoint(), &folderList, &folder))
+            {
+                if (m_view->dropLooksOnFolder(cues, folderList, folder))
+                {
+                    e->setDropAction(Qt::CopyAction);
+                    e->accept();
+                }
+                else
+                    e->ignore();
+                return;
+            }
             const bool include = e->modifiers() & Qt::AltModifier;
             // Handled here: never let the base class move the rows itself.
             if (cues.count() == 1 && layer == ShowTree::invalidId() && carried.isEmpty()
@@ -307,6 +344,28 @@ protected:
     }
 
 private:
+    /** A Looks section's row or one of its folders at @a pos. */
+    bool lookFolderAt(const QPoint &pos, quint32 *listId, QString *folder) const
+    {
+        QTreeWidgetItem *item = itemAt(pos);
+        if (item == nullptr)
+            return false;
+        const int kind = item->data(0, ShowTreeView::KindRole).toInt();
+        if (kind == ShowTreeView::LookFolderNode)
+        {
+            *listId = item->data(0, ShowTreeView::IdRole).toUInt();
+            *folder = item->data(0, ShowTreeView::FolderRole).toString();
+            return true;
+        }
+        if (kind == ShowTreeView::ListNode && item->data(0, ShowTreeView::FolderRole).toString() == QLatin1String("/"))
+        {
+            *listId = item->data(0, ShowTreeView::IdRole).toUInt();
+            folder->clear();
+            return true;
+        }
+        return false;
+    }
+
     ShowTreeView *m_view;
     QLabel *m_hint = nullptr;
 };
@@ -319,24 +378,92 @@ public:
     explicit LibraryWidget(QWidget *parent) : QTreeWidget(parent)
     {
         setDragEnabled(true);
-        setDragDropMode(QAbstractItemView::DragOnly);
+        // Out to the tree and the pages; within: palettes onto a palette
+        // folder (R2, Move to folder by drag).
+        setDragDropMode(QAbstractItemView::DragDrop);
+        setAcceptDrops(true);
+        setDropIndicatorShown(true);
         setSelectionMode(QAbstractItemView::ExtendedSelection);
     }
     /** What a drag of @a items carries (Return / double-click use it too). */
     QMimeData *mimeFor(const QList<QTreeWidgetItem *> &items) const { return mimeData(items); }
     /** Return / Enter: told, with whether ⌥ was held. */
     std::function<void(bool)> onReturn;
+    /** F2: rename in place; ⌫: delete. */
+    std::function<void()> onRename;
+    std::function<void()> onDelete;
+    /** Palettes dropped on a palette folder ("": none); false: refused. */
+    std::function<bool(const QList<quint32> &, const QString &)> onPaletteDrop;
 
 protected:
     void keyPressEvent(QKeyEvent *e) override
     {
+        if (state() == QAbstractItemView::EditingState)
+        {
+            QTreeWidget::keyPressEvent(e);
+            return;
+        }
         if ((e->key() == Qt::Key_Return || e->key() == Qt::Key_Enter) && onReturn)
         {
             onReturn(e->modifiers() & Qt::AltModifier);
             e->accept();
             return;
         }
+        if (e->key() == Qt::Key_F2 && onRename)
+        {
+            onRename();
+            e->accept();
+            return;
+        }
+        if ((e->key() == Qt::Key_Delete || e->key() == Qt::Key_Backspace) && onDelete)
+        {
+            onDelete();
+            e->accept();
+            return;
+        }
         QTreeWidget::keyPressEvent(e);
+    }
+    /** The palette folder a drop at @a pos files into (false: none there). */
+    bool folderAt(const QPoint &pos, QString *folder) const
+    {
+        QTreeWidgetItem *item = itemAt(pos);
+        if (item == nullptr || item->data(0, ShowTreeView::KindRole).toInt() != ShowTreeView::LibPaletteFolder)
+            return false;
+        *folder = item->data(0, ShowTreeView::FolderRole).toString();
+        return true;
+    }
+    void dragEnterEvent(QDragEnterEvent *e) override
+    {
+        if (e->source() == this && e->mimeData()->hasFormat(QLatin1String(FunctionsTreeWidget::paletteDragMimeType())))
+            e->acceptProposedAction();
+        else
+            e->ignore();
+    }
+    void dragMoveEvent(QDragMoveEvent *e) override
+    {
+        QString folder;
+        if (e->source() == this && folderAt(e->position().toPoint(), &folder)
+            && e->mimeData()->hasFormat(QLatin1String(FunctionsTreeWidget::paletteDragMimeType())))
+        {
+            e->setDropAction(Qt::MoveAction);
+            e->accept();
+        }
+        else
+            e->ignore();
+    }
+    void dropEvent(QDropEvent *e) override
+    {
+        // Handled here: never let the base class move the rows itself.
+        QString folder;
+        const QList<quint32> ids = idsFromMime(e->mimeData(), FunctionsTreeWidget::paletteDragMimeType());
+        if (e->source() == this && folderAt(e->position().toPoint(), &folder) && !ids.isEmpty() && onPaletteDrop
+            && onPaletteDrop(ids, folder))
+        {
+            e->setDropAction(Qt::CopyAction);
+            e->accept();
+        }
+        else
+            e->ignore();
     }
 public:
 
@@ -705,6 +832,9 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     m_commander->setRecordChooser([this](quint32 cueId, const QList<RecordSource> &choices, RecordSource *chosen) {
         return chooseRecordSource(cueId, choices, chosen);
     });
+    m_commander->setVcPageMaker([this](quint32 listId, const QString &folder, QString *message) {
+        return makeVcPage(listId, folder, message);
+    });
     m_commandBar = new QWidget(this);
     {
         QVBoxLayout *v = new QVBoxLayout(m_commandBar);
@@ -789,6 +919,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     connect(m_lookEditor, &LookEditor::paletteValueChanged, this, [this](quint32 pid) {
         paletteEdited(pid, false);
     });
+    connect(m_lookEditor, &LookEditor::usedByLinkActivated, this, &ShowTreeView::usedByLinkActivated);
 
     // Middle: the tree
     ShowTreeWidget *tree = new ShowTreeWidget(this, split);
@@ -845,6 +976,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     m_listPage = new QWidget(m_pages);
     {
         QFormLayout *f = new QFormLayout(m_listPage);
+        m_listForm = f;
         m_listTitle = new QLabel(m_listPage);
         QFont bold = m_listTitle->font();
         bold.setBold(true);
@@ -879,8 +1011,20 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                                     "edit in the Functions window; the list leaves the Show Tree. One undo step."));
         h->addWidget(m_listConvert);
         h->addWidget(m_listDetach);
+        // R3: a Looks section or folder -- a VC page of buttons for it.
+        m_listVcPage = new QPushButton(tr("Make VC page"), row);
+        m_listVcPage->setObjectName("stMakeVcPage");
+        m_listVcPage->setToolTip(tr("A frame on the Virtual Console with one button per look here, "
+                                    "captioned with its name and coloured by its first colour"));
+        h->addWidget(m_listVcPage);
         h->addStretch(1);
         f->addRow(row);
+        connect(m_listVcPage, &QPushButton::clicked, this, [this]() {
+            const quint32 listId = currentListId();
+            QString msg;
+            makeVcPage(listId, currentLookFolder(), &msg);
+            m_hint->setText(msg);
+        });
         connect(m_listConvert, &QPushButton::clicked, this, [this]() {
             if (currentKind() == ListNode)
                 convertListToTracking(currentId());
@@ -904,6 +1048,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         inner->setHint(m_hint);
         inner->stayOnCue = true;
         QFormLayout *f = new QFormLayout(inner);
+        m_cueForm = f;
         cueScroll->setWidget(inner);
         m_cueNumber = new QLineEdit(inner);
         m_cueNumber->setObjectName("stCueNumber");
@@ -931,6 +1076,13 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         f->addRow(tr("Number"), m_cueNumber);
         f->addRow(tr("Name"), m_cueName);
         f->addRow(tr("Note"), m_cueNote);
+        // R3: a look is fired by VC buttons (P-D7): which, and Make VC page.
+        m_lookFiredBy = new QLabel(inner);
+        m_lookFiredBy->setObjectName("stLookFiredBy");
+        m_lookFiredBy->setWordWrap(true);
+        m_lookFiredBy->setTextFormat(Qt::RichText);
+        connect(m_lookFiredBy, &QLabel::linkActivated, this, &ShowTreeView::lookLinkActivated);
+        f->addRow(tr("Fired by"), m_lookFiredBy);
         // P4: a use of a reusable cue (Unlink here, Used by), or Make reusable.
         m_cueReuse = new QLabel(inner);
         m_cueReuse->setObjectName("stCueReuse");
@@ -1212,7 +1364,26 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_filter->setPlaceholderText(tr("Filter the Library"));
         m_filter->setClearButtonEnabled(true);
         connect(m_filter, &QLineEdit::textChanged, this, &ShowTreeView::slotFilterChanged);
-        v->addWidget(m_filter);
+        // R2: + Palette, by type, in the folder selected below.
+        QHBoxLayout *fh = new QHBoxLayout();
+        fh->setContentsMargins(0, 0, 0, 0);
+        fh->addWidget(m_filter, 1);
+        m_newPalette = new QToolButton(lib);
+        m_newPalette->setObjectName("stNewPalette");
+        m_newPalette->setText(tr("+ Palette"));
+        m_newPalette->setToolTip(tr("A new palette, by type, in the folder selected in the Library; it opens in "
+                                    "the Look Editor. Effect design, .qxfx and Bundles are in Programming."));
+        m_newPalette->setPopupMode(QToolButton::InstantPopup);
+        {
+            QMenu *m = new QMenu(m_newPalette);
+            connect(m, &QMenu::aboutToShow, this, [this, m]() {
+                m->clear();
+                fillNewPaletteMenu(m, libraryPaletteFolder());
+            });
+            m_newPalette->setMenu(m);
+        }
+        fh->addWidget(m_newPalette);
+        v->addLayout(fh);
         m_library = new LibraryWidget(lib);
         m_library->setObjectName("stLibrary");
         m_library->setHeaderHidden(true);
@@ -1221,9 +1392,22 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         // Return / double-click: what is selected acts on the tree's
         // selection, as a drop on it would -- no dragging across.
         static_cast<LibraryWidget *>(m_library)->onReturn = [this](bool alt) { applyLibrarySelection(alt); };
+        static_cast<LibraryWidget *>(m_library)->onRename = [this]() { startLibraryRename(); };
+        static_cast<LibraryWidget *>(m_library)->onDelete = [this]() { deleteLibrarySelection(); };
+        static_cast<LibraryWidget *>(m_library)->onPaletteDrop = [this](const QList<quint32> &ids, const QString &f) {
+            return dropPalettesOnFolder(ids, f);
+        };
+        connect(m_library, &QTreeWidget::itemChanged, this, &ShowTreeView::slotLibraryItemRenamed);
+        connect(m_library->itemDelegate(), &QAbstractItemDelegate::closeEditor, this, [this]() {
+            if (!m_libRenaming)
+                return;
+            m_libRenaming = false;
+            m_libRenameItem = nullptr;
+            QTimer::singleShot(0, this, [this]() { reloadLibrary(); });
+        });
         connect(m_library, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem *item) {
             const int kind = item->data(0, KindRole).toInt();
-            if (kind == LibSection || kind == LibFolder)
+            if (kind == LibSection || kind == LibFolder || kind == LibPaletteFolder)
                 return;
             applyLibrarySelection(QApplication::keyboardModifiers() & Qt::AltModifier);
         });
@@ -1258,6 +1442,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
             QSettings s;
             s.setValue(SETTINGS_EDITOR_SPLITTER, vsplit->saveState());
         });
+        m_paletteByType = settings.value(QStringLiteral("showtree/libraryPalettesByType"), true).toBool();
         for (const QString &entry : settings.value(SETTINGS_PINNED).toStringList())
         {
             const QStringList parts = entry.split(QLatin1Char(':'));
@@ -1292,6 +1477,17 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                          &Doc::paletteAdded, &Doc::paletteRemoved })
         connect(m_doc, signal, m_libraryTimer, QOverload<>::of(&QTimer::start));
     connect(m_doc, &Doc::loaded, this, &ShowTreeView::reload);
+    // Palettes made, renamed, filed, deleted (here, typed or in the
+    // Programming tab) and the shared undo: the Library and the buttons.
+    connect(m_doc->paletteOps(), &PaletteOps::changed, this, [this]() {
+        m_libraryTimer->start();
+        updateButtons();
+        // A palette back (or gone): the rows name it.
+        if (!m_inspectorUpdating)
+            updateInspector();
+        if (editedPalette() != QLCPalette::invalidId())
+            updateUsedBy(editedPalette());
+    });
 
     reload();
 }
@@ -1456,7 +1652,13 @@ bool ShowTreeView::startRename()
     else if (kind == ListNode)
     {
         const CueList *l = m_st->cueList(id);
-        text = l == nullptr ? QString() : l->name;
+        if (l == nullptr || l->looks)
+            return false;                   // the Looks section keeps its name
+        text = l->name;
+    }
+    else if (kind == LookFolderNode)
+    {
+        text = item->text(0);
     }
     else if (kind == CueNode)
     {
@@ -1499,6 +1701,16 @@ void ShowTreeView::slotTreeItemRenamed(QTreeWidgetItem *item, int column)
         if (l != nullptr && name == m_st->targetLabel(l->target))
             name.clear();
     }
+    if (kind == LookFolderNode)
+    {
+        const QString path = item->data(0, FolderRole).toString();
+        QTimer::singleShot(0, this, [this, id, name, path]() {
+            if (!m_st->renameLookFolder(id, path, name))
+                buildTree();
+            m_tree->setFocus(Qt::OtherFocusReason);
+        });
+        return;
+    }
     // After the editor is done with the row: the rename rebuilds the tree.
     const quint32 cueId = item->data(0, CueRole).toUInt();
     QTimer::singleShot(0, this, [this, id, name, cueId, kind]() {
@@ -1519,6 +1731,8 @@ void ShowTreeView::slotTreeChanged()
     updateButtons();
     // "In this cue list" counts what the list uses.
     m_libraryTimer->start();
+    if (editedPalette() != QLCPalette::invalidId())
+        updateUsedBy(editedPalette());
 
     // The re-bake chain as it came out: which cues play something else now.
     QStringList cues;
@@ -1545,8 +1759,21 @@ void ShowTreeView::saveExpanded()
 {
     m_expanded.clear();
     for (QTreeWidgetItemIterator it(m_tree); *it; ++it)
+    {
+        if ((*it)->data(0, KindRole).toInt() == LookFolderNode)
+        {
+            // A look folder by its path: open unless closed by hand.
+            const QString key = QStringLiteral("%1:%2").arg((*it)->data(0, IdRole).toUInt())
+                                .arg((*it)->data(0, FolderRole).toString());
+            if ((*it)->isExpanded())
+                m_collapsedFolders.remove(key);
+            else
+                m_collapsedFolders.insert(key);
+            continue;
+        }
         if ((*it)->isExpanded())
             m_expanded << (*it)->data(0, IdRole).toUInt();
+    }
 }
 
 QTreeWidgetItem *ShowTreeView::findItem(quint32 id, quint32 cueId) const
@@ -1559,7 +1786,7 @@ QTreeWidgetItem *ShowTreeView::findItem(quint32 id, quint32 cueId) const
         const int kind = item->data(0, KindRole).toInt();
         if (kind == LayerNode && cueId != invalidId() && item->data(0, CueRole).toUInt() != cueId)
             continue;
-        if (kind == TrackedLayerNode)
+        if (kind == TrackedLayerNode || kind == LookFolderNode)
             continue;
         return item;
     }
@@ -1575,6 +1802,8 @@ void ShowTreeView::buildTree()
     // id of its own there); made the cue's own, by its layer there.
     const bool selTracked = currentKind() == TrackedLayerNode;
     const QString selTarget = selTracked ? m_tree->currentItem()->data(0, TargetRole).toString() : QString();
+    const bool selFolder = currentKind() == LookFolderNode;
+    const QString selFolderPath = selFolder ? m_tree->currentItem()->data(0, FolderRole).toString() : QString();
     // The rest of a multi-selection (own rows: a carried-in row has no id).
     QList<QPair<quint32, quint32>> alsoSelected;
     for (QTreeWidgetItem *item : m_tree->selectedItems())
@@ -1597,8 +1826,16 @@ void ShowTreeView::buildTree()
         pi->setData(0, KindRole, ProductionNode);
         pi->setData(0, IdRole, prod.id);
 
+        // The cue lists, then the Looks section (R3).
+        QList<const CueList *> lists;
         for (const CueList &list : prod.lists)
+            if (!list.looks)
+                lists << &list;
+        if (const CueList *looks = prod.looks())
+            lists << looks;
+        for (const CueList *lp : lists)
         {
+            const CueList &list = *lp;
             QTreeWidgetItem *li = new QTreeWidgetItem(pi);
             li->setText(0, list.name);
             li->setText(1, list.mode == ListMode::Tracking ? tr("Tracking") : tr("Non-tracking"));
@@ -1606,10 +1843,47 @@ void ShowTreeView::buildTree()
             li->setData(0, IdRole, list.id);
             const QList<ResolvedCue> resolved = m_st->resolved(list);
 
+            // A Looks section: its folders (nested, first) and the VC
+            // buttons firing each look.
+            QHash<QString, QTreeWidgetItem *> folderItems;
+            QHash<quint32, int> firedBy;
+            std::function<QTreeWidgetItem *(const QString &)> folderItem = [&](const QString &path) {
+                if (path.isEmpty())
+                    return li;
+                if (QTreeWidgetItem *have = folderItems.value(path))
+                    return have;
+                const int slash = path.lastIndexOf(QLatin1Char('/'));
+                QTreeWidgetItem *f = new QTreeWidgetItem(folderItem(slash < 0 ? QString() : path.left(slash)));
+                f->setText(0, slash < 0 ? path : path.mid(slash + 1));
+                f->setIcon(0, QIcon(":/folder.png"));
+                f->setData(0, KindRole, LookFolderNode);
+                f->setData(0, IdRole, list.id);
+                f->setData(0, FolderRole, path);
+                f->setToolTip(0, tr("A folder of looks: drag looks onto it; Make VC page makes a button for each"));
+                folderItems.insert(path, f);
+                return f;
+            };
+            if (list.looks)
+            {
+                li->setText(0, tr("Looks"));
+                li->setText(1, tr("busking"));
+                li->setData(0, FolderRole, QStringLiteral("/"));
+                li->setIcon(0, QIcon(":/collection.png"));
+                li->setToolTip(0, tr("Busking looks: built with layers like cues, never tracking; each plays from a "
+                                     "VC button (Make VC page), over whatever runs."));
+                for (const QString &path : m_st->lookFolders(list.id))
+                    folderItem(path);
+                QSet<quint32> fids;
+                for (const Cue &c : list.cues)
+                    fids.insert(c.collection);
+                for (const VCButton *b : UsedBy::vcButtons(fids))
+                    firedBy[b->function()]++;
+            }
+
             for (int i = 0; i < list.cues.count(); ++i)
             {
                 const Cue &cue = list.cues.at(i);
-                QTreeWidgetItem *ci = new QTreeWidgetItem(li);
+                QTreeWidgetItem *ci = new QTreeWidgetItem(list.looks ? folderItem(cue.folder) : li);
                 ci->setText(0, m_st->cueLabel(list, i));
                 QStringList badges;
                 if (list.baseCue == cue.id)
@@ -1630,6 +1904,8 @@ void ShowTreeView::buildTree()
                     ci->setText(0, QStringLiteral("⟲ ") + ci->text(0));
                     badges << tr("reusable ×%1").arg(m_st->reusableUses(cue.reusable).count());
                 }
+                if (list.looks && firedBy.value(cue.collection) > 0)
+                    badges << tr("VC ×%1").arg(firedBy.value(cue.collection));
                 ci->setText(1, badges.join(QStringLiteral(" ")));
                 ci->setToolTip(0, cue.reusable == invalidId() ? cue.note
                                : tr("A use of the reusable cue %1: an edit here is an edit to every use. %2")
@@ -1704,14 +1980,28 @@ void ShowTreeView::buildTree()
     {
         QTreeWidgetItem *item = *it;
         const int kind = item->data(0, KindRole).toInt();
-        if (first)
+        if (kind == LookFolderNode)
+            item->setExpanded(!m_collapsedFolders.contains(QStringLiteral("%1:%2")
+                                                           .arg(item->data(0, IdRole).toUInt())
+                                                           .arg(item->data(0, FolderRole).toString())));
+        else if (first)
             item->setExpanded(kind == ProductionNode || kind == ListNode);
         else
             item->setExpanded(m_expanded.contains(item->data(0, IdRole).toUInt())
                               && kind != TrackedLayerNode);
     }
 
-    if (selTracked)
+    if (selFolder)
+    {
+        for (QTreeWidgetItemIterator it(m_tree); *it; ++it)
+            if ((*it)->data(0, KindRole).toInt() == LookFolderNode && (*it)->data(0, IdRole).toUInt() == selId
+                && (*it)->data(0, FolderRole).toString() == selFolderPath)
+            {
+                m_tree->setCurrentItem(*it, 0, kSelectOnly);
+                break;
+            }
+    }
+    else if (selTracked)
     {
         QTreeWidgetItem *found = nullptr;
         for (QTreeWidgetItemIterator it(m_tree); *it && found == nullptr; ++it)
@@ -1805,7 +2095,7 @@ void ShowTreeView::slotTreeSelectionChanged()
 
 quint32 ShowTreeView::currentListId() const
 {
-    if (currentKind() == ListNode)
+    if (currentKind() == ListNode || currentKind() == LookFolderNode)
         return currentId();
     const quint32 cueId = currentCueId();
     const CueList *list = cueId == invalidId() ? nullptr : m_st->listOfCue(cueId);
@@ -1881,16 +2171,23 @@ void ShowTreeView::updateButtons()
 {
     const NodeKind kind = currentKind();
     m_newList->setEnabled(kind != NoNode);
+    // In a Looks section, + Cue makes a look (R3).
+    const bool looks = selectionInLooks();
+    m_newCue->setText(looks ? tr("+ Look") : tr("+ Cue"));
+    m_newCue->setToolTip(looks ? tr("A new busking look after the selected one, in its folder")
+                               : tr("A new cue after the selected one, numbered for you (never renumbers)"));
     m_newCue->setEnabled(kind == ListNode || kind == CueNode || kind == LayerNode
-                         || kind == TrackedLayerNode);
+                         || kind == TrackedLayerNode || kind == LookFolderNode);
     m_addLayer->setEnabled(currentCueId() != invalidId());
-    m_record->setEnabled(currentCueId() != invalidId());
+    m_record->setEnabled(currentCueId() != invalidId() && !looks);
     m_delete->setEnabled(kind != NoNode && kind != TrackedLayerNode);
     m_merge->setEnabled(selectedLayers().count() > 1);
-    m_undo->setEnabled(m_st->canUndo());
-    m_redo->setEnabled(m_st->canRedo());
-    m_undo->setToolTip(m_st->canUndo() ? tr("Undo %1 (⌘Z)").arg(m_st->undoText()) : tr("Nothing to undo"));
-    m_redo->setToolTip(m_st->canRedo() ? tr("Redo %1 (⇧⌘Z)").arg(m_st->redoText()) : tr("Nothing to redo"));
+    // One history: the tree's steps and the palette steps (P-D14).
+    m_undo->setEnabled(m_st->canUndoShared());
+    m_redo->setEnabled(m_st->canRedoShared());
+    m_undo->setToolTip(m_st->canUndoShared() ? tr("Undo %1 (⌘Z)").arg(m_st->sharedUndoText()) : tr("Nothing to undo"));
+    m_redo->setToolTip(m_st->canRedoShared() ? tr("Redo %1 (⇧⌘Z)").arg(m_st->sharedRedoText())
+                                             : tr("Nothing to redo"));
 }
 
 /****************************************************************************
@@ -1969,11 +2266,22 @@ void ShowTreeView::updateInspector()
     const NodeKind kind = currentKind();
     const quint32 id = currentId();
 
+    if (kind == LookFolderNode || (kind == ListNode && m_st->isLooks(id)))
+    {
+        showLooksPage(id, currentLookFolder());
+        m_inspectorUpdating = false;
+        return;
+    }
     if (kind == ListNode)
     {
         const CueList *list = m_st->cueList(id);
         if (list != nullptr)
         {
+            for (QWidget *w : { static_cast<QWidget *>(m_listMode), static_cast<QWidget *>(m_listBase) })
+                m_listForm->setRowVisible(w, true);
+            m_listConvert->show();
+            m_listDetach->show();
+            m_listVcPage->hide();
             m_listTitle->setText(list->name);
             m_listMode->setCurrentIndex(list->mode == ListMode::Tracking ? 1 : 0);
             m_listBase->clear();
@@ -2044,6 +2352,27 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
 {
     const Cue &cue = list.cues.at(index);
     m_pageCue = cue.id;
+    // A look (R3): no number, mode, base, includes, timing or next cue --
+    // what it has is all it plays, from a VC button.
+    {
+        const bool cueRows = !list.looks;
+        for (QWidget *w : { static_cast<QWidget *>(m_cueNumber), static_cast<QWidget *>(m_cueMode),
+                            static_cast<QWidget *>(m_cueBase), m_cueIncludes->parentWidget(),
+                            static_cast<QWidget *>(m_cueFadeIn), static_cast<QWidget *>(m_cueFadeOut),
+                            static_cast<QWidget *>(m_cueHold), static_cast<QWidget *>(m_cueNext) })
+            m_cueForm->setRowVisible(w, cueRows);
+        m_cueForm->setRowVisible(m_lookFiredBy, list.looks);
+        if (list.looks)
+        {
+            const QStringList fired = lookFiredBy(cue.id);
+            m_lookFiredBy->setText((fired.isEmpty() ? tr("no VC button yet") : fired.join(QStringLiteral(", ")).toHtmlEscaped())
+                                   + QStringLiteral(" · <a href=\"vcpage\">%1</a>").arg(tr("Make VC page"))
+                                   + QStringLiteral(" · <a href=\"folder\">%1</a>").arg(tr("Move to folder…")));
+            m_lookFiredBy->setToolTip(tr("A look plays from a VC button like any function: Toggle or Flash. "
+                                         "Over a running cue list it mixes as any function does -- the "
+                                         "highest intensity wins, the last started sets the rest."));
+        }
+    }
     m_cueNumber->setText(cue.number);
     m_cueNumber->setPlaceholderText(QString::number(index + 1));
     m_cueName->setText(cue.name);
@@ -2361,7 +2690,7 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
     }
     // Release: on the cue's own layer, or on a carried-in one (which then
     // becomes the cue's own, in the same undo step).
-    m_layerRelease->setVisible(!rl->target.isOpaque());
+    m_layerRelease->setVisible(!rl->target.isOpaque() && !list.looks);
     m_layerReleaseTarget = own == nullptr ? rl->target : Target();
     {
         QSignalBlocker block(m_layerRelease);
@@ -3133,6 +3462,11 @@ void ShowTreeView::slotNewCueList()
 
 void ShowTreeView::slotNewCue()
 {
+    if (selectionInLooks())
+    {
+        newLook();
+        return;
+    }
     quint32 listId = invalidId();
     int after = -1;
     if (currentKind() == ListNode)
@@ -3351,10 +3685,22 @@ void ShowTreeView::slotDelete()
                 m_st->removeProduction(id);
         break;
         case ListNode:
-            if (QMessageBox::question(this, tr("Delete cue list"),
+            if (m_st->isLooks(id))
+            {
+                if (confirm(tr("Delete the Looks section"),
+                            tr("Delete the Looks section and its %n look(s)? VC buttons firing them stop "
+                               "doing anything. (Undo brings it back.)", "",
+                               int(m_st->looksIn(id, QString()).count()))))
+                    m_st->removeCueList(id);
+            }
+            else if (QMessageBox::question(this, tr("Delete cue list"),
                                       tr("Delete this cue list and its cues? (Undo brings it back.)"))
                 == QMessageBox::Yes)
                 m_st->removeCueList(id);
+        break;
+        case LookFolderNode:
+            // What is in it moves up; nothing is deleted.
+            m_st->removeLookFolder(id, currentLookFolder());
         break;
         case CueNode:
             m_st->removeCue(id);
@@ -3369,12 +3715,15 @@ void ShowTreeView::slotDelete()
 
 void ShowTreeView::slotUndo()
 {
-    m_st->undo();
+    // The tree's steps and the palette steps are one history (P-D14).
+    m_st->undoShared();
+    updateButtons();
 }
 
 void ShowTreeView::slotRedo()
 {
-    m_st->redo();
+    m_st->redoShared();
+    updateButtons();
 }
 
 bool ShowTreeView::dropTargets(quint32 cueId, const QList<quint32> &groups, const QList<quint32> &fixtures,
@@ -3904,6 +4253,7 @@ void ShowTreeView::editPalette(quint32 paletteId)
     m_lookEditor->setTrialNote(m_st->isInlinePalette(paletteId)
                                ? tr("A one-off value of this cue")
                                : tr("A shared palette: changing it changes every cue and scene that uses it"));
+    updateUsedBy(paletteId);
     m_lookEditor->show();
 }
 
@@ -4260,10 +4610,66 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
         else
             m_tree->setCurrentItem(item, 0, kSelectOnly);
         const int kind = item->data(0, KindRole).toInt();
+        const bool inLooks = selectionInLooks();
         menu.addAction(tr("+ Cue list…"), this, &ShowTreeView::slotNewCueList);
-        if (kind != ProductionNode)
+        // R3: busking looks, beside the cue lists.
+        menu.addAction(tr("+ Look"), this, [this]() { newLook(); })->setObjectName("stNewLook");
+        if (kind != ProductionNode && !inLooks)
             menu.addAction(tr("+ Cue"), this, &ShowTreeView::slotNewCue);
-        if (kind == CueNode)
+        if (inLooks && kind != CueNode && kind != LayerNode)
+        {
+            const quint32 listId = currentListId();
+            const QString folder = currentLookFolder();
+            menu.addAction(tr("New folder…"), this, [this, listId, folder]() {
+                bool ok = false;
+                const QString n = QInputDialog::getText(this, tr("New folder"), tr("Folder name"), QLineEdit::Normal,
+                                                        QString(), &ok);
+                if (ok && !n.trimmed().isEmpty())
+                    m_st->addLookFolder(listId, folder.isEmpty() ? n.trimmed() : folder + QLatin1Char('/') + n.trimmed());
+            })->setObjectName("stNewLookFolder");
+            if (kind == LookFolderNode)
+            {
+                menu.addAction(tr("Rename folder"), this, [this]() { startRename(); });
+                menu.addAction(tr("Delete folder (its looks move up)"), this, [this, listId, folder]() {
+                    m_st->removeLookFolder(listId, folder);
+                });
+            }
+            menu.addAction(tr("Make VC page"), this, [this, listId, folder]() {
+                QString msg;
+                makeVcPage(listId, folder, &msg);
+                m_hint->setText(msg);
+            })->setObjectName("stMakeVcPageMenu");
+        }
+        if (kind == CueNode && inLooks)
+        {
+            const quint32 cueId = item->data(0, IdRole).toUInt();
+            const CueList *list = m_st->listOfCue(cueId);
+            QList<quint32> looks;
+            for (QTreeWidgetItem *sel : m_tree->selectedItems())
+                if (sel->data(0, KindRole).toInt() == CueNode && m_st->isLook(sel->data(0, IdRole).toUInt()))
+                    looks << sel->data(0, IdRole).toUInt();
+            if (!looks.contains(cueId))
+                looks = { cueId };
+            if (list != nullptr)
+                lookFolderMenu(menu.addMenu(tr("Move to folder")), list->id, looks);
+            const QString folder = m_st->cue(cueId) == nullptr ? QString() : m_st->cue(cueId)->folder;
+            menu.addAction(tr("Make VC page"), this, [this, list, folder]() {
+                QString msg;
+                if (list != nullptr)
+                    makeVcPage(list->id, folder, &msg);
+                m_hint->setText(msg);
+            });
+        }
+        if (kind == CueNode && !inLooks)
+        {
+            const quint32 cueId = item->data(0, IdRole).toUInt();
+            menu.addAction(tr("Copy to look"), this, [this, cueId]() {
+                const quint32 id = m_st->copyCueToLook(cueId);
+                if (id != invalidId())
+                    selectNode(id);
+            })->setObjectName("stCopyToLook");
+        }
+        if (kind == CueNode && !inLooks)
         {
             const quint32 cueId = item->data(0, IdRole).toUInt();
             const CueList *list = m_st->listOfCue(cueId);
@@ -4503,7 +4909,7 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
                 }
             }
         }
-        if (kind == ListNode)
+        if (kind == ListNode && !inLooks)
         {
             const quint32 id = item->data(0, IdRole).toUInt();
             QAction *conv = menu.addAction(tr("Convert to tracking…"), this, [this, id]() { convertListToTracking(id); });
@@ -4512,7 +4918,7 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
             menu.addAction(tr("Detach to plain chaser…"), this, [this, id]() { detachListToChaser(id); })
                 ->setObjectName("stDetachList");
         }
-        if (kind == ProductionNode || kind == ListNode)
+        if (kind == ProductionNode || (kind == ListNode && !inLooks))
         {
             const quint32 id = item->data(0, IdRole).toUInt();
             menu.addAction(tr("Rename…"), this, [this, id, item]() {
@@ -4668,15 +5074,9 @@ QStringList ShowTreeView::reusableUsedBy(quint32 id) const
         for (const Layer &l : rc.layers)
             if (l.reusable == id)
                 out << tr("reusable cue %1").arg(rc.name);
-    // VC widgets that play one of the uses' cue or layer (cheap: buttons
-    // and cue lists by the function they hold).
-    VirtualConsole *vc = VirtualConsole::instance();
-    if (vc != nullptr && vc->contents() != nullptr && !functions.isEmpty())
-    {
-        for (VCButton *b : vc->contents()->findChildren<VCButton *>())
-            if (functions.contains(b->function()))
-                out << tr("VC button “%1”").arg(b->caption());
-    }
+    // VC buttons that play one of the uses' cue or layer (the shared
+    // Used by, P-D13).
+    out << UsedBy::vcLines(functions);
     return out;
 }
 
@@ -5227,30 +5627,8 @@ void ShowTreeView::reloadLibrary()
     for (const FixtureGroup *g : gl)
         add(groupFolder(groupPath(g)), LibGroup, g->id());
 
-    const QList<QPair<QString, QString>> kinds = {
-        { KeyColour, tr("Colour") }, { KeyDimmer, tr("Dimmer") }, { KeyPosition, tr("Position") },
-        { KeyGobo, tr("Gobo") }, { KeyZoom, tr("Zoom") }, { KeyBeam, tr("Focus / Frost / Iris") },
-        { KeyShutter, tr("Shutter") }, { KeyEffectPrefix, tr("Effects") } };
-    QHash<QString, QTreeWidgetItem *> folders;
-    QTreeWidgetItem *palettes = folder(all, tr("Palettes"));
-    for (const auto &k : kinds)
-        folders.insert(k.first, folder(palettes, k.second));
-    QList<QLCPalette *> pl = m_doc->palettes();
-    std::sort(pl.begin(), pl.end(), [](const QLCPalette *a, const QLCPalette *b) {
-        return a->name().compare(b->name(), Qt::CaseInsensitive) < 0;
-    });
-    for (const QLCPalette *p : pl)
-    {
-        if (m_st->isInlinePalette(p->id()))
-            continue;               // one-off values: Recent only (D21)
-        QString key = m_st->keyForPalette(p->id());
-        if (isEffectKey(key))
-            key = KeyEffectPrefix;
-        add(folders.value(key, folders.value(KeyEffectPrefix)), LibPalette, p->id());
-    }
-    for (QTreeWidgetItem *f : folders)
-        if (f->childCount() == 0)
-            delete f;
+    // Palettes (R2): by type with the folders under each, or folders first.
+    buildLibraryPalettes(all, add);
 
     QTreeWidgetItem *funcs = folder(all, tr("Functions (played as they are)"));
     QList<Function *> fl;
@@ -5301,9 +5679,10 @@ void ShowTreeView::slotFilterChanged(const QString &text)
     // whose name matches ("Movers") shows everything in it, at any depth.
     std::function<bool(QTreeWidgetItem *, bool)> apply = [&](QTreeWidgetItem *item, bool inMatch) {
         const int kind = item->data(0, KindRole).toInt();
-        const bool folder = kind == LibFolder && !item->data(0, PathRole).toString().isEmpty()
-                            && item->data(0, PathRole).toString() != QLatin1String("Groups");
-        const bool leaf = kind != LibSection && kind != LibFolder;
+        const bool folder = (kind == LibFolder || kind == LibPaletteFolder) && !item->data(0, PathRole).toString().isEmpty()
+                            && item->data(0, PathRole).toString() != QLatin1String("Groups")
+                            && !item->data(0, PathRole).toString().endsWith(QLatin1String(":/"));
+        const bool leaf = kind != LibSection && kind != LibFolder && kind != LibPaletteFolder;
         const bool match = text.isEmpty() || inMatch
                            || ((leaf || folder) && item->text(0).contains(text, Qt::CaseInsensitive));
         bool any = false;
@@ -5323,7 +5702,7 @@ void ShowTreeView::slotFilterChanged(const QString &text)
         for (QTreeWidgetItemIterator it(m_library); *it; ++it)
         {
             QTreeWidgetItem *item = *it;
-            if (item->data(0, KindRole).toInt() != LibFolder)
+            if (item->data(0, KindRole).toInt() != LibFolder && item->data(0, KindRole).toInt() != LibPaletteFolder)
                 continue;
             const QString path = item->data(0, PathRole).toString();
             item->setExpanded(m_openWithoutFilter.contains(
@@ -5338,6 +5717,34 @@ void ShowTreeView::slotLibraryContextMenu(const QPoint &pos)
         return;
     const int kind = item->data(0, KindRole).toInt();
     const quint32 id = item->data(0, IdRole).toUInt();
+    const bool paletteHeading = kind == LibFolder && item->data(0, PathRole).toString().startsWith(QLatin1String("Palettes"));
+    if (kind == LibPaletteFolder || paletteHeading)
+    {
+        // R2: a palette folder (or the Palettes heading, or a type under it).
+        if (!item->isSelected())
+            m_library->setCurrentItem(item);
+        const QString folder = kind == LibPaletteFolder ? item->data(0, FolderRole).toString() : QString();
+        QMenu menu(this);
+        fillNewPaletteMenu(menu.addMenu(tr("New palette")), folder);
+        menu.addAction(tr("New folder…"), this, [this]() {
+            bool ok = false;
+            const QString n = QInputDialog::getText(this, tr("New folder"), tr("Folder name"), QLineEdit::Normal,
+                                                    QString(), &ok);
+            if (ok && !n.trimmed().isEmpty())
+                newPaletteFolder(n.trimmed());
+        })->setObjectName("stNewPaletteFolder");
+        if (kind == LibPaletteFolder && !folder.isEmpty())
+        {
+            menu.addAction(tr("Rename folder"), this, [this]() { startLibraryRename(); });
+            menu.addAction(tr("Delete folder (its palettes move up)"), this, [this]() { deleteLibrarySelection(); });
+        }
+        menu.addSeparator();
+        QAction *byType = menu.addAction(tr("Group by type"), this, [this](bool on) { setPaletteGroupByType(on); });
+        byType->setCheckable(true);
+        byType->setChecked(m_paletteByType);
+        menu.exec(m_library->viewport()->mapToGlobal(pos));
+        return;
+    }
     if (kind == LibReusable)
     {
         // P4: rename, who uses it, put it in, delete.
@@ -5434,6 +5841,73 @@ void ShowTreeView::slotLibraryContextMenu(const QPoint &pos)
                 QMessageBox::information(this, tr("Delete set"), why);
         });
     }
+    if (kind == LibPalette && m_doc->paletteOps()->isManaged(id))
+    {
+        // R2 (P-D8): the everyday operations, as in Programming.
+        menu.addSeparator();
+        menu.addAction(tr("Edit"), this, [this, id]() { editPalette(id); })->setObjectName("stEditPalette");
+        menu.addAction(tr("Rename"), this, [this]() { startLibraryRename(); });
+        menu.addAction(tr("Duplicate"), this, [this, id]() {
+            const quint32 copy = m_doc->paletteOps()->duplicate(id);
+            if (copy != QLCPalette::invalidId())
+            {
+                reloadLibrary();
+                selectLibraryPalette(copy);
+                editPalette(copy);
+            }
+        });
+        QList<quint32> pids;
+        for (QTreeWidgetItem *sel : m_library->selectedItems())
+            if (sel->data(0, KindRole).toInt() == LibPalette && !pids.contains(sel->data(0, IdRole).toUInt()))
+                pids << sel->data(0, IdRole).toUInt();
+        if (!pids.contains(id))
+            pids = { id };
+        QMenu *moveMenu = menu.addMenu(pids.count() > 1 ? tr("Move %1 to folder").arg(pids.count()) : tr("Move to folder"));
+        moveMenu->addAction(tr("(no folder)"), this, [this, pids]() { dropPalettesOnFolder(pids, QString()); });
+        for (const QString &f : m_doc->paletteOps()->folders())
+            moveMenu->addAction(f, this, [this, pids, f]() { dropPalettesOnFolder(pids, f); });
+        moveMenu->addSeparator();
+        moveMenu->addAction(tr("New folder…"), this, [this, pids]() {
+            bool ok = false;
+            const QString n = QInputDialog::getText(this, tr("Move to a new folder"), tr("Folder name"),
+                                                    QLineEdit::Normal, QString(), &ok);
+            if (ok && !n.trimmed().isEmpty())
+                dropPalettesOnFolder(pids, n.trimmed());
+        });
+        QMenu *used = menu.addMenu(tr("Used by"));
+        used->setObjectName("stPaletteUsedBy");
+        for (const PaletteOps::Use &u : m_doc->paletteOps()->usage(id))
+        {
+            QAction *a = used->addAction(u.label);
+            if (u.kind == PaletteOps::Use::Cue || u.kind == PaletteOps::Use::Look)
+                connect(a, &QAction::triggered, this, [this, u]() {
+                    if (u.layer != invalidId())
+                        selectNode(u.layer, u.owner);
+                    else
+                        selectNode(u.owner);
+                });
+            else
+                a->setEnabled(false);
+        }
+        QSet<quint32> fns;
+        for (const PaletteOps::Use &u : m_doc->paletteOps()->usage(id))
+            if (u.function != invalidId())
+                fns.insert(u.function);
+        for (const QString &vc : UsedBy::vcLines(fns))
+            used->addAction(vc)->setEnabled(false);
+        if (used->isEmpty())
+            used->addAction(tr("(not used)"))->setEnabled(false);
+        menu.addSeparator();
+        menu.addAction(pids.count() > 1 ? tr("Delete %1 palettes…").arg(pids.count()) : tr("Delete…"), this,
+                       [this]() { deleteLibrarySelection(); })->setObjectName("stDeletePalette");
+    }
+    if (kind == LibFunction)
+    {
+        const Function *f = m_doc->function(id);
+        if (f != nullptr && f->type() == Function::SceneType)
+            menu.addAction(tr("Adopt as look"), this, [this, id]() { adoptAsLook(id); })
+                ->setObjectName("stAdoptAsLook");
+    }
     if (kind == LibPalette && m_st->isInlinePalette(id))
     {
         menu.addAction(tr("Make reusable…"), this, [this, id]() {
@@ -5452,6 +5926,668 @@ void ShowTreeView::slotLibraryContextMenu(const QPoint &pos)
         });
     }
     menu.exec(m_library->viewport()->mapToGlobal(pos));
+}
+
+/****************************************************************************
+ * Palettes in the Library (R2, PROGRAMMING_ROLE_DESIGN.md §4.2, P-D8)
+ ****************************************************************************/
+
+void ShowTreeView::buildLibraryPalettes(QTreeWidgetItem *all,
+                                        const std::function<QTreeWidgetItem *(QTreeWidgetItem *, int, quint32)> &add)
+{
+    PaletteOps *ops = m_doc->paletteOps();
+    // The heading is the folder "none": a palette dropped on it is unfiled.
+    QTreeWidgetItem *root = new QTreeWidgetItem(all);
+    root->setText(0, tr("Palettes"));
+    root->setData(0, KindRole, LibPaletteFolder);
+    root->setData(0, FolderRole, QString());
+    root->setData(0, PathRole, QStringLiteral("Palettes:/"));
+    root->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDropEnabled);
+    root->setToolTip(0, tr("+ Palette (or right-click) makes one; F2 renames; drag onto a folder to file it "
+                           "(folders hold any type); ⌫ deletes, saying where it is used. Effect design, .qxfx "
+                           "and Bundles are in Programming."));
+
+    QList<QLCPalette *> pl;
+    for (QLCPalette *p : m_doc->palettes())
+        if (!m_st->isInlinePalette(p->id()))
+            pl << p;                    // one-off values: Recent only (D21)
+    std::sort(pl.begin(), pl.end(), [](const QLCPalette *a, const QLCPalette *b) {
+        return a->name().compare(b->name(), Qt::CaseInsensitive) < 0;
+    });
+
+    // Nested folder rows under @a parent for @a paths (their parents too),
+    // first: folders before palettes.
+    auto makeFolders = [this](QTreeWidgetItem *parent, const QString &scope, const QStringList &paths) {
+        QStringList withParents;
+        for (const QString &path : paths)
+        {
+            const QStringList parts = path.split(QLatin1Char('/'), Qt::SkipEmptyParts);
+            for (int i = 1; i <= parts.count(); ++i)
+            {
+                const QString pfx = parts.mid(0, i).join(QLatin1Char('/'));
+                if (!withParents.contains(pfx))
+                    withParents << pfx;
+            }
+        }
+        std::sort(withParents.begin(), withParents.end(), [](const QString &a, const QString &b) {
+            return a.compare(b, Qt::CaseInsensitive) < 0;
+        });
+        QHash<QString, QTreeWidgetItem *> items;
+        for (const QString &path : withParents)
+        {
+            const int slash = path.lastIndexOf(QLatin1Char('/'));
+            QTreeWidgetItem *up = slash < 0 ? parent : items.value(path.left(slash), parent);
+            QTreeWidgetItem *f = new QTreeWidgetItem(up);
+            f->setText(0, slash < 0 ? path : path.mid(slash + 1));
+            f->setIcon(0, QIcon(":/folder.png"));
+            f->setData(0, KindRole, LibPaletteFolder);
+            f->setData(0, FolderRole, path);
+            f->setData(0, PathRole, QStringLiteral("Palettes:%1/%2").arg(scope, path));
+            f->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDropEnabled);
+            f->setToolTip(0, tr("A palette folder: any type goes in it. Drop palettes here to file them."));
+            items.insert(path, f);
+        }
+        return items;
+    };
+
+    if (!m_paletteByType)
+    {
+        // Folders first, any type in each; palettes in no folder below.
+        const QHash<QString, QTreeWidgetItem *> items = makeFolders(root, QStringLiteral("*"), ops->folders());
+        for (const QLCPalette *p : pl)
+            add(items.value(PaletteOps::folderOf(p), root), LibPalette, p->id());
+        return;
+    }
+
+    // By type (the default), each type's folders under it. A folder with
+    // nothing in it yet has no type: it shows at the top.
+    QStringList used;
+    for (const QLCPalette *p : pl)
+        used << PaletteOps::folderOf(p);
+    QStringList empty;
+    for (const QString &f : ops->folders())
+    {
+        bool hasAny = false;
+        for (const QString &u : used)
+            hasAny |= u == f || u.startsWith(f + QLatin1Char('/'));
+        if (!hasAny)
+            empty << f;
+    }
+    makeFolders(root, QStringLiteral("*"), empty);
+    const QList<QPair<QString, QString>> kinds = {
+        { KeyColour, tr("Colour") }, { KeyDimmer, tr("Dimmer") }, { KeyPosition, tr("Position") },
+        { KeyGobo, tr("Gobo") }, { KeyZoom, tr("Zoom") }, { KeyBeam, tr("Focus / Frost / Iris") },
+        { KeyShutter, tr("Shutter") }, { KeyEffectPrefix, tr("Effects") } };
+    QHash<QString, QList<const QLCPalette *>> byKind;
+    for (const QLCPalette *p : pl)
+    {
+        QString key = m_st->keyForPalette(p->id());
+        if (isEffectKey(key) || !attributeKeys().contains(key))
+            key = isEffectKey(key) || key.isEmpty() ? KeyEffectPrefix : key;
+        byKind[key] << p;
+    }
+    for (const auto &k : kinds)
+    {
+        const QList<const QLCPalette *> these = byKind.value(k.first);
+        if (these.isEmpty())
+            continue;
+        QTreeWidgetItem *heading = new QTreeWidgetItem(root);
+        heading->setText(0, k.second);
+        heading->setData(0, KindRole, LibFolder);
+        heading->setData(0, PathRole, QStringLiteral("Palettes/%1").arg(k.second));
+        heading->setFlags(Qt::ItemIsEnabled);
+        QStringList paths;
+        for (const QLCPalette *p : these)
+            if (!PaletteOps::folderOf(p).isEmpty())
+                paths << PaletteOps::folderOf(p);
+        const QHash<QString, QTreeWidgetItem *> items = makeFolders(heading, k.second, paths);
+        for (const QLCPalette *p : these)
+            add(items.value(PaletteOps::folderOf(p), heading), LibPalette, p->id());
+    }
+}
+
+void ShowTreeView::fillNewPaletteMenu(QMenu *menu, const QString &folder)
+{
+    // What Programming offers, the same words.
+    const QList<QPair<QString, QLCPalette::PaletteType>> types = {
+        { tr("Colour"), QLCPalette::Color }, { tr("Dimmer"), QLCPalette::Dimmer },
+        { tr("Pan/Tilt"), QLCPalette::PanTilt }, { tr("Aim"), QLCPalette::Aim },
+        { tr("Beam (focus, frost, iris)"), QLCPalette::Beam }, { tr("Gobo"), QLCPalette::Gobo },
+        { tr("Zoom"), QLCPalette::Zoom }, { tr("Shutter"), QLCPalette::Shutter },
+        { tr("Strobe"), QLCPalette::Strobe }, { tr("Effect"), QLCPalette::Effect } };
+    if (!folder.isEmpty())
+        menu->addSection(tr("In %1").arg(folder));
+    for (const auto &t : types)
+    {
+        const QLCPalette::PaletteType type = t.second;
+        menu->addAction(t.first, this, [this, type]() { newPaletteFromLibrary(type); })
+            ->setObjectName(QStringLiteral("stNewPalette%1").arg(QLCPalette::typeToString(type)));
+    }
+}
+
+QString ShowTreeView::libraryPaletteFolder() const
+{
+    QTreeWidgetItem *item = m_library->currentItem();
+    if (item == nullptr)
+        return QString();
+    const int kind = item->data(0, KindRole).toInt();
+    if (kind == LibPaletteFolder)
+        return item->data(0, FolderRole).toString();
+    if (kind == LibPalette)
+        return PaletteOps::folderOf(m_doc->palette(item->data(0, IdRole).toUInt()));
+    return QString();
+}
+
+void ShowTreeView::selectLibraryPalette(quint32 paletteId)
+{
+    for (QTreeWidgetItemIterator it(m_library); *it; ++it)
+    {
+        if ((*it)->data(0, KindRole).toInt() != LibPalette || (*it)->data(0, IdRole).toUInt() != paletteId)
+            continue;
+        QTreeWidgetItem *top = *it;
+        while (top->parent() != nullptr)
+            top = top->parent();
+        if (top->data(0, IdRole).toUInt() != 2)
+            continue;                               // All's, not Recent's
+        for (QTreeWidgetItem *p = (*it)->parent(); p != nullptr; p = p->parent())
+            p->setExpanded(true);
+        m_library->clearSelection();
+        m_library->setCurrentItem(*it);
+        (*it)->setSelected(true);
+        m_library->scrollToItem(*it);
+        return;
+    }
+}
+
+quint32 ShowTreeView::newPaletteFromLibrary(QLCPalette::PaletteType type)
+{
+    // In the folder selected in the Library, else where the show keeps
+    // that type (as a typed value's palette is filed, §10.11).
+    const QString folder = libraryPaletteFolder();
+    const QString path = folder.isEmpty() ? m_st->suggestPaletteFolder(type) : PaletteOps::pathForFolder(folder);
+    const quint32 id = m_doc->paletteOps()->create(type, path);
+    if (id == QLCPalette::invalidId())
+        return id;
+    reloadLibrary();
+    selectLibraryPalette(id);
+    editPalette(id);
+    m_hint->setText(tr("New palette “%1”: set it in the Look Editor; F2 in the Library renames it")
+                    .arg(m_doc->palette(id)->name()));
+    return id;
+}
+
+bool ShowTreeView::newPaletteFolder(const QString &name)
+{
+    const QString parent = libraryPaletteFolder();
+    const QString folder = PaletteOps::cleanFolder(parent.isEmpty() ? name : parent + QLatin1Char('/') + name);
+    if (!m_doc->paletteOps()->addFolder(folder))
+    {
+        m_hint->setText(tr("There is a folder “%1” already").arg(folder));
+        return false;
+    }
+    reloadLibrary();
+    return true;
+}
+
+bool ShowTreeView::startLibraryRename()
+{
+    // The row last clicked (the current one), whatever else is selected.
+    QTreeWidgetItem *item = m_library->currentItem();
+    if (item == nullptr)
+        return false;
+    const int kind = item->data(0, KindRole).toInt();
+    QString text;
+    if (kind == LibPalette)
+    {
+        const quint32 id = item->data(0, IdRole).toUInt();
+        if (!m_doc->paletteOps()->isManaged(id))
+            return false;
+        text = m_doc->palette(id)->name();
+    }
+    else if (kind == LibPaletteFolder && !item->data(0, FolderRole).toString().isEmpty())
+        text = item->text(0);
+    else
+        return false;
+    item->setText(0, text);         // the bare name (no ★)
+    item->setFlags(item->flags() | Qt::ItemIsEditable);
+    m_libRenaming = true;
+    m_libRenameItem = item;
+    m_library->editItem(item, 0);
+    return true;
+}
+
+void ShowTreeView::slotLibraryItemRenamed(QTreeWidgetItem *item, int column)
+{
+    if (!m_libRenaming || item != m_libRenameItem || column != 0)
+        return;
+    m_libRenaming = false;
+    m_libRenameItem = nullptr;
+    const QString name = item->text(0).trimmed();
+    const int kind = item->data(0, KindRole).toInt();
+    const quint32 id = item->data(0, IdRole).toUInt();
+    const QString folder = item->data(0, FolderRole).toString();
+    // After the editor is done with the row: the rename rebuilds the Library.
+    QTimer::singleShot(0, this, [this, kind, id, folder, name]() {
+        if (kind == LibPalette)
+            m_doc->paletteOps()->rename(id, name);
+        else
+            m_doc->paletteOps()->renameFolder(folder, name);
+        reloadLibrary();
+        if (kind == LibPalette)
+        {
+            selectLibraryPalette(id);
+            if (editedPalette() == id)
+                m_lookEditor->setPalette(id);
+        }
+    });
+}
+
+bool ShowTreeView::deleteLibrarySelection()
+{
+    QList<quint32> pids;
+    for (QTreeWidgetItem *sel : m_library->selectedItems())
+        if (sel->data(0, KindRole).toInt() == LibPalette && m_doc->paletteOps()->isManaged(sel->data(0, IdRole).toUInt())
+            && !pids.contains(sel->data(0, IdRole).toUInt()))
+            pids << sel->data(0, IdRole).toUInt();
+    QTreeWidgetItem *cur = m_library->currentItem();
+    if (pids.isEmpty() && cur != nullptr && cur->data(0, KindRole).toInt() == LibReusable)
+        return deleteReusable(cur->data(0, IdRole).toUInt());
+    if (pids.isEmpty() && cur != nullptr && cur->data(0, KindRole).toInt() == LibPaletteFolder)
+    {
+        const QString folder = cur->data(0, FolderRole).toString();
+        if (folder.isEmpty())
+            return false;
+        const int n = m_doc->paletteOps()->folderCount(folder);
+        if (n > 0 && !confirm(tr("Delete folder"),
+                              tr("Delete the folder “%1”? The %n palette(s) in it move up a level; nothing is "
+                                 "deleted.", "", n).arg(folder)))
+            return false;
+        return m_doc->paletteOps()->removeFolder(folder);
+    }
+    if (pids.isEmpty())
+        return false;
+    // Asks, naming every cue, look, scene and VC button that uses each.
+    if (!confirm(pids.count() > 1 ? tr("Delete palettes") : tr("Delete palette"),
+                 UsedBy::deletePalettesQuestion(m_doc, pids)))
+        return false;
+    const bool editing = pids.contains(editedPalette());
+    if (!m_doc->paletteOps()->remove(pids))
+        return false;
+    if (editing)
+        editPalette(QLCPalette::invalidId());
+    // The cues still name them: "(missing)" until Undo brings them back.
+    updateInspector();
+    return true;
+}
+
+bool ShowTreeView::dropPalettesOnFolder(const QList<quint32> &paletteIds, const QString &folder)
+{
+    QList<quint32> ids;
+    for (quint32 id : paletteIds)
+        if (m_doc->paletteOps()->isManaged(id))
+            ids << id;
+    if (ids.isEmpty() || !m_doc->paletteOps()->move(ids, folder))
+        return false;
+    reloadLibrary();
+    selectLibraryPalette(ids.first());
+    m_hint->setText(folder.isEmpty() ? tr("%n palette(s) in no folder", "", int(ids.count()))
+                                     : tr("%n palette(s) → %1", "", int(ids.count())).arg(folder));
+    return true;
+}
+
+void ShowTreeView::setPaletteGroupByType(bool byType)
+{
+    if (m_paletteByType == byType)
+        return;
+    m_paletteByType = byType;
+    QSettings().setValue(QStringLiteral("showtree/libraryPalettesByType"), byType);
+    reloadLibrary();
+}
+
+QStringList ShowTreeView::libraryPaletteRows() const
+{
+    QStringList out;
+    QTreeWidgetItem *root = nullptr;
+    for (QTreeWidgetItemIterator it(m_library); *it && root == nullptr; ++it)
+        if ((*it)->data(0, PathRole).toString() == QLatin1String("Palettes:/"))
+            root = *it;
+    if (root == nullptr)
+        return out;
+    std::function<void(QTreeWidgetItem *, int)> walk = [&](QTreeWidgetItem *item, int depth) {
+        for (int i = 0; i < item->childCount(); ++i)
+        {
+            QTreeWidgetItem *c = item->child(i);
+            QString text = c->text(0);
+            if (text.startsWith(QStringLiteral("★ ")))
+                text = text.mid(2);
+            if (c->data(0, KindRole).toInt() == LibPaletteFolder)
+                text += QLatin1Char('/');
+            out << QString(depth * 2, QLatin1Char(' ')) + text;
+            walk(c, depth + 1);
+        }
+    };
+    walk(root, 0);
+    return out;
+}
+
+QString ShowTreeView::usedByText() const
+{
+    return m_lookEditor->usedByText();
+}
+
+void ShowTreeView::updateUsedBy(quint32 paletteId)
+{
+    // P-D13: where it is used, a click for the list (and a jump there).
+    if (m_doc->palette(paletteId) == nullptr || m_st->isInlinePalette(paletteId))
+    {
+        m_lookEditor->setUsedBy(QString());
+        return;
+    }
+    const QString summary = UsedBy::paletteSummary(m_doc, paletteId);
+    m_lookEditor->setUsedBy(summary.isEmpty()
+                            ? tr("Used by: nothing yet")
+                            : tr("Used by: %1 — <a href=\"usedby\">which</a>").arg(summary.toHtmlEscaped()));
+}
+
+void ShowTreeView::usedByLinkActivated(const QString &link)
+{
+    const quint32 pid = m_lookEditor->paletteId();
+    if (link != QLatin1String("usedby") || m_doc->palette(pid) == nullptr)
+        return;
+    QMenu menu(this);
+    for (const PaletteOps::Use &u : m_doc->paletteOps()->usage(pid))
+    {
+        QAction *a = menu.addAction(u.label);
+        if (u.kind == PaletteOps::Use::Cue || u.kind == PaletteOps::Use::Look)
+            connect(a, &QAction::triggered, this, [this, u]() {
+                if (u.layer != invalidId())
+                    selectNode(u.layer, u.owner);
+                else
+                    selectNode(u.owner);
+            });
+        else
+            a->setEnabled(false);
+    }
+    QSet<quint32> fns;
+    for (const PaletteOps::Use &u : m_doc->paletteOps()->usage(pid))
+        if (u.function != invalidId())
+            fns.insert(u.function);
+    for (const QString &vc : UsedBy::vcLines(fns))
+        menu.addAction(vc)->setEnabled(false);
+    menu.exec(QCursor::pos());
+}
+
+/****************************************************************************
+ * The Looks section (R3, PROGRAMMING_ROLE_DESIGN.md §4.1)
+ ****************************************************************************/
+
+bool ShowTreeView::selectionInLooks() const
+{
+    QTreeWidgetItem *item = m_tree->currentItem();
+    if (item == nullptr)
+        return false;
+    switch (item->data(0, KindRole).toInt())
+    {
+        case LookFolderNode: return true;
+        case ListNode: return m_st->isLooks(item->data(0, IdRole).toUInt());
+        case CueNode: return m_st->isLook(item->data(0, IdRole).toUInt());
+        case LayerNode:
+        case TrackedLayerNode: return m_st->isLook(item->data(0, CueRole).toUInt());
+        default: break;
+    }
+    return false;
+}
+
+quint32 ShowTreeView::currentProductionId() const
+{
+    for (QTreeWidgetItem *item = m_tree->currentItem(); item != nullptr; item = item->parent())
+        if (item->data(0, KindRole).toInt() == ProductionNode)
+            return item->data(0, IdRole).toUInt();
+    return m_st->productions().count() == 1 ? m_st->productions().first().id : invalidId();
+}
+
+QString ShowTreeView::currentLookFolder() const
+{
+    QTreeWidgetItem *item = m_tree->currentItem();
+    return item != nullptr && item->data(0, KindRole).toInt() == LookFolderNode
+           ? item->data(0, FolderRole).toString() : QString();
+}
+
+quint32 ShowTreeView::newLook()
+{
+    const quint32 prod = currentProductionId();
+    if (prod == invalidId())
+    {
+        m_hint->setText(tr("Select a production first (+ Production)"));
+        return invalidId();
+    }
+    // After the selected look, in its folder; else in the selected folder.
+    quint32 after = invalidId();
+    QString folder = currentLookFolder();
+    const quint32 cueId = currentCueId();
+    if (cueId != invalidId() && m_st->isLook(cueId))
+    {
+        after = cueId;
+        folder = m_st->cue(cueId)->folder;
+    }
+    const quint32 id = m_st->addLook(prod, QString(), folder, after);
+    if (id != invalidId())
+    {
+        selectNode(id);
+        m_cueName->setFocus();
+    }
+    return id;
+}
+
+QString ShowTreeView::lookFolderDropHint(const QList<quint32> &lookIds, quint32 listId, const QString &folder) const
+{
+    const CueList *list = m_st->cueList(listId);
+    if (list == nullptr || !list->looks || lookIds.isEmpty())
+        return QString();
+    bool any = false;
+    for (quint32 id : lookIds)
+    {
+        const Cue *c = list->cue(id);
+        if (c == nullptr)
+            return QString();               // a cue of a list, or another section's look
+        any |= c->folder != folder;
+    }
+    if (!any)
+        return QString();
+    const QString what = lookIds.count() == 1 ? m_st->cueLabel(*list, list->indexOf(lookIds.first()))
+                                              : tr("%1 looks").arg(lookIds.count());
+    return folder.isEmpty() ? tr("%1 → out of its folder").arg(what) : tr("%1 → %2").arg(what, folder);
+}
+
+bool ShowTreeView::dropLooksOnFolder(const QList<quint32> &lookIds, quint32 listId, const QString &folder)
+{
+    if (lookFolderDropHint(lookIds, listId, folder).isEmpty())
+        return false;
+    return m_st->setLookFolder(lookIds, folder);
+}
+
+QStringList ShowTreeView::lookFiredBy(quint32 lookId) const
+{
+    const quint32 fid = m_st->lookFunction(lookId);
+    return fid == invalidId() ? QStringList() : UsedBy::vcLines({ fid });
+}
+
+bool ShowTreeView::makeVcPage(quint32 listId, const QString &folder, QString *message)
+{
+    auto say = [message](const QString &text) {
+        if (message != nullptr)
+            *message = text;
+    };
+    VirtualConsole *vc = VirtualConsole::instance();
+    if (vc == nullptr || vc->contents() == nullptr)
+    {
+        say(tr("No Virtual Console to put it on."));
+        return false;
+    }
+    const CueList *list = m_st->cueList(listId);
+    quint32 prodId = invalidId();
+    m_st->cueList(listId, &prodId);
+    const QList<quint32> looks = m_st->looksIn(listId, folder);
+    if (list == nullptr || !list->looks || looks.isEmpty())
+    {
+        say(tr("No looks there yet."));
+        return false;
+    }
+    const Production *prod = m_st->production(prodId);
+    const QList<ResolvedCue> resolved = m_st->resolved(*list);
+
+    // Below what the console already holds, at its left.
+    VCFrame *contents = vc->contents();
+    int y = 10;
+    for (QObject *o : contents->children())
+        if (VCWidget *w = qobject_cast<VCWidget *>(o))
+            y = qMax(y, w->geometry().bottom() + 10);
+    const int size = 80, gap = 6, header = 36, cols = qMin(6, int(looks.count()));
+    const int rows = (int(looks.count()) + cols - 1) / cols;
+
+    VCFrame *frame = new VCFrame(contents, m_doc, true);
+    vc->placeWidget(frame, contents);
+    frame->setCaption(folder.isEmpty() ? tr("Looks — %1").arg(prod == nullptr ? QString() : prod->name)
+                                       : tr("Looks — %1").arg(folder));
+    frame->setHeaderVisible(true);
+    frame->move(QPoint(10, y));
+    frame->resize(QSize(10 + cols * (size + gap), header + rows * (size + gap) + 4));
+
+    int n = 0;
+    for (quint32 lookId : looks)
+    {
+        const int at = list->indexOf(lookId);
+        const quint32 fid = m_st->lookFunction(lookId);
+        if (at < 0 || fid == invalidId())
+            continue;
+        VCButton *b = new VCButton(frame, m_doc);
+        vc->placeWidget(b, frame);
+        b->setFunction(fid);
+        b->setCaption(m_st->cueLabel(*list, at));
+        b->setAction(VCButton::Toggle);
+        b->move(QPoint(5 + (n % cols) * (size + gap), header + (n / cols) * (size + gap)));
+        b->resize(QSize(size, size));
+        // Its colour: the look's first Colour (as it plays).
+        for (const ResolvedLayer &rl : resolved.value(at).layers)
+        {
+            const ResolvedValue v = rl.values.value(KeyColour);
+            const QLCPalette *p = v.look.palettes.isEmpty() ? nullptr : m_doc->palette(v.look.palettes.first());
+            if (p == nullptr)
+                continue;
+            const QColor c = p->rgbValue();
+            b->setBackgroundColor(c);
+            b->setForegroundColor(qGray(c.rgb()) > 140 ? QColor(Qt::black) : QColor(Qt::white));
+            break;
+        }
+        ++n;
+    }
+    frame->show();
+    m_doc->setModified();
+    buildTree();
+    updateInspector();
+    say(tr("VC page “%1”: %n button(s), one per look (Virtual Console)", "", n).arg(frame->caption()));
+    return n > 0;
+}
+
+quint32 ShowTreeView::adoptAsLook(quint32 functionId)
+{
+    const Function *f = m_doc->function(functionId);
+    const quint32 prod = currentProductionId();
+    if (f == nullptr || prod == invalidId())
+    {
+        m_hint->setText(tr("Select a production first (+ Production)"));
+        return invalidId();
+    }
+    QString why;
+    const quint32 id = m_st->adoptAsLook(prod, functionId, &why);
+    if (id == invalidId())
+    {
+        m_hint->setText(why);
+        return invalidId();
+    }
+    // The VC buttons firing the scene may fire the look instead (P-D16);
+    // the scene stays either way.
+    const QList<VCButton *> buttons = UsedBy::vcButtons({ functionId });
+    if (!buttons.isEmpty()
+        && confirm(tr("Adopt as look"),
+                   tr("%n VC button(s) fire “%1”. Fire the look instead?", "", int(buttons.count())).arg(f->name()),
+                   UsedBy::vcLines({ functionId }).join(QStringLiteral("\n"))))
+    {
+        const quint32 fid = m_st->lookFunction(id);
+        for (VCButton *b : buttons)
+            b->setFunction(fid);
+        m_doc->setModified();
+    }
+    selectNode(id);
+    m_hint->setText(why.isEmpty() ? tr("“%1” is a look: its groups and palettes are a layer").arg(f->name())
+                                  : tr("“%1” is a look, played as it is: %2").arg(f->name(), why));
+    return id;
+}
+
+void ShowTreeView::showLooksPage(quint32 listId, const QString &folder)
+{
+    const CueList *list = m_st->cueList(listId);
+    if (list == nullptr)
+        return;
+    for (QWidget *w : { static_cast<QWidget *>(m_listMode), static_cast<QWidget *>(m_listBase) })
+        m_listForm->setRowVisible(w, false);
+    m_listConvert->hide();
+    m_listDetach->hide();
+    m_listVcPage->show();
+    const QList<quint32> looks = m_st->looksIn(listId, folder);
+    m_listVcPage->setEnabled(!looks.isEmpty());
+    m_listTitle->setText(folder.isEmpty() ? tr("Looks") : tr("Looks › %1").arg(folder));
+    QStringList lines;
+    for (quint32 id : looks)
+    {
+        const QStringList fired = lookFiredBy(id);
+        lines << QStringLiteral("• %1%2").arg(m_st->cueLabel(*list, list->indexOf(id)),
+                                             fired.isEmpty() ? QString() : QStringLiteral(" — ") + fired.join(QStringLiteral(", ")));
+    }
+    m_listInfo->setText(tr("%n busking look(s) here.", "", int(looks.count()))
+                        + (lines.isEmpty() ? QString() : QStringLiteral("\n") + lines.join(QLatin1Char('\n')))
+                        + QStringLiteral("\n\n")
+                        + tr("A look is built like a cue -- layers, attribute rows, effects -- but never tracks: "
+                             "it plays only what it has. It plays from a VC button (Toggle or Flash), over "
+                             "whatever runs: the highest intensity wins, the last started sets the rest. Make "
+                             "VC page puts a button for each on the Virtual Console; + Look adds one; drag looks "
+                             "onto a folder to file them."));
+    m_pages->setCurrentWidget(m_listPage);
+}
+
+void ShowTreeView::lookFolderMenu(QMenu *menu, quint32 listId, const QList<quint32> &lookIds)
+{
+    menu->addAction(tr("(no folder)"), this, [this, lookIds]() { m_st->setLookFolder(lookIds, QString()); });
+    for (const QString &f : m_st->lookFolders(listId))
+        menu->addAction(f, this, [this, lookIds, f]() { m_st->setLookFolder(lookIds, f); });
+    menu->addSeparator();
+    menu->addAction(tr("New folder…"), this, [this, lookIds]() {
+        bool ok = false;
+        const QString n = QInputDialog::getText(this, tr("Move to a new folder"), tr("Folder name"),
+                                                QLineEdit::Normal, QString(), &ok);
+        if (ok && !n.trimmed().isEmpty())
+            m_st->setLookFolder(lookIds, n.trimmed());
+    });
+}
+
+void ShowTreeView::lookLinkActivated(const QString &link)
+{
+    const quint32 lookId = m_pageCue;
+    const CueList *list = m_st->listOfCue(lookId);
+    if (list == nullptr || !list->looks)
+        return;
+    if (link == QLatin1String("vcpage"))
+    {
+        QString msg;
+        makeVcPage(list->id, list->cue(lookId)->folder, &msg);
+        m_hint->setText(msg);
+    }
+    else if (link == QLatin1String("folder"))
+    {
+        QMenu menu(this);
+        lookFolderMenu(&menu, list->id, { lookId });
+        menu.exec(QCursor::pos());
+    }
 }
 
 /****************************************************************************
@@ -5633,6 +6769,14 @@ bool ShowTreeView::runCommand(const QString &line)
 
     const ShowTreeCommand::Result r = m_commander->run(line, ctx);
     m_commandMsg->setText(r.message);
+    // A palette made or named for editing: in the Look Editor, and shown
+    // in the Library (R2).
+    if (r.ok && r.editPalette != QLCPalette::invalidId() && m_doc->palette(r.editPalette) != nullptr)
+    {
+        reloadLibrary();
+        selectLibraryPalette(r.editPalette);
+        editPalette(r.editPalette);
+    }
     if (!r.help.isEmpty())
     {
         m_commandHelp->setHtml(r.help);

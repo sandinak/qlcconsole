@@ -1687,6 +1687,16 @@ void VirtualConsole::setupWidget(VCWidget *widget, VCWidget *parent)
     setWidgetSelected(widget, true);
 }
 
+void VirtualConsole::placeWidget(VCWidget *widget, VCWidget *parent)
+{
+    Q_ASSERT(widget != NULL);
+    Q_ASSERT(parent != NULL);
+
+    addWidgetInMap(widget);
+    connectWidgetToParent(widget, parent);
+    widget->show();
+}
+
 VCWidget *VirtualConsole::widget(quint32 id)
 {
     if (id == VCWidget::invalidId())

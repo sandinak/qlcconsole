@@ -93,6 +93,14 @@ private slots:
     void reusablesInTheTreeAndTheLibrary();
     void convertAndDetachFromTheListPage();
 
+    // R2: palettes in the Library; R3: the Looks section
+    void palettesInTheLibrary();
+    void aPaletteDeletedFromTheLibraryComesBackWithUndo();
+    void paletteStepsAreOneUndoStepAndSharedWithProgramming();
+    void looksSectionInTheTree();
+    void makeVcPageAndAdoptAsLook();
+    void looksAreOneUndoStepAndTyped();
+
 private:
     quint32 dimmer(int level, const QString &name);
     quint32 colour(const QColor &c, const QString &name);

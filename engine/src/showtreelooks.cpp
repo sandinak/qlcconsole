@@ -381,3 +381,47 @@ quint32 ShowTreeController::adoptAsLook(quint32 productionId, quint32 functionId
         *why = reason;      // read as it is, and why (empty: as a layer)
     return lookId;
 }
+
+quint32 ShowTreeController::copyCueToLook(quint32 cueId)
+{
+    quint32 prodId = invalidId();
+    const CueList *list = listOfCue(cueId);
+    if (list == nullptr || list->looks)
+        return invalidId();
+    cueList(list->id, &prodId);
+    const Cue *src = list->cue(cueId);
+    QList<Layer> layers = recordLayers(cueId, RecordSource::Selected);
+    for (Layer &l : layers)
+        l.id = newId();
+    const quint32 sectionId = looksSection(prodId) == invalidId() ? newId() : invalidId();
+    const quint32 lookId = newId();
+    const QString name = src->name.isEmpty() ? cueLabel(*list, list->indexOf(cueId)) : src->name;
+    const bool ok = edit(tr("Copy %1 to look").arg(cueLabel(*list, list->indexOf(cueId))),
+                         [&](QList<Production> &ps) {
+        for (Production &p : ps)
+        {
+            if (p.id != prodId)
+                continue;
+            CueList *l = p.looks();
+            if (l == nullptr)
+            {
+                CueList fresh;
+                fresh.id = sectionId;
+                fresh.name = tr("Looks");
+                fresh.looks = true;
+                p.lists << fresh;
+                l = &p.lists.last();
+            }
+            Cue c;
+            c.id = lookId;
+            c.name = name;
+            c.mixOverlap = src->mixOverlap;
+            c.number = numberForInsert(*l, int(l->cues.count()) - 1);
+            c.layers = layers;
+            l->cues << c;
+            return true;
+        }
+        return false;
+    });
+    return ok ? lookId : invalidId();
+}

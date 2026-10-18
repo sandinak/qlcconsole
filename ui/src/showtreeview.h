@@ -45,6 +45,7 @@ class QLineEdit;
 class QMimeData;
 class QTimer;
 class QCheckBox;
+class QFormLayout;
 class QTextBrowser;
 class QLabel;
 class QMenu;
@@ -81,7 +82,8 @@ public:
         ListNode,
         CueNode,
         LayerNode,          //!< a cue's own layer
-        TrackedLayerNode    //!< carried into the cue (tracked, included, base)
+        TrackedLayerNode,   //!< carried into the cue (tracked, included, base)
+        LookFolderNode      //!< a folder of a Looks section (R3): IdRole its list, FolderRole its path
     };
 
     /** Item roles in the tree and the Library. */
@@ -91,12 +93,13 @@ public:
         IdRole = Qt::UserRole + 1,
         CueRole = Qt::UserRole + 2,     //!< a layer row's cue
         TargetRole = Qt::UserRole + 3,  //!< a tracked layer's target signature
-        PathRole = Qt::UserRole + 4     //!< a Library folder's path ("Groups/Movers/Front")
+        PathRole = Qt::UserRole + 4,    //!< a Library folder's path ("Groups/Movers/Front")
+        FolderRole = Qt::UserRole + 5   //!< a look folder's / palette folder's own path ("Hits")
     };
 
     /** Library item kinds. */
     enum LibraryKind { LibSection = 100, LibFolder, LibGroup, LibFixture, LibPalette, LibFunction, LibSet, LibTarget,
-                       LibReusable };
+                       LibReusable, LibPaletteFolder };
 
     QTreeWidget *tree() const { return m_tree; }
     QTreeWidget *library() const { return m_library; }
@@ -257,6 +260,65 @@ public:
      *  as one undo step; false (nothing done) when fewer, or a cue list
      *  or production is among them. */
     bool deleteSelected();
+
+    /************************************************************************
+     * Palettes in the Library (R2, P-D8): the everyday operations, through
+     * the shared PaletteOps (one undo history with the tree)
+     ************************************************************************/
+public:
+    /** + Palette: a new palette of @a type in the folder selected in the
+     *  Library (else where the show keeps that type), selected there and
+     *  opened in the Look Editor. */
+    quint32 newPaletteFromLibrary(QLCPalette::PaletteType type);
+    /** New folder in the Library (under the selected palette folder). */
+    bool newPaletteFolder(const QString &name);
+    /** The palette folder the Library's selection is in ("": none). */
+    QString libraryPaletteFolder() const;
+    /** F2 in the Library: rename the selected palette or palette folder in
+     *  place (Return commits, Esc cancels). False: nothing to rename. */
+    bool startLibraryRename();
+    bool isLibraryRenaming() const { return m_libRenaming; }
+    /** ⌫ in the Library: the selected palettes (asks, naming where each is
+     *  used), or the selected palette folder (what is in it moves up). */
+    bool deleteLibrarySelection();
+    /** Palettes dropped on a Library palette folder ("": none). */
+    bool dropPalettesOnFolder(const QList<quint32> &paletteIds, const QString &folder);
+    /** All → Palettes by type, folders under each (the default), or folders
+     *  first, any type in each (feat/palette-folders' view). Remembered. */
+    bool paletteGroupByType() const { return m_paletteByType; }
+    void setPaletteGroupByType(bool byType);
+    /** All → Palettes as text, one row per item, indented two spaces a
+     *  level: "Colour", "  01-Song/", "    Blue" (tests). */
+    QStringList libraryPaletteRows() const;
+    /** The Look Editor's Used by line, as text (tests). */
+    QString usedByText() const;
+
+    /************************************************************************
+     * The Looks section (R3, P-D5..P-D7)
+     ************************************************************************/
+public:
+    /** + Look: a new look after the selected one (in its folder), or in the
+     *  selected Looks section / folder; the section is made the first time.
+     *  Selected, its name field focused. */
+    quint32 newLook();
+    /** Looks dropped on a folder of their Looks section ("": the section
+     *  itself, no folder). One undo step. */
+    bool dropLooksOnFolder(const QList<quint32> &lookIds, quint32 listId, const QString &folder);
+    /** What that drop would do ("Hit 1 → Hits"); empty: refused. */
+    QString lookFolderDropHint(const QList<quint32> &lookIds, quint32 listId, const QString &folder) const;
+    /** Make VC page (P-D7): a frame on the Virtual Console with one Toggle
+     *  button per look in @a folder of Looks section @a listId ("": every
+     *  look), captioned with the look's name, coloured by its first colour.
+     *  False (and @a message why) when there is no VC or no look. */
+    bool makeVcPage(quint32 listId, const QString &folder, QString *message = nullptr);
+    /** The VC buttons that fire look @a lookId, as text. */
+    QStringList lookFiredBy(quint32 lookId) const;
+    /** Adopt as look (P-D16) scene @a functionId into the selected
+     *  production; offers to re-point the VC buttons that fire the scene to
+     *  the look. The look (invalid: refused, said in the hint). */
+    quint32 adoptAsLook(quint32 functionId);
+    /** The folder selected in the tree's Looks section ("": none). */
+    QString currentLookFolder() const;
 
     /************************************************************************
      * Record as new cue: which stage (selected / running / everything lit)
@@ -564,6 +626,38 @@ private:
     bool m_applyingMulti = false;
     void slotTreeItemRenamed(QTreeWidgetItem *item, int column);
     bool m_inspectorUpdating = false;
+
+    // R2: palettes in the Library
+    QToolButton *m_newPalette = nullptr;
+    bool m_paletteByType = true;
+    bool m_libRenaming = false;
+    QTreeWidgetItem *m_libRenameItem = nullptr;
+    void slotLibraryItemRenamed(QTreeWidgetItem *item, int column);
+    /** The Look Editor's Used by line for @a paletteId. */
+    void updateUsedBy(quint32 paletteId);
+    void usedByLinkActivated(const QString &link);
+    /** The Library's All → Palettes item for @a paletteId, selected. */
+    void selectLibraryPalette(quint32 paletteId);
+    /** + Palette's menu, by type: what Programming offers. */
+    void fillNewPaletteMenu(QMenu *menu, const QString &folder);
+    /** The Library's palette rows, under All. */
+    void buildLibraryPalettes(QTreeWidgetItem *all, const std::function<QTreeWidgetItem *(QTreeWidgetItem *, int, quint32)> &add);
+
+    // R3: the Looks section
+    QFormLayout *m_cueForm = nullptr;
+    QFormLayout *m_listForm = nullptr;
+    QLabel *m_lookFiredBy = nullptr;
+    QPushButton *m_listVcPage = nullptr;
+    QSet<QString> m_collapsedFolders;      //!< "listId:path" of look folders closed by hand
+    /** Whether the selection is in a Looks section (its node, a folder, a
+     *  look, a look's layer). */
+    bool selectionInLooks() const;
+    /** The production the selection is in (invalid: none). */
+    quint32 currentProductionId() const;
+    void showLooksPage(quint32 listId, const QString &folder);
+    void lookLinkActivated(const QString &link);
+    /** "Move to folder" for looks @a lookIds of Looks section @a listId. */
+    void lookFolderMenu(QMenu *menu, quint32 listId, const QList<quint32> &lookIds);
 };
 
 /** @} */

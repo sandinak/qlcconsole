@@ -38,6 +38,8 @@
 #include <QDebug>
 #include "speedmasterspanel.h"
 #include "programmingmanager.h"
+#include "paletteops.h"
+#include "usedby.h"
 #include "helpbrowser.h"
 #include "programmercontroller.h"
 #include "functionstreewidget.h"
@@ -1351,23 +1353,9 @@ void ProgrammingManager::createPalette(int paletteType)
 {
     const QLCPalette::PaletteType type =
         static_cast<QLCPalette::PaletteType>(paletteType);
-    QLCPalette *p = new QLCPalette(type);
-    p->setName(tr("New %1").arg(QLCPalette::typeToString(type)));
-
-    // Sensible starting value so the palette is valid/saveable.
-    switch (type)
-    {
-    case QLCPalette::Color:   p->setValue(QColor(Qt::white).name()); break;
-    case QLCPalette::Dimmer:  p->setValue(255); break;
-    case QLCPalette::PanTilt: p->setValue(270, 135); break;
-    case QLCPalette::Aim:     break; // no m_values; target set in LookEditor
-    case QLCPalette::Effect:  break; // no value needed; script path set in LookEditor
-    case QLCPalette::Strobe:  p->setValue(0.25f); break; // default to 25% rate
-    default:                  p->setValue(0); break; // Gobo / Shutter / …
-    }
 
     // Default to a type-named folder; override with selected folder if one is active.
-    p->setPath(QString("Palettes/%1/").arg(QLCPalette::typeToString(type)));
+    QString path = QString("Palettes/%1/").arg(QLCPalette::typeToString(type));
     const QList<QTreeWidgetItem*> sel = m_paletteTree->selectedItems();
     if (sel.isEmpty() == false)
     {
@@ -1379,17 +1367,16 @@ void ProgrammingManager::createPalette(int paletteType)
                 cp = sp->path();
         }
         if (cp.isEmpty() == false)
-            p->setPath(cp);
+            path = cp;
     }
 
-    if (m_doc->addPalette(p) == false)
-    {
-        delete p;
+    // The shared operation (PaletteOps, as the Show Tree's Library): a
+    // start value so it is valid and saves, one palette undo step.
+    const quint32 pid = m_doc->paletteOps()->create(type, path);
+    if (pid == QLCPalette::invalidId())
         return;
-    }
-    m_doc->setModified();
-    revealPalette(p->id());            // select + scroll to it in the source tree
-    m_lookEditor->setPalette(p->id()); // edit it inline immediately
+    revealPalette(pid);            // select + scroll to it in the source tree
+    m_lookEditor->setPalette(pid); // edit it inline immediately
     showLookEditorPanel();
 }
 
@@ -1670,19 +1657,10 @@ void ProgrammingManager::slotPaste()
 
 void ProgrammingManager::duplicatePalette(quint32 pid)
 {
-    QLCPalette *src = m_doc->palette(pid);
-    if (src == NULL)
-        return;
-    QLCPalette *copy = src->createCopy();
+    const quint32 copyId = m_doc->paletteOps()->duplicate(pid);
+    QLCPalette *copy = m_doc->palette(copyId);
     if (copy == NULL)
         return;
-    copy->setName(src->name() + tr(" (copy)"));
-    if (m_doc->addPalette(copy) == false)
-    {
-        delete copy;
-        return;
-    }
-    m_doc->setModified();
     m_paletteTree->updateTree();
     QTreeWidgetItem *it = m_paletteTree->paletteItem(copy);
     if (it != NULL)
@@ -2629,49 +2607,9 @@ QString ProgrammingManager::deleteFunctionsMessage(const QList<quint32> &fids) c
 
 QString ProgrammingManager::deletePalettesMessage(const QList<quint32> &pids) const
 {
-    ProgrammerController *pc = m_doc->programmer();
-    QStringList names;
-    QString used;
-    bool anyLook = false;
-    bool anyBinding = false;
-    for (quint32 pid : pids)
-    {
-        QLCPalette *p = m_doc->palette(pid);
-        if (p == NULL)
-            continue;
-        names << p->name();
-        const QList<ProgrammerController::Usage> uses =
-            (pc != NULL) ? pc->paletteUsage(pid) : QList<ProgrammerController::Usage>();
-        if (uses.isEmpty())
-            continue;
-        for (const ProgrammerController::Usage &u : uses)
-        {
-            if (u.kind == ProgrammerController::Usage::SceneLook)
-                anyLook = true;
-            else
-                anyBinding = true;
-        }
-        used += QString("\n\n") + tr("“%1” is used in %n place(s):", "", uses.size())
-                    .arg(p->name())
-                + "\n" + usageBlock(ProgrammerController::usageLines(uses));
-    }
-    if (names.isEmpty())
-        return QString();
-
-    QString msg = names.size() > 1
-        ? tr("Delete %1 palettes?\n\n%2").arg(names.size()).arg(names.join(", "))
-        : tr("Delete palette “%1”?").arg(names.first());
-    if (used.isEmpty())
-        return msg + QString("\n\n") + tr("Nothing uses it.");
-
-    msg += used + QString("\n");
-    if (anyLook)
-        msg += QString("\n") + tr("Those scenes lose that look; their other looks "
-                                  "and values stay.");
-    if (anyBinding)
-        msg += QString("\n") + tr("Those effect looks lose that slot's palette and "
-                                  "use their look's colours instead.");
-    return msg;
+    // The one Used by (P-D13): cues and looks by name, scenes, effect
+    // slots and the VC buttons firing them -- as the Show Tree asks.
+    return UsedBy::deletePalettesQuestion(m_doc, pids);
 }
 
 bool ProgrammingManager::deletePalettes(const QList<quint32> &pids, bool confirm)
@@ -2684,9 +2622,10 @@ bool ProgrammingManager::deletePalettes(const QList<quint32> &pids, bool confirm
             QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
         return false;
 
-    // By id: each delete rebuilds the tree (paletteRemoved).
-    for (quint32 pid : pids)
-        m_doc->deletePalette(pid);
+    // One palette undo step (PaletteOps): Undo in the Show Tree brings
+    // them back, in every scene and slot they were in.
+    if (!m_doc->paletteOps()->remove(pids))
+        return false;
     m_paletteTree->updateTree();
     return true;
 }
@@ -3043,11 +2982,8 @@ void ProgrammingManager::slotPaletteTreeMenu(const QPoint &pos)
             return;
         QString path = folder.trimmed();
         // Palette paths are stored with the internal "Palettes/" prefix.
-        if (path.isEmpty())
-            p->setPath(QString());
-        else
-            p->setPath(QStringLiteral("Palettes/") + path);
-        m_doc->setModified();
+        m_doc->paletteOps()->setPath({ pid }, path.isEmpty() ? QString()
+                                                             : QStringLiteral("Palettes/") + path);
         m_paletteTree->updateTree();
     }
 }

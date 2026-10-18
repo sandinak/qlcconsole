@@ -69,6 +69,13 @@ public:
     void setTrialNote(const QString &text);
     QString trialNote() const;
 
+    /** The Used by line (PROGRAMMING_ROLE_DESIGN.md P-D13): where the
+     *  edited palette is used, rich text whose links the host follows
+     *  (usedByLinkActivated). Empty hides it. Either tab may set it. */
+    void setUsedBy(const QString &html);
+    /** The line as plain text (tests). */
+    QString usedByText() const;
+
 public slots:
     /** Edit the given palette; invalidId() shows the empty page. */
     void setPalette(quint32 paletteId);
@@ -85,6 +92,9 @@ signals:
      *  unaffected (e.g. effect script param slider). Only refreshes the DMX
      *  preview — does NOT rebuild the look list or palette tree. */
     void paletteValueChanged(quint32 paletteId);
+
+    /** A link in the Used by line was clicked (see setUsedBy()). */
+    void usedByLinkActivated(const QString &link);
 
     /** Emitted at the end of every setPalette() call — on a genuine focus
      *  change (a different look selected on screen) as well as a same-id
@@ -190,6 +200,7 @@ private:
     QLabel    *m_title;      //!< "used by N scene(s)" info line
     QLabel    *m_warning;
     QLabel    *m_trialNote;   //!< see setTrialNote()
+    QLabel    *m_usedBy;      //!< see setUsedBy()
 
     // Per-look fade override row (per scene+palette; hidden when no context
     // scene or for Effect palettes, which the script runner fades itself).
