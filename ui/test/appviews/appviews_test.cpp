@@ -31,6 +31,9 @@
 
 #include "cuerunner.h"
 #include "showtreemodel.h"
+#include "showtreeview.h"
+#include "showtreecontroller.h"
+#include <QtMath>
 #include "appviews_test.h"
 
 #define private public
@@ -561,3 +564,84 @@ void AppViews_Test::theGridFollowsTheUnitPreference()
 }
 
 QTEST_MAIN(AppViews_Test)
+
+/* WCAG relative luminance and contrast. */
+static double luminance(QRgb c)
+{
+    auto lin = [](int v) {
+        const double s = v / 255.0;
+        return s <= 0.03928 ? s / 12.92 : qPow((s + 0.055) / 1.055, 2.4);
+    };
+    return 0.2126 * lin(qRed(c)) + 0.7152 * lin(qGreen(c)) + 0.0722 * lin(qBlue(c));
+}
+
+static double contrast(QRgb a, QRgb b)
+{
+    const double la = luminance(a), lb = luminance(b);
+    return (qMax(la, lb) + 0.05) / (qMin(la, lb) + 0.05);
+}
+
+void AppViews_Test::theDropAreaReadsInEveryTheme()
+{
+    ShowTreeController *st = m_app->doc()->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 cue = st->addCue(list, -1, "One");
+    ShowTreeView *view = ShowTreeView::instance();
+    QVERIFY(view != nullptr);
+    QVERIFY(view->selectNode(cue));
+    QLabel *zone = view->findChild<QLabel *>("stCueDropZone");
+    QVERIFY(zone != nullptr);
+    zone->resize(420, 90);
+
+    const int was = m_app->theme();
+    const int themes[] = { App::ThemeDefault, App::ThemeTan, App::ThemeBlue,
+                           App::ThemeQLCOriginal, App::ThemeRedShift, App::ThemeVSCodeDark };
+    for (int theme : themes)
+    {
+        m_app->setTheme(theme);
+        QCoreApplication::processEvents();
+        // The words, against what is behind them: the commonest colour is
+        // the page, the one furthest from it the text.
+        const QImage img = zone->grab().toImage();
+        QHash<QRgb, int> counts;
+        for (int y = 0; y < img.height(); ++y)
+            for (int x = 0; x < img.width(); ++x)
+                ++counts[img.pixel(x, y) | 0xff000000];
+        QRgb bg = 0;
+        int most = -1;
+        for (auto it = counts.cbegin(); it != counts.cend(); ++it)
+            if (it.value() > most)
+            {
+                most = it.value();
+                bg = it.key();
+            }
+        double best = 1.0;
+        for (auto it = counts.cbegin(); it != counts.cend(); ++it)
+            best = qMax(best, contrast(it.key(), bg));
+        QVERIFY2(best >= 4.5, qPrintable(QString("theme %1: text contrast %2").arg(theme).arg(best)));
+    }
+    m_app->setTheme(was);
+    QVERIFY(st->removeProduction(st->productions().first().id));
+}
+
+void AppViews_Test::quittingWithTheShowTreeShowing()
+{
+    QTabWidget *tabs = m_app->m_tab;
+    ShowTreeView *view = ShowTreeView::instance();
+    QVERIFY(view != nullptr);
+    int at = -1;
+    for (int i = 0; i < tabs->count(); ++i)
+        if (tabs->widget(i) == view || tabs->widget(i)->isAncestorOf(view))
+            at = i;
+    QVERIFY(at >= 0);
+    tabs->setCurrentIndex(at);
+    m_app->showNormal();
+    QCoreApplication::processEvents();
+    QVERIFY(view->isVisible());
+
+    // Not hidden first: App goes while it is on screen, as at quit.
+    m_app->doc()->resetModified();
+    delete m_app;
+    m_app = nullptr;
+    QVERIFY(ShowTreeView::instance() == nullptr);
+}

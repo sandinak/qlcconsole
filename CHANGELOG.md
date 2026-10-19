@@ -82,6 +82,18 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
   line target checks each head's own point on the line; a curtain driven by
   a fixture blocks where that fixture has it now.
 
+### Changed
+- **A new production is current when nothing else has GO.** In the Show
+  Tree, a production made while no production is current and the main cue
+  list isn't some other chaser becomes the current one, so a first
+  production plays from the Run tab without **Make current**. Adding a
+  production never takes GO from one the operator chose.
+- **Coloured light reads as its colour in the rig views.** Light landing on
+  a grey or white surface (a cyc, the deck) now takes it over in the
+  light's colour: a full blue wash on the cyc draws blue, not white with a
+  lavender tint. White light looks as before, and coloured surfaces (LED
+  strips, drapes) keep their own colour.
+
 ### Fixed
 - **Calibration offsets no longer show in the rig views.** A head's pan/tilt
   offsets correct the physical fixture: the DMX keeps them, but the plot,
@@ -91,6 +103,11 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 - macOS Xbox controller (raw mode): axes now arrive in the order the Xbox
   profile names them (the right stick was reported as the left trigger),
   and the D-pad is reported.
+- **Crash on quit with the Show Tree open.** Closing the app while its
+  window was still up could crash: the Show Tree tab stopped its preview on
+  a show that had already been freed.
+- **The cue page's drop area is readable in every theme.** "Drag groups or
+  fixtures here…" was nearly invisible on the dark themes (Blue especially).
 - **Chaser teardown use-after-free.** Deleting a chaser while its runner was
   still running freed the steps the runner reads (an intermittent "double
   free" on Linux).

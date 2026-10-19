@@ -13398,6 +13398,56 @@ void Monitor_Test::aPoolOnADeckIsDrawn()
    triangles, the same passes. A lit par over a deck, drawn both ways at
    each quality; the two pictures agree to within edge smoothing. Skipped
    where there is no GPU to draw on. */
+void Monitor_Test::colouredLightTakesOverAGreySurface()
+{
+    // One pixel each: a lit cyc in a house-lit room, a red LED, black.
+    QImage frame(3, 1, QImage::Format_ARGB32_Premultiplied);
+    const QRgb cyc = qRgb(156, 156, 156), led = qRgb(230, 20, 20), black = qRgb(0, 0, 0);
+    auto fill = [&]() {
+        frame.setPixel(0, 0, cyc);
+        frame.setPixel(1, 0, led);
+        frame.setPixel(2, 0, black);
+    };
+    auto lightOf = [](QRgb c) {
+        QImage l(3, 1, QImage::Format_ARGB32_Premultiplied);
+        const int a = qMax(qRed(c), qMax(qGreen(c), qBlue(c)));
+        l.fill(qRgba(qRed(c), qGreen(c), qBlue(c), a));
+        return l;
+    };
+    auto screen = [](int d, int s) { return qRound(d + s - d * s / 255.0); };
+
+    // A blue wash at a fifth of full: the cyc reads blue, not lavender.
+    fill();
+    ZRaster::composeLight(frame, lightOf(qRgb(0, 0, 50)), QPoint(0, 0));
+    const QRgb blueCyc = frame.pixel(0, 0);
+    QVERIFY2(qBlue(blueCyc) - qRed(blueCyc) > 50,
+             qPrintable(QString("cyc under blue: %1").arg(QColor(blueCyc).name())));
+    QCOMPARE(qRed(blueCyc), qGreen(blueCyc));
+    QCOMPARE(qBlue(blueCyc), screen(156, 50));        // the light itself is all there
+    // The red LED keeps its red; black is just the light.
+    QVERIFY(qRed(frame.pixel(1, 0)) >= 225);
+    QCOMPARE(frame.pixel(2, 0), qRgb(0, 0, 50));
+
+    // White light is plain Screen.
+    fill();
+    ZRaster::composeLight(frame, lightOf(qRgb(60, 60, 60)), QPoint(0, 0));
+    QCOMPARE(frame.pixel(0, 0), qRgb(screen(156, 60), screen(156, 60), screen(156, 60)));
+    QCOMPARE(qRed(frame.pixel(1, 0)), screen(230, 60));
+
+    // Amber warms the cyc: red untouched, blue taken down most.
+    fill();
+    ZRaster::composeLight(frame, lightOf(qRgb(60, 45, 0)), QPoint(0, 0));
+    const QRgb amber = frame.pixel(0, 0);
+    QCOMPARE(qRed(amber), screen(156, 60));
+    QVERIFY(qRed(amber) > qGreen(amber) && qGreen(amber) > qBlue(amber));
+
+    // Off the frame, or no light: nothing changes.
+    fill();
+    ZRaster::composeLight(frame, lightOf(qRgb(0, 0, 200)), QPoint(5, 0));
+    ZRaster::composeLight(frame, QImage(), QPoint(0, 0));
+    QCOMPARE(frame.pixel(0, 0), cyc);
+}
+
 void Monitor_Test::theGpuDrawsWhatTheCpuDraws()
 {
     Doc doc(this);

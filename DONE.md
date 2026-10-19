@@ -6,6 +6,54 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-18 — Fixes from writing the student course *(fix/course-app-issues, off feat/show-tree, not merged)*
+
+COURSE_PLAN.md §8 (docs/show-tree-course) listed what the app got in the
+way of in Lesson 1.1.
+
+- **Crash on quit.** `App::~App` deleted the Doc before the Show Tree tab;
+  with the window still up, `ShowTreeView::hideEvent` → `stopPreview` ran
+  on the freed `ShowTreeController`. The tab is now deleted before the Doc
+  (beside the ProgrammingManager one), the view holds the controller in a
+  `QPointer`, and `ShowTreeController::syncPreview` does nothing once the
+  Doc has freed its master timer (~Doc frees it before `clearContents()`).
+  appviews_test `quittingWithTheShowTreeShowing` reproduced the SIGSEGV
+  before the fix.
+- **A new production is current when nothing else has GO**
+  (`ShowTreeController::addProduction`): no production current, and the
+  main cue list isn't a chaser that still exists. Chosen over "always"
+  (that would take GO from a production being run, or a plain chaser the
+  operator picked) and over "when it's the only one" (a show whose only
+  production was deleted, or that had "production none", is the same case).
+  After `production none` the main cue list still names that production's
+  chaser, so GO still plays it and a new production doesn't take it. Undo
+  of the add leaves none current. showtreeplay_test
+  `aNewProductionIsCurrentWhenNothingElseHasGo`; three tests that assumed
+  no current production updated.
+- **Drop-area text.** It was `palette(mid)`, which Fusion derives from
+  Button: on the dark themes about the page's own colour (contrast 1.7:1
+  even on Default offscreen). Now two thirds of the way from Window to
+  WindowText, re-applied on a palette change. appviews_test
+  `theDropAreaReadsInEveryTheme` grabs it in all six themes: ≥ 4.5:1.
+- **Blue on the cyc.** Not haze and not saturation lost in the light
+  buffer: light was Screened over the frame, and Screen only adds -- the
+  cyc's red and green stayed at what the House ambient gave them (~156),
+  so a full blue wash was (156,157,168). `ZRaster::composeLight()` (both
+  CPU and GPU paths): where coloured light lands on something grey, the
+  channels it lacks are taken down by its strength (up to 80%, easing in,
+  times grey²), then Screen. Classroom cyc, four XL-450s at full: blue
+  (156,157,168) → (108,109,168), red (163,157,162) → (163,109,112), white
+  unchanged; red riser strips and drapes unchanged in a mixed look. Banded
+  on the global pool: ~1.9 ms for a fully lit 2400×1400 frame at -O2.
+  Still faint in absolute terms: the pool model has no distance term, so a
+  wide wash a metre from the cyc lights it no more than from ten.
+- **Front washes at the floor: data, not the app.** The classroom's Front
+  Wash heads are `FloorMounted` on tower shelves; their definition declares
+  no Default for Tilt, so untouched tilt is DMX 0, which on a 280° head
+  standing up is about 50° below the horizon -- a pool beside the tower. The rig
+  view draws exactly that. Centre (128) would point them straight up. Open
+  question (and the definition's Pan byte) in TODO.md.
+
 ### 2026-10-18 — Colour rings on movers *(on feat/show-tree, not merged)*
 
 Branson's "LED Movinghead+Circle" (10 fixtures in DanceHysteria): a small

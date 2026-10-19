@@ -1324,15 +1324,12 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                                          "hold ⌥ for a layer each. A palette dropped here is a cue look; "
                                          "a function plays as it is."));
             v->addWidget(m_cueDropZone);
-            auto zoneStyle = [this](bool active) {
-                m_cueDropZone->setStyleSheet(active
-                    ? QStringLiteral("QLabel { border: 2px solid palette(highlight); border-radius: 6px;"
-                                     " padding: 12px; color: palette(highlight); }")
-                    : QStringLiteral("QLabel { border: 2px dashed palette(mid); border-radius: 6px;"
-                                     " padding: 12px; color: palette(mid); }"));
+            m_cueDropActive = false;
+            styleCueDropZone();
+            inner->onActive = [this](bool active) {
+                m_cueDropActive = active;
+                styleCueDropZone();
             };
-            zoneStyle(false);
-            inner->onActive = zoneStyle;
             f->addRow(tr("Layers"), box);
             connect(m_cueLayers, &QListWidget::itemClicked, this, [this](QListWidgetItem *item) {
                 if (item->data(KindRole).toInt() == LayerNode)
@@ -2297,9 +2294,42 @@ void ShowTreeView::showEvent(QShowEvent *ev)
 
 void ShowTreeView::hideEvent(QHideEvent *ev)
 {
-    // Don't leave a cue on the rig when the tab is left.
-    m_st->stopPreview();
+    // Don't leave a cue on the rig when the tab is left (unless the Doc,
+    // and the preview with it, is already gone).
+    if (!m_st.isNull())
+        m_st->stopPreview();
     QWidget::hideEvent(ev);
+}
+
+void ShowTreeView::changeEvent(QEvent *ev)
+{
+    QWidget::changeEvent(ev);
+    if (ev->type() == QEvent::PaletteChange || ev->type() == QEvent::StyleChange)
+        styleCueDropZone();
+}
+
+void ShowTreeView::styleCueDropZone()
+{
+    if (m_cueDropZone == nullptr)
+        return;
+    if (m_cueDropActive)
+    {
+        m_cueDropZone->setStyleSheet(QStringLiteral(
+            "QLabel { border: 2px solid palette(highlight); border-radius: 6px;"
+            " padding: 12px; color: palette(highlight); }"));
+        return;
+    }
+    // Two thirds of the way from the background to the text: quieter than
+    // a label, never close to the background. palette(mid) is a shade of
+    // the button colour -- on the dark themes about the window's own.
+    const QPalette pal = palette();
+    const QColor fg = pal.color(QPalette::WindowText);
+    const QColor bg = pal.color(QPalette::Window);
+    const auto mix = [](int a, int b) { return (a * 2 + b) / 3; };
+    const QColor quiet(mix(fg.red(), bg.red()), mix(fg.green(), bg.green()), mix(fg.blue(), bg.blue()));
+    m_cueDropZone->setStyleSheet(QStringLiteral(
+        "QLabel { border: 2px dashed %1; border-radius: 6px; padding: 12px; color: %1; }")
+        .arg(quiet.name()));
 }
 
 void ShowTreeView::syncPreview()

@@ -48,6 +48,7 @@ private slots:
     void looksSectionsPerProduction();
     void deletingTheCurrentProduction();
     void productionCommands();
+    void aNewProductionIsCurrentWhenNothingElseHasGo();
 
     // P6: sub-cues in the tree
     void subCuesTrackFromTheirCueAndAreCueOnly();

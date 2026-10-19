@@ -21,6 +21,7 @@
 #define SHOWTREEVIEW_H
 
 #include <functional>
+#include <QPointer>
 #include <QWidget>
 #include <QPair>
 #include <QList>
@@ -466,6 +467,8 @@ public slots:
 protected:
     void showEvent(QShowEvent *ev) override;
     void hideEvent(QHideEvent *ev) override;
+    /** A theme change re-colours the cue page's drop area. */
+    void changeEvent(QEvent *ev) override;
 
 private slots:
     void slotTreeSelectionChanged();
@@ -534,7 +537,9 @@ private:
     void syncPreview();
 
     Doc *m_doc;
-    ShowTreeController *m_st;
+    /** The Doc's; guarded, so a hide event during teardown (the Doc gone
+     *  first) finds it null instead of freed. */
+    QPointer<ShowTreeController> m_st;
 
     QToolButton *m_newProduction;
     QToolButton *m_newList;
@@ -605,7 +610,13 @@ public:
 private:
     QLabel *m_cueLooks;
     QListWidget *m_cueLayers;
-    QLabel *m_cueDropZone;
+    QLabel *m_cueDropZone = nullptr;
+    /** Something is being dragged over the drop area. */
+    bool m_cueDropActive = false;
+    /** The drop area's look, from the current palette: the highlight while
+     *  a drag is over it, else a quiet colour that still reads as text on
+     *  every theme (palette(mid) all but vanishes on the dark ones). */
+    void styleCueDropZone();
     QLabel *m_cueNext;
     QWidget *m_layerPage;
     QLabel *m_layerTitle;
