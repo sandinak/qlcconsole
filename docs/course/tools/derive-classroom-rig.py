@@ -53,6 +53,9 @@ KEEP.update({'199': 'SR Truss Cyc 1', '200': 'SR Truss Cyc 2',
 KEEP.update({'4': 'SR AT Spot', '142': 'SL AT Spot',
              '179': 'SR AT Wash 1', '180': 'SR AT Wash 2',
              '176': 'SL AT Wash 1', '177': 'SL AT Wash 2'})
+# Which way the washes face at pan centre (degrees, 0 downstage, 90 stage
+# right, 270 stage left): at the middle of the front riser row (see below).
+AT_WASH_FACING = {'179': 252.0, '180': 252.0, '176': 108.0, '177': 108.0}
 # The upstage beams standing along the top riser (UST-1..8), SR to SL.
 for i, fid in enumerate(['9', '18', '19', '20', '21', '22', '23', '24']):
     KEEP[fid] = 'UST %d' % (i + 1)
@@ -207,6 +210,23 @@ def main(src, dst):
             e.attrib.pop('Fixture')         # the drape stays, open, with no motor
             e.set('State', 'Open')
     # Hangers whose lantern went (none today) would stay as bare arms; fine.
+
+    # The audience-tower washes' facing (pan zero). The real show has them
+    # all at 0 (downstage), which nobody measured: lit with only a colour
+    # and a level they then light the house floor. Last season's aim scenes
+    # (tpihab "Risers-*" and "Apron-Solo", worked out 2026-10-19) put a
+    # head's pan centre, tilted forward, straight ACROSS the stage (270,
+    # toward stage left) to within about 10 degrees -- on BOTH towers: the
+    # SL heads reached the stage by tilting back over the top. Facing
+    # straight across, the definition's resting aim (pan 128, tilt 32, 15
+    # degrees down) lands on the floor in front of the risers, and on the
+    # SL tower it would go offstage. So the classroom rig has the heads
+    # turned on their shelves to face the middle of the front riser row:
+    # SR 252 (18 degrees upstage of across), SL the mirror, 108.
+    for e in mon.findall(N + 'FixtureRig'):
+        facing = AT_WASH_FACING.get(e.get('FID'))
+        if facing is not None:
+            e.set('PanZero', '%.1f' % facing)
 
     # ---- stage targets: three a designer uses for a show choir
     for e in mon.findall(N + 'StageTarget'):

@@ -278,21 +278,32 @@ and into this branch), and the course updated to match:
    warns that clicking the **▶ Current** button would *unset* it.
 2. ~~**The drop area's text is hard to read.**~~ **Done.** Readable in every
    theme (`images/lesson-01/new-cue.png` retaken).
-3. ~~**Moving lights have no home.**~~ **Definition fixed** (Branson,
-   2026-10-19): the "Branson 36LED Moving Head" (AT-W-ALL) now has Pan as a
-   coarse channel with default 128 and Tilt default 32; the classroom show
-   carries the fixed copy (`derive-classroom-rig.py` patches it, and the
-   course test checks a colour-only AT-W-ALL sends pan 128 / tilt 32).
-   **But lit with only a colour and a level they still miss the stage:**
-   on our rig the heads stand on the audience towers facing *downstage*,
-   into the house (rig pan-zero 0°), so pan 128 throws the light onto the
-   house floor in front of the towers. **Aimed, they work:** `AT-W-ALL aim
-   Center` lights the singers on the risers (checked offscreen). So
-   **Lesson 1.3 starts with aiming** — "AT-W-ALL, Warm White, Full, *Aim
-   Center*" — not with a bare "AT-W-ALL, Warm White, Full". To make the
-   bare version work, the heads' facing on the rig (or the pan default)
-   would need about half a turn: Branson's call. Level 1.1 stays on
-   non-moving groups.
+3. ~~**Moving lights have no home.**~~ **Done.** The "Branson 36LED
+   Moving Head" definition (AT-W-ALL) has Pan as a coarse channel with
+   default 128 and Tilt default 32 (Branson, 2026-10-19); the classroom
+   show carries the fixed copy (`derive-classroom-rig.py` patches it, and
+   the course test checks a colour-only AT-W-ALL sends pan 128 / tilt 32).
+   Tilt 32 is 15° below horizontal: 128 is straight up and the head tilts
+   280°, which last season's aim scenes bear out (they reached the singers
+   with tilt 45–54, near horizontal, within 2° on average).
+   **The facing, worked out from last season's show** (tpihab-1.3 /
+   showfiles/out.qxw, scenes *Risers-US/CS/DS-Center*, *Risers*,
+   *Apron-Solo*, against the towers where DanceHysteria has them): at pan
+   centre, tilted forward, these heads point straight **across** the
+   stage, toward stage left — rig pan-zero **270°**, fitted to within
+   about 10° rms over 29 aims from both towers — not downstage (0°), which
+   is why a bare colour and level used to light the house floor. Both
+   towers were rigged the same way round, so the SL heads only reached the
+   stage by tilting back over the top (tilt ~208), and no one definition
+   default could light the stage from both sides. The classroom rig
+   therefore has the washes turned on their shelves to face the middle of
+   the front riser row: **SR 252°, SL 108°** (the mirror). With that,
+   **"AT-W-ALL, Warm White, Full" on its own lights the front row and the
+   soloist** (checked offscreen; facing straight across, 270°/90°, the
+   pool fell on the floor in front of the risers), and *Aim Center* still
+   lands on Center. Lesson 1.3 can start bare and then aim. For the real
+   show (DanceHysteria) the change is Branson's: the per-fixture facing
+   and how the SL heads are set on the tower.
 4. **The footer is red in class.** Unchanged and intended: the teaching
    show has no outputs, so it says **Not ready** ("13 universe(s) with
    fixtures but no output"). The handout, install and rig pages say to
@@ -320,7 +331,7 @@ and into this branch), and the course updated to match:
 | 9 | Licence | Recommended CC BY 4.0 (text, pictures) + Apache-2.0 (show files, scripts), pending OK (§6). |
 | 10 | Real lights | First hands on the real rig in **December or January**. |
 | 11 | Where students save | On their own computers (see §5 and the install page). |
-| 12 | App issues | Fixed (§8); the moving-head definition fixed too, its facing on the rig still open. |
+| 12 | App issues | Fixed (§8); the moving-head definition fixed too, and its facing worked out — set on the classroom rig, DanceHysteria's is Branson's call. |
 
 **Still open:**
 
