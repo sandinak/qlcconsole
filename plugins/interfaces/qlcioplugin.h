@@ -27,6 +27,7 @@
 #include <QtPlugin>
 #include <QVariant>
 #include <QObject>
+#include <QMutex>
 #include <climits>
 #include <QMap>
 
@@ -718,6 +719,47 @@ signals:
      * @param data
      */
     void rdmValueChanged(quint32 universe, quint32 line, QVariantMap data);
+
+    /*************************************************************************
+     * Rig network transmit gate
+     *************************************************************************/
+public:
+    /**
+     * The networks this plugin may transmit from, as "a.b.c.d/p" (IPv4).
+     *
+     * Set by the engine from the show's rig networks while the gate is on
+     * (see InputOutputMap::transmitGateActive()); an empty list means no
+     * restriction, which is also how a plugin starts. A network plugin
+     * (Art-Net, E1.31, OSC, WLED) asks transmitAllowedFrom() with the local
+     * address a packet would leave from before it sends anything -- DMX,
+     * polls, replies, discovery -- so a laptop on some other network (a
+     * school's, a venue's office Wi-Fi) never puts show traffic on it, even
+     * through a path the engine's own patch hold does not see (an input
+     * line answering polls, a rescan). Entries that do not parse are ignored.
+     */
+    void setTransmitNetworks(const QStringList &networks);
+
+    /** The list last given to setTransmitNetworks(), normalised */
+    QStringList transmitNetworks() const;
+
+    /** Is any network set, i.e. is anything held at all? */
+    bool transmitRestricted() const;
+
+    /** May this plugin send from local IPv4 address @a ipv4 (host order)?
+     *  Always for loopback (127.0.0.0/8) and when no networks are set. */
+    bool transmitAllowedFrom(quint32 ipv4) const;
+
+    /** The same for a dotted address string; anything that is not an IPv4
+     *  address (a hostname, IPv6) is allowed only when no networks are set. */
+    bool transmitAllowedFrom(const QString &address) const;
+
+protected:
+    /** setTransmitNetworks() changed the list. Default: nothing to do. */
+    virtual void transmitNetworksChanged() {}
+
+private:
+    mutable QMutex m_transmitMutex;
+    QVector<QPair<quint32, int> > m_transmitNetworks;
 };
 
 #define QLCIOPlugin_iid "org.qlcplus.QLCIOPlugin"

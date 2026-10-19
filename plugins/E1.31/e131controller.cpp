@@ -40,6 +40,7 @@ E131Controller::E131Controller(QNetworkInterface const& iface, QNetworkAddressEn
     , m_packetizer(new E131Packetizer(iface.hardwareAddress()))
 {
     qDebug() << Q_FUNC_INFO;
+    m_gate = qobject_cast<QLCIOPlugin *>(parent);
     m_clock.start();
     m_UdpSocket->bind(m_ipAddr, 0);
     // Output multicast on the correct interface
@@ -343,6 +344,10 @@ quint64 E131Controller::getPacketReceivedNumber()
 
 void E131Controller::sendDmx(const quint32 universe, const QByteArray &data)
 {
+    // Not on the show's rig network: hold, send nothing (not a failure)
+    if (m_gate != NULL && m_gate->transmitAllowedFrom(m_ipAddr.toIPv4Address()) == false)
+        return;
+
     QMutexLocker locker(&m_dataMutex);
     QByteArray dmxPacket;
     QHostAddress outAddress = QHostAddress(QString("239.255.0.%1").arg(universe + 1));

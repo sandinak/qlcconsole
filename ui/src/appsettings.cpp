@@ -27,6 +27,8 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QDialogButtonBox>
+#include <QMessageBox>
+#include <QLineEdit>
 
 #include <QFormLayout>
 
@@ -34,6 +36,8 @@
 #include "showtreeview.h"
 #include "measurementunits.h"
 #include "monitor.h"
+#include "inputoutputmap.h"
+#include "rignetwork.h"
 #include "app.h"
 
 AppSettings::AppSettings(App *app, QWidget *parent)
@@ -192,15 +196,82 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     scLayout->addWidget(scOpen, 0, Qt::AlignTop);
     mainLayout->addWidget(scGroup);
 
+    // --- Network: rig networks and the transmit gate ---
+    // The networks are the SHOW's (saved in it); "only transmit on them" is
+    // this machine's; "transmit anyway" lasts this session and is never saved.
+    InputOutputMap *ioMap = m_app->doc()->inputOutputMap();
+    QGroupBox *netGroup = new QGroupBox(tr("Network"), this);
+    netGroup->setObjectName(QStringLiteral("settingsRigNetwork"));
+    netGroup->setProperty("helpTopic", QStringLiteral("other-improvements.md#only-transmit-on-the-rig-network"));
+    QVBoxLayout *netLayout = new QVBoxLayout(netGroup);
+    QHBoxLayout *rigRow = new QHBoxLayout();
+    rigRow->addWidget(new QLabel(tr("This show's rig networks:"), netGroup));
+    m_rigNetworksEdit = new QLineEdit(netGroup);
+    m_rigNetworksEdit->setObjectName(QStringLiteral("settingsRigNetworks"));
+    m_rigNetworksEdit->setText(ioMap->rigNetworks().join(QStringLiteral(", ")));
+    m_rigNetworksEdit->setToolTip(tr("The IPv4 networks this show's Art-Net, sACN (E1.31), OSC "
+                                     "and WLED output belongs on, e.g. 172.18.0.0/20 -- several "
+                                     "separated by commas. Saved with the show."));
+    const QStringList suggested = ioMap->suggestedRigNetworks();
+    m_rigNetworksEdit->setPlaceholderText(suggested.isEmpty()
+        ? tr("e.g. 172.18.0.0/20")
+        : tr("e.g. %1 (from this show's patches)").arg(suggested.join(QStringLiteral(", "))));
+    rigRow->addWidget(m_rigNetworksEdit, 1);
+    if (ioMap->rigNetworks().isEmpty() && suggested.isEmpty() == false)
+    {
+        // Offered, never written by itself: the operator says yes.
+        QPushButton *useSuggested = new QPushButton(tr("Use these"), netGroup);
+        useSuggested->setObjectName(QStringLiteral("settingsRigUseSuggested"));
+        useSuggested->setToolTip(tr("Fill in the networks this show's patches were saved "
+                                    "with: %1").arg(suggested.join(QStringLiteral(", "))));
+        connect(useSuggested, &QPushButton::clicked, this, [this, suggested]() {
+            m_rigNetworksEdit->setText(suggested.join(QStringLiteral(", ")));
+        });
+        rigRow->addWidget(useSuggested);
+    }
+    netLayout->addLayout(rigRow);
+    m_rigNetworksError = new QLabel(netGroup);
+    m_rigNetworksError->setObjectName(QStringLiteral("settingsRigNetworksError"));
+    m_rigNetworksError->setStyleSheet(QStringLiteral("color: #e60000;"));
+    m_rigNetworksError->setWordWrap(true);
+    m_rigNetworksError->hide();
+    netLayout->addWidget(m_rigNetworksError);
+    m_rigOnlyCheck = new QCheckBox(tr("Only transmit on rig networks"), netGroup);
+    m_rigOnlyCheck->setObjectName(QStringLiteral("settingsRigNetworkOnly"));
+    m_rigOnlyCheck->setChecked(ioMap->transmitGateEnabled());
+    m_rigOnlyCheck->setToolTip(tr("Network output is held -- kept, nothing sent -- while this "
+                                  "machine is not on one of the show's rig networks, and "
+                                  "resumes by itself when it is. Loopback, USB DMX and MIDI are "
+                                  "not affected. A setting of this machine, not the show."));
+    netLayout->addWidget(m_rigOnlyCheck);
+    QHBoxLayout *anywayRow = new QHBoxLayout();
+    m_transmitAnywayButton = new QPushButton(netGroup);
+    m_transmitAnywayButton->setObjectName(QStringLiteral("settingsTransmitAnyway"));
+    connect(m_transmitAnywayButton, &QPushButton::clicked, this, &AppSettings::slotTransmitAnyway);
+    anywayRow->addWidget(m_transmitAnywayButton);
+    anywayRow->addStretch();
+    netLayout->addLayout(anywayRow);
+    QLabel *netInfo = new QLabel(
+        tr("Keeps a laptop on some other network (a school's, a venue office's) from putting "
+           "show traffic on it."), netGroup);
+    netInfo->setWordWrap(true);
+    netInfo->setStyleSheet("color: gray; font-size: 10px;");
+    netLayout->addWidget(netInfo);
+    mainLayout->addWidget(netGroup);
+    updateTransmitAnywayButton();
+
     // Add stretch to push buttons to bottom
     mainLayout->addStretch();
 
     // Dialog buttons
     QDialogButtonBox *buttonBox = new QDialogButtonBox(
         QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    m_buttonBox = buttonBox;
     connect(buttonBox, SIGNAL(accepted()), this, SLOT(accept()));
     connect(buttonBox, SIGNAL(rejected()), this, SLOT(reject()));
     mainLayout->addWidget(buttonBox);
+    connect(m_rigNetworksEdit, &QLineEdit::textChanged, this, &AppSettings::validateRigNetworks);
+    validateRigNetworks();
 
     // Connect enable checkbox to enable/disable interval spinbox
     connect(m_autosaveEnabledCheck, &QCheckBox::toggled,
@@ -212,8 +283,94 @@ AppSettings::~AppSettings()
 {
 }
 
+void AppSettings::focusRigNetworks()
+{
+    m_rigNetworksEdit->setFocus(Qt::OtherFocusReason);
+    m_rigNetworksEdit->selectAll();
+}
+
+void AppSettings::validateRigNetworks()
+{
+    QStringList bad, why;
+    RigNetwork::parseList(m_rigNetworksEdit->text(), &bad, &why);
+    QStringList lines;
+    for (int i = 0; i < bad.count(); i++)
+        lines << tr("%1: %2").arg(bad.at(i), why.value(i));
+    m_rigNetworksError->setText(lines.join(QStringLiteral("\n")));
+    m_rigNetworksError->setVisible(lines.isEmpty() == false);
+    if (QPushButton *ok = m_buttonBox->button(QDialogButtonBox::Ok))
+        ok->setEnabled(lines.isEmpty());
+}
+
+void AppSettings::updateTransmitAnywayButton()
+{
+    InputOutputMap *ioMap = m_app->doc()->inputOutputMap();
+    if (ioMap->transmitOverride())
+    {
+        m_transmitAnywayButton->setText(tr("Check the rig network again"));
+        m_transmitAnywayButton->setToolTip(tr("End \"Transmit anyway\": hold network output "
+                                              "that is not on a rig network again."));
+        m_transmitAnywayButton->setEnabled(true);
+    }
+    else
+    {
+        m_transmitAnywayButton->setText(tr("Transmit anyway, this session…"));
+        m_transmitAnywayButton->setToolTip(tr("Send network output wherever this machine is "
+                                              "connected, until it quits or another show is "
+                                              "opened. Asks first; never saved."));
+        m_transmitAnywayButton->setEnabled(ioMap->transmitGateActive());
+    }
+}
+
+void AppSettings::slotTransmitAnyway()
+{
+    InputOutputMap *ioMap = m_app->doc()->inputOutputMap();
+    if (ioMap->transmitOverride())
+    {
+        ioMap->setTransmitOverride(false);
+    }
+    else
+    {
+        const InputOutputMap::TransmitGateStatus st = ioMap->transmitGateStatus();
+        const QMessageBox::StandardButton answer = QMessageBox::warning(this,
+            tr("Transmit anyway"),
+            tr("This machine is connected to: %1.\n\n"
+               "The show's rig networks are: %2.\n\n"
+               "Transmitting anyway sends this show's Art-Net, sACN and WLED output on "
+               "whatever network this machine is on -- broadcasts included -- until "
+               "qlcconsole quits or another show is opened. Transmit anyway?")
+                .arg(st.connected.isEmpty() ? tr("no network") : st.connected.join(QStringLiteral(", ")),
+                     st.networks.join(QStringLiteral(", "))),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+        if (answer != QMessageBox::Yes)
+            return;
+        ioMap->setTransmitOverride(true);
+    }
+    updateTransmitAnywayButton();
+}
+
 void AppSettings::accept()
 {
+    // The show's rig networks (saved with it) and this machine's gate choice
+    {
+        QStringList bad;
+        const QStringList nets = RigNetwork::parseList(m_rigNetworksEdit->text(), &bad);
+        if (bad.isEmpty() == false)
+        {
+            validateRigNetworks();
+            m_rigNetworksEdit->setFocus();
+            return;
+        }
+        InputOutputMap *ioMap = m_app->doc()->inputOutputMap();
+        if (nets != ioMap->rigNetworks())
+        {
+            ioMap->setRigNetworks(nets);
+            m_app->doc()->setModified();
+        }
+        QSettings().setValue(App::rigNetworkGateSettingKey(), m_rigOnlyCheck->isChecked());
+        ioMap->setTransmitGateEnabled(m_rigOnlyCheck->isChecked());
+    }
+
     // Apply autosave settings
     m_app->setAutosaveEnabled(m_autosaveEnabledCheck->isChecked());
     m_app->setAutosaveInterval(m_autosaveIntervalSpin->value());

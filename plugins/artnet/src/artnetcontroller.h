@@ -36,6 +36,7 @@
 #include <climits>
 
 #include "artnetpacketizer.h"
+#include "qlcioplugin.h"
 #include "sendhealth.h"
 #include "artnetnodewatch.h"
 
@@ -162,6 +163,10 @@ public:
     /** Is the UDP socket capable of receiving packets ? */
     bool socketBound() const;
 
+    /** This line's address is not on one of the show's rig networks while
+     *  the gate is on (QLCIOPlugin::setTransmitNetworks()): it sends nothing */
+    bool transmitHeld() const;
+
     /** Send a RDM command */
     bool sendRDMCommand(const quint32 universe, uchar command, QVariantList params);
 
@@ -220,7 +225,9 @@ private:
     /** Log node-watch issues that appeared or cleared since the last call */
     void logNodeIssueChanges();
 
-    /** Write one datagram -- or, under test, record it and send nothing */
+    /** Write one datagram -- or, under test, record it and send nothing.
+     *  Every packet this controller sends goes through here. Returns 0, and
+     *  sends nothing, while transmitHeld(). */
     qint64 writeDatagram(const QNetworkDatagram &dg);
 
     /** The monotonic time SendHealth and ArtNetNodeWatch are fed */
@@ -283,6 +290,9 @@ private:
     /** Timer used to send out an ArtPoll packet to
      *  discover available nodes on the network */
     QTimer m_pollTimer;
+
+    /** The plugin whose rig network gate applies (the parent), or NULL */
+    const QLCIOPlugin *m_gate;
 
     /** Timer used to send output data every N seconds
      *  when data is not changing */

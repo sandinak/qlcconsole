@@ -1503,12 +1503,22 @@ void ConnectionsTree::refresh()
             {
                 QTreeWidgetItem *ghostLine = new QTreeWidgetItem(pitem);
                 ghostLine->setText(COL_NAME, it.key());
-                QString ghostNet;
+                QString ghostNet, heldWhy;
                 foreach (Universe *u, it.value())
-                    for (int i = 0; i < u->outputPatchesCount() && ghostNet.isEmpty(); i++)
+                    for (int i = 0; i < u->outputPatchesCount(); i++)
                         if (u->outputPatch(i) != NULL && u->outputPatch(i)->isPending())
-                            ghostNet = u->outputPatch(i)->pendingNetwork();
-                ghostLine->setText(COL_DETAIL, ghostNet.isEmpty()
+                        {
+                            if (ghostNet.isEmpty())
+                                ghostNet = u->outputPatch(i)->pendingNetwork();
+                            if (heldWhy.isEmpty())
+                                heldWhy = u->outputPatch(i)->heldReason();
+                        }
+                /* Held by the rig network gate (InputOutputMap::
+                   transmitGateActive()): the line may well be right here,
+                   it is just not on one of the show's rig networks. */
+                ghostLine->setText(COL_DETAIL, heldWhy.isEmpty() == false
+                    ? tr("held: %1 — kept, resumes on the rig network").arg(heldWhy)
+                    : ghostNet.isEmpty()
                     ? tr("not present — kept, will reconnect")
                     : tr("network %1 not present — kept, will reconnect").arg(ghostNet));
                 const QBrush errBrush(QColor(220, 90, 90));

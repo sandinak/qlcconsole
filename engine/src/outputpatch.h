@@ -93,6 +93,13 @@ public:
      *  is sent, but the mapping itself is not lost. */
     bool isPending() const;
 
+    /** Pending because the rig network gate holds it (see
+     *  InputOutputMap::transmitGateActive()): the line exists, but it is not
+     *  on one of the show's rig networks. heldReason() says why. */
+    bool isHeld() const { return isPending() && m_heldReason.isEmpty() == false; }
+    QString heldReason() const { return m_heldReason; }
+    void setHeldReason(const QString &reason) { m_heldReason = reason; }
+
     /**
      * If a valid plugin and line have been set, close
      * the output line and re-open it again
@@ -146,6 +153,8 @@ private:
     QString m_pendingUID;
     quint32 m_pendingLine;
     QString m_pendingNetwork;
+    /** Why the rig network gate holds this patch; empty when it does not */
+    QString m_heldReason;
     /** The patch parameters cache */
     QMap<QString, QVariant>m_parametersCache;
 

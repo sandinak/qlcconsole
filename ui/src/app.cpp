@@ -651,7 +651,7 @@ void App::init()
     /* A patch kept offline reconnected (its network appeared): the footer
        notice has to drop it without waiting for the next mode change. */
     connect(m_doc->inputOutputMap(), &InputOutputMap::offlinePatchesChanged,
-            this, [this]() { updateOutputReadiness(); });
+            this, [this]() { updateOutputReadiness(); updateRigNetworkFooter(); });
 
     // Listen to DMX value changes and update each Fixture values array
     connect(m_doc->inputOutputMap(), SIGNAL(universeWritten(quint32, const QByteArray&)),
@@ -675,6 +675,11 @@ void App::init()
     this->setStyleSheet(AppUtil::getStyleSheet("MAIN"));
 
     m_videoProvider = new VideoProvider(m_doc, this);
+
+    // The rig network transmit gate is this machine's choice: on unless
+    // turned off in Settings. (The networks themselves come with the show.)
+    m_doc->inputOutputMap()->setTransmitGateEnabled(
+            QSettings().value(rigNetworkGateSettingKey(), true).toBool());
 
     // Initialize status bar
     initStatusBar();
@@ -1295,10 +1300,19 @@ void App::updateOutputReadiness()
     QStringList items;
     int rangeCount = 0;
     QSet<quint32> keptUniverses;
+    QSet<quint32> heldUniverses;
     QStringList missing;
     foreach (const InputOutputMap::DanglingPatch &p, bad)
     {
-        if (p.missingInterface.isEmpty() == false)
+        if (p.heldReason.isEmpty() == false)
+        {
+            // Held by the rig network gate: the red footer chip of its own
+            // (updateRigNetworkFooter()) says why; listed here too.
+            heldUniverses.insert(p.universe);
+            items << tr("Universe %1 — %2 output held: %3")
+                        .arg(p.universe + 1).arg(p.pluginName, p.heldReason);
+        }
+        else if (p.missingInterface.isEmpty() == false)
         {
             // Kept offline: the interface/network (an Art-Net address, most
             // often), device or plugin this patch names is not present here
@@ -1336,6 +1350,9 @@ void App::updateOutputReadiness()
     if (rangeCount > 0)
         summaryParts << tr("%1 universe%2 patched to a line this machine doesn't have")
                             .arg(rangeCount).arg(rangeCount == 1 ? QString() : "s");
+    if (heldUniverses.isEmpty() == false)
+        summaryParts << tr("%n universe(s) held — not on the rig network", "",
+                           heldUniverses.count());
 
     // Registered into ShowStatus rather than written straight to the footer
     // -- see showstatus.h. items carries the per-universe breakdown as an
@@ -4638,6 +4655,23 @@ void App::initStatusBar()
     m_statusModeLabel->installEventFilter(this);   // click → full ShowStatus details
     sb->addWidget(m_statusModeLabel, 0);
 
+    // Rig network gate (InputOutputMap::transmitGateStatus()), right beside
+    // the readiness chip: "Output held — not on the rig network". Hidden
+    // while there is nothing to say.
+    m_statusRigNetLabel = new QLabel(this);
+    m_statusRigNetLabel->setObjectName("footerRigNetwork");
+    m_statusRigNetLabel->setCursor(Qt::PointingHandCursor);
+    m_statusRigNetLabel->setProperty("helpTopic", QStringLiteral("other-improvements.md#only-transmit-on-the-rig-network"));
+    m_statusRigNetLabel->installEventFilter(this);  // click → Settings, rig networks
+    m_statusRigNetLabel->hide();
+    sb->addWidget(m_statusRigNetLabel, 0);
+    if (m_doc != NULL)
+    {
+        connect(m_doc->inputOutputMap(), &InputOutputMap::transmitGateChanged,
+                this, [this]() { updateRigNetworkFooter(); updateOutputReadiness(); });
+        updateRigNetworkFooter();
+    }
+
     // Grand Master footer fader (far left, right after the mode label — moved
     // here from the right-hand permanent-chip group per Branson). GM
     // previously lived only inside the Virtual Console tab, unlike its
@@ -5184,6 +5218,12 @@ bool App::eventFilter(QObject *watched, QEvent *event)
         && m_modeToggleAction != NULL)
     {
         m_modeToggleAction->trigger();
+        return true;
+    }
+
+    if (watched == m_statusRigNetLabel && event->type() == QEvent::MouseButtonPress)
+    {
+        showRigNetworkSettings();
         return true;
     }
 
@@ -6055,6 +6095,72 @@ void App::updateStatusBar()
                 m_statusModeLabel->setText(m_statusMessage);
         }
     }
+}
+
+QString App::rigNetworkGateSettingKey()
+{
+    return QStringLiteral("network/onlyTransmitOnRigNetworks");
+}
+
+QString App::rigNetworkFooterText(const InputOutputMap::TransmitGateStatus &st, bool *alarm)
+{
+    typedef InputOutputMap::TransmitGateStatus S;
+    if (alarm)
+        *alarm = st.state == S::Held || st.state == S::Overridden;
+
+    const QString nets = st.networks.join(QStringLiteral(", "));
+    const QString connected = st.connected.isEmpty() ? tr("no network")
+                                                     : st.connected.join(QStringLiteral(", "));
+    switch (st.state)
+    {
+        case S::Held:
+            if (st.held >= st.networkOutputs)
+                return tr("Output held — not on the rig network (%1). Connected: %2")
+                        .arg(nets, connected);
+            return tr("%1 of %2 outputs held — not on the rig network (%3). Connected: %4")
+                    .arg(st.held).arg(st.networkOutputs).arg(nets, connected);
+        case S::NotSet:
+            return tr("Rig network not set — network output goes out on whatever network "
+                      "this machine is on. Set it");
+        case S::Overridden:
+            return tr("Transmitting anyway — rig network check lifted for this session");
+        case S::Off:
+            return tr("Rig network check off — network output goes out on any network");
+        case S::Clear:
+        default:
+            return QString();
+    }
+}
+
+void App::updateRigNetworkFooter()
+{
+    if (m_statusRigNetLabel == NULL || m_doc == NULL)
+        return;
+    const InputOutputMap::TransmitGateStatus st = m_doc->inputOutputMap()->transmitGateStatus();
+    bool alarm = false;
+    const QString text = rigNetworkFooterText(st, &alarm);
+    if (text.isEmpty())
+    {
+        m_statusRigNetLabel->hide();
+        return;
+    }
+    m_statusRigNetLabel->setText(text);
+    m_statusRigNetLabel->setStyleSheet(alarm
+        ? QStringLiteral("QLabel { color: #e60000; font-weight: bold; }")
+        : QStringLiteral("QLabel { color: #d08000; font-weight: bold; }"));
+    QStringList tip = st.reasons;
+    if (tip.isEmpty() == false)
+        tip << QString();
+    tip << tr("Click to set the show's rig networks.");
+    m_statusRigNetLabel->setToolTip(tip.join("\n"));
+    m_statusRigNetLabel->show();
+}
+
+void App::showRigNetworkSettings()
+{
+    AppSettings settings(this, this);
+    settings.focusRigNetworks();
+    settings.exec();
 }
 
 void App::showStatusDetails()

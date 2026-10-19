@@ -174,6 +174,19 @@ private:
     void pollInfo();
     void pollLive();
     void send(quint32 universe, int slot);
+
+    /** The rig network gate (QLCIOPlugin::setTransmitNetworks()) for one
+     *  device: may anything be sent to @a host? The local address the OS
+     *  would send from must be on a rig network -- a device on the show
+     *  network reached through a laptop's other (default) route is exactly
+     *  what is held. A name rather than an address cannot be checked and is
+     *  held while the gate is on. Called with m_mutex held. */
+    bool gateAllows(const QString &host) const;
+    void transmitNetworksChanged() override;
+    /** gateAllows()'s route answers, by device address: when asked (ms since
+     *  epoch) and the local IPv4 address (0 = no route). Under m_mutex. */
+    mutable QHash<QString, QPair<qint64, quint32> > m_routeCache;
+
     static void setAnswered(Device &d, bool answered);
     Device &slot(Target &t, int index);
     void problemsMaybeChanged();

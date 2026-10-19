@@ -11,6 +11,7 @@ target_include_directories(${module_name} PRIVATE
     ../../../plugins/interfaces
     ../../src
     ../../src/showmanager
+    ../../../engine/test/iopluginstub
 )
 
 include_ui_header(${module_name})

@@ -13,6 +13,19 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 ## [Unreleased]
 
 ### Added
+- **Only transmit on the rig network.** A show can name its rig networks
+  (Settings → Network, e.g. `172.18.0.0/20`, saved with the show as
+  `<RigNetwork>` in the IO map). With **Only transmit on rig networks** on
+  (this computer's setting, default on), Art-Net, E1.31/sACN, OSC and WLED
+  output from any interface outside them is **held** — patch kept and saved
+  unchanged, line not opened, nothing sent (no default-route unicast, no
+  broadcast, no ArtPoll/ArtPollReply/discovery) — and resumes by itself
+  within ~5 s on the rig network. Loopback and non-network outputs are not
+  affected. A red footer chip ("Output held — not on the rig network
+  (172.18.0.0/20). Connected: en0 10.4.12.7") opens the setting;
+  **Transmit anyway, this session…** asks first and is never saved. A show
+  with none set transmits as before, with an amber footer note and a
+  suggestion taken from its patches' saved networks (offered, not written).
 - **Focus mode** for aligning the rig before a show: step through the moving
   heads with the controller's bumpers, each aimed at its reference (a
   scene's aim, a stage target, a line target's own point) and lit, nudge its

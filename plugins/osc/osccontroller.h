@@ -35,6 +35,7 @@
 #include <QMap>
 
 #include "oscpacketizer.h"
+#include "qlcioplugin.h"
 
 typedef struct _uinfo
 {
@@ -147,6 +148,12 @@ signals:
 private:
     /** The controller IP address as QHostAddress */
     QHostAddress m_ipAddr;
+
+    /** The plugin whose rig network gate applies (the parent), or NULL.
+     *  DMX output from a line not on the show's rig networks is held: see
+     *  QLCIOPlugin::setTransmitNetworks(). Feedback to a control surface
+     *  is not show output and is not held. */
+    const QLCIOPlugin *m_gate = nullptr;
 
     quint64 m_packetSent;
     quint64 m_packetReceived;

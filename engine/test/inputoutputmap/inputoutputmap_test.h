@@ -67,6 +67,17 @@ private slots:
     void inputAndFeedbackKeptOffline();
     void missingPluginKept();
     void routeLookupLoopback();
+
+    /* The rig network transmit gate */
+    void rigNetworkParsing();
+    void rigNetworkHeldOffTheRigNetwork();
+    void rigNetworkHeldPatchResumesOnTheRigNetwork();
+    void rigNetworkLivePatchAndSettingsHoldAndRelease();
+    void rigNetworkNoneSetBehavesAsBefore();
+    void rigNetworkLoopbackAndNonNetworkUnaffected();
+    void rigNetworkDeviceTargetsFollowTheRoute();
+    void rigNetworkSaveLoadRoundTrip();
+    void rigNetworkSuggestedFromPatchesNotWritten();
     void cleanup();
 
     void universeNames();
