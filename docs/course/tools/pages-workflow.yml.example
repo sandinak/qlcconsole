@@ -1,0 +1,43 @@
+# GitHub Pages for the course -- NOT active. To publish the course site:
+#   1. move this file to .github/workflows/course-pages.yml
+#   2. Settings -> Pages -> Source: GitHub Actions
+# It builds docs/course only (Jekyll with the just-the-docs remote theme,
+# docs/course/_config.yml) on every push to main that touches it.
+name: Course site
+
+on:
+  push:
+    branches: [main]
+    paths: ['docs/course/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: course-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/jekyll-build-pages@v1
+        with:
+          source: ./docs/course
+          destination: ./_site
+      - uses: actions/upload-pages-artifact@v3
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
