@@ -2060,21 +2060,19 @@ void StructureStudioView::flushOps(QPainter &p) const
         for (const QRect &r : lit)
             m_z->addLit(r);
     }
-    p.drawImage(0, 0, m_z->resolve());
     {
         /* SCREEN, not plus: light over a dark background adds nearly in full,
            over something already bright it closes in on white without
            reaching it. Plus clipped the air behind a crowd of beams, and the
-           glow in front of a lit body, straight to white. */
+           glow in front of a lit body, straight to white. And coloured light
+           on a grey surface takes it over (composeLight()): Screen alone left
+           a blue cyc white with a lavender tint. */
+        QImage frame = m_z->resolve();
         QPoint at;
         const QImage light = m_z->lightImage(&at);
         if (!light.isNull())
-        {
-            p.save();
-            p.setCompositionMode(QPainter::CompositionMode_Screen);
-            p.drawImage(at, light);
-            p.restore();
-        }
+            ZRaster::composeLight(frame, light, at);
+        p.drawImage(0, 0, frame);
     }
     }   // !drawn: the CPU
 
@@ -2245,15 +2243,12 @@ bool StructureStudioView::gpuRender(QPainter &p, const OpRefs &opaque,
 
     if (!m_gpu->render(size(), m_supersample, solids, see, light))
         return false;
-    p.drawImage(0, 0, m_gpu->scene());
+    // Light over the frame as the CPU adds it (ZRaster::composeLight()).
+    QImage frame = m_gpu->scene();
     const QImage lit = m_gpu->lightImage();
     if (!lit.isNull())
-    {
-        p.save();
-        p.setCompositionMode(QPainter::CompositionMode_Screen);
-        p.drawImage(0, 0, lit);
-        p.restore();
-    }
+        ZRaster::composeLight(frame, lit, QPoint(0, 0));
+    p.drawImage(0, 0, frame);
     return true;
 }
 

@@ -430,6 +430,10 @@ private slots:
     void keptLandingsFollowTheDecks();
     void aPoolOnADeckIsDrawn();
     void theGpuDrawsWhatTheCpuDraws();
+    /** Coloured light on a grey surface reads as its colour ("blue on the
+     *  cyc looks pale"): white light is plain Screen, a saturated surface
+     *  keeps its own colour. */
+    void colouredLightTakesOverAGreySurface();
     /** A fixture standing in for a missing definition: one small body,
      *  no overlap warning (not a 19 m wall of heads in red). */
     void aStandInForAMissingDefinitionIsOneSmallBody();
