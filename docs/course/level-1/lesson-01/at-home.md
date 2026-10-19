@@ -18,7 +18,7 @@ Do **one** of these.
    Pose, Verse, Chorus. Use the handout's steps if you get stuck.
 4. Now make it **yours**: change the colours to tell a different story
    (a sad song? a spooky one?). Change at least one colour in each cue.
-5. Make the production current and play it in the **Run** tab.
+5. Play it in the **Run** tab (GO three times).
 6. Save it as `Lesson01-Home-yourname.qlcc` and bring it (USB stick or the
    class folder), or hand in a screenshot of each cue in the Rig Overview.
 

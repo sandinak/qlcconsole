@@ -74,13 +74,13 @@ teacher says. It can be turned into a deck as it is.*
 
 ## 11. GO
 
-- Pictures: `make-current.png`, `run-tab.png`
-- Make the production current, Run tab, GO ×3.
+- Picture: `run-tab.png`
+- The new production is already current (▶ current): Run tab, GO ×3.
 
 ## 12. Your turn
 
 - Roles: Driver · Navigator · Designer — switch every cue.
-- Handout Part 2, steps 1–15.
+- Handout Part 2, steps 1–14.
 
 ## 13. Exit ticket
 

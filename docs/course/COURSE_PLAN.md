@@ -70,7 +70,7 @@ with GO.*
 
 | # | Lesson | Design idea | In the tool |
 |---|---|---|---|
-| **1.1** | **From a song to cues: your first three looks** *(written; song: "Everybody Scream")* | A song has sections; a cue is a moment where the light changes. A look is a group of lights in a colour at a level. | Production → cue list → cue. A group dropped on a cue is a **layer**; a colour and a level dropped on the layer. Three cues: Pose, Verse, Chorus. Make it current, GO in the Run tab. |
+| **1.1** | **From a song to cues: your first three looks** *(written; song: "Everybody Scream")* | A song has sections; a cue is a moment where the light changes. A look is a group of lights in a colour at a level. | Production → cue list → cue. A group dropped on a cue is a **layer**; a colour and a level dropped on the layer. Three cues: Pose, Verse, Chorus. GO in the Run tab. |
 | 1.2 | **Colour and intensity tell the mood** | Warm vs cool; saturated vs pale; bright isn't always better. Contrast between sections. | Change a look in place (⋯ → Set to), Level… and Colour… for values not in the palette list, a **cue look** for the whole cue. Undo. |
 | 1.3 | **Direction: aim the light** | Front light shows faces; back and side light shape bodies; uplight is drama. Every number needs faces lit. | Stage targets (Soloist DS, Center). Drop **Aim Center** on AT-W-ALL (the audience-tower washes); **Aim Soloist DS** on AT-Spots. Why moving lights need a Position. |
 | 1.4 | **Timing: fades and holds** | A snap is a hit; a slow fade is a breath. Cue timing follows the music. | Fade in / Fade out / Hold on the cue page. Watch the fades in the Rig Overview. |
@@ -267,51 +267,34 @@ and its test change in the same commit, and the course test
 
 ---
 
-## 8. Where the course and the app disagree (found writing Lesson 1.1)
+## 8. Where the course and the app disagreed (found writing Lesson 1.1)
 
-Branson asked for these to be fixed; that is happening on a separate fix
-branch, not in the course. When each lands, the lesson text marked below
-changes:
+Fixed in the app (`fix/course-app-issues`, merged into `feat/show-tree`
+and into this branch), and the course updated to match:
 
-- **1** → Lesson 1.1 handout step 13 (Make current), its picture
-  `make-current.png`, the teacher guide's "GO does nothing" row and Stuck?
-  row, `lessonOneByMouse` step 9 and `production current` in the typed
-  version.
-- **2** → the handout's "(3) the big empty box under Layers" wording.
-- **3** → Lesson 1.3 can start from "AT-W-ALL, Warm White, Full".
-- **4** → the "Not ready is normal" notes (handout, install, rig page).
-- **5** → "a soft blue glow" in the handout.
-- **6** → `CourseShow_Test::cleanupTestCase`'s `hide()` can go.
-
-
-1. **A new production isn't the one GO plays.** After **+ Production**,
-   the Run tab shows nothing to GO until the production is made current
-   (its page → **Make current**). Lesson 1.1 has that as step 9. With a
-   single production in the show, making it current automatically would
-   save every beginner the confusion.
-2. **The drop area's text is hard to read.** On the cue page, the dashed
-   area's "Drag groups or fixtures here…" is very faint in the Blue theme
-   (see `images/lesson-01/new-cue.png`). The handout tells students where
-   it is instead of relying on the text.
-3. **Moving lights have no home.** AT-W-ALL and AT-Spots (the audience
-   towers) are moving heads; lit with only a colour and a level they point at the floor
-   by their tower. Lesson 1.1 uses only non-moving groups; Lesson 1.3
-   introduces Aim. A per-fixture home position (or a show base cue the
-   course ships) would make a first "AT-W-ALL, Warm White, Full" work.
-4. **The footer is red in class.** The teaching show shows **Not ready** in red:
-   "13 universe(s) with fixtures but no output" — true and intended (it
-   must never send DMX). The handout tells students to expect it. A
-   "virtual rig / classroom" setting that silences it would help.
-5. **Blue on the cyc looks pale** in the Rig Overview: pure blue (#0000ff)
-   on the cyc renders as a faint lavender tint, not a strong blue. Students
-   may think the cue didn't work; the handout says "a soft blue glow".
-6. **A crash on close, found by the course test.** `App::~App` deletes the
-   Doc before the Show Tree tab. If the main window is still showing when
-   the App is destroyed, the tab's hide event stops its preview on the
-   Doc's (already freed) ShowTreeController → SIGSEGV. The test now hides
-   the window first; the app fix is one line in `App::~App`, beside the
-   ProgrammingManager one: delete `ShowTreeView::instance()` before
-   `m_doc`. (Not changed in this pass.)
+1. ~~**A new production isn't the one GO plays.**~~ **Done.** A new
+   production becomes current by itself when nothing else has GO. The
+   handout's "Make current" step and its picture are gone; the handout now
+   warns that clicking the **▶ Current** button would *unset* it.
+2. ~~**The drop area's text is hard to read.**~~ **Done.** Readable in every
+   theme (`images/lesson-01/new-cue.png` retaken).
+3. **Moving lights have no home — still open, and not an app bug.** The
+   "Branson 36LED Moving Head" definition (AT-W-ALL) gives Tilt no default,
+   so standing heads sit about 50° below horizontal, and it marks Pan as
+   `Byte="1"`, so the app finds no coarse pan. Branson is deciding about the
+   definition; the classroom show and `derive-classroom-rig.py` leave it as
+   it is. **Until then the Level 1 lessons stay on non-moving groups**
+   (TrussC-RGB, StepTops, Steps); Lesson 1.3 (aim) depends on it.
+4. **The footer is red in class.** Unchanged and intended: the teaching
+   show has no outputs, so it says **Not ready** ("13 universe(s) with
+   fixtures but no output"). The handout, install and rig pages say to
+   expect it.
+5. ~~**Blue on the cyc looks pale.**~~ **Done.** Coloured light on the grey
+   cyc is clearly coloured — brightest at the top, as the cyc boxes aim
+   upward. The handout now says "a clear blue, brightest at the top"
+   (`rig-*.png` retaken).
+6. ~~**A crash on close with the Show Tree up.**~~ **Done.** The course
+   test no longer hides the window before deleting the App.
 
 ---
 
@@ -329,7 +312,7 @@ changes:
 | 9 | Licence | Recommended CC BY 4.0 (text, pictures) + Apache-2.0 (show files, scripts), pending OK (§6). |
 | 10 | Real lights | First hands on the real rig in **December or January**. |
 | 11 | Where students save | On their own computers (see §5 and the install page). |
-| 12 | App issues | Being fixed on a separate branch (§8). |
+| 12 | App issues | Fixed (§8), except the moving-head definition, which is Branson's call. |
 
 **Still open:**
 

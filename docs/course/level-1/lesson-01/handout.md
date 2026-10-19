@@ -89,21 +89,22 @@ show, **(4)** the **page** for what you clicked, **(5)** the command line
 
 ![A new cue](../../images/lesson-01/new-cue.png)
 
-   **(1)** + Cue, **(2)** the Name box, **(3)** the big empty box under
-   **Layers** — the drop area, **(4)** your cue in the tree.
+   **(1)** + Cue, **(2)** the Name box, **(3)** the dashed box under
+   **Layers**, *"Drag groups or fixtures here to add a layer"* — the drop area, **(4)** your cue in the tree.
 
 7. In the Library, open **All → Groups → Trusses**. Drag **TrussC-RGB**
-   onto the empty box under **Layers** (3).
+   onto the dashed box under **Layers** (3).
    - While you drag, the top right says *"a new layer on TrussC-RGB in
      1.0.0 Pose"*.
    - *You should see:* a row **TrussC-RGB** under Layers.
 
 ![Dragging a group onto the cue](../../images/lesson-01/drop-group.png)
 
-8. Open **All → Palettes → Colour**. Drag **Blue** onto the **Cyc
-   Washes** row. Then open **Dimmer** and drag **Full** onto the same row.
+8. Open **All → Palettes → Colour**. Drag **Blue** onto the
+   **TrussC-RGB** row. Then open **Dimmer** and drag **Full** onto the same row.
    - *You should see:* the row says **TrussC-RGB   Blue, Full**, and in the
-     Rig Overview the cyc glows a soft blue.
+     Rig Overview the cyc turns a clear blue, brightest at the top (the cyc
+     boxes aim upward).
 
 ![Colour and level on the layer](../../images/lesson-01/drop-palettes.png)
 
@@ -141,13 +142,11 @@ show, **(4)** the **page** for what you clicked, **(5)** the command line
 
 ### Play it
 
-13. Click **Spring Show** in the tree. On its page click **Make current**.
-    - *You should see:* the button now says **▶ Current — click to
-      unset**. This tells GO which show to play.
+Your production is already the one GO plays: the tree marks it
+**▶ current**. (Don't click its **Current** button — that would turn it
+off.)
 
-![Make current](../../images/lesson-01/make-current.png)
-
-14. Click the **Run** tab (⇧⌘0). Press **GO** (or **Space**) three times.
+13. Click the **Run** tab (⇧⌘0). Press **GO** (or **Space**) three times.
     - *You should see:* NEXT moves down the list; the stage goes Pose →
       Verse → Chorus.
 
@@ -155,7 +154,7 @@ show, **(4)** the **page** for what you clicked, **(5)** the command line
 
    **(1)** GO, **(2)** your cues, **(3)** what the next GO will change.
 
-15. **Save** with your name: **File → Save As** → `Lesson01-yourname.qlcc`.
+14. **Save** with your name: **File → Save As** → `Lesson01-yourname.qlcc`.
 
 ## What it should look like
 
@@ -169,7 +168,7 @@ show, **(4)** the **page** for what you clicked, **(5)** the command line
 |---|---|
 | A dialog asked something you didn't expect | Cancel, then click the right row in the tree first (the production for + Cue list). |
 | The group landed in the wrong cue | **Undo** (⌘Z) and click the right cue first. |
-| GO does nothing | Step 13: make the production current. |
+| GO does nothing | Is **Spring Show** marked **▶ current** in the tree? If not, click it and click its **Current** button once. |
 | Nothing lights in the Rig Overview | Is a **cue** selected in the tree (the stage shows the selected cue)? Is **Live** on in the Rig Overview? |
 | You can't find a palette | Type its name in **Filter the Library** at the top left. |
 
@@ -192,7 +191,6 @@ show, **(4)** the **page** for what you clicked, **(5)** the command line
    StepTops colour "Warm White" dimmer 75
    cue + "Chorus"
    Steps colour Magenta dimmer Full
-   production current
    ```
 
    Names with spaces go in quotes. `dimmer 75` finds the palette **75%**.

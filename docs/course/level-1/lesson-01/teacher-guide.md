@@ -46,7 +46,7 @@ Say the word, point at it on the projector, use it in a sentence.
 |---|---|---|
 | 0–10 | **Design idea** (no computers) | Reading a song |
 | 10–20 | **Teacher demo** (projector) | Build cue 1.0.0 live; the class calls the steps |
-| 20–40 | **Hands-on** (pairs/triads, roles) | Handout Part 2, steps 1–15 |
+| 20–40 | **Hands-on** (pairs/triads, roles) | Handout Part 2, steps 1–14 |
 | 40–45 | **Check / share** | Two groups GO their cues for the class |
 | 45–50 | **Exit ticket** | On paper |
 
@@ -78,7 +78,7 @@ handout up so they can read ahead):
    out "Tracking" beside it and that the `01` numbers the cues 1.0.0, 1.0.1…
 2. **+ Cue** → type `Pose`, Return.
 3. Library → **All → Groups → Trusses → TrussC-RGB**: drag it onto the
-   empty box under **Layers**. Read the top-right hint aloud while dragging
+   dashed box under **Layers**. Read the top-right hint aloud while dragging
    (*"a new layer on TrussC-RGB in 1.0.0 Pose"*). "A **layer** is one group
    doing one thing in this cue."
 4. **Blue** then **Full** onto the row. Watch the cyc turn blue.
@@ -110,7 +110,7 @@ Stop there; the students build the rest.
 | A layer in the wrong cue | Dropped while another cue was selected | "Undo, click the right cue, drop again." |
 | Stage stays dark | No cue selected (the stage shows the selected cue in Design), or the Rig Overview's **Live** is off | "Click your cue in the tree." |
 | Cue numbers 1.0.0.5 or similar | + Cue pressed with an earlier cue selected | Fine for now; cue numbers never renumber. Delete and redo if it bothers them. |
-| GO does nothing in the Run tab | Production not made current (step 13) | "Click Spring Show → Make current." |
+| GO does nothing in the Run tab | The production was un-set (someone clicked its **▶ Current** button) | "Click Spring Show, then its Current button once." |
 | Footer says **Not ready** in red | Expected: the show has no outputs | "That's because it isn't plugged into real lights — on purpose." |
 
 ## 4. Check for understanding (while circulating)

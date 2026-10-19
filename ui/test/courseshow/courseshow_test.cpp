@@ -119,7 +119,6 @@ const QStringList kLessonOneTyped = {
     "StepTops colour \"Warm White\" dimmer 75",
     "cue + \"Chorus\"",
     "Steps colour Magenta dimmer Full",
-    "production current",
 };
 
 /* What Lesson 1 ends with: each cue's own layers and their looks. */
@@ -303,9 +302,6 @@ void CourseShow_Test::cleanupTestCase()
             mon->m_overviewDlg->close();
     settle();
     m_app->doc()->resetModified();
-    // Off the screen first, as closing the window does in the app.
-    m_app->hide();
-    settle();
     delete m_app;
     m_app = nullptr;
 }
@@ -443,18 +439,11 @@ static bool lessonOneByMouse(Doc *doc, ShowTreeView *view)
             }
         }
     }
-    // Step 9: make it the show GO plays -- click the production, then
-    // Make current on its page.
-    if (!view->selectNode(st->productions().first().id))
-        { qWarning() << "select production"; return false; }
-    settle();
-    QPushButton *current = view->findChild<QPushButton *>("stProdCurrent");
-    if (current == nullptr || current->text() != QStringLiteral("Make current"))
-        { qWarning() << "Make current" << (current ? current->text() : QString()); return false; }
-    current->click();
-    settle();
-    if (current->text() != QStringLiteral("▶ Current — click to unset"))
-        { qWarning() << "after Make current" << current->text(); return false; }
+    // No step to make it the show GO plays: the first production in a show
+    // is current by itself (and clicking its Current button would unset it,
+    // so the handout doesn't send students there).
+    if (st->currentProduction() != st->productions().first().id)
+        { qWarning() << "the new production isn't current"; return false; }
 
     if (describe(doc) != kLessonOneResult)
         qWarning() << describe(doc);
@@ -891,7 +880,7 @@ void CourseShow_Test::lessonPictures()
         QVERIFY(shoot(f, dir, "drop-palettes"));
     }
 
-    // --- The finished lesson again: the tracked row, Make current, Run.
+    // --- The finished lesson again: the tracked row, the rig, Run.
     QVERIFY(open(kL1Finish));
     doc = m_app->doc();
     st = doc->showTree();
@@ -916,16 +905,6 @@ void CourseShow_Test::lessonPictures()
             f.callouts << markRect(tree->viewport(), tree->visualItemRect(grey), view, 3);
         QVERIFY(shoot(f, dir, "tracked-row"));
     }
-    QVERIFY(view->selectNode(st->productions().first().id));
-    settle(100);
-    {
-        HelpShots::Frame f;
-        f.grab = view;
-        f.callouts << mark(view->findChild<QPushButton *>("stProdCurrent"), 1)
-                   << mark(view->findChild<QWidget *>("stProduction"), 2);
-        QVERIFY(shoot(f, dir, "make-current"));
-    }
-
     // The Rig Overview of each cue, as Design shows it while it's selected.
     Monitor *mon = Monitor::instance();
     QVERIFY(mon != nullptr);
