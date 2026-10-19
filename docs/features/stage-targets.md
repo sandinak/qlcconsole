@@ -163,6 +163,12 @@ in range, preferring the one that doesn't need to swing all the way around.
 It reports **margin**: how much spare travel is left before the nearest
 limit. Negative margin means the fixture physically can't get there at all.
 
+The calibration offsets go into the DMX, after the geometry; every view
+takes them out again when it turns DMX back into a direction, so a beam is
+drawn on the target it is aimed at whatever the offsets are. See
+[Calibration offsets](lighting-studio.md#calibration-offsets), and
+[Focus mode](lighting-studio.md#focus-mode) for setting them.
+
 Reachability is a question of pan/tilt range against the fixture's own
 calibrated limits. Whether anything *stands in the way* is a separate
 question — see [Line of sight](#line-of-sight).
@@ -269,6 +275,10 @@ with an Aim look:
   each flying its own per-fixture angle steps (which diverge from different
   rig positions). Per-fixture "free-fly" from a joystick is only used when
   no Aim look is present at all.
+
+The follow spot's stick is also the stick [Focus mode](lighting-studio.md#focus-mode)
+uses: while Focus mode is on it nudges calibration offsets instead, with the
+same deadzone and sensitivity.
 
 A beam does **not** stop at the point it's aimed at — it passes through and
 lands on whatever real surface is actually behind it (the floor, or a

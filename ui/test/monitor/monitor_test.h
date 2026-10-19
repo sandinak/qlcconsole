@@ -491,6 +491,15 @@ private slots:
     /** Aim a head at a mark, feed it its own DMX, and the beam it draws
      *  arrives at that mark -- hung or standing, inverted or not. */
     void aHeadAimedAtAMarkDrawsItsBeamThere();
+    /** The plot's pool from live DMX of a head with calibration offsets
+     *  lands on the mark it is aimed at, not the offset beside it. */
+    void aCalibratedHeadsPoolLandsOnItsMark();
+    /** Focus mode's setup offers the selected scene's aim first, and the
+     *  selected heads. */
+    void focusModeSetupOffersTheSceneAimFirst();
+    /** Focus mode end to end from the keyboard: nudge, save, next, revert,
+     *  step size, zero, Esc asks about unsaved, the plot ring, one undo. */
+    void focusModeRunsFromTheKeyboard();
     /** A head standing on a truss top cannot point at its own feet. */
     void anUprightHeadCannotPointBesideItself();
     /** A par or bar throws light as well -- beams were movers-only. */

@@ -33,6 +33,8 @@
 #include <QVariant>
 
 #include "programmercontroller.h"
+#include "focussession.h"
+#include "gamepadrole.h"
 
 #include "doc.h"
 #include "fixture.h"
@@ -82,6 +84,19 @@ ProgrammerController::ProgrammerController(Doc *doc)
     // The mark set auto-releases fixtures on reveal; surface that to the monitor.
     connect(m_markEffect, &MarkEffect::fixtureRevealed,
             this, &ProgrammerController::markChanged);
+    m_focusSession = new FocusSession(m_doc, this);
+    /* Focus mode takes the stick from the follow spot's data channel while it
+       runs (a free-flying follow spot must not fly while its stick is
+       aligning the rig), and gives it back as it stands when it stops. */
+    connect(m_focusSession, &FocusSession::started, this, [this]() {
+        connectControllerInput();    // even with no follow-spot axes bound
+        m_fineNormX = m_fineNormY = 0.5f;
+        m_focusSession->setStick(FocusSession::Coarse, m_panNorm, m_tiltNorm);
+        emit joystickUpdated(0.5f, 0.5f);
+    });
+    connect(m_focusSession, &FocusSession::stopped, this, [this]() {
+        emit joystickUpdated(m_panNorm, m_tiltNorm);
+    });
     m_markPlanner = new MarkPlanner(m_doc, m_markEffect, this);
     connect(m_markPlanner, &MarkPlanner::enabledChanged,
             this, &ProgrammerController::autoMoveInBlackChanged);
@@ -1722,6 +1737,9 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
         return;
     }
 
+    if (routeFocusInput(universe, channel, value))
+        return;
+
     const float norm = value / 255.0f;
 
     // Trace every event so we can see incoming u/ch vs bound u/ch.
@@ -1873,8 +1891,84 @@ void ProgrammerController::sendTriggerFeedback(quint32 universe, quint32 channel
     m_doc->inputOutputMap()->sendFeedBack(universe, channel, on ? 255 : 0, QVariant());
 }
 
+int ProgrammerController::controllerRole(quint32 universe, quint32 channel) const
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    InputPatch *ip = iom != nullptr ? iom->inputPatch(universe) : nullptr;
+    if (ip == nullptr || ip->plugin() == nullptr)
+        return GamepadRole::None;
+    return GamepadRole::fromProfile(ip->plugin()->inputChannelRole(ip->input(), channel),
+                                    ip->plugin()->inputChannelName(ip->input(), channel));
+}
+
+bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uchar value)
+{
+    const float norm = value / 255.0f;
+    const bool active = m_focusSession->isActive();
+    const bool isPan = m_panBound && universe == m_panUniverse && channel == m_panChannel;
+    const bool isTilt = m_tiltBound && universe == m_tiltUniverse && channel == m_tiltChannel;
+    /* The bound pan/tilt pair is the follow spot's stick: when Focus mode is
+       off it stays theirs, untouched by any of this. */
+    if (!active && (isPan || isTilt))
+        return false;
+
+    const GamepadRole::Role role = GamepadRole::Role(controllerRole(universe, channel));
+    if (role == GamepadRole::None && !active)
+        return false;
+
+    if (!GamepadRole::isAxis(role) && role != GamepadRole::None)
+    {
+        if (value > 0)
+            m_heldRoles.insert(role);
+        else
+            m_heldRoles.remove(role);
+        // View + Menu together: ask for Focus mode.
+        if (!active && value > 0 && m_heldRoles.contains(GamepadRole::Back)
+            && m_heldRoles.contains(GamepadRole::Start))
+        {
+            emit focusModeRequested();
+            return true;
+        }
+    }
+    if (!active)
+        return false;
+
+    // Focus mode owns the controller: everything stops here.
+    if (isPan || role == GamepadRole::LeftX)
+    {
+        m_panNorm = norm;
+        m_focusSession->setStick(FocusSession::Coarse, m_panNorm, m_tiltNorm);
+    }
+    else if (isTilt || role == GamepadRole::LeftY)
+    {
+        m_tiltNorm = norm;
+        m_focusSession->setStick(FocusSession::Coarse, m_panNorm, m_tiltNorm);
+    }
+    else if (role == GamepadRole::RightX || role == GamepadRole::RightY)
+    {
+        (role == GamepadRole::RightX ? m_fineNormX : m_fineNormY) = norm;
+        m_focusSession->setStick(FocusSession::Fine, m_fineNormX, m_fineNormY);
+    }
+    else if (value > 0)
+    {
+        m_focusSession->apply(FocusSession::controlFor(role));
+    }
+    return true;
+}
+
 void ProgrammerController::applyDesignJoystick()
 {
+    /* Focus mode is the follow spot's stick put to another use: the same
+       bound axes, the same profile deadzone and sensitivity, this same tick --
+       nudging the current head's calibration instead of moving a target. */
+    if (m_focusSession != nullptr && m_focusSession->isActive())
+    {
+        m_focusSession->setStickResponse(m_joystickDeadzone, m_joystickSensitivity);
+        m_focusSession->tick(m_designJoyTimer != nullptr
+                             ? m_designJoyTimer->interval() / 1000.0 : 0.02);
+        return;
+    }
+
     // Run-mode joystick: for an Aim look, drag the stage target in floor space
     // (the scene re-resolves per-fixture pan/tilt from the moved target).  A
     // Standard Pan/Tilt look is fixed; a followspot.js effect, when present,

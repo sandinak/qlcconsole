@@ -96,6 +96,31 @@ namespace AimSolver
      *  which is the case a clamp used to get silently wrong. */
     Solution solve(const Frame &frame, const QVector3D &targetWorld);
 
+    /** The way back: a head's pan and tilt as DMX sends them (fixture
+     *  degrees, CENTRED -- 0 is the middle of the range) turned into what they
+     *  mean on the stage, with the calibration taken out.
+     *
+     *  Exactly the inverse of solve(), step for step and in reverse order: the
+     *  mirrors first (invert flags, a standing head's flipped pan), then the
+     *  calibration offsets, then the mounting. The offsets correct the
+     *  PHYSICAL head -- DMX carries them so the real light lands where the
+     *  design says -- so every view that turns DMX back into "where is it
+     *  pointing" must remove them, or a head with a +3 degree pan offset aimed
+     *  at a mark draws its beam 3 degrees off it. Pan zero, invert and
+     *  standing are geometry, not calibration: applied both ways.
+     *
+     *  @p panRelDeg comes back as the bearing relative to the head's facing
+     *  (FixtureRigProps::panZeroDir) and @p tiltRelDeg as the tilt away from
+     *  its home (straight down hung, straight up standing), both in the same
+     *  turning sense the views draw. */
+    void intendedAngles(const ::FixtureRigProps &rp, double panCentredDeg, double tiltCentredDeg,
+                        double &panRelDeg, double &tiltRelDeg);
+
+    /** The same, as the world-space direction of the beam (unit vector;
+     *  +Y downstage, +X stage left, +Z up). False only when it degenerates. */
+    bool beamDirection(const ::FixtureRigProps &rp, double panCentredDeg, double tiltCentredDeg,
+                       QVector3D &dir);
+
     /** Compute the fixture's pan/tilt (degrees) to aim its beam at @p targetWorld
      *  (metres, absolute — the caller bakes in platform/subject height). Honours
      *  the fixture's rig position, mounting (floor vs hung), pan-zero facing,

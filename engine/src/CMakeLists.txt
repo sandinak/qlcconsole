@@ -111,6 +111,8 @@ add_library(${module_name} SHARED
     rgbtext.cpp rgbtext.h
     programmerflasher.cpp programmerflasher.h
     highlighteffect.cpp highlighteffect.h
+    focussession.cpp focussession.h
+    gamepadrole.cpp gamepadrole.h
     parkeffect.cpp parkeffect.h
     markeffect.cpp markeffect.h
     cueoutput.cpp cueoutput.h

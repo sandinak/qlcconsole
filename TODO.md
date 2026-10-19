@@ -234,6 +234,17 @@ help (DONE.md 2026-10-16). Handoff: SHOW_TREE_OVERNIGHT.md.
 
 ## Needs the real rig / hardware
 
+- **Focus mode with a real controller (built 2026-10-18, feat/focus-alignment)**
+  — FOCUS_MODE_DESIGN.md. Tested offscreen with a stub controller and the
+  keyboard only. On the rig with the Xbox pad: View + Menu opens it; the
+  bumpers, A/B/X/Y, View/Menu and the D-pad (macOS raw mode now reports it
+  as buttons 11–14 -- check the bits on a Series pad, and on an element-mode
+  / 360-driver pad that 11–14 really are the D-pad); the right stick and
+  triggers after the raw reader's axis reorder (LX LY LT RX RY RT, as the
+  profile names them); stick right/up feel on hung, standing and inverted
+  heads; 8°/s and 1°/s rates feel right; the offsets land the light on a
+  real mark from two references across the stage.
+
 - **Matrix effects on the XL-450s (built 2026-10-18, feat/matrix-effects)**
   — the fourteen Matrix effects were checked offscreen only (no DMX from
   the laptop). On the rig: each on one box, on all eight as one canvas, in

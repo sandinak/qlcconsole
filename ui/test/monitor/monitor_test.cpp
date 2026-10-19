@@ -33,6 +33,7 @@
 #include <functional>
 #include <QDialogButtonBox>
 #include <QMessageBox>
+#include <QPointer>
 #include <QPushButton>
 #include <QPainter>
 #include <QTemporaryDir>
@@ -55,6 +56,9 @@
 #include "stagegroupdialog.h"
 #include "monitorgraphicsview.h"
 #include "monitorfixtureitem.h"
+#include "focusmodepanel.h"
+#include "focussession.h"
+#include "programmercontroller.h"
 #include "structurestudioview.h"
 #include "rhiraster.h"
 #include "mastertimer.h"
@@ -10798,7 +10802,8 @@ void Monitor_Test::aHeadAimedAtAMarkDrawsItsBeamThere()
     bar->setOrigin(QVector3D(0.0f, 3.0f, 3.0f));
     bar->setLength(6.0f);
 
-    struct Case { const char *what; Truss::MountingType mount; bool panInv; bool tiltInv; QVector3D mark; };
+    struct Case { const char *what; Truss::MountingType mount; bool panInv; bool tiltInv; QVector3D mark;
+                  float panOfs = 0.0f; float tiltOfs = 0.0f; };
     /* A standing head's tilt is centred straight UP, so with this fixture's
        180 degrees of travel it works the sky, not the deck -- which is the
        whole of Branson's point about a 270 degree head on a truss top. */
@@ -10808,6 +10813,12 @@ void Monitor_Test::aHeadAimedAtAMarkDrawsItsBeamThere()
         { "standing on the bar",     Truss::FloorMounted, false, false, QVector3D(4.0f, 1.5f, 5.0f) },
         { "hung, pan inverted",      Truss::TopHung,      true,  false, QVector3D(4.0f, 1.5f, 0.0f) },
         { "standing, tilt inverted", Truss::FloorMounted, false, true,  QVector3D(4.0f, 1.5f, 5.0f) },
+        /* Calibration offsets correct the physical head: in the DMX, out of
+           the picture. A head with offsets aimed at a mark still draws its
+           beam on the mark. */
+        { "hung, calibrated +8/-5",  Truss::TopHung,      false, false, QVector3D(4.0f, 1.5f, 0.0f), 8.0f, -5.0f },
+        { "hung, inverted, calibrated", Truss::TopHung,   true,  true,  QVector3D(-1.0f, 4.5f, 0.0f), -6.0f, 4.0f },
+        { "standing, calibrated",    Truss::FloorMounted, false, false, QVector3D(4.0f, 1.5f, 5.0f), 5.0f, 3.0f },
     };
 
     int addr = 0;
@@ -10822,6 +10833,8 @@ void Monitor_Test::aHeadAimedAtAMarkDrawsItsBeamThere()
         rp.mountingType = c.mount;
         rp.panInvert = c.panInv;
         rp.tiltInvert = c.tiltInv;
+        rp.panOffsetDeg = c.panOfs;
+        rp.tiltOffsetDeg = c.tiltOfs;
         props->setFixtureRigProps(fx->id(), rp);
 
         AimSolver::Solution sol;
@@ -10858,6 +10871,193 @@ void Monitor_Test::aHeadAimedAtAMarkDrawsItsBeamThere()
                             .arg(double(dir.x())).arg(double(dir.y())).arg(double(dir.z()))));
     }
 
+    delete doc;
+}
+
+void Monitor_Test::aCalibratedHeadsPoolLandsOnItsMark()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Truss *bar = props->addTruss();
+    bar->setName("T-1");
+    bar->setOrigin(QVector3D(1.0f, 2.0f, 5.0f));
+    bar->setLength(8.0f);
+
+    Fixture *spot = makeMover(doc, 10.0, 0, "Calibrated", QVector3D(3.0f, 2.0f, 5.0f));
+    QVERIFY(spot != nullptr);
+    FixtureRigProps rp;
+    rp.trussId = bar->id();
+    rp.trussOffset = 2.0f;
+    rp.mountingType = Truss::TopHung;
+    rp.panOffsetDeg = 12.0f;
+    rp.tiltOffsetDeg = -6.0f;
+    props->setFixtureRigProps(spot->id(), rp);
+
+    const QVector3D mark(7.0f, 6.0f, 0.0f);
+    AimSolver::Solution sol;
+    QVERIFY(AimSolver::reach(doc, spot->id(), mark, sol));
+    QVERIFY(sol.reachable());
+
+    // The DMX the solver sends, offsets and all, as the head is being driven.
+    QLCFixtureMode *mode = spot->fixtureMode();
+    const QLCPhysical phy = mode->physical();
+    QByteArray v(512, char(0));
+    v[int(spot->address())] = char(uchar(qRound(sol.panDeg * 255.0f / float(phy.focusPanMax()))));
+    v[int(spot->address() + 1)] = char(uchar(qRound(sol.tiltDeg * 255.0f / float(phy.focusTiltMax()))));
+    v[int(spot->address() + 2)] = char(255);
+    spot->setChannelValues(v);
+
+    MonitorGraphicsView view(doc);
+    view.resize(1000, 700);
+    view.setGridMetrics(1000.0);
+    view.setGridSize(QSize(10, 8));
+    view.updateTrusses();
+    view.addFixture(spot->id(), QPointF(3000.0, 2000.0));
+    view.setViewPOV(MonitorGraphicsView::PovTop);
+
+    auto poolOff = [&]() {
+        const QPolygonF poly = view.fixtureProjection(spot->id());
+        if (poly.size() < 3)
+            return -1.0;
+        const QPointF want = view.realPositionToPixels(double(mark.x()) * 1000.0,
+                                                       double(mark.y()) * 1000.0);
+        return QLineF(poly.boundingRect().center(), want).length() / view.m_cellPixels;
+    };
+    const double calibrated = poolOff();
+    QVERIFY2(calibrated >= 0.0 && calibrated < 0.5,
+             qPrintable(QString("a calibrated head's pool is %1 m from its mark").arg(calibrated)));
+
+    // The same DMX read as if there were no calibration lands well off it:
+    // the offset is real, and the view is what takes it out.
+    rp.panOffsetDeg = 0.0f;
+    rp.tiltOffsetDeg = 0.0f;
+    props->setFixtureRigProps(spot->id(), rp);
+    const double raw = poolOff();
+    QVERIFY2(raw < 0.0 || raw > 1.0,
+             qPrintable(QString("without removing the offset the pool is still %1 m from the mark")
+                        .arg(raw)));
+
+    delete doc;
+}
+
+void Monitor_Test::focusModeSetupOffersTheSceneAimFirst()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Fixture *a = makeMover(doc, 14.0, 0, "FA", QVector3D(2.0f, 2.0f, 5.0f));
+    Fixture *b = makeMover(doc, 14.0, 16, "FB", QVector3D(5.0f, 2.0f, 5.0f));
+    QVERIFY(a != nullptr && b != nullptr);
+    StageTarget *mark = props->addStageTarget();
+    mark->setName("Mark");
+    mark->setPosition(QVector3D(4.0f, 5.0f, 0.0f));
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, doc);
+    aim->setStageTargetId(mark->id());
+    QVERIFY(doc->addPalette(aim));
+    Scene *scene = new Scene(doc);
+    scene->setName("Look");
+    scene->addFixture(a->id());
+    scene->addFixture(b->id());
+    scene->addPalette(aim->id());
+    QVERIFY(doc->addFunction(scene));
+
+    {
+        FocusModeSetupDialog dlg(doc, scene->id(), { b->id() });
+        const FocusSession::Options o = dlg.options();
+        QCOMPARE(o.fixtures, QList<quint32>({ b->id() }));
+        QCOMPARE(o.first.kind, FocusSession::Reference::SceneAim);
+        QCOMPARE(o.first.id, scene->id());
+        QVERIFY(!o.second.isValid());
+        QCOMPARE(o.others, FocusSession::OthersDark);
+    }
+    {
+        // Nothing selected, no scene: every head, aimed at a target.
+        FocusModeSetupDialog dlg(doc, Function::invalidId(), {});
+        const FocusSession::Options o = dlg.options();
+        QCOMPARE(o.fixtures.size(), 2);
+        QCOMPARE(o.first.kind, FocusSession::Reference::Target);
+        QCOMPARE(o.first.id, mark->id());
+    }
+    delete doc;
+}
+
+void Monitor_Test::focusModeRunsFromTheKeyboard()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Fixture *a = makeMover(doc, 14.0, 0, "FA", QVector3D(2.0f, 6.0f, 5.0f));
+    Fixture *b = makeMover(doc, 14.0, 16, "FB", QVector3D(5.0f, 6.0f, 5.0f));
+    QVERIFY(a != nullptr && b != nullptr);
+    StageTarget *mark = props->addStageTarget();
+    mark->setName("Mark");
+    mark->setPosition(QVector3D(4.0f, 3.0f, 0.0f));
+
+    QWidget parent;
+    Monitor *mon = new Monitor(&parent, doc);
+    FocusSession *s = doc->programmer()->focusSession();
+
+    FocusSession::Options o;
+    o.fixtures = { a->id(), b->id() };
+    o.first.kind = FocusSession::Reference::Target;
+    o.first.id = mark->id();
+
+    QString why;
+    QPointer<FocusModePanel> panel = FocusModePanel::startWith(doc, &parent, o, &why);
+    QVERIFY2(panel != nullptr, qPrintable(why));
+    QVERIFY(s->isActive());
+    QCOMPARE(s->currentFixture(), a->id());
+    QLabel *offsets = panel->findChild<QLabel *>("focusOffsets");
+    QLabel *progress = panel->findChild<QLabel *>("focusProgress");
+    QVERIFY(offsets != nullptr && progress != nullptr);
+
+    // Its head is ringed on the plot.
+    MonitorGraphicsView *gv = mon->findChild<MonitorGraphicsView *>();
+    QVERIFY(gv != nullptr);
+    MonitorFixtureItem *ringed = gv->fixtureItemForId(a->id());
+    QVERIFY(ringed != nullptr);
+    QVERIFY(ringed->m_highlighted);
+
+    QTest::keyClick(panel, Qt::Key_Right);                     // one step of pan
+    QTest::keyClick(panel, Qt::Key_Up, Qt::ShiftModifier);     // a degree of tilt
+    QCOMPARE(s->liveOffset(a->id()).pan, 0.1f);
+    QCOMPARE(s->liveOffset(a->id()).tilt, 1.0f);
+    QVERIFY2(offsets->text().contains("+0.10") && offsets->text().contains("+1.00"),
+             qPrintable(offsets->text()));
+    QTest::keyClick(panel, Qt::Key_Return);                     // save
+    QVERIFY(s->isChecked(a->id()));
+    QVERIFY2(progress->text().startsWith("1 of 2"), qPrintable(progress->text()));
+    QTest::keyClick(panel, Qt::Key_BracketRight);               // next
+    QCOMPARE(s->currentFixture(), b->id());
+    QTest::keyClick(panel, Qt::Key_Left);
+    QTest::keyClick(panel, Qt::Key_Backspace);                  // revert
+    QCOMPARE(s->liveOffset(b->id()).pan, 0.0f);
+    QTest::keyClick(panel, Qt::Key_Plus);                       // step x10
+    QCOMPARE(s->stepDegrees(), 1.0f);
+    QTest::keyClick(panel, Qt::Key_Left);
+    QCOMPARE(s->liveOffset(b->id()).pan, -1.0f);
+    QTest::keyClick(panel, Qt::Key_0);                          // zero
+    QCOMPARE(s->liveOffset(b->id()).pan, 0.0f);
+    QTest::keyClick(panel, Qt::Key_Down);
+
+    // Esc with a head unsaved asks; Discard puts it back and ends it.
+    QTimer::singleShot(0, this, []() {
+        for (QWidget *w : QApplication::topLevelWidgets())
+            if (QMessageBox *box = qobject_cast<QMessageBox *>(w))
+                if (box->objectName() == QLatin1String("focusExitQuestion") && box->isVisible())
+                    box->button(QMessageBox::Discard)->click();
+    });
+    QTest::keyClick(panel, Qt::Key_Escape);
+    QTRY_VERIFY(panel.isNull());
+    QVERIFY(!s->isActive());
+    QCOMPARE(props->fixtureRigProps(b->id()).tiltOffsetDeg, 0.0f);
+    QCOMPARE(props->fixtureRigProps(a->id()).tiltOffsetDeg, 1.0f);   // saved stays
+    QVERIFY(!gv->fixtureItemForId(a->id())->m_highlighted);
+
+    // The whole session is one step on the Studio's undo.
+    mon->undo();
+    QCOMPARE(props->fixtureRigProps(a->id()).tiltOffsetDeg, 0.0f);
+    QCOMPARE(props->fixtureRigProps(a->id()).panOffsetDeg, 0.0f);
+
+    delete mon;
     delete doc;
 }
 

@@ -709,6 +709,95 @@ other light, and follow a mover's pan and tilt.
   off. The bundled **Generic → Silk Flame (relay)** is one channel for a DMX
   relay pack.
 
+## Calibration offsets
+
+A moving head's **Pan offset** and **Tilt offset** (Fixture Properties →
+the rig box, or [Focus mode](#focus-mode)) correct the *physical* head: a
+yoke bolted a few degrees round, a tilt that homes a little high. They are
+calibration, not design:
+
+- **The DMX includes them.** Every aimed look, line target and follow spot
+  adds the offset after working out where the head should point, so the
+  real light lands where the design says.
+- **The views leave them out.** The plot, its pan/tilt gauges, the Studio,
+  the Rig Overview, beams, footprints and line-of-sight rays all draw the
+  **intended** aim. A head with +3° of pan offset aimed at the Main Drape
+  draws its beam on the Main Drape, not 3° off it. (What you see is the
+  light on stage, assuming the offset exactly cancels the fault — which is
+  what setting it means.)
+
+**Facing (pan zero)**, the invert switches and standing or hanging are not
+calibration: they are how the head is rigged, and both the DMX and the views
+use them.
+
+**Test orientation → Aim at target** in Fixture Properties points the head
+the way an Aim look would, offsets included, so you can set them by eye.
+For a whole rig, use Focus mode.
+
+## Focus mode
+
+Aligning the rig before a show, one head at a time, with the Xbox
+controller or the keyboard.
+
+**Start it** from **Focus** on the Lighting Studio toolbar, **Focus** on the
+Rig Overview's bar, **View → Focus Mode…** (⌘⌥F), or by holding **View +
+Menu** on the controller. Choose:
+
+- **Heads** — the ones selected in the programmer, or every moving head on
+  the plot (only heads that can pan or tilt and are placed on the plot).
+- **Order** — by stage position (front to back, then house left to right)
+  or as selected (a group's own order).
+- **Aim at** — the selected scene's aim (each head its own point: on a
+  line target every head has its own place on the line) or a stage target.
+- **Then check at** — an optional second reference to check the same
+  offsets somewhere else across the stage.
+- **The other heads** — dark, dimmed, or left as they are; and how bright
+  to light the head being focused.
+
+It is a Design-mode tool: in Perform it refuses, and switching to Perform
+ends it (unsaved nudges go back). If functions are running it says so — it
+takes over only the heads it is focusing.
+
+Each head in turn is aimed at its reference, lit white with its shutter
+open, and ringed on the plot and in the Rig Overview. Nudge it until the
+real light lands on the mark: the light moves, and the views keep drawing
+the intended aim while the panel shows the offsets.
+
+| Do | Controller | Keyboard |
+|---|---|---|
+| Next / previous head | RB / LB | ] / [ (or Tab / ⇧Tab) |
+| Nudge (coarse) | Left stick | ⇧ + arrows (1°) |
+| Nudge (fine) | Right stick | — |
+| One step (0.1°) | D-pad | Arrows |
+| Step size ×10 / ÷10 | — | + / − |
+| Save this head | A | Return |
+| Back to what was saved | B | Backspace |
+| Zero the offsets | X | 0 |
+| The other reference | Y | R |
+| Undo the last save | View | ⌘Z |
+| Leave | Menu | Esc |
+
+The sticks feel like the follow spot's — they are the same stick, with the
+controller profile's deadzone and sensitivity — scaled for alignment: full
+left stick is 8° a second, full right stick 1°. Stick right is more pan
+offset, stick up more tilt offset; on an inverted or standing head that
+can look mirrored on stage, and the numbers say which way it went.
+
+**Saving.** A nudge changes the head live but is not an edit until you save
+it (A): then it is the head's offset, marks the show changed, and **File →
+Save** keeps it. The panel says **Unsaved** while a head differs from what
+was saved, and counts the heads you have checked. Leaving with unsaved
+heads asks: **Save All**, **Discard** (back as they were saved), or
+**Cancel**. Afterwards the whole session is one step of the Lighting
+Studio's undo (⌘Z).
+
+**Controllers.** Buttons are matched by what they are — A, LB, View… — not
+by number: a controller profile (`.qxhid`) can say so with `role="…"` on each
+axis and button, and one without roles still works if its controls have the
+usual names. The Xbox profile has roles, and the D-pad as buttons 11–14.
+While Focus mode is on it has the controller to itself: chaser stepping
+and the follow spot wait.
+
 ## Lanterns
 
 A **lantern** — such as the bundled WLED Lantern — is drawn as a lantern,
@@ -802,3 +891,5 @@ Two small but load-bearing visual cues:
 | **Shift-drop** | Holding Shift as you drop a fixture over a truss, pipe or deck, to hang or stand it there; a plain drop only moves it. |
 | **Beneath (faded)** | In the Top view, a fixture with a structure more than half a metre above it, drawn faded and dashed but still clickable. |
 | **Rig Overview** | The read-only, whole-rig 3D window (View → Rig Overview…, Ctrl/⌘+Shift+R). |
+| **Calibration offsets** | A head's pan/tilt offsets: in the DMX so the real light lands where intended, left out of every view so it shows the intended aim. |
+| **Focus mode** | Stepping through the heads, each aimed at its reference, to set their calibration offsets with the controller or keyboard. |

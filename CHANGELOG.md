@@ -13,6 +13,15 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 ## [Unreleased]
 
 ### Added
+- **Focus mode** for aligning the rig before a show: step through the moving
+  heads with the controller's bumpers, each aimed at its reference (a
+  scene's aim, a stage target, a line target's own point) and lit, nudge its
+  pan/tilt calibration offsets with the sticks (the follow spot's stick
+  path) or D-pad, A to save (one undo step), B revert, X zero, Y a second
+  reference, Menu to leave (asks about unsaved heads). Keyboard fallback for
+  all of it. Lighting Studio / Rig Overview **Focus**, View → Focus Mode…
+  (⌘⌥F), or View + Menu. Controller profiles gain optional gamepad
+  `role=` attributes; the Xbox profile has them and the D-pad.
 - **Show Tree** (new tab, ⇧⌘6): productions → cue lists → cues → layers →
   looks, with tracking (Block / Cue-only / Release), includes, one
   precedence rule up and down the chain, a plan view for line targets, and
@@ -74,6 +83,14 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
   a fixture blocks where that fixture has it now.
 
 ### Fixed
+- **Calibration offsets no longer show in the rig views.** A head's pan/tilt
+  offsets correct the physical fixture: the DMX keeps them, but the plot,
+  its gauges, the Studio, the Rig Overview, beams and footprints now draw
+  the intended aim. Fixture Properties' **Test orientation → Aim at target**
+  uses the aim solver (it was 180° out and solved standing heads as hung).
+- macOS Xbox controller (raw mode): axes now arrive in the order the Xbox
+  profile names them (the right stick was reported as the left trigger),
+  and the D-pad is reported.
 - **Chaser teardown use-after-free.** Deleting a chaser while its runner was
   still running freed the steps the runner reads (an intermittent "double
   free" on Linux).
