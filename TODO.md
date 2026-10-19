@@ -229,6 +229,17 @@ help (DONE.md 2026-10-16). Handoff: SHOW_TREE_OVERNIGHT.md.
   one Undo puts back the palette and every use. **Try:** delete a palette
   three cues and a look use (Library, Programming, `palette X delete
   anyway`), check the cues, ⌘Z.
+- **Course fixes 2026-10-18 done** (DONE.md, fix/course-app-issues): crash
+  on quit, new production current, drop-area text, coloured light on the
+  cyc. **Open for Branson:** should a coarse Pan/Tilt channel whose
+  definition declares no Default rest at centre (128) instead of 0, as
+  most consoles home a mover? It changes real DMX for every such head (all
+  but ~50 of the 1,639 shipped Pan/Tilt channels declare none), and a
+  floor-standing head at centre points straight up, so it would not make
+  the classroom's front washes light the stage either. Not changed.
+  Branson's "36LED Moving Head" definition marks **Pan** as the fine byte
+  (`<Group Byte="1">`): the app finds no coarse pan, so Aim can't pan
+  those heads (DanceHysteria's AT washes too) -- fix it in the definition.
 - **P5 next:** multiple productions (switcher, current production for VC /
   footer GO / show control, per-production timecode).
 
