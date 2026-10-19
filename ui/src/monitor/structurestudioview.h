@@ -48,6 +48,7 @@
 #include "truss.h"     // FixtureRigProps::Face
 
 class Doc;
+class Scenery;
 
 /** \addtogroup ui_mon DMX Monitor
  * @{
@@ -690,6 +691,18 @@ private:
                              QVector3D *landNormal, int *surface) const;
     QVector<Deck> decks() const;
     mutable QVector<Deck> m_decks;      ///< this frame's, while painting
+    /** Something a light's haze can be hidden behind (opaqueTowardTheEye()):
+     *  opaque scenery, or one block of a platform, in the box it fits in. */
+    struct Occluder
+    {
+        const Scenery *scenery = nullptr;
+        StagePlatform *platform = nullptr;
+        StagePlatform::Block block{ 0, 0, 0, 0, 0 };
+        double baseZ = 0.0;
+        QVector3D lo, hi;
+    };
+    QVector<Occluder> occluders() const;
+    mutable QVector<Occluder> m_occluders;  ///< this frame's, while painting
     mutable bool m_decksValid = false;
 
     /** Where each ray thrown while painting landed (beamThrow()), kept from
@@ -730,6 +743,7 @@ private:
     struct BeamMesh
     {
         QVector<QVector3D> q;   ///< where each ray of the mesh landed
+        QVector<QVector3D> normal;  ///< the face it landed on, facing the ray
         QVector<int> surf;
         QVector<bool> landed;
         QVector<double> fade;
@@ -875,7 +889,15 @@ private:
     /** In haze, the air right round each lit source glows: a soft halo by
      *  how bright its pixels are, not by its lumens -- faint LED strip glows
      *  without throwing beams it should not. */
-    void drawHazeGlow(QPainter &p, const QVector<BarLight> &sources) const;
+    void drawHazeGlow(QPainter &p, const QVector<BarLight> &sources,
+                      quint32 hostPlatform = UINT_MAX) const;
+    /** How far from @p from toward the eye (@p eye, a unit vector) the first
+     *  opaque thing stands -- a closed drape, a wall, a platform other than
+     *  @p hostPlatform -- or -1 when nothing does within @p maxT. @p normal
+     *  is the face it meets there. A scrim is seen through and does not
+     *  count. */
+    double opaqueTowardTheEye(const QVector3D &from, const QVector3D &eye, double maxT,
+                              quint32 hostPlatform, QVector3D *normal) const;
     QVector<BarLight> barLights(class Fixture *fx, const struct FixtureRigProps &rp,
                                 const struct FixtureVisualTraits &traits,
                                 const QByteArray &vals, const QVector3D &centre) const;
