@@ -353,6 +353,11 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Lighting Studio
 
+- **A closed curtain hides what is behind it.** Lit steps just upstage of
+  the closed main drape glowed through it in the Rig Overview — their haze
+  glow, and the pools their light made on the back of the cloth. Now the
+  drape (or a wall, or a platform) hides them, and the glow shows only
+  where the curtain is open. See [Haze](lighting-studio.md#haze).
 - **A mover hung on a truss sits where the truss editor shows it** in the
   Rig Overview and the Angled view — just under the bar — instead of half
   a body lower.

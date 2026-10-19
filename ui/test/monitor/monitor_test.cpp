@@ -18009,6 +18009,289 @@ void Monitor_Test::ledsGlowInTheHaze()
              qPrintable(QString("light %1 between clear %2 and heavy %3").arg(light).arg(clearAir).arg(heavy)));
 }
 
+/* "Haze glow from the bottom steps shows through the closed curtain." The
+   glow round a lit bar was lifted half a metre toward the eye so its own
+   housing would not cover it -- and a row of steps a foot behind the closed
+   main drape glowed through the drape, as did the pools their light made on
+   the back of the cloth (lifted toward the eye off a face with no
+   thickness). Behind a closed drape: nothing. In front of it, or with it
+   open: the glow, as before. On the CPU and, where there is one, the GPU,
+   at both qualities. */
+void Monitor_Test::hazeGlowStaysBehindAClosedDrape()
+{
+    Doc doc(this);
+    MonitorProperties *props = doc.monitorProperties();
+
+    // A step with a blue strip on its front face.
+    StagePlatform *pl = props->addPlatform();
+    pl->setName("Step"); pl->setOriginX(-1.2f); pl->setOriginY(0.0f);
+    pl->setWidth(2.438f); pl->setDepth(0.6f); pl->setHeight(0.4f);
+    pl->setColor(QColor(40, 40, 44));
+    Fixture *tape = makeStepTape(&doc, pl, 32, 0, "Steps", 0.2f);
+    QVERIFY(tape != nullptr);
+    QByteArray u(512, char(0));
+    for (int h = 0; h < 32; ++h)
+        u[h * 3 + 2] = char(255);
+    tape->setChannelValues(u);
+
+    // The main drape, closed, a foot in front of the step's face.
+    Scenery *drape = props->addScenery();
+    drape->setKind(Scenery::MainDrape);
+    drape->setColor(Scenery::defaultColor(Scenery::MainDrape));
+    drape->setOriginX(0.0f);
+    drape->setOriginY(0.6f + 0.3f);
+    drape->setWidth(8.0f);
+    drape->setHeight(4.0f);
+    drape->setOpeningWidth(4.0f);
+    drape->setState(Scenery::Closed);
+
+    const QByteArray was = qgetenv("QLC_RIG_GPU");
+    auto restore = qScopeGuard([&]() {
+        if (was.isNull()) qunsetenv("QLC_RIG_GPU"); else qputenv("QLC_RIG_GPU", was);
+    });
+    qputenv("QLC_RIG_GPU", "1");
+
+    StructureStudioView v(&doc, StructureStudioView::StageKind, 0);
+    v.resize(800, 600);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    v.setAngledView(15.0, 15.0);
+    v.setLiveValues(true);
+    v.setBeams(true);
+    v.setAmbient(0.0);
+    v.setHaze(1.0);                                      // Medium
+
+    /* The strip's blue, wherever it shows: its pixels, the glow round them and
+       its light on the cloth -- however faint, where nothing should be. */
+    auto blue = [&v](const char *tag, bool faint = false) {
+        v.reload();
+        const QImage img = v.grab().toImage().convertToFormat(QImage::Format_ARGB32);
+        if (!qEnvironmentVariableIsEmpty("HAZE_PNG"))
+            img.save(qEnvironmentVariable("HAZE_PNG").replace(".png", QString("-%1.png").arg(tag)));
+        int n = 0;
+        for (int y = 0; y < img.height(); ++y)
+            for (int x = 0; x < img.width(); ++x)
+            {
+                const QColor q = img.pixelColor(x, y);
+                if (faint ? (q.blue() > q.red() + 4 && q.blue() > 2 * q.green() + 4)   // even on the red cloth
+                          : (q.blue() > 12 && q.blue() > 2 * q.red() && q.blue() > 2 * q.green()))
+                    ++n;
+            }
+        return n;
+    };
+
+    QList<bool> gpus { false };
+    if (RhiRaster::available())
+        gpus << true;
+    for (bool gpu : gpus)
+        for (int quality : { 1, 2 })
+        {
+            v.setGpu(gpu);
+            v.setSupersample(quality);
+            const QByteArray tag = QString("%1-q%2").arg(gpu ? "gpu" : "cpu").arg(quality).toLatin1();
+
+            /* Behind the closed drape: nothing of it, haze or no haze -- not
+               its glow, nor the pools its light makes on the back of the
+               cloth, which has no thickness to hide them. */
+            drape->setOriginY(0.9f);
+            drape->setState(Scenery::Closed);
+            v.setHaze(1.0);
+            const int closed = blue((tag + "-closed").constData(), true);
+            if (gpu)
+                QVERIFY2(v.drewOnGpu(), "the GPU fell back to the CPU");
+            v.setHaze(0.0);
+            const int closedClear = blue((tag + "-closed-clear").constData(), true);
+            QVERIFY2(closed < 30 && closedClear < 30,
+                     qPrintable(QString("%1: %2 blue px through the closed drape in haze, %3 in clear air")
+                                .arg(tag.constData()).arg(closed).arg(closedClear)));
+
+            // Open: the glow shows through the gap.
+            drape->setState(Scenery::Open);
+            const int openClear = blue((tag + "-open-clear").constData());
+            v.setHaze(1.0);
+            const int open = blue((tag + "-open").constData());
+            QVERIFY2(open > openClear + 1500,
+                     qPrintable(QString("%1: open, %2 blue px in haze vs %3 in clear air")
+                                .arg(tag.constData()).arg(open).arg(openClear)));
+
+            // Upstage of the step instead: the glow in front of the drape, as before.
+            drape->setState(Scenery::Closed);
+            drape->setOriginY(-1.0f);
+            const int inFront = blue((tag + "-infront").constData());
+            v.setHaze(0.0);
+            const int inFrontClear = blue((tag + "-infront-clear").constData());
+            QVERIFY2(inFront > inFrontClear + 1500,
+                     qPrintable(QString("%1: in front, %2 blue px in haze vs %3 in clear air")
+                                .arg(tag.constData()).arg(inFront).arg(inFrontClear)));
+        }
+
+    /* A curtain its fixture closes: "the steps glow through the drape" was a
+       show whose drape is saved open and closed by its motor. Where the
+       fixture has it is where it hides the glow. */
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Curtain");
+    def->setType(QLCFixtureDef::Other);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("Open");
+    QLCChannel *ch = new QLCChannel();
+    ch->setName("Open");
+    ch->setGroup(QLCChannel::Maintenance);
+    def->addChannel(ch);
+    mode->insertChannel(ch, 0);
+    def->addMode(mode);
+    Fixture *motor = new Fixture(&doc);
+    motor->setName("Main drape motor");
+    motor->setFixtureDefinition(def, mode);
+    motor->setAddress(100);
+    QVERIFY(doc.addFixture(motor));
+    drape->setDriverFixture(motor->id());
+    QVERIFY(drape->isDriven());
+    auto setOpen = [&](uchar val) {
+        QByteArray w(512, char(0));
+        w[int(motor->address())] = char(val);
+        motor->setChannelValues(w);
+    };
+    v.setGpu(false);
+    v.setSupersample(1);
+    v.setHaze(1.0);
+    drape->setOriginY(0.9f);
+    drape->setState(Scenery::Open);              // as saved
+    setOpen(0);                                  // closed by its motor
+    const int motorClosed = blue("motor-closed", true);
+    QVERIFY2(motorClosed < 30, qPrintable(QString("%1 blue px through the drape its motor closed")
+                                          .arg(motorClosed)));
+    setOpen(255);
+    const int motorOpen = blue("motor-open");
+    QVERIFY2(motorOpen > 1500, qPrintable(QString("only %1 blue px with its motor open").arg(motorOpen)));
+}
+
+/* A rig built of pixel fixtures paints in good time. "The app hung at 99% CPU
+   repainting the Studio": per paint, typing each head of an XL-450 (75 heads,
+   165 channels; the show has eight) was heads x channels x heads. Eight of
+   those and ten movers: classifying every fixture, and painting the Studio
+   and the Rig Overview from scratch, each well inside a generous budget. */
+void Monitor_Test::aBigPixelRigPaintsInGoodTime()
+{
+    Doc doc(this);
+    MonitorProperties *props = doc.monitorProperties();
+
+    // An XL-450-shaped bar: 45 RGB cells, then 30 white ones.
+    auto makeBigBar = [&doc](int i) -> Fixture * {
+        QLCFixtureDef *def = new QLCFixtureDef();
+        def->setManufacturer("Test"); def->setModel(QString("Big Bar %1").arg(i));
+        def->setType(QLCFixtureDef::LEDBarPixels);
+        QLCFixtureMode *mode = new QLCFixtureMode(def);
+        mode->setName("165ch");
+        quint32 c = 0;
+        for (int h = 0; h < 75; ++h)
+        {
+            QLCFixtureHead hd;
+            const QList<QLCChannel::PrimaryColour> cols = (h < 45)
+                ? QList<QLCChannel::PrimaryColour>{ QLCChannel::Red, QLCChannel::Green, QLCChannel::Blue }
+                : QList<QLCChannel::PrimaryColour>{ QLCChannel::White };
+            for (QLCChannel::PrimaryColour pc : cols)
+            {
+                QLCChannel *ch = new QLCChannel();
+                ch->setName(QString("%1-%2").arg(h).arg(c));
+                ch->setGroup(QLCChannel::Intensity); ch->setColour(pc);
+                def->addChannel(ch); mode->insertChannel(ch, c);
+                hd.addChannel(c++);
+            }
+            mode->insertHead(-1, hd);
+        }
+        QLCPhysical ph;
+        ph.setWidth(1200); ph.setHeight(120); ph.setDepth(80);
+        ph.setLayoutSize(QSize(15, 5));
+        mode->setPhysical(ph);
+        def->addMode(mode);
+        Fixture *f = new Fixture(&doc);
+        f->setName(QString("XL %1").arg(i)); f->setFixtureDefinition(def, mode);
+        f->setUniverse(quint32(10 + i)); f->setAddress(0);
+        if (!doc.addFixture(f))
+            return nullptr;
+        return f;
+    };
+
+    Truss *t = props->addTruss();
+    t->setType(Truss::Horizontal);
+    t->setOrigin(QVector3D(0.0f, 2.0f, 5.0f));
+    t->setDirection(QPointF(1.0, 0.0));
+    t->setLength(12.0f);
+    t->setWidth(0.3f);
+    QList<Fixture *> rig;
+    for (int i = 0; i < 8; ++i)
+    {
+        Fixture *f = makeBigBar(i);
+        QVERIFY(f != nullptr);
+        props->setFixturePosition(f->id(), 0, 0, QVector3D(0, 0, 0));
+        FixtureRigProps rp;
+        rp.trussId = t->id();
+        rp.trussOffset = 0.75f + 1.4f * i;
+        props->setFixtureRigProps(f->id(), rp);
+        QByteArray vals(512, char(0));
+        for (quint32 c = 0; c < f->channels(); ++c)
+            vals[int(c)] = char((c * 37 + i * 11) % 256);
+        f->setChannelValues(vals);
+        rig << f;
+    }
+    for (int i = 0; i < 10; ++i)
+    {
+        Fixture *m = makeMover(&doc, 14.0, quint32(6 * i), qPrintable(QString("Mover %1").arg(i)),
+                               QVector3D(1.0f + 1.1f * i, 4.0f, 0.0f));
+        QVERIFY(m != nullptr);
+        QByteArray vals(512, char(0));
+        vals[6 * i + 2] = char(255); vals[6 * i + 3] = char(255); vals[6 * i + 5] = char(200);
+        m->setChannelValues(vals);
+        rig << m;
+    }
+
+    /* Classifying every fixture: what each paint and each rebuild starts
+       from, several times over. Ten passes over the rig: well under a
+       millisecond here; with the per-paint head typing it was tens of
+       milliseconds a pass. */
+    QElapsedTimer clock;
+    clock.start();
+    for (int pass = 0; pass < 10; ++pass)
+        for (Fixture *f : rig)
+            (void)classifyFixture(f);
+    const qint64 classify = clock.elapsed();
+    qInfo().noquote() << QString("classifying %1 fixtures ten times: %2 ms").arg(rig.size()).arg(classify);
+    QVERIFY2(classify < 100, qPrintable(QString("classifying %1 fixtures ten times took %2 ms")
+                                        .arg(rig.size()).arg(classify)));
+
+    // The Studio (from above) and the Rig Overview, each frame from scratch.
+    const QByteArray was = qgetenv("QLC_RIG_GPU");
+    auto restore = qScopeGuard([&]() {
+        if (was.isNull()) qunsetenv("QLC_RIG_GPU"); else qputenv("QLC_RIG_GPU", was);
+    });
+    qunsetenv("QLC_RIG_GPU");
+    for (StructureStudioView::Plane plane : { StructureStudioView::Top, StructureStudioView::Angled })
+        for (int quality : { 1, 2 })
+        {
+            StructureStudioView v(&doc, StructureStudioView::StageKind, 0);
+            v.resize(1100, 680);
+            v.setPlane(plane);
+            v.setLiveValues(true);
+            v.setBeams(true);
+            v.setHaze(1.0);
+            v.setGpu(false);
+            v.setSupersample(quality);
+            (void)v.grab();                  // the first frame builds what it keeps
+            qint64 slowest = 0;
+            for (int frame = 0; frame < 3; ++frame)
+            {
+                v.reload();                  // the rebuilds a reload asks for, too
+                clock.start();
+                (void)v.grab();
+                slowest = qMax(slowest, clock.elapsed());
+            }
+            qInfo().noquote() << QString("plane %1, quality %2: slowest paint %3 ms")
+                                 .arg(int(plane)).arg(quality).arg(slowest);
+            QVERIFY2(slowest < 1500, qPrintable(QString("plane %1, quality %2: a paint took %3 ms")
+                                                .arg(int(plane)).arg(quality).arg(slowest)));
+        }
+}
+
 void Monitor_Test::doubleClickingAFixtureOpensItWhereverItIs()
 {
     FixtureCleanup cleanup(m_doc);
