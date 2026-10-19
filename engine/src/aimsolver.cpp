@@ -175,6 +175,47 @@ AimSolver::Solution AimSolver::solve(const Frame &frame, const QVector3D &target
     return out;
 }
 
+void AimSolver::intendedAngles(const FixtureRigProps &rp, double panCentredDeg,
+                               double tiltCentredDeg, double &panRelDeg, double &tiltRelDeg)
+{
+    /* solve() works in fixture degrees from 0; centred, the middle of the
+       range is 0 and mirroring about it is negation, which is what invert does
+       there. Undo it first, as solve() applied it last. */
+    bool invertPan = rp.panInvert;
+    if (floorMounted(rp))
+        invertPan = !invertPan;
+    double pan = invertPan ? -panCentredDeg : panCentredDeg;
+    double tilt = rp.tiltInvert ? -tiltCentredDeg : tiltCentredDeg;
+
+    // Then the calibration: solve() added it to correct the physical head.
+    panRelDeg = pan - double(rp.panOffsetDeg);
+    tiltRelDeg = tilt - double(rp.tiltOffsetDeg);
+}
+
+bool AimSolver::beamDirection(const FixtureRigProps &rp, double panCentredDeg,
+                              double tiltCentredDeg, QVector3D &dir)
+{
+    double panRel = 0.0, tiltRel = 0.0;
+    intendedAngles(rp, panCentredDeg, tiltCentredDeg, panRel, tiltRel);
+
+    const double yaw = qDegreesToRadians(double(rp.panZeroDir) + panRel);
+    /* Elevation of the beam above the horizon. A hanging head is centred on
+       straight down, a standing one on straight up -- which is why a head
+       standing on a truss top cannot point at its own feet however much tilt
+       it has. */
+    const double elevDeg = floorMounted(rp) ? (tiltRel + 90.0) : (tiltRel - 90.0);
+    const double elev = qDegreesToRadians(elevDeg);
+
+    // Horizontal bearing: 0 = downstage (+Y), turning clockwise from above.
+    dir = QVector3D(float(-qSin(yaw) * qCos(elev)),
+                    float(qCos(yaw) * qCos(elev)),
+                    float(qSin(elev)));
+    if (dir.length() < 1e-6f)
+        return false;
+    dir.normalize();
+    return true;
+}
+
 bool AimSolver::reach(Doc *doc, quint32 fixtureId, const QVector3D &targetWorld,
                       Solution &solution)
 {

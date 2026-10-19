@@ -284,6 +284,12 @@ App::~App()
     if (ProgrammingManager *pm = findChild<ProgrammingManager *>())
         delete pm;
 
+    // The Show Tree tab is the same trap: its hide event (the window still
+    // showing when App goes) stops its preview through the Doc's
+    // ShowTreeController, which is freed with m_doc below.
+    if (ShowTreeView::instance() != NULL)
+        delete ShowTreeView::instance();
+
     // Same ordering trap: the overlay and the engine are both children of App,
     // so QObject child deletion tears them down in construction order — engine
     // first — and ~PMJOverlay's unregisterDevice() then lands on freed memory.
@@ -561,6 +567,8 @@ void App::init()
     }
     if (ProgrammerController *pc = m_doc->programmer())
     {
+        // View + Menu on the controller.
+        connect(pc, &ProgrammerController::focusModeRequested, this, &App::slotFocusMode);
         connect(pc, &ProgrammerController::dangleFixturesChanged, this,
                 [this](const QList<quint32> &fixtureIds) {
             if (m_statusDangleLabel == NULL)
@@ -2018,6 +2026,15 @@ void App::initMenuBar()
     m_rigOverviewAction->setToolTip(tr("An angled, read-only view of the whole rig"));
     connect(m_rigOverviewAction, &QAction::triggered, this, &App::slotRigOverview);
 
+    /* Focus mode: aligning the rig before a show (FOCUS_MODE_DESIGN.md). The
+       Lighting Studio and the Rig Overview have it on their bars; this is the
+       same thing from anywhere, and View + Menu on the controller asks too. */
+    QAction *focusAct = viewMenu->addAction(tr("Focus Mode…"));
+    focusAct->setObjectName(QStringLiteral("focusModeMenuAction"));
+    focusAct->setShortcut(QKeySequence("CTRL+ALT+F"));
+    focusAct->setToolTip(tr("Aim each moving head at its reference and nudge its calibration offsets"));
+    connect(focusAct, &QAction::triggered, this, &App::slotFocusMode);
+
 
     // Backstage color themes: low-glare palettes for working near a stage/
     // audience. Persisted (App::setTheme() -> workspace/theme).
@@ -2814,6 +2831,12 @@ void App::slotRigOverview()
        in ("every time I open the rig view .. the studio tab comes up"). */
     if (Monitor *mon = Monitor::instance())
         mon->toggleStageOverview();
+}
+
+void App::slotFocusMode()
+{
+    if (Monitor *mon = Monitor::instance())
+        mon->openFocusMode();
 }
 
 void App::slotControlMonitor()

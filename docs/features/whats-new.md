@@ -172,6 +172,18 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Follow spot and aiming
 
+- **Focus mode: align the rig with the controller.** Step through the moving
+  heads with the bumpers — each aimed at its reference (the scene's aim, a
+  target, a line target's own point), lit and ringed in the views — nudge
+  its calibration offsets with the sticks or D-pad until the light lands,
+  and save with A (B reverts, X zeroes, Y checks a second reference). The
+  keyboard does it all too. From the Lighting Studio, the Rig Overview,
+  View → Focus Mode… (⌘⌥F) or View + Menu on the controller. See
+  [Focus mode](lighting-studio.md#focus-mode).
+- **Calibration offsets stay out of the picture.** A head's pan/tilt
+  offsets are in its DMX but no longer in the views: its beam is drawn on
+  the target it is aimed at. See
+  [Calibration offsets](lighting-studio.md#calibration-offsets).
 - **Line of sight: lights go out when they can't see the target.** A follow
   spot's new **Fade When Blocked** fades a head while a closed drape, a
   wall, a riser or a tower stands between it and the subject, and brings it
@@ -353,6 +365,11 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Lighting Studio
 
+- **A closed curtain hides what is behind it.** Lit steps just upstage of
+  the closed main drape glowed through it in the Rig Overview — their haze
+  glow, and the pools their light made on the back of the cloth. Now the
+  drape (or a wall, or a platform) hides them, and the glow shows only
+  where the curtain is open. See [Haze](lighting-studio.md#haze).
 - **A mover hung on a truss sits where the truss editor shows it** in the
   Rig Overview and the Angled view — just under the bar — instead of half
   a body lower.

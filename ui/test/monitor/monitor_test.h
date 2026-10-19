@@ -148,6 +148,8 @@ private slots:
     void aSockedTrussGlowsWithTheBarsInsideIt();
     void aTowerWearsItsFacesPlainOrPrinted();
     void ledsGlowInTheHaze();
+    void hazeGlowStaysBehindAClosedDrape();
+    void aBigPixelRigPaintsInGoodTime();
     /** Consolidation 3: double-click a fixture = Fixture Properties; click
      *  again picks one out of a group. */
     void doubleClickingAFixtureOpensItWhereverItIs();
@@ -430,6 +432,10 @@ private slots:
     void keptLandingsFollowTheDecks();
     void aPoolOnADeckIsDrawn();
     void theGpuDrawsWhatTheCpuDraws();
+    /** Coloured light on a grey surface reads as its colour ("blue on the
+     *  cyc looks pale"): white light is plain Screen, a saturated surface
+     *  keeps its own colour. */
+    void colouredLightTakesOverAGreySurface();
     /** A fixture standing in for a missing definition: one small body,
      *  no overlap warning (not a 19 m wall of heads in red). */
     void aStandInForAMissingDefinitionIsOneSmallBody();
@@ -489,6 +495,15 @@ private slots:
     /** Aim a head at a mark, feed it its own DMX, and the beam it draws
      *  arrives at that mark -- hung or standing, inverted or not. */
     void aHeadAimedAtAMarkDrawsItsBeamThere();
+    /** The plot's pool from live DMX of a head with calibration offsets
+     *  lands on the mark it is aimed at, not the offset beside it. */
+    void aCalibratedHeadsPoolLandsOnItsMark();
+    /** Focus mode's setup offers the selected scene's aim first, and the
+     *  selected heads. */
+    void focusModeSetupOffersTheSceneAimFirst();
+    /** Focus mode end to end from the keyboard: nudge, save, next, revert,
+     *  step size, zero, Esc asks about unsaved, the plot ring, one undo. */
+    void focusModeRunsFromTheKeyboard();
     /** A head standing on a truss top cannot point at its own feet. */
     void anUprightHeadCannotPointBesideItself();
     /** A par or bar throws light as well -- beams were movers-only. */

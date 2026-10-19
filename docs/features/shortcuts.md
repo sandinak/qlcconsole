@@ -55,6 +55,11 @@ editor's last change, a selected bar's ring rotates it (⇧ snaps to 15°).
 **In the Rig Overview / Angled view:** drag to swing, ⇧-drag to pan, scroll
 to zoom, ⇧⌘R or ⌘W to close.
 
+**Focus mode** (⌘⌥F, or View + Menu on the controller): ] / [ next and
+previous head, arrows nudge 0.1° (⇧ for 1°), + / − step size, Return save,
+Backspace revert, 0 zero, R the other reference, ⌘Z undo the last save, Esc
+leave. See [Focus mode](lighting-studio.md#focus-mode).
+
 ## Programming
 
 | Keys / mouse | Does |

@@ -577,6 +577,18 @@ public:
     { Q_UNUSED(input); Q_UNUSED(channel); return QString(); }
 
     /**
+     * Return the standard gamepad ROLE of an input channel (axis or button)
+     * on a given input line: "a", "b", "x", "y", "lb", "rb", "back", "start",
+     * "ls", "rs", "guide", "dpad_up", "dpad_down", "dpad_left", "dpad_right"
+     * for buttons, "lx", "ly", "rx", "ry", "lt", "rt" for axes -- or an empty
+     * string when the profile does not say. Tools that use a gamepad as a
+     * gamepad (Focus mode) map by role, so any controller whose profile
+     * declares them works the same way.
+     */
+    virtual QString inputChannelRole(quint32 input, quint32 channel) const
+    { Q_UNUSED(input); Q_UNUSED(channel); return QString(); }
+
+    /**
      * Open an editor dialog for the named device profile associated with a
      * given input line.  The plugin shows its own editor UI (modal dialog).
      * The default does nothing — only plugins with editable profiles

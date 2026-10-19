@@ -19,6 +19,8 @@
 
 #include <QtMath>
 #include <algorithm>
+#include <QThreadPool>
+#include <QSemaphore>
 
 #include "zraster.h"
 
@@ -394,6 +396,115 @@ QImage ZRaster::lightImage(QPoint *topLeft) const
     if (topLeft != nullptr)
         *topLeft = r.topLeft();
     return out;
+}
+
+namespace
+{
+/* How much light takes over what is under it, by its strongest channel:
+   easing in (a faint fringe tints, it doesn't step), about half way at a
+   tenth of full -- a wash on a cyc; a spot's pool is well past it -- and
+   never all of what is there. Per unit of the light's shortfall in a
+   channel. Tables: this runs on every lit pixel of every frame. */
+struct ComposeTables
+{
+    float takeOver[256];
+    float recip[256];
+    ComposeTables()
+    {
+        static const double MOST = 0.8;
+        takeOver[0] = 0.0f;
+        recip[0] = 0.0f;
+        for (int i = 1; i < 256; ++i)
+        {
+            takeOver[i] = float(MOST * (1.0 - qExp(-8.0 * i / 255.0)) / i);
+            recip[i] = 1.0f / float(i);
+        }
+    }
+};
+
+inline int mul255(int a, int b)
+{
+    const int t = a * b + 128;
+    return (t + (t >> 8)) >> 8;
+}
+
+void composeRows(QImage &frame, const QImage &src, const QPoint &at, const QRect &r, int from, int to)
+{
+    static const ComposeTables k;
+    for (int y = from; y < to; ++y)
+    {
+        const QRgb *lrow = reinterpret_cast<const QRgb *>(src.constScanLine(y - at.y())) - at.x();
+        QRgb *drow = reinterpret_cast<QRgb *>(frame.scanLine(y));
+        for (int x = r.left(); x <= r.right(); ++x)
+        {
+            const QRgb l = lrow[x];
+            if (l == 0)
+                continue;
+            const int lr = qRed(l), lg = qGreen(l), lb = qBlue(l);
+            const QRgb d = drow[x];
+            int dr = qRed(d), dg = qGreen(d), db = qBlue(d);
+            const int lmax = std::max(lr, std::max(lg, lb)), lmin = std::min(lr, std::min(lg, lb));
+            const int dmax = std::max(dr, std::max(dg, db));
+            if (lmax > lmin && dmax > 0)
+            {
+                /* Only what has little colour of its own -- squared, so a
+                   drape or an LED barely moves -- and each channel by how far
+                   short of the light's strongest it is. White light: none. */
+                const float grey = float(std::min(dr, std::min(dg, db))) * k.recip[dmax];
+                const float w = k.takeOver[lmax] * grey * grey;
+                dr = int(float(dr) * (1.0f - w * float(lmax - lr)) + 0.5f);
+                dg = int(float(dg) * (1.0f - w * float(lmax - lg)) + 0.5f);
+                db = int(float(db) * (1.0f - w * float(lmax - lb)) + 0.5f);
+            }
+            // Screen (premultiplied): D + S - D*S, alpha alike.
+            const int la = qAlpha(l), da = qAlpha(d);
+            drow[x] = qRgba(dr + lr - mul255(dr, lr), dg + lg - mul255(dg, lg),
+                            db + lb - mul255(db, lb), da + la - mul255(da, la));
+        }
+    }
+}
+}
+
+void ZRaster::composeLight(QImage &frame, const QImage &light, const QPoint &at)
+{
+    if (light.isNull() || frame.isNull())
+        return;
+    if (frame.format() != QImage::Format_ARGB32_Premultiplied)
+        frame = frame.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+    const QImage src = light.format() == QImage::Format_ARGB32_Premultiplied
+        ? light : light.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+    const QRect r = QRect(at, src.size()).intersected(frame.rect());
+    if (r.isEmpty())
+        return;
+    frame.detach();         // before the bands share it
+
+    // Bands of rows on the global pool once there is enough to share out.
+    const int rows = r.height();
+    QThreadPool *pool = QThreadPool::globalInstance();
+    const int bands = (qint64(rows) * r.width() < 200000) ? 1
+                    : qBound(1, pool->maxThreadCount(), qMax(1, rows / 32));
+    if (bands <= 1)
+    {
+        composeRows(frame, src, at, r, r.top(), r.bottom() + 1);
+        return;
+    }
+    const int per = (rows + bands - 1) / bands;
+    QSemaphore done;
+    int started = 0;
+    for (int b = 1; b < bands; ++b)
+    {
+        const int from = r.top() + b * per;
+        const int to = qMin(r.bottom() + 1, from + per);
+        if (from >= to)
+            break;
+        ++started;
+        pool->start([&frame, &src, &at, &r, &done, from, to]() {
+            composeRows(frame, src, at, r, from, to);
+            done.release();
+        });
+    }
+    composeRows(frame, src, at, r, r.top(), qMin(r.bottom() + 1, r.top() + per));
+    done.acquire(started);
 }
 
 QImage ZRaster::resolve() const

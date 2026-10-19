@@ -229,10 +229,32 @@ help (DONE.md 2026-10-16). Handoff: SHOW_TREE_OVERNIGHT.md.
   one Undo puts back the palette and every use. **Try:** delete a palette
   three cues and a look use (Library, Programming, `palette X delete
   anyway`), check the cues, ⌘Z.
+- **Course fixes 2026-10-18 done** (DONE.md, fix/course-app-issues): crash
+  on quit, new production current, drop-area text, coloured light on the
+  cyc. **Open for Branson:** should a coarse Pan/Tilt channel whose
+  definition declares no Default rest at centre (128) instead of 0, as
+  most consoles home a mover? It changes real DMX for every such head (all
+  but ~50 of the 1,639 shipped Pan/Tilt channels declare none), and a
+  floor-standing head at centre points straight up, so it would not make
+  the classroom's front washes light the stage either. Not changed.
+  Branson's "36LED Moving Head" definition marks **Pan** as the fine byte
+  (`<Group Byte="1">`): the app finds no coarse pan, so Aim can't pan
+  those heads (DanceHysteria's AT washes too) -- fix it in the definition.
 - **P5 next:** multiple productions (switcher, current production for VC /
   footer GO / show control, per-production timecode).
 
 ## Needs the real rig / hardware
+
+- **Focus mode with a real controller (built 2026-10-18, feat/focus-alignment)**
+  — FOCUS_MODE_DESIGN.md. Tested offscreen with a stub controller and the
+  keyboard only. On the rig with the Xbox pad: View + Menu opens it; the
+  bumpers, A/B/X/Y, View/Menu and the D-pad (macOS raw mode now reports it
+  as buttons 11–14 -- check the bits on a Series pad, and on an element-mode
+  / 360-driver pad that 11–14 really are the D-pad); the right stick and
+  triggers after the raw reader's axis reorder (LX LY LT RX RY RT, as the
+  profile names them); stick right/up feel on hung, standing and inverted
+  heads; 8°/s and 1°/s rates feel right; the offsets land the light on a
+  real mark from two references across the stage.
 
 - **Matrix effects on the XL-450s (built 2026-10-18, feat/matrix-effects)**
   — the fourteen Matrix effects were checked offscreen only (no DMX from

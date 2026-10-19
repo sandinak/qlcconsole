@@ -201,6 +201,13 @@ public:
     /** Undo the rig's last change -- a move, a dialog's edit, a patch. */
     void undo();
 
+    /** Focus mode's current head: ring it on the plot and in the Rig
+     *  Overview. UINT_MAX clears it. */
+    void showFocusFixture(quint32 fid);
+    /** Open Focus mode (FocusModePanel) on the selected scene and the heads
+     *  selected on the plot or in the programmer. */
+    void openFocusMode();
+
     /** A new curtain fixture (Generic > Stage Curtain, unpatched until it is
      *  given an address) to drive the curtain @p sid, linked to it: a main
      *  drape opens and flies, a traveler opens. Null if it is not a curtain

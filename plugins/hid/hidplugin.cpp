@@ -175,6 +175,22 @@ QString HIDPlugin::inputChannelName(quint32 input, quint32 channel) const
     return QString();
 }
 
+QString HIDPlugin::inputChannelRole(quint32 input, quint32 channel) const
+{
+    HIDDevice *dev = device(input);
+    if (!dev) return QString();
+    const HIDProfile *prof = profileForDevice(dev);
+    if (!prof) return QString();
+
+    // Axes first, by their own index -- as inputChannelName() does.
+    if (!prof->axisName((int)channel).isEmpty())
+        return prof->axisRole((int)channel);
+    const int axes = dev->axisCount();
+    if (axes >= 0 && (int)channel >= axes)
+        return prof->buttonRole((int)channel - axes);
+    return QString();
+}
+
 HIDPlugin::~HIDPlugin()
 {
     while (m_devices.isEmpty() == false)

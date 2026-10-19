@@ -13,6 +13,15 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 ## [Unreleased]
 
 ### Added
+- **Focus mode** for aligning the rig before a show: step through the moving
+  heads with the controller's bumpers, each aimed at its reference (a
+  scene's aim, a stage target, a line target's own point) and lit, nudge its
+  pan/tilt calibration offsets with the sticks (the follow spot's stick
+  path) or D-pad, A to save (one undo step), B revert, X zero, Y a second
+  reference, Menu to leave (asks about unsaved heads). Keyboard fallback for
+  all of it. Lighting Studio / Rig Overview **Focus**, View → Focus Mode…
+  (⌘⌥F), or View + Menu. Controller profiles gain optional gamepad
+  `role=` attributes; the Xbox profile has them and the D-pad.
 - **Show Tree** (new tab, ⇧⌘6): productions → cue lists → cues → layers →
   looks, with tracking (Block / Cue-only / Release), includes, one
   precedence rule up and down the chain, a plan view for line targets, and
@@ -73,7 +82,32 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
   line target checks each head's own point on the line; a curtain driven by
   a fixture blocks where that fixture has it now.
 
+### Changed
+- **A new production is current when nothing else has GO.** In the Show
+  Tree, a production made while no production is current and the main cue
+  list isn't some other chaser becomes the current one, so a first
+  production plays from the Run tab without **Make current**. Adding a
+  production never takes GO from one the operator chose.
+- **Coloured light reads as its colour in the rig views.** Light landing on
+  a grey or white surface (a cyc, the deck) now takes it over in the
+  light's colour: a full blue wash on the cyc draws blue, not white with a
+  lavender tint. White light looks as before, and coloured surfaces (LED
+  strips, drapes) keep their own colour.
+
 ### Fixed
+- **Calibration offsets no longer show in the rig views.** A head's pan/tilt
+  offsets correct the physical fixture: the DMX keeps them, but the plot,
+  its gauges, the Studio, the Rig Overview, beams and footprints now draw
+  the intended aim. Fixture Properties' **Test orientation → Aim at target**
+  uses the aim solver (it was 180° out and solved standing heads as hung).
+- macOS Xbox controller (raw mode): axes now arrive in the order the Xbox
+  profile names them (the right stick was reported as the left trigger),
+  and the D-pad is reported.
+- **Crash on quit with the Show Tree open.** Closing the app while its
+  window was still up could crash: the Show Tree tab stopped its preview on
+  a show that had already been freed.
+- **The cue page's drop area is readable in every theme.** "Drag groups or
+  fixtures here…" was nearly invisible on the dark themes (Blue especially).
 - **Chaser teardown use-after-free.** Deleting a chaser while its runner was
   still running freed the steps the runner reads (an intermittent "double
   free" on Linux).
@@ -386,6 +420,12 @@ a shorter Windows re-soak is planned.
   the rig view about 9 ms a frame on a 200-fixture show (was 51).
 
 ### Fixed
+- **Lights behind a closed curtain glowed through it in the Rig Overview.**
+  Steps just upstage of the closed main drape showed their haze glow on the
+  drape and on the floor in front of it, and the pools their light made on
+  the back of the cloth. Opaque scenery and platforms now hide a light's
+  glow, and pools on the far side of a drape stay there; where the drape is
+  open the glow shows through the gap, and a scrim is still see-through.
 - **Universe patches were lost when a show was opened away from its
   network.** Opening a show on a computer without the interface it was
   patched to (a laptop off the show VLAN) and saving it wrote the show

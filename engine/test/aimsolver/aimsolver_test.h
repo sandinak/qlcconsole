@@ -41,6 +41,12 @@ private slots:
      *  cannot get there. */
     void aSceneSaysWhichHeadsCannotReach();
     void aDeckHeadStandsAtTheDecksHeight();
+    /** Calibration offsets are in the DMX and out of the picture: a head
+     *  with offsets aimed at a mark sends different DMX from one without,
+     *  and that DMX turned back into a beam lands on the mark. */
+    void calibrationIsInTheDmxAndOutOfThePicture();
+    /** No offset, no change: the inverse is the plain inverse. */
+    void zeroOffsetsInverseIsUnchanged();
 };
 
 #endif

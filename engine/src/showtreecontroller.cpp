@@ -450,6 +450,16 @@ quint32 ShowTreeController::addProduction(const QString &name)
         ps << p;
         return true;
     });
+    if (production(id) != nullptr && m_current == invalidId())
+    {
+        // Nothing else has GO: this one does. A main cue list that is still
+        // a chaser (a plain one, or a list kept after "production none")
+        // is the operator's choice and stays.
+        const ShowControl *sc = m_doc->showControl();
+        const quint32 main = sc != nullptr ? sc->mainCueList() : Function::invalidId();
+        if (main == Function::invalidId() || m_doc->function(main) == nullptr)
+            setCurrentProduction(id);
+    }
     return id;
 }
 
@@ -5190,6 +5200,14 @@ void ShowTreeController::syncPreview()
     // LTP on every channel), so a running cue at full can't hide a dimmer
     // edited down; an opaque function (EFX, a matrix) mixes as it would.
     MasterTimer *timer = m_doc->masterTimer();
+    if (timer == nullptr)
+    {
+        // The Doc is being torn down (~Doc frees its timer first): there is
+        // nothing left to start or stop a preview on.
+        m_previewRunning.clear();
+        m_previewState = PreviewState::Off;
+        return;
+    }
     for (quint32 fid : want)
     {
         // start() is a no-op for a parent the function already has, and

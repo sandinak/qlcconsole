@@ -90,6 +90,9 @@ public:
     /** @reimp — returns action string for a button channel, or empty. */
     QString inputButtonAction(quint32 input, quint32 channel) const override;
 
+    /** @reimp — returns the gamepad role of an axis/button channel, or empty. */
+    QString inputChannelRole(quint32 input, quint32 channel) const override;
+
     /** @reimp — opens HIDProfileEditor dialog for the named profile. */
     void editDeviceProfile(quint32 input, const QString &profileName, QWidget *parent) override;
 

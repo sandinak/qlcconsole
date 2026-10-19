@@ -44,6 +44,13 @@ public:
      *  "followspot_toggle", etc., or empty if not assigned. */
     QString buttonAction(int index) const { return m_buttonActions.value(index); }
 
+    /** Standard gamepad role of axis @p index ("lx", "ly", "rx", "ry", "lt",
+     *  "rt"), or empty. See QLCIOPlugin::inputChannelRole(). */
+    QString axisRole(int index) const { return m_axisRoles.value(index); }
+    /** Standard gamepad role of button @p index ("a", "lb", "start",
+     *  "dpad_up"...), or empty. */
+    QString buttonRole(int index) const { return m_buttonRoles.value(index); }
+
     /** Returns the axis index with the given slot ("pan"/"tilt"), or -1 if none. */
     int axisForSlot(const QString &slot) const;
 
@@ -60,11 +67,17 @@ public:
     void setAxisSlot(int index, const QString &slot)
     { if (slot.isEmpty()) m_axisSlots.remove(index); else m_axisSlots.insert(index, slot); }
     void setButtonName(int index, const QString &name) { m_buttonNames.insert(index, name); }
+    void setAxisRole(int index, const QString &role)
+    { if (role.isEmpty()) m_axisRoles.remove(index); else m_axisRoles.insert(index, role); }
+    void setButtonRole(int index, const QString &role)
+    { if (role.isEmpty()) m_buttonRoles.remove(index); else m_buttonRoles.insert(index, role); }
     void setButtonAction(int index, const QString &action)
     { if (action.isEmpty()) m_buttonActions.remove(index); else m_buttonActions.insert(index, action); }
 
     /** Save this profile back to its file.  Returns true on success. */
     bool save() const;
+    /** Save this profile to @p path (does not change path()). */
+    bool saveTo(const QString &path) const;
 
     /** Load a profile from @p path. Returns nullptr on failure (caller owns result). */
     static HIDProfile *load(const QString &path);
@@ -78,6 +91,8 @@ private:
     QHash<int, QString> m_buttonNames;
     QHash<int, QString> m_axisSlots;
     QHash<int, QString> m_buttonActions;
+    QHash<int, QString> m_axisRoles;
+    QHash<int, QString> m_buttonRoles;
     float m_sensitivity = 1.0f;
     float m_deadzone    = 0.05f;
 };

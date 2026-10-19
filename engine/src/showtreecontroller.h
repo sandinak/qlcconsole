@@ -253,6 +253,11 @@ public:
      *  @a change returns false to leave everything as it was. */
     bool edit(const QString &label, const std::function<bool(QList<ShowTree::Production> &)> &change);
 
+    /** A new production. It becomes the current one -- what GO plays --
+     *  when nothing else has GO: no production is current and the show's
+     *  main cue list isn't another chaser. So a first production plays
+     *  without a trip to Make current, and adding one never takes GO from
+     *  a production (or a plain chaser) the operator chose. */
     quint32 addProduction(const QString &name);
     /** A new cue list: **Tracking**, the point of the tab -- the same from
      *  + Cue list and from `list "name"`. Only an imported chaser starts

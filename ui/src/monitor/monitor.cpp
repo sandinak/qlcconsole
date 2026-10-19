@@ -89,6 +89,8 @@
 #include <QMutexLocker>
 #include <memory>
 #include "monitorfixtureitem.h"
+#include "focusmodepanel.h"
+#include "aimsolver.h"
 #include "powerdistribution.h"
 #include "networktopology.h"
 #include "networkgearcatalog.h"
@@ -1461,6 +1463,25 @@ void Monitor::highlightFixtures(const QList<quint32> &ids)
         m_graphicsView->highlightFixtures(ids);
 }
 
+void Monitor::showFocusFixture(quint32 fid)
+{
+    QList<quint32> ids;
+    if (fid != UINT_MAX)
+        ids << fid;
+    if (m_graphicsView != NULL)
+        m_graphicsView->highlightFixtures(ids);
+    if (m_overviewView != NULL)
+        m_overviewView->setHighlight(ids);
+}
+
+void Monitor::openFocusMode()
+{
+    QList<quint32> selection;
+    if (m_doc->programmer() != NULL)
+        selection = m_doc->programmer()->programmerSelection();
+    FocusModePanel::open(m_doc, window(), m_activeSceneId, selection);
+}
+
 void Monitor::setActiveScene(quint32 sceneId)
 {
     m_activeSceneId = sceneId;
@@ -1787,6 +1808,16 @@ void Monitor::initGraphicsToolbar()
 
     // "More" popup — the secondary view/edit tools, folded off the toolbar to
     // keep it lean. (Most also have shortcuts and/or a right-click equivalent.)
+    /* Focus mode: align the rig before a show, a head at a time
+       (FOCUS_MODE_DESIGN.md). Also View > Focus Mode, the Rig Overview, and
+       View + Menu on the controller. */
+    QAction *focusAct = m_graphicsToolBar->addAction(QIcon(":/target.png"), tr("Focus"));
+    focusAct->setObjectName(QStringLiteral("focusModeAction"));
+    focusAct->setToolTip(tr("Focus mode: aim each moving head at its reference in turn and "
+                            "nudge its calibration offsets until it lands there "
+                            "(controller: View + Menu)"));
+    connect(focusAct, &QAction::triggered, this, &Monitor::openFocusMode);
+
     m_moreBtn = new QToolButton(this);
     QToolButton *moreBtn = m_moreBtn;
     moreBtn->setIcon(QIcon(":/configure.png"));
@@ -2567,6 +2598,16 @@ void Monitor::showStageOverview()
             [view, rateCombo](int) {
         view->setMaxFrameRate(rateCombo->currentData().toInt());
     });
+
+    /* Focus mode from here too: the Overview is where you watch the beams
+       land while you align them. */
+    QToolButton *focusBtn = new QToolButton(&dlg);
+    focusBtn->setObjectName(QStringLiteral("rigFocus"));
+    focusBtn->setText(tr("Focus"));
+    focusBtn->setToolTip(tr("Focus mode: aim each moving head at its reference in turn and "
+                            "nudge its calibration offsets"));
+    bar->addWidget(focusBtn);
+    connect(focusBtn, &QToolButton::clicked, this, &Monitor::openFocusMode);
 
     bar->addStretch();
     bar->addWidget(new QLabel(tr("drag to swing · shift-drag to pan · "
@@ -9659,45 +9700,43 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
         const int   mode       = testModeCb->currentData().toInt();
 
         if (mode == 2) {
-            // "Aim at target": compute full 3D geometry like PanTilt palettes do.
+            /* "Aim at target": the solver every Aim look uses, so the test
+               pose is the show's pose. This had a copy of its own that
+               measured the bearing from upstage (180 degrees out) and solved a
+               standing head as though it hung. */
             quint32 tgtId = testTargetCb->currentData().toUInt();
             StageTarget *tgt = m_props->stageTarget(tgtId);
-            FixtureRigProps lrp = m_props->fixtureRigProps(fxId_dlg);
-            QVector3D fixPos = m_props->fixtureRigPosition(fxId_dlg);
-            if (tgt && lrp.trussId != Truss::invalidId() && fixPos != QVector3D())
+            AimSolver::Solution sol;
+            if (tgt != nullptr
+                && AimSolver::reach(m_doc, fxId_dlg,
+                                    AimSolver::aimPointFor(m_doc, fxId_dlg, tgt, false), sol))
             {
-                QVector3D tgtPos = tgt->position();
-                tgtPos.setZ(tgtPos.z() + m_props->platformHeightAt(tgtPos.x(), tgtPos.y()));
-                float dx = tgtPos.x() - fixPos.x();
-                float dy = tgtPos.y() - fixPos.y();
-                float dz = tgtPos.z() - fixPos.z();
-                float horizDist = qSqrt(dx*dx + dy*dy);
-                float azimuthDeg = float(qRadiansToDegrees(qAtan2(double(dx), double(-dy))));
-                if (azimuthDeg < 0.0f) azimuthDeg += 360.0f;
-                float relativePan = azimuthDeg - float(panZeroSpin->value());
-                while (relativePan >  180.0f) relativePan -= 360.0f;
-                while (relativePan < -180.0f) relativePan += 360.0f;
-                float panRaw = panMax / 2.0f + relativePan + panOffset;
-                if (lrp.panInvert) panRaw = panMax - panRaw;
-                outPan = qBound(0.0f, panRaw, panMax);
-                float elevDeg = float(qRadiansToDegrees(qAtan2(double(dz), double(horizDist))));
-                float tiltOff = 90.0f + elevDeg;
-                float tiltDeg = (lrp.mountingType == Truss::FloorMounted)
-                                ? tiltMax / 2.0f - tiltOff + tiltOffset
-                                : tiltMax / 2.0f + tiltOff + tiltOffset;
-                if (lrp.tiltInvert) tiltDeg = tiltMax - tiltDeg;
-                outTilt = qBound(0.0f, tiltDeg, tiltMax);
+                outPan = sol.panDeg;
+                outTilt = sol.tiltDeg;
             } else {
                 // Fallback: straight down when no rig data
                 outPan  = panMax / 2.0f + panOffset;
                 outTilt = tiltMax / 2.0f + tiltOffset;
             }
         } else if (mode == 1) {
-            float relPan = -float(panZeroSpin->value());
-            while (relPan >  180.0f) relPan -= 360.0f;
-            while (relPan < -180.0f) relPan += 360.0f;
-            outPan  = qBound(0.0f, panMax / 2.0f + relPan + panOffset, panMax);
-            outTilt = horizTilt;
+            /* Level, straight downstage: a point far out front at the head's
+               own height, through the same solver. */
+            AimSolver::Frame frame;
+            if (AimSolver::frameFor(m_doc, fxId_dlg, frame))
+            {
+                const AimSolver::Solution sol =
+                    AimSolver::solve(frame, frame.position + QVector3D(0.0f, 1000.0f, 0.0f));
+                outPan = sol.panDeg;
+                outTilt = sol.tiltDeg;
+            }
+            else
+            {
+                float relPan = -float(panZeroSpin->value());
+                while (relPan >  180.0f) relPan -= 360.0f;
+                while (relPan < -180.0f) relPan += 360.0f;
+                outPan  = qBound(0.0f, panMax / 2.0f + relPan + panOffset, panMax);
+                outTilt = horizTilt;
+            }
         } else {
             outPan  = panMax / 2.0f + panOffset;
             outTilt = tiltMax / 2.0f + tiltOffset;
