@@ -72,7 +72,7 @@ with GO.*
 |---|---|---|---|
 | **1.1** | **From a song to cues: your first three looks** *(written; song: "Everybody Scream")* | A song has sections; a cue is a moment where the light changes. A look is a group of lights in a colour at a level. | Production → cue list → cue. A group dropped on a cue is a **layer**; a colour and a level dropped on the layer. Three cues: Pose, Verse, Chorus. GO in the Run tab. |
 | 1.2 | **Colour and intensity tell the mood** | Warm vs cool; saturated vs pale; bright isn't always better. Contrast between sections. | Change a look in place (⋯ → Set to), Level… and Colour… for values not in the palette list, a **cue look** for the whole cue. Undo. |
-| 1.3 | **Direction: aim the light** | Front light shows faces; back and side light shape bodies; uplight is drama. Every number needs faces lit. | Stage targets (Soloist DS, Center). Drop **Aim Center** on AT-W-ALL (the audience-tower washes); **Aim Soloist DS** on AT-Spots. Why moving lights need a Position. |
+| 1.3 | **Direction: aim the light** | Front light shows faces; back and side light shape bodies; uplight is drama. Every number needs faces lit. | Stage targets (Soloist DS, Center). Start from AT-W-ALL (the audience-tower washes) Warm White, Full **and Aim Center** — moving lights need a position, or they light the house; then **Aim Soloist DS** on AT-Spots. Why moving lights need a Position. |
 | 1.4 | **Timing: fades and holds** | A snap is a hit; a slow fade is a breath. Cue timing follows the music. | Fade in / Fade out / Hold on the cue page. Watch the fades in the Rig Overview. |
 | 1.5 | **Calling and running the show** | Standby / GO. The stage manager calls; the board op runs. | Run tab: GO, Back, Stop, LOAD a cue. Students "call" each other's cues. **Level check:** light a 30-second clip (3–5 cues) and run it. |
 
@@ -278,13 +278,21 @@ and into this branch), and the course updated to match:
    warns that clicking the **▶ Current** button would *unset* it.
 2. ~~**The drop area's text is hard to read.**~~ **Done.** Readable in every
    theme (`images/lesson-01/new-cue.png` retaken).
-3. **Moving lights have no home — still open, and not an app bug.** The
-   "Branson 36LED Moving Head" definition (AT-W-ALL) gives Tilt no default,
-   so standing heads sit about 50° below horizontal, and it marks Pan as
-   `Byte="1"`, so the app finds no coarse pan. Branson is deciding about the
-   definition; the classroom show and `derive-classroom-rig.py` leave it as
-   it is. **Until then the Level 1 lessons stay on non-moving groups**
-   (TrussC-RGB, StepTops, Steps); Lesson 1.3 (aim) depends on it.
+3. ~~**Moving lights have no home.**~~ **Definition fixed** (Branson,
+   2026-10-19): the "Branson 36LED Moving Head" (AT-W-ALL) now has Pan as a
+   coarse channel with default 128 and Tilt default 32; the classroom show
+   carries the fixed copy (`derive-classroom-rig.py` patches it, and the
+   course test checks a colour-only AT-W-ALL sends pan 128 / tilt 32).
+   **But lit with only a colour and a level they still miss the stage:**
+   on our rig the heads stand on the audience towers facing *downstage*,
+   into the house (rig pan-zero 0°), so pan 128 throws the light onto the
+   house floor in front of the towers. **Aimed, they work:** `AT-W-ALL aim
+   Center` lights the singers on the risers (checked offscreen). So
+   **Lesson 1.3 starts with aiming** — "AT-W-ALL, Warm White, Full, *Aim
+   Center*" — not with a bare "AT-W-ALL, Warm White, Full". To make the
+   bare version work, the heads' facing on the rig (or the pan default)
+   would need about half a turn: Branson's call. Level 1.1 stays on
+   non-moving groups.
 4. **The footer is red in class.** Unchanged and intended: the teaching
    show has no outputs, so it says **Not ready** ("13 universe(s) with
    fixtures but no output"). The handout, install and rig pages say to
@@ -312,7 +320,7 @@ and into this branch), and the course updated to match:
 | 9 | Licence | Recommended CC BY 4.0 (text, pictures) + Apache-2.0 (show files, scripts), pending OK (§6). |
 | 10 | Real lights | First hands on the real rig in **December or January**. |
 | 11 | Where students save | On their own computers (see §5 and the install page). |
-| 12 | App issues | Fixed (§8), except the moving-head definition, which is Branson's call. |
+| 12 | App issues | Fixed (§8); the moving-head definition fixed too, its facing on the rig still open. |
 
 **Still open:**
 

@@ -249,6 +249,25 @@ def main(src, dst):
     for i, g in enumerate(groups):
         eng.insert(after + i, g)
 
+    # ---- definition fixes (Branson, 2026-10-19), as made to his own copy:
+    # the 36LED moving head's Pan was marked fine (Byte="1"), so the app found
+    # no coarse pan, and neither Pan nor Tilt had a default, so a standing
+    # head lit with only a colour and a level pointed ~50 deg down at the
+    # floor. Pan 128 is the head's facing; tilt 32 ~15 deg below horizontal.
+    for e in root.find(N + 'Embedded').findall(N + 'FixtureDefinition'):
+        if (e.get('Manufacturer'), e.get('Model')) == ('Branson', '36LED Moving Head'):
+            t = e.text
+            t = t.replace('<Channel Name="Pan">\n  <Group Byte="1">Pan</Group>',
+                          '<Channel Name="Pan" Default="128">\n  <Group Byte="0">Pan</Group>')
+            t = t.replace('<Channel Name="Tilt">\n  <Group Byte="0">Tilt</Group>',
+                          '<Channel Name="Tilt" Default="32">\n  <Group Byte="0">Tilt</Group>')
+            assert 'Name="Pan" Default="128"' in t and 'Name="Tilt" Default="32"' in t, \
+                'the 36LED Moving Head definition changed: check the Pan/Tilt fix'
+            e.text = t
+            # The show's copy no longer matches its recorded checksum: let
+            # the app work out its own on save.
+            e.attrib.pop('SHA256', None)
+
     # ---- the embedded definitions: only the ones still used, and not the
     # ones the app ships (a student's install has those; a show copy that
     # differs from it would only put "differs from this computer" in the

@@ -3,7 +3,7 @@
 <Workspace xmlns="http://www.qlcplus.org/Workspace" CurrentWindow="ShowTreeView">
  <Creator>
   <Name>qlcconsole</Name>
-  <Version>4.14.2+qlcconsole.1782</Version>
+  <Version>4.14.2+qlcconsole.1797</Version>
   <Author>branson</Author>
  </Creator>
  <Embedded>
@@ -2146,7 +2146,7 @@
  </Physical>
 </FixtureDefinition>
 ]]></FixtureDefinition>
-  <FixtureDefinition Manufacturer="Branson" Model="36LED Moving Head" File="Branson-36LED-Moving-Head 2.qxf" SHA256="2573a7123a92bd55760d0b7f7cfd3ae63572661a976a9407339d3c8d8061b0d0" From="user" FromModified="2026-10-09T20:56:17Z" Embedded="2026-10-16T17:56:55Z"><![CDATA[<?xml version="1.0" encoding="UTF-8"?>
+  <FixtureDefinition Manufacturer="Branson" Model="36LED Moving Head" File="Branson-36LED-Moving-Head 2.qxf" SHA256="cd937106a92c2f6bc7a9de0c92db2340f8441e13e4462968d03a2aad5ab70b3c" From="user" FromModified="2026-10-09T20:56:17Z" Embedded="2026-10-16T17:56:55Z"><![CDATA[<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE FixtureDefinition>
 <FixtureDefinition xmlns="http://www.qlcplus.org/FixtureDefinition">
  <Creator>
@@ -2157,15 +2157,15 @@
  <Manufacturer>Branson</Manufacturer>
  <Model>36LED Moving Head</Model>
  <Type>Moving Head</Type>
- <Channel Name="Pan">
-  <Group Byte="1">Pan</Group>
+ <Channel Name="Pan" Default="128">
+  <Group Byte="0">Pan</Group>
   <Capability Min="0" Max="255"></Capability>
  </Channel>
  <Channel Name="Pan Fine">
   <Group Byte="1">Pan</Group>
   <Capability Min="0" Max="255"></Capability>
  </Channel>
- <Channel Name="Tilt">
+ <Channel Name="Tilt" Default="32">
   <Group Byte="0">Tilt</Group>
   <Capability Min="0" Max="255"></Capability>
  </Channel>

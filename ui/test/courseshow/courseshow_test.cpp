@@ -640,6 +640,45 @@ void CourseShow_Test::lessonOneTyped()
         const quint32 dim = fx->masterIntensityChannel();
         if (g == "AT-W-ALL")
         {
+            // The definition's defaults (fixed 2026-10-19): facing forward,
+            // a little below horizontal -- at the stage, not the floor.
+            int pan = -1, tilt = -1;
+            for (quint32 c = 0; c < fx->channels(); ++c)
+            {
+                if (fx->channel(c)->name() == QLatin1String("Pan"))
+                    pan = uchar(v.at(int(c)));
+                if (fx->channel(c)->name() == QLatin1String("Tilt"))
+                    tilt = uchar(v.at(int(c)));
+            }
+            QCOMPARE(pan, 128);
+            QCOMPARE(tilt, 32);
+            const QString probe = qEnvironmentVariable("COURSE_PROBE");
+            if (!probe.isEmpty())
+            {
+                // White and full, and a look at it on the Rig Overview.
+                QVERIFY(view->runCommand("AT-W-ALL colour White dimmer Full"));
+                QVERIFY(view->selectNode(view->currentCueId()));
+                settle(400);
+                Monitor *mon = Monitor::instance();
+                mon->toggleStageOverview();
+                settle(400);
+                mon->m_overviewDlg->resize(1100, 700);
+                settle(300);
+                mon->m_overviewView->repaint();
+                mon->m_overviewDlg->grab().save(probe);
+                // And aimed at Center, as Lesson 1.3 will.
+                showTree();
+                QVERIFY(view->runCommand("AT-W-ALL aim Center"));
+                QVERIFY(view->selectNode(view->currentCueId()));
+                settle(600);
+                mon->m_overviewView->repaint();
+                QString aimed = probe;
+                aimed.insert(aimed.lastIndexOf('.'), QStringLiteral("-aimed"));
+                mon->m_overviewDlg->grab().save(aimed);
+                mon->m_overviewDlg->close();
+                settle();
+                showTree();
+            }
             // Its own Dimmer channel stays at 0: blue, but dark.
             Q_UNUSED(dim)
             bool dark = false;
