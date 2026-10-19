@@ -52,7 +52,7 @@ Say the word, point at it on the projector, use it in a sentence.
 
 ## 1. Design idea (10 min)
 
-1. Play the clip (or sing/describe the "Opener"). Ask: *where did the
+1. Play the clip (or describe "Everybody Scream"). Ask: *where did the
    feeling change?* Collect answers on the board: "before they sang",
    "when they started", "the chorus — it got big".
 2. Name them: those moments are **cues**. The whole song's cues in order is
@@ -74,20 +74,20 @@ because we can.
 On the projector, with the class telling you what to click next (have the
 handout up so they can read ahead):
 
-1. **+ Production** → `Spring Show`; **+ Cue list** → `01-Opener`. Point
+1. **+ Production** → `Spring Show`; **+ Cue list** → `01-Everybody Scream`. Point
    out "Tracking" beside it and that the `01` numbers the cues 1.0.0, 1.0.1…
 2. **+ Cue** → type `Pose`, Return.
-3. Library → **All → Groups → Towers → Cyc Washes**: drag it onto the
+3. Library → **All → Groups → Trusses → TrussC-RGB**: drag it onto the
    empty box under **Layers**. Read the top-right hint aloud while dragging
-   (*"a new layer on Cyc Washes in 1.0.0 Pose"*). "A **layer** is one group
+   (*"a new layer on TrussC-RGB in 1.0.0 Pose"*). "A **layer** is one group
    doing one thing in this cue."
 4. **Blue** then **Full** onto the row. Watch the cyc turn blue.
 5. **Why a level too?** Undo (⌘Z) the Full: the cyc stays blue — these
    LED boxes have no dimmer, so a colour alone plays at full. Say: *on a
-   light with a dimmer (the Front Wash, Lesson 1.3) a colour alone is dark,
+   light with a dimmer (the AT-W-ALL front washes, Lesson 1.3) a colour alone is dark,
    and the level is a design choice anyway — always set both.* Redo
    (⇧⌘Z).
-6. **+ Cue** → `Verse`. Point at the grey row: **⤳ Cyc Washes … tracked
+6. **+ Cue** → `Verse`. Point at the grey row: **⤳ TrussC-RGB … tracked
    from 1.0.0 Pose**. "Lights stay on until you change them. That's
    **tracking**. We'll learn much more about it in Level 2."
 
@@ -142,7 +142,7 @@ the paper version (design cue sheet for a song of their choice).
 
 ## Answer key
 
-- **Exit ticket:** 1 — a moment where the light changes. 2 — Cyc Washes:
+- **Exit ticket:** 1 — a moment where the light changes. 2 — TrussC-RGB:
   Blue, Full (one group, one colour, one level). 3 — It **tracked**: lights
   stay on until a later cue changes them. 4 — Any reasoned answer, e.g.
   "Verse: warm light on the singers, because it's close and personal."

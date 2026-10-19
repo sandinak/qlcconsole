@@ -15,9 +15,12 @@ up is in brackets.
 | **Upstage / downstage (US / DS)** | Toward the back / the front of the stage. (Old stages sloped, so the back was "up".) [0.2] |
 | **Centre stage (CS)** | The middle. On our risers: the middle row. [0.2] |
 | **Stage left / stage right (SL / SR)** | The singers' left / right as they face the audience. Stage right is the audience's left. [0.2] |
-| **Risers** | The steps the choir stands on: three rows (US, CS, DS) of four units, numbered 1–4 from SR. [0.2] |
+| **Risers / steps** | The platforms the choir stands on: three rows (US, CS, DS) of four units, numbered 1–4 from SR. Their lights are the **Steps** (strips on the fronts) and **StepTops** groups. [0.2] |
 | **Cyc** (cyclorama) | The big white cloth at the back. Light paints it with colour. Say "sike". [1.1] |
-| **Tower** | An upright truss holding lights at the side of the stage. Ours: two SR, two SL (1 = outside), and a front tower on each side in the house. [0.2] |
+| **Truss** | A metal frame that holds lights. Our **Trusses** are four upright ones across the back: two SR, two SL (1 = outside). [0.2] |
+| **AT (audience tower)** | A tower of lights in the house, one each side (AT1 SR, AT2 SL), lighting the singers from the front. [0.2] |
+| **UST** | Upstage beam: the eight moving beams along the top riser. [0.2] |
+| **RGB / W** | A pixel's red-green-blue colour LEDs / its white LEDs. *TrussC-RGB* is the colour pixels of the boxes lighting the **C**yc; *TrussW-RGB* those **W**ashing the stage. [1.1] |
 | **House** | Where the audience sits. **Front of house (FOH)**: lights out there, pointing at the stage. [0.2] |
 | **Rig** | All the lights and what they hang on. [0.2] |
 
@@ -45,7 +48,7 @@ up is in brackets.
 | **Production** | The whole show: all its cue lists. The **current** one is what GO plays. [1.1] |
 | **Cue list** | One song's cues, in order. [1.1] |
 | **Cue** | A moment where the light changes. Numbered 1.0.0, 1.0.1… and never renumbered. [1.1] |
-| **Group** | Lights we always use together, with a name: *Risers*, *Cyc Washes*. [1.1] |
+| **Group** | Lights we always use together, with a name: *Steps*, *TrussC-RGB*. [1.1] |
 | **Layer** | One group (or several) doing one thing in a cue. [1.1] |
 | **Look** | What a layer does, one value per attribute: colour, intensity, position… [1.1] |
 | **Palette** | A saved, named value — a colour, a level, a position — that you drag onto a layer. Change the palette and every cue using it changes. [1.1] |

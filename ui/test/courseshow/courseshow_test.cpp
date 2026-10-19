@@ -103,30 +103,31 @@ const QStringList kPaletteCommands = {
 };
 
 /* What the lessons name: if one of these changes, a handout is wrong. */
-const QStringList kGroups = { "Risers", "US Risers", "CS Risers", "DS Risers", "Riser Tops",
-                              "Front Wash", "Front Spots", "Movers", "Pixel Boxes", "Cyc Washes",
-                              "Towers SR", "Towers SL", "Back Beams", "Lanterns" };
+const QStringList kGroups = { "Steps", "US", "CS", "DS", "StepTops",
+                              "Trusses", "Trusses SR", "Trusses SL", "Truss-Spots",
+                              "TrussW-RGB", "TrussW-W", "TrussC-RGB", "TrussC-W", "USTs",
+                              "AT-Spots", "AT-W-ALL", "Lanterns" };
 const QStringList kTargets = { "Soloist DS", "Center", "Riser Line" };
 
 /* Lesson 1, as the handout's "type it" box has it. */
 const QStringList kLessonOneTyped = {
     "production \"Spring Show\"",
-    "list \"01-Opener\"",
+    "list \"01-Everybody Scream\"",
     "cue + \"Pose\"",
-    "\"Cyc Washes\" colour Blue dimmer Full",
+    "TrussC-RGB colour Blue dimmer Full",
     "cue + \"Verse\"",
-    "\"Riser Tops\" colour \"Warm White\" dimmer 75",
+    "StepTops colour \"Warm White\" dimmer 75",
     "cue + \"Chorus\"",
-    "Risers colour Magenta dimmer Full",
+    "Steps colour Magenta dimmer Full",
     "production current",
 };
 
 /* What Lesson 1 ends with: each cue's own layers and their looks. */
 const QStringList kLessonOneResult = {
-    "Spring Show (current) / 01-Opener (Tracking)",
-    "1.0.0 Pose: Cyc Washes [Colour Blue, Dimmer Full]",
-    "1.0.1 Verse: Riser Tops [Colour Warm White, Dimmer 75%]",
-    "1.0.2 Chorus: Risers [Colour Magenta, Dimmer Full]",
+    "Spring Show (current) / 01-Everybody Scream (Tracking)",
+    "1.0.0 Pose: TrussC-RGB [Colour Blue, Dimmer Full]",
+    "1.0.1 Verse: StepTops [Colour Warm White, Dimmer 75%]",
+    "1.0.2 Chorus: Steps [Colour Magenta, Dimmer Full]",
 };
 
 void settle(int ms = 0)
@@ -218,7 +219,7 @@ QTreeWidgetItem *libraryRow(QTreeWidget *lib, const QString &text)
     while (!todo.isEmpty())
     {
         QTreeWidgetItem *it = todo.takeFirst();
-        // A group shows how many fixtures it holds: "Risers (12)".
+        // A group shows how many fixtures it holds: "Steps (12)".
         if (it != all && (it->text(0) == text || it->text(0).startsWith(text + QStringLiteral(" ("))))
             return it;
         for (int i = 0; i < it->childCount(); ++i)
@@ -357,8 +358,8 @@ static bool lessonOneByMouse(Doc *doc, ShowTreeView *view)
         || view->currentKind() != ShowTreeView::ProductionNode)
         { qWarning() << "lesson 1 by mouse: step failed at line" << __LINE__ << describe(doc); return false; }
 
-    // Step 2: + Cue list, "01-Opener" -- Tracking.
-    answerNextInputDialog(QStringLiteral("01-Opener"));
+    // Step 2: + Cue list, "01-Everybody Scream" -- Tracking.
+    answerNextInputDialog(QStringLiteral("01-Everybody Scream"));
     view->findChild<QToolButton *>("stNewList")->click();
     settle();
     if (view->currentKind() != ShowTreeView::ListNode
@@ -370,9 +371,9 @@ static bool lessonOneByMouse(Doc *doc, ShowTreeView *view)
     // colour and a level dropped on its row.
     struct Step { QString cue, number, group, colour, level; };
     const QList<Step> steps = {
-        { "Pose", "1.0.0", "Cyc Washes", "Blue", "Full" },
-        { "Verse", "1.0.1", "Riser Tops", "Warm White", "75%" },
-        { "Chorus", "1.0.2", "Risers", "Magenta", "Full" },
+        { "Pose", "1.0.0", "TrussC-RGB", "Blue", "Full" },
+        { "Verse", "1.0.1", "StepTops", "Warm White", "75%" },
+        { "Chorus", "1.0.2", "Steps", "Magenta", "Full" },
     };
     for (const Step &s : steps)
     {
@@ -569,11 +570,11 @@ void CourseShow_Test::lessonOneSetInThisCue()
     QVERIFY(view->selectNode(chorus));
     settle(100);
 
-    // Click the grey Cyc Washes row on the chorus's page: its page opens.
+    // Click the grey TrussC-RGB row on the chorus's page: its page opens.
     QListWidget *rows = view->cueLayerList();
     QListWidgetItem *grey = nullptr;
     for (int i = 0; i < rows->count(); ++i)
-        if (rows->item(i)->text().startsWith(QStringLiteral("⤳ Cyc Washes")))
+        if (rows->item(i)->text().startsWith(QStringLiteral("⤳ TrussC-RGB")))
             grey = rows->item(i);
     QVERIFY2(grey != nullptr, qPrintable(view->cueLayerItems().join(" | ")));
     QTest::mouseClick(rows->viewport(), Qt::LeftButton, Qt::NoModifier, rows->visualItemRect(grey).center());
@@ -610,14 +611,14 @@ void CourseShow_Test::lessonOneSetInThisCue()
     more->click();
     settle(100);
     QVERIFY(chose);
-    // The chorus now has Cyc Washes as its own layer, magenta; its level
+    // The chorus now has TrussC-RGB as its own layer, magenta; its level
     // still comes from the Pose (Full), so the cyc is magenta at full.
     const QStringList d = describe(doc);
-    QCOMPARE(d.last(), QStringLiteral("1.0.2 Chorus: Risers [Colour Magenta, Dimmer Full]; "
-                                      "Cyc Washes [Colour Magenta]"));
+    QCOMPARE(d.last(), QStringLiteral("1.0.2 Chorus: Steps [Colour Magenta, Dimmer Full]; "
+                                      "TrussC-RGB [Colour Magenta]"));
     QVERIFY(view->selectNode(chorus));
     settle(500);
-    QCOMPARE(sends(doc, "SR Tower Cyc 1"), QByteArray("\xff\x00\xff", 3));
+    QCOMPARE(sends(doc, "SR Truss Cyc 1"), QByteArray("\xff\x00\xff", 3));
     doc->resetModified();
 }
 
@@ -630,17 +631,17 @@ void CourseShow_Test::lessonOneTyped()
     QCOMPARE(describe(m_app->doc()), kLessonOneResult);
     // Why every layer gets a level too (the teacher's demo): the lesson's
     // groups are LED fixtures with no dimmer channel, so a colour alone
-    // already shows at full -- but a light with a dimmer (the Front Wash,
+    // already shows at full -- but a light with a dimmer (the AT-W-ALL front washes,
     // Lesson 1.3) stays dark with a colour alone.
-    for (const QString &g : { QStringLiteral("Cyc Washes"), QStringLiteral("Riser Tops"),
-                              QStringLiteral("Risers"), QStringLiteral("Front Wash") })
+    for (const QString &g : { QStringLiteral("TrussC-RGB"), QStringLiteral("StepTops"),
+                              QStringLiteral("Steps"), QStringLiteral("AT-W-ALL") })
     {
         QVERIFY(view->runCommand(QStringLiteral("cue + \"Probe %1\" block").arg(g)));
         QVERIFY(view->runCommand(QStringLiteral("\"%1\" colour Blue").arg(g)));
         QVERIFY(view->selectNode(view->currentCueId()));
         settle(400);
-        const QString name = g == "Cyc Washes" ? "SR Tower Cyc 1" : g == "Riser Tops" ? "US Riser 1 Top SR"
-                             : g == "Risers" ? "US Riser 1" : "SR Front Wash 1";
+        const QString name = g == "TrussC-RGB" ? "SR Truss Cyc 1" : g == "StepTops" ? "US Step 1 Top SR"
+                             : g == "Steps" ? "US Step 1" : "SR AT Wash 1";
         Fixture *fx = nullptr;
         for (Fixture *f : m_app->doc()->fixtures())
             if (f->name() == name)
@@ -648,7 +649,7 @@ void CourseShow_Test::lessonOneTyped()
         QVERIFY(fx != nullptr);
         const QByteArray v = sends(m_app->doc(), name, int(fx->channels()));
         const quint32 dim = fx->masterIntensityChannel();
-        if (g == "Front Wash")
+        if (g == "AT-W-ALL")
         {
             // Its own Dimmer channel stays at 0: blue, but dark.
             Q_UNUSED(dim)
@@ -667,7 +668,7 @@ void CourseShow_Test::lessonOneTyped()
     // A typed level (75) reused the palette that plays it: nothing new.
     QVERIFY(paletteNamed(m_app->doc(), "Dimmer 75%") == nullptr);
     // One that isn't there is named as the show's levels are: "30%".
-    QVERIFY(view->runCommand("Risers dimmer 30"));
+    QVERIFY(view->runCommand("Steps dimmer 30"));
     QVERIFY(paletteNamed(m_app->doc(), "30%") != nullptr);
     m_app->doc()->resetModified();
 }
@@ -690,9 +691,9 @@ void CourseShow_Test::lessonOnePlaysInTheRunTab()
     // GO, three times: Pose, Verse, Chorus -- what each cue lights.
     struct Expect { QString cue, fixture; QByteArray rgb; };
     const QList<Expect> expect = {
-        { "1.0.0", "SR Tower Cyc 1", QByteArray("\x00\x00\xff", 3) },
-        { "1.0.1", "US Riser 1 Top SR", QByteArray() },     // lit (warm white, 75 %)
-        { "1.0.2", "US Riser 1", QByteArray("\xff\x00\xff", 3) },
+        { "1.0.0", "SR Truss Cyc 1", QByteArray("\x00\x00\xff", 3) },
+        { "1.0.1", "US Step 1 Top SR", QByteArray() },     // lit (warm white, 75 %)
+        { "1.0.2", "US Step 1", QByteArray("\xff\x00\xff", 3) },
     };
     for (const Expect &e : expect)
     {
@@ -706,7 +707,7 @@ void CourseShow_Test::lessonOnePlaysInTheRunTab()
             QVERIFY2(v == e.rgb, qPrintable(e.fixture + " " + v.toHex(' ')));
     }
     // Tracking: in the chorus the cyc is still blue (from 1.0.0).
-    QCOMPARE(sends(doc, "SR Tower Cyc 1"), QByteArray("\x00\x00\xff", 3));
+    QCOMPARE(sends(doc, "SR Truss Cyc 1"), QByteArray("\x00\x00\xff", 3));
     run->findChild<QToolButton *>("crStop")->click();
     settle(100);
 }
@@ -827,7 +828,7 @@ void CourseShow_Test::lessonPictures()
     answerNextInputDialog(QStringLiteral("Spring Show"));
     view->m_newProduction->click();
     settle();
-    answerNextInputDialog(QStringLiteral("01-Opener"));
+    answerNextInputDialog(QStringLiteral("01-Everybody Scream"));
     view->m_newList->click();
     settle();
     view->m_newCue->click();
@@ -850,14 +851,14 @@ void CourseShow_Test::lessonPictures()
         QVERIFY(shoot(f, dir, "new-cue"));
     }
 
-    // Drag Cyc Washes onto the dashed area.
+    // Drag TrussC-RGB onto the dashed area.
     QLabel *hint = view->findChild<QLabel *>("stDropHint");
     QWidget *page = view->findChild<QWidget *>("stCuePage");
     QLabel *zone = view->findChild<QLabel *>("stCueDropZone");
-    QTreeWidgetItem *cyc = showLibraryRow(view->library(), "Cyc Washes");
+    QTreeWidgetItem *cyc = showLibraryRow(view->library(), "TrussC-RGB");
     QVERIFY(cyc != nullptr);
     dragAndDrop(page, zone->mapTo(page, zone->rect().center()),
-                idsMime(FixtureGroupSource::fixtureGroupMimeType(), { groupNamed(doc, "Cyc Washes")->id() }), hint);
+                idsMime(FixtureGroupSource::fixtureGroupMimeType(), { groupNamed(doc, "TrussC-RGB")->id() }), hint);
     settle(100);
     QListWidget *rows = view->cueLayerList();
     auto rowRect = [rows](const QString &start) {
@@ -869,14 +870,14 @@ void CourseShow_Test::lessonPictures()
     {
         HelpShots::Frame f;
         f.grab = view;
-        cyc = showLibraryRow(view->library(), "Cyc Washes");
+        cyc = showLibraryRow(view->library(), "TrussC-RGB");
         f.callouts << markRect(view->library()->viewport(), view->library()->visualItemRect(cyc), view, 1)
-                   << markRect(rows->viewport(), rowRect("Cyc Washes"), view, 2);
+                   << markRect(rows->viewport(), rowRect("TrussC-RGB"), view, 2);
         QVERIFY(shoot(f, dir, "drop-group"));
     }
     // Blue and Full onto the row.
     for (const QString &pal : { QStringLiteral("Blue"), QStringLiteral("Full") })
-        dragAndDrop(rows->viewport(), rowRect("Cyc Washes").center(),
+        dragAndDrop(rows->viewport(), rowRect("TrussC-RGB").center(),
                     idsMime(FunctionsTreeWidget::paletteDragMimeType(), { paletteNamed(doc, pal)->id() }), hint);
     settle(100);
     {
@@ -885,7 +886,7 @@ void CourseShow_Test::lessonPictures()
         QTreeWidgetItem *blue = showLibraryRow(view->library(), "Blue");
         QRect r = view->library()->visualItemRect(blue);
         f.callouts << markRect(view->library()->viewport(), r, view, 1)
-                   << markRect(rows->viewport(), rowRect("Cyc Washes"), view, 2)
+                   << markRect(rows->viewport(), rowRect("TrussC-RGB"), view, 2)
                    << mark(hint, 3);
         QVERIFY(shoot(f, dir, "drop-palettes"));
     }
@@ -904,8 +905,8 @@ void CourseShow_Test::lessonPictures()
     {
         HelpShots::Frame f;
         f.grab = view;
-        f.callouts << markRect(rows->viewport(), rowRect("⤳ Cyc Washes"), view, 1)
-                   << markRect(rows->viewport(), rowRect("Riser Tops"), view, 2);
+        f.callouts << markRect(rows->viewport(), rowRect("⤳ TrussC-RGB"), view, 1)
+                   << markRect(rows->viewport(), rowRect("StepTops"), view, 2);
         QTreeWidgetItem *grey = nullptr;
         for (QTreeWidgetItemIterator it(tree); *it; ++it)
             if ((*it)->text(0).contains(QStringLiteral("⤳")) && (*it)->parent()

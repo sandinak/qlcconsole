@@ -10,7 +10,7 @@ A course for high-school show choir tech crews: from "what does lighting
 do?" to programming and running a real show in **qlcconsole**, on a
 virtual copy of a show choir stage.
 
-> **Status:** first pass for review. The [course plan](COURSE_PLAN.md),
+> **Status:** second pass, with Branson's answers. The [course plan](COURSE_PLAN.md),
 > the [teaching show](rig.md) and **Lesson 1.1** are written; the rest is
 > planned.
 
@@ -27,9 +27,9 @@ virtual copy of a show choir stage.
 | Level | What you learn | Lessons |
 |---|---|---|
 | [0 — First look](level-0/index.md) | What light does; the virtual stage | 2 |
-| [1 — Basics](level-1/index.md) | A song → cues: colour, intensity, direction, timing, GO | 5 (1.1 written) |
+| [1 — Basics](level-1/index.md) | A song → cues: colour, intensity, direction, timing, GO ("Everybody Scream") | 5 (1.1 written) |
 | [2 — Intermediate](level-2/index.md) | Tracking, palettes, effects, moving lights, busking | 7 |
-| [3 — Advanced](level-3/index.md) | Patching, fixtures, building the rig, show control, running a real show | 7 |
+| [3 — Advanced](level-3/index.md) | Patching, fixtures, building the rig, show control, running a real show — on the real rig from December/January | 7 |
 
 ## What's in this folder
 
@@ -40,14 +40,16 @@ virtual copy of a show choir stage.
 | `level-N/` | A level; `level-1/lesson-01/` is a complete lesson (teacher guide, handout, slides outline, exit ticket, at home) |
 | `shows/` | The teaching show and each lesson's start / finish files (see [shows/README.md](shows/README.md)) |
 | `images/` | Lesson pictures, taken from the real app by the course test |
-| `tools/` | How the teaching show is made; the GitHub Pages workflow (not turned on) |
-| `_config.yml` | The website's settings (GitHub Pages, just-the-docs theme) |
+| `tools/` | How the teaching show is made |
+| `_config.yml` | The website's settings (GitHub Pages, just-the-docs theme); the site is built by `.github/workflows/pages.yml` from `main` |
+| `LICENSE.md` | The course's licences (recommended) |
 
 ## Reading it
 
 - **On GitHub:** every page reads as it is — click through from here.
-- **As a website:** with GitHub Pages turned on (see the plan, §6), the
-  same pages become a site with a sidebar and search.
+- **As a website:** once this is on `main` and Pages is switched on (the
+  plan, §6), the same pages are a site with a sidebar and search at
+  `https://sandinak.github.io/qlcconsole/`.
 - **Preview the site on your computer** (needs Ruby):
 
   ```sh
@@ -68,5 +70,8 @@ working, that test fails. The pictures are taken by the same test (see
 
 ## Licence
 
-qlcconsole is Apache-2.0. The course content's licence is still to be
-chosen (suggested: CC BY-SA 4.0).
+*Recommended, pending Branson's OK* — see [LICENSE.md](LICENSE.md):
+
+- course text and pictures: **CC BY 4.0**;
+- the teaching show files, scripts and the course test: **Apache-2.0**, as
+  qlcconsole is.

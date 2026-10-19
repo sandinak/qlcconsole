@@ -8,9 +8,12 @@ nav_order: 3
 qlcconsole is free. It runs on **Mac**, **Windows** and **Linux**
 computers. You don't need any lights: the course stage is on the screen.
 
-**Download it from the
-[qlcconsole Releases page](https://github.com/sandinak/qlcconsole/releases/latest).**
-Under **Assets**, pick the file for your computer:
+**Download the Show Tree build from the
+[qlcconsole Releases page](https://github.com/sandinak/qlcconsole/releases).**
+The course uses the newest **pre-release** whose name starts with
+**Show Tree** (it has a *Pre-release* badge; the "Latest" release above it
+may be an older build without the Show Tree). Under its **Assets**, pick
+the file for your computer:
 
 | Your computer | File to download | Ends in |
 |---|---|---|
@@ -63,6 +66,27 @@ and pick it.
 
 Open shows with **File → Open**. Save your own work with **File → Save
 As** under a new name, so the course file stays as it was.
+
+## Saving your work
+
+Save your shows **on your own computer**. qlcconsole has no folder of its
+own for shows: the first time, the Save dialog starts wherever your
+computer starts; after that it remembers the last folder you used. So make
+one folder and always save there:
+
+| Computer | Make this folder |
+|---|---|
+| Mac | **Documents → qlcconsole** (in Finder: Documents, then File → New Folder) |
+| Windows | **Documents\\qlcconsole** (`C:\Users\yourname\Documents\qlcconsole`) |
+| Linux | `~/Documents/qlcconsole` |
+| Chromebook (Linux on) | **Linux files → qlcconsole** |
+
+Name files `Lesson01-yourname.qlcc`. A `.qlcc` file carries everything the
+show needs, so it opens on any computer.
+
+**Bringing a show to class:** copy the `.qlcc` to a USB stick, upload it to
+the school's cloud drive (Google Drive / OneDrive), or email it to
+yourself. In class, download it and **File → Open** it.
 
 ## Is it safe?
 

@@ -29,29 +29,33 @@ ET.register_namespace('', NS)
 
 # ---------------------------------------------------------------- the rig --
 # Old fixture ID -> new name. Numbering: SR (stage right, the singers' right,
-# the audience's left) before SL; on towers, 1 is the OUTSIDE tower (nearest
-# the wings) on each side; riser units 1-4 run from SR to SL.
+# the audience's left) before SL; on the trusses, 1 is the OUTSIDE truss
+# (nearest the wings) on each side; riser units 1-4 run from SR to SL.
 #
-# Towers in the real show: T-1 and T-2 are SR (outside, inside), T-3 and T-4
-# SL (inside, outside). AT1 / AT2 are the front towers in the house.
+# The "trusses" are the four upright trusses across the back (T-1 and T-2 SR,
+# outside and inside; T-3 and T-4 SL, inside and outside). AT1 / AT2 are the
+# audience towers (front of house). Group names follow the real show's:
+# Truss-Spots, TrussW-RGB / TrussW-W (the pixel boxes facing out, by head
+# type), TrussC-RGB / TrussC-W (the ones on the cyc), USTs, AT-Spots,
+# AT-W-ALL, Steps, StepTops, US / CS / DS, Lanterns.
 
 KEEP = {}
-# Tower spots (movers with a colour ring), one per tower.
-KEEP.update({'0': 'SR Tower Spot 1', '190': 'SR Tower Spot 2',
-             '192': 'SL Tower Spot 2', '194': 'SL Tower Spot 1'})
-# Pixel boxes (Warmdance XL-450), two per tower: one faces out over the
-# stage to the audience (eye candy), one lights the cyc behind.
-KEEP.update({'7': 'SR Tower Box 1', '196': 'SR Tower Box 2',
-             '197': 'SL Tower Box 2', '198': 'SL Tower Box 1'})
-KEEP.update({'199': 'SR Tower Cyc 1', '200': 'SR Tower Cyc 2',
-             '201': 'SL Tower Cyc 2', '202': 'SL Tower Cyc 1'})
-# Front towers in the house: a spot each and two washes each.
-KEEP.update({'4': 'SR Front Spot', '142': 'SL Front Spot',
-             '179': 'SR Front Wash 1', '180': 'SR Front Wash 2',
-             '176': 'SL Front Wash 1', '177': 'SL Front Wash 2'})
-# The beams standing on the top riser (UST-1..8), SR to SL.
+# Truss spots (movers with a colour ring), one per truss.
+KEEP.update({'0': 'SR Truss Spot 1', '190': 'SR Truss Spot 2',
+             '192': 'SL Truss Spot 2', '194': 'SL Truss Spot 1'})
+# Pixel boxes (Warmdance XL-450, RGB and white heads), two per truss: the
+# wash faces out over the stage, the cyc box lights the cyc behind.
+KEEP.update({'7': 'SR Truss Wash 1', '196': 'SR Truss Wash 2',
+             '197': 'SL Truss Wash 2', '198': 'SL Truss Wash 1'})
+KEEP.update({'199': 'SR Truss Cyc 1', '200': 'SR Truss Cyc 2',
+             '201': 'SL Truss Cyc 2', '202': 'SL Truss Cyc 1'})
+# Audience towers (front of house): a spot each and two washes each.
+KEEP.update({'4': 'SR AT Spot', '142': 'SL AT Spot',
+             '179': 'SR AT Wash 1', '180': 'SR AT Wash 2',
+             '176': 'SL AT Wash 1', '177': 'SL AT Wash 2'})
+# The upstage beams standing along the top riser (UST-1..8), SR to SL.
 for i, fid in enumerate(['9', '18', '19', '20', '21', '22', '23', '24']):
-    KEEP[fid] = 'Back Beam %d' % (i + 1)
+    KEEP[fid] = 'UST %d' % (i + 1)
 
 # Risers: rows US (top, at the back), CS, DS (front); units 1-4 SR to SL.
 # The real show has eight LED strips on each riser front; the classroom keeps
@@ -61,16 +65,16 @@ RISER_FACE = {}     # old name -> new name
 RISER_TOP = {}
 for row in ROWS:
     for unit in range(1, 5):
-        RISER_FACE['%s%d #1' % (row, unit)] = '%s Riser %d' % (row, unit)
-        RISER_TOP['%s%dt1' % (row, unit)] = '%s Riser %d Top SR' % (row, unit)
-        RISER_TOP['%s%dt2' % (row, unit)] = '%s Riser %d Top SL' % (row, unit)
+        RISER_FACE['%s%d #1' % (row, unit)] = '%s Step %d' % (row, unit)
+        RISER_TOP['%s%dt1' % (row, unit)] = '%s Step %d Top SR' % (row, unit)
+        RISER_TOP['%s%dt2' % (row, unit)] = '%s Step %d Top SL' % (row, unit)
 
 # Structures renamed the same way.
 STRUCTURE_NAMES = {
-    'T-1': 'SR Tower 1', 'T-2': 'SR Tower 2', 'T-3': 'SL Tower 2', 'T-4': 'SL Tower 1',
-    'Bar 1': 'SR Tower 1 Top Bar', 'Bar 6': 'SR Tower 2 Top Bar',
-    'Bar 7': 'SL Tower 2 Top Bar', 'Bar 8': 'SL Tower 1 Top Bar',
-    'AT1': 'SR Front Tower', 'AT2': 'SL Front Tower',
+    'T-1': 'SR Truss 1', 'T-2': 'SR Truss 2', 'T-3': 'SL Truss 2', 'T-4': 'SL Truss 1',
+    'Bar 1': 'SR Truss 1 Top Bar', 'Bar 6': 'SR Truss 2 Top Bar',
+    'Bar 7': 'SL Truss 2 Top Bar', 'Bar 8': 'SL Truss 1 Top Bar',
+    'AT1': 'AT1 (SR audience tower)', 'AT2': 'AT2 (SL audience tower)',
     'Cyclorama 1': 'Cyc', 'Proscenium 3': 'Proscenium',
 }
 for row in ROWS:
@@ -87,10 +91,10 @@ DROP_MONITOR_GROUPS = {'FART-1', 'FART-2'}
 # The patch: universes with names and NO output. Channels per fixture come
 # from the show; fixtures are packed in this order.
 UNIVERSES = [
-    ('Spots, washes, beams, lanterns', lambda n: not ('Riser' in n or 'Tower Box' in n or 'Tower Cyc' in n)),
-    ('Tower pixel boxes', lambda n: 'Tower Box' in n or 'Tower Cyc' in n),
-    ('Riser fronts', lambda n: 'Riser' in n and 'Top' not in n),
-    ('Riser tops', lambda n: 'Riser' in n and 'Top' in n),
+    ('Spots, washes, beams, lanterns', lambda n: not ('Step' in n or 'Truss Wash' in n or 'Truss Cyc' in n)),
+    ('Truss pixel boxes', lambda n: 'Truss Wash' in n or 'Truss Cyc' in n),
+    ('Step fronts', lambda n: 'Step' in n and 'Top' not in n),
+    ('Step tops', lambda n: 'Step' in n and 'Top' in n),
 ]
 
 
@@ -298,20 +302,26 @@ def embedded_head_layouts(root):
     definitions (every fixture kept has one), and the show's head layouts."""
     fd = '{http://www.qlcplus.org/FixtureDefinition}'
     heads = {}
+    white = {}      # which heads are white-only (a pixel box's W heads)
     emb = root.find(N + 'Embedded')
     for e in emb.findall(N + 'FixtureDefinition'):
         d = ET.fromstring(e.text.encode('utf-8'))
         for m in d.findall(fd + 'Mode'):
-            heads[(e.get('Manufacturer'), e.get('Model'), m.get('Name'))] = max(1, len(m.findall(fd + 'Head')))
+            key = (e.get('Manufacturer'), e.get('Model'), m.get('Name'))
+            hs = m.findall(fd + 'Head')
+            heads[key] = max(1, len(hs))
+            names = [c.text for c in m.findall(fd + 'Channel')]
+            white[key] = [all(names[int(c.text)].startswith('White') for c in h.findall(fd + 'Channel'))
+                          for h in hs]
     layouts = {}
     for hl in root.find(N + 'Engine').find(N + 'Monitor').findall(N + 'HeadLayout'):
         cells = [tuple(int(v) for v in p.split(',')) for p in hl.text.split()]
         layouts[hl.get('Key')] = (int(hl.get('Cols')), int(hl.get('Rows')), cells)
-    return heads, layouts
+    return heads, layouts, white
 
 
 def make_groups(kept, mon, defs):
-    heads, layouts = defs
+    heads, layouts, white = defs
     by = {text(f, 'Name'): f for f in kept}
     gid = [0]
 
@@ -323,9 +333,10 @@ def make_groups(kept, mon, defs):
             return lay[0], lay[1], lay[2]
         return n, 1, [(i, 0) for i in range(n)]
 
-    def group(name, path, rows):
+    def group(name, path, rows, heads_of=None):
         """rows: list of rows, each a list of fixture names, laid out left
-        to right (SR to SL) -- each fixture its own head layout."""
+        to right (SR to SL) -- each fixture its own head layout. heads_of:
+        'RGB' or 'W' for only that type's heads (as a group by head type)."""
         g = ET.Element(N + 'FixtureGroup', {'ID': str(gid[0])})
         gid[0] += 1
         ET.SubElement(g, N + 'Name').text = name
@@ -340,7 +351,11 @@ def make_groups(kept, mon, defs):
             for fname in row:
                 f = by[fname]
                 cols, nrows, layout = fixture_heads(f)
+                kinds = white.get((text(f, 'Manufacturer'), text(f, 'Model'), text(f, 'Mode')), [])
                 for h, (cx, cy) in enumerate(layout):
+                    is_w = h < len(kinds) and kinds[h]
+                    if heads_of == 'RGB' and is_w or heads_of == 'W' and not is_w:
+                        continue
                     cells.append((x0 + cx, y0 + cy, text(f, 'ID'), h))
                 x0 += cols
                 row_h = max(row_h, nrows)
@@ -351,27 +366,33 @@ def make_groups(kept, mon, defs):
             ET.SubElement(g, N + 'Head', {'X': str(x), 'Y': str(y), 'Fixture': fid}).text = str(h)
         return g
 
-    risers = [['%s Riser %d' % (r, u) for u in range(1, 5)] for r in ROWS]
-    tops = [['%s Riser %d Top %s' % (r, u, s) for u in range(1, 5) for s in ('SR', 'SL')] for r in ROWS]
+    risers = [['%s Step %d' % (r, u) for u in range(1, 5)] for r in ROWS]
+    tops = [['%s Step %d Top %s' % (r, u, s) for u in range(1, 5) for s in ('SR', 'SL')] for r in ROWS]
     sr_l = lambda kind: ['SR %s 1' % kind, 'SR %s 2' % kind]
     sl_l = lambda kind: ['SL %s 2' % kind, 'SL %s 1' % kind]
     across = lambda kind: sr_l(kind) + sl_l(kind)
 
+    trusses = lambda side: [ (sr_l if side == 'SR' else sl_l)(k) for k in ('Truss Spot', 'Truss Wash', 'Truss Cyc') ]
     out = [
-        group('Risers', 'Risers', risers),
-        group('US Risers', 'Risers', [risers[0]]),
-        group('CS Risers', 'Risers', [risers[1]]),
-        group('DS Risers', 'Risers', [risers[2]]),
-        group('Riser Tops', 'Risers', tops),
-        group('Front Wash', 'Front', [['SR Front Wash 1', 'SR Front Wash 2', 'SL Front Wash 2', 'SL Front Wash 1']]),
-        group('Front Spots', 'Front', [['SR Front Spot', 'SL Front Spot']]),
-        group('Movers', 'Towers', [across('Tower Spot')]),
-        group('Pixel Boxes', 'Towers', [across('Tower Box')]),
-        group('Cyc Washes', 'Towers', [across('Tower Cyc')]),
-        group('Towers SR', 'Towers', [sr_l('Tower Spot'), sr_l('Tower Box'), sr_l('Tower Cyc')]),
-        group('Towers SL', 'Towers', [sl_l('Tower Spot'), sl_l('Tower Box'), sl_l('Tower Cyc')]),
-        group('Back Beams', 'Extras', [['Back Beam %d' % i for i in range(1, 9)]]),
-        group('Lanterns', 'Extras', [['Lantern %d' % i for i in range(1, 7)]]),
+        group('Steps', 'Steps', risers),
+        group('US', 'Steps', [risers[0]]),
+        group('CS', 'Steps', [risers[1]]),
+        group('DS', 'Steps', [risers[2]]),
+        group('StepTops', 'Steps', tops),
+        group('Trusses', 'Trusses', [sr_l('Truss Spot') + sl_l('Truss Spot'),
+                                     sr_l('Truss Wash') + sl_l('Truss Wash'),
+                                     sr_l('Truss Cyc') + sl_l('Truss Cyc')]),
+        group('Trusses SR', 'Trusses', trusses('SR')),
+        group('Trusses SL', 'Trusses', trusses('SL')),
+        group('Truss-Spots', 'Trusses', [across('Truss Spot')]),
+        group('TrussW-RGB', 'Trusses', [across('Truss Wash')], 'RGB'),
+        group('TrussW-W', 'Trusses', [across('Truss Wash')], 'W'),
+        group('TrussC-RGB', 'Trusses', [across('Truss Cyc')], 'RGB'),
+        group('TrussC-W', 'Trusses', [across('Truss Cyc')], 'W'),
+        group('USTs', 'Trusses', [['UST %d' % i for i in range(1, 9)]]),
+        group('AT-Spots', 'AT', [['SR AT Spot', 'SL AT Spot']]),
+        group('AT-W-ALL', 'AT', [['SR AT Wash 1', 'SR AT Wash 2', 'SL AT Wash 2', 'SL AT Wash 1']]),
+        group('Lanterns', 'Lanterns', [['Lantern %d' % i for i in range(1, 7)]]),
     ]
     return out
 

@@ -18,46 +18,52 @@ network. The **Rig Overview** (View → Rig Overview, ⇧⌘R) is the stage.
 
 ## The stage
 
-- **Risers:** three rows — **US** (top, at the back), **CS**, **DS**
-  (front) — of four units each, numbered **1–4 from stage right**.
+- **Risers (steps):** three rows — **US** (top, at the back), **CS**,
+  **DS** (front) — of four units each, numbered **1–4 from stage right**.
 - **Cyc:** the white cloth upstage.
-- **Towers:** four upstage, two each side. On each side **1 is the outside
-  tower** (nearest the wings), 2 the inside one.
-- **Front towers:** one each side, in the house.
+- **Trusses:** four upright trusses across the back, two each side. On each
+  side **1 is the outside truss** (nearest the wings), 2 the inside one.
+- **Audience towers (AT1 SR, AT2 SL):** one each side, in the house.
 - Proscenium and an open main drape.
 
 ## The lights (68)
 
 | Lights | How many | Where | Kind |
 |---|---|---|---|
-| **US/CS/DS Riser 1–4** | 12 | an LED strip along each riser front | pixel strip (64 pixels), colour only |
-| **… Riser N Top SR / SL** | 24 | two bars on top of each riser unit, lighting up | pixel bar (colour + white), colour only |
-| **SR/SL Tower Box 1–2** | 4 | on the towers, facing out over the stage | pixel box (XL-450), colour only |
-| **SR/SL Tower Cyc 1–2** | 4 | on the towers, facing the cyc | pixel box (XL-450), colour only |
-| **SR/SL Tower Spot 1–2** | 4 | top of each tower | moving spot with a colour ring |
-| **SR/SL Front Spot** | 2 | the front towers | moving spot (for soloists) |
-| **SR/SL Front Wash 1–2** | 4 | the front towers | moving wash, with a dimmer |
-| **Back Beam 1–8** | 8 | standing along the top riser | two-arm moving beam |
-| **Lantern 1–6** | 6 | hanging from the towers (one on the SR front tower) | LED lantern |
+| **US/CS/DS Step 1–4** | 12 | an LED strip along each step front | pixel strip (64 pixels), colour only |
+| **… Step N Top SR / SL** | 24 | two bars on top of each riser unit, lighting up | pixel bar (colour + white), colour only |
+| **SR/SL Truss Wash 1–2** | 4 | on the trusses, facing out over the stage | pixel box (XL-450: RGB + white pixels), colour only |
+| **SR/SL Truss Cyc 1–2** | 4 | on the trusses, facing the cyc | pixel box (XL-450), colour only |
+| **SR/SL Truss Spot 1–2** | 4 | top of each truss | moving spot with a colour ring |
+| **SR/SL AT Spot** | 2 | the audience towers | moving spot (for soloists) |
+| **SR/SL AT Wash 1–2** | 4 | the audience towers | moving wash, with a dimmer |
+| **UST 1–8** | 8 | upstage, standing along the top riser | two-arm moving beam |
+| **Lantern 1–6** | 6 | hanging from the trusses (one on AT1) | LED lantern |
 
 "Colour only" lights have no dimmer of their own: a colour plays at full
 and a level dims the colour.
 
 ## Groups (Library → All → Groups)
 
+The names follow the real show's (DanceHysteria): where it is, then what.
+
 | Folder | Group | Lights |
 |---|---|---|
-| Risers | **Risers** | all 12 riser fronts |
-| | **US Risers**, **CS Risers**, **DS Risers** | one row's fronts |
-| | **Riser Tops** | all 24 riser-top bars |
-| Towers | **Movers** | the 4 tower spots |
-| | **Pixel Boxes** | the 4 boxes facing out |
-| | **Cyc Washes** | the 4 boxes on the cyc |
-| | **Towers SR**, **Towers SL** | everything on that side's towers |
-| Front | **Front Wash** | the 4 front washes |
-| | **Front Spots** | the 2 front spots |
-| Extras | **Back Beams** | the 8 beams |
-| | **Lanterns** | the 6 lanterns |
+| Steps | **Steps** | all 12 step fronts |
+| | **US**, **CS**, **DS** | one row's step fronts |
+| | **StepTops** | all 24 step-top bars |
+| Trusses | **Trusses** | everything on the four trusses |
+| | **Trusses SR**, **Trusses SL** | everything on that side's trusses |
+| | **Truss-Spots** | the 4 truss spots |
+| | **TrussW-RGB**, **TrussW-W** | the wash boxes' colour pixels / white pixels |
+| | **TrussC-RGB**, **TrussC-W** | the cyc boxes' colour pixels / white pixels |
+| | **USTs** | the 8 upstage beams |
+| AT | **AT-Spots** | the 2 audience-tower spots |
+| | **AT-W-ALL** | the 4 audience-tower washes |
+| Lanterns | **Lanterns** | the 6 lanterns |
+
+A group with **-RGB** or **-W** holds only that kind of pixel of a pixel
+box, so a colour on TrussC-RGB doesn't also turn on the white pixels.
 
 ## Stage targets (Library → All → Targets)
 

@@ -4,7 +4,7 @@
 |---|---|
 | `ShowChoir-Classroom.qlcc` | The teaching show: the rig, groups, targets and base palettes, no productions. See [the teaching show](../rig.md). |
 | `lesson-01-start.qlcc` | Lesson 1.1's start (the same as the classroom show). |
-| `lesson-01-finish.qlcc` | Lesson 1.1 done: *Spring Show / 01-Opener*, cues Pose, Verse, Chorus, made current. |
+| `lesson-01-finish.qlcc` | Lesson 1.1 done: *Spring Show / 01-Everybody Scream*, cues Pose, Verse, Chorus, made current. |
 
 All are safe for a school network: no universe has an output, no fixture
 has a network address of its own. `ui/test/courseshow`
@@ -42,7 +42,9 @@ would save:
    ```
 
 3. **Take the pictures** (`docs/course/images/lesson-01/`), at 2x, in the
-   Blue theme, as the help's are:
+   Blue theme, as the help's are — in a run of their own (`lessonPictures`
+   only), so nothing an earlier test did (an open Look Editor, Recent
+   items) shows in them:
 
    ```sh
    COURSE_SHOTS=$PWD/../../../../docs/course/images/lesson-01 QT_SCALE_FACTOR=2 \

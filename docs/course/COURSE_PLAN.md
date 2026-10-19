@@ -5,13 +5,14 @@ nav_order: 2
 
 # Show Tree course — plan for review
 
-*Status: first pass for Branson to review (2026-10-18). Written: this plan,
-the teaching show, Lesson 1.1 complete. Everything else below is an outline.*
+*Status: second pass (2026-10-18), with Branson's answers to the first
+pass's questions (§9). Written: this plan, the teaching show, Lesson 1.1
+complete. Everything else below is an outline.*
 
 The Show Tree is the main tool for this year's show. This course takes a
 high-school show choir tech crew from "what does a lighting designer do?"
 to programming and running a real show in qlcconsole, using a stage that
-looks like ours: risers, towers, a cyc, pixel boxes and lanterns.
+looks like ours: risers, trusses, a cyc, pixel boxes and lanterns.
 
 The course teaches **design first, then the tool**. Each lesson starts from
 something a designer decides ("the verse should feel close and warm") and
@@ -24,12 +25,12 @@ ends with the Show Tree action that makes it happen.
 | | Assumption (change any of these) |
 |---|---|
 | **Students** | Grades 9–12, on the show choir tech crew. Most have never run lights. Some have run a board once. |
-| **Class period** | **50 minutes.** Each lesson fits one period: 10 min design idea, 10 min teacher demo, 20 min hands-on, 10 min check and exit ticket. A 45-minute period drops the extension. |
-| **Pace** | About one lesson a week, between rehearsals. Level 0–1 before the fall show's tech week; Level 2 through the winter; Level 3 for the students who will run the spring show. |
+| **Class period** | **50 minutes** (confirmed). Each lesson fits one period: 10 min design idea, 10 min teacher demo, 20 min hands-on, 10 min check and exit ticket. A 45-minute period drops the extension. |
+| **Pace** | About one lesson a week (confirmed), between rehearsals. Level 0–1 before the fall show's tech week; Level 2 through the winter; Level 3 for the students who will run the spring show. |
 | **Laptops in class** | **Few at first** — one per pair or three. The projector shows the teacher's screen. |
 | **Computers at home** | Mixed: Mac, Windows, and **Chromebooks**. A Chromebook runs qlcconsole only if its Linux environment (Crostini) is turned on **and** it has an Intel/AMD chip — the Linux build is x86_64 only. Many school Chromebooks have Linux turned off by the district, and many are ARM. Those students do the paper version of the homework (each lesson has one). |
 | **The stage** | The **teaching show** (below): a virtual copy of a show choir stage. It is never connected to real lights. The **Rig Overview** is the stage. |
-| **Real lights** | Only in Level 3, on Branson's rig, with an adult. |
+| **Real lights** | First hands on the real rig in **December or January**, with Branson: Level 3 starts there. Until then, only the virtual stage. |
 
 ### Roles for shared laptops
 
@@ -59,7 +60,7 @@ can open the app, find the stage, and play a finished cue list.*
 | # | Lesson | Design idea | In the tool |
 |---|---|---|---|
 | 0.1 | **What light does** | The four qualities of light (intensity, colour, direction, movement). The jobs of light: let the audience see, tell them where to look, set the mood, match the energy of the song. | No computer. Watch a 2-minute clip of a show choir number twice: once for the singers, once only for the light. Name each change. |
-| 0.2 | **The virtual stage** | The stage words: upstage / downstage, stage left / stage right (the singers' left and right), risers, towers, cyc, front of house. | Install and open qlcconsole. Open `lesson-01-finish.qlcc`. **View → Rig Overview** (⇧⌘R): find each part of the stage. Run tab: press GO three times. Nothing you do can break real lights. |
+| 0.2 | **The virtual stage** | The stage words: upstage / downstage, stage left / stage right (the singers' left and right), risers, trusses, cyc, audience towers (front of house). | Install and open qlcconsole. Open `lesson-01-finish.qlcc`. **View → Rig Overview** (⇧⌘R): find each part of the stage. Run tab: press GO three times. Nothing you do can break real lights. |
 
 ### Level 1 — Basics (5 lessons)
 
@@ -69,9 +70,9 @@ with GO.*
 
 | # | Lesson | Design idea | In the tool |
 |---|---|---|---|
-| **1.1** | **From a song to cues: your first three looks** *(written)* | A song has sections; a cue is a moment where the light changes. A look is a group of lights in a colour at a level. | Production → cue list → cue. A group dropped on a cue is a **layer**; a colour and a level dropped on the layer. Three cues: Pose, Verse, Chorus. Make it current, GO in the Run tab. |
+| **1.1** | **From a song to cues: your first three looks** *(written; song: "Everybody Scream")* | A song has sections; a cue is a moment where the light changes. A look is a group of lights in a colour at a level. | Production → cue list → cue. A group dropped on a cue is a **layer**; a colour and a level dropped on the layer. Three cues: Pose, Verse, Chorus. Make it current, GO in the Run tab. |
 | 1.2 | **Colour and intensity tell the mood** | Warm vs cool; saturated vs pale; bright isn't always better. Contrast between sections. | Change a look in place (⋯ → Set to), Level… and Colour… for values not in the palette list, a **cue look** for the whole cue. Undo. |
-| 1.3 | **Direction: aim the light** | Front light shows faces; back and side light shape bodies; uplight is drama. Every number needs faces lit. | Stage targets (Soloist DS, Center). Drop **Aim Center** on the Front Wash; **Aim Soloist DS** on a Front Spot. Why moving lights need a Position. |
+| 1.3 | **Direction: aim the light** | Front light shows faces; back and side light shape bodies; uplight is drama. Every number needs faces lit. | Stage targets (Soloist DS, Center). Drop **Aim Center** on AT-W-ALL (the audience-tower washes); **Aim Soloist DS** on AT-Spots. Why moving lights need a Position. |
 | 1.4 | **Timing: fades and holds** | A snap is a hit; a slow fade is a breath. Cue timing follows the music. | Fade in / Fade out / Hold on the cue page. Watch the fades in the Rig Overview. |
 | 1.5 | **Calling and running the show** | Standby / GO. The stage manager calls; the board op runs. | Run tab: GO, Back, Stop, LOAD a cue. Students "call" each other's cues. **Level check:** light a 30-second clip (3–5 cues) and run it. |
 
@@ -85,9 +86,9 @@ on lines, and busking looks for the unexpected.*
 |---|---|---|---|
 | 2.1 | **Tracking and Block** | What stays on unless you change it. A "hard start" for each song. | Grey ⤳ rows ("tracked from"), **Release**, cue modes Track / Block / Cue-only, the **base cue**, *Next cue receives*. |
 | 2.2 | **Palettes: change once, change everywhere** | A designer's colours for a song. The director says "less pink" an hour before the show. | Edit a palette in the Look Editor and watch every cue change. Make your own palette; a folder per song. *Used by*. |
-| 2.3 | **Parts of a group** | Highlight one row of singers. Symmetry. | Child layers (`US Risers in Risers`), group sets (Towers = Towers SR + Towers SL), Split / Merge. |
-| 2.4 | **Effects: sparkle, chase, matrix** | Energy and rhythm. Eye candy vs. light on people. | Effects on the riser fronts and pixel boxes (Sinelon, chase, sparkle); an effect on the cue across the whole stage; its own colour; speed masters. |
-| 2.5 | **Moving lights and lines** | Beams as scenery; fans and crosses on the button of a song. | The Riser Line target, Spread / Grouping / Cross, the plan view. Colour rings on the Movers. |
+| 2.3 | **Parts of a group** | Highlight one row of singers. Symmetry. | Child layers (`US in Steps`), group sets (a set of Trusses SR + Trusses SL), Split / Merge. |
+| 2.4 | **Effects: sparkle, chase, matrix** | Energy and rhythm. Eye candy vs. light on people. | Effects on the Steps and the truss pixel boxes (Sinelon, chase, sparkle); an effect on the cue across the whole stage; its own colour; speed masters. |
+| 2.5 | **Moving lights and lines** | Beams as scenery; fans and crosses on the button of a song. | The Riser Line target, Spread / Grouping / Cross, the plan view, with Truss-Spots and USTs. Colour rings on the Truss-Spots. |
 | 2.6 | **Busking with Looks** | When the band vamps, or the soloist goes long. | The Looks section, **Make VC page**, firing looks from Virtual Console buttons over a running list. |
 | 2.7 | **Hits inside a cue** | Hits, stomps and buttons in a chorus. | Sub-cues 4.1, 4.2, Sub GO and auto-follow. **Level check:** design and program one full song from a cue sheet. |
 
@@ -118,7 +119,7 @@ back again and again; the table says where each one maps to the Show Tree.
 |---|---|---|
 | **Intensity** | How bright. The eye goes to the brightest thing. | The **Dimmer** row; palettes Full, 75%, Half, 25%, 10%, Out. |
 | **Colour** | Warm/cool, saturated/pale, what it says (blue = night, cool, calm; red/magenta = energy). | The **Colour** row; the colour palettes. |
-| **Direction (position)** | Front light shows faces, back light separates, side light sculpts, uplight is drama. | Which **group** you choose (Front Wash vs Riser Tops vs Cyc Washes), and **Position** / Aim for moving lights. |
+| **Direction (position)** | Front light shows faces, back light separates, side light sculpts, uplight is drama. | Which **group** you choose (AT-W-ALL from the front, StepTops from below, TrussC-RGB on the cyc), and **Position** / Aim for moving lights. |
 | **Movement** | Light that changes while you watch: fades, chases, moving beams. | Fade times, **effects**, moving lights on a **line**. |
 | **Focus the audience** | Light where you want them to look; dark where you don't. | Which layers are in a cue; a soloist special. |
 | **Mood and story** | What the song is about; what changes in it. | Colour choices per song; palettes per song. |
@@ -132,7 +133,7 @@ used from Lesson 1.1 to the capstone (it is in Lesson 1.1's handout).
 
 | Cue | Where in the song (words or count) | What the audience should feel | Lights (group: colour, level) | Time |
 |---|---|---|---|---|
-| 1.0.0 | Before the first note, singers in pose | Mystery, waiting | Cyc Washes: Blue, Full | snap |
+| 1.0.0 | Before the first note, singers in pose | Mystery, waiting | TrussC-RGB: Blue, Full | snap |
 | … | | | | |
 
 ---
@@ -177,8 +178,13 @@ Each lesson's folder holds: `teacher-guide.md`, `handout.md`,
   GOs, the other group says what each cue made them feel.
 - **Nothing to break.** The teaching show sends nothing to real lights, so
   "try it and see" is safe. Undo (⌘Z / Ctrl+Z) takes back any step.
-- **Save often.** Students save under their own name
-  (`Lesson01-Jordan.qlcc`), never over the course file.
+- **Save often, on your own computer.** Students save under their own
+  name (`Lesson01-Jordan.qlcc`), never over the course file, in a
+  **qlcconsole** folder in their Documents (the app has no folder of its
+  own for shows: the first Save offers wherever the computer starts, and
+  after that the last folder used). Files come to class on a USB stick, by
+  the school's cloud drive, or emailed to themselves — see
+  [Install → Saving your work](install.md#saving-your-work).
 - **Keyboard shortcuts** are shown as Mac keys (⌘). On Windows and Linux
   use **Ctrl** for ⌘ and **Alt** for ⌥.
 
@@ -193,38 +199,49 @@ the course next to the app it teaches: when the app changes, the course
 and its test change in the same commit, and the course test
 (`courseshow_test`) fails if a lesson step stops working.
 
-### Recommended: GitHub Pages with the just-the-docs theme
+### The website: GitHub Pages with the just-the-docs theme (approved)
 
 - **Why:** students get a clean website (search, a sidebar of levels and
   lessons, works on a phone) with no build step for the teacher: edit a
   `.md` file, push, the site updates. The same `.md` files also read fine
-  on GitHub itself, so nothing breaks if Pages is never turned on.
-- **How:** `docs/course/_config.yml` is a Jekyll config using the
-  just-the-docs remote theme (GitHub's Pages build supports remote themes).
-  Because the course is in a sub-folder of `docs/`, Pages needs a small
-  GitHub Actions workflow that builds `docs/course` only. That workflow is
-  in `docs/course/tools/pages-workflow.yml.example` — **not** in
-  `.github/workflows/`, so nothing runs until Branson moves it there and
-  turns on Pages (Settings → Pages → Source: GitHub Actions).
-- **Simpler alternative:** don't turn on Pages; send students to the
-  `docs/course/README.md` page on GitHub. Everything works, just less
-  pretty.
-- **Nothing is published yet.** The branch is pushed; Pages is off.
+  on GitHub itself.
+- **How:** `docs/course/_config.yml` is a Jekyll config with the
+  just-the-docs remote theme. `.github/workflows/pages.yml` builds **only
+  `docs/course`** and deploys it, on a push to `main` that touches
+  `docs/course/**` (and by hand, *Run workflow*). GitHub runs a workflow
+  only from the default branch, so the site goes live when this branch is
+  merged to `main` and Pages is switched on:
+  1. **Settings → Pages → Build and deployment → Source: GitHub
+     Actions.**
+  2. **Settings → Environments → github-pages** (made by step 1):
+     *Deployment branches and tags* must allow `main` (the default rule,
+     "protected branches" or "selected: main", does).
+  3. **Settings → Actions → General → Workflow permissions:** the default
+     (read) is enough; the workflow asks for `pages: write` and
+     `id-token: write` itself.
+  4. Merge to `main`, then Actions → **Course site** → *Run workflow*
+     once (or push a change under `docs/course`). The site is at
+     `https://sandinak.github.io/qlcconsole/`.
 
 ### Downloads for students
 
-- [Install qlcconsole](install.md) points at the **GitHub Releases** page
-  (macOS dmg, Windows installer, Linux AppImage), with install notes per
-  computer.
+- [Install qlcconsole](install.md) points at the **show-tree pre-release**
+  on GitHub Releases (macOS dmg, Windows installer, Linux AppImage), with
+  install notes per computer. That pre-release isn't published yet.
 - Each lesson links its show files (`docs/course/shows/`). On GitHub, a
-  student opens the file and clicks **Download raw file**.
+  student opens the file and clicks **Download raw file**; on the site, the
+  link downloads it.
 
-### Licence
+### Licence (recommended, pending Branson's OK)
 
-- qlcconsole is Apache-2.0 (as QLC+ is).
-- **Course content:** suggested **CC BY-SA 4.0** — other teachers may use
-  and adapt it if they credit it and share alike. Branson decides; nothing
-  is marked yet beyond a note in the README.
+- qlcconsole is **Apache-2.0** (`COPYING`), as QLC+ is.
+- **Course text and pictures: CC BY 4.0.** Other teachers can use and adapt
+  it if they credit it; unlike CC BY-SA, it doesn't force their whole
+  handout packet under the same licence, and it sits comfortably beside an
+  Apache-2.0 app (both only ask for credit).
+- **The teaching show files and the course's scripts and test: Apache-2.0**,
+  like the app: they are software and data built from and for it.
+- Written into `docs/course/LICENSE.md`, marked *recommended*.
 
 ---
 
@@ -232,7 +249,7 @@ and its test change in the same commit, and the course test
 
 - **Exit tickets** every lesson (quick, low stakes).
 - **Level checks:**
-  - Level 0: label the stage diagram (US/DS/SL/SR, risers, towers, cyc).
+  - Level 0: label the stage diagram (US/DS/SL/SR, risers, trusses, audience towers, cyc).
   - Level 1: *Light this 30-second clip* — a cue sheet with 3–5 cues, the
     cue list built, and run live with GO while the clip plays.
   - Level 2: *Design and program one song* — cue sheet, tracking used on
@@ -252,7 +269,20 @@ and its test change in the same commit, and the course test
 
 ## 8. Where the course and the app disagree (found writing Lesson 1.1)
 
-Nothing in the app was changed in this pass. These are for Branson:
+Branson asked for these to be fixed; that is happening on a separate fix
+branch, not in the course. When each lands, the lesson text marked below
+changes:
+
+- **1** → Lesson 1.1 handout step 13 (Make current), its picture
+  `make-current.png`, the teacher guide's "GO does nothing" row and Stuck?
+  row, `lessonOneByMouse` step 9 and `production current` in the typed
+  version.
+- **2** → the handout's "(3) the big empty box under Layers" wording.
+- **3** → Lesson 1.3 can start from "AT-W-ALL, Warm White, Full".
+- **4** → the "Not ready is normal" notes (handout, install, rig page).
+- **5** → "a soft blue glow" in the handout.
+- **6** → `CourseShow_Test::cleanupTestCase`'s `hide()` can go.
+
 
 1. **A new production isn't the one GO plays.** After **+ Production**,
    the Run tab shows nothing to GO until the production is made current
@@ -263,11 +293,11 @@ Nothing in the app was changed in this pass. These are for Branson:
    area's "Drag groups or fixtures here…" is very faint in the Blue theme
    (see `images/lesson-01/new-cue.png`). The handout tells students where
    it is instead of relying on the text.
-3. **Moving lights have no home.** The Front Wash and Front Spots are
-   moving heads; lit with only a colour and a level they point at the floor
+3. **Moving lights have no home.** AT-W-ALL and AT-Spots (the audience
+   towers) are moving heads; lit with only a colour and a level they point at the floor
    by their tower. Lesson 1.1 uses only non-moving groups; Lesson 1.3
    introduces Aim. A per-fixture home position (or a show base cue the
-   course ships) would make a first "Front Wash, Warm White, Full" work.
+   course ships) would make a first "AT-W-ALL, Warm White, Full" work.
 4. **The footer is red in class.** The teaching show shows **Not ready** in red:
    "13 universe(s) with fixtures but no output" — true and intended (it
    must never send DMX). The handout tells students to expect it. A
@@ -285,34 +315,28 @@ Nothing in the app was changed in this pass. These are for Branson:
 
 ---
 
-## 9. Open questions for Branson
+## 9. Decisions (Branson, 2026-10-18) and what's still open
 
-1. **Period length and pace** — 50 minutes and about one lesson a week:
-   right? How many periods before the fall show's tech week?
-2. **Which song** for the running example? Lesson 1.1 uses a made-up
-   "Opener" (Pose, Verse, Chorus). A real song from this year's set would
-   motivate more — but needs a clip we can play in class.
-3. **Groups and names** in the teaching show: *Back Beams* (the two-arm
-   beams standing on the top riser — your brief said "Back Truss"),
-   *Pixel Boxes* (the tower XL-450s that face out) vs *Cyc Washes* (the ones
-   that light the cyc), the folder *Extras*, numbering towers *1 = outside*
-   on each side. Keep, or rename to what the crew calls them?
-4. **The line target** is called *Riser Line*, not *Risers*: a target and
-   a group with the same name clash on the command line. OK?
-5. **Fixture count.** The teaching show has 68 fixtures (the real show
-   206): one LED strip per riser front instead of eight, one spot per tower,
-   no pixel walls between the towers, no pars. Enough of "our stage"?
-6. **Chromebooks** — does the district allow the Linux environment on
-   student Chromebooks? Are they Intel or ARM? (Decides whether homework
-   is on the computer or on paper for those students.)
-7. **The first release.** The repo is public, but it has **no GitHub
-   Release yet**, so the [install page](install.md)'s download link has
-   nothing to download until v0.1.0 (or a class build) is published.
-   Which build should students use?
-8. **Turn on GitHub Pages?** (Recommended, with the workflow provided.)
-9. **Course licence** — CC BY-SA 4.0 OK?
-10. **Real lights** — when do students first touch the real rig: Level 3
-    only, or a "field trip" at the end of Level 1?
-11. **Show file names for students** — save as `Lesson01-<name>.qlcc` in
-    a class folder? Is there a shared drive?
-12. The app items in §8 — fix any before the course starts?
+| # | Question | Answer |
+|---|---|---|
+| 1 | Period and pace | 50-minute periods, about one lesson a week. |
+| 2 | The song | **"Everybody Scream"** — Lesson 1.1's cue list is `01-Everybody Scream`. |
+| 3 | Group names | The real show's style: the **Trusses** across the back, with letters for what's on them: **Truss-Spots**, **TrussW-RGB / -W**, **TrussC-RGB / -W**, **USTs** (the upstage beams), and likewise **Steps**, **StepTops**, **US / CS / DS**, **AT-Spots**, **AT-W-ALL**, **Lanterns**. |
+| 4 | Riser Line | Fine. |
+| 5 | 68 fixtures | Fine. |
+| 7 | What students install | The **show-tree pre-release** on GitHub Releases (to be published). |
+| 8 | GitHub Pages | Yes — the workflow is ready (§6); it needs the merge to `main` and the settings in §6. |
+| 9 | Licence | Recommended CC BY 4.0 (text, pictures) + Apache-2.0 (show files, scripts), pending OK (§6). |
+| 10 | Real lights | First hands on the real rig in **December or January**. |
+| 11 | Where students save | On their own computers (see §5 and the install page). |
+| 12 | App issues | Being fixed on a separate branch (§8). |
+
+**Still open:**
+
+1. **Chromebooks** (6): does the district allow the Linux environment on
+   student Chromebooks, and are they Intel or ARM? Probably not Linux — so
+   every lesson keeps a full paper *At home* version.
+2. **The pre-release's name and files**: the install page says "the newest
+   pre-release whose name starts with **Show Tree**" — confirm when it's
+   published.
+3. **Licence**: OK to mark CC BY 4.0 + Apache-2.0 as final?

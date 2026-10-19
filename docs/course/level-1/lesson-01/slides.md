@@ -42,12 +42,12 @@ teacher says. It can be turned into a deck as it is.*
 ## 5. Our stage
 
 - Picture: `images/lesson-01/rig-dark.png` with labels: cyc, risers (US,
-  CS, DS), towers (SR, SL), front towers.
+  CS, DS), the trusses across the back (SR, SL), the audience towers (AT).
 - Stage right = the singers' right (the audience's left).
 
 ## 6. Groups, layers and looks
 
-- **Group** — lights we use together: *Cyc Washes*.
+- **Group** — lights we use together: *TrussC-RGB*.
 - **Layer** — one group doing one thing in a cue.
 - **Look** — its colour and its intensity: *Blue, Full*.
 - **Palette** — a saved colour or level you drag on.

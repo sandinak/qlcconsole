@@ -36,8 +36,8 @@ any.
    | 1.0.1 | | | |
    | 1.0.2 | | | |
 
-   Use our groups: Risers, Riser Tops, Cyc Washes, Pixel Boxes, Front Wash,
-   Movers, Back Beams, Lanterns. Use our colours: White, Warm White, Red,
+   Use our groups: Steps (and US, CS, DS), StepTops, TrussC-RGB, TrussW-RGB,
+   Truss-Spots, USTs, AT-W-ALL, AT-Spots, Lanterns. Use our colours: White, Warm White, Red,
    Amber, Yellow, Green, Cyan, Blue, Lavender, Magenta. Levels: Full, 75%,
    Half, 25%, 10%, Out.
 3. Next class, a partner builds your cue sheet in the Show Tree and you
