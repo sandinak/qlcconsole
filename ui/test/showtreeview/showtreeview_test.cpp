@@ -187,7 +187,9 @@ void ShowTreeView_Test::theTreeShowsProductionsListsCuesAndLayers()
 
     ShowTreeView view(nullptr, m_doc);
     const QStringList text = treeText(view.tree());
-    QCOMPARE(text, QStringList({ "DanceHysteria", "  01-Everybody Scream [Non-tracking]",
+    // The only production: current as it was made, its list GO's.
+    QCOMPARE(text, QStringList({ QString::fromUtf8("DanceHysteria [\u25B6 current]"),
+                                 QString::fromUtf8("  01-Everybody Scream [Non-tracking \u00B7 main]"),
                                  "    1.0.0 PreCurtain", "      Towers" }));
 
     // An edit elsewhere shows at once.
@@ -1146,7 +1148,7 @@ void ShowTreeView_Test::trackingControlsOnTheListAndCuePages()
     emit mode->activated(1);
     QCOMPARE(st->cueList(list)->mode, ListMode::Tracking);
     QVERIFY(trackedRow(view.tree(), c2, "Towers") != nullptr);
-    QVERIFY(treeText(view.tree()).contains("  L [Tracking]"));
+    QVERIFY(treeText(view.tree()).contains(QString::fromUtf8("  L [Tracking \u00B7 main]")));
 
     // The base from the list page...
     base->setCurrentIndex(1);
@@ -4402,6 +4404,9 @@ void ShowTreeView_Test::theProductionSwitcherAndPage()
     st->addCue(lb, -1, "Walk-in");
     const quint32 lb2 = st->addCueList(pb, "Awards");
     st->addCue(lb2, -1, "Fanfare");
+    // The first was made current as it was made: start from none.
+    QCOMPARE(st->currentProduction(), pa);
+    QVERIFY(st->setCurrentProduction(invalidId()));
 
     ShowTreeView view(nullptr, m_doc);
     QComboBox *sw = view.findChild<QComboBox *>("stProduction");

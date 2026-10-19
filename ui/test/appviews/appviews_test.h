@@ -66,6 +66,16 @@ private slots:
      *  saved with Units from the preference */
     void theGridFollowsTheUnitPreference();
 
+    /** The cue page's drop area says what it is for in every theme the app
+     *  ships: its words stand out from the page (they were palette(mid),
+     *  all but the page's own colour on the dark themes). */
+    void theDropAreaReadsInEveryTheme();
+
+    /** Quitting with the window still up and the Show Tree in front: the
+     *  tab goes before the Doc, so its hide event (which stops its preview)
+     *  doesn't land on a freed Doc. Last: it deletes the app. */
+    void quittingWithTheShowTreeShowing();
+
 private:
     App *m_app;
 };

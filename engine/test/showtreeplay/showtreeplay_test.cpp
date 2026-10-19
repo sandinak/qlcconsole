@@ -182,11 +182,11 @@ void ShowTreePlay_Test::theCurrentProductionIsWhatGoPlays()
     const quint32 la = oneListProduction("Dance", a->id(), 2, full, &pa);
     const quint32 lb = oneListProduction("Corporate", b->id(), 2, full, &pb);
 
-    // Nothing current: GO plays the main cue list as set (none: nothing,
-    // there are two chasers).
-    QCOMPARE(st->currentProduction(), invalidId());
-    QCOMPARE(m_doc->currentProduction(), invalidId());
-    QVERIFY(sc->cueList(QString()) == nullptr);
+    // The first production made is current (nothing else had GO); the
+    // second is not.
+    QCOMPARE(st->currentProduction(), pa);
+    QCOMPARE(m_doc->currentProduction(), pa);
+    QCOMPARE(sc->mainCueList(), st->cueList(la)->chaser);
 
     QSignalSpy changed(st, &ShowTreeController::currentProductionChanged);
     QVERIFY(m_doc->setCurrentProduction(pb));
@@ -296,6 +296,7 @@ void ShowTreePlay_Test::eachProductionHasItsTimecodeSource()
     quint32 pa = 0, pb = 0;
     oneListProduction("Dance", a->id(), 1, full, &pa);
     oneListProduction("Corporate", a->id(), 1, full, &pb);
+    QVERIFY(st->setCurrentProduction(invalidId()));    // the first was made current
     tc->setSourceUniverse(1);                   // the show's: universe 2
 
     QVERIFY(st->setProductionTimecode(pa, 2));
@@ -462,7 +463,7 @@ void ShowTreePlay_Test::productionCommands()
     const quint32 pb = r.context.production;
     QVERIFY(pb != pa);
     QCOMPARE(st->production(pb)->name, QString("Corporate Gig"));
-    QCOMPARE(st->currentProduction(), invalidId());
+    QCOMPARE(st->currentProduction(), pa);      // the first stays current
 
     r = cmd.run("production Dance current", r.context);
     QVERIFY2(r.ok, qPrintable(r.message));
@@ -1034,6 +1035,54 @@ void ShowTreePlay_Test::cueOfStepMapsTheChaserBack()
     QCOMPARE(listId, ids[0]);
     // The sub-cues' own chaser is not a list of the production.
     QCOMPARE(st->productionOfChaser(st->cueList(st->subCueList(ids[2]))->chaser), invalidId());
+}
+
+/* A new production is current when nothing else has GO -- no production
+   current, no chaser as the main cue list -- so a first production plays
+   without a trip to Make current. It never takes GO from a choice. */
+void ShowTreePlay_Test::aNewProductionIsCurrentWhenNothingElseHasGo()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    ShowControl *sc = m_doc->showControl();
+    QCOMPARE(st->currentProduction(), invalidId());
+
+    // The first: current, and GO plays its list once it has one.
+    quint32 pa = 0;
+    const quint32 la = oneListProduction("Dance", a->id(), 1, full, &pa);
+    QCOMPARE(st->currentProduction(), pa);
+    QCOMPARE(sc->mainCueList(), st->cueList(la)->chaser);
+
+    // Another while one is current: not current.
+    const quint32 pb = st->addProduction("Corporate");
+    QCOMPARE(st->currentProduction(), pa);
+
+    // "None" leaves the main cue list on Dance's list: GO still plays it, so
+    // a new production doesn't take it.
+    QVERIFY(st->setCurrentProduction(invalidId()));
+    const quint32 pc = st->addProduction("Encore");
+    QCOMPARE(st->currentProduction(), invalidId());
+    QCOMPARE(sc->mainCueList(), st->cueList(la)->chaser);
+
+    // A plain chaser chosen as the main cue list keeps GO too.
+    Chaser *plain = new Chaser(m_doc);
+    m_doc->addFunction(plain);
+    sc->setMainCueList(plain->id());
+    st->addProduction("Matinee");
+    QCOMPARE(st->currentProduction(), invalidId());
+    QCOMPARE(sc->mainCueList(), plain->id());
+
+    // Nothing has GO once that chaser is gone: the next one made is current,
+    // and undoing it leaves none.
+    m_doc->deleteFunction(plain->id());
+    const quint32 pd = st->addProduction("Gala");
+    QCOMPARE(st->currentProduction(), pd);
+    QVERIFY(st->undo());
+    QVERIFY(st->production(pd) == nullptr);
+    QCOMPARE(st->currentProduction(), invalidId());
+    Q_UNUSED(pb)
+    Q_UNUSED(pc)
 }
 
 QTEST_MAIN(ShowTreePlay_Test)

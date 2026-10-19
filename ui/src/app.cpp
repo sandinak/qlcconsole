@@ -284,6 +284,12 @@ App::~App()
     if (ProgrammingManager *pm = findChild<ProgrammingManager *>())
         delete pm;
 
+    // The Show Tree tab is the same trap: its hide event (the window still
+    // showing when App goes) stops its preview through the Doc's
+    // ShowTreeController, which is freed with m_doc below.
+    if (ShowTreeView::instance() != NULL)
+        delete ShowTreeView::instance();
+
     // Same ordering trap: the overlay and the engine are both children of App,
     // so QObject child deletion tears them down in construction order — engine
     // first — and ~PMJOverlay's unregisterDevice() then lands on freed memory.
