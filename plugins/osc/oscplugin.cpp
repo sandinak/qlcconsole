@@ -370,3 +370,10 @@ QList<OSCIO> OSCPlugin::getIOMapping() const
 {
     return m_IOmapping;
 }
+
+void OSCPlugin::refreshTransmitGate()
+{
+    for (const OSCIO &io : m_IOmapping)
+        if (io.controller != NULL)
+            io.controller->refreshTransmitGate();
+}

@@ -33,6 +33,7 @@
 #include <QTimer>
 #include <QHash>
 #include <QMap>
+#include <atomic>
 
 #include "oscpacketizer.h"
 #include "qlcioplugin.h"
@@ -124,6 +125,12 @@ public:
     /** Send DMX data to a specific universe */
     void sendDmx(const quint32 universe, const QByteArray& dmxData);
 
+    /** Work out again whether this line is held by the rig network gate
+     *  (QLCIOPlugin::setTransmitNetworks()). Called when the line is made,
+     *  and by the plugin's refreshTransmitGate(); sendDmx() only reads the
+     *  cached answer. */
+    void refreshTransmitGate();
+
     /** Send a feedback using the specified path and value */
     void sendFeedback(const quint32 universe, quint32 channel, uchar value, const QString &key);
 
@@ -154,6 +161,10 @@ private:
      *  QLCIOPlugin::setTransmitNetworks(). Feedback to a control surface
      *  is not show output and is not held. */
     const QLCIOPlugin *m_gate = nullptr;
+
+    /** The gate's decision for this line, cached: written on the main thread
+     *  by refreshTransmitGate(), read on every send (any thread) */
+    std::atomic<bool> m_held{false};
 
     quint64 m_packetSent;
     quint64 m_packetReceived;

@@ -150,6 +150,10 @@ private:
         QString version;
         int ledCount = 0;           ///< from /json/info, 0 = not known
         qint64 retryAt = 0;         ///< no answer: not sent again before (ms)
+        /** The rig network gate's decision for this device, cached (see
+         *  routeAllowed()): worked out when its address is set and by
+         *  refreshTransmitGate(), only read by the send/poll ticks. */
+        bool gateOpen = true;
     };
 
     struct Target
@@ -180,13 +184,17 @@ private:
      *  would send from must be on a rig network -- a device on the show
      *  network reached through a laptop's other (default) route is exactly
      *  what is held. A name rather than an address cannot be checked and is
-     *  held while the gate is on. Called with m_mutex held. */
-    bool gateAllows(const QString &host) const;
-    void transmitNetworksChanged() override;
-    /** gateAllows()'s route answers, by device address: when asked (ms since
-     *  epoch) and the local IPv4 address (0 = no route). Under m_mutex. */
-    mutable QHash<QString, QPair<qint64, quint32> > m_routeCache;
+     *  held while the gate is on. Asks the OS for the route (a UDP connect,
+     *  which sends nothing), so never on a send path: its answer is kept in
+     *  Device::gateOpen. Called without m_mutex. */
+    bool routeAllowed(const QString &host) const;
 
+public:
+    /** @reimp: every device's Device::gateOpen, again -- the networks changed,
+     *  or (the engine's reconnect tick) a route may have (DHCP, VPN, Wi-Fi) */
+    void refreshTransmitGate() override;
+
+private:
     static void setAnswered(Device &d, bool answered);
     Device &slot(Target &t, int index);
     void problemsMaybeChanged();

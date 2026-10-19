@@ -357,6 +357,8 @@ void InputOutputMap_Test::cleanup()
     stub->m_openOutputs.clear();
     stub->m_openInputs.clear();
     stub->setTransmitNetworks(QStringList());
+    stub->m_gateRefreshes = 0;
+    stub->m_gateAllowed.clear();
 }
 
 void InputOutputMap_Test::offlineShowSavesPatchesByteIdentical()
@@ -1914,6 +1916,49 @@ void InputOutputMap_Test::rigNetworkSuggestedFromPatchesNotWritten()
     // Only offered: nothing set, nothing saved
     QVERIFY(iom.rigNetworks().isEmpty());
     QVERIFY(saveIOMap(iom).contains("<RigNetwork") == false);
+}
+
+void InputOutputMap_Test::rigNetworkDecisionRefreshedOnChangeAndTick()
+{
+    /* The plugins decide once and cache it (no per-packet lookup): the
+       engine has them decide again when the networks or the setting change,
+       and on every reconnect tick even when nothing it knows changed -- an
+       address can move under it (DHCP, VPN, Wi-Fi). */
+    schoolLaptop();
+    IOPluginStub *stub = namedStub(m_doc, "ArtNet", QStringList() << "127.0.0.1" << "10.4.12.7");
+    stub->m_gateRefreshes = 0;
+
+    InputOutputMap iom(m_doc, 1);
+    iom.setRigNetworks(QStringList() << "172.18.0.0/20");
+    QVERIFY(stub->m_gateRefreshes >= 1);
+    QCOMPARE(stub->m_gateAllowed.value("10.4.12.7", true), false);
+    QCOMPARE(stub->m_gateAllowed.value("127.0.0.1", false), true);
+
+    // The session override: every line allowed at once
+    iom.setTransmitOverride(true);
+    QCOMPARE(stub->m_gateAllowed.value("10.4.12.7", false), true);
+    iom.setTransmitOverride(false);
+    QCOMPARE(stub->m_gateAllowed.value("10.4.12.7", true), false);
+
+    // The setting switched off on this machine
+    iom.setTransmitGateEnabled(false);
+    QCOMPARE(stub->m_gateAllowed.value("10.4.12.7", false), true);
+    iom.setTransmitGateEnabled(true);
+    QCOMPARE(stub->m_gateAllowed.value("10.4.12.7", true), false);
+
+    // The tick, with nothing changed: still asked, and the answer kept
+    int before = stub->m_gateRefreshes;
+    QVERIFY(QMetaObject::invokeMethod(&iom, "slotRetryOfflinePatches"));
+    QCOMPARE(stub->m_gateRefreshes, before + 1);
+    QCOMPARE(stub->m_gateAllowed.value("10.4.12.7", true), false);
+
+    // The laptop moved onto the rig network: the next tick catches it
+    stub->m_lineNames = QStringList() << "127.0.0.1" << "172.18.2.219";
+    before = stub->m_gateRefreshes;
+    QVERIFY(QMetaObject::invokeMethod(&iom, "slotRetryOfflinePatches"));
+    QCOMPARE(stub->m_gateRefreshes, before + 1);
+    QCOMPARE(stub->m_gateAllowed.value("172.18.2.219", false), true);
+    QVERIFY(stub->m_gateAllowed.contains("10.4.12.7") == false);
 }
 
 QTEST_GUILESS_MAIN(InputOutputMap_Test)

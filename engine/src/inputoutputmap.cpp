@@ -1230,10 +1230,15 @@ void InputOutputMap::pushTransmitNetworks()
 {
     if (m_doc == NULL || m_doc->ioPluginCache() == NULL)
         return;
+    /* The plugins keep each line's / device's decision cached, so nothing
+       is worked out per packet: a changed list refreshes them by itself;
+       otherwise (the reconnect tick, a line reopened) they are asked to
+       look again, which catches an address or route that moved (DHCP,
+       VPN, Wi-Fi) without the networks changing. */
     const QStringList effective = transmitGateActive() ? m_rigNetworks : QStringList();
     foreach (QLCIOPlugin *plugin, m_doc->ioPluginCache()->plugins())
-        if (plugin != NULL)
-            plugin->setTransmitNetworks(effective);
+        if (plugin != NULL && plugin->setTransmitNetworks(effective) == false)
+            plugin->refreshTransmitGate();
 }
 
 int InputOutputMap::applyTransmitGate()
