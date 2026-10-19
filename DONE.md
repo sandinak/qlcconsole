@@ -41,9 +41,19 @@ troubleshooting, whats-new.
   `ArtNetController::writeDatagram()` (DMX, RDM, ArtPoll, ArtPollReply,
   discovery, ArtIpProg used to call the socket directly in places) and drops
   it there while `transmitHeld()`; E1.31 and OSC DMX output check before
-  sending; WLED checks each device's route before every POST/GET. That covers
+  sending; WLED checks each device's route before its POSTs/GETs. That covers
   what a patch hold can't see: input lines answering polls, Rescan. OSC
   *feedback* to a control surface is deliberately not held.
+- **Decided on change, not per packet** *(fix/rig-gate-cached)* — each
+  Art-Net/E1.31/OSC controller keeps the answer in a `std::atomic<bool>
+  m_held` and WLED each `Device::gateOpen`; the send path only reads it (no
+  mutex, no CIDR walk, no allocation, no route probe). Worked out again by
+  `QLCIOPlugin::refreshTransmitGate()` when `setTransmitNetworks()` changes
+  the list (gate setting, session override, rig networks), when a line's
+  controller is made or a WLED address is set, and on InputOutputMap's 5 s
+  reconnect tick (catches DHCP/VPN/Wi-Fi moves). WLED's route probe (UDP
+  connect, up to `waitForConnected(100)`) moved from the send tick to that
+  refresh, so it can no longer stall a send.
 - **Settings → Network** (AppSettings): the show's rig networks (validated as
   typed; OK disabled while any entry is bad), **Only transmit on rig
   networks** (QSettings `network/onlyTransmitOnRigNetworks`, default on —

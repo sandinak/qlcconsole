@@ -134,6 +134,9 @@ public:
     /** Get a list of the available Input/Output lines */
     QList<E131IO> getIOMapping() const;
 
+    /** @reimp: every line's cached rig network gate decision, again */
+    void refreshTransmitGate() override;
+
 private:
     /** Map of the E131 plugin Input/Output lines */
     QList<E131IO> m_IOmapping;

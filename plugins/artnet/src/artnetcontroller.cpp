@@ -50,6 +50,7 @@ ArtNetController::ArtNetController(QNetworkInterface const& iface, QNetworkAddre
     , m_packetizer(new ArtNetPacketizer())
     , m_pollTimer(NULL)
     , m_gate(qobject_cast<QLCIOPlugin *>(parent))
+    , m_held(false)
 {
     if (m_ipAddr == QHostAddress::LocalHost)
     {
@@ -63,6 +64,7 @@ ArtNetController::ArtNetController(QNetworkInterface const& iface, QNetworkAddre
     }
 
     m_clock.start();
+    refreshTransmitGate();
 
     qDebug() << "[ArtNetController] IP Address:" << m_ipAddr.toString() << " Broadcast address:" << m_broadcastAddr.toString() << "(MAC:" << m_MACAddress << ")";
 }
@@ -721,9 +723,10 @@ bool ArtNetController::isOnSubnet(const QHostAddress &address) const
         && address.isInSubnet(m_ipAddr, m_address.prefixLength());
 }
 
-bool ArtNetController::transmitHeld() const
+void ArtNetController::refreshTransmitGate()
 {
-    return m_gate != NULL && m_gate->transmitAllowedFrom(m_ipAddr.toIPv4Address()) == false;
+    m_held.store(m_gate != NULL && m_gate->transmitAllowedFrom(m_ipAddr.toIPv4Address()) == false,
+                 std::memory_order_relaxed);
 }
 
 qint64 ArtNetController::writeDatagram(const QNetworkDatagram &dg)
@@ -732,8 +735,10 @@ qint64 ArtNetController::writeDatagram(const QNetworkDatagram &dg)
        whose address is not on one of the show's rig networks sends nothing
        at all -- no DMX, no ArtPoll, no ArtPollReply, no discovery. Checked
        here, the one door every packet leaves through, and before the test
-       sink so a test sees exactly what would have gone out. 0 rather than
-       an error: nothing failed, and the send health must not call it so. */
+       sink so a test sees exactly what would have gone out. Only the cached
+       flag is read (refreshTransmitGate() works it out when the networks
+       change): no lock, no list walk per packet. 0 rather than an error:
+       nothing failed, and the send health must not call it so. */
     if (transmitHeld())
         return 0;
 

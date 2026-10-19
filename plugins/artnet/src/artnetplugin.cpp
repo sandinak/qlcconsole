@@ -832,6 +832,13 @@ QList<ArtNetIO> ArtNetPlugin::getIOMapping() const
     return m_IOmapping;
 }
 
+void ArtNetPlugin::refreshTransmitGate()
+{
+    for (const ArtNetIO &io : m_IOmapping)
+        if (io.controller != NULL)
+            io.controller->refreshTransmitGate();
+}
+
 /********************************************************************
  * RDM
  ********************************************************************/

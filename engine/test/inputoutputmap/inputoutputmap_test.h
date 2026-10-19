@@ -78,6 +78,7 @@ private slots:
     void rigNetworkDeviceTargetsFollowTheRoute();
     void rigNetworkSaveLoadRoundTrip();
     void rigNetworkSuggestedFromPatchesNotWritten();
+    void rigNetworkDecisionRefreshedOnChangeAndTick();
     void cleanup();
 
     void universeNames();

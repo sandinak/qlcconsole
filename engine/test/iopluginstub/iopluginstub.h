@@ -111,6 +111,18 @@ public:
     /** When set, name() returns this (e.g. "ArtNet", to load real show XML). */
     QString m_nameOverride;
 
+    /** @reimp Like a network plugin: each line's rig network gate decision,
+     *  cached by line name (the line's address) and counted. */
+    void refreshTransmitGate() override
+    {
+        m_gateRefreshes++;
+        m_gateAllowed.clear();
+        for (const QString &line : std::as_const(m_lineNames))
+            m_gateAllowed.insert(line, transmitAllowedFrom(line));
+    }
+    int m_gateRefreshes = 0;
+    QMap<QString, bool> m_gateAllowed;
+
     /*********************************************************************
      * Outputs
      *********************************************************************/

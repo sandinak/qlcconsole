@@ -88,6 +88,7 @@ private slots:
        send goes to a test sink; nothing leaves. */
     void rigNetworkGateHoldsEverySend();
     void rigNetworkGateAllowsRigAndLoopback();
+    void rigNetworkGateDecisionIsCachedOffTheSendPath();
 };
 
 #endif

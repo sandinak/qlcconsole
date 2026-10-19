@@ -498,10 +498,12 @@ public:
      * set nothing is held -- an older show behaves as it always did -- and
      * transmitGateStatus() says so, for the footer to suggest setting them.
      *
-     * The plugins enforce the same list themselves on every packet
-     * (QLCIOPlugin::setTransmitNetworks()), which also covers what a patch
-     * hold cannot see: an input line answering ArtPolls, a rescan's
-     * discovery polls.
+     * The plugins enforce the same list themselves for everything a line
+     * sends (QLCIOPlugin::setTransmitNetworks()), which also covers what a
+     * patch hold cannot see: an input line answering ArtPolls, a rescan's
+     * discovery polls. They keep the decision cached per line or device and
+     * work it out again when the list changes and on the retry tick, so the
+     * send path only reads a flag.
      */
     QStringList rigNetworks() const;
 
@@ -566,7 +568,8 @@ private:
     void holdOutputPatch(quint32 universe, int index, QLCIOPlugin *plugin,
                          const QString &uid, quint32 savedLine,
                          const QString &network, const QString &reason);
-    /** Push the effective network list into every loaded plugin */
+    /** Push the effective network list into every loaded plugin, and have
+     *  each work its cached per-line decisions out again */
     void pushTransmitNetworks();
     /** Is a patch on @p lineName with @p params network output (a line named
      *  after a non-loopback local address, or aimed at IPv4 targets)? */

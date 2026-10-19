@@ -189,6 +189,9 @@ public:
     /** Get a list of the available Input/Output lines */
     QList<ArtNetIO> getIOMapping() const;
 
+    /** @reimp: every line's cached rig network gate decision, again */
+    void refreshTransmitGate() override;
+
 private:
     /** Map of the ArtNet plugin Input/Output lines */
     QList<ArtNetIO> m_IOmapping;

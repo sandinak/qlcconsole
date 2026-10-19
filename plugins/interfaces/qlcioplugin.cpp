@@ -252,7 +252,7 @@ namespace
     }
 }
 
-void QLCIOPlugin::setTransmitNetworks(const QStringList &networks)
+bool QLCIOPlugin::setTransmitNetworks(const QStringList &networks)
 {
     QVector<QPair<quint32, int> > parsed;
     for (const QString &entry : networks)
@@ -273,10 +273,11 @@ void QLCIOPlugin::setTransmitNetworks(const QStringList &networks)
     {
         QMutexLocker locker(&m_transmitMutex);
         if (parsed == m_transmitNetworks)
-            return;
+            return false;
         m_transmitNetworks = parsed;
     }
-    transmitNetworksChanged();
+    refreshTransmitGate();
+    return true;
 }
 
 QStringList QLCIOPlugin::transmitNetworks() const
