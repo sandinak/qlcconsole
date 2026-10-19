@@ -34,6 +34,15 @@ any interface on that network appears — no re-patching. If the computer
 *is* on that network, check that the interface has an address on it. See
 [Patches follow the network](other-improvements.md#patches-follow-the-network).
 
+**The footer says "Output held — not on the rig network".** This computer
+isn't on any of the networks the show's output belongs on, so its Art-Net,
+sACN, OSC and WLED output is held — kept, and nothing sent — rather than
+put on whatever network it is on. The footer names the show's networks and
+where this computer is connected. Join the show network and it resumes by
+itself; if it *is* on the show network, click the footer and check the
+show's rig networks in **Settings → Network**. See
+[Only transmit on the rig network](other-improvements.md#only-transmit-on-the-rig-network).
+
 **A new Art-Net node doesn't show up, or shows amber "set its IP".** It's
 still on its factory address (2.x.x.x, 10.x.x.x, its maker's default) or
 self-assigned (169.254.x.x), not on your network. Press **Rescan**; if it

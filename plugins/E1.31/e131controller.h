@@ -37,6 +37,7 @@
 #include <QMap>
 
 #include "e131packetizer.h"
+#include "qlcioplugin.h"
 
 #define E131_DEFAULT_PORT     5568
 
@@ -183,6 +184,11 @@ private:
     QNetworkInterface m_interface;
     /** The controller IP address as QHostAddress */
     QHostAddress m_ipAddr;
+
+    /** The plugin whose rig network gate applies (the parent), or NULL.
+     *  A line not on the show's rig networks sends nothing: see
+     *  QLCIOPlugin::setTransmitNetworks(). */
+    const QLCIOPlugin *m_gate = nullptr;
 
     quint64 m_packetSent;
     quint64 m_packetReceived;

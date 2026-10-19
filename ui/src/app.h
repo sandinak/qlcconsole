@@ -227,6 +227,18 @@ public:
     /** Open Connections at its Show control & sync page. */
     void showShowControlSettings();
 
+    /** Open Settings at the show's rig networks (the rig network footer
+     *  chip's click). */
+    void showRigNetworkSettings();
+
+    /** The QSettings key of "Only transmit on rig networks" (default on) */
+    static QString rigNetworkGateSettingKey();
+
+    /** The rig network footer chip's text for @a st, and whether it is the
+     *  red kind (@a alarm) -- empty when there is nothing to say. */
+    static QString rigNetworkFooterText(const InputOutputMap::TransmitGateStatus &st,
+                                        bool *alarm = nullptr);
+
 private slots:
     void slotDocModified(bool state);
     void slotDocAutosave();
@@ -631,6 +643,11 @@ private:
     QLabel* m_statusPadModeLabel;
     QLabel* m_statusShowLockLabel;
     QLabel* m_statusBlackoutLabel;
+    /** Rig network transmit gate: red while network output is held because
+     *  this machine is not on the show's rig network, amber when the show
+     *  has none set or the check is off/lifted. Click opens the setting. */
+    QLabel* m_statusRigNetLabel = nullptr;
+    void updateRigNetworkFooter();
     /** Persistent Design/Operate indicator — the toolbar's mode-toggle
      *  button/icon always shows the mode a click would switch TO, not the
      *  current one (standard play/pause-style affordance), so there was no

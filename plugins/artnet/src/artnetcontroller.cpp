@@ -49,6 +49,7 @@ ArtNetController::ArtNetController(QNetworkInterface const& iface, QNetworkAddre
     , m_udpSocket(udpSocket)
     , m_packetizer(new ArtNetPacketizer())
     , m_pollTimer(NULL)
+    , m_gate(qobject_cast<QLCIOPlugin *>(parent))
 {
     if (m_ipAddr == QHostAddress::LocalHost)
     {
@@ -331,6 +332,9 @@ bool ArtNetController::reportSendResult(UniverseInfo &info, quint32 universe,
 
 void ArtNetController::slotSendAllUniverses()
 {
+    if (transmitHeld())
+        return;
+
     bool changed = false;
     QMutexLocker locker(&m_dataMutex);
     for (QMap<quint32, UniverseInfo>::iterator it = m_universeMap.begin(); it != m_universeMap.end(); ++it)
@@ -345,7 +349,7 @@ void ArtNetController::slotSendAllUniverses()
 
             m_packetizer->setupArtNetDmx(dmxPacket, info.outputUniverse, info.outputData);
 
-            qint64 sent = m_udpSocket->writeDatagram(dmxPacket, info.outputAddress, ARTNET_PORT);
+            qint64 sent = writeDatagram(QNetworkDatagram(dmxPacket, info.outputAddress, ARTNET_PORT));
             if (reportSendResult(info, it.key(), info.outputAddress, sent >= 0))
                 changed = true;
         }
@@ -357,6 +361,9 @@ void ArtNetController::slotSendAllUniverses()
 
 void ArtNetController::sendDmx(const quint32 universe, const QByteArray &data, bool dataChanged)
 {
+    if (transmitHeld())
+        return;
+
     QMutexLocker locker(&m_dataMutex);
     QByteArray dmxPacket;
     QHostAddress outAddress = m_broadcastAddr;
@@ -392,7 +399,7 @@ void ArtNetController::sendDmx(const quint32 universe, const QByteArray &data, b
         m_packetizer->setupArtNetDmx(dmxPacket, outUniverse, data);
     }
 
-    qint64 sent = m_udpSocket->writeDatagram(dmxPacket, outAddress, ARTNET_PORT);
+    qint64 sent = writeDatagram(QNetworkDatagram(dmxPacket, outAddress, ARTNET_PORT));
     const bool changed = reportSendResult(*info, universe, outAddress, sent >= 0);
     locker.unlock();
     if (changed)
@@ -432,14 +439,14 @@ bool ArtNetController::sendRDMCommand(const quint32 universe, uchar command, QVa
 
     //qDebug() << "Sending RDM command" << rdmPacket.toHex(',');
 
-    qint64 sent = m_udpSocket->writeDatagram(rdmPacket, outAddress, ARTNET_PORT);
+    qint64 sent = writeDatagram(QNetworkDatagram(rdmPacket, outAddress, ARTNET_PORT));
     if (sent < 0)
     {
         qWarning() << "sendDmx failed";
         qWarning() << "Errno: " << m_udpSocket->error();
         qWarning() << "Errmgs: " << m_udpSocket->errorString();
     }
-    else
+    else if (sent > 0)
     {
         m_packetSent++;
         result = true;
@@ -492,8 +499,8 @@ bool ArtNetController::handleArtNetPoll(QByteArray const& datagram, QHostAddress
         bool isInput = (info.type & Input) ? true : false;
 
         m_packetizer->setupArtNetPollReply(pollReplyPacket, m_ipAddr, m_MACAddress, universe, isInput);
-        m_udpSocket->writeDatagram(pollReplyPacket, senderAddress, ARTNET_PORT);
-        ++m_packetSent;
+        if (writeDatagram(QNetworkDatagram(pollReplyPacket, senderAddress, ARTNET_PORT)) > 0)
+            ++m_packetSent;
     }
     ++m_packetReceived;
     return true;
@@ -643,7 +650,7 @@ void ArtNetController::sendPollTo(const QHostAddress &address, bool quiet)
     QByteArray pollPacket;
     m_packetizer->setupArtNetPoll(pollPacket);
 
-    const qint64 sent = m_udpSocket->writeDatagram(pollPacket, address, ARTNET_PORT);
+    const qint64 sent = writeDatagram(QNetworkDatagram(pollPacket, address, ARTNET_PORT));
     if (sent < 0)
     {
         /* The periodic one stays quiet: whether this target is reachable is
@@ -654,7 +661,7 @@ void ArtNetController::sendPollTo(const QHostAddress &address, bool quiet)
                        << ": errno=" << m_udpSocket->error()
                        << "(" << m_udpSocket->errorString() << ")";
     }
-    else
+    else if (sent > 0)
     {
         m_packetSent++;
     }
@@ -691,7 +698,7 @@ void ArtNetController::slotSendPoll()
     qint64 sent = writeDatagram(QNetworkDatagram(pollPacket, m_broadcastAddr, ARTNET_PORT));
     if (sent < 0)
         qWarning() << "Unable to send Poll packet: errno=" << m_udpSocket->error() << "(" << m_udpSocket->errorString() << ")";
-    else
+    else if (sent > 0)
         m_packetSent++;
 #endif
 }
@@ -714,8 +721,22 @@ bool ArtNetController::isOnSubnet(const QHostAddress &address) const
         && address.isInSubnet(m_ipAddr, m_address.prefixLength());
 }
 
+bool ArtNetController::transmitHeld() const
+{
+    return m_gate != NULL && m_gate->transmitAllowedFrom(m_ipAddr.toIPv4Address()) == false;
+}
+
 qint64 ArtNetController::writeDatagram(const QNetworkDatagram &dg)
 {
+    /* The rig network gate (QLCIOPlugin::setTransmitNetworks()): a line
+       whose address is not on one of the show's rig networks sends nothing
+       at all -- no DMX, no ArtPoll, no ArtPollReply, no discovery. Checked
+       here, the one door every packet leaves through, and before the test
+       sink so a test sees exactly what would have gone out. 0 rather than
+       an error: nothing failed, and the send health must not call it so. */
+    if (transmitHeld())
+        return 0;
+
     if (m_testSink != NULL)
     {
         m_testSink->append(dg);
@@ -726,6 +747,9 @@ qint64 ArtNetController::writeDatagram(const QNetworkDatagram &dg)
 
 bool ArtNetController::sendDiscoveryPoll()
 {
+    if (transmitHeld())
+        return false;
+
     const QNetworkInterface::InterfaceFlags need =
             QNetworkInterface::IsUp | QNetworkInterface::CanBroadcast;
     if (m_ipAddr.isLoopback() || m_interface.index() <= 0
@@ -755,6 +779,13 @@ bool ArtNetController::sendDiscoveryPoll()
 
 bool ArtNetController::sendIpProg(const QHostAddress &node, const ArtNetIpProgRequest &request)
 {
+    if (transmitHeld())
+    {
+        qWarning() << "[ArtNet] ArtIpProg to" << node.toString() << "not sent:"
+                   << m_ipAddr.toString() << "is not on the show's rig network";
+        return false;
+    }
+
     QByteArray packet;
     m_packetizer->setupArtNetIpProg(packet, request);
 

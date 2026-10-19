@@ -146,6 +146,55 @@ Saved shows keep the interface address and line number older versions
 read, plus the network they're on (a `Network` attribute older versions
 ignore).
 
+### Only transmit on the rig network
+
+A laptop that is on some other network — a school's, a venue office's
+Wi-Fi — must not put show traffic on it. Each show can say which networks
+its output belongs on, its **rig networks**, and network output then goes
+out only from this computer's interfaces on them.
+
+Set them in **Settings → Network**: **This show's rig networks** takes one
+or more IPv4 networks, separated by commas (for example 172.18.0.0/20).
+They are checked as you type — an address without its /size, or anything
+that isn't an IPv4 network, is pointed out in red and OK waits until it
+reads right — and they are saved with the show. A show that has none but
+already has network patches offers the networks its patches were saved
+with (the grey example in the box, and **Use these**); nothing is filled in
+until you say so.
+
+While **Only transmit on rig networks** is on (it is unless you turn it
+off; it is a setting of this computer, not the show), every Art-Net,
+E1.31 (sACN), OSC and WLED output is checked:
+
+- An output whose interface — or, for a WLED, the interface this computer
+  would reach the device through — is **not on a rig network is held**:
+  the patch is kept exactly as it is and saved unchanged, and nothing is
+  sent. No unicast through the default route, no broadcast, no Art-Net
+  polls or poll replies, no discovery on that interface either.
+- A held output **resumes by itself** within a few seconds of this
+  computer joining a rig network — the same check that reconnects an
+  offline patch.
+- **Loopback** (127.x.x.x) is never held, and outputs that aren't on a
+  network (DMX USB, MIDI and the like) aren't looked at.
+- A WLED named by a host name rather than an address can't be checked, so
+  it is held while the check is on.
+
+The footer says so in red, beside the readiness chip: **"Output held — not
+on the rig network (172.18.0.0/20). Connected: en0 10.4.12.7"** — the
+show's networks and where this computer actually is. Hover it for each
+universe and why; click it to open the setting. In Devices a held patch
+reads "held: … — kept, resumes on the rig network".
+
+**Transmit anyway, this session…** (in the same place) lets output go out
+wherever this computer is, after asking. It lasts until qlcconsole quits or
+another show is opened, is never saved, and the footer says "Transmitting
+anyway" the whole time; the same button then reads **Check the rig network
+again**.
+
+A show with **no rig networks** set transmits as it always did, with an
+amber footer note suggesting you set them. Turning the check off shows an
+amber "Rig network check off".
+
 ### When an output is in trouble
 
 The Art-Net and E1.31 outputs say when where a universe goes stops working,

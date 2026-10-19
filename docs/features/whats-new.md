@@ -248,6 +248,15 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Outputs
 
+- **Only transmit on the rig network.** A show can name the networks its
+  output belongs on (**Settings → Network**, for example 172.18.0.0/20,
+  saved with the show). Art-Net, sACN, OSC and WLED output on any other
+  network — a laptop at school — is held, kept and sent nothing, and
+  resumes by itself on the rig network. The footer says it in red: "Output
+  held — not on the rig network (172.18.0.0/20). Connected: en0
+  10.4.12.7"; click it for the setting. **Transmit anyway, this session…**
+  asks first and is never saved. See
+  [Only transmit on the rig network](other-improvements.md#only-transmit-on-the-rig-network).
 - **Backup WLED lanterns.** A WLED universe can drive several devices: a
   backup lantern mirrors the primary, nothing programmed twice. Right-click
   the universe → **WLED Devices / Backup Lanterns…** → **Add Backup**. Each

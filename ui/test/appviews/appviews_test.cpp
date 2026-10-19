@@ -27,6 +27,11 @@
 #include <QDialog>
 #include <QComboBox>
 #include <QLabel>
+#include <QLineEdit>
+#include <QCheckBox>
+#include <QPushButton>
+#include <QDialogButtonBox>
+#include <QXmlStreamReader>
 #include <QFile>
 
 #include "cuerunner.h"
@@ -53,6 +58,12 @@
 #undef protected
 #undef private
 #include "helpbrowser.h"
+#include "inputoutputmap.h"
+#include "networkroute.h"
+#include "outputpatch.h"
+#include "iopluginstub.h"
+#include "ioplugincache.h"
+#include "qlcfile.h"
 #undef protected
 #undef private
 
@@ -561,6 +572,198 @@ void AppViews_Test::theGridFollowsTheUnitPreference()
     // (No second New straight after: MasterTimer::stop() right behind a
     // start() can wait forever -- see TODO.md.)
     forget();
+}
+
+void AppViews_Test::rigNetworkFooterSaysWhyOutputIsHeld()
+{
+    typedef InputOutputMap::TransmitGateStatus S;
+    S st;
+    st.state = S::Held;
+    st.held = 1;
+    st.networkOutputs = 1;
+    st.networks << "172.18.0.0/20";
+    st.connected << "en0 10.4.12.7";
+    bool alarm = false;
+    QCOMPARE(App::rigNetworkFooterText(st, &alarm),
+             QString("Output held — not on the rig network (172.18.0.0/20). "
+                     "Connected: en0 10.4.12.7"));
+    QVERIFY(alarm);
+    st.networkOutputs = 3;
+    QVERIFY(App::rigNetworkFooterText(st).startsWith("1 of 3 outputs held — not on the rig network"));
+    st.state = S::NotSet;
+    QVERIFY(App::rigNetworkFooterText(st, &alarm).startsWith("Rig network not set"));
+    QVERIFY(alarm == false);
+    st.state = S::Clear;
+    QVERIFY(App::rigNetworkFooterText(st).isEmpty());
+
+    /* The real footer, on a laptop at school, patched to the school's own
+       interface: the line is right there, and held. The plugin is the
+       engine's test stub dressed as Art-Net, so nothing is ever sent. */
+    QDir stubDir(QStringLiteral("../../../engine/test/iopluginstub"));
+    stubDir.setFilter(QDir::Files);
+    stubDir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    IOPluginCache *cache = m_app->doc()->ioPluginCache();
+    if (cache->plugin(QStringLiteral("I/O Plugin Stub")) == nullptr)
+        cache->load(stubDir);
+    IOPluginStub *stub = static_cast<IOPluginStub *>(cache->plugin(QStringLiteral("I/O Plugin Stub")));
+    QVERIFY2(stub != nullptr, "the I/O plugin stub did not load");
+    stub->m_nameOverride = QStringLiteral("ArtNet");
+    stub->m_lineNames = QStringList() << QStringLiteral("10.4.12.7");
+    stub->m_openOutputs.clear();
+
+    NetworkRoute::LocalAddress school;
+    school.iface = "en0";
+    school.ip = QHostAddress("10.4.12.7");
+    school.prefix = 16;
+    NetworkRoute::setResolverForTest(
+        [school]() { return QList<NetworkRoute::LocalAddress>() << school; },
+        [](const QHostAddress &) { return QHostAddress("10.4.12.7"); });
+
+    m_app->clearDocument();
+    InputOutputMap *iom = m_app->doc()->inputOutputMap();
+    QLabel *chip = m_app->findChild<QLabel *>("footerRigNetwork");
+    QVERIFY(chip != nullptr);
+    QVERIFY(chip->isHidden());
+
+    QXmlStreamReader xml(QStringLiteral(
+        "<InputOutputMap>\n"
+        " <RigNetwork>172.18.0.0/20</RigNetwork>\n"
+        " <Universe Name=\"U01\" ID=\"0\">\n"
+        "  <Output Plugin=\"ArtNet\" UID=\"10.4.12.7\" Line=\"0\"/>\n"
+        " </Universe>\n"
+        "</InputOutputMap>\n"));
+    xml.readNextStartElement();
+    QVERIFY(iom->loadXML(xml));
+    QCOMPARE(iom->outputPatchesCount(0), 1);
+    QVERIFY(iom->outputPatch(0, 0)->isHeld());
+    QVERIFY(stub->m_openOutputs.isEmpty());
+    QVERIFY(chip->isHidden() == false);
+    QCOMPARE(chip->text(), QString("Output held — not on the rig network (172.18.0.0/20). "
+                                   "Connected: en0 10.4.12.7"));
+    QVERIFY(chip->styleSheet().contains("#e60000"));
+    QVERIFY(chip->toolTip().contains("Universe 1"));
+
+    // Lifting it for the session: the line opens, and the chip says so
+    iom->setTransmitOverride(true);
+    QCOMPARE(stub->m_openOutputs, QList<quint32>() << 0);
+    QVERIFY(chip->text().startsWith("Transmitting anyway"));
+
+    // Unpatched: nothing left to say
+    iom->setTransmitOverride(false);
+    QVERIFY(stub->m_openOutputs.isEmpty());
+    iom->forgetOfflinePatches(0);
+    QVERIFY(chip->isHidden());
+    iom->setRigNetworks(QStringList());
+    m_app->clearDocument();
+    NetworkRoute::setResolverForTest(nullptr, nullptr);
+    stub->m_nameOverride.clear();
+    stub->m_lineNames.clear();
+    stub->m_openOutputs.clear();
+}
+
+void AppViews_Test::rigNetworkSettingsRoundTrip()
+{
+    QSettings settings;
+    const QVariant before = settings.value(App::rigNetworkGateSettingKey());
+
+    m_app->clearDocument();
+    InputOutputMap *iom = m_app->doc()->inputOutputMap();
+    iom->setRigNetworks(QStringList() << "172.18.0.0/20");
+    m_app->doc()->resetModified();
+    QVERIFY(m_app->doc()->isModified() == false);
+    {
+        AppSettings dlg(m_app);
+        QLineEdit *edit = dlg.findChild<QLineEdit *>("settingsRigNetworks");
+        QCheckBox *only = dlg.findChild<QCheckBox *>("settingsRigNetworkOnly");
+        QLabel *error = dlg.findChild<QLabel *>("settingsRigNetworksError");
+        QPushButton *anyway = dlg.findChild<QPushButton *>("settingsTransmitAnyway");
+        QDialogButtonBox *box = dlg.findChild<QDialogButtonBox *>();
+        QVERIFY(edit && only && error && anyway && box);
+        QCOMPARE(edit->text(), QString("172.18.0.0/20"));
+        QVERIFY(only->isChecked());
+        QVERIFY(anyway->isEnabled());
+
+        // Validated as typed: OK waits for something that parses
+        edit->setText("172.18.0.0/20, 172.18/20");
+        QVERIFY(error->isHidden() == false);
+        QVERIFY(error->text().contains("172.18/20"));
+        QVERIFY(box->button(QDialogButtonBox::Ok)->isEnabled() == false);
+
+        edit->setText("172.18.0.0/20, 10.20.1.9/16");
+        QVERIFY(error->isHidden());
+        QVERIFY(box->button(QDialogButtonBox::Ok)->isEnabled());
+        only->setChecked(false);
+        dlg.accept();
+    }
+    QCOMPARE(iom->rigNetworks(), QStringList() << "172.18.0.0/20" << "10.20.0.0/16");
+    QVERIFY(m_app->doc()->isModified());   // the networks are the show's
+    QVERIFY(iom->transmitGateEnabled() == false);
+    QCOMPARE(QSettings().value(App::rigNetworkGateSettingKey()).toBool(), false);
+
+    {
+        AppSettings dlg(m_app);
+        QCOMPARE(dlg.findChild<QLineEdit *>("settingsRigNetworks")->text(),
+                 QString("172.18.0.0/20, 10.20.0.0/16"));
+        QVERIFY(dlg.findChild<QCheckBox *>("settingsRigNetworkOnly")->isChecked() == false);
+        dlg.findChild<QCheckBox *>("settingsRigNetworkOnly")->setChecked(true);
+        dlg.reject();   // Cancel changes nothing
+    }
+    QVERIFY(iom->transmitGateEnabled() == false);
+
+    {
+        AppSettings dlg(m_app);
+        dlg.findChild<QCheckBox *>("settingsRigNetworkOnly")->setChecked(true);
+        dlg.accept();
+    }
+    QVERIFY(iom->transmitGateEnabled());
+
+    // A show with none but network patches is offered its own, not given them
+    m_app->clearDocument();
+    IOPluginStub *stub = static_cast<IOPluginStub *>(
+            m_app->doc()->ioPluginCache()->plugin(QStringLiteral("I/O Plugin Stub")));
+    QVERIFY(stub != nullptr);   // loaded by the footer test before this one
+    stub->m_nameOverride = QStringLiteral("ArtNet");
+    stub->m_lineNames = QStringList() << QStringLiteral("10.4.12.7");
+    NetworkRoute::LocalAddress school;
+    school.iface = "en0";
+    school.ip = QHostAddress("10.4.12.7");
+    school.prefix = 16;
+    NetworkRoute::setResolverForTest(
+        [school]() { return QList<NetworkRoute::LocalAddress>() << school; },
+        [](const QHostAddress &) { return QHostAddress("10.4.12.7"); });
+    QXmlStreamReader xml(QStringLiteral(
+        "<InputOutputMap>\n"
+        " <Universe Name=\"U01\" ID=\"0\">\n"
+        "  <Output Plugin=\"ArtNet\" UID=\"172.18.2.219\" Line=\"1\" Network=\"172.18.2.0/24\"/>\n"
+        " </Universe>\n"
+        "</InputOutputMap>\n"));
+    xml.readNextStartElement();
+    QVERIFY(iom->loadXML(xml));
+    QCOMPARE(iom->outputPatchesCount(0), 1);
+    {
+        AppSettings dlg(m_app);
+        QLineEdit *edit = dlg.findChild<QLineEdit *>("settingsRigNetworks");
+        QVERIFY(edit->text().isEmpty());
+        QVERIFY(edit->placeholderText().contains("172.18.2.0/24"));
+        QPushButton *use = dlg.findChild<QPushButton *>("settingsRigUseSuggested");
+        QVERIFY(use != nullptr);
+        use->click();
+        QCOMPARE(edit->text(), QString("172.18.2.0/24"));
+        dlg.reject();
+        QVERIFY(iom->rigNetworks().isEmpty());
+    }
+    iom->forgetOfflinePatches(0);
+    iom->setRigNetworks(QStringList());
+    NetworkRoute::setResolverForTest(nullptr, nullptr);
+    m_app->clearDocument();
+    stub->m_nameOverride.clear();
+    stub->m_lineNames.clear();
+    stub->m_openOutputs.clear();
+
+    if (before.isValid())
+        settings.setValue(App::rigNetworkGateSettingKey(), before);
+    else
+        settings.remove(App::rigNetworkGateSettingKey());
 }
 
 QTEST_MAIN(AppViews_Test)

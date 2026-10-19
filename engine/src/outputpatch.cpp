@@ -74,6 +74,7 @@ bool OutputPatch::set(QLCIOPlugin* plugin, quint32 output)
     m_pendingUID.clear();
     m_pendingLine = UINT_MAX;
     m_pendingNetwork.clear();
+    m_heldReason.clear();
 
     m_plugin = plugin;
     m_pluginLine = output;

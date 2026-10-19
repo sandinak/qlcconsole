@@ -1501,3 +1501,87 @@ void ArtNet_Test::nodeSetupShowsTheNodesAnswer()
     QVERIFY(dlg.findChild<QLabel *>("status")->text() == status);
     plugin.m_IOmapping.clear();
 }
+
+void ArtNet_Test::rigNetworkGateHoldsEverySend()
+{
+    ArtNetPlugin plugin;
+    QSharedPointer<QUdpSocket> sock(new QUdpSocket());
+    QList<QNetworkDatagram> sink;
+    if (showNetLine(plugin, sock, &sink) == false)
+        QSKIP("needs a broadcast-capable IPv4 interface");
+    ArtNetController *ctrl = plugin.m_IOmapping.at(0).controller;
+
+    // The laptop at school: the show's rig network is somewhere else.
+    plugin.setTransmitNetworks(QStringList() << "10.4.0.0/16");
+    QVERIFY(plugin.transmitRestricted());
+    QVERIFY(ctrl->transmitHeld());
+
+    // Opening an output polls at once -- not from here
+    ctrl->addUniverse(0, ArtNetController::Output);
+
+    ctrl->sendDmx(0, QByteArray(512, char(255)), true);
+    QMetaObject::invokeMethod(ctrl, "slotSendAllUniverses");
+    QVERIFY(QMetaObject::invokeMethod(ctrl, "slotPollTick"));
+    QVERIFY(ctrl->sendDiscoveryPoll() == false);
+    QVERIFY(ctrl->sendIpProg(QHostAddress("172.18.2.60"), ArtNetIpProgRequest()) == false);
+
+    // A node on that network polling us: no ArtPollReply goes back.
+    QByteArray poll;
+    ArtNetPacketizer().setupArtNetPoll(poll);
+    ctrl->handlePacket(poll, QHostAddress("172.18.2.60"));
+
+    QVERIFY2(sink.isEmpty(), qPrintable(QString("%1 datagram(s) left a held line").arg(sink.count())));
+    QCOMPARE(ctrl->getPacketSentNumber(), quint64(0));
+    // Nothing failed, either: held is not a send error
+    QVERIFY(ctrl->outputProblems().isEmpty());
+
+    // Back on the rig network: it resumes with the very next frame.
+    plugin.setTransmitNetworks(QStringList() << "172.18.0.0/20");
+    QVERIFY(ctrl->transmitHeld() == false);
+    ctrl->sendDmx(0, QByteArray(512, char(255)), true);
+    QCOMPARE(sink.count(), 1);
+    QCOMPARE(sink.first().destinationAddress(), QHostAddress("172.18.2.255"));
+
+    // No networks at all: as it always was
+    plugin.setTransmitNetworks(QStringList());
+    QVERIFY(plugin.transmitRestricted() == false);
+    QVERIFY(ctrl->transmitHeld() == false);
+    plugin.m_IOmapping.clear();
+}
+
+void ArtNet_Test::rigNetworkGateAllowsRigAndLoopback()
+{
+    ArtNetPlugin plugin;
+    plugin.setTransmitNetworks(QStringList() << "172.18.2.7/20" << "bogus" << "fe80::/64"
+                                             << "10.0.0.0/33" << "172.18.0.0/20");
+    // Normalised, de-duplicated, the junk ignored
+    QCOMPARE(plugin.transmitNetworks(), QStringList() << "172.18.0.0/20");
+    QVERIFY(plugin.transmitAllowedFrom(QString("172.18.2.219")));
+    QVERIFY(plugin.transmitAllowedFrom(QString("172.18.15.255")));
+    QVERIFY(plugin.transmitAllowedFrom(QString("172.18.16.1")) == false);
+    QVERIFY(plugin.transmitAllowedFrom(QString("10.4.12.7")) == false);
+    QVERIFY(plugin.transmitAllowedFrom(QString("127.0.0.1")));
+    QVERIFY(plugin.transmitAllowedFrom(QString("127.4.5.6")));
+    // Not IPv4: never on a rig network, and no crash
+    QVERIFY(plugin.transmitAllowedFrom(QString("fe80::1")) == false);
+    QVERIFY(plugin.transmitAllowedFrom(QString("wled.local")) == false);
+    QVERIFY(plugin.transmitAllowedFrom(QString()) == false);
+
+    // A loopback line is never held
+    QSharedPointer<QUdpSocket> sock(new QUdpSocket());
+    QList<QNetworkDatagram> sink;
+    QNetworkAddressEntry lo;
+    lo.setIp(QHostAddress::LocalHost);
+    lo.setPrefixLength(8);
+    ArtNetController loCtrl(QNetworkInterface::interfaceFromName("lo0").isValid()
+                                ? QNetworkInterface::interfaceFromName("lo0")
+                                : QNetworkInterface::interfaceFromName("lo"),
+                            lo, sock, 1, &plugin);
+    loCtrl.m_testSink = &sink;
+    QVERIFY(loCtrl.transmitHeld() == false);
+    loCtrl.addUniverse(0, ArtNetController::Output);
+    sink.clear();
+    loCtrl.sendDmx(0, QByteArray(512, char(1)), true);
+    QCOMPARE(sink.count(), 1);
+    QCOMPARE(sink.first().destinationAddress(), QHostAddress(QHostAddress::LocalHost));
+}

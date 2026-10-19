@@ -297,6 +297,7 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
     connect(m_ioMap, SIGNAL(pluginConfigurationChanged(const QString&, bool)),
             this, SLOT(updateList()));
     connect(m_ioMap, SIGNAL(offlinePatchesChanged()), this, SLOT(updateList()));
+    connect(m_ioMap, SIGNAL(transmitGateChanged()), this, SLOT(updateList()));
 
     connect(m_ioMap, SIGNAL(universeAdded(quint32)),
             this, SLOT(slotUniverseAdded(quint32)));
