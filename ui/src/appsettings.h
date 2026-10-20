@@ -78,6 +78,11 @@ private:
     QLabel *m_rigNetworksError;
     QCheckBox *m_rigOnlyCheck;
     QPushButton *m_transmitAnywayButton;
+
+    // Software Update (UpdateChecker): this machine's, not the show's
+    QCheckBox *m_updateCheck = nullptr;
+    QComboBox *m_updateChannel = nullptr;
+    QCheckBox *m_updateAuto = nullptr;
     QDialogButtonBox *m_buttonBox;
     void updateTransmitAnywayButton();
 };

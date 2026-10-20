@@ -50,7 +50,7 @@ const char *const kTopics[] = {
     "getting-started.md", "whats-new.md", "README.md", "lighting-studio.md",
     "programming-tab.md", "show-tree.md", "fixture-manager.md", "stage-targets.md", "shows.md",
     "show-control.md",
-    "other-improvements.md", "effects.md", "shortcuts.md", "troubleshooting.md",
+    "other-improvements.md", "effects.md", "shortcuts.md", "troubleshooting.md", "updates.md",
     "EFFECTSCRIPT_API.md"
 };
 

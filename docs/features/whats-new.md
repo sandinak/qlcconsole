@@ -4,6 +4,21 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## October 2026
 
+### Software updates
+
+- **Update check and install.** qlcconsole checks GitHub Releases once a day
+  in the background, and from **Help → Check for Updates…**. A newer
+  version shows as a footer chip, **Update available: 0.2.0**, never as a
+  pop-up. Its window shows the release notes, with **Install**, **Later**
+  and **Skip This Version**. On macOS and Windows, Install downloads the
+  update and checks it against the release's SHA-256 list (and, on macOS,
+  its signature). It then installs when you quit, or on **Restart and
+  Install**, reopening the same show. It never installs in Perform mode or
+  while anything is running. Settings → Software Update has the channel
+  (Stable, or Pre-releases such as Show Tree) and **Install updates
+  automatically**. IT can turn it all off. On Linux and the Pi, it only
+  tells you. See [Software updates](updates.md).
+
 ### Show Tree
 
 - **Movers with a colour ring.** A ring of LEDs round a mover's lens is a

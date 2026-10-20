@@ -13,6 +13,7 @@
     <file alias="help/show-control.md">../../docs/features/show-control.md</file>
     <file alias="help/stage-targets.md">../../docs/features/stage-targets.md</file>
     <file alias="help/troubleshooting.md">../../docs/features/troubleshooting.md</file>
+    <file alias="help/updates.md">../../docs/features/updates.md</file>
     <file alias="help/whats-new.md">../../docs/features/whats-new.md</file>
     <file alias="help/EFFECTSCRIPT_API.md">../../EFFECTSCRIPT_API.md</file>
     <file alias="images/connections-by-universe.png">../../docs/images/connections-by-universe.png</file>
