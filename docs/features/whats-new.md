@@ -175,6 +175,13 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Lighting Studio
 
+- **Beams stop at risers and the floor.** A wash thrown across the stage —
+  the TrussW bars over DanceHysteria's steps — ran straight through the
+  risers and on below the stage floor in a side elevation. Now a beam stops
+  at the first riser, step or platform it meets (its side as well as its
+  top), washes the top and face it reaches, and nothing of it shows behind
+  a riser or below the floor, in the Studio and the Rig Overview alike. See
+  [Beams](lighting-studio.md#beams-footprint-and-coverage).
 - **Curtains that open in the show.** A main drape or traveler can be
   **Driven by** a curtain fixture (**Add curtain fixture** in its editor):
   as the fixture's **Open** channel goes from 0 to 255 the drape opens, and

@@ -138,6 +138,13 @@ network. Everything in 0.1.0 is in it too.
   strips, drapes) keep their own colour.
 
 ### Fixed
+- **Beams stop at risers and the floor in the rig views.** A wash thrown
+  across a riser went through it, lighting the air behind it, and its cone
+  carried on below the stage floor (the cone's edge was followed to the
+  surface the middle of the beam landed on, a drape far beyond). A beam now
+  stops at a platform's side as well as its top, each edge of the cone ends
+  at what it meets, and a side or front elevation cuts the beam round the
+  risers it meets and shows the wash on their tops and faces as a band.
 - **Calibration offsets no longer show in the rig views.** A head's pan/tilt
   offsets correct the physical fixture: the DMX keeps them, but the plot,
   its gauges, the Studio, the Rig Overview, beams and footprints now draw

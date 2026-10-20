@@ -548,7 +548,13 @@ the Rig Overview show what it's actually doing, not just where it sits:
   meets that surface — or on the cyclorama, for a beam going level or up.
   A beam that lands on more than one thing — half on the end of the cyc and
   half past it, or across the edge of a deck — is split between them, each
-  part of the pool on what it reaches.
+  part of the pool on what it reaches. Platforms, risers and steps are
+  solid: a beam thrown across the stage stops at a riser's side as well as
+  its top, washes the faces it reaches, and lights nothing behind the riser
+  or below the floor. In a side or front elevation (the Angled view with
+  the eye level, up to 10°) the beam is cut round each riser it meets, and
+  the light on a riser's top and lit face shows as a bright band just inside
+  that edge.
 - **Gobos and prisms** — a beam's pool is drawn through whatever its
   optics are doing: the gobo in the current slot (an open slot, or a wheel
   spinning between slots, shows none), turned by gobo rotation, repeated by
@@ -582,9 +588,9 @@ show it:
   target* and the blocked traces go by. See
   [Line of sight](stage-targets.md#line-of-sight).
 - **Beams stop at what is in their way** — in the Angled view and the Rig
-  Overview a beam already stops at a deck, a drape or a wall; with this on
-  it stops at a tower, a truss or a riser's side too. Off by default;
-  remembered.
+  Overview a beam already stops at a platform (its top or its side), a
+  drape or a wall; with this on it stops at a tower or a truss too. Off by
+  default; remembered.
 
 On the plot, a head aimed at a target it can't see draws its aim line **red
 and dashed to the blocker**, with a cross where it stops and a faint dotted

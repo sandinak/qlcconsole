@@ -6,6 +6,47 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-20 — Beams stop at risers and the floor *(fix/beams-stop-at-platforms, off feat/show-tree, not merged)*
+
+"The TrussW are going thru the platforms .. should wash on them vs thru
+them" — DanceHysteria-0.6, the side-on (az 90/270, el 0) Angled view, with
+TrussW-RGB lit blue.
+
+- **Cause.** The flat Top/Front/Side planes draw no beams at all; Branson's
+  "side elevation" is the Angled view, eye level. `drawBeamCone()` drew the
+  cone as the hull of the lens and `beamFootprint()`'s ring, which is every
+  edge ray followed on to the *plane the axis landed on*. The TrussW's axis
+  landed on the closed main drape (a vertical plane), so the lower edge
+  rays ran on down through the steps and ~2 m below the floor to meet it.
+  And `beamThrowUncached()` only knew platform *tops*: a ray going into a
+  riser's back went out of its front to the floor beyond (only the
+  optional Line of sight stopped it), so pools lit the floor in a riser's
+  shadow. The planar-depth fan also tinted riser faces it passed beside.
+  Every view of the Studio and the Rig Overview (CPU and GPU draw the same
+  ops) had the below-floor cone; the 45° overview only showed it as a glow
+  on the floor in front of the drape.
+- **beamThrow**: each platform block is a box (`rayIntoBlock()`, slab test
+  in the platform's turned frame); a ray stops at the first face, with that
+  face's normal. Tops keep their old surface numbers; sides are
+  `kBlockSides + block*8 + face` (`deckSurface()`/`deckSurfaceParts()`).
+- **The cone's far end**: each footprint point is cut back to where its own
+  edge ray stops (when it stops sooner), keeping the fade it had there. A
+  beam whose rays all land where its footprint says is drawn exactly as
+  before.
+- **Seen level** (`seenLevel()`: Angled, el <= 10°): every block a ray hits
+  is cut out of the cone as its screen outline plus everything beyond it
+  from the lens (`levelShadows()`, convex; `emitLightTriOutside()` splits
+  each fan triangle into the convex pieces outside, depth and alpha carried
+  by interpolation), and the wash on an edge-on top or face is a band just
+  inside that edge (`drawLevelWash()`, 3x the pool's alpha, on the block's
+  near face depth). Higher up, the depth buffer and the pools do it.
+- Tests: `aWashStopsOnARiserSeenFromTheSide` / `...FromTheFront` (nothing
+  below the floor, inside the riser or in its shadow; a band on its top),
+  `aBeamClearOfTheRisersIsLeftAlone` (a riser drawn across the beam but not
+  in its way changes no pixel of it); all three fail on the old code.
+  `aBigPixelRigPaintsInGoodTime` now has four risers and an eye-level
+  camera: 45° 44-48 ms vs 42-46 before, level 23-26 vs 22-26.
+
 ### 2026-10-19 — Rig network transmit gate *(feat/rig-network-gate, off feat/show-tree, not merged)*
 
 So a laptop on a school network never sprays Art-Net, sACN or WLED onto it.
