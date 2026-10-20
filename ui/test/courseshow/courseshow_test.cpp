@@ -1102,6 +1102,37 @@ static bool lessonTwoByMouse(Doc *doc, ShowTreeView *view)
     qInfo().noquote() << "[L2] after Make reusable:" << hint->text() << "|" << rowText(view, KeyDimmer);
     LESSON_STEP(paletteNamed(doc, "40%") != nullptr && !st->isInlinePalette(paletteNamed(doc, "40%")->id()),
                 "40% is a palette");
+    {
+        // In the Library with the levels: Palettes → Dimmer → 40%.
+        QTreeWidgetItem *row = libraryRow(view->library(), "40%");
+        QStringList path;
+        for (QTreeWidgetItem *p = row; p != nullptr; p = p->parent())
+            path.prepend(p->text(0));
+        qInfo().noquote() << "[L2] 40% in the Library:" << path.join(" → ") << "| path" << paletteNamed(doc, "40%")->path();
+        LESSON_STEP(row != nullptr, "no 40% in the Library");
+    }
+    LESSON_STEP(rowText(view, KeyDimmer) == QStringLiteral("40%"), rowText(view, KeyDimmer));
+
+    // Undo three times: the warm verse is back; Redo three times: the cool one.
+    for (int i = 0; i < 3; ++i)
+    {
+        view->findChild<QToolButton *>("stUndo")->click();
+        settle(50);
+    }
+    {
+        const QStringList d = describe(doc);
+        LESSON_STEP(d.value(2) == QStringLiteral("1.0.1 Verse: StepTops [Colour Warm White, Dimmer 75%]"), d.value(2));
+    }
+    for (int i = 0; i < 3; ++i)
+    {
+        view->findChild<QToolButton *>("stRedo")->click();
+        settle(50);
+    }
+    {
+        const QStringList d = describe(doc);
+        LESSON_STEP(d.value(2) == QStringLiteral("1.0.1 Verse: StepTops [Colour Lavender, Dimmer 40%]"), d.value(2));
+        LESSON_STEP(!st->isInlinePalette(paletteNamed(doc, "40%")->id()), "40% a one-off again after Redo");
+    }
 
     // Steps 6-8: the chorus, then + Cue "Scream": TrussW-RGB and Lanterns,
     // then Red and Full dropped on the dashed area: cue looks.
@@ -1556,6 +1587,15 @@ void CourseShow_Test::lessonTwoColourPicker()
     qInfo().noquote() << "[L2] picked colour row:" << rowText(view, KeyColour);
     QVERIFY2(rowText(view, KeyColour).startsWith("#6a0dad"), qPrintable(rowText(view, KeyColour)));
     QVERIFY(view->findChild<QLabel *>(QStringLiteral("stReuse:%1").arg(KeyColour)) != nullptr);
+
+    // The puzzle: a cue look on the Pose reaches none of its layers (its
+    // one layer sets its own colour).
+    QVERIFY(view->selectNode(cueNumbered(doc, "1.0.0")));
+    settle(50);
+    const QString said = dropPaletteOnZone(doc, view, "Green");
+    qInfo().noquote() << "[L2] Green on the Pose:" << said;
+    QCOMPARE(said, QStringLiteral("Green → cue look on 1.0.0 Pose: reaches 0 of 1 layers"));
+    QCOMPARE(sends(doc, "SR Truss Cyc 1"), QByteArray("\x00\x00\xff", 3));
     doc->resetModified();
 }
 

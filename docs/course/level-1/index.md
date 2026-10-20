@@ -12,7 +12,7 @@ with GO.
 | # | Lesson | Status |
 |---|---|---|
 | 1.1 | [From a song to cues: your first three looks](lesson-01/index.md) | written |
-| 1.2 | Colour and intensity tell the mood | planned |
+| 1.2 | [Colour and intensity tell the mood](lesson-02/index.md) | written |
 | 1.3 | Direction: aim the light | planned |
 | 1.4 | Timing: fades and holds | planned |
 | 1.5 | Calling and running the show (level check) | planned |
