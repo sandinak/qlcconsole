@@ -91,6 +91,10 @@ private slots:
      *  a jump (double-click) and Stop, in the Run tab. */
     void lessonFiveRunsTheShow();
 
+    /** Lesson 1.5's show time: Operate (LIVE), where a click in the Show
+     *  Tree doesn't change the stage; Stop, then Design again. */
+    void lessonFiveOperate();
+
     /** COURSE_BUILD=1: makes Lessons 1.2-1.5's start and finish files, each
      *  lesson done with the mouse from the one before's finish. Skipped
      *  otherwise. */

@@ -40,6 +40,7 @@
 #include <QColorDialog>
 #include <QComboBox>
 #include <QFileInfo>
+#include <QElapsedTimer>
 #include <QLabel>
 #include <QTimer>
 #include <QFile>
@@ -1064,6 +1065,22 @@ static void closeRig()
     settle();
 }
 
+/* Waits (up to @a ms) until @a ok holds, as the preview reaches the rig
+   a frame or two after a change. */
+template <typename F>
+static bool waitUntil(F ok, int ms = 3000)
+{
+    QElapsedTimer t;
+    t.start();
+    while (!ok())
+    {
+        if (t.elapsed() > ms)
+            return false;
+        QTest::qWait(20);
+    }
+    return true;
+}
+
 #define LESSON_STEP(cond, what) \
     do { if (!(cond)) { qWarning().noquote() << "lesson step failed:" << (what) << "line" << __LINE__ \
                                              << describe(doc).join(" || "); return false; } } while (0)
@@ -1189,7 +1206,7 @@ static bool lessonThreeByMouse(Doc *doc, ShowTreeView *view, const QString &shot
     settle(300);
     qInfo() << "[L3] bare AT wash pan/tilt" << panTilt(doc, "SR AT Wash 1") << panTilt(doc, "SL AT Wash 1")
             << "dimmer" << channelValue(doc, "SR AT Wash 1", "Dimmer");
-    LESSON_STEP(panTilt(doc, "SR AT Wash 1") == qMakePair(128, 32), "bare wash pan/tilt");
+    LESSON_STEP(waitUntil([doc]() { return panTilt(doc, "SR AT Wash 1") == qMakePair(128, 32); }), "bare wash pan/tilt");
     shot(QStringLiteral("rig-verse-front"));
     {
         const QString said = dropTargetOnRow(doc, view, "AT-W-ALL", "Center");
@@ -1198,7 +1215,7 @@ static bool lessonThreeByMouse(Doc *doc, ShowTreeView *view, const QString &shot
     }
     settle(300);
     qInfo() << "[L3] aimed AT wash pan/tilt" << panTilt(doc, "SR AT Wash 1") << panTilt(doc, "SL AT Wash 1");
-    LESSON_STEP(panTilt(doc, "SR AT Wash 1") != qMakePair(128, 32), "the wash didn't move");
+    LESSON_STEP(waitUntil([doc]() { return panTilt(doc, "SR AT Wash 1") != qMakePair(128, 32); }), "the wash didn't move");
     shot(QStringLiteral("rig-verse-center"));
 
     // The solo: after the scream.
@@ -1231,7 +1248,7 @@ static bool lessonThreeByMouse(Doc *doc, ShowTreeView *view, const QString &shot
     }
     settle(300);
     // White at Full, and still dark: the shutter is closed.
-    LESSON_STEP(channelValue(doc, "SR AT Spot", "Master Dimmer") == 255, "spot dimmer");
+    LESSON_STEP(waitUntil([doc]() { return channelValue(doc, "SR AT Spot", "Master Dimmer") == 255; }), "spot dimmer");
     LESSON_STEP(channelValue(doc, "SR AT Spot", "Strobe/Shutter") < 8, "spot shutter already open");
     shot(QStringLiteral("rig-solo-closed"));
     {
@@ -1242,7 +1259,7 @@ static bool lessonThreeByMouse(Doc *doc, ShowTreeView *view, const QString &shot
     settle(300);
     qInfo() << "[L3] open AT spot pan/tilt" << panTilt(doc, "SR AT Spot") << panTilt(doc, "SL AT Spot")
             << "shutter" << channelValue(doc, "SR AT Spot", "Strobe/Shutter");
-    LESSON_STEP(channelValue(doc, "SR AT Spot", "Strobe/Shutter") >= 8, "spot shutter still closed");
+    LESSON_STEP(waitUntil([doc]() { return channelValue(doc, "SR AT Spot", "Strobe/Shutter") >= 8; }), "spot shutter still closed");
     LESSON_STEP(panTilt(doc, "SR AT Spot") == qMakePair(0, 0), "the spot has a position already");
     shot(QStringLiteral("rig-solo-floor"));
     {
@@ -1252,7 +1269,7 @@ static bool lessonThreeByMouse(Doc *doc, ShowTreeView *view, const QString &shot
     }
     settle(300);
     qInfo() << "[L3] aimed AT spot pan/tilt" << panTilt(doc, "SR AT Spot") << panTilt(doc, "SL AT Spot");
-    LESSON_STEP(panTilt(doc, "SR AT Spot") != qMakePair(0, 0), "the spot didn't move");
+    LESSON_STEP(waitUntil([doc]() { return panTilt(doc, "SR AT Spot") != qMakePair(0, 0); }), "the spot didn't move");
     shot(QStringLiteral("rig-solo"));
     qInfo().noquote() << "[L3] solo rows:" << view->cueLayerItems().join(" | ");
     return true;
@@ -1421,6 +1438,11 @@ void CourseShow_Test::lessonFiveRunsTheShow()
     Doc *doc = m_app->doc();
     CueRunner *run = runTab(m_app);
     QVERIFY(run != nullptr);
+    // Show time: Operate first, as the handout says.
+    m_app->m_modeToggleAction->trigger();
+    settle(100);
+    QCOMPARE(doc->mode(), Doc::Operate);
+    QTRY_COMPARE_WITH_TIMEOUT(run->modeText(), QStringLiteral("LIVE"), 2000);
     qInfo().noquote() << "[L5] mode:" << run->modeText() << "| header:" << run->headerText()
                       << "| next:" << run->nextText();
     QVERIFY2(run->nextText().contains("1.0.0"), qPrintable(run->nextText()));
@@ -1471,6 +1493,11 @@ void CourseShow_Test::lessonFiveRunsTheShow()
     QTRY_COMPARE_WITH_TIMEOUT(sends(doc, "US Step 1"), QByteArray("\x00\x00\x00", 3), 3000);
     QTRY_VERIFY_WITH_TIMEOUT(run->nextText().contains("1.0.0"), 2000);
     qInfo().noquote() << "[L5] after Stop:" << run->nowText() << "| next:" << run->nextText();
+    // Back to Design: nothing runs, so it doesn't ask.
+    settle(300);
+    m_app->m_modeToggleAction->trigger();
+    settle(100);
+    QCOMPARE(doc->mode(), Doc::Design);
     doc->resetModified();
 }
 
@@ -1601,7 +1628,7 @@ void CourseShow_Test::lessonTwoColourPicker()
     const QString said = dropPaletteOnZone(doc, view, "Green");
     qInfo().noquote() << "[L2] Green on the Pose:" << said;
     QCOMPARE(said, QStringLiteral("Green → cue look on 1.0.0 Pose: reaches 0 of 1 layers"));
-    QCOMPARE(sends(doc, "SR Truss Cyc 1"), QByteArray("\x00\x00\xff", 3));
+    QTRY_COMPARE_WITH_TIMEOUT(sends(doc, "SR Truss Cyc 1"), QByteArray("\x00\x00\xff", 3), 2000);
     doc->resetModified();
 }
 
@@ -1634,6 +1661,47 @@ void CourseShow_Test::lessonThreeExtension()
              qPrintable(view->cueLayerItems().join(" | ")));
     const QByteArray wash = sends(doc, "SR Truss Wash 1");
     QVERIFY2(uchar(wash.at(0)) == 0 && uchar(wash.at(2)) > 40 && uchar(wash.at(2)) < 90, qPrintable(wash.toHex(' ')));
+    doc->resetModified();
+}
+
+void CourseShow_Test::lessonFiveOperate()
+{
+    // Lesson 1.5's show time: the Operate button (top right) makes it LIVE;
+    // then a click on a cue in the Show Tree doesn't touch the stage; Stop,
+    // and Design again.
+    QVERIFY(open(kL5Start));
+    Doc *doc = m_app->doc();
+    QCOMPARE(m_app->m_modeToggleAction->text().remove(QLatin1Char('&')), QStringLiteral("Operate"));
+    m_app->m_modeToggleAction->trigger();
+    settle(100);
+    QCOMPARE(doc->mode(), Doc::Operate);
+    QCOMPARE(m_app->m_modeToggleAction->text(), QStringLiteral("Design"));
+    CueRunner *run = runTab(m_app);
+    QVERIFY(run != nullptr);
+    QTRY_COMPARE_WITH_TIMEOUT(run->modeText(), QStringLiteral("LIVE"), 2000);
+    QVERIFY(!m_app->m_fileOpenAction->isEnabled());
+
+    press(run, "crGo");
+    QTRY_VERIFY_WITH_TIMEOUT(run->nowText().contains("1.0.0"), 2000);
+    QTRY_COMPARE_WITH_TIMEOUT(sends(doc, "SR Truss Cyc 1"), QByteArray("\x00\x00\xff", 3), 5000);
+    // In LIVE, the Show Tree shows nothing new on stage: the Scream clicked
+    // there doesn't turn the stage red.
+    ShowTreeView *view = showTree();
+    QVERIFY(view->selectNode(cueNumbered(doc, "1.0.3")));
+    QTest::qWait(600);
+    QCOMPARE(sends(doc, "SR Truss Wash 1"), QByteArray("\x00\x00\x00", 3));
+    QCOMPARE(sends(doc, "SR Truss Cyc 1"), QByteArray("\x00\x00\xff", 3));
+    qInfo().noquote() << "[L5] Show Tree in LIVE says:" << hintOf(view)->text()
+                      << "|" << view->findChild<QLabel *>("stPreview")->text();
+
+    run = runTab(m_app);
+    press(run, "crStop");
+    QTRY_COMPARE_WITH_TIMEOUT(sends(doc, "SR Truss Cyc 1"), QByteArray("\x00\x00\x00", 3), 3000);
+    settle(300);
+    m_app->m_modeToggleAction->trigger();
+    settle(100);
+    QCOMPARE(doc->mode(), Doc::Design);
+    QTRY_COMPARE_WITH_TIMEOUT(run->modeText(), QStringLiteral("DESIGN"), 2000);
     doc->resetModified();
 }
 
@@ -2065,6 +2133,8 @@ void CourseShow_Test::lessonPictures()
         Doc *dc = m_app->doc();
         CueRunner *run = runTab(m_app);
         QVERIFY(run != nullptr);
+        m_app->m_modeToggleAction->trigger();      // show time: LIVE
+        settle(300);
         press(run, "crGo");
         QTest::qWait(3300);
         QTreeWidgetItem *chorus = runRow(run, "1.0.2");
@@ -2085,7 +2155,10 @@ void CourseShow_Test::lessonPictures()
             QVERIFY(shoot(f, d, "run-standby"));
         }
         press(run, "crStop");
+        QTest::qWait(800);
+        m_app->m_modeToggleAction->trigger();      // Design again
         settle(300);
+        QCOMPARE(dc->mode(), Doc::Design);
         dc->resetModified();
     }
 
