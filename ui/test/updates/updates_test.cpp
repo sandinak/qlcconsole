@@ -178,6 +178,7 @@ protected:
     bool launchInstaller(bool, const QString &) override { ++launches; return true; }
 };
 
+#if defined(Q_OS_MACOS)
 bool run(const QString &program, const QStringList &args, QByteArray *out = nullptr,
          const QProcessEnvironment &env = QProcessEnvironment::systemEnvironment())
 {
@@ -236,6 +237,7 @@ bool makeDmg(const QString &srcFolder, const QString &dmg)
     return run("/usr/bin/hdiutil", { "create", "-quiet", "-srcfolder", srcFolder,
                                      "-format", "UDZO", "-volname", "qlcconsole test", dmg });
 }
+#endif
 }
 
 /*****************************************************************************
