@@ -44,8 +44,10 @@ to the show:
 
 - **Check for updates (once a day, from GitHub)** turns checking on or off.
 - **Channel**: **Stable releases**, or **Pre-releases too** (for example
-  the **Show Tree** builds handed out to a class). A stable build starts on
-  Stable. A pre-release build starts on Pre-releases.
+  the **Show Tree** builds handed out to a class). A build starts on the
+  channel of its own release. If GitHub marks that release as a
+  pre-release, the build follows Pre-releases from its first check.
+  Otherwise it follows Stable.
 - **Install updates automatically** is off by default, so qlcconsole asks
   first. When it is on, an update is downloaded and checked in the
   background as soon as it is found. The chip then says it will install

@@ -49,6 +49,7 @@ private slots:
     void checkStableIgnoresPrerelease();
     void checkSkipVersion();
     void checkUpToDate();
+    void ownReleaseSetsDefaultChannel();
     void checkEtag();
     void checkRateLimited();
     void checkOffline();

@@ -495,6 +495,49 @@ void Updates_Test::checkUpToDate()
     QVERIFY(c.available().isValid() == false);
 }
 
+void Updates_Test::ownReleaseSetsDefaultChannel()
+{
+    // Plain X.Y.Z versions: this build's own release on GitHub, flagged
+    // pre-release (Show Tree for students), puts it on Pre-release.
+    const QString self = QStringLiteral(QLCCONSOLE_VERSION);
+    if (UpdateChecker::isPrereleaseVersion(self))
+        QSKIP("this build's version is itself a pre-release");
+    QCOMPARE(UpdateChecker::channel(), UpdateChecker::Stable);
+
+    QJsonArray list;
+    list.append(release("v" + self, true, m_server->base(), false, "Show Tree " + self));
+    list.append(release("v99.0.0", false, m_server->base()));
+    list.append(release("v100.0.0", true, m_server->base()));
+    FakeGitHub::Route r;
+    r.body = QJsonDocument(list).toJson();
+    m_server->route("/releases", r);
+
+    UpdateChecker c;
+    c.setApiUrl(QUrl(m_server->base() + "/releases"));
+    QSignalSpy spy(&c, &UpdateChecker::checkFinished);
+    c.check();
+    QVERIFY(spy.wait(10000));
+    QCOMPARE(UpdateChecker::defaultChannel(), UpdateChecker::PreRelease);
+    QCOMPARE(UpdateChecker::channel(), UpdateChecker::PreRelease);
+    QCOMPARE(c.available().version, QString("100.0.0"));
+
+    // Chosen by hand, Stable wins; the build's default is not stored.
+    UpdateChecker::setChannel(UpdateChecker::Stable);
+    QCOMPARE(UpdateChecker::channel(), UpdateChecker::Stable);
+    c.check();
+    QVERIFY(spy.wait(10000));
+    QCOMPARE(c.available().version, QString("99.0.0"));
+
+    // The same release re-published as a full release: back to Stable.
+    list[0] = release("v" + self, false, m_server->base());
+    r.body = QJsonDocument(list).toJson();
+    m_server->route("/releases", r);
+    QSettings().remove("updates/channel");
+    c.check();
+    QVERIFY(spy.wait(10000));
+    QCOMPARE(UpdateChecker::defaultChannel(), UpdateChecker::Stable);
+}
+
 void Updates_Test::checkEtag()
 {
     FakeGitHub::Route r;

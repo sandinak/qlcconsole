@@ -44,6 +44,7 @@
 #define SETTINGS_ETAG         QStringLiteral("updates/etag")
 #define SETTINGS_RETRYAFTER   QStringLiteral("updates/retryAfter")
 #define SETTINGS_DISABLED     QStringLiteral("updates/disabled")
+#define SETTINGS_SELFPRE      QStringLiteral("updates/buildIsPrerelease")
 
 #define DEFAULT_API_URL "https://api.github.com/repos/sandinak/qlcconsole/releases?per_page=20"
 
@@ -193,7 +194,13 @@ bool UpdateChecker::isPrereleaseVersion(const QString &v)
 
 UpdateChecker::Channel UpdateChecker::defaultChannel()
 {
-    return isPrereleaseVersion(QStringLiteral(QLCCONSOLE_VERSION)) ? PreRelease : Stable;
+    // Versions are plain X.Y.Z; what makes a build a pre-release is GitHub's
+    // flag on its own release, learnt by the first check (evaluate()). A
+    // SemVer suffix ("0.3.0-rc.1") says so too, without asking.
+    const QString self = QStringLiteral(QLCCONSOLE_VERSION);
+    if (isPrereleaseVersion(self))
+        return PreRelease;
+    return QSettings().value(SETTINGS_SELFPRE).toString() == self ? PreRelease : Stable;
 }
 
 /*****************************************************************************
@@ -615,7 +622,24 @@ void UpdateChecker::slotFinished()
 
 void UpdateChecker::evaluate(const QByteArray &json)
 {
-    const UpdateRelease newest = newestOn(parseReleases(json), channel());
+    const QList<UpdateRelease> releases = parseReleases(json);
+
+    // This build's own release, if listed, says which channel it belongs to
+    // (a Show Tree build for students is a GitHub pre-release).
+    const QString self = QStringLiteral(QLCCONSOLE_VERSION);
+    for (const UpdateRelease &r : releases)
+    {
+        if (compareVersions(r.version, self) != 0)
+            continue;
+        QSettings settings;
+        if (r.prerelease)
+            settings.setValue(SETTINGS_SELFPRE, self);
+        else
+            settings.remove(SETTINGS_SELFPRE);
+        break;
+    }
+
+    const UpdateRelease newest = newestOn(releases, channel());
     m_available = UpdateRelease();
     if (newest.isValid() && compareVersions(newest.version, currentVersion()) > 0)
     {

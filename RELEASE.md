@@ -120,7 +120,8 @@ things from each release:
 - **Tag** `vX.Y.Z`, a SemVer version. A tag that is not a version is
   ignored.
 - **Pre-release flag** for builds meant only for the Pre-release channel,
-  such as Show Tree for students:
+  such as Show Tree for students. VERSION stays plain X.Y.Z; a build whose
+  own release carries the flag follows the Pre-release channel by itself:
   `PRERELEASE=1 TITLE="Show Tree X.Y.Z" ./release.sh`.
 - **Asset names**, which is how it picks its download:
   - macOS: `qlcconsole-<v>-universal-<date>-<rev>.dmg`

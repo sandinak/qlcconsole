@@ -123,8 +123,9 @@ public:
     /** True for a SemVer pre-release ("0.2.0-showtree.1"). */
     static bool isPrereleaseVersion(const QString &v);
 
-    /** What a fresh install follows: PreRelease for a pre-release build,
-     *  Stable otherwise. */
+    /** What a fresh install follows: PreRelease for a pre-release build
+     *  -- one whose own GitHub release carries the pre-release flag (seen
+     *  by a check), or with a SemVer pre-release suffix -- Stable otherwise. */
     static Channel defaultChannel();
 
     /*********************************************************************

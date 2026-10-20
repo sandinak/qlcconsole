@@ -18,10 +18,10 @@ under `~/.claude/.../memory/`.
   - Test a standard (non-admin) account, which should fall back to Open
     Download.
   - Test the Windows silent install (`/S /D=`) and reopen on the Win10 VM.
-  - A pre-release VERSION with a SemVer suffix (`0.2.0-showtree.1`) would
-    break NSIS `VIProductVersion "${VERSION}.0"`. Give it a numeric-only
-    version before using one; until then Show Tree builds start on the
-    Stable channel and students pick Pre-releases in Settings.
+  - Versions stay plain X.Y.Z; a build learns it is a pre-release from its
+    own release's GitHub flag at its first check. Until that check, a
+    pre-release build behaves as Stable. A SemVer suffix would also work, but
+    it would break NSIS `VIProductVersion "${VERSION}.0"`.
   - `hdiutil attach -mountpoint` warns that it is deprecated on macOS 27, in
     favour of `diskutil image attach`. It still works.
 
