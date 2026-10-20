@@ -186,10 +186,10 @@ Branson reviews it, checks the steps on the app, and merges it.
 | Part | Status |
 |---|---|
 | [Course plan](COURSE_PLAN.md), [teaching show](rig.md), [install](install.md), [glossary](GLOSSARY.md) | written |
-| [Level 0](level-0/index.md): 0.1 *What light does*, 0.2 *The virtual stage* | see the level page |
-| [Level 1](level-1/index.md): 1.1–1.5 | see the level page |
+| [Level 0](level-0/index.md): 0.1 *What light does*, 0.2 *The virtual stage* (with the Level 0 check) | written |
+| [Level 1](level-1/index.md): 1.1–1.5, the [Level 1 check and rubric](level-1/lesson-05/level-check.md) | written |
 | Level 2 (7 lessons), Level 3 (7 lessons) | planned: outlines in the [course plan](COURSE_PLAN.md#2-levels-and-lessons) |
-| The Level 1 rubric (plan §7) | to write |
+| Slide decks made from the slide outlines | to make |
 
 Good first jobs for you:
 
@@ -198,7 +198,9 @@ Good first jobs for you:
   grader.
 - Suggest **video clips** for Lesson 0.1 (a 2-minute show choir number with
   clear light changes; YouTube links are fine).
-- Draft the **Level 1 rubric** and the **Level 2** lessons from the plan.
+- Try the **Level 1 rubric** (in the Level 1 check) on a made-up group:
+  is it fair and clear?
+- Draft the **Level 2** lessons from the plan, starting with 2.1.
 - Check the **Colour…** picker on the Mac (Lesson 1.2's extension): say
   whether the steps match what you see.
 

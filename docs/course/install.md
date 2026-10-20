@@ -8,8 +8,9 @@ nav_order: 3
 qlcconsole is free. It runs on **Mac**, **Windows** and **Linux**
 computers. You don't need any lights: the course stage is on the screen.
 
-**Download the Show Tree build from the
+**Download qlcconsole 0.2.0 (or later) from the
 [qlcconsole Releases page](https://github.com/sandinak/qlcconsole/releases).**
+The lessons are checked on 0.2.0.
 The course uses the newest **pre-release** whose name starts with
 **Show Tree** (it has a *Pre-release* badge; the "Latest" release above it
 may be an older build without the Show Tree). Under its **Assets**, pick

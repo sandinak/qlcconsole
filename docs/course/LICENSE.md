@@ -5,7 +5,7 @@ nav_order: 10
 
 # Licence
 
-*Recommended — pending Branson's OK.*
+*Approved by Branson, 2026-10-20.*
 
 | What | Licence |
 |---|---|

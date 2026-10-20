@@ -5,9 +5,11 @@ nav_order: 2
 
 # Show Tree course — plan for review
 
-*Status: second pass (2026-10-18), with Branson's answers to the first
-pass's questions (§9). Written: this plan, the teaching show, Lesson 1.1
-complete. Everything else below is an outline.*
+*Status (2026-10-20): Level 0 and Level 1 are written — 0.1, 0.2, 1.1–1.5
+and the Level 1 check — each with teacher guide, handout, slides outline,
+exit ticket and at-home page, every app step checked on qlcconsole 0.2.0
+by the course test. Levels 2 and 3 are outlines. Volunteers start at
+[For volunteers](VOLUNTEER.md); new lessons start from `_template/`.*
 
 The Show Tree is the main tool for this year's show. This course takes a
 high-school show choir tech crew from "what does a lighting designer do?"
@@ -59,8 +61,8 @@ can open the app, find the stage, and play a finished cue list.*
 
 | # | Lesson | Design idea | In the tool |
 |---|---|---|---|
-| 0.1 | **What light does** | The four qualities of light (intensity, colour, direction, movement). The jobs of light: let the audience see, tell them where to look, set the mood, match the energy of the song. | No computer. Watch a 2-minute clip of a show choir number twice: once for the singers, once only for the light. Name each change. |
-| 0.2 | **The virtual stage** | The stage words: upstage / downstage, stage left / stage right (the singers' left and right), risers, trusses, cyc, audience towers (front of house). | Install and open qlcconsole. Open `lesson-1-1-finish.qlcc`. **View → Rig Overview** (⇧⌘R): find each part of the stage. Run tab: press GO three times. Nothing you do can break real lights. |
+| 0.1 | **What light does** *(written)* | The four qualities of light (intensity, colour, direction, movement). The jobs of light: let the audience see, tell them where to look, set the mood, match the energy of the song. | No computer. Watch a 2-minute clip of a show choir number twice: once for the singers, once only for the light. Name each change. |
+| 0.2 | **The virtual stage** *(written)* | The stage words: upstage / downstage, stage left / stage right (the singers' left and right), risers, trusses, cyc, audience towers (front of house). | Install and open qlcconsole. Open `lesson-1-1-finish.qlcc`. **View → Rig Overview** (⇧⌘R): its View (Top, Front, 45°) and Room (Work light…) to find each part of the stage. Run tab: press GO three times. Nothing you do can break real lights. **Level 0 check:** label the stage plan. |
 
 ### Level 1 — Basics (5 lessons)
 
@@ -71,10 +73,10 @@ with GO.*
 | # | Lesson | Design idea | In the tool |
 |---|---|---|---|
 | **1.1** | **From a song to cues: your first three looks** *(written; song: "Everybody Scream")* | A song has sections; a cue is a moment where the light changes. A look is a group of lights in a colour at a level. | Production → cue list → cue. A group dropped on a cue is a **layer**; a colour and a level dropped on the layer. Three cues: Pose, Verse, Chorus. GO in the Run tab. |
-| 1.2 | **Colour and intensity tell the mood** | Warm vs cool; saturated vs pale; bright isn't always better. Contrast between sections. | Change a look in place (⋯ → Set to), Level… and Colour… for values not in the palette list, a **cue look** for the whole cue. Undo. |
-| 1.3 | **Direction: aim the light** | Front light shows faces; back and side light shape bodies; uplight is drama. Every number needs faces lit. | Stage targets (Soloist DS, Center). Start from AT-W-ALL (the audience-tower washes) Warm White, Full **and Aim Center** — moving lights need a position, or they light the house; then **Aim Soloist DS** on AT-Spots. Why moving lights need a Position. |
-| 1.4 | **Timing: fades and holds** | A snap is a hit; a slow fade is a breath. Cue timing follows the music. | Fade in / Fade out / Hold on the cue page. Watch the fades in the Rig Overview. |
-| 1.5 | **Calling and running the show** | Standby / GO. The stage manager calls; the board op runs. | Run tab: GO, Back, Stop, LOAD a cue. Students "call" each other's cues. **Level check:** light a 30-second clip (3–5 cues) and run it. |
+| 1.2 | **Colour and intensity tell the mood** *(written)* | Warm vs cool; saturated vs pale; bright isn't always better. Contrast between sections. The director's note: the verse is too cosy. | The verse's StepTops in place: ⋯ → **Set to** Lavender, ⋯ → **Level…** 40, **Make reusable**; Undo / Redo. A new cue 1.0.3 *Scream*: TrussW-RGB and Lanterns with **cue looks** Red, Full. Extension: **Colour…**. |
+| 1.3 | **Direction: aim the light** *(written)* | Front light shows faces; back and side light shape bodies; uplight is drama. Every number needs faces lit. | AT-W-ALL Warm White, Full in the verse — it lights the front row as it is — then **Aim Center** (Library → Targets). A **Block** cue 1.0.4 *Solo*: AT-Spots White, Full stay dark (the shutter), **Open** (Palettes → Shutter) lights the floor (no position), then **Aim Soloist DS**. |
+| 1.4 | **Timing: fades and holds** *(written)* | A snap is a hit; a slow fade is a breath. Cue timing follows the music. | Fade in / Fade out / Hold typed on the cue page: Pose 3 s, Verse 2 s, Chorus a snap, Scream hold 2 s and fade out 3 s (the Solo, fade in 3 s, follows by itself). Played in the Run tab. |
+| 1.5 | **Calling and running the show** *(written)* | Standby / GO. The stage manager calls; the board op runs. | **Operate** (LIVE); Run tab: GO, Back, LOAD a cue (STANDBY), double-click to jump, Stop; Design again. Students call each other's cues. **Level check** (its own page, with the rubric): light a 30-second clip (3–5 cues) and run it. |
 
 ### Level 2 — Intermediate (7 lessons)
 
@@ -156,9 +158,12 @@ Every lesson has the same parts, so a substitute can teach it:
 9. **At home** — the same task on a home computer, or a paper version for
    students who can't install it.
 
-Each lesson's folder holds: `teacher-guide.md`, `handout.md`,
+Each lesson's folder holds: `index.md`, `teacher-guide.md`, `handout.md`,
 `slides.md` (a slide outline that can become a deck), `exit-ticket.md`,
-`at-home.md`, and its pictures in `images/lesson-N-N/`.
+`at-home.md`, and its pictures in `images/lesson-L-N/` (Lesson 1.2:
+`images/lesson-1-2/`); its show files are `shows/lesson-L-N-start.qlcc`
+and `…-finish.qlcc`, each lesson starting from the one before's finish.
+Blank copies of the six files are in `_template/`.
 
 ---
 
@@ -232,7 +237,7 @@ and its test change in the same commit, and the course test
   student opens the file and clicks **Download raw file**; on the site, the
   link downloads it.
 
-### Licence (recommended, pending Branson's OK)
+### Licence (approved, 2026-10-20)
 
 - qlcconsole is **Apache-2.0** (`COPYING`), as QLC+ is.
 - **Course text and pictures: CC BY 4.0.** Other teachers can use and adapt
@@ -241,7 +246,7 @@ and its test change in the same commit, and the course test
   Apache-2.0 app (both only ask for credit).
 - **The teaching show files and the course's scripts and test: Apache-2.0**,
   like the app: they are software and data built from and for it.
-- Written into `docs/course/LICENSE.md`, marked *recommended*.
+- Written into `docs/course/LICENSE.md`.
 
 ---
 
@@ -263,11 +268,11 @@ and its test change in the same commit, and the course test
   audience to feel and how the light did it."
 - A simple rubric (4 levels: beginning / developing / proficient /
   advanced) for design, programming, operation and teamwork goes with
-  Level 1's check — to be written with the Level 1 lessons.
+  Level 1's check: [level-1/lesson-05/level-check.md](level-1/lesson-05/level-check.md).
 
 ---
 
-## 8. Where the course and the app disagreed (found writing Lesson 1.1)
+## 8. Where the course and the app disagreed
 
 Fixed in the app (`fix/course-app-issues`, merged into `feat/show-tree`
 and into this branch), and the course updated to match:
@@ -317,6 +322,47 @@ and into this branch), and the course updated to match:
 
 ---
 
+### Found writing Level 0 and Lessons 1.2–1.5 (on 0.2.0)
+
+Not changed in the app (this branch doesn't change app code); each is
+worked around in the course and checked by the course test.
+
+7. **The AT-Spots stay dark at Full: their shutter is closed.** The
+   *Focus Spot Three Z*'s Strobe/Shutter channel rests at 0 (*Off*), and a
+   Dimmer look doesn't open it, so "AT-Spots White, Full" lights nothing.
+   **Worked around:** the classroom show now has a Shutter palette
+   **Open** (Palettes → Shutter), and Lesson 1.3 teaches it as a step —
+   a real thing about spots. **For the app (Branson's call):** a Dimmer
+   look could open a closed shutter, as many consoles do, or the
+   definition's default could be an *Open* value (8). DanceHysteria has
+   the same spots.
+8. **Make reusable files a picked level in a folder of its own.** After
+   **Level… 40** and **Make reusable**, *40%* lands in **Palettes →
+   Dimmer → Show Tree**, though the show's other levels are in no folder
+   (the help says it is filed "the way your palettes of that kind are").
+   **Worked around:** the handout says where it goes.
+9. **The Run tab's production box can keep the last show's name.** Seen in
+   the course test: after a show whose production was *Qualities*, opening
+   `lesson-1-4-finish.qlcc` left the box at *Current production
+   (Qualities)* while the header said *Spring Show*. The box refreshes when
+   the current production changes, and both shows' productions had the
+   same id. Every course file uses *Spring Show*, so students won't meet
+   it; the course test takes the 0.1 pictures (the *Qualities* production)
+   last.
+10. **The command line's last message carries over to the next show** (the
+    bottom right still said *✓ TrussW-RGB colour White dimmer Full* after
+    File → Open). Cosmetic.
+11. **Not checked: the Mac's own colour panel.** The course test drives
+    Qt's colour window for **⋯ → Colour…** (Lesson 1.2's extension); on a
+    Mac, Qt may show the system colour panel instead. A volunteer should
+    try it on the Mac (VOLUNTEER.md lists it).
+
+Also: the classroom show was rebuilt from DanceHysteria-0.6 as it is now
+(the SR tower's shelves were changed after the last build: now 1.0 /
+1.524 / 2.438 m, with its spot and washes on different shelves). The bare AT-W-ALL still lights the front row
+(Lesson 1.3's first picture), and the aims still land.
+
+
 ## 9. Decisions (Branson, 2026-10-18) and what's still open
 
 | # | Question | Answer |
@@ -326,9 +372,9 @@ and into this branch), and the course updated to match:
 | 3 | Group names | The real show's style: the **Trusses** across the back, with letters for what's on them: **Truss-Spots**, **TrussW-RGB / -W**, **TrussC-RGB / -W**, **USTs** (the upstage beams), and likewise **Steps**, **StepTops**, **US / CS / DS**, **AT-Spots**, **AT-W-ALL**, **Lanterns**. |
 | 4 | Riser Line | Fine. |
 | 5 | 68 fixtures | Fine. |
-| 7 | What students install | The **show-tree pre-release** on GitHub Releases (to be published). |
+| 7 | What students install | **qlcconsole 0.2.0** from GitHub Releases (the DMG is being made; the lessons are checked on 0.2.0). |
 | 8 | GitHub Pages | Yes — the workflow is ready (§6); it needs the merge to `main` and the settings in §6. |
-| 9 | Licence | Recommended CC BY 4.0 (text, pictures) + Apache-2.0 (show files, scripts), pending OK (§6). |
+| 9 | Licence | CC BY 4.0 (text, pictures) + Apache-2.0 (show files, scripts): approved (§6). |
 | 10 | Real lights | First hands on the real rig in **December or January**. |
 | 11 | Where students save | On their own computers (see §5 and the install page). |
 | 12 | App issues | Fixed (§8); the moving-head definition fixed too, and its facing worked out — set on the classroom rig, DanceHysteria's is Branson's call. |
@@ -338,7 +384,9 @@ and into this branch), and the course updated to match:
 1. **Chromebooks** (6): does the district allow the Linux environment on
    student Chromebooks, and are they Intel or ARM? Probably not Linux — so
    every lesson keeps a full paper *At home* version.
-2. **The pre-release's name and files**: the install page says "the newest
-   pre-release whose name starts with **Show Tree**" — confirm when it's
-   published.
-3. **Licence**: OK to mark CC BY 4.0 + Apache-2.0 as final?
+2. **The 0.2.0 release's name and files**: the install page says "the
+   newest pre-release whose name starts with **Show Tree**" and "0.2.0 or
+   later" — check both when it's published.
+3. **The AT-Spots' shutter** (§8, 7): keep teaching **Open**, or change
+   the app or the definition?
+4. **Video clips** for Lesson 0.1 and the Level 1 check: pick them.

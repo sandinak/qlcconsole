@@ -18,4 +18,4 @@ exclude:
   - shows/README.md
   - Gemfile
   - Gemfile.lock
-footer_content: "Course text and pictures: CC BY 4.0 (recommended, pending). Show files and scripts: Apache-2.0, as qlcconsole is."
+footer_content: "Course text and pictures: CC BY 4.0. Show files and scripts: Apache-2.0, as qlcconsole is."

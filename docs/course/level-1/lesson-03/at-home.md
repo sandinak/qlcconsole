@@ -16,7 +16,7 @@ Do **one** of these.
    (on GitHub: open it, then **Download raw file**).
 3. Add a cue after the Solo, **1.0.5 Duet**: two singers at **Center**.
    Make it **Block**, then light it with the **AT-W-ALL** washes in a
-   colour you choose, aimed at **Center**. (The washes light up without
+   colour and a level you choose, aimed at **Center**. (The washes light up without
    a shutter look.)
 4. Add some **back light** or **uplight** to the duet. Which direction
    makes it feel the most dramatic?
