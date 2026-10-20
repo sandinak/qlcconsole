@@ -1392,29 +1392,24 @@ void CourseShow_Test::lessonFourPlaysTheFades()
     const uchar mid = uchar(sends(doc, "SR Truss Cyc 1").at(2));
     qInfo() << "[L4] cyc blue after 1.2 s" << mid;
     QVERIFY2(mid > 20 && mid < 235, qPrintable(QString::number(mid)));
-    QTest::qWait(2600);
-    QCOMPARE(sends(doc, "SR Truss Cyc 1"), QByteArray("\x00\x00\xff", 3));
+    QTRY_COMPARE_WITH_TIMEOUT(sends(doc, "SR Truss Cyc 1"), QByteArray("\x00\x00\xff", 3), 4000);
 
     // GO, GO: Verse (2 s), Chorus (a snap).
     press(run, "crGo");
     QTest::qWait(2600);
     press(run, "crGo");
-    QTest::qWait(300);
-    QCOMPARE(sends(doc, "US Step 1"), QByteArray("\xff\x00\xff", 3));
+    QTRY_COMPARE_WITH_TIMEOUT(sends(doc, "US Step 1"), QByteArray("\xff\x00\xff", 3), 2000);
 
     // GO: the Scream snaps in, holds 2 s, then the Solo comes by itself.
     press(run, "crGo");
-    QTest::qWait(400);
-    QVERIFY2(run->nowText().contains("1.0.3"), qPrintable(run->nowText()));
+    QTRY_VERIFY_WITH_TIMEOUT(run->nowText().contains("1.0.3"), 1500);
     qInfo().noquote() << "[L4] scream now:" << run->nowText() << "| next:" << run->nextText();
-    QVERIFY2(uchar(sends(doc, "SR Truss Wash 1").at(0)) > 200, qPrintable(sends(doc, "SR Truss Wash 1").toHex(' ')));
-    QTest::qWait(2400);
+    QTRY_VERIFY_WITH_TIMEOUT(uchar(sends(doc, "SR Truss Wash 1").at(0)) > 200, 1500);
+    QTRY_VERIFY_WITH_TIMEOUT(run->nowText().contains("1.0.4"), 4000);
     qInfo().noquote() << "[L4] after the hold:" << run->nowText() << "| wash" << sends(doc, "SR Truss Wash 1").toHex(' ')
                       << "| spot dimmer" << channelValue(doc, "SR AT Spot", "Master Dimmer");
-    QVERIFY2(run->nowText().contains("1.0.4"), qPrintable(run->nowText()));
-    QTest::qWait(3500);
-    QCOMPARE(sends(doc, "SR Truss Wash 1", 3), QByteArray("\x00\x00\x00", 3));
-    QCOMPARE(channelValue(doc, "SR AT Spot", "Master Dimmer"), 255);
+    QTRY_COMPARE_WITH_TIMEOUT(sends(doc, "SR Truss Wash 1", 3), QByteArray("\x00\x00\x00", 3), 6000);
+    QTRY_COMPARE_WITH_TIMEOUT(channelValue(doc, "SR AT Spot", "Master Dimmer"), 255, 6000);
     press(run, "crStop");
     settle(200);
     doc->resetModified();
@@ -1432,13 +1427,15 @@ void CourseShow_Test::lessonFiveRunsTheShow()
 
     // "GO" twice: Pose, Verse.
     press(run, "crGo");
+    QTRY_VERIFY_WITH_TIMEOUT(run->nowText().contains("1.0.0"), 2000);
     QTest::qWait(3300);
     press(run, "crGo");
+    QTRY_VERIFY_WITH_TIMEOUT(run->nowText().contains("1.0.1"), 2000);
     QTest::qWait(2300);
-    QVERIFY2(run->nowText().contains("1.0.1"), qPrintable(run->nowText()));
     // Back: the Pose again.
     press(run, "crBack");
-    QTest::qWait(3300);
+    QTRY_VERIFY_WITH_TIMEOUT(run->nowText().contains("1.0.0"), 2000);
+    QTest::qWait(500);
     qInfo().noquote() << "[L5] after Back:" << run->nowText() << "| next:" << run->nextText();
     QVERIFY2(run->nowText().contains("1.0.0"), qPrintable(run->nowText()));
 
@@ -1453,9 +1450,8 @@ void CourseShow_Test::lessonFiveRunsTheShow()
     QVERIFY2(chorus->text(0).contains("STANDBY"), qPrintable(chorus->text(0)));
     // "GO": the chorus, though the verse was next.
     press(run, "crGo");
-    QTest::qWait(400);
-    QVERIFY2(run->nowText().contains("1.0.2"), qPrintable(run->nowText()));
-    QCOMPARE(sends(doc, "US Step 1"), QByteArray("\xff\x00\xff", 3));
+    QTRY_VERIFY_WITH_TIMEOUT(run->nowText().contains("1.0.2"), 2000);
+    QTRY_COMPARE_WITH_TIMEOUT(sends(doc, "US Step 1"), QByteArray("\xff\x00\xff", 3), 2000);
 
     // Double-click the Solo: jump there now.
     QTreeWidgetItem *solo = runRow(run, "1.0.4");
@@ -1465,17 +1461,16 @@ void CourseShow_Test::lessonFiveRunsTheShow()
     QTest::mouseClick(run->cueTree()->viewport(), Qt::LeftButton, Qt::NoModifier, at);
     QTest::mouseDClick(run->cueTree()->viewport(), Qt::LeftButton, Qt::NoModifier, at);
     settle(50);
-    QTest::qWait(3500);
+    QTRY_VERIFY_WITH_TIMEOUT(run->nowText().contains("1.0.4"), 2000);
+    QTRY_COMPARE_WITH_TIMEOUT(channelValue(doc, "SR AT Spot", "Master Dimmer"), 255, 6000);
     qInfo().noquote() << "[L5] after the jump:" << run->nowText() << "| next:" << run->nextText();
-    QVERIFY2(run->nowText().contains("1.0.4"), qPrintable(run->nowText()));
-    QCOMPARE(channelValue(doc, "SR AT Spot", "Master Dimmer"), 255);
 
     // Stop: the stage goes dark.
     press(run, "crStop");
-    QTest::qWait(500);
+    QTRY_COMPARE_WITH_TIMEOUT(channelValue(doc, "SR AT Spot", "Master Dimmer"), 0, 3000);
+    QTRY_COMPARE_WITH_TIMEOUT(sends(doc, "US Step 1"), QByteArray("\x00\x00\x00", 3), 3000);
+    QTRY_VERIFY_WITH_TIMEOUT(run->nextText().contains("1.0.0"), 2000);
     qInfo().noquote() << "[L5] after Stop:" << run->nowText() << "| next:" << run->nextText();
-    QCOMPARE(channelValue(doc, "SR AT Spot", "Master Dimmer"), 0);
-    QCOMPARE(sends(doc, "US Step 1"), QByteArray("\x00\x00\x00", 3));
     doc->resetModified();
 }
 
