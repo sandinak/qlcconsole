@@ -12,6 +12,15 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 
 ## [Unreleased]
 
+## [0.2.0] - Unreleased
+
+The Show Tree release. A show is written as one tree — productions → cue
+lists → cues → layers → looks — with tracking, sub-cues and a cue runner
+for playback; line targets, line of sight and Focus mode for aiming;
+curtains a fixture opens and flies; colour rings on movers; Matrix effects
+for pixel boxes; backup WLED lanterns; and output held off the rig
+network. Everything in 0.1.0 is in it too.
+
 ### Added
 - **Only transmit on the rig network.** A show can name its rig networks
   (Settings → Network, e.g. `172.18.0.0/20`, saved with the show as
@@ -542,4 +551,5 @@ a shorter Windows re-soak is planned.
   end, Art-Net trouble reporting on a failing node, and opening a show's
   carried definitions on a machine without them.
 
+[0.2.0]: https://github.com/sandinak/qlcconsole/releases/tag/v0.2.0
 [0.1.0]: https://github.com/sandinak/qlcconsole/releases/tag/v0.1.0
