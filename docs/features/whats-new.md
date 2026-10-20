@@ -2,7 +2,7 @@
 
 The latest changes, newest first. Each links to the guide with the detail.
 
-## October 2026
+## 0.2.0 — Show Tree (October 2026)
 
 ### Software updates
 
@@ -216,6 +216,30 @@ The latest changes, newest first. Each links to the guide with the detail.
   **Group by type** (right-click) for type first with the same folders under
   each. Older shows' per-type folders merge on open. See
   [Filing into folders](programming-tab.md#filing-into-folders).
+
+### Outputs
+
+- **Only transmit on the rig network.** A show can name the networks its
+  output belongs on (**Settings → Network**, for example 172.18.0.0/20,
+  saved with the show). Art-Net, sACN, OSC and WLED output on any other
+  network — a laptop at school — is held, kept and sent nothing, and
+  resumes by itself on the rig network. The footer says it in red: "Output
+  held — not on the rig network (172.18.0.0/20). Connected: en0
+  10.4.12.7"; click it for the setting. **Transmit anyway, this session…**
+  asks first and is never saved. See
+  [Only transmit on the rig network](other-improvements.md#only-transmit-on-the-rig-network).
+- **Backup WLED lanterns.** A WLED universe can drive several devices: a
+  backup lantern mirrors the primary, nothing programmed twice. Right-click
+  the universe → **WLED Devices / Backup Lanterns…** → **Add Backup**. Each
+  device is sent to on its own, so a dead one never holds up the others,
+  and one that comes back is sent the look again. Connections says "1 of 2
+  answering" while one is down. See
+  [Backup lanterns](other-improvements.md#backup-lanterns).
+
+## 0.1.0 (October 2026)
+
+### Programming
+
 - **Drag scenes and palettes into folders.** In the Programming tab, a scene
   (or several, or a whole folder) dragged onto a folder moves into it, and
   onto the type's heading or empty space moves back out; pressing on a row
@@ -263,22 +287,6 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Outputs
 
-- **Only transmit on the rig network.** A show can name the networks its
-  output belongs on (**Settings → Network**, for example 172.18.0.0/20,
-  saved with the show). Art-Net, sACN, OSC and WLED output on any other
-  network — a laptop at school — is held, kept and sent nothing, and
-  resumes by itself on the rig network. The footer says it in red: "Output
-  held — not on the rig network (172.18.0.0/20). Connected: en0
-  10.4.12.7"; click it for the setting. **Transmit anyway, this session…**
-  asks first and is never saved. See
-  [Only transmit on the rig network](other-improvements.md#only-transmit-on-the-rig-network).
-- **Backup WLED lanterns.** A WLED universe can drive several devices: a
-  backup lantern mirrors the primary, nothing programmed twice. Right-click
-  the universe → **WLED Devices / Backup Lanterns…** → **Add Backup**. Each
-  device is sent to on its own, so a dead one never holds up the others,
-  and one that comes back is sent the look again. Connections says "1 of 2
-  answering" while one is down. See
-  [Backup lanterns](other-improvements.md#backup-lanterns).
 - **Patch a universe from the Fixture Manager.** Right-click a universe row
   in the fixtures list: **Patch output…**, or on a patched one the menu says
   where it goes and offers **Change interface / target…** and **Unpatch

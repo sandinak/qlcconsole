@@ -708,6 +708,25 @@ other stage features it dims out .. this should be an option".
   min size has no UI (XML only); blocked dimming of an Aim look is the
   look's own dimmer — an HTP dimmer from another scene still shows.
 
+### 2026-10-18 — Fixture definition save flushes one file, not every disk *(fix/fixture-def-flush)*
+
+Backport of `cd3826b31` from feat/show-tree into 0.1.0.
+
+- **Problem:** `QLCFixtureDefCache::storeFixtureDef()` followed the write
+  with a global `sync()`, which flushes every mounted volume (Time Machine
+  over SMB, external disks, other builds' output). On a busy machine it
+  stalled for minutes; `qlcfixturedefcache_test::storeDef` hit its 300 s
+  timeout under load.
+- **Fix:** write through `QSaveFile` — temp file in the same folder,
+  `commit()` flushes just that file (fsync/fdatasync on Unix,
+  `FlushFileBuffers` on Windows, inside Qt — so MinGW needs nothing extra)
+  and then renames it over the target; a failed write is cancelled and
+  leaves the old file intact. The definitions are reloaded only after the
+  commit. storeDef now takes ~1.3 s and checks the file reads back as
+  written.
+
+---
+
 ### 2026-10-18 — Offline patches kept; patches follow the network *(fix/keep-offline-patches)*
 
 Release blocker from Branson's DanceHysteria 0.5: saved on the laptop off the

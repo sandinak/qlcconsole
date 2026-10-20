@@ -12,6 +12,15 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 
 ## [Unreleased]
 
+## [0.2.0] - Unreleased
+
+The Show Tree release. A show is written as one tree — productions → cue
+lists → cues → layers → looks — with tracking, sub-cues and a cue runner
+for playback; line targets, line of sight and Focus mode for aiming;
+curtains a fixture opens and flies; colour rings on movers; Matrix effects
+for pixel boxes; backup WLED lanterns; and output held off the rig
+network. Everything in 0.1.0 is in it too.
+
 ### Added
 - **Software update check and install** (GitHub Releases). A background
   check after start-up and at most once a day, plus **Help → Check for
@@ -460,6 +469,9 @@ a shorter Windows re-soak is planned.
   the back of the cloth. Opaque scenery and platforms now hide a light's
   glow, and pools on the far side of a drape stay there; where the drape is
   open the glow shows through the gap, and a scrim is still see-through.
+- **Saving a fixture definition could stall for minutes on a busy Mac:**
+  it flushed every disk instead of the one file. It now writes the file
+  whole (or not at all) and flushes only that file.
 - **Universe patches were lost when a show was opened away from its
   network.** Opening a show on a computer without the interface it was
   patched to (a laptop off the show VLAN) and saving it wrote the show
@@ -560,4 +572,5 @@ a shorter Windows re-soak is planned.
   end, Art-Net trouble reporting on a failing node, and opening a show's
   carried definitions on a machine without them.
 
+[0.2.0]: https://github.com/sandinak/qlcconsole/releases/tag/v0.2.0
 [0.1.0]: https://github.com/sandinak/qlcconsole/releases/tag/v0.1.0
