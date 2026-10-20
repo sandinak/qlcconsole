@@ -15,7 +15,7 @@ teacher says. It can be turned into a deck as it is.*
 ## 1. From a song to cues
 
 - Title, Level 1 · Lesson 1
-- Picture: `images/lesson-01/rig-chorus.png`
+- Picture: `images/lesson-1-1/rig-chorus.png`
 - *Say:* "By the end of today, you'll have lit the start of a song."
 
 ## 2. Where does the light change?
@@ -41,7 +41,7 @@ teacher says. It can be turned into a deck as it is.*
 
 ## 5. Our stage
 
-- Picture: `images/lesson-01/rig-dark.png` with labels: cyc, risers (US,
+- Picture: `images/lesson-1-1/rig-dark.png` with labels: cyc, risers (US,
   CS, DS), the trusses across the back (SR, SL), the audience towers (AT).
 - Stage right = the singers' right (the audience's left).
 
@@ -54,11 +54,11 @@ teacher says. It can be turned into a deck as it is.*
 
 ## 7. The Show Tree tab
 
-- Picture: `images/lesson-01/showtree-tab.png` (numbers 1–6).
+- Picture: `images/lesson-1-1/showtree-tab.png` (numbers 1–6).
 
 ## 8. Make a cue
 
-- Picture: `images/lesson-01/new-cue.png`
+- Picture: `images/lesson-1-1/new-cue.png`
 - + Production → + Cue list → + Cue → type the name.
 
 ## 9. Drag a group, then a colour and a level
@@ -69,7 +69,7 @@ teacher says. It can be turned into a deck as it is.*
 
 ## 10. Lights stay on: tracking
 
-- Picture: `images/lesson-01/tracked-row.png`
+- Picture: `images/lesson-1-1/tracked-row.png`
 - Grey ⤳ row = carried on from an earlier cue.
 
 ## 11. GO

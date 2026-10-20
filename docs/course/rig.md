@@ -10,7 +10,7 @@ one (DanceHysteria), made smaller and simpler for class. It has the rig,
 the groups, a few stage targets and a set of colours and levels — and no
 show yet: students build that.
 
-![The stage, dark](images/lesson-01/rig-dark.png)
+![The stage, dark](images/lesson-1-1/rig-dark.png)
 
 **It is never connected to real lights.** No universe has an output and
 no light talks to the network, so it can't send anything on the school
@@ -35,7 +35,7 @@ network. The **Rig Overview** (View → Rig Overview, ⇧⌘R) is the stage.
 | **SR/SL Truss Wash 1–2** | 4 | on the trusses, facing out over the stage | pixel box (XL-450: RGB + white pixels), colour only |
 | **SR/SL Truss Cyc 1–2** | 4 | on the trusses, facing the cyc | pixel box (XL-450), colour only |
 | **SR/SL Truss Spot 1–2** | 4 | top of each truss | moving spot with a colour ring |
-| **SR/SL AT Spot** | 2 | the audience towers | moving spot (for soloists) |
+| **SR/SL AT Spot** | 2 | the audience towers | moving spot (for soloists), with a dimmer and a shutter |
 | **SR/SL AT Wash 1–2** | 4 | the audience towers | moving wash, with a dimmer |
 | **UST 1–8** | 8 | upstage, standing along the top riser | two-arm moving beam |
 | **Lantern 1–6** | 6 | hanging from the trusses (one on AT1) | LED lantern |
@@ -83,6 +83,7 @@ Line**) under Palettes → Position.
 | Colour | White, Warm White, Red, Amber, Yellow, Green, Cyan, Blue, Lavender, Magenta |
 | Dimmer | Full, 75%, Half, 25%, 10%, Out |
 | Position | Aim Soloist DS, Aim Center, Aim Riser Line |
+| Shutter | Open (the AT-Spots' shutter is closed until a look opens it) |
 
 A level you type that isn't there (`dimmer 30`) makes a new palette named
 the same way: **30%**.

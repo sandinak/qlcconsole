@@ -12,7 +12,7 @@ Do **one** of these.
 ## A. On your computer (Mac, Windows, or Linux)
 
 1. Install qlcconsole: [Install](../../install.md).
-2. Download [`lesson-01-start.qlcc`](../../shows/lesson-01-start.qlcc)
+2. Download [`lesson-1-1-start.qlcc`](../../shows/lesson-1-1-start.qlcc)
    (on GitHub: open it, then **Download raw file**).
 3. Build the three cues again **without looking at the handout pictures**:
    Pose, Verse, Chorus. Use the handout's steps if you get stuck.

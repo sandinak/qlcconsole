@@ -39,7 +39,7 @@ Switch roles after each cue.
 
 ### Get ready
 
-1. Open qlcconsole. **File → Open** → `lesson-NN-start.qlcc`.
+1. Open qlcconsole. **File → Open** → `lesson-N-N-start.qlcc`.
 2. Click the **Show Tree** tab (⇧⌘6). Open **View → Rig Overview** (⇧⌘R).
 
 ### TODO: a heading per cue or task
@@ -51,7 +51,7 @@ Switch roles after each cue.
 
 ### Save
 
-N. **File → Save As** → `LessonNN-yourname.qlcc` in **Documents →
+N. **File → Save As** → `LessonN-N-yourname.qlcc` in **Documents →
    qlcconsole**.
 
 ## Stuck?

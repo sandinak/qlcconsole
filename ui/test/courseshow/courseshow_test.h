@@ -65,6 +65,33 @@ private slots:
      *  and the rig shows what each cue says. */
     void lessonOnePlaysInTheRunTab();
 
+    /** Lessons 1.2, 1.3 and 1.4 with the mouse, step by step, each from
+     *  its start file: each step checks the handout's "you should see",
+     *  each ends as its finish file, and each starts where the one before
+     *  finished. */
+    void lessonsOneTwoToOneFourWithTheMouse();
+
+    /** Lesson 1.2's extension: ⋯ → Colour… and a colour picked: a one-off
+     *  value with Make reusable beside it. */
+    void lessonTwoColourPicker();
+
+    /** Lesson 0.2: the Rig Overview's views and room light, as the handout
+     *  names them, and GO three times on Lesson 1.1's finish. */
+    void lessonZeroTwoTheVirtualStage();
+
+    /** Lesson 1.4's fades and hold play in the Run tab: the Pose fades in
+     *  over 3 s, the Scream holds 2 s and the Solo follows by itself. */
+    void lessonFourPlaysTheFades();
+
+    /** Lesson 1.5, running the show: GO, Back, LOAD (a click: STANDBY),
+     *  a jump (double-click) and Stop, in the Run tab. */
+    void lessonFiveRunsTheShow();
+
+    /** COURSE_BUILD=1: makes Lessons 1.2-1.5's start and finish files, each
+     *  lesson done with the mouse from the one before's finish. Skipped
+     *  otherwise. */
+    void buildLessonShows();
+
     /** COURSE_SHOTS=<folder>: the annotated pictures for the lesson and the
      *  Rig Overview of each cue. Skipped otherwise. */
     void lessonPictures();

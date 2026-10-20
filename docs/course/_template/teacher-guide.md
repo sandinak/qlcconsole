@@ -20,7 +20,7 @@ Students can:
 ## Before class
 
 - [ ] qlcconsole on the projector computer and the class laptops.
-- [ ] `lesson-NN-start.qlcc` on each laptop (from `docs/course/shows/`).
+- [ ] `lesson-N-N-start.qlcc` on each laptop (from `docs/course/shows/`).
 - [ ] On the projector: the start file open, Show Tree tab, **View → Rig
   Overview** beside it.
 - [ ] Print the [handout](handout.md) and the [exit ticket](exit-ticket.md).

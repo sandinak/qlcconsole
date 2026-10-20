@@ -68,7 +68,7 @@ Everything is in the `docs/course/` folder of the repo, on the branch
 | [`install.md`](install.md), [`rig.md`](rig.md) | Student pages: install, and the stage |
 | `level-0/` … `level-3/` | One folder per level. Each lesson has its own folder, like `level-1/lesson-01/` |
 | `shows/` | The teaching show and each lesson's start and finish files |
-| `images/` | The pictures, one folder per lesson (`images/lesson-01/`) |
+| `images/` | The pictures, one folder per lesson (`images/lesson-1-1/`) |
 | [`_template/`](https://github.com/sandinak/qlcconsole/tree/docs/show-tree-course/docs/course/_template) | Blank lesson files to copy for a new lesson |
 | `tools/` | The script that makes the teaching show (you won't need it) |
 | `_config.yml` | Settings for the course website (you won't need it) |
@@ -145,7 +145,7 @@ So when you want a picture:
    ```
 
 2. Tell Branson (or mention it in your pull request). He adds it to the
-   test and the picture appears in `images/lesson-NN/`.
+   test and the picture appears in `images/lesson-N-N/`.
 
 Your own screenshots (⇧⌘4 on the Mac) are welcome as **sketches** in a
 pull request or a message, to show what you mean.

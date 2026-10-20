@@ -22,10 +22,10 @@ Students can:
 
 - [ ] qlcconsole installed on the projector computer and every class laptop
   ([Install](../../install.md)).
-- [ ] `lesson-01-start.qlcc` and `lesson-01-finish.qlcc` from
+- [ ] `lesson-1-1-start.qlcc` and `lesson-1-1-finish.qlcc` from
   [`docs/course/shows/`](../../shows/) copied to each laptop (or a shared
   folder).
-- [ ] On the projector computer: open `lesson-01-start.qlcc`, Show Tree tab,
+- [ ] On the projector computer: open `lesson-1-1-start.qlcc`, Show Tree tab,
   and **View → Rig Overview** placed beside it. Bigger text helps: the
   Rig Overview window can be made full height.
 - [ ] Print the [handout](handout.md) (one per student; Part 1 is
@@ -100,7 +100,7 @@ Stop there; the students build the rest.
 - Students without a laptop: the **design station** — the cue sheet for
   extension cue 1.0.3 *Button* (what is the final hit?), then swap.
 - Walk the room with the finish picture in mind
-  (`images/lesson-01/rig-chorus.png`).
+  (`images/lesson-1-1/rig-chorus.png`).
 
 ### What to watch for
 

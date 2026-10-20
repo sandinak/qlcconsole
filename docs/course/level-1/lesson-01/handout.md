@@ -57,7 +57,7 @@ Switch roles after each cue.
 
 ### Get ready
 
-1. Open qlcconsole. **File → Open** → `lesson-01-start.qlcc`.
+1. Open qlcconsole. **File → Open** → `lesson-1-1-start.qlcc`.
 2. Click the **Show Tree** tab at the bottom (or press ⇧⌘6).
 3. Open the stage: **View → Rig Overview** (⇧⌘R). Move it so you can see
    it and the Show Tree together.
@@ -66,7 +66,7 @@ Switch roles after each cue.
    - The footer says **Not ready** in red. That's normal in class: this
      show isn't connected to real lights.
 
-![The Show Tree tab](../../images/lesson-01/showtree-tab.png)
+![The Show Tree tab](../../images/lesson-1-1/showtree-tab.png)
 
 The tab has: **(1)** the buttons that make things, **(2)** the
 **Library** — groups and palettes to drag, **(3)** the **tree** of your
@@ -87,7 +87,7 @@ show, **(4)** the **page** for what you clicked, **(5)** the command line
    and press **Return**.
    - *You should see:* **1.0.0 Pose** in the tree.
 
-![A new cue](../../images/lesson-01/new-cue.png)
+![A new cue](../../images/lesson-1-1/new-cue.png)
 
    **(1)** + Cue, **(2)** the Name box, **(3)** the dashed box under
    **Layers**, *"Drag groups or fixtures here to add a layer"* — the drop area, **(4)** your cue in the tree.
@@ -98,7 +98,7 @@ show, **(4)** the **page** for what you clicked, **(5)** the command line
      1.0.0 Pose"*.
    - *You should see:* a row **TrussC-RGB** under Layers.
 
-![Dragging a group onto the cue](../../images/lesson-01/drop-group.png)
+![Dragging a group onto the cue](../../images/lesson-1-1/drop-group.png)
 
 8. Open **All → Palettes → Colour**. Drag **Blue** onto the
    **TrussC-RGB** row. Then open **Dimmer** and drag **Full** onto the same row.
@@ -106,7 +106,7 @@ show, **(4)** the **page** for what you clicked, **(5)** the command line
      Rig Overview the cyc turns a clear blue, brightest at the top (the cyc
      boxes aim upward).
 
-![Colour and level on the layer](../../images/lesson-01/drop-palettes.png)
+![Colour and level on the layer](../../images/lesson-1-1/drop-palettes.png)
 
    **(1)** the palette in the Library, **(2)** the layer it lands on,
    **(3)** the top right says what changed.
@@ -127,7 +127,7 @@ show, **(4)** the **page** for what you clicked, **(5)** the command line
     - *You should see:* the risers lit warm from the step tops, the cyc
       still blue.
 
-![The verse: a grey tracked row and a new layer](../../images/lesson-01/tracked-row.png)
+![The verse: a grey tracked row and a new layer](../../images/lesson-1-1/tracked-row.png)
 
    **(1)** the cyc, carried on from Pose (grey), **(2)** your new layer,
    **(3)** the same grey row in the tree.
@@ -150,7 +150,7 @@ off.)
     - *You should see:* NEXT moves down the list; the stage goes Pose →
       Verse → Chorus.
 
-![The Run tab](../../images/lesson-01/run-tab.png)
+![The Run tab](../../images/lesson-1-1/run-tab.png)
 
    **(1)** GO, **(2)** your cues, **(3)** what the next GO will change.
 
@@ -160,7 +160,7 @@ off.)
 
 | Pose | Verse | Chorus |
 |---|---|---|
-| ![Pose](../../images/lesson-01/rig-pose.png) | ![Verse](../../images/lesson-01/rig-verse.png) | ![Chorus](../../images/lesson-01/rig-chorus.png) |
+| ![Pose](../../images/lesson-1-1/rig-pose.png) | ![Verse](../../images/lesson-1-1/rig-verse.png) | ![Chorus](../../images/lesson-1-1/rig-chorus.png) |
 
 ## Stuck?
 
@@ -178,7 +178,7 @@ off.)
    Chorus**, click the grey **TrussC-RGB** row, and on its Colour row use
    **⋯ → Set in this cue → Magenta**. Watch the tree: TrussC-RGB is now
    the chorus's own layer.
-2. **Type it.** Open `lesson-01-start.qlcc` again and build the same three
+2. **Type it.** Open `lesson-1-1-start.qlcc` again and build the same three
    cues by typing in the **Command** line at the bottom (click it, type a
    line, press Enter):
 

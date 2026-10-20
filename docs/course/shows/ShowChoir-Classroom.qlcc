@@ -3,7 +3,7 @@
 <Workspace xmlns="http://www.qlcplus.org/Workspace" CurrentWindow="ShowTreeView">
  <Creator>
   <Name>qlcconsole</Name>
-  <Version>4.14.2+qlcconsole.1797</Version>
+  <Version>4.14.2+qlcconsole.1817</Version>
   <Author>branson</Author>
  </Creator>
  <Embedded>
@@ -7492,9 +7492,10 @@
   <Palette ID="13" Type="Dimmer" Name="25%" Value="64"/>
   <Palette ID="14" Type="Dimmer" Name="10%" Value="26"/>
   <Palette ID="15" Type="Dimmer" Name="Out" Value="0"/>
-  <Palette ID="16" Type="Aim" Name="Aim Soloist DS" StageTarget="0"/>
-  <Palette ID="17" Type="Aim" Name="Aim Center" StageTarget="1"/>
-  <Palette ID="18" Type="Aim" Name="Aim Riser Line" StageTarget="2"/>
+  <Palette ID="16" Type="Shutter" Name="Open" Value="0"/>
+  <Palette ID="17" Type="Aim" Name="Aim Soloist DS" StageTarget="0"/>
+  <Palette ID="18" Type="Aim" Name="Aim Center" StageTarget="1"/>
+  <Palette ID="19" Type="Aim" Name="Aim Riser Line" StageTarget="2"/>
   <SpeedMasters>
    <Master Index="0" Name="Main Speed" Mode="Own" BPM="120"/>
    <Master Index="1" Mode="Own" BPM="120"/>
@@ -7641,11 +7642,11 @@
    <StagePlatform ID="23" Name="DS Riser 4 Front" OriginX="10.365" OriginY="7.338" Width="2.438" Depth="0.204" Height="0.204" TopMaterial="1" Color="#1c1c20" Stackable="true" LayerId="3" GroupId="16"/>
    <Tower ID="0" Name="AT2 (SL audience tower)" OriginX="14.198" OriginY="8.508" Width="0.405" Depth="0.405" Height="2.438" Color="#7088c0" LayerId="7" GroupId="19" Faces="1" FacesColour="#18181a" FacesFrom="0.000">
     <Shelf Z="0.600"/>
-    <Shelf Z="1.200"/>
-    <Shelf Z="1.800"/>
+    <Shelf Z="1.000"/>
+    <Shelf Z="1.524"/>
+    <Shelf Z="2.438"/>
    </Tower>
    <Tower ID="1" Name="AT1 (SR audience tower)" OriginX="1.125" OriginY="8.489" Width="0.405" Depth="0.405" Height="2.438" Color="#5a6478" LayerId="7" GroupId="3" Faces="1" FacesColour="#18181a" FacesFrom="0.000">
-    <Shelf Z="0.091"/>
     <Shelf Z="0.600"/>
     <Shelf Z="1.000"/>
     <Shelf Z="1.524"/>
@@ -7670,7 +7671,7 @@
    <HeadLayout Key="Oppsk|Wall Washer Light Bar|64ch" Cols="16" Rows="3">0,0 2,0 4,0 6,0 8,0 10,0 12,0 14,0 0,2 2,2 4,2 6,2 8,2 10,2 12,2 14,2 0,1 1,1 2,1 3,1 4,1 5,1 6,1 7,1 8,1 9,1 10,1 11,1 12,1 13,1 14,1 15,1</HeadLayout>
    <HeadLayout Key="Warmdance|XL-450|165ch" Cols="15" Rows="5">0,0 1,0 2,0 3,0 4,0 5,0 6,0 7,0 8,0 9,0 10,0 11,0 12,0 13,0 14,0 0,2 1,2 2,2 3,2 4,2 5,2 6,2 7,2 8,2 9,2 10,2 11,2 12,2 13,2 14,2 0,4 1,4 2,4 3,4 4,4 5,4 6,4 7,4 8,4 9,4 10,4 11,4 12,4 13,4 14,4 0,1 1,1 2,1 3,1 4,1 5,1 6,1 7,1 8,1 9,1 10,1 11,1 12,1 13,1 14,1 0,3 1,3 2,3 3,3 4,3 5,3 6,3 7,3 8,3 9,3 10,3 11,3 12,3 13,3 14,3</HeadLayout>
    <FixtureRig FID="0" Truss="0" Offset="0.904" Mounting="TopHung" PanZero="270.0" TrussCross="-0.017" MountZ="-0.154" GLX="1.207" GLY="3.401" GLZ="2.824" SM="0"/>
-   <FixtureRig FID="4" Truss="4294967295" Offset="2.942" Mounting="FloorMounted" PanZero="0.0" PanOfs="5.00" TrussSide="1" Tower="1" TShelf="4" TU="0.203" TV="0.203" TSide="1"/>
+   <FixtureRig FID="4" Truss="4294967295" Offset="2.942" Mounting="FloorMounted" PanZero="0.0" PanOfs="5.00" TrussSide="1" Tower="1" TShelf="3" TU="0.203" TV="0.203" TSide="1"/>
    <FixtureRig FID="5" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="12" RiserFace="1" RiserU="0.610" RiserV="0.102" Placement="1" MountZ="0.184" GLX="0.107" GLY="0.070" GLZ="0.184" SM="0" ST="20.0"/>
    <FixtureRig FID="6" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="12" RiserFace="1" RiserU="1.829" RiserV="0.102" Placement="1" MountZ="0.184" GLX="1.326" GLY="0.070" GLZ="0.184" SM="0" ST="20.0"/>
    <FixtureRig FID="7" Truss="1" Offset="2.922" Mounting="TopHung" PanZero="0.0" TrussCross="-0.003" TrussCrossY="0.180" GLX="0.218" GLY="4.775" GLZ="-0.031" ST="-20.0"/>
@@ -7716,12 +7717,12 @@
    <FixtureRig FID="126" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="23" RiserFace="1" RiserU="0.610" RiserV="0.102" Placement="1" MountZ="0.184" GLX="0.108" GLY="0.070" GLZ="0.184" SM="0" ST="20.0"/>
    <FixtureRig FID="127" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="23" RiserFace="1" RiserU="1.829" RiserV="0.102" Placement="1" MountZ="0.184" GLX="1.326" GLY="0.070" GLZ="0.184" SM="0" ST="20.0"/>
    <FixtureRig FID="128" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Riser="23" RiserFace="0" RiserU="1.219" RiserV="0.191" GLX="0.152" GLY="0.192" GLZ="0.191"/>
-   <FixtureRig FID="142" Truss="4294967295" Offset="0.000" Mounting="FloorMounted" PanZero="0.0" Tower="0" TShelf="2" TU="0.199" TV="0.203" TSide="1" SM="0"/>
+   <FixtureRig FID="142" Truss="4294967295" Offset="0.000" Mounting="FloorMounted" PanZero="0.0" Tower="0" TShelf="3" TU="0.199" TV="0.203" TSide="1" SM="0"/>
    <FixtureRig FID="143" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Hanger="1"/>
    <FixtureRig FID="176" Truss="4294967295" Offset="0.000" Mounting="FloorMounted" PanZero="108.0" Tower="0" TShelf="2" TU="0.206" TV="0.203" TSide="0"/>
    <FixtureRig FID="177" Truss="4294967295" Offset="0.000" Mounting="FloorMounted" PanZero="108.0" Tower="0" TShelf="1" TU="0.212" TV="0.203" TSide="0"/>
-   <FixtureRig FID="179" Truss="4294967295" Offset="0.000" Mounting="FloorMounted" PanZero="252.0" Tower="1" TShelf="1" TU="0.199" TV="0.203" TSide="0"/>
-   <FixtureRig FID="180" Truss="4294967295" Offset="0.000" Mounting="FloorMounted" PanZero="252.0" Tower="1" TShelf="2" TU="0.206" TV="0.203" TSide="0"/>
+   <FixtureRig FID="179" Truss="4294967295" Offset="0.000" Mounting="FloorMounted" PanZero="252.0" Tower="1" TShelf="2" TU="0.199" TV="0.203" TSide="0"/>
+   <FixtureRig FID="180" Truss="4294967295" Offset="0.000" Mounting="FloorMounted" PanZero="252.0" Tower="1" TShelf="1" TU="0.206" TV="0.203" TSide="0"/>
    <FixtureRig FID="190" Truss="5" Offset="0.931" Mounting="TopHung" PanZero="0.0" MountZ="-0.152" SM="0"/>
    <FixtureRig FID="192" Truss="6" Offset="0.912" Mounting="TopHung" PanZero="0.0" MountZ="-0.152" SM="0"/>
    <FixtureRig FID="194" Truss="7" Offset="0.916" Mounting="TopHung" PanZero="0.0" MountZ="-0.148" SM="0"/>

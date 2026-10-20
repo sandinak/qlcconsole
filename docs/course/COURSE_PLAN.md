@@ -60,7 +60,7 @@ can open the app, find the stage, and play a finished cue list.*
 | # | Lesson | Design idea | In the tool |
 |---|---|---|---|
 | 0.1 | **What light does** | The four qualities of light (intensity, colour, direction, movement). The jobs of light: let the audience see, tell them where to look, set the mood, match the energy of the song. | No computer. Watch a 2-minute clip of a show choir number twice: once for the singers, once only for the light. Name each change. |
-| 0.2 | **The virtual stage** | The stage words: upstage / downstage, stage left / stage right (the singers' left and right), risers, trusses, cyc, audience towers (front of house). | Install and open qlcconsole. Open `lesson-01-finish.qlcc`. **View → Rig Overview** (⇧⌘R): find each part of the stage. Run tab: press GO three times. Nothing you do can break real lights. |
+| 0.2 | **The virtual stage** | The stage words: upstage / downstage, stage left / stage right (the singers' left and right), risers, trusses, cyc, audience towers (front of house). | Install and open qlcconsole. Open `lesson-1-1-finish.qlcc`. **View → Rig Overview** (⇧⌘R): find each part of the stage. Run tab: press GO three times. Nothing you do can break real lights. |
 
 ### Level 1 — Basics (5 lessons)
 
@@ -158,7 +158,7 @@ Every lesson has the same parts, so a substitute can teach it:
 
 Each lesson's folder holds: `teacher-guide.md`, `handout.md`,
 `slides.md` (a slide outline that can become a deck), `exit-ticket.md`,
-`at-home.md`, and its pictures in `images/lesson-NN/`.
+`at-home.md`, and its pictures in `images/lesson-N-N/`.
 
 ---
 
@@ -277,7 +277,7 @@ and into this branch), and the course updated to match:
    handout's "Make current" step and its picture are gone; the handout now
    warns that clicking the **▶ Current** button would *unset* it.
 2. ~~**The drop area's text is hard to read.**~~ **Done.** Readable in every
-   theme (`images/lesson-01/new-cue.png` retaken).
+   theme (`images/lesson-1-1/new-cue.png` retaken).
 3. ~~**Moving lights have no home.**~~ **Done.** The "Branson 36LED
    Moving Head" definition (AT-W-ALL) has Pan as a coarse channel with
    default 128 and Tilt default 32 (Branson, 2026-10-19); the classroom
