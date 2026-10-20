@@ -21,6 +21,7 @@ virtual copy of a show choir stage.
 | A student | [Install qlcconsole](install.md), then your lesson's **handout** |
 | The teacher | [Course plan](COURSE_PLAN.md) · [Lesson 1.1 teacher guide](level-1/lesson-01/teacher-guide.md) |
 | Anyone | [Glossary](GLOSSARY.md) · [The teaching show](rig.md) |
+| Helping write the course | [For volunteers](VOLUNTEER.md) — start here |
 
 ## The levels
 
