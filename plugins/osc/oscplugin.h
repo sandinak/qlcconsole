@@ -127,6 +127,9 @@ public:
     /** Get a list of the available Input/Output lines */
     QList<OSCIO> getIOMapping() const;
 
+    /** @reimp: every line's cached rig network gate decision, again */
+    void refreshTransmitGate() override;
+
 private:
     /** Map of the OSC plugin Input/Output lines */
     QList<OSCIO>m_IOmapping;

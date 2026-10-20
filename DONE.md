@@ -6,6 +6,77 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-19 — Rig network transmit gate *(feat/rig-network-gate, off feat/show-tree, not merged)*
+
+So a laptop on a school network never sprays Art-Net, sACN or WLED onto it.
+Docs: other-improvements.md "Only transmit on the rig network",
+troubleshooting, whats-new.
+
+- **Rig networks per show** — `InputOutputMap::rigNetworks()`, IPv4 CIDRs,
+  saved as `<RigNetwork>172.18.0.0/20</RigNetwork>` inside
+  `<InputOutputMap>` *before* the universes so a load knows them before it
+  opens a patch (an older build skips them with its usual "Unknown IO Map
+  tag" warning). Text/matching in `engine/src/rignetwork.{h,cpp}`
+  (normalise, parseList, contains; IPv6 never matches, never crashes).
+  Loading a show replaces them; File → New keeps them (it keeps the patch
+  they describe). `suggestedRigNetworks()` = distinct saved Network values of
+  the show's patches, offered in Settings (placeholder + **Use these**),
+  never written by itself.
+- **The gate** (`transmitGateActive()` = enabled && !override && networks
+  set). A network output patch — a line named after a non-loopback local
+  address (Art-Net, E1.31, OSC), or a patch with IPv4 `outputIP*` targets
+  (WLED; source = `NetworkRoute::sourceFor(target)`) — that may not transmit
+  is **held**: made pending (`OutputPatch::isHeld()`/`heldReason()`), so the
+  plugin line is never opened and the patch saves unchanged. Held at load
+  (`loadPatch`), on a live patch (`setOutputPatch`), and on the 5 s retry
+  tick (`applyTransmitGate()` closes open offenders, e.g. after a DHCP move
+  or a settings change); resumes through `retryOfflinePatches()`. Line
+  resolution prefers rig lines when several qualify. A pending network
+  patch whose network is absent while this machine is on no rig network at
+  all counts as held too (footer). Host-name WLED targets can't be checked:
+  held while the gate is on.
+- **Plugins enforce it too** — `QLCIOPlugin::setTransmitNetworks()` (pushed
+  by the engine, empty = unrestricted; parsed without QtNetwork since every
+  plugin builds that file). Art-Net routes *every* send through
+  `ArtNetController::writeDatagram()` (DMX, RDM, ArtPoll, ArtPollReply,
+  discovery, ArtIpProg used to call the socket directly in places) and drops
+  it there while `transmitHeld()`; E1.31 and OSC DMX output check before
+  sending; WLED checks each device's route before its POSTs/GETs. That covers
+  what a patch hold can't see: input lines answering polls, Rescan. OSC
+  *feedback* to a control surface is deliberately not held.
+- **Decided on change, not per packet** *(fix/rig-gate-cached)* — each
+  Art-Net/E1.31/OSC controller keeps the answer in a `std::atomic<bool>
+  m_held` and WLED each `Device::gateOpen`; the send path only reads it (no
+  mutex, no CIDR walk, no allocation, no route probe). Worked out again by
+  `QLCIOPlugin::refreshTransmitGate()` when `setTransmitNetworks()` changes
+  the list (gate setting, session override, rig networks), when a line's
+  controller is made or a WLED address is set, and on InputOutputMap's 5 s
+  reconnect tick (catches DHCP/VPN/Wi-Fi moves). WLED's route probe (UDP
+  connect, up to `waitForConnected(100)`) moved from the send tick to that
+  refresh, so it can no longer stall a send.
+- **Settings → Network** (AppSettings): the show's rig networks (validated as
+  typed; OK disabled while any entry is bad), **Only transmit on rig
+  networks** (QSettings `network/onlyTransmitOnRigNetworks`, default on —
+  this machine's choice, not the show's), **Transmit anyway, this session…**
+  (confirmation; never saved; ends on quit or opening another show; the
+  button then reads "Check the rig network again").
+- **Footer** — `footerRigNetwork` chip beside the readiness chip: red "Output
+  held — not on the rig network (…). Connected: en0 10.4.12.7" / "N of M
+  outputs held…", red "Transmitting anyway…", amber "Rig network not set…" /
+  "Rig network check off"; tooltip lists each universe and why; click →
+  Settings with the field focused. "Not ready" lists held universes too;
+  Connections' ghost row reads "held: … — kept, resumes on the rig network".
+- **No CLI/web output-state query exists** (webaccess has none; `-n`/`-w`
+  have no status command), so there was nothing to extend; the engine's
+  `transmitGateStatus()` is there for one.
+- Tests: inputoutputmap_test (9 new: parsing, held off the rig network,
+  resume, live patch + settings + override + off, none set, loopback and
+  non-network, WLED targets by route, save/load round trip, suggestion not
+  written); artnet_test (every send held through the test sink, rig and
+  loopback allowed, junk entries ignored); appviews_test (footer text and
+  colour on a stub dressed as Art-Net, Settings round trip and validation,
+  suggestion offered not written).
+
 ### 2026-10-18 — Fixes from writing the student course *(fix/course-app-issues, off feat/show-tree, not merged)*
 
 COURSE_PLAN.md §8 (docs/show-tree-course) listed what the app got in the
@@ -636,6 +707,25 @@ other stage features it dims out .. this should be an option".
   warnings/traces are informational and always on (they change no output);
   min size has no UI (XML only); blocked dimming of an Aim look is the
   look's own dimmer — an HTP dimmer from another scene still shows.
+
+### 2026-10-18 — Fixture definition save flushes one file, not every disk *(fix/fixture-def-flush)*
+
+Backport of `cd3826b31` from feat/show-tree into 0.1.0.
+
+- **Problem:** `QLCFixtureDefCache::storeFixtureDef()` followed the write
+  with a global `sync()`, which flushes every mounted volume (Time Machine
+  over SMB, external disks, other builds' output). On a busy machine it
+  stalled for minutes; `qlcfixturedefcache_test::storeDef` hit its 300 s
+  timeout under load.
+- **Fix:** write through `QSaveFile` — temp file in the same folder,
+  `commit()` flushes just that file (fsync/fdatasync on Unix,
+  `FlushFileBuffers` on Windows, inside Qt — so MinGW needs nothing extra)
+  and then renames it over the target; a failed write is cancelled and
+  leaves the old file intact. The definitions are reloaded only after the
+  commit. storeDef now takes ~1.3 s and checks the file reads back as
+  written.
+
+---
 
 ### 2026-10-18 — Offline patches kept; patches follow the network *(fix/keep-offline-patches)*
 

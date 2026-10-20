@@ -23,6 +23,9 @@
 #include <QSharedPointer>
 #include <QRegularExpression>
 #include <QSignalSpy>
+#include <thread>
+#include <future>
+#include <chrono>
 
 #define private public
 #include "artnet_test.h"
@@ -1499,5 +1502,151 @@ void ArtNet_Test::nodeSetupShowsTheNodesAnswer()
     reply.ip = QHostAddress("172.18.2.99");
     emit plugin.ipProgReplied("172.18.2.99", reply);
     QVERIFY(dlg.findChild<QLabel *>("status")->text() == status);
+    plugin.m_IOmapping.clear();
+}
+
+void ArtNet_Test::rigNetworkGateHoldsEverySend()
+{
+    ArtNetPlugin plugin;
+    QSharedPointer<QUdpSocket> sock(new QUdpSocket());
+    QList<QNetworkDatagram> sink;
+    if (showNetLine(plugin, sock, &sink) == false)
+        QSKIP("needs a broadcast-capable IPv4 interface");
+    ArtNetController *ctrl = plugin.m_IOmapping.at(0).controller;
+
+    // The laptop at school: the show's rig network is somewhere else.
+    plugin.setTransmitNetworks(QStringList() << "10.4.0.0/16");
+    QVERIFY(plugin.transmitRestricted());
+    QVERIFY(ctrl->transmitHeld());
+
+    // Opening an output polls at once -- not from here
+    ctrl->addUniverse(0, ArtNetController::Output);
+
+    ctrl->sendDmx(0, QByteArray(512, char(255)), true);
+    QMetaObject::invokeMethod(ctrl, "slotSendAllUniverses");
+    QVERIFY(QMetaObject::invokeMethod(ctrl, "slotPollTick"));
+    QVERIFY(ctrl->sendDiscoveryPoll() == false);
+    QVERIFY(ctrl->sendIpProg(QHostAddress("172.18.2.60"), ArtNetIpProgRequest()) == false);
+
+    // A node on that network polling us: no ArtPollReply goes back.
+    QByteArray poll;
+    ArtNetPacketizer().setupArtNetPoll(poll);
+    ctrl->handlePacket(poll, QHostAddress("172.18.2.60"));
+
+    QVERIFY2(sink.isEmpty(), qPrintable(QString("%1 datagram(s) left a held line").arg(sink.count())));
+    QCOMPARE(ctrl->getPacketSentNumber(), quint64(0));
+    // Nothing failed, either: held is not a send error
+    QVERIFY(ctrl->outputProblems().isEmpty());
+
+    // Back on the rig network: it resumes with the very next frame.
+    plugin.setTransmitNetworks(QStringList() << "172.18.0.0/20");
+    QVERIFY(ctrl->transmitHeld() == false);
+    ctrl->sendDmx(0, QByteArray(512, char(255)), true);
+    QCOMPARE(sink.count(), 1);
+    QCOMPARE(sink.first().destinationAddress(), QHostAddress("172.18.2.255"));
+
+    // No networks at all: as it always was
+    plugin.setTransmitNetworks(QStringList());
+    QVERIFY(plugin.transmitRestricted() == false);
+    QVERIFY(ctrl->transmitHeld() == false);
+    plugin.m_IOmapping.clear();
+}
+
+void ArtNet_Test::rigNetworkGateAllowsRigAndLoopback()
+{
+    ArtNetPlugin plugin;
+    plugin.setTransmitNetworks(QStringList() << "172.18.2.7/20" << "bogus" << "fe80::/64"
+                                             << "10.0.0.0/33" << "172.18.0.0/20");
+    // Normalised, de-duplicated, the junk ignored
+    QCOMPARE(plugin.transmitNetworks(), QStringList() << "172.18.0.0/20");
+    QVERIFY(plugin.transmitAllowedFrom(QString("172.18.2.219")));
+    QVERIFY(plugin.transmitAllowedFrom(QString("172.18.15.255")));
+    QVERIFY(plugin.transmitAllowedFrom(QString("172.18.16.1")) == false);
+    QVERIFY(plugin.transmitAllowedFrom(QString("10.4.12.7")) == false);
+    QVERIFY(plugin.transmitAllowedFrom(QString("127.0.0.1")));
+    QVERIFY(plugin.transmitAllowedFrom(QString("127.4.5.6")));
+    // Not IPv4: never on a rig network, and no crash
+    QVERIFY(plugin.transmitAllowedFrom(QString("fe80::1")) == false);
+    QVERIFY(plugin.transmitAllowedFrom(QString("wled.local")) == false);
+    QVERIFY(plugin.transmitAllowedFrom(QString()) == false);
+
+    // A loopback line is never held
+    QSharedPointer<QUdpSocket> sock(new QUdpSocket());
+    QList<QNetworkDatagram> sink;
+    QNetworkAddressEntry lo;
+    lo.setIp(QHostAddress::LocalHost);
+    lo.setPrefixLength(8);
+    ArtNetController loCtrl(QNetworkInterface::interfaceFromName("lo0").isValid()
+                                ? QNetworkInterface::interfaceFromName("lo0")
+                                : QNetworkInterface::interfaceFromName("lo"),
+                            lo, sock, 1, &plugin);
+    loCtrl.m_testSink = &sink;
+    QVERIFY(loCtrl.transmitHeld() == false);
+    loCtrl.addUniverse(0, ArtNetController::Output);
+    sink.clear();
+    loCtrl.sendDmx(0, QByteArray(512, char(1)), true);
+    QCOMPARE(sink.count(), 1);
+    QCOMPARE(sink.first().destinationAddress(), QHostAddress(QHostAddress::LocalHost));
+}
+
+void ArtNet_Test::rigNetworkGateDecisionIsCachedOffTheSendPath()
+{
+    ArtNetPlugin plugin;
+    QSharedPointer<QUdpSocket> sock(new QUdpSocket());
+    QList<QNetworkDatagram> sink;
+    if (showNetLine(plugin, sock, &sink) == false)
+        QSKIP("needs a broadcast-capable IPv4 interface");
+    ArtNetController *ctrl = plugin.m_IOmapping.at(0).controller;
+    ctrl->addUniverse(0, ArtNetController::Output);
+    sink.clear();
+
+    // setTransmitNetworks() updates the line's cached flag by itself
+    QVERIFY(ctrl->m_held.load() == false);
+    plugin.setTransmitNetworks(QStringList() << "10.4.0.0/16");
+    QVERIFY(ctrl->m_held.load());
+    plugin.setTransmitNetworks(QStringList() << "172.18.0.0/20");
+    QVERIFY(ctrl->m_held.load() == false);
+
+    // The engine's reconnect tick asks again even with the list unchanged
+    // (a setTransmitNetworks() with the same list is no change): a stale
+    // flag is put right there.
+    QVERIFY(plugin.setTransmitNetworks(QStringList() << "172.18.0.0/20") == false);
+    ctrl->m_held.store(true);
+    plugin.refreshTransmitGate();
+    QVERIFY(ctrl->m_held.load() == false);
+
+    /* The send path takes no gate lock and walks no list: with the plugin's
+       gate mutex held elsewhere (as by a setTransmitNetworks() in progress),
+       a send from another thread -- the universe thread's side -- still
+       completes. Taking the lock would deadlock it: the wait times out and
+       the lock is let go so the test fails instead of hanging. */
+    auto sendFromAnotherThread = [&]() {
+        std::promise<void> done;
+        std::future<void> finished = done.get_future();
+        plugin.m_transmitMutex.lock();
+        std::thread sender([&]() {
+            for (int i = 0; i < 1000; i++)
+            {
+                ctrl->transmitHeld();
+                ctrl->sendDmx(0, QByteArray(512, char(i & 0xFF)), true);
+            }
+            done.set_value();
+        });
+        const bool inTime = finished.wait_for(std::chrono::seconds(5)) == std::future_status::ready;
+        plugin.m_transmitMutex.unlock();
+        sender.join();
+        return inTime;
+    };
+
+    sink.clear();
+    QVERIFY2(sendFromAnotherThread(), "an allowed send waited for the gate lock");
+    QCOMPARE(sink.count(), 1000);
+
+    plugin.setTransmitNetworks(QStringList() << "10.4.0.0/16");
+    sink.clear();
+    QVERIFY2(sendFromAnotherThread(), "a held send waited for the gate lock");
+    QVERIFY(sink.isEmpty());
+
+    plugin.setTransmitNetworks(QStringList());
     plugin.m_IOmapping.clear();
 }

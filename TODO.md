@@ -10,6 +10,21 @@ under `~/.claude/.../memory/`.
 
 ## Small fixes and leftovers
 
+- **Software update: first real-release checks (2026-10-20)**: the updater
+  (feat/update-check, docs/features/updates.md) is unit-tested against a
+  local fake GitHub and fake apps only. Still to do:
+  - When the first release with `SHA256SUMS` is out, update a signed
+    /Applications copy end to end, from the previous release.
+  - Test a standard (non-admin) account, which should fall back to Open
+    Download.
+  - Test the Windows silent install (`/S /D=`) and reopen on the Win10 VM.
+  - Versions stay plain X.Y.Z; a build learns it is a pre-release from its
+    own release's GitHub flag at its first check. Until that check, a
+    pre-release build behaves as Stable. A SemVer suffix would also work, but
+    it would break NSIS `VIProductVersion "${VERSION}.0"`.
+  - `hdiutil attach -mountpoint` warns that it is deprecated on macOS 27, in
+    favour of `diskutil image attach`. It still works.
+
 - **MasterTimer stop/start race (2026-10-16)** — `MasterTimerPrivate::run()`
   sets `m_run = true` inside the thread, so a `stop()` that comes right after
   `start()` (before the thread runs) is undone and `wait()` never returns:
@@ -244,6 +259,16 @@ help (DONE.md 2026-10-16). Handoff: SHOW_TREE_OVERNIGHT.md.
   footer GO / show control, per-production timecode).
 
 ## Needs the real rig / hardware
+
+- **Rig network gate on real networks (built 2026-10-19, feat/rig-network-gate)**
+  — tested with a modelled machine (NetworkRoute::setResolverForTest) and
+  Art-Net's test sink only; no packet was sent. On ender: with the show's
+  rig network 172.18.0.0/20, unplug vlan0 / join another Wi-Fi and confirm
+  with tcpdump on en0 that no Art-Net/sACN/ArtPoll leaves (and the footer
+  goes red within ~5 s); plug back in and it resumes. Check WLED on the
+  show Wi-Fi vs. a laptop whose default route is elsewhere. Also: a VPN
+  route to the show network (source on utunN, outside the rig CIDR) is
+  *held* by design — decide whether the VPN's own subnet should be listed.
 
 - **Focus mode with a real controller (built 2026-10-18, feat/focus-alignment)**
   — FOCUS_MODE_DESIGN.md. Tested offscreen with a stub controller and the

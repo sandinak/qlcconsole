@@ -219,3 +219,102 @@ bool QLCIOPlugin::sendRDMCommand(quint32 universe, quint32 line, uchar command, 
 
     return false;
 }
+
+/*************************************************************************
+ * Rig network transmit gate
+ *************************************************************************/
+
+namespace
+{
+    /* "a.b.c.d" to a host-order address, without QtNetwork: this file is
+       built into every plugin, MIDI and USB ones included. */
+    bool parseIPv4(const QString &text, quint32 *out)
+    {
+        const QStringList parts = text.trimmed().split('.');
+        if (parts.count() != 4)
+            return false;
+        quint32 value = 0;
+        for (const QString &part : parts)
+        {
+            bool ok = false;
+            const uint octet = part.toUInt(&ok);
+            if (ok == false || octet > 255 || part.isEmpty())
+                return false;
+            value = (value << 8) | octet;
+        }
+        *out = value;
+        return true;
+    }
+
+    quint32 maskOf(int prefix)
+    {
+        return prefix <= 0 ? 0 : (0xFFFFFFFFu << (32 - prefix));
+    }
+}
+
+bool QLCIOPlugin::setTransmitNetworks(const QStringList &networks)
+{
+    QVector<QPair<quint32, int> > parsed;
+    for (const QString &entry : networks)
+    {
+        const int slash = entry.indexOf('/');
+        if (slash < 0)
+            continue;
+        quint32 ip = 0;
+        bool ok = false;
+        const int prefix = entry.mid(slash + 1).toInt(&ok);
+        if (ok == false || prefix < 1 || prefix > 32 || parseIPv4(entry.left(slash), &ip) == false)
+            continue;
+        const QPair<quint32, int> net(ip & maskOf(prefix), prefix);
+        if (parsed.contains(net) == false)
+            parsed << net;
+    }
+
+    {
+        QMutexLocker locker(&m_transmitMutex);
+        if (parsed == m_transmitNetworks)
+            return false;
+        m_transmitNetworks = parsed;
+    }
+    refreshTransmitGate();
+    return true;
+}
+
+QStringList QLCIOPlugin::transmitNetworks() const
+{
+    QMutexLocker locker(&m_transmitMutex);
+    QStringList list;
+    for (const QPair<quint32, int> &net : m_transmitNetworks)
+        list << QString("%1.%2.%3.%4/%5").arg(net.first >> 24).arg((net.first >> 16) & 0xFF)
+                                         .arg((net.first >> 8) & 0xFF).arg(net.first & 0xFF)
+                                         .arg(net.second);
+    return list;
+}
+
+bool QLCIOPlugin::transmitRestricted() const
+{
+    QMutexLocker locker(&m_transmitMutex);
+    return m_transmitNetworks.isEmpty() == false;
+}
+
+bool QLCIOPlugin::transmitAllowedFrom(quint32 ipv4) const
+{
+    if ((ipv4 >> 24) == 127)
+        return true;
+    QMutexLocker locker(&m_transmitMutex);
+    if (m_transmitNetworks.isEmpty())
+        return true;
+    for (const QPair<quint32, int> &net : m_transmitNetworks)
+        if ((ipv4 & maskOf(net.second)) == net.first)
+            return true;
+    return false;
+}
+
+bool QLCIOPlugin::transmitAllowedFrom(const QString &address) const
+{
+    quint32 ip = 0;
+    if (parseIPv4(address, &ip))
+        return transmitAllowedFrom(ip);
+    QMutexLocker locker(&m_transmitMutex);
+    return m_transmitNetworks.isEmpty();
+}

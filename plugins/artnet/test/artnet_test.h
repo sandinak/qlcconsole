@@ -82,6 +82,13 @@ private slots:
     void nodeSetupOffersTheAliasForAnUnreachableNode();
     void nodeSetupValidatesAndConfirmsBeforeSending();
     void nodeSetupShowsTheNodesAnswer();
+
+    /* The rig network gate: a line not on the show's rig networks sends
+       nothing -- DMX, polls, poll replies, discovery, ArtIpProg. Every
+       send goes to a test sink; nothing leaves. */
+    void rigNetworkGateHoldsEverySend();
+    void rigNetworkGateAllowsRigAndLoopback();
+    void rigNetworkGateDecisionIsCachedOffTheSendPath();
 };
 
 #endif

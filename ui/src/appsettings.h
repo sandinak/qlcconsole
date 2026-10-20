@@ -25,6 +25,10 @@
 class QCheckBox;
 class QComboBox;
 class QSpinBox;
+class QLineEdit;
+class QLabel;
+class QPushButton;
+class QDialogButtonBox;
 class App;
 
 /** @addtogroup ui UI
@@ -39,8 +43,18 @@ public:
     AppSettings(App *app, QWidget *parent = nullptr);
     ~AppSettings();
 
+    /** Put the cursor in the show's rig networks (the footer chip's click) */
+    void focusRigNetworks();
+
 protected slots:
     void accept() override;
+
+private slots:
+    /** Check the rig networks as typed; OK only while they parse */
+    void validateRigNetworks();
+    /** "Transmit anyway, this session" -- confirmed, never saved -- or,
+     *  while that is in force, turn the check back on */
+    void slotTransmitAnyway();
 
 private:
     App *m_app;
@@ -58,6 +72,19 @@ private:
     QComboBox *m_recordPerformCombo;
     // Measurement units (MeasurementUnits::preferredLength)
     QComboBox *m_unitsCombo;
+
+    // Network: the show's rig networks and the transmit gate
+    QLineEdit *m_rigNetworksEdit;
+    QLabel *m_rigNetworksError;
+    QCheckBox *m_rigOnlyCheck;
+    QPushButton *m_transmitAnywayButton;
+
+    // Software Update (UpdateChecker): this machine's, not the show's
+    QCheckBox *m_updateCheck = nullptr;
+    QComboBox *m_updateChannel = nullptr;
+    QCheckBox *m_updateAuto = nullptr;
+    QDialogButtonBox *m_buttonBox;
+    void updateTransmitAnywayButton();
 };
 
 /** @} */

@@ -27,6 +27,7 @@
 #include <QtPlugin>
 #include <QVariant>
 #include <QObject>
+#include <QMutex>
 #include <climits>
 #include <QMap>
 
@@ -718,6 +719,60 @@ signals:
      * @param data
      */
     void rdmValueChanged(quint32 universe, quint32 line, QVariantMap data);
+
+    /*************************************************************************
+     * Rig network transmit gate
+     *************************************************************************/
+public:
+    /**
+     * The networks this plugin may transmit from, as "a.b.c.d/p" (IPv4).
+     *
+     * Set by the engine from the show's rig networks while the gate is on
+     * (see InputOutputMap::transmitGateActive()); an empty list means no
+     * restriction, which is also how a plugin starts. A network plugin
+     * (Art-Net, E1.31, OSC, WLED) holds everything a line or device would
+     * send -- DMX, polls, replies, discovery -- while the local address it
+     * would leave from is not allowed (transmitAllowedFrom()), so a laptop
+     * on some other network (a school's, a venue's office Wi-Fi) never puts
+     * show traffic on it, even through a path the engine's own patch hold
+     * does not see (an input line answering polls, a rescan). Entries that
+     * do not parse are ignored.
+     *
+     * The decision is not made per packet: each line (controller) or device
+     * keeps it in a flag its send path only reads, worked out again by
+     * refreshTransmitGate() -- called from here when the list changes, and
+     * by the engine on its reconnect tick -- and when a line opens or a
+     * device's address changes.
+     *
+     * Returns true when the list changed (and refreshTransmitGate() ran).
+     */
+    bool setTransmitNetworks(const QStringList &networks);
+
+    /** The list last given to setTransmitNetworks(), normalised */
+    QStringList transmitNetworks() const;
+
+    /** Is any network set, i.e. is anything held at all? */
+    bool transmitRestricted() const;
+
+    /** May this plugin send from local IPv4 address @a ipv4 (host order)?
+     *  Always for loopback (127.0.0.0/8) and when no networks are set.
+     *  Takes a lock and walks the list: for working out a cached decision,
+     *  never for a send path. */
+    bool transmitAllowedFrom(quint32 ipv4) const;
+
+    /** The same for a dotted address string; anything that is not an IPv4
+     *  address (a hostname, IPv6) is allowed only when no networks are set. */
+    bool transmitAllowedFrom(const QString &address) const;
+
+    /** Work out every line's / device's cached transmit decision again:
+     *  the networks changed, or (the engine's reconnect tick) an interface
+     *  or route may have. Main thread; never blocks a send path. Default:
+     *  nothing to do (a plugin that does not transmit over IP). */
+    virtual void refreshTransmitGate() {}
+
+private:
+    mutable QMutex m_transmitMutex;
+    QVector<QPair<quint32, int> > m_transmitNetworks;
 };
 
 #define QLCIOPlugin_iid "org.qlcplus.QLCIOPlugin"

@@ -443,3 +443,10 @@ QList<E131IO> E131Plugin::getIOMapping() const
 {
     return m_IOmapping;
 }
+
+void E131Plugin::refreshTransmitGate()
+{
+    for (const E131IO &io : m_IOmapping)
+        if (io.controller != NULL)
+            io.controller->refreshTransmitGate();
+}

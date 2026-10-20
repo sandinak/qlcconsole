@@ -227,6 +227,18 @@ public:
     /** Open Connections at its Show control & sync page. */
     void showShowControlSettings();
 
+    /** Open Settings at the show's rig networks (the rig network footer
+     *  chip's click). */
+    void showRigNetworkSettings();
+
+    /** The QSettings key of "Only transmit on rig networks" (default on) */
+    static QString rigNetworkGateSettingKey();
+
+    /** The rig network footer chip's text for @a st, and whether it is the
+     *  red kind (@a alarm) -- empty when there is nothing to say. */
+    static QString rigNetworkFooterText(const InputOutputMap::TransmitGateStatus &st,
+                                        bool *alarm = nullptr);
+
 private slots:
     void slotDocModified(bool state);
     void slotDocAutosave();
@@ -387,6 +399,15 @@ public slots:
 
     void slotAppSettings();
 
+public:
+    /** Update checks and installs (nullptr without a GUI). */
+    class UpdateManager *updateManager() const { return m_updateManager; }
+private:
+    class UpdateManager *m_updateManager = nullptr;
+    /** Software Update's "Restart and Install": the close in progress
+     *  reopens the show once the update is in place. */
+    bool m_restartForUpdate = false;
+
 private:
     QAction* m_fileNewAction;
     QAction* m_fileOpenAction;
@@ -434,6 +455,7 @@ private:
     QAction* m_helpIndexAction;
     QAction* m_helpContextAction = nullptr;
     QAction* m_helpAboutAction;
+    QAction* m_checkUpdatesAction = nullptr;    ///< Help → Check for Updates…
     QAction* m_quitAction;
     QMenu* m_fileOpenMenu;
     QMenu* m_fadeAndStopMenu;
@@ -631,6 +653,14 @@ private:
     QLabel* m_statusPadModeLabel;
     QLabel* m_statusShowLockLabel;
     QLabel* m_statusBlackoutLabel;
+    /** Rig network transmit gate: red while network output is held because
+     *  this machine is not on the show's rig network, amber when the show
+     *  has none set or the check is off/lifted. Click opens the setting. */
+    QLabel* m_statusRigNetLabel = nullptr;
+    void updateRigNetworkFooter();
+    /** "Update available: 0.1.1" -- driven by m_updateManager, hidden while
+     *  there is nothing to say; a click opens Software Update. */
+    QLabel* m_statusUpdateLabel = nullptr;
     /** Persistent Design/Operate indicator — the toolbar's mode-toggle
      *  button/icon always shows the mode a click would switch TO, not the
      *  current one (standard play/pause-style affordance), so there was no

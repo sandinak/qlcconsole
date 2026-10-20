@@ -21,7 +21,9 @@
 #include <QNetworkAccessManager>
 
 #include "wled_test.h"
+#define private public
 #include "wledplugin.h"
+#undef private
 #include "wledstate.h"
 
 namespace
@@ -490,6 +492,54 @@ void Wled_Test::theRigViewWatchesTheFirstDeviceThatAnswers()
     QTRY_VERIFY_WITH_TIMEOUT(plugin.targetPixels(2) == (QVector<quint32>{ 0x00FF00 }), 8000);
     QCOMPARE(plugin.targetPixelCount(2), 16);
     plugin.watchTargetPixels(2, false);
+}
+
+/* The rig network gate's per-device decision is worked out when the
+   device's address is set and when the gate refreshes (the networks changed;
+   the engine's reconnect tick), never on the send tick, which only reads
+   Device::gateOpen. Nothing here is sent anywhere: init() is not called (no
+   send timers), and a route probe is a UDP connect, which sends nothing. */
+void Wled_Test::rigNetworkGateIsDecidedOffTheSendTick()
+{
+    WledPlugin plugin;
+    QVERIFY(plugin.openOutput(0, 0));
+    QVERIFY(plugin.openOutput(0, 1));
+    auto open = [&plugin](quint32 universe) {
+        QMutexLocker locker(&plugin.m_mutex);
+        return plugin.m_targets.value(universe).devices.value(0).gateOpen;
+    };
+
+    // No networks: everything open, no probe needed
+    plugin.setParameter(0, 0, QLCIOPlugin::Output, WLED_OUTPUTIP, QString("198.51.100.7"));
+    plugin.setParameter(1, 0, QLCIOPlugin::Output, WLED_OUTPUTIP, QString("127.0.0.1"));
+    QVERIFY(open(0));
+    QVERIFY(open(1));
+
+    // A rig network this machine is not on (TEST-NET-1): the device reached
+    // through some other route is held, loopback never is
+    plugin.setTransmitNetworks(QStringList() << "192.0.2.0/24");
+    QVERIFY(open(0) == false);
+    QVERIFY(open(1));
+
+    // A device addressed while the gate is on is decided as it is set
+    plugin.setParameter(0, 0, QLCIOPlugin::Output, WLED_OUTPUTIP, QString("198.51.100.8"));
+    QVERIFY(open(0) == false);
+    plugin.setParameter(0, 0, QLCIOPlugin::Output, WLED_OUTPUTIP, QString("wled.local"));
+    QVERIFY(open(0) == false);                  // a name cannot be checked
+
+    // The tick: a stale answer is put right
+    plugin.setParameter(0, 0, QLCIOPlugin::Output, WLED_OUTPUTIP, QString("198.51.100.8"));
+    {
+        QMutexLocker locker(&plugin.m_mutex);
+        plugin.m_targets[0].devices[0].gateOpen = true;
+    }
+    plugin.refreshTransmitGate();
+    QVERIFY(open(0) == false);
+
+    // The networks cleared: open again at once
+    plugin.setTransmitNetworks(QStringList());
+    QVERIFY(open(0));
+    QVERIFY(open(1));
 }
 
 QTEST_MAIN(Wled_Test)

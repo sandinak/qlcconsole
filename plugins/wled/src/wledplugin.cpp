@@ -24,6 +24,9 @@
 #include <QDateTime>
 #include <QJsonArray>
 #include <QTimer>
+#include <QSet>
+#include <QUdpSocket>
+#include <QHostAddress>
 #include <QDebug>
 
 #include "wledplugin.h"
@@ -255,6 +258,9 @@ void WledPlugin::setParameter(quint32 universe, quint32 line, Capability type,
     const int index = parameterSlot(name, &kind);
     if (index < 0)
         return;                             // not one of ours (e.g. Art-Net's outputUni)
+    // A device's address: its gate decision, worked out before the lock
+    // (the route probe must not hold up writeUniverse())
+    const bool newIpOpen = kind == 0 ? routeAllowed(value.toString().trimmed()) : true;
     {
         QMutexLocker locker(&m_mutex);
         if (!m_targets.contains(universe))
@@ -270,6 +276,7 @@ void WledPlugin::setParameter(quint32 universe, quint32 line, Capability type,
                 // from the old one is told apart by its IP.
                 Device fresh;
                 fresh.ip = ip;
+                fresh.gateOpen = newIpOpen;
                 fresh.address = d.address;
                 fresh.channels = d.channels;
                 d = fresh;
@@ -356,7 +363,7 @@ void WledPlugin::tick()
                 // One request at a time per device (the latest wins); one
                 // that did not answer is tried again in a moment, not every
                 // tick. Neither holds up the other devices.
-                if (d.ip.isEmpty() || d.inFlight || now < d.retryAt)
+                if (d.ip.isEmpty() || d.inFlight || now < d.retryAt || !d.gateOpen)
                     continue;
                 const QJsonObject state = WledState::decode(t.data, t.addressOf(d),
                                                             t.channelsOf(d), m_sendInterval);
@@ -420,6 +427,56 @@ void WledPlugin::send(quint32 universe, int index)
     });
 }
 
+bool WledPlugin::routeAllowed(const QString &host) const
+{
+    if (transmitRestricted() == false)
+        return true;
+
+    const QHostAddress target(host.trimmed());
+    if (target.isNull() || target.protocol() != QAbstractSocket::IPv4Protocol)
+        return false;
+    if (target.isLoopback())
+        return true;
+
+    /* Which local address would a request to it leave from? Connecting a
+       UDP socket sends nothing -- the kernel only picks the route. */
+    quint32 local = 0;
+    QUdpSocket probe;
+    probe.connectToHost(target, 80);
+    if (probe.state() == QAbstractSocket::ConnectedState
+        || probe.waitForConnected(100))
+        local = probe.localAddress().toIPv4Address();
+    probe.abort();
+    return local != 0 && transmitAllowedFrom(local);
+}
+
+void WledPlugin::refreshTransmitGate()
+{
+    /* The route probes run here -- the networks changed, or the engine's
+       reconnect tick -- with m_mutex released, never on the send tick:
+       tick(), pollInfo() and pollLive() only read Device::gateOpen. */
+    QSet<QString> hosts;
+    {
+        QMutexLocker locker(&m_mutex);
+        for (const Target &t : std::as_const(m_targets))
+            for (const Device &d : t.devices)
+                if (!d.ip.isEmpty())
+                    hosts.insert(d.ip);
+    }
+    QHash<QString, bool> open;
+    for (const QString &host : std::as_const(hosts))
+        open.insert(host, routeAllowed(host));
+
+    QMutexLocker locker(&m_mutex);
+    for (Target &t : m_targets)
+        for (Device &d : t.devices)
+        {
+            auto it = open.constFind(d.ip);
+            if (it != open.constEnd())
+                d.gateOpen = it.value();
+        }
+}
+
 void WledPlugin::pollInfo()
 {
     struct Ask { quint32 universe; int index; QString ip; };
@@ -430,7 +487,7 @@ void WledPlugin::pollInfo()
             for (int i = 0; i < it.value().devices.size(); i++)
             {
                 Device &d = it.value().devices[i];
-                if (!d.ip.isEmpty() && !d.infoInFlight)
+                if (!d.ip.isEmpty() && !d.infoInFlight && d.gateOpen)
                 {
                     d.infoInFlight = true;
                     ask << Ask{ it.key(), i, d.ip };
@@ -486,7 +543,7 @@ void WledPlugin::pollLive()
             // The first device that answers: a dead primary does not leave
             // the rig view dark while its backup is showing the look.
             const int s = t.liveSlot();
-            if (s < 0)
+            if (s < 0 || !t.devices.at(s).gateOpen)
                 continue;
             t.liveInFlight = true;
             ask << qMakePair(it.key(), t.devices.at(s).ip);

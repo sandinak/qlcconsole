@@ -51,6 +51,10 @@ set(APPVERSION "${QLC_BASE_VERSION}+qlcconsole.${QLCCONSOLE_REV}")
 # --version and the bundle's Info.plist show. APPVERSION above stays the
 # build id: it is what a saved show records as its creator's version.
 file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/VERSION" QLCCONSOLE_VERSION LIMIT_COUNT 1)
+# Bumping VERSION has to reconfigure: without this a build after the bump
+# kept the old release in qlcconfig.h, About, --version and Info.plist.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+             "${CMAKE_CURRENT_LIST_DIR}/VERSION")
 if(NOT QLCCONSOLE_VERSION)
     set(QLCCONSOLE_VERSION "0.0.0")
 endif()

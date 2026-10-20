@@ -33,6 +33,7 @@
 #include "qlcfile.h"
 #include "doc.h"
 #include "networkroute.h"
+#include "rignetwork.h"
 #undef private
 
 #define TESTPLUGINDIR "../iopluginstub"
@@ -355,6 +356,9 @@ void InputOutputMap_Test::cleanup()
     stub->m_lineNames.clear();
     stub->m_openOutputs.clear();
     stub->m_openInputs.clear();
+    stub->setTransmitNetworks(QStringList());
+    stub->m_gateRefreshes = 0;
+    stub->m_gateAllowed.clear();
 }
 
 void InputOutputMap_Test::offlineShowSavesPatchesByteIdentical()
@@ -1571,4 +1575,390 @@ void InputOutputMap_Test::universeIdAlwaysEqualsItsArrayIndex()
 // which calls QCoreApplication::applicationDirPath() on macOS/iOS/Windows —
 // that needs a real QCoreApplication instance to resolve correctly (without
 // one it warns and returns an empty path, failing the path comparison).
+/*****************************************************************************
+ * Rig network transmit gate
+ *****************************************************************************/
+
+namespace
+{
+    /* The show on a school laptop: one Art-Net universe saved on the show
+       VLAN, rig network 172.18.0.0/20. */
+    const char *kRigShow =
+        "<InputOutputMap>\n"
+        " <RigNetwork>172.18.0.0/20</RigNetwork>\n"
+        " <Universe Name=\"U01\" ID=\"0\">\n"
+        "  <Output Plugin=\"ArtNet\" UID=\"172.18.2.219\" Line=\"1\" Network=\"172.18.2.0/24\">\n"
+        "   <PluginParameters outputIP=\"172.18.2.60\" outputUni=\"0\"/>\n"
+        "  </Output>\n"
+        " </Universe>\n"
+        "</InputOutputMap>\n";
+
+    /* A universe patched at school, to the school interface itself. */
+    const char *kSchoolPatch =
+        "<InputOutputMap>\n"
+        "%1"
+        " <Universe Name=\"U01\" ID=\"0\">\n"
+        "  <Output Plugin=\"ArtNet\" UID=\"10.4.12.7\" Line=\"1\"/>\n"
+        " </Universe>\n"
+        "</InputOutputMap>\n";
+
+    void schoolLaptop()
+    {
+        mockMachine(QList<NetworkRoute::LocalAddress>()
+                        << localAddr("lo0", "127.0.0.1", 8)
+                        << localAddr("en0", "10.4.12.7", 16),
+                    QMap<QString, QString>{ { "127.", "127.0.0.1" }, { "*", "10.4.12.7" } });
+    }
+}
+
+void InputOutputMap_Test::rigNetworkParsing()
+{
+    QString why;
+    QCOMPARE(RigNetwork::normalise("172.18.2.5/24"), QString("172.18.2.0/24"));
+    QCOMPARE(RigNetwork::normalise(" 172.18.0.0/20 "), QString("172.18.0.0/20"));
+    QCOMPARE(RigNetwork::normalise("10.1.2.3/32"), QString("10.1.2.3/32"));
+    QVERIFY(RigNetwork::normalise("172.18.2.0", &why).isEmpty());
+    QVERIFY(why.isEmpty() == false);
+    QVERIFY(RigNetwork::normalise("172.18/20").isEmpty());
+    QVERIFY(RigNetwork::normalise("300.1.1.1/8").isEmpty());
+    QVERIFY(RigNetwork::normalise("10.0.0.0/0").isEmpty());
+    QVERIFY(RigNetwork::normalise("10.0.0.0/33").isEmpty());
+    QVERIFY(RigNetwork::normalise("fe80::/64").isEmpty());   // IPv6: not a rig network
+    QVERIFY(RigNetwork::normalise("").isEmpty());
+
+    QStringList bad;
+    QCOMPARE(RigNetwork::parseList("172.18.0.0/20, 10.0.5.9/24;172.18.3.1/20\n bogus", &bad),
+             QStringList() << "172.18.0.0/20" << "10.0.5.0/24");
+    QCOMPARE(bad, QStringList() << "bogus");
+
+    const QStringList nets = QStringList() << "172.18.0.0/20";
+    QVERIFY(RigNetwork::contains(nets, QHostAddress("172.18.2.219")));
+    QVERIFY(RigNetwork::contains(nets, QHostAddress("172.18.15.1")));
+    QVERIFY(RigNetwork::contains(nets, QHostAddress("172.18.16.1")) == false);
+    QVERIFY(RigNetwork::contains(nets, QHostAddress("10.4.12.7")) == false);
+    // IPv6 is ignored for matching, and does not crash
+    QVERIFY(RigNetwork::contains(nets, QHostAddress("fe80::1")) == false);
+    QVERIFY(RigNetwork::contains(nets, QHostAddress("::ffff:172.18.2.1")) == false);
+    QVERIFY(RigNetwork::contains(nets, QHostAddress()) == false);
+    QVERIFY(RigNetwork::contains(QStringList() << "fe80::/64", QHostAddress("fe80::1")) == false);
+
+    // Setting them normalises and drops junk
+    InputOutputMap iom(m_doc, 1);
+    iom.setRigNetworks(QStringList() << "172.18.2.5/20" << "nope" << "172.18.0.0/20" << "::1/128");
+    QCOMPARE(iom.rigNetworks(), QStringList() << "172.18.0.0/20");
+}
+
+void InputOutputMap_Test::rigNetworkHeldOffTheRigNetwork()
+{
+    schoolLaptop();
+    IOPluginStub *stub = namedStub(m_doc, "ArtNet", QStringList() << "127.0.0.1" << "10.4.12.7");
+
+    // Saved on the show VLAN: nothing here reaches it -- kept, and HELD.
+    {
+        InputOutputMap iom(m_doc, 1);
+        QVERIFY(loadIOMap(iom, kRigShow));
+        QVERIFY(iom.transmitGateActive());
+        QVERIFY(stub->m_openOutputs.isEmpty());
+        OutputPatch *op = iom.outputPatch(0, 0);
+        QVERIFY(op->isPending());
+        QVERIFY(op->isHeld());
+        // The plugins were told too
+        QCOMPARE(stub->transmitNetworks(), QStringList() << "172.18.0.0/20");
+
+        const InputOutputMap::TransmitGateStatus st = iom.transmitGateStatus();
+        QCOMPARE(int(st.state), int(InputOutputMap::TransmitGateStatus::Held));
+        QCOMPARE(st.held, 1);
+        QCOMPARE(st.networkOutputs, 1);
+        QCOMPARE(st.networks, QStringList() << "172.18.0.0/20");
+        QCOMPARE(st.connected, QStringList() << "en0 10.4.12.7");
+        QCOMPARE(iom.danglingOutputPatches().count(), 1);
+        QVERIFY(iom.danglingOutputPatches().first().heldReason.isEmpty() == false);
+    }
+
+    /* Patched at school to the school interface: the line is right here,
+       and without the gate it would open and broadcast on it. Held. */
+    stub->m_openOutputs.clear();
+    {
+        InputOutputMap iom(m_doc, 1);
+        QVERIFY(loadIOMap(iom, QString(kSchoolPatch).arg(" <RigNetwork>172.18.0.0/20</RigNetwork>\n")));
+        QVERIFY(stub->m_openOutputs.isEmpty());
+        OutputPatch *op = iom.outputPatch(0, 0);
+        QVERIFY(op->isHeld());
+        QVERIFY2(op->heldReason().contains("10.4.12.7"), qPrintable(op->heldReason()));
+
+        // Nothing reaches the plugin while held
+        stub->m_universe.fill(0);
+        op->dump(0, QByteArray(512, char(200)), true);
+        QCOMPARE(stub->m_universe.count(char(200)), 0);
+
+        // The tick keeps it held
+        QCOMPARE(iom.retryOfflinePatches(), 0);
+        QVERIFY(op->isHeld());
+        QVERIFY(stub->m_openOutputs.isEmpty());
+
+        // Saved exactly as loaded
+        QCOMPARE(patchElements(saveIOMap(iom)),
+                 patchElements(QString(kSchoolPatch).arg(QString())));
+    }
+}
+
+void InputOutputMap_Test::rigNetworkHeldPatchResumesOnTheRigNetwork()
+{
+    schoolLaptop();
+    IOPluginStub *stub = namedStub(m_doc, "ArtNet", QStringList() << "127.0.0.1" << "10.4.12.7");
+
+    InputOutputMap iom(m_doc, 1);
+    QSignalSpy gate(&iom, SIGNAL(transmitGateChanged()));
+    QVERIFY(loadIOMap(iom, kRigShow));
+    QVERIFY(iom.outputPatch(0, 0)->isHeld());
+
+    // The laptop gets to the venue: a cable onto the show VLAN.
+    mockMachine(QList<NetworkRoute::LocalAddress>()
+                    << localAddr("lo0", "127.0.0.1", 8)
+                    << localAddr("en0", "10.4.12.7", 16)
+                    << localAddr("en5", "172.18.2.157", 24),
+                QMap<QString, QString>{ { "127.", "127.0.0.1" }, { "172.18.2.", "172.18.2.157" },
+                                        { "*", "10.4.12.7" } });
+    stub->m_lineNames << "172.18.2.157";
+    gate.clear();
+
+    // The retry tick: it reconnects by itself, on the rig line
+    QMetaObject::invokeMethod(&iom, "slotRetryOfflinePatches");
+    OutputPatch *op = iom.outputPatch(0, 0);
+    QVERIFY(op->isPending() == false);
+    QVERIFY(op->isHeld() == false);
+    QCOMPARE(op->output(), quint32(2));
+    QCOMPARE(stub->m_openOutputs, QList<quint32>() << 2);
+    QCOMPARE(op->getPluginParameters().value("outputIP").toString(), QString("172.18.2.60"));
+    QCOMPARE(int(iom.transmitGateStatus().state), int(InputOutputMap::TransmitGateStatus::Clear));
+    QVERIFY(gate.count() >= 1);
+    QVERIFY(iom.danglingOutputPatches().isEmpty());
+}
+
+void InputOutputMap_Test::rigNetworkLivePatchAndSettingsHoldAndRelease()
+{
+    schoolLaptop();
+    IOPluginStub *stub = namedStub(m_doc, "ArtNet", QStringList() << "127.0.0.1" << "10.4.12.7");
+
+    InputOutputMap iom(m_doc, 1);
+    // No rig networks yet: patching to the school interface opens it
+    QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 1));
+    QCOMPARE(stub->m_openOutputs, QList<quint32>() << 1);
+    QCOMPARE(int(iom.transmitGateStatus().state), int(InputOutputMap::TransmitGateStatus::NotSet));
+
+    // Setting them holds it at once: closed, kept
+    iom.setRigNetworks(QStringList() << "172.18.0.0/20");
+    QVERIFY(stub->m_openOutputs.isEmpty());
+    QVERIFY(iom.outputPatch(0, 0)->isHeld());
+    QCOMPARE(iom.outputPatch(0, 0)->outputName(), QString("10.4.12.7"));
+
+    // "Transmit anyway, this session": back on
+    iom.setTransmitOverride(true);
+    QVERIFY(iom.transmitGateActive() == false);
+    QCOMPARE(stub->m_openOutputs, QList<quint32>() << 1);
+    QVERIFY(iom.outputPatch(0, 0)->isPatched());
+    QVERIFY(stub->transmitNetworks().isEmpty());
+    QCOMPARE(int(iom.transmitGateStatus().state), int(InputOutputMap::TransmitGateStatus::Overridden));
+
+    iom.setTransmitOverride(false);
+    QVERIFY(stub->m_openOutputs.isEmpty());
+    QVERIFY(iom.outputPatch(0, 0)->isHeld());
+
+    // The check switched off on this machine
+    iom.setTransmitGateEnabled(false);
+    QCOMPARE(stub->m_openOutputs, QList<quint32>() << 1);
+    QCOMPARE(int(iom.transmitGateStatus().state), int(InputOutputMap::TransmitGateStatus::Off));
+    iom.setTransmitGateEnabled(true);
+    QVERIFY(iom.outputPatch(0, 0)->isHeld());
+
+    // A patch made by hand while the gate is on: kept, never opened
+    QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 1, false, 1));
+    QVERIFY(stub->m_openOutputs.isEmpty());
+    QVERIFY(iom.outputPatch(0, 1)->isHeld());
+
+    // File -> New keeps the patch, so it keeps where that patch belongs
+    iom.resetUniverses();
+    QCOMPARE(iom.rigNetworks(), QStringList() << "172.18.0.0/20");
+    QVERIFY(iom.outputPatch(0, 0)->isHeld());
+}
+
+void InputOutputMap_Test::rigNetworkNoneSetBehavesAsBefore()
+{
+    schoolLaptop();
+    IOPluginStub *stub = namedStub(m_doc, "ArtNet", QStringList() << "127.0.0.1" << "10.4.12.7");
+
+    InputOutputMap iom(m_doc, 1);
+    QVERIFY(loadIOMap(iom, QString(kSchoolPatch).arg(QString())));
+    QVERIFY(iom.transmitGateActive() == false);
+    QCOMPARE(stub->m_openOutputs, QList<quint32>() << 1);
+    QVERIFY(iom.outputPatch(0, 0)->isHeld() == false);
+    QVERIFY(stub->transmitNetworks().isEmpty());
+
+    // ...with a warning to set them
+    const InputOutputMap::TransmitGateStatus st = iom.transmitGateStatus();
+    QCOMPARE(int(st.state), int(InputOutputMap::TransmitGateStatus::NotSet));
+    QCOMPARE(st.held, 0);
+}
+
+void InputOutputMap_Test::rigNetworkLoopbackAndNonNetworkUnaffected()
+{
+    schoolLaptop();
+    IOPluginStub *stub = namedStub(m_doc, "ArtNet", QStringList() << "127.0.0.1" << "10.4.12.7");
+
+    InputOutputMap iom(m_doc, 2);
+    iom.setRigNetworks(QStringList() << "172.18.0.0/20");
+    QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 0));     // 127.0.0.1
+    QCOMPARE(stub->m_openOutputs, QList<quint32>() << 0);
+    QVERIFY(iom.outputPatch(0, 0)->isHeld() == false);
+    QVERIFY(iom.transmitHoldReason("127.0.0.1", QMap<QString, QVariant>()).isEmpty());
+    QVERIFY(iom.transmitHoldReason("127.0.0.1", QMap<QString, QVariant>()).isEmpty());
+
+    // Not network output at all (a USB widget, MIDI): never looked at
+    QVERIFY(iom.transmitHoldReason("FT232R USB UART", QMap<QString, QVariant>()).isEmpty());
+    // An IPv6-named line is not on a rig network -- and nothing crashes
+    QVERIFY(iom.transmitHoldReason("fe80::1", QMap<QString, QVariant>()).isEmpty());
+
+    // Loopback output is not "network output": no warning about it
+    QCOMPARE(int(iom.transmitGateStatus().state), int(InputOutputMap::TransmitGateStatus::Clear));
+    QCOMPARE(iom.transmitGateStatus().networkOutputs, 0);
+}
+
+void InputOutputMap_Test::rigNetworkDeviceTargetsFollowTheRoute()
+{
+    /* WLED: one line, the device addresses in the parameters. A request
+       leaves from wherever the OS routes it. */
+    schoolLaptop();
+    IOPluginStub *stub = namedStub(m_doc, "WLED", QStringList() << "WLED (JSON over Wi-Fi)");
+    const char *xml =
+        "<InputOutputMap>\n"
+        " <RigNetwork>172.18.0.0/20</RigNetwork>\n"
+        " <Universe Name=\"U01\" ID=\"0\">\n"
+        "  <Output Plugin=\"WLED\" UID=\"WLED (JSON over Wi-Fi)\" Line=\"0\">\n"
+        "   <PluginParameters outputIP=\"172.18.2.60\" outputIP2=\"172.18.2.61\"/>\n"
+        "  </Output>\n"
+        " </Universe>\n"
+        "</InputOutputMap>\n";
+
+    {
+        // At school the device "routes" out through the default route: held
+        InputOutputMap iom(m_doc, 1);
+        QVERIFY(loadIOMap(iom, xml));
+        QVERIFY(stub->m_openOutputs.isEmpty());
+        QVERIFY(iom.outputPatch(0, 0)->isHeld());
+        QVERIFY2(iom.outputPatch(0, 0)->heldReason().contains("172.18.2.60"),
+                 qPrintable(iom.outputPatch(0, 0)->heldReason()));
+        QCOMPARE(iom.transmitGateStatus().held, 1);
+
+        // On the show Wi-Fi it is reached from a rig address: it resumes
+        mockMachine(QList<NetworkRoute::LocalAddress>()
+                        << localAddr("en0", "172.18.2.40", 24),
+                    QMap<QString, QString>{ { "*", "172.18.2.40" } });
+        QCOMPARE(iom.retryOfflinePatches(), 1);
+        QCOMPARE(stub->m_openOutputs, QList<quint32>() << 0);
+        QVERIFY(iom.outputPatch(0, 0)->isHeld() == false);
+    }
+
+    // A name cannot be checked: held while the gate is on
+    InputOutputMap iom(m_doc, 1);
+    iom.setRigNetworks(QStringList() << "172.18.0.0/20");
+    QMap<QString, QVariant> params;
+    params["outputIP"] = "wled-bar.local";
+    QVERIFY(iom.transmitHoldReason("WLED (JSON over Wi-Fi)", params).isEmpty() == false);
+    params["outputIP"] = "127.0.0.1";
+    QVERIFY(iom.transmitHoldReason("WLED (JSON over Wi-Fi)", params).isEmpty());
+}
+
+void InputOutputMap_Test::rigNetworkSaveLoadRoundTrip()
+{
+    schoolLaptop();
+    namedStub(m_doc, "ArtNet", QStringList() << "127.0.0.1" << "10.4.12.7");
+
+    InputOutputMap iom(m_doc, 1);
+    QVERIFY(loadIOMap(iom, kRigShow));
+    iom.setRigNetworks(QStringList() << "172.18.0.0/20" << "10.20.0.0/16");
+    const QString saved = saveIOMap(iom);
+    QCOMPARE(saved.count("<RigNetwork>"), 2);
+    // Ahead of the universes, so a load knows them before opening a patch
+    QVERIFY(saved.indexOf("<RigNetwork>") < saved.indexOf("<Universe"));
+    // A held patch saves exactly as it was loaded
+    QCOMPARE(patchElements(saved), patchElements(kRigShow));
+
+    InputOutputMap again(m_doc, 1);
+    QVERIFY(loadIOMap(again, saved));
+    QCOMPARE(again.rigNetworks(), QStringList() << "172.18.0.0/20" << "10.20.0.0/16");
+    QCOMPARE(saveIOMap(again), saved);
+
+    // An older show, without any: none, and loading it clears the last show's
+    again.setTransmitOverride(true);
+    QVERIFY(loadIOMap(again, kArtNetUniverse));
+    QVERIFY(again.rigNetworks().isEmpty());
+    QVERIFY(again.transmitOverride() == false);
+    QVERIFY(saveIOMap(again).contains("<RigNetwork") == false);
+}
+
+void InputOutputMap_Test::rigNetworkSuggestedFromPatchesNotWritten()
+{
+    schoolLaptop();
+    namedStub(m_doc, "ArtNet", QStringList() << "127.0.0.1" << "10.4.12.7");
+    const char *xml =
+        "<InputOutputMap>\n"
+        " <Universe Name=\"U01\" ID=\"0\">\n"
+        "  <Output Plugin=\"ArtNet\" UID=\"172.18.2.219\" Line=\"1\" Network=\"172.18.2.0/24\"/>\n"
+        " </Universe>\n"
+        " <Universe Name=\"U02\" ID=\"1\">\n"
+        "  <Output Plugin=\"ArtNet\" UID=\"172.18.2.219\" Line=\"1\" Network=\"172.18.2.0/24\"/>\n"
+        "  <Output Plugin=\"ArtNet\" UID=\"10.20.1.5\" Line=\"1\" Network=\"10.20.1.0/24\"/>\n"
+        " </Universe>\n"
+        "</InputOutputMap>\n";
+    InputOutputMap iom(m_doc, 2);
+    QVERIFY(loadIOMap(iom, xml));
+    QCOMPARE(iom.suggestedRigNetworks(), QStringList() << "172.18.2.0/24" << "10.20.1.0/24");
+    // Only offered: nothing set, nothing saved
+    QVERIFY(iom.rigNetworks().isEmpty());
+    QVERIFY(saveIOMap(iom).contains("<RigNetwork") == false);
+}
+
+void InputOutputMap_Test::rigNetworkDecisionRefreshedOnChangeAndTick()
+{
+    /* The plugins decide once and cache it (no per-packet lookup): the
+       engine has them decide again when the networks or the setting change,
+       and on every reconnect tick even when nothing it knows changed -- an
+       address can move under it (DHCP, VPN, Wi-Fi). */
+    schoolLaptop();
+    IOPluginStub *stub = namedStub(m_doc, "ArtNet", QStringList() << "127.0.0.1" << "10.4.12.7");
+    stub->m_gateRefreshes = 0;
+
+    InputOutputMap iom(m_doc, 1);
+    iom.setRigNetworks(QStringList() << "172.18.0.0/20");
+    QVERIFY(stub->m_gateRefreshes >= 1);
+    QCOMPARE(stub->m_gateAllowed.value("10.4.12.7", true), false);
+    QCOMPARE(stub->m_gateAllowed.value("127.0.0.1", false), true);
+
+    // The session override: every line allowed at once
+    iom.setTransmitOverride(true);
+    QCOMPARE(stub->m_gateAllowed.value("10.4.12.7", false), true);
+    iom.setTransmitOverride(false);
+    QCOMPARE(stub->m_gateAllowed.value("10.4.12.7", true), false);
+
+    // The setting switched off on this machine
+    iom.setTransmitGateEnabled(false);
+    QCOMPARE(stub->m_gateAllowed.value("10.4.12.7", false), true);
+    iom.setTransmitGateEnabled(true);
+    QCOMPARE(stub->m_gateAllowed.value("10.4.12.7", true), false);
+
+    // The tick, with nothing changed: still asked, and the answer kept
+    int before = stub->m_gateRefreshes;
+    QVERIFY(QMetaObject::invokeMethod(&iom, "slotRetryOfflinePatches"));
+    QCOMPARE(stub->m_gateRefreshes, before + 1);
+    QCOMPARE(stub->m_gateAllowed.value("10.4.12.7", true), false);
+
+    // The laptop moved onto the rig network: the next tick catches it
+    stub->m_lineNames = QStringList() << "127.0.0.1" << "172.18.2.219";
+    before = stub->m_gateRefreshes;
+    QVERIFY(QMetaObject::invokeMethod(&iom, "slotRetryOfflinePatches"));
+    QCOMPARE(stub->m_gateRefreshes, before + 1);
+    QCOMPARE(stub->m_gateAllowed.value("172.18.2.219", false), true);
+    QVERIFY(stub->m_gateAllowed.contains("10.4.12.7") == false);
+}
+
 QTEST_GUILESS_MAIN(InputOutputMap_Test)

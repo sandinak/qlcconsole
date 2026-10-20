@@ -93,9 +93,14 @@ Steps:
       -p 'qlcconsole-*-win64-setup.exe' -p 'build-v4-AppImage'
    cp dist/ci/qlcconsole-*-win64-setup.exe/*.exe dist/qlcconsole-X.Y.Z-win64-setup.exe
    cp dist/ci/build-v4-AppImage/*.AppImage dist/qlcconsole-X.Y.Z-x86_64.AppImage
-   gh release upload vX.Y.Z dist/qlcconsole-X.Y.Z-win64-setup.exe \
+   ./release.sh attach dist/qlcconsole-X.Y.Z-win64-setup.exe \
       dist/qlcconsole-X.Y.Z-x86_64.AppImage
    ```
+
+   `attach` uploads the files and adds their lines to the release's
+   `SHA256SUMS` (re-uploaded). The in-app updater refuses any download
+   whose checksum is not listed there, so attach CI's files this way, not
+   with a bare `gh release upload`.
 
    CI's names carry the build date and commit (and, for the AppImage, the
    build id rather than the release number); the copies above give users
@@ -105,6 +110,31 @@ Steps:
 
 `release.sh` pushes a tag and creates a public GitHub Release — real,
 visible actions. Run it deliberately, not as part of routine iteration.
+
+## What the in-app updater needs from a release
+
+The updater (`ui/src/updatechecker.cpp`, docs/features/updates.md) reads
+`api.github.com/repos/sandinak/qlcconsole/releases`, and it needs these
+things from each release:
+
+- **Tag** `vX.Y.Z`, a SemVer version. A tag that is not a version is
+  ignored.
+- **Pre-release flag** for builds meant only for the Pre-release channel,
+  such as Show Tree for students. VERSION stays plain X.Y.Z; a build whose
+  own release carries the flag follows the Pre-release channel by itself:
+  `PRERELEASE=1 TITLE="Show Tree X.Y.Z" ./release.sh`.
+- **Asset names**, which is how it picks its download:
+  - macOS: `qlcconsole-<v>-universal-<date>-<rev>.dmg`
+  - Windows: `qlcconsole-<v>-win64-setup.exe`
+  - Linux (linked, not installed): `qlcconsole-<v>-x86_64.AppImage`
+- **`SHA256SUMS`**, in `sha256sum` format, with one line for every asset
+  above. `release.sh` writes it for the DMG, and `release.sh attach` adds
+  the rest.
+- On macOS, the DMG's app must be signed with the same Developer ID Team
+  (B4N7HJ7VZ6) and bundle id as the installed one, and must pass
+  Gatekeeper. That is what sign-notarize.sh produces.
+
+The release body is shown as the update's notes, rendered as Markdown.
 
 ## Signing: local, not CI
 

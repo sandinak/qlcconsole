@@ -12,7 +12,50 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 
 ## [Unreleased]
 
+## [0.2.0] - Unreleased
+
+The Show Tree release. A show is written as one tree — productions → cue
+lists → cues → layers → looks — with tracking, sub-cues and a cue runner
+for playback; line targets, line of sight and Focus mode for aiming;
+curtains a fixture opens and flies; colour rings on movers; Matrix effects
+for pixel boxes; backup WLED lanterns; and output held off the rig
+network. Everything in 0.1.0 is in it too.
+
 ### Added
+- **Software update check and install** (GitHub Releases). A background
+  check after start-up and at most once a day, plus **Help → Check for
+  Updates…**. It sends one unauthenticated GET of the releases list, with
+  ETag / If-None-Match, waits out GitHub's rate-limit reset, and gives up
+  quietly offline. Channels are Stable or Pre-release, defaulting to the
+  build's own. Versions are compared SemVer-style, with `+qlcconsole.N`
+  breaking ties. **Skip This Version** is available. A footer chip shows
+  "Update available: X", and a non-modal dialog shows the release notes as
+  Markdown. Downloads are verified against the release's `SHA256SUMS`, and
+  anything that does not match is refused. On macOS the new app is staged
+  beside the old one, after its code signature, Gatekeeper, Team ID and
+  bundle id are checked. A detached helper swaps it in at quit, keeps the
+  old app until the new one has started, and reopens the show on **Restart
+  and Install**. A read-only /Applications falls back to opening the DMG.
+  Windows runs the NSIS installer silently after quit. Linux and the Pi are
+  notified only. Nothing installs in Perform mode, in kiosk mode, or while a
+  function runs. "Install updates automatically" downloads in the
+  background and installs at the next quit. `QLCCONSOLE_NO_UPDATES=1` or
+  the system-wide `updates/disabled` turns it all off. `release.sh` now
+  publishes `SHA256SUMS`, and `./release.sh attach` adds CI's files and
+  their checksums.
+- **Only transmit on the rig network.** A show can name its rig networks
+  (Settings → Network, e.g. `172.18.0.0/20`, saved with the show as
+  `<RigNetwork>` in the IO map). With **Only transmit on rig networks** on
+  (this computer's setting, default on), Art-Net, E1.31/sACN, OSC and WLED
+  output from any interface outside them is **held** — patch kept and saved
+  unchanged, line not opened, nothing sent (no default-route unicast, no
+  broadcast, no ArtPoll/ArtPollReply/discovery) — and resumes by itself
+  within ~5 s on the rig network. Loopback and non-network outputs are not
+  affected. A red footer chip ("Output held — not on the rig network
+  (172.18.0.0/20). Connected: en0 10.4.12.7") opens the setting;
+  **Transmit anyway, this session…** asks first and is never saved. A show
+  with none set transmits as before, with an amber footer note and a
+  suggestion taken from its patches' saved networks (offered, not written).
 - **Focus mode** for aligning the rig before a show: step through the moving
   heads with the controller's bumpers, each aimed at its reference (a
   scene's aim, a stage target, a line target's own point) and lit, nudge its
@@ -426,6 +469,9 @@ a shorter Windows re-soak is planned.
   the back of the cloth. Opaque scenery and platforms now hide a light's
   glow, and pools on the far side of a drape stay there; where the drape is
   open the glow shows through the gap, and a scrim is still see-through.
+- **Saving a fixture definition could stall for minutes on a busy Mac:**
+  it flushed every disk instead of the one file. It now writes the file
+  whole (or not at all) and flushes only that file.
 - **Universe patches were lost when a show was opened away from its
   network.** Opening a show on a computer without the interface it was
   patched to (a laptop off the show VLAN) and saving it wrote the show
@@ -526,4 +572,5 @@ a shorter Windows re-soak is planned.
   end, Art-Net trouble reporting on a failing node, and opening a show's
   carried definitions on a machine without them.
 
+[0.2.0]: https://github.com/sandinak/qlcconsole/releases/tag/v0.2.0
 [0.1.0]: https://github.com/sandinak/qlcconsole/releases/tag/v0.1.0
