@@ -1368,6 +1368,17 @@ void CourseShow_Test::lessonFourPlaysTheFades()
 {
     QVERIFY(open(kL4Finish));
     Doc *doc = m_app->doc();
+    {
+        // In the Show Tree, a click on a cue shows it at once: fades are
+        // for GO (the handout says so).
+        ShowTreeView *view = showTree();
+        QVERIFY(view->selectNode(cueNumbered(doc, "1.0.0")));
+        QTest::qWait(500);
+        qInfo().noquote() << "[L4] Pose clicked, 0.5 s:" << sends(doc, "SR Truss Cyc 1").toHex(' ');
+        QCOMPARE(sends(doc, "SR Truss Cyc 1"), QByteArray("\x00\x00\xff", 3));
+        QVERIFY(view->selectNode(doc->showTree()->productions().first().id));
+        settle(300);
+    }
     CueRunner *run = runTab(m_app);
     QVERIFY(run != nullptr);
     QStringList timing;
