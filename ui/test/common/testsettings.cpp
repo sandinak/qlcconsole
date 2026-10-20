@@ -50,6 +50,10 @@ namespace
             qFatal("no temporary folder for the test's settings");
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, dir.path());
         qputenv("QLC_NO_RECOVERY_PROMPT", "1");
+        // And never GitHub: an App a test builds checks for updates on no
+        // platform at all (ui/test/updates points its own checker at a
+        // local server and lifts this for itself).
+        qputenv("QLCCONSOLE_NO_UPDATES", "1");
     }
 }
 

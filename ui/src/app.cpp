@@ -71,6 +71,7 @@
 #include "monitorproperties.h"
 #include "vcframe.h"
 #include "speedmastersfooter.h"
+#include "updatemanager.h"
 #include "app.h"
 #include "measurementunits.h"
 #include "effectscriptrunner.h"
@@ -775,6 +776,15 @@ void App::closeEvent(QCloseEvent* e)
                                             "before closing the application?")) == true)
         {
             e->accept();
+            // A staged update goes in now that qlcconsole is quitting -- and
+            // only if nothing is running (UpdateManager::aboutToQuit()). The
+            // helper waits for this process to end: make sure it does, even
+            // with a help or detached window still open.
+            if (m_updateManager != nullptr
+                && m_updateManager->aboutToQuit(m_restartForUpdate, fileName()))
+            {
+                QTimer::singleShot(0, qApp, &QCoreApplication::quit);
+            }
         }
         else
         {
@@ -1848,6 +1858,17 @@ void App::initActions()
     m_helpAboutAction->setMenuRole(QAction::AboutRole);
     connect(m_helpAboutAction, SIGNAL(triggered(bool)), this, SLOT(slotHelpAbout()));
 
+    /* Software Update (UpdateManager): GitHub Releases, never during a show.
+       Gone entirely when IT has turned update checks off. */
+    m_checkUpdatesAction = new QAction(tr("Check for Updates…"), this);
+    m_checkUpdatesAction->setObjectName(QStringLiteral("checkForUpdates"));
+    m_checkUpdatesAction->setMenuRole(QAction::NoRole);   // stays in Help on macOS
+    m_checkUpdatesAction->setVisible(UpdateChecker::isDisabledByPolicy() == false);
+    connect(m_checkUpdatesAction, &QAction::triggered, this, [this]() {
+        if (m_updateManager != nullptr)
+            m_updateManager->checkNow();
+    });
+
     /* Settings action */
     m_appSettingsAction = new QAction(QIcon(":/configure.png"), tr("&Settings"), this);
     m_appSettingsAction->setShortcut(QKeySequence(tr("CTRL+,", "Settings")));
@@ -2323,6 +2344,7 @@ void App::initMenuBar()
     }
     helpMenu->addSeparator();
     helpMenu->addAction(m_helpIndexAction);
+    helpMenu->addAction(m_checkUpdatesAction);
     helpMenu->addAction(m_helpAboutAction);         // → app menu (About) on macOS
 }
 
@@ -4665,6 +4687,23 @@ void App::initStatusBar()
     m_statusRigNetLabel->installEventFilter(this);  // click → Settings, rig networks
     m_statusRigNetLabel->hide();
     sb->addWidget(m_statusRigNetLabel, 0);
+
+    // Software Update's chip: "Update available: 0.1.1". Never a pop-up --
+    // a show may be running -- just this, until it is clicked.
+    m_statusUpdateLabel = new QLabel(this);
+    m_statusUpdateLabel->hide();
+    sb->addWidget(m_statusUpdateLabel, 0);
+    if (m_noGui == false)
+    {
+        m_updateManager = new UpdateManager(m_doc, this);
+        m_updateManager->setFooterLabel(m_statusUpdateLabel);
+        connect(m_updateManager, &UpdateManager::restartRequested, this, [this]() {
+            m_restartForUpdate = true;
+            if (close() == false)
+                m_restartForUpdate = false;     // kept open (unsaved changes, cancel)
+        });
+        m_updateManager->scheduleChecks();
+    }
     if (m_doc != NULL)
     {
         connect(m_doc->inputOutputMap(), &InputOutputMap::transmitGateChanged,

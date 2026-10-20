@@ -38,6 +38,7 @@
 #include "monitor.h"
 #include "inputoutputmap.h"
 #include "rignetwork.h"
+#include "updatechecker.h"
 #include "app.h"
 
 AppSettings::AppSettings(App *app, QWidget *parent)
@@ -260,6 +261,49 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     mainLayout->addWidget(netGroup);
     updateTransmitAnywayButton();
 
+    // --- Software Update ---
+    // GitHub Releases, this machine's choice. IT can turn it off for every
+    // account (UpdateChecker::isDisabledByPolicy()); then this says so.
+    QGroupBox *updGroup = new QGroupBox(tr("Software Update"), this);
+    updGroup->setObjectName(QStringLiteral("settingsUpdates"));
+    updGroup->setProperty("helpTopic", QStringLiteral("updates.md"));
+    QVBoxLayout *updLayout = new QVBoxLayout(updGroup);
+    m_updateCheck = new QCheckBox(tr("Check for updates (once a day, from GitHub)"), updGroup);
+    m_updateCheck->setObjectName(QStringLiteral("settingsUpdateCheck"));
+    m_updateCheck->setChecked(UpdateChecker::checkEnabled());
+    m_updateCheck->setToolTip(tr("Asks GitHub's list of qlcconsole releases -- nothing is sent "
+                                 "about this computer or the show."));
+    updLayout->addWidget(m_updateCheck);
+    QHBoxLayout *chanRow = new QHBoxLayout();
+    chanRow->addWidget(new QLabel(tr("Channel:"), updGroup));
+    m_updateChannel = new QComboBox(updGroup);
+    m_updateChannel->setObjectName(QStringLiteral("settingsUpdateChannel"));
+    m_updateChannel->addItem(tr("Stable releases"), int(UpdateChecker::Stable));
+    m_updateChannel->addItem(tr("Pre-releases too (e.g. Show Tree)"), int(UpdateChecker::PreRelease));
+    m_updateChannel->setCurrentIndex(m_updateChannel->findData(int(UpdateChecker::channel())));
+    chanRow->addWidget(m_updateChannel);
+    chanRow->addStretch();
+    updLayout->addLayout(chanRow);
+    m_updateAuto = new QCheckBox(tr("Install updates automatically"), updGroup);
+    m_updateAuto->setObjectName(QStringLiteral("settingsUpdateAuto"));
+    m_updateAuto->setChecked(UpdateChecker::autoInstall());
+    m_updateAuto->setToolTip(tr("Download and check an update in the background, and install it "
+                                "the next time you quit qlcconsole -- never during a show. "
+                                "Off: the footer says an update is there and you choose."));
+    updLayout->addWidget(m_updateAuto);
+    connect(m_updateCheck, &QCheckBox::toggled, m_updateChannel, &QWidget::setEnabled);
+    connect(m_updateCheck, &QCheckBox::toggled, m_updateAuto, &QWidget::setEnabled);
+    m_updateChannel->setEnabled(m_updateCheck->isChecked());
+    m_updateAuto->setEnabled(m_updateCheck->isChecked());
+    if (UpdateChecker::isDisabledByPolicy())
+    {
+        updGroup->setEnabled(false);
+        QLabel *off = new QLabel(tr("Turned off for this computer by its administrator."), updGroup);
+        off->setObjectName(QStringLiteral("settingsUpdatePolicy"));
+        updLayout->addWidget(off);
+    }
+    mainLayout->addWidget(updGroup);
+
     // Add stretch to push buttons to bottom
     mainLayout->addStretch();
 
@@ -395,6 +439,13 @@ void AppSettings::accept()
     // Effect script editor preference (read by the Look Editor authoring flow).
     QSettings().setValue(QStringLiteral("effectscript/editor"),
                          m_scriptEditorCombo->currentData().toString());
+
+    if (UpdateChecker::isDisabledByPolicy() == false)
+    {
+        UpdateChecker::setCheckEnabled(m_updateCheck->isChecked());
+        UpdateChecker::setChannel(UpdateChecker::Channel(m_updateChannel->currentData().toInt()));
+        UpdateChecker::setAutoInstall(m_updateAuto->isChecked());
+    }
 
     QDialog::accept();
 }

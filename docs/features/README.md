@@ -31,6 +31,7 @@ In the app, **F1** opens the guide for whatever you're looking at, and
 | [Effects](effects.md) | Every built-in effect, by what it does, and writing your own |
 | [Keyboard and mouse](shortcuts.md) | Every shortcut, by view |
 | [Troubleshooting](troubleshooting.md) | When lights, the Lighting Studio or Rig Overview, files or fixtures aren't doing what you expect |
+| [Software updates](updates.md) | Update checks from GitHub, the footer chip, installing at quit (never during a show), channels, and turning it off for a school |
 
 ## The rough shape of a show, end to end
 

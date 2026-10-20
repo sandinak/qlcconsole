@@ -22,6 +22,27 @@ for pixel boxes; backup WLED lanterns; and output held off the rig
 network. Everything in 0.1.0 is in it too.
 
 ### Added
+- **Software update check and install** (GitHub Releases). A background
+  check after start-up and at most once a day, plus **Help → Check for
+  Updates…**. It sends one unauthenticated GET of the releases list, with
+  ETag / If-None-Match, waits out GitHub's rate-limit reset, and gives up
+  quietly offline. Channels are Stable or Pre-release, defaulting to the
+  build's own. Versions are compared SemVer-style, with `+qlcconsole.N`
+  breaking ties. **Skip This Version** is available. A footer chip shows
+  "Update available: X", and a non-modal dialog shows the release notes as
+  Markdown. Downloads are verified against the release's `SHA256SUMS`, and
+  anything that does not match is refused. On macOS the new app is staged
+  beside the old one, after its code signature, Gatekeeper, Team ID and
+  bundle id are checked. A detached helper swaps it in at quit, keeps the
+  old app until the new one has started, and reopens the show on **Restart
+  and Install**. A read-only /Applications falls back to opening the DMG.
+  Windows runs the NSIS installer silently after quit. Linux and the Pi are
+  notified only. Nothing installs in Perform mode, in kiosk mode, or while a
+  function runs. "Install updates automatically" downloads in the
+  background and installs at the next quit. `QLCCONSOLE_NO_UPDATES=1` or
+  the system-wide `updates/disabled` turns it all off. `release.sh` now
+  publishes `SHA256SUMS`, and `./release.sh attach` adds CI's files and
+  their checksums.
 - **Only transmit on the rig network.** A show can name its rig networks
   (Settings → Network, e.g. `172.18.0.0/20`, saved with the show as
   `<RigNetwork>` in the IO map). With **Only transmit on rig networks** on

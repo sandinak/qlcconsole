@@ -167,6 +167,11 @@ add_library(${module_name}
     programmingmanager.cpp programmingmanager.h
     showtreeview.cpp showtreeview.h
     cuerunner.cpp cuerunner.h
+    updatechecker.cpp updatechecker.h
+    updatedialog.cpp updatedialog.h
+    updatedownloader.cpp updatedownloader.h
+    updateinstaller.cpp updateinstaller.h
+    updatemanager.cpp updatemanager.h
     usedby.cpp usedby.h
     paletteeditdialog.cpp paletteeditdialog.h
     palettemanager.cpp palettemanager.h
@@ -268,7 +273,7 @@ target_link_libraries(${module_name} PUBLIC
 
 # Add resources and RGB Script deps
 target_link_libraries(${module_name} PUBLIC Qt6::Qml)
-qt_add_resources(qlcplusui_resource_files "qlcui.qrc" "help.qrc"
+qt_add_resources(qlcplusui_resource_files "qlcui.qrc" "help.qrc" "update.qrc"
     "../../resources/icons/hicolor/appicons.qrc")
 
 target_sources(${module_name} PRIVATE ${qlcplusui_resource_files})

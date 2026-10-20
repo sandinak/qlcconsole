@@ -88,6 +88,11 @@ FunctionEnd
 Section
 	SetOutPath $INSTDIR
 
+	# A silent install (/S -- the in-app updater) skips the Start Menu
+	# page, which would leave the shortcuts loose in Start Menu: the default.
+	StrCmp $R0 "" 0 +2
+		StrCpy $R0 "qlcconsole"
+
 	# this part is only necessary if you used /checknoshortcuts
 	StrCpy $R1 $R0 1
 	StrCmp $R1 ">" skip
