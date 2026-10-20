@@ -75,6 +75,10 @@ private slots:
      *  value with Make reusable beside it. */
     void lessonTwoColourPicker();
 
+    /** Lesson 1.3's extension: ⋯ → Set to → Aim Center on the spots'
+     *  Position row (and Undo), and a blue back light in the Solo. */
+    void lessonThreeExtension();
+
     /** Lesson 0.2: the Rig Overview's views and room light, as the handout
      *  names them, and GO three times on Lesson 1.1's finish. */
     void lessonZeroTwoTheVirtualStage();

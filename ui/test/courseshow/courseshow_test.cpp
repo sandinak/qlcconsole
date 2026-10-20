@@ -1599,6 +1599,38 @@ void CourseShow_Test::lessonTwoColourPicker()
     doc->resetModified();
 }
 
+void CourseShow_Test::lessonThreeExtension()
+{
+    // Lesson 1.3's extension: the spots aimed elsewhere with ⋯ → Set to on
+    // the Position row; a back light behind the soloist.
+    QVERIFY(open(kL3Finish));
+    Doc *doc = m_app->doc();
+    ShowTreeView *view = showTree();
+    QVERIFY(view->selectNode(cueNumbered(doc, "1.0.4")));
+    settle(50);
+    QVERIFY(clickCueRow(view, "AT-Spots"));
+    const QPair<int, int> soloist = panTilt(doc, "SR AT Spot");
+    QVERIFY(rowMenu(view, KeyPosition, "Set to", "Aim Center"));
+    settle(300);
+    QVERIFY2(rowText(view, KeyPosition).startsWith("Aim Center"), qPrintable(rowText(view, KeyPosition)));
+    QVERIFY(panTilt(doc, "SR AT Spot") != soloist);
+    view->findChild<QToolButton *>("stUndo")->click();
+    settle(300);
+    QCOMPARE(panTilt(doc, "SR AT Spot"), soloist);
+
+    QVERIFY(view->selectNode(cueNumbered(doc, "1.0.4")));
+    settle(50);
+    QCOMPARE(dropGroupOnZone(doc, view, "TrussW-RGB"), QStringLiteral("a new layer on TrussW-RGB in 1.0.4 Solo"));
+    for (const QString &pal : { QStringLiteral("Blue"), QStringLiteral("25%") })
+        QVERIFY(dropPaletteOnRow(doc, view, "TrussW-RGB", pal).startsWith(pal + " → layer TrussW-RGB in 1.0.4 Solo"));
+    settle(300);
+    QVERIFY2(cueRow(view, "TrussW-RGB") != nullptr && cueRow(view, "TrussW-RGB")->text().contains("Blue, 25%"),
+             qPrintable(view->cueLayerItems().join(" | ")));
+    const QByteArray wash = sends(doc, "SR Truss Wash 1");
+    QVERIFY2(uchar(wash.at(0)) == 0 && uchar(wash.at(2)) > 40 && uchar(wash.at(2)) < 90, qPrintable(wash.toHex(' ')));
+    doc->resetModified();
+}
+
 namespace
 {
 HelpShots::Callout mark(QWidget *w, int n, HelpShots::Place place = HelpShots::Auto)
