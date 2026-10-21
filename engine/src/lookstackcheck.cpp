@@ -18,10 +18,12 @@
 */
 
 #include <QSet>
+#include <QMap>
 
 #include "lookstackcheck.h"
 #include "effectinstance.h"
 #include "qlcfixturemode.h"
+#include "qlcfixturedef.h"
 #include "fixturegroup.h"
 #include "qlcpalette.h"
 #include "fixture.h"
@@ -296,6 +298,98 @@ QList<LookStackCheck::Issue> LookStackCheck::check(Doc *doc, const Scene *scene)
                           QObject::tr("Colour %1 of the look: none of its fixtures has a colour "
                                       "set %1, and no effect here uses it, so it shows nowhere.")
                               .arg(colourNo) };
+    }
+
+    // 6. A colour that is black: it lights nothing, and an effect that takes
+    //    the look's colours (confetti, a chase) gets black from it too. A
+    //    "White" saved as #000000 made a whole look dark with nothing to say why.
+    foreach (quint32 pid, pals)
+    {
+        QLCPalette *p = doc->palette(pid);
+        if (p == nullptr || p->type() != QLCPalette::Color || p->values().isEmpty())
+            continue;
+        bool black = true;
+        for (const QVariant &v : p->values())
+        {
+            QColor rgb, wauv;
+            if (!QLCPalette::stringToColor(v.toString(), rgb, wauv) || !rgb.isValid()
+                || rgb.red() || rgb.green() || rgb.blue()
+                || (wauv.isValid() && (wauv.red() || wauv.green() || wauv.blue())))
+            {
+                black = false;
+                break;
+            }
+        }
+        if (black)
+            out << Issue{ p->id(), Issue::Warning,
+                          QObject::tr("Black: %1 is all zero, so the heads it colours give no "
+                                      "light, and an effect that takes the look's colours gets "
+                                      "black from it. Set its colour again.").arg(nameOf(p)) };
+    }
+
+    // 7. A position the fixtures can't take: a definition whose Pan (or Tilt)
+    //    channels are all marked Fine has no coarse channel to turn it, so an
+    //    Aim or Pan/Tilt writes only the fine byte and the head stays at 0 --
+    //    "these lights are not pointing at this target".
+    QLCPalette *positionLook = nullptr;
+    foreach (quint32 pid, pals)
+    {
+        QLCPalette *p = doc->palette(pid);
+        if (p == nullptr)
+            continue;
+        const QSet<QString> a = attributesOf(p->type());
+        if (a.contains(QStringLiteral("pan")) || a.contains(QStringLiteral("tilt")))
+        {
+            positionLook = p;
+            break;
+        }
+    }
+    if (positionLook == nullptr)
+    {
+        for (const Fx &fx : effects)
+            if (fx.kind == QLatin1String("Position"))
+            {
+                positionLook = fx.pal;
+                break;
+            }
+    }
+    if (positionLook != nullptr)
+    {
+        QMap<QString, int> noCoarse;            // "<model> Pan" -> fixtures
+        foreach (quint32 fid, targets)
+        {
+            Fixture *f = doc->fixture(fid);
+            QLCFixtureMode *mode = f != nullptr ? f->fixtureMode() : nullptr;
+            if (mode == nullptr)
+                continue;
+            const struct { QLCChannel::Group group; const char *word; } axes[] = {
+                { QLCChannel::Pan, "Pan" }, { QLCChannel::Tilt, "Tilt" } };
+            for (const auto &ax : axes)
+            {
+                bool anyChannel = false, coarse = false;
+                for (QLCChannel *ch : mode->channels())
+                {
+                    if (ch == nullptr || ch->group() != ax.group)
+                        continue;
+                    anyChannel = true;
+                    coarse = coarse || ch->controlByte() == QLCChannel::MSB;
+                }
+                if (anyChannel && !coarse)
+                    noCoarse[QString("%1 %2").arg(f->fixtureDef() != nullptr
+                                                      ? f->fixtureDef()->model() : f->name(),
+                                                  QLatin1String(ax.word))]++;
+            }
+        }
+        for (auto it = noCoarse.constBegin(); it != noCoarse.constEnd(); ++it)
+        {
+            const int cut = it.key().lastIndexOf(QLatin1Char(' '));
+            out << Issue{ positionLook->id(), Issue::Warning,
+                          QObject::tr("Can't move %n fixture(s): %1's %2 channels are all marked "
+                                      "Fine (byte 1), so nothing turns the head and its %2 stays "
+                                      "at 0. Make the main one Coarse in the fixture definition.",
+                                      "", it.value())
+                              .arg(it.key().left(cut), it.key().mid(cut + 1)) };
+        }
     }
     return out;
 }

@@ -65,6 +65,7 @@
 #include "paletteops.h"
 #include "doc.h"
 #include "powerlimiter.h"
+#include "shutterautoopen.h"
 #include "bus.h"
 #include "qlcpalette.h"
 #include "qlcphysical.h"
@@ -146,6 +147,8 @@ Doc::Doc(QObject* parent, int universes)
 
     // Fixtures held to a maximum draw: kept in step with the show.
     m_powerLimiter = new PowerLimiter(this);
+    // Shutters opened for a lit head that nothing else opens.
+    m_shutterAutoOpen = new ShutterAutoOpen(this);
 
     // Track running Scenes for programmer edit-routing (LTP).
     // DirectConnection: the signal is emitted from MasterTimer's worker
@@ -240,6 +243,8 @@ Doc::~Doc()
 {
     delete m_powerLimiter;
     m_powerLimiter = nullptr;
+    delete m_shutterAutoOpen;
+    m_shutterAutoOpen = nullptr;
 
     delete m_masterTimer;
     m_masterTimer = NULL;
@@ -289,6 +294,8 @@ void Doc::clearContents()
         m_powerDist->reset();
 
     m_speedMasters->reset();
+    if (m_shutterAutoOpen != nullptr)
+        m_shutterAutoOpen->reset();
     m_showControl->reset();
     m_showTree->reset();
     m_paletteOps->reset();
@@ -2379,6 +2386,10 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
             else
                 doc.skipCurrentElement();
         }
+        else if (doc.name() == KXMLQLCShutterAutoOpen)
+        {
+            m_shutterAutoOpen->loadXML(doc);
+        }
         else if (doc.name() == KXMLQLCMoveInBlack)
         {
             if (m_programmer != NULL)
@@ -2484,6 +2495,7 @@ bool Doc::saveXML(QXmlStreamWriter *doc)
         m_powerDist->saveXML(doc);
 
     m_speedMasters->saveXML(doc);
+    m_shutterAutoOpen->saveXML(doc);
     m_showControl->saveXML(doc);
     m_showTree->saveXML(doc);
     if (m_timecodeSource != NULL)

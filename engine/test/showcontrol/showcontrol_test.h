@@ -53,8 +53,20 @@ private slots:
     void autoFollowPassesOverSkippedSteps();
     void standbyIsWhatGoPlaysNext();
 
+    // Sub-cues (SUBCUES_DESIGN.md P3)
+    void aSubCueIsFoundByNumber();
+    void goASubCueByNumberPlaysItsCueFirst();
+    void oscSubGoAndSubBackAreDecoded();
+    void oscSubGoAndSubBackStepTheCuePlaying();
+    void mscGoAndLoadASubCue();
+    void loadASubCuePutsItOnStandby();
+    void stopASubCueOnlyWhenItsPlaying();
+
 private:
     Chaser *makeList(int steps, const QString &name);
+    /** "Main": cues 1, 2, 3, cue 2 a chase of three steps on Sub GO. */
+    Chaser *makeSubCueList(Chaser **inner = nullptr);
+    void stopAll();
 
     Doc *m_doc = nullptr;
 };

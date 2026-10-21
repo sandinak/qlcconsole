@@ -97,7 +97,11 @@ endif()
 if (WIN32)
     set(INSTALLROOT "$ENV{SystemDrive}/qlcconsole")
 elseif (APPLE)
-    set(INSTALLROOT "$ENV{HOME}/qlcconsole.app/Contents")
+    # The bundle `cmake --install` writes: ~/qlcconsole.app for a release
+    # (package-local.sh), ~/Applications/qlcconsole-dev.app for `make test`.
+    set(QLC_MACOS_BUNDLE "$ENV{HOME}/qlcconsole.app" CACHE PATH
+        "macOS: the .app bundle cmake --install writes")
+    set(INSTALLROOT "${QLC_MACOS_BUNDLE}/Contents")
 elseif (UNIX)
     set(INSTALLROOT "/usr")
 endif ()

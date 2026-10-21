@@ -50,6 +50,8 @@
 #define protected public
 #include "app.h"
 #include "appsettings.h"
+#include "shutterautoopen.h"
+#include <QTabWidget>
 #include "measurementunits.h"
 #include "functionmanager.h"
 #define private public
@@ -502,6 +504,46 @@ void AppViews_Test::settingsChoosesTheUnits()
     }
     QCOMPARE(MeasurementUnits::preferredLength(), MeasurementUnits::Inches);
     MeasurementUnits::setPreferredLength(MeasurementUnits::Millimetres);
+}
+
+void AppViews_Test::settingsAdvancedHoldsAutoOpen()
+{
+    ShutterAutoOpen *ao = m_app->doc()->shutterAutoOpen();
+    QVERIFY(ao->isEnabled());
+    {
+        AppSettings dlg(m_app);
+        QTabWidget *tabs = dlg.findChild<QTabWidget *>(QStringLiteral("settingsTabs"));
+        QVERIFY(tabs != nullptr);
+        QCOMPARE(tabs->count(), 2);
+        QCOMPARE(tabs->tabText(1), QStringLiteral("Advanced"));
+        QWidget *adv = tabs->widget(1);
+        QCheckBox *box = adv->findChild<QCheckBox *>(QStringLiteral("settingsAutoOpenShutters"));
+        QVERIFY(box != nullptr);
+        QVERIFY(box->isChecked());
+        // The expert settings moved there; everyday ones stay on General.
+        QVERIFY(adv->findChild<QPushButton *>(QStringLiteral("settingsOpenShowControl")) != nullptr);
+        QVERIFY(adv->findChild<QComboBox *>(QStringLiteral("settingsUnitsCombo")) == nullptr);
+        QVERIFY(tabs->widget(0)->findChild<QComboBox *>(QStringLiteral("settingsUnitsCombo")) != nullptr);
+        dlg.showAdvanced();
+        QCOMPARE(tabs->currentIndex(), 1);
+
+        box->setChecked(false);
+        dlg.reject();                   // Cancel keeps it
+    }
+    QVERIFY(ao->isEnabled());
+    {
+        AppSettings dlg(m_app);
+        dlg.findChild<QCheckBox *>(QStringLiteral("settingsAutoOpenShutters"))->setChecked(false);
+        dlg.accept();
+    }
+    QVERIFY(ao->isEnabled() == false);
+    QVERIFY(m_app->doc()->isModified());
+    {
+        AppSettings dlg(m_app);
+        QVERIFY(dlg.findChild<QCheckBox *>(QStringLiteral("settingsAutoOpenShutters"))->isChecked() == false);
+    }
+    ao->setEnabled(true);
+    m_app->doc()->resetModified();
 }
 
 void AppViews_Test::theGridFollowsTheUnitPreference()

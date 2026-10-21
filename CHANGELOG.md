@@ -22,6 +22,22 @@ for pixel boxes; backup WLED lanterns; and output held off the rig
 network. Everything in 0.1.0 is in it too.
 
 ### Added
+- **Auto-open shutters** (Settings → Advanced, saved with the show, on by
+  default). Like a console's auto open: a head given a level (its dimmer,
+  or a colour when it has no dimmer) by any look, layer, cue, slider or
+  programmer edit, whose shutter nothing sets, has its shutter opened on
+  output, at the definition's open value (an open default, else the
+  ShutterOpen / "Shutter open" capability; a strobe preset channel at 0;
+  never an iris). An explicit shutter value -- Closed, Strobe, anything --
+  always wins, including one a slider or programmer edit left behind; a
+  head with no level, or a dimmer only resting at its default, is left
+  alone. Each universe applies it after its faders on its own thread, on
+  the post-GM values only, so DMX, the 2D view and the Rig Overview agree
+  and turning it off restores exactly what the show sets. Shows that never
+  turned it off save as before (`<ShutterAutoOpen Enabled="0"/>` only
+  when off). The AT-Spots (Focus Spot Three Z, shutter resting at Off) now
+  light from White, Full alone. The Programming tab stops warning "no look
+  for: shutter" while it is on.
 - **Software update check and install** (GitHub Releases). A background
   check after start-up and at most once a day, plus **Help → Check for
   Updates…**. It sends one unauthenticated GET of the releases list, with
@@ -124,8 +140,21 @@ network. Everything in 0.1.0 is in it too.
   `blockedKind` / `blockedAt` / `clearance` (also on `aimAt` slots). A
   line target checks each head's own point on the line; a curtain driven by
   a fixture blocks where that fixture has it now.
+- **Sub-cues from QLab.** OSC `/cue/4.2/go`, `/go 4.2` and MSC GO 4.2 play
+  a sub-cue (its cue first); `/subgo` and `/subback` say why when they
+  can't; LOAD 4.2 puts a sub-cue on standby and **Next:** in the footer
+  and the cue list shows it ("Next: 4.2 — Wash"); STOP 4.2 stops the list
+  only while 4.2 is the one playing. ⌥⌘↩ / ⌥⌘⇧↩ go through show control, so their result is
+  reported with the rest.
+- **Two new look warnings.** The Looks list marks a Colour look that is all
+  zero (**Black**), and a position look on fixtures whose definition marks
+  every Pan or Tilt channel Fine (**Can't move**: the head stays at 0).
 
 ### Changed
+- **Settings has General and Advanced tabs.** Advanced holds the show's
+  output behaviour (auto-open shutters) and two settings for experienced
+  users moved off the one page: the effect script editor, and the Show
+  control (QLab) pointer to Connections. Everything else stays on General.
 - **A new production is current when nothing else has GO.** In the Show
   Tree, a production made while no production is current and the main cue
   list isn't some other chaser becomes the current one, so a first
@@ -138,6 +167,13 @@ network. Everything in 0.1.0 is in it too.
   strips, drapes) keep their own colour.
 
 ### Fixed
+- **Beams stop at risers and the floor in the rig views.** A wash thrown
+  across a riser went through it, lighting the air behind it, and its cone
+  carried on below the stage floor (the cone's edge was followed to the
+  surface the middle of the beam landed on, a drape far beyond). A beam now
+  stops at a platform's side as well as its top, each edge of the cone ends
+  at what it meets, and a side or front elevation cuts the beam round the
+  risers it meets and shows the wash on their tops and faces as a band.
 - **Calibration offsets no longer show in the rig views.** A head's pan/tilt
   offsets correct the physical fixture: the DMX keeps them, but the plot,
   its gauges, the Studio, the Rig Overview, beams and footprints now draw
@@ -154,6 +190,14 @@ network. Everything in 0.1.0 is in it too.
 - **Chaser teardown use-after-free.** Deleting a chaser while its runner was
   still running freed the steps the runner reads (an intermittent "double
   free" on Linux).
+- **A dimmer effect on a two-arm beam went black.** One master dimmer
+  serving several heads got one scaled write per head, multiplied together:
+  confetti's lit arm times its dark one was 0. The brightest head now sets
+  it.
+- **GO by number on a paused list resumed it and stayed put.** It now plays
+  that cue.
+- **An OSC float cue number matched nothing.** 2.2 sent as a float read as
+  2.200000048; floats now read to the digits they hold.
 
 ## [0.1.0] - Unreleased
 

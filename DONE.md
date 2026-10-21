@@ -6,6 +6,99 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-21 — Auto-open shutters; Settings → Advanced *(feat/shutter-auto-open)*
+
+Board Q10 (Branson: "configurable option with default to open ... a tab for
+advanced config"). `ShutterAutoOpen` (engine, owned by Doc, built like
+PowerLimiter) turns each patched fixture into per-universe
+`Universe::AutoOpenRule`s: shutter address, open value
+(`ShutterAutoOpen::openValue()`: open default, else ShutterOpen preset,
+else a plain "Open"/"Shutter open" name; strobe preset 0; never iris) and
+the heads' levels (master + head dimmer as gates, colours when a head has
+no dimmer). `Universe::applyAutoOpen()` runs in `processFaders()` after the
+faders, under `m_autoOpenMutex`, on the post-GM buffer only: open when a
+head is lit by something written in the last two frames and the shutter
+itself is neither written lately nor held. Per-channel frame stamps
+(`std::atomic`) are set in write / writeMultiple / writeRelative; a
+GenericFader AutoRemove channel (slider, programmer edit; not a fade-out)
+leaves it held via `holdChannels()`. Saved per show as
+`<ShutterAutoOpen Enabled="0"/>`, only when off. AppSettings is now General
+| Advanced; Advanced holds it plus the effect script editor and the Show
+control (QLab) pointer. Programming tab's "no look for: shutter" is skipped
+while on. Tests: engine/test/shutterautoopen, appviews
+`settingsAdvancedHoldsAutoOpen`; both AT-Spots in copies of the classroom
+show and DanceHysteria-0.6 light at Full from a dimmer-only scene (shutter
+11) and stay at 0 with it off.
+
+- **Course:** Lesson 1.3's Shutter → Open step can go once this lands (the
+  course branch is untouched).
+
+### 2026-10-16 — Sub-cues P3: show control by sub-cue number *(feat/sub-cues-p3, merged into feat/show-tree 2026-10-21)*
+
+SUBCUES_DESIGN.md §4.1. `ShowControl` reads a cue by number as
+`Chaser::findCueOrSubCue()` does (a main "4.2" wins); GO 4.2 over OSC / MSC
+jumps there, its cue first; new `SubGo` / `SubBack` commands (OSC `/subgo`,
+`/subback`); LOAD 4.2 keeps the sub-cue on standby (`Standby { step, subCue }`,
+`loadedSubCue()`, `standbySubCue()`, `cueName()`), shown on the footer's and
+the VC cue list's **Next:**; STOP 4.2 only when it's the one playing. ⌥⌘↩ /
+⌥⌘⇧↩ go through ShowControl. Fixes: OSC float cues read to their 7 digits;
+`Chaser::write` unpauses the runner directly so a GO by number on a paused
+list isn't swallowed.
+
+- **Merge note:** show-tree's P7 had already added a smaller Sub GO / LOAD
+  4.2 to ShowControl (a parallel `m_loadedSub` hash). P3's version replaces
+  it; show-tree's `Request::chaser` and `mainCueListChanged()` stay.
+
+### 2026-10-16 — Confetti on two-arm beams; Black and Can't-move look warnings *(fix/programming-confetti-look, merged into feat/show-tree 2026-10-21)*
+
+- `EffectInstance::parseIntents()`: one effect's heads writing a shared
+  master dimmer collapse to the brightest (they were multiplied as two
+  effects would be; confetti's dark arm zeroed the beam).
+- `LookStackCheck` checks 6 and 7: a Colour look that is all zero (**Black**),
+  and a position look on fixtures whose Pan or Tilt channels are all Fine
+  (**Can't move**, e.g. the AT-W-Bottom movers' definition).
+
+### 2026-10-20 — Beams stop at risers and the floor *(fix/beams-stop-at-platforms, off feat/show-tree, not merged)*
+
+"The TrussW are going thru the platforms .. should wash on them vs thru
+them" — DanceHysteria-0.6, the side-on (az 90/270, el 0) Angled view, with
+TrussW-RGB lit blue.
+
+- **Cause.** The flat Top/Front/Side planes draw no beams at all; Branson's
+  "side elevation" is the Angled view, eye level. `drawBeamCone()` drew the
+  cone as the hull of the lens and `beamFootprint()`'s ring, which is every
+  edge ray followed on to the *plane the axis landed on*. The TrussW's axis
+  landed on the closed main drape (a vertical plane), so the lower edge
+  rays ran on down through the steps and ~2 m below the floor to meet it.
+  And `beamThrowUncached()` only knew platform *tops*: a ray going into a
+  riser's back went out of its front to the floor beyond (only the
+  optional Line of sight stopped it), so pools lit the floor in a riser's
+  shadow. The planar-depth fan also tinted riser faces it passed beside.
+  Every view of the Studio and the Rig Overview (CPU and GPU draw the same
+  ops) had the below-floor cone; the 45° overview only showed it as a glow
+  on the floor in front of the drape.
+- **beamThrow**: each platform block is a box (`rayIntoBlock()`, slab test
+  in the platform's turned frame); a ray stops at the first face, with that
+  face's normal. Tops keep their old surface numbers; sides are
+  `kBlockSides + block*8 + face` (`deckSurface()`/`deckSurfaceParts()`).
+- **The cone's far end**: each footprint point is cut back to where its own
+  edge ray stops (when it stops sooner), keeping the fade it had there. A
+  beam whose rays all land where its footprint says is drawn exactly as
+  before.
+- **Seen level** (`seenLevel()`: Angled, el <= 10°): every block a ray hits
+  is cut out of the cone as its screen outline plus everything beyond it
+  from the lens (`levelShadows()`, convex; `emitLightTriOutside()` splits
+  each fan triangle into the convex pieces outside, depth and alpha carried
+  by interpolation), and the wash on an edge-on top or face is a band just
+  inside that edge (`drawLevelWash()`, 3x the pool's alpha, on the block's
+  near face depth). Higher up, the depth buffer and the pools do it.
+- Tests: `aWashStopsOnARiserSeenFromTheSide` / `...FromTheFront` (nothing
+  below the floor, inside the riser or in its shadow; a band on its top),
+  `aBeamClearOfTheRisersIsLeftAlone` (a riser drawn across the beam but not
+  in its way changes no pixel of it); all three fail on the old code.
+  `aBigPixelRigPaintsInGoodTime` now has four risers and an eye-level
+  camera: 45° 44-48 ms vs 42-46 before, level 23-26 vs 22-26.
+
 ### 2026-10-19 — Rig network transmit gate *(feat/rig-network-gate, off feat/show-tree, not merged)*
 
 So a laptop on a school network never sprays Art-Net, sACN or WLED onto it.

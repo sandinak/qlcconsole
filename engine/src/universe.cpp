@@ -68,6 +68,13 @@ Universe::Universe(quint32 id, GrandMaster *gm, QObject *parent)
     , m_passthroughValues()
 {
     m_modifiers.fill(NULL, UNIVERSE_SIZE);
+    m_writtenFrame.reset(new std::atomic<quint32>[UNIVERSE_SIZE]);
+    m_held.reset(new std::atomic<quint8>[UNIVERSE_SIZE]);
+    for (int i = 0; i < UNIVERSE_SIZE; i++)
+    {
+        m_writtenFrame[i].store(0, std::memory_order_relaxed);
+        m_held[i].store(0, std::memory_order_relaxed);
+    }
 
     connect(m_grandMaster, SIGNAL(valueChanged(uchar)),
             this, SLOT(slotGMValueChanged()));
@@ -367,6 +374,11 @@ void Universe::processFaders()
         }
     }
 
+    applyAutoOpen();
+    // Writes from here on (the DMX sources, before the next frame) belong
+    // to the next frame.
+    m_frame.fetch_add(1, std::memory_order_relaxed);
+
     bool dataChanged = hasChanged();
     QByteArray postGM = m_postGMValues->mid(0, m_usedChannels);
     /* The fixtures held to a maximum draw, on what goes out -- never on the
@@ -425,6 +437,106 @@ bool Universe::applyPowerLimits(QByteArray &out)
     return true;
 }
 
+/************************************************************************
+ * Auto-open shutters
+ ************************************************************************/
+
+void Universe::setAutoOpenRules(const QVector<AutoOpenRule> &rules)
+{
+    QMutexLocker locker(&m_autoOpenMutex);
+    // Whatever the old rules may have opened goes back to what is stored,
+    // unless the new rules still cover it.
+    foreach (const AutoOpenRule &r, m_autoOpenRules)
+        if (m_autoOpenRestore.contains(r.shutter) == false)
+            m_autoOpenRestore << r.shutter;
+    m_autoOpenRules = rules;
+}
+
+void Universe::holdChannels(int address, int count)
+{
+    for (int i = 0; i < count; i++)
+        if (address + i >= 0 && address + i < UNIVERSE_SIZE)
+            m_held[address + i].store(1, std::memory_order_relaxed);
+}
+
+bool Universe::isChannelSet(int address) const
+{
+    if (address < 0 || address >= UNIVERSE_SIZE)
+        return false;
+    return writtenRecently(address) || m_held[address].load(std::memory_order_relaxed) != 0;
+}
+
+void Universe::applyAutoOpen()
+{
+    QMutexLocker locker(&m_autoOpenMutex);
+    if (m_autoOpenRestore.isEmpty() == false)
+    {
+        foreach (int a, m_autoOpenRestore)
+            if (a >= 0 && a < UNIVERSE_SIZE && isChannelSet(a) == false)
+                updatePostGMValue(a);
+        m_autoOpenRestore.clear();
+    }
+    if (m_autoOpenRules.isEmpty())
+        return;
+
+    const char *post = m_postGMValues->constData();
+    auto lit = [post](int a) {
+        return a >= 0 && a < UNIVERSE_SIZE && post[a] != 0;
+    };
+    // Given a level lately: a resting default (a dimmer that sits at full
+    // when nothing drives it) never opens a shutter by itself.
+    auto given = [this, post](int a) {
+        return a >= 0 && a < UNIVERSE_SIZE && post[a] != 0 && writtenRecently(a);
+    };
+
+    foreach (const AutoOpenRule &r, m_autoOpenRules)
+    {
+        if (r.shutter < 0 || r.shutter >= UNIVERSE_SIZE)
+            continue;
+        // An explicit shutter value -- closed, strobe, open -- always wins.
+        if (isChannelSet(r.shutter))
+            continue;
+
+        bool open = false;
+        foreach (const AutoOpenHead &h, r.heads)
+        {
+            bool ok = true, fresh = false;
+            foreach (int a, h.gates)
+            {
+                if (lit(a) == false) { ok = false; break; }
+                fresh = fresh || given(a);
+            }
+            if (ok && h.anyOf.isEmpty() == false)
+            {
+                bool any = false;
+                foreach (int a, h.anyOf)
+                    if (lit(a))
+                    {
+                        any = true;
+                        fresh = fresh || given(a);
+                    }
+                ok = any;
+            }
+            if (ok && fresh)
+            {
+                open = true;
+                break;
+            }
+        }
+
+        if (open)
+        {
+            if (r.shutter >= m_usedChannels)
+                m_usedChannels = r.shutter + 1;
+            (*m_postGMValues)[r.shutter] = char(r.open);
+        }
+        else
+        {
+            updatePostGMValue(r.shutter);
+        }
+    }
+}
+
 void Universe::run()
 {
     m_running = true;
@@ -455,6 +567,8 @@ void Universe::run()
 
 void Universe::reset()
 {
+    for (int i = 0; i < UNIVERSE_SIZE; i++)
+        m_held[i].store(0, std::memory_order_relaxed);
     m_preGMValues->fill(0);
     m_blackoutValues->fill(0);
 
@@ -1060,6 +1174,8 @@ bool Universe::write(int address, uchar value, bool forceLTP)
     if (address >= m_usedChannels)
         m_usedChannels = address + 1;
 
+    markWritten(address);
+
     // A lower value on an HTP channel loses: routine, every tick -- not logged
     if (m_channelsMask->at(address) & HTP)
     {
@@ -1100,6 +1216,8 @@ bool Universe::writeMultiple(int address, quint32 value, int channelCount)
     {
         //qDebug() << "[Universe]" << id() << ": write channel" << (address + i) << ", value:" << QString::number(((uchar *)&value)[channelCount - 1 - i]);
 
+        markWritten(address + i);
+
         // preserve non HTP channels for blackout
         if ((m_channelsMask->at(address + i) & HTP) == 0)
             (*m_blackoutValues)[address + i] = ((uchar *)&value)[channelCount - 1 - i];
@@ -1121,6 +1239,9 @@ bool Universe::writeRelative(int address, quint32 value, int channelCount)
 
     if (address + channelCount >= m_usedChannels)
         m_usedChannels = address + channelCount;
+
+    for (int i = 0; i < channelCount; i++)
+        markWritten(address + i);
 
     if (channelCount == 1)
     {

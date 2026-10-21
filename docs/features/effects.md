@@ -327,7 +327,9 @@ Effects run over the base, in list order:
 - A **dimmer effect** (Breathe, Dimmer Phaser, Wave, Candle…) **scales**
   whatever is there: the fixture's master dimmer; else the head's own dimmer
   (a mover whose definition puts its Dimmer in its head); else, with no
-  dimmer at all, its colour. Half of a look at 50 % is 25 %.
+  dimmer at all, its colour. Half of a look at 50 % is 25 %. On a fixture
+  whose master dimmer serves several heads (a two-arm beam), the brightest
+  head sets it: one lit arm is enough.
 - A **movement effect** (Ballyhoo, Orbit, Figure 8…) moves round where the
   look's Aim or Pan/Tilt points each head ([Position](#position-moving-heads)),
   and leaves the colour and dimmer alone.
@@ -387,6 +389,13 @@ won't do what it seems to, with a line under the list saying how many:
 - **No Aim or Pan/Tilt** — a movement effect with nothing to move round.
 - **Colour 3 of the look** — a colour no fixture has a set for and no
   effect uses.
+- **Black** — a Colour look that is all zero (a "White" saved as
+  #000000): the heads it colours give no light, and an effect that takes the
+  look's colours (Confetti, a chase) gets black from it too.
+- **Can't move** — on an Aim, Pan/Tilt or movement look: a fixture whose
+  definition marks every Pan (or Tilt) channel Fine has no coarse channel to
+  turn the head, so it stays at 0 whatever the look says. Make the main
+  channel Coarse in the fixture definition.
 - **No targets** — the look lights nothing until fixtures or groups are
   added.
 

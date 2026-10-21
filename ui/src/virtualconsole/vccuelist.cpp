@@ -597,9 +597,14 @@ void VCCueList::updateStandby()
         text = tr("Next: (end of the list)");
     else
     {
-        const ChaserStep step = ch->steps().at(next);
+        // A sub-cue a show controller LOADed (LOAD 4.2): its number, and
+        // its own step's name and note.
+        const int loadedSub = next == m_doc->showControl()->loadedStep(ch->id())
+                              ? m_doc->showControl()->standbySubCue(ch) : -1;
+        const Chaser *inner = loadedSub >= 0 ? ch->subCueChase(next) : NULL;
+        const ChaserStep step = inner != NULL ? inner->steps().at(loadedSub) : ch->steps().at(next);
         const Function *f = m_doc->function(step.fid);
-        text = tr("Next: %1").arg(ch->stepCue(next));
+        text = tr("Next: %1").arg(inner != NULL ? ch->subCue(next, loadedSub) : ch->stepCue(next));
         if (f != NULL)
             text += QStringLiteral(" \u2014 ") + f->name();
         if (!step.note.isEmpty())

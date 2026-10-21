@@ -4,6 +4,16 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## 0.2.0 — Show Tree (October 2026)
 
+### Shutters open by themselves
+
+- **Auto-open shutters.** A spot whose shutter rests closed now lights
+  from a level alone: give it White at Full and it opens its shutter, as a
+  lighting console does. A shutter look (Closed, Strobe...) still wins, and
+  a light with no level stays as it is. It is on for every show, saved
+  with the show, and turned off in the new **Settings → Advanced** tab,
+  which also now holds the effect script editor choice and the Show control
+  (QLab) button. See [Auto-open shutters](other-improvements.md#auto-open-shutters).
+
 ### Software updates
 
 - **Update check and install.** qlcconsole checks GitHub Releases once a day
@@ -172,9 +182,23 @@ The latest changes, newest first. Each links to the guide with the detail.
   plus accents, follow brightness, accents only, RGB only or white only.
   A pixel box in a look with no group is now drawn on as its own grid.
   See [Matrix effects](effects.md#matrix-effects).
+- **Confetti on a two-arm beam, and two new look warnings.** A dimmer
+  effect on a fixture whose one master dimmer serves several heads takes
+  its brightest head, so a beam with one lit arm lights (it went black).
+  The Looks list now marks a Colour look that is all zero (**Black**), and
+  a position look on fixtures that can't move because their definition
+  marks every Pan or Tilt channel Fine (**Can't move**). See
+  [The stack checker](effects.md#the-stack-checker).
 
 ### Lighting Studio
 
+- **Beams stop at risers and the floor.** A wash thrown across the stage —
+  the TrussW bars over DanceHysteria's steps — ran straight through the
+  risers and on below the stage floor in a side elevation. Now a beam stops
+  at the first riser, step or platform it meets (its side as well as its
+  top), washes the top and face it reaches, and nothing of it shows behind
+  a riser or below the floor, in the Studio and the Rig Overview alike. See
+  [Beams](lighting-studio.md#beams-footprint-and-coverage).
 - **Curtains that open in the show.** A main drape or traveler can be
   **Driven by** a curtain fixture (**Add curtain fixture** in its editor):
   as the fixture's **Open** channel goes from 0 to 255 the drape opens, and
@@ -216,6 +240,14 @@ The latest changes, newest first. Each links to the guide with the detail.
   **Group by type** (right-click) for type first with the same folders under
   each. Older shows' per-type folders merge on open. See
   [Filing into folders](programming-tab.md#filing-into-folders).
+
+### Show control
+
+- **Sub-cues from QLab.** `/cue/4.2/go`, `/go 4.2` and MSC GO 4.2 play a
+  sub-cue (its cue first); OSC `/subgo` and `/subback` step the cue
+  playing; LOAD 4.2 puts one on standby and **Next:** shows it. A GO by
+  number on a paused list now plays that cue (it used to resume where it
+  was). See [Sub-cues from QLab](show-control.md#sub-cues-from-qlab).
 
 ### Outputs
 

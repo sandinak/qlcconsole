@@ -37,6 +37,8 @@
 #include <QHash>
 #include <QPair>
 #include <QVector>
+#include <QVarLengthArray>
+#include <QPolygonF>
 #include <climits>
 #include <QElapsedTimer>
 
@@ -158,9 +160,9 @@ public:
     void setActiveScene(quint32 sceneId);
 
     /** Line of sight in the rig views: a beam stops at the first solid
-     *  feature in its way -- a tower, a truss, a riser's side -- as it
-     *  already does at decks and scenery (BeamOcclusion, the kinds the stage
-     *  counts). Off by default; every view shares it (Lighting Studio:
+     *  feature in its way -- a tower, a truss -- as it always does at
+     *  platforms (top and sides) and scenery (BeamOcclusion, the kinds the
+     *  stage counts). Off by default; every view shares it (Lighting Studio:
      *  Show > Line of sight). */
     static void setLineOfSightBeams(bool on);
     static bool lineOfSightBeams();
@@ -780,6 +782,46 @@ private:
      *  the decks (where, how big, how high, their blocks), the scenery,
      *  what's hidden. A change, and the kept landings are thrown away. */
     quint64 throwScene() const;
+
+    /** Where one ray of a beam met something, for a view seen level. */
+    struct BeamLanding
+    {
+        int surface;            ///< as beamThrow() names it
+        QVector3D at;
+    };
+    /** The eye level with the stage (an Angled view no more than a few
+     *  degrees up): a side or front elevation, where a riser in a beam's way
+     *  is seen as its upright cross-section. */
+    bool seenLevel() const;
+    /** The platform block a beamThrow() surface names, and which face. */
+    bool deckBlock(int surface, StagePlatform **pl, StagePlatform::Block *bk,
+                   double *baseZ, int *face = nullptr) const;
+    /** Seen level: for each block the rays in @p landings met, its outline
+     *  and all that lies beyond it from @p apex -- where the beam's air is in
+     *  its shade. */
+    QVector<QPolygonF> levelShadows(const QVector3D &apex, const BeamLanding *landings,
+                                    int count) const;
+    /** Seen level: the light on each riser top or face the rays met, as a
+     *  band inside its edge, as far along it as they reach. */
+    void drawLevelWash(const BeamLanding *landings, int count, const QColor &colour,
+                       QPainter &p) const;
+public:
+    /** One corner of a triangle of light: screen point, depth, alpha. */
+    struct LitCorner
+    {
+        QPointF p;
+        double z;
+        double a;
+    };
+private:
+    typedef QVarLengthArray<LitCorner, 16> LitPiece;
+    static void keepInside(const LitPiece &in, const QPointF &q, const QPointF &n,
+                           LitPiece &out);
+    /** emitLightTri() for what of the triangle lies outside every one of
+     *  @p shadows (convex outlines, on screen). */
+    void emitLightTriOutside(const LitCorner &a, const LitCorner &b, const LitCorner &c,
+                             const QVector<QPolygonF> &shadows, const QColor &colour,
+                             QPainter &p) const;
 
     void drawBeamCone(QPainter &p, const QVector3D &apex, const QVector3D &dir,
                       double halfAngleRad, const QColor &colour, double level,

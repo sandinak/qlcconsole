@@ -31,6 +31,7 @@
 #include <QLineEdit>
 
 #include <QFormLayout>
+#include <QTabWidget>
 
 #include "appsettings.h"
 #include "showtreeview.h"
@@ -39,6 +40,8 @@
 #include "inputoutputmap.h"
 #include "rignetwork.h"
 #include "updatechecker.h"
+#include "shutterautoopen.h"
+#include "doc.h"
 #include "app.h"
 
 AppSettings::AppSettings(App *app, QWidget *parent)
@@ -50,7 +53,44 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     setWindowTitle(tr("Application Settings"));
     setMinimumWidth(400);
 
-    QVBoxLayout *mainLayout = new QVBoxLayout(this);
+    // Two tabs: General, what everyone sets, and Advanced -- settings for
+    // the experienced, and the show's output behaviour (auto-open shutters).
+    QVBoxLayout *dialogLayout = new QVBoxLayout(this);
+    m_tabs = new QTabWidget(this);
+    m_tabs->setObjectName(QStringLiteral("settingsTabs"));
+    dialogLayout->addWidget(m_tabs);
+    QWidget *generalPage = new QWidget(m_tabs);
+    generalPage->setObjectName(QStringLiteral("settingsGeneral"));
+    QVBoxLayout *mainLayout = new QVBoxLayout(generalPage);
+    m_tabs->addTab(generalPage, tr("General"));
+    QWidget *advancedPage = new QWidget(m_tabs);
+    advancedPage->setObjectName(QStringLiteral("settingsAdvanced"));
+    advancedPage->setProperty("helpTopic", QStringLiteral("other-improvements.md#advanced-settings"));
+    QVBoxLayout *advLayout = new QVBoxLayout(advancedPage);
+    m_tabs->addTab(advancedPage, tr("Advanced"));
+
+    // --- Advanced: Output (this show) ---
+    // The show's, saved with it: it changes what the rig does.
+    QGroupBox *outGroup = new QGroupBox(tr("Output (saved with this show)"), advancedPage);
+    outGroup->setObjectName(QStringLiteral("settingsOutput"));
+    outGroup->setProperty("helpTopic", QStringLiteral("other-improvements.md#auto-open-shutters"));
+    QVBoxLayout *outLayout = new QVBoxLayout(outGroup);
+    m_autoOpenCheck = new QCheckBox(tr("Auto-open shutters when a light is given a level"), outGroup);
+    m_autoOpenCheck->setObjectName(QStringLiteral("settingsAutoOpenShutters"));
+    m_autoOpenCheck->setChecked(m_app->doc()->shutterAutoOpen()->isEnabled());
+    m_autoOpenCheck->setToolTip(tr("A light given a level by a look, a cue or a slider, whose "
+                                   "shutter nothing sets, has its shutter opened -- so a spot "
+                                   "whose shutter rests closed lights from a dimmer look alone. "
+                                   "A shutter look (Closed, Strobe...) always wins, and a light "
+                                   "with no level is left alone. Saved with the show."));
+    outLayout->addWidget(m_autoOpenCheck);
+    QLabel *outInfo = new QLabel(
+        tr("Like a lighting console's auto-open. Off: a closed shutter stays closed until a "
+           "look opens it (Shutter → Open), as in QLC+."), outGroup);
+    outInfo->setWordWrap(true);
+    outInfo->setStyleSheet("color: gray; font-size: 10px;");
+    outLayout->addWidget(outInfo);
+    advLayout->addWidget(outGroup);
 
     // Autosave Group
     QGroupBox *autosaveGroup = new QGroupBox(tr("Autosave"), this);
@@ -129,7 +169,7 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     mainLayout->addWidget(unitsGroup);
 
     // --- Effects ---
-    QGroupBox *fxGroup = new QGroupBox(tr("Effects"), this);
+    QGroupBox *fxGroup = new QGroupBox(tr("Effects"), advancedPage);
     QHBoxLayout *fxLayout = new QHBoxLayout(fxGroup);
     fxLayout->addWidget(new QLabel(tr("Effect script editor:"), fxGroup));
     m_scriptEditorCombo = new QComboBox(fxGroup);
@@ -147,7 +187,7 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     }
     fxLayout->addWidget(m_scriptEditorCombo);
     fxLayout->addStretch();
-    mainLayout->addWidget(fxGroup);
+    advLayout->addWidget(fxGroup);
 
     // --- Show Tree ---
     // Record as new cue: what to record when the selected cue, the list's
@@ -178,7 +218,7 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     // --- Show control (QLab) ---
     // Edited in one place: Connections' Show control & sync page, next to
     // the MIDI inputs MSC and timecode arrive on. This just points there.
-    QGroupBox *scGroup = new QGroupBox(tr("Show control (QLab)"), this);
+    QGroupBox *scGroup = new QGroupBox(tr("Show control (QLab)"), advancedPage);
     scGroup->setObjectName(QStringLiteral("settingsShowControl"));
     scGroup->setProperty("helpTopic", QStringLiteral("show-control.md"));
     QHBoxLayout *scLayout = new QHBoxLayout(scGroup);
@@ -195,7 +235,8 @@ AppSettings::AppSettings(App *app, QWidget *parent)
         m_app->showShowControlSettings();
     });
     scLayout->addWidget(scOpen, 0, Qt::AlignTop);
-    mainLayout->addWidget(scGroup);
+    advLayout->addWidget(scGroup);
+    advLayout->addStretch();
 
     // --- Network: rig networks and the transmit gate ---
     // The networks are the SHOW's (saved in it); "only transmit on them" is
@@ -313,7 +354,7 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     m_buttonBox = buttonBox;
     connect(buttonBox, SIGNAL(accepted()), this, SLOT(accept()));
     connect(buttonBox, SIGNAL(rejected()), this, SLOT(reject()));
-    mainLayout->addWidget(buttonBox);
+    dialogLayout->addWidget(buttonBox);
     connect(m_rigNetworksEdit, &QLineEdit::textChanged, this, &AppSettings::validateRigNetworks);
     validateRigNetworks();
 
@@ -327,8 +368,14 @@ AppSettings::~AppSettings()
 {
 }
 
+void AppSettings::showAdvanced()
+{
+    m_tabs->setCurrentIndex(1);
+}
+
 void AppSettings::focusRigNetworks()
 {
+    m_tabs->setCurrentIndex(0);
     m_rigNetworksEdit->setFocus(Qt::OtherFocusReason);
     m_rigNetworksEdit->selectAll();
 }
@@ -414,6 +461,9 @@ void AppSettings::accept()
         QSettings().setValue(App::rigNetworkGateSettingKey(), m_rigOnlyCheck->isChecked());
         ioMap->setTransmitGateEnabled(m_rigOnlyCheck->isChecked());
     }
+
+    // Auto-open shutters: the show's (ShutterAutoOpen marks it modified)
+    m_app->doc()->shutterAutoOpen()->setEnabled(m_autoOpenCheck->isChecked());
 
     // Apply autosave settings
     m_app->setAutosaveEnabled(m_autosaveEnabledCheck->isChecked());

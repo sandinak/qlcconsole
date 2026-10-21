@@ -391,7 +391,14 @@ void GenericFader::write(Universe *universe)
         }
 
         if (flags & FadeChannel::AutoRemove && value == fc.target())
+        {
+            // A one-shot writer (slider, programmer edit) leaves the value
+            // where it put it: still set, for auto-open shutters. A fade-out
+            // (SetTarget) is a function letting go, not setting anything.
+            if (m_fadeOut == false)
+                universe->holdChannels(int(address), channelCount);
             it.remove();
+        }
     }
 
     // self-request deletion when fadeout is complete

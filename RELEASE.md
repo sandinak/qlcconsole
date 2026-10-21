@@ -4,14 +4,15 @@ qlcconsole releases are published to
 [GitHub Releases](https://github.com/sandinak/qlcconsole/releases):
 
 - **macOS** — a universal DMG (Apple silicon + Intel, macOS 12+), built,
-  Developer ID signed and notarized **locally** by `./release.sh`.
+  Developer ID signed and notarized **locally** by `make beta` /
+  `make release` (`platforms/macos/publish.sh`).
 - **Windows** — the NSIS installer (`…-win64-setup.exe`) built by CI's
   `build-windows` job. Not code-signed.
 - **Linux** — the x86_64 AppImage built by CI's `build-linux` job
   (`build-v4`).
 
 The Windows and Linux files are downloaded from the CI run of the release
-commit and attached to the release `release.sh` created (step 5 below).
+commit and attached afterwards with `make attach` (step 5 below).
 
 ## Two independent version numbers
 
@@ -32,6 +33,66 @@ them:
 In short: `VERSION` answers "what qlcconsole release is this," `APPVERSION`
 answers "what's actually in the binary and what QLC+ base is it built on."
 A release's notes should mention both.
+
+## make targets
+
+From the repo root (`make help` for the details). The first four stay on
+this Mac; **`make beta`, `make release` and `make attach` are public**.
+
+- `make test` — builds the checkout (`build-dev/`, Homebrew Qt) and installs
+  `~/Applications/qlcconsole-dev.app`, ad-hoc signed, for running on this Mac.
+  Not a release, not distributable, and it runs no unit tests (`make check`).
+- `make run SHOW=…` — `make test`, then launch it with `-o SHOW`.
+- `make check` — `./check-all.sh`, the unit-test gate.
+- `make dmg` — `platforms/macos/make-release.sh`: `package-local.sh` +
+  `sign-notarize.sh` on a committed HEAD, then `dist/SHA256SUMS` and a
+  Gatekeeper check. It **replaces `~/qlcconsole.app`**, keeping the old one
+  as `~/qlcconsole.app.prev`, and leaves `/Applications` alone (open the DMG
+  and drag to update that one). No gate, no tag, nothing published. The DMG
+  is made without driving Finder (`create-dmg --skip-jenkins`: a plain
+  window, no background layout); `DMG_FINDER=1` brings back the laid-out
+  window, at the cost of an AppleScript opening the volume on the screen.
+- `make beta` — **public**: a GitHub **pre-release** (the updater's
+  Pre-release channel), titled "Show Tree <VERSION> (beta)".
+- `make release` — **public**: a full GitHub release (Stable channel: every
+  user is offered it), titled "qlcconsole <VERSION>".
+- `make attach FILES="…"` — **public**: add files (CI's Windows installer
+  and AppImage) to the v<VERSION> release, and their lines to its
+  `SHA256SUMS` (re-uploaded). Asks you to type `attach`.
+
+`make beta` and `make release` run `platforms/macos/publish.sh`:
+
+1. Pre-flight, all read-only, and it refuses on any of: uncommitted
+   changes to tracked files (`test-workspaces/` aside); HEAD on no origin
+   branch (push first); tag `v<VERSION>` already on origin or with a GitHub
+   release (unless `REPLACE=1`); no or an empty `## [<VERSION>]` CHANGELOG
+   section; no signing identity / notary profile; `~/qlcconsole.app`
+   running. A section still dated `Unreleased` is a warning.
+2. Shows the plan and the full release notes — a short install header,
+   then the CHANGELOG section verbatim — and asks you to type `publish`
+   (with `REPLACE=1`, `replace v<VERSION>` first). `DRYRUN=1` stops here.
+3. The test gate: `./check-all.sh` on a `git archive` copy of HEAD in
+   `$TMPDIR`, deleted afterwards pass or fail (three full builds; the disk
+   has filled before). `SKIP_GATE=1` skips it.
+4. `make dmg` (or `DMG=dist/….dmg`: an already-built, stapled DMG of HEAD).
+5. With `REPLACE=1`, only now deletes the old release and tag. Tags HEAD
+   `v<VERSION>` (annotated, message = the title) and pushes the tag.
+6. Creates the release as a **draft** (not public), uploads the DMG and
+   `SHA256SUMS`, downloads both back from GitHub and checks the DMG against
+   `SHA256SUMS`; then makes it public and prints its URL. (`DRAFT=1` stops
+   at the draft — for testing the script.)
+
+If it fails after the tag push, it says what exists and how to clean up;
+running again with `REPLACE=1` is the usual fix. `TITLE=`, `INTRO=` (the
+notes' first line) and `NOTES_FILE=` override the defaults.
+
+It uses only GitHub's REST API (`gh api`). `gh release create` once failed
+with "GraphQL: API rate limit already exceeded" while REST had quota.
+
+`./release.sh` still works and runs the same script (`PRERELEASE=1
+./release.sh` = `make beta`; `./release.sh attach …` = `make attach`).
+
+The scripts build the checkout they're in, so a worktree releases itself.
 
 ## Cutting a release
 
@@ -71,17 +132,12 @@ Steps:
 3. Commit those two changes, and merge the release branch (e.g.
    `release/0.1.0`) to `main`; release from `main`. Push it, so CI builds
    the Windows installer and the AppImage from that commit.
-4. Run `./release.sh`. This:
-   - runs the test gate (`cmake --build build --target check` — engine +
-     UI unit tests, fixture-definition validation) and **stops here** if
-     anything fails, before any of the slower/external steps below run,
-   - builds + bundles via `platforms/macos/package-local.sh` -- one
-     universal app; the DMG is `qlcconsole-<VERSION>-universal-<date>-<rev>.dmg`,
-   - Developer ID signs, notarizes, and staples via
-     `platforms/macos/sign-notarize.sh`,
-   - tags `vX.Y.Z` and pushes the tag,
-   - creates a GitHub Release with the signed DMG attached and release notes
-     pulled straight from that version's `CHANGELOG.md` section.
+4. `DRYRUN=1 make beta` (or `make release`) to read the plan and notes,
+   then `make beta` / `make release` (above). It runs the gate, builds,
+   signs and notarizes the universal DMG
+   (`qlcconsole-<VERSION>-universal-<date>-<rev>.dmg`), tags `vX.Y.Z`,
+   and publishes the release with the DMG and `SHA256SUMS`, verified by
+   downloading them back.
 5. Attach the Windows installer and the Linux AppImage from CI. Wait for
    the CI run of the release commit to finish (`build-windows` and the
    `build-v4` Linux job green), then:
@@ -93,12 +149,14 @@ Steps:
       -p 'qlcconsole-*-win64-setup.exe' -p 'build-v4-AppImage'
    cp dist/ci/qlcconsole-*-win64-setup.exe/*.exe dist/qlcconsole-X.Y.Z-win64-setup.exe
    cp dist/ci/build-v4-AppImage/*.AppImage dist/qlcconsole-X.Y.Z-x86_64.AppImage
-   ./release.sh attach dist/qlcconsole-X.Y.Z-win64-setup.exe \
-      dist/qlcconsole-X.Y.Z-x86_64.AppImage
+   make attach FILES="dist/qlcconsole-X.Y.Z-win64-setup.exe dist/qlcconsole-X.Y.Z-x86_64.AppImage"
    ```
 
-   `attach` uploads the files and adds their lines to the release's
-   `SHA256SUMS` (re-uploaded). The in-app updater refuses any download
+   `attach` uploads the files (replacing any of the same name), adds their
+   lines to the release's `SHA256SUMS` (re-uploaded), checks GitHub's
+   copies against it, and rewrites the notes' "Windows and Linux builds:"
+   line to say what is now attached. `DRYRUN=1` shows the new `SHA256SUMS`
+   only. The in-app updater refuses any download
    whose checksum is not listed there, so attach CI's files this way, not
    with a bare `gh release upload`.
 
@@ -108,8 +166,9 @@ Steps:
    test already does) and, if the Windows VM is free, install it there.
 6. Sanity-check the release page, then announce it.
 
-`release.sh` pushes a tag and creates a public GitHub Release — real,
-visible actions. Run it deliberately, not as part of routine iteration.
+`make beta` / `make release` / `make attach` push a tag and publish on
+GitHub — real, visible actions, and the in-app updater offers the result
+to users. Run them deliberately, not as part of routine iteration.
 
 ## What the in-app updater needs from a release
 
@@ -122,14 +181,15 @@ things from each release:
 - **Pre-release flag** for builds meant only for the Pre-release channel,
   such as Show Tree for students. VERSION stays plain X.Y.Z; a build whose
   own release carries the flag follows the Pre-release channel by itself:
-  `PRERELEASE=1 TITLE="Show Tree X.Y.Z" ./release.sh`.
+  `make beta` (title "Show Tree X.Y.Z (beta)"; the course install page
+  looks for a pre-release whose name starts with "Show Tree").
 - **Asset names**, which is how it picks its download:
   - macOS: `qlcconsole-<v>-universal-<date>-<rev>.dmg`
   - Windows: `qlcconsole-<v>-win64-setup.exe`
   - Linux (linked, not installed): `qlcconsole-<v>-x86_64.AppImage`
 - **`SHA256SUMS`**, in `sha256sum` format, with one line for every asset
-  above. `release.sh` writes it for the DMG, and `release.sh attach` adds
-  the rest.
+  above. `make beta` / `make release` write it for the DMG, and
+  `make attach` adds the rest.
 - On macOS, the DMG's app must be signed with the same Developer ID Team
   (B4N7HJ7VZ6) and bundle id as the installed one, and must pass
   Gatekeeper. That is what sign-notarize.sh produces.

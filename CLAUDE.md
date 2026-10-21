@@ -51,6 +51,26 @@ cmake --build build -j"$(sysctl -n hw.perflevel0.logicalcpu 2>/dev/null || sysct
 build/main/qlcconsole -o test-workspaces/surfacetesting.qxw
 ```
 
+`make` shortcuts from the repo root (`make help` lists them):
+
+- **`make test`** — incremental build in `build-dev/` (RelWithDebInfo,
+  Homebrew Qt) installed as `~/Applications/qlcconsole-dev.app`: ad-hoc
+  signed, its own bundle id (`…qlcconsole.dev`, "qlcconsole (dev)"), opens
+  from Finder/Spotlight or `…/Contents/MacOS/qlcconsole -o show.qlcc`. It runs
+  **no unit tests** (that's `make check` = `./check-all.sh`). `make run
+  SHOW=path` builds and launches with `-o`. Settings are shared with the
+  release app (QSettings `org.qlcplus.qlcconsole`).
+- **`make dmg`** — `platforms/macos/make-release.sh`: the signed,
+  notarized, stapled universal DMG of a committed HEAD into `dist/` (+
+  `dist/SHA256SUMS`); replaces `~/qlcconsole.app` (old one →
+  `~/qlcconsole.app.prev`). Publishes nothing.
+- **`make beta` / `make release` / `make attach` are PUBLIC**
+  (`platforms/macos/publish.sh`): gate + `make dmg` + push tag `v<VERSION>` +
+  a GitHub pre-release ("Show Tree X (beta)") or full release, DMG +
+  SHA256SUMS verified by download; `attach` adds CI's files. Never run them
+  unasked; `DRYRUN=1` is safe, `DRAFT=1` leaves a non-public draft. REST
+  only (`gh api`), not `gh release` (GraphQL limits). See RELEASE.md.
+
 - App binary: `build/main/qlcconsole` (arm64 Mach-O; renamed from `qlcplus` in
   the qlcconsole rebrand — launcher/fixtureeditor binaries are
   `qlcconsole-launcher` / `qlcconsole-fixtureeditor`).

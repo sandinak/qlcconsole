@@ -30,6 +30,8 @@
 #include <QMap>
 #include <QVariant>
 #include <climits>
+#include <atomic>
+#include <memory>
 
 #include "inputpatch.h"
 #include "qlcchannel.h"
@@ -429,6 +431,70 @@ private:
     QVector<PowerLimit> m_powerLimits;
     QHash<quint32, QPair<double, double> > m_powerHeldBack;
     QByteArray m_lastLimited;
+
+    /*********************************************************************
+     * Auto-open shutters
+     *********************************************************************/
+public:
+    /** One head's level: lit when every gate is above zero and, if there
+     *  are any, at least one of anyOf too -- and something gave it that
+     *  level lately (a resting default is not a level). */
+    struct AutoOpenHead
+    {
+        QVector<int> gates;
+        QVector<int> anyOf;
+    };
+
+    /** A shutter channel opened while any of its heads has a level and
+     *  nothing sets the shutter itself (ShutterAutoOpen). */
+    struct AutoOpenRule
+    {
+        int shutter;
+        uchar open;
+        QVector<AutoOpenHead> heads;
+    };
+
+    /** The shutters to auto-open in this universe; empty turns it off. Safe
+     *  from any thread: applied on the universe's own, on the next frame. */
+    void setAutoOpenRules(const QVector<AutoOpenRule> &rules);
+
+    /** A one-shot writer (a slider, a programmer edit) left @p count
+     *  channels from @p address where it put them: they count as set until
+     *  something else writes them (GenericFader, on auto-removing them). */
+    void holdChannels(int address, int count);
+
+    /** True when @p address was written in this frame or the one before,
+     *  or is held (holdChannels()). */
+    bool isChannelSet(int address) const;
+
+private:
+    void markWritten(int address)
+    {
+        m_writtenFrame[address].store(m_frame.load(std::memory_order_relaxed),
+                                      std::memory_order_relaxed);
+        m_held[address].store(0, std::memory_order_relaxed);
+    }
+    bool writtenRecently(int address) const
+    {
+        return quint32(m_frame.load(std::memory_order_relaxed)
+                       - m_writtenFrame[address].load(std::memory_order_relaxed)) <= 1;
+    }
+    /** After the faders, before the output: open the shutters whose heads
+     *  have a level and that nothing sets; put back the ones that no
+     *  longer should be. Works on the post-GM values, never the stored
+     *  pre-GM ones, so turning it off leaves the show exactly as it was. */
+    void applyAutoOpen();
+
+    QMutex m_autoOpenMutex;
+    QVector<AutoOpenRule> m_autoOpenRules;
+    /** Shutters a previous rule set may have opened: put back next frame */
+    QVector<int> m_autoOpenRestore;
+    /** The frame each channel was last written in (m_frame) */
+    std::unique_ptr<std::atomic<quint32>[]> m_writtenFrame;
+    /** Channels a one-shot writer left set (holdChannels()) */
+    std::unique_ptr<std::atomic<quint8>[]> m_held;
+    /** Counts processFaders() frames; starts past 1 so nothing is "recent" */
+    std::atomic<quint32> m_frame { 16 };
 
 signals:
     void universeWritten(quint32 universeID, const QByteArray& universeData);

@@ -72,7 +72,7 @@ written, known issues included.
   (scaled + rough), and diff kronk's `--heap-track` snapshots.
 - **Rig test pass** — `RIG_TEST_PLAN.md`, section K first (the 0.1.0
   work), on the office rig with kronk.
-- Then: merge `release/0.1.0` to main, `./release.sh`, attach the Windows
+- Then: merge `release/0.1.0` to main, `make release`, `make attach` the Windows
   installer and Linux AppImage from CI (RELEASE.md).
 
 ## Platforms and soak findings — open (2026-10-16)
@@ -371,12 +371,10 @@ before building):
 
 - **Agreed next (2026-10-13/15), after 0.1.0:**
   - **Sub-cues** ([SUBCUES_DESIGN.md](SUBCUES_DESIGN.md)) — P1 (engine)
-    and P2 (editor, VC cue list, footer, ⌥⌘↩) shipped in 0.1.0 (DONE.md).
-    Still to do: P3 show control (`/cue/4.2/go`, `/subgo`, `/subback`, MSC
-    GO 4.2, LOAD 4.2 — show control is on Connections → Show control &
-    sync now; the engine API is there: `Chaser::findCueOrSubCue()`,
-    `jumpToSubCue()`, `subGo()`, `subBack()`), P4 step-based effects on Sub
-    GO.
+    and P2 (editor, VC cue list, footer, ⌥⌘↩) shipped in 0.1.0 (DONE.md);
+    P3 show control (`/cue/4.2/go`, `/go 4.2`, MSC GO 4.2, `/subgo`,
+    `/subback`, LOAD 4.2 on Next) is in 0.2.0. Still to do: P4 step-based
+    effects on Sub GO.
   - **Sending to QLab** — OSC / MSC out. Its home is ready: the "QLab out"
     section of Connections → Show control & sync (`ShowControlSyncPage`).
   - **Duplicate a structure's setup** (Branson, 2026-10-15; replaces the

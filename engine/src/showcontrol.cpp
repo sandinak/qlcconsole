@@ -132,11 +132,29 @@ void ShowControl::go(Chaser *chaser, int step)
         chaser->setPause(false);
 }
 
+void ShowControl::goSubCue(Chaser *chaser, int step, int subCue)
+{
+    // A jump to a sub-cue: its parent first, if that isn't the one playing
+    // (the runner sees to it); a stopped list starts there.
+    chaser->jumpToSubCue(step, subCue);
+    if (!chaser->isRunning())
+        chaser->start(m_doc->masterTimer(), FunctionParent::master());
+    else if (chaser->isPaused())
+        chaser->setPause(false);
+}
+
+QString ShowControl::cueName(const Chaser *chaser, int step, int subCue)
+{
+    if (chaser == nullptr)
+        return QString();
+    return subCue < 0 ? chaser->stepCue(step) : chaser->subCue(step, subCue);
+}
+
 int ShowControl::standbyStep(const Chaser *chaser) const
 {
     if (chaser == nullptr)
         return -1;
-    const int loaded = m_loaded.value(chaser->id(), -1);
+    const int loaded = m_loaded.value(chaser->id()).step;
     if (loaded >= 0 && loaded < chaser->stepsCount())
         return loaded;
     if (chaser->isRunning())
@@ -144,11 +162,25 @@ int ShowControl::standbyStep(const Chaser *chaser) const
     return chaser->firstPlayableStep();
 }
 
+int ShowControl::standbySubCue(const Chaser *chaser) const
+{
+    if (chaser == nullptr)
+        return -1;
+    const Standby loaded = m_loaded.value(chaser->id());
+    if (loaded.step < 0 || loaded.step >= chaser->stepsCount()
+            || loaded.subCue < 0 || loaded.subCue >= chaser->subCueCount(loaded.step))
+        return -1;
+    return loaded.subCue;
+}
+
 bool ShowControl::execute(const Request &request)
 {
+    // Sub GO / Sub Back take no cue: they step through the cue playing.
+    const bool subStep = request.command == SubGo || request.command == SubBack;
+    const QString cue = subStep ? QString() : request.cue;
     QString what = commandName(request.command);
-    if (!request.cue.isEmpty())
-        what += tr(" cue %1").arg(request.cue);
+    if (!cue.isEmpty())
+        what += tr(" cue %1").arg(cue);
 
     auto finish = [&](bool done, const QString &how) {
         const QString line = how.isEmpty() ? what : what + QStringLiteral(" — ") + how;
@@ -166,7 +198,6 @@ bool ShowControl::execute(const Request &request)
         // MasterTimer::stopAllFunctions(), which waits for the timer
         // thread, here on the thread a command arrives on.
         m_loaded.clear();
-        m_loadedSub.clear();
         for (Function *f : m_doc->functions())
             if (f->isRunning())
                 f->stop(FunctionParent::master());
@@ -183,11 +214,13 @@ bool ShowControl::execute(const Request &request)
     }
     const QString name = listName(chaser);
 
-    // A cue by number: a main cue first, else a sub-cue ("4.2", SUBCUES §4).
-    int step = -1, subStep = -1;
-    if (!request.cue.isEmpty())
+    // A cue by number: a main cue -- one numbered "4.2" wins -- else a
+    // sub-cue, "4.2" being sub-cue 2 of cue 4 (or one numbered so).
+    int step = -1;
+    int sub = -1;
+    if (!cue.isEmpty())
     {
-        if (!chaser->findCueOrSubCue(request.cue, &step, &subStep))
+        if (!chaser->findCueOrSubCue(cue, &step, &sub))
             return finish(false, tr("no such cue in %1").arg(name));
     }
 
@@ -198,8 +231,9 @@ bool ShowControl::execute(const Request &request)
             {
                 // The cue on standby; else the next one -- from stopped,
                 // the first.
-                step = m_loaded.value(chaser->id(), -1);
-                subStep = m_loadedSub.value(chaser->id(), -1);
+                const Standby loaded = m_loaded.value(chaser->id());
+                step = loaded.step;
+                sub = standbySubCue(chaser);
                 if (step < 0 && !chaser->isRunning())
                 {
                     step = chaser->firstPlayableStep();
@@ -208,59 +242,26 @@ bool ShowControl::execute(const Request &request)
                 }
             }
             m_loaded.remove(chaser->id());
-            m_loadedSub.remove(chaser->id());
-            if (step >= 0 && subStep >= 0)
-            {
-                // A sub-cue: its cue first if it isn't playing, then it.
-                chaser->jumpToSubCue(step, subStep);
-                if (!chaser->isRunning())
-                    chaser->start(m_doc->masterTimer(), FunctionParent::master());
-                else if (chaser->isPaused())
-                    chaser->setPause(false);
-                if (request.cue.isEmpty())
-                    what += tr(" cue %1").arg(chaser->subCue(step, subStep));
-                return finish(true, name);
-            }
-            go(chaser, step);
-            if (step >= 0 && request.cue.isEmpty())
-                what += tr(" cue %1").arg(chaser->stepCue(step));
+            if (sub >= 0)
+                goSubCue(chaser, step, sub);
+            else
+                go(chaser, step);
+            if (step >= 0 && cue.isEmpty())
+                what += tr(" cue %1").arg(cueName(chaser, step, sub));
             return finish(true, name);
 
         case Load:
             if (step < 0)
                 return finish(false, tr("LOAD needs a cue"));
-            m_loaded.insert(chaser->id(), step);
-            if (subStep >= 0)
-                m_loadedSub.insert(chaser->id(), subStep);
-            else
-                m_loadedSub.remove(chaser->id());
+            m_loaded.insert(chaser->id(), Standby{ step, sub });
             return finish(true, name);
-
-        case SubGo:
-        case SubBack:
-        {
-            if (!chaser->isRunning())
-                return finish(false, tr("%1 isn't playing").arg(name));
-            const int cur = chaser->currentStepIndex();
-            if (!chaser->isSubGoStep(cur))
-                return finish(false, tr("cue %1 has no sub-cues").arg(chaser->stepCue(cur)));
-            const int to = request.command == SubGo ? chaser->nextSubCueIndex() : chaser->previousSubCueIndex();
-            if (to < 0)
-                return finish(false, request.command == SubGo ? tr("end of %1").arg(chaser->stepCue(cur))
-                                                              : tr("start of %1").arg(chaser->stepCue(cur)));
-            if (request.command == SubGo)
-                chaser->subGo();
-            else
-                chaser->subBack();
-            what += tr(" cue %1").arg(chaser->subCue(cur, to));
-            return finish(true, name);
-        }
 
         case Stop:
             if (!chaser->isRunning())
                 return finish(false, tr("%1 isn't playing").arg(name));
-            if (step >= 0 && step != chaser->currentStepIndex())
-                return finish(false, tr("cue %1 isn't the one playing").arg(request.cue));
+            if (step >= 0 && (step != chaser->currentStepIndex()
+                              || (sub >= 0 && sub != chaser->currentSubCueIndex())))
+                return finish(false, tr("cue %1 isn't the one playing").arg(cue));
             chaser->stop(FunctionParent::master());
             return finish(true, name);
 
@@ -288,16 +289,42 @@ bool ShowControl::execute(const Request &request)
             action.m_fadeMode = Chaser::FromFunction;
             chaser->setAction(action);
             m_loaded.remove(chaser->id());
-            m_loadedSub.remove(chaser->id());
             return finish(true, name);
         }
 
         case Reset:
             m_loaded.remove(chaser->id());
-            m_loadedSub.remove(chaser->id());
             if (chaser->isRunning())
                 chaser->stop(FunctionParent::master());
             return finish(true, name);
+
+        case SubGo:
+        case SubBack:
+        {
+            if (!chaser->isRunning())
+                return finish(false, tr("%1 isn't playing").arg(name));
+            const int current = chaser->currentStepIndex();
+            const QString parent = chaser->stepCue(current);
+            if (!chaser->isSubGoStep(current))
+                return finish(false, tr("cue %1 has no sub-cues on Sub GO").arg(parent));
+            // Not yet started (GO into the cue this very moment): the
+            // runner steps it once it has, so there's nothing to check.
+            if (chaser->currentSubCueIndex() >= 0)
+            {
+                const int target = request.command == SubGo ? chaser->nextSubCueIndex()
+                                                            : chaser->previousSubCueIndex();
+                if (target < 0)
+                    return finish(false, request.command == SubGo
+                                         ? tr("end of %1").arg(parent)
+                                         : tr("%1 is at its first sub-cue").arg(parent));
+                what += tr(" cue %1").arg(chaser->subCue(current, target));
+            }
+            if (request.command == SubGo)
+                chaser->subGo();
+            else
+                chaser->subBack();
+            return finish(true, name);
+        }
 
         case AllOff:
             break;
@@ -308,7 +335,6 @@ bool ShowControl::execute(const Request &request)
 void ShowControl::slotFunctionRemoved(quint32 id)
 {
     m_loaded.remove(id);
-    m_loadedSub.remove(id);
     if (id == m_mainCueList)
     {
         m_mainCueList = UINT_MAX;
@@ -452,6 +478,13 @@ QString cueFromNumber(double v)
     return QString::number(v, 'g', 10);
 }
 
+/** The same for a 32-bit float, to the digits it holds: 2.2, not the
+ *  2.200000048 it is as a double -- which no cue "2.2" would match. */
+QString cueFromFloat(float v)
+{
+    return QString::number(double(v), 'g', 7);
+}
+
 void parseOscMessage(const QByteArray &d, QList<ShowControl::Request> *out)
 {
     int pos = 0;
@@ -478,7 +511,7 @@ void parseOscMessage(const QByteArray &d, QList<ShowControl::Request> *out)
             {
                 float f;
                 std::memcpy(&f, &v, sizeof f);
-                arg = cueFromNumber(f);
+                arg = cueFromFloat(f);
             }
         }
         else if (t == QLatin1Char('d') && pos + 8 <= d.size())
@@ -544,12 +577,12 @@ void parseOscMessage(const QByteArray &d, QList<ShowControl::Request> *out)
         r.command = ShowControl::Reset;
     else if (first == QLatin1String("back"))
         r.command = ShowControl::Back;
+    else if (first == QLatin1String("panic") || first == QLatin1String("alloff"))
+        r.command = ShowControl::AllOff;
     else if (first == QLatin1String("subgo"))
         r.command = ShowControl::SubGo;
     else if (first == QLatin1String("subback"))
         r.command = ShowControl::SubBack;
-    else if (first == QLatin1String("panic") || first == QLatin1String("alloff"))
-        r.command = ShowControl::AllOff;
     else
         return;
     if (r.command == ShowControl::AllOff || r.command == ShowControl::Pause
@@ -607,7 +640,6 @@ void ShowControl::reset()
 {
     m_mainCueList = UINT_MAX;
     m_loaded.clear();
-    m_loadedSub.clear();
 }
 
 bool ShowControl::loadXML(QXmlStreamReader &root)
