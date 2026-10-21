@@ -554,7 +554,7 @@ void ShowEmbedding_Test::definitionCompatibility()
           false, "is not in this computer's copy" },
         { "channel count changed",
           Modes() << qMakePair(QString("4ch"), QStringList() << "Dimmer" << "Red" << "Green" << "Blue" << "White"),
-          false, "is 5 channels here, 4 in the show" },
+          false, "goes 4 → 5 channels" },
         { "channel kind changed",
           Modes() << qMakePair(QString("4ch"), QStringList() << "Dimmer" << "Red" << "Green" << "White"),
           false, "channel 4 is" },

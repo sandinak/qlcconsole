@@ -176,6 +176,17 @@ public:
     bool useComputers(const QString &key, QString *error = nullptr);
     /** Stop warning about @p key (remembered in the show). */
     void keepShows(const QString &key);
+    /** Forget what undoChoices() would undo: the start of a new choice
+     *  (one click of the operator's, however many items it switches). */
+    void clearUndo();
+    /** useComputers() since clearUndo() can be undone. */
+    bool canUndo() const { return !m_undo.isEmpty(); }
+    /** Undo every useComputers() since clearUndo(), in one step: the show's
+     *  copies in use again, each fixture back on its mode. */
+    bool undoChoices();
+    /** This computer's file @p path was rewritten (a definition update):
+     *  what the show compares itself with is read again. */
+    void computerFileChanged(const QString &path);
     /** Write the show's copy to this computer: over its file (that one to
      *  the Trash), or into the user folder when it has none or ships it. */
     bool installShows(const QString &key, QString *error = nullptr);
@@ -229,6 +240,15 @@ private:
     QHash<QString, QLCFixtureDef *> m_showDefs;   ///< key -> the show's, in the cache
     QHash<QString, QLCFixtureDef *> m_displaced;  ///< key -> this computer's, set aside
     QList<QLCFixtureDef *> m_retired;             ///< out of the cache, kept for stale pointers
+
+    struct Switched
+    {
+        QString key;
+        QLCFixtureDef *show = nullptr;          ///< a fixture definition's
+        QLCFixtureDef *computer = nullptr;
+        QHash<quint32, QString> modes;          ///< fixture -> its mode
+    };
+    QList<Switched> m_undo;                       ///< useComputers() since clearUndo()
 };
 
 /** @} */

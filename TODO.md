@@ -10,6 +10,20 @@ under `~/.claude/.../memory/`.
 
 ## Small fixes and leftovers
 
+- **Definition updates: leftovers (2026-10-21)** (feat/definition-updates,
+  DONE.md):
+  - On ender, `~/Library/Application Support/QLC+` links to
+    `~/Crew/SynologyDrive/QLC+`, which is gone (the folder is now
+    `~/Crew/QLC+`). 51 of the 52 legacy links in the user folder lead
+    nowhere, so those definitions don't load. Re-point the link (Branson's
+    call), then run Fixtures → Definition Updates…: 12 stale copies are
+    waiting in the QLC+ folder, including both 36LED copies at 4.12.6.
+  - The standalone Fixture Definition Editor doesn't show "older than
+    current" yet. It is a separate app; it could reuse
+    `FixtureDefUpdates::scan()` for the open file.
+  - Undo goes back one update at a time. Older backups stay in
+    `.backup/` and are never pruned.
+
 - **Software update: first real-release checks (2026-10-20)**: the updater
   (feat/update-check, docs/features/updates.md) is unit-tested against a
   local fake GitHub and fake apps only. Still to do:

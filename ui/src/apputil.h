@@ -216,6 +216,13 @@ namespace AppUtil
      *  read. Item data: each one's ShowEmbedding key. */
     void updateShowEmbeddingStatus(Doc *doc);
 
+    /** The footer's "definitions.outofdate": definitions in the user folder
+     *  older than the current version of the same fixture
+     *  (FixtureDefUpdates::scan()), the ones the open show uses first --
+     *  a warning when the show uses one, information otherwise. Item data:
+     *  each file's path. Review… opens Definition Updates. */
+    void updateDefinitionUpdatesStatus(Doc *doc);
+
     /** The address @p n after IPv4 @p ip (n = 0: @p ip itself), the last
      *  octet carrying into the one before it -- one each for a batch of
      *  network fixtures. Empty when @p ip is not an IPv4 address or the run

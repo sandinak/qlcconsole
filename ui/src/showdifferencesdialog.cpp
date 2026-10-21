@@ -23,7 +23,10 @@
 #include <QMessageBox>
 #include <QLabel>
 
+#include <QFile>
+
 #include "showdifferencesdialog.h"
+#include "fixturedefupdates.h"
 #include "showembedding.h"
 #include "doc.h"
 
@@ -31,18 +34,50 @@ namespace
 {
     enum { KeyRole = Qt::UserRole, CompatibleRole };
     enum { ColWhat, ColNewer, ColSafe };
+    int s_autoAnswer = -1;
 }
 
-ShowDifferencesDialog::ShowDifferencesDialog(Doc *doc, QWidget *parent)
+void ShowDifferencesDialog::setAutoAnswer(int yes)
+{
+    s_autoAnswer = yes;
+}
+
+bool ShowDifferencesDialog::ask(const QString &title, const QString &text)
+{
+    if (s_autoAnswer >= 0)
+        return s_autoAnswer > 0;
+    return QMessageBox::warning(this, title, text, QMessageBox::Yes | QMessageBox::Cancel,
+                                QMessageBox::Cancel) == QMessageBox::Yes;
+}
+
+void ShowDifferencesDialog::tell(const QString &title, const QString &text)
+{
+    if (s_autoAnswer < 0)
+        QMessageBox::warning(this, title, text);
+}
+
+QString ShowDifferencesDialog::detailText() const
+{
+    return m_detail->text();
+}
+
+ShowDifferencesDialog::ShowDifferencesDialog(Doc *doc, QWidget *parent, bool everything)
     : QDialog(parent)
     , m_doc(doc)
+    , m_everything(everything)
 {
-    setWindowTitle(tr("Differences from this computer"));
+    setWindowTitle(everything ? tr("Show Definitions") : tr("Differences from this computer"));
+    setProperty("helpTopic", QStringLiteral("definition-updates.md"));
     QVBoxLayout *lay = new QVBoxLayout(this);
 
-    QLabel *intro = new QLabel(tr("The show carries its own copies of these, and they are not "
-                                  "the same as this computer's. The show's are in use; nothing "
-                                  "changes until you choose."), this);
+    QLabel *intro = new QLabel(everything
+        ? tr("The definitions and scripts this show carries, and how each compares with this "
+             "computer's. Where they differ the show's is in use until you choose: use this "
+             "computer's (the show carries it from the next save), keep the show's, or install "
+             "the show's on this computer.")
+        : tr("The show carries its own copies of these, and they are not "
+             "the same as this computer's. The show's are in use; nothing "
+             "changes until you choose."), this);
     intro->setWordWrap(true);
     lay->addWidget(intro);
 
@@ -59,6 +94,7 @@ ShowDifferencesDialog::ShowDifferencesDialog(Doc *doc, QWidget *parent)
     // What switching would change, for the row picked.
     m_detail = new QLabel(this);
     m_detail->setWordWrap(true);
+    m_detail->setAlignment(Qt::AlignTop | Qt::AlignLeft);
     m_detail->setTextInteractionFlags(Qt::TextSelectableByMouse);
     lay->addWidget(m_detail);
 
@@ -72,6 +108,10 @@ ShowDifferencesDialog::ShowDifferencesDialog(Doc *doc, QWidget *parent)
     m_install = box->addButton(tr("Install the Show's"), QDialogButtonBox::ActionRole);
     m_install->setToolTip(tr("Write the show's copy over this computer's; the old file goes "
                              "to the Trash"));
+    m_undo = box->addButton(tr("Undo"), QDialogButtonBox::ActionRole);
+    m_undo->setObjectName(QStringLiteral("showDifferencesUndo"));
+    m_undo->setToolTip(tr("Go back to the show's copies the last Use This Computer's switched from"));
+    connect(m_undo, &QPushButton::clicked, this, &ShowDifferencesDialog::undoChoices);
     connect(m_use, &QPushButton::clicked, this, &ShowDifferencesDialog::useComputers);
     connect(m_useAll, &QPushButton::clicked, this, &ShowDifferencesDialog::useComputersForAllCompatible);
     connect(m_keep, &QPushButton::clicked, this, &ShowDifferencesDialog::keepShows);
@@ -92,20 +132,38 @@ void ShowDifferencesDialog::rebuild()
     ShowEmbedding *e = m_doc->showEmbedding();
     m_tree->blockSignals(true);
     m_tree->clear();
-    foreach (const ShowEmbedding::Item &it, e->differences())
+    const QList<ShowEmbedding::Item> rows = m_everything ? e->items() : e->differences();
+    foreach (const ShowEmbedding::Item &it, rows)
     {
-        const ShowEmbedding::Compatibility c = e->compatibility(it.key());
         QTreeWidgetItem *row = new QTreeWidgetItem(m_tree);
         row->setText(ColWhat, it.displayName());
-        row->setText(ColNewer, ShowEmbedding::newerText(e->newer(it)));
-        row->setText(ColSafe, c.compatible ? tr("Compatible") : tr("Not compatible"));
+        row->setData(ColWhat, KeyRole, it.key());
         row->setToolTip(ColWhat, QStringLiteral("%1\n%2").arg(it.showPath, it.computerPath));
+        if (it.state != ShowEmbedding::Different || !it.usingShow)
+        {
+            QString state;
+            if (it.state == ShowEmbedding::ShowOnly)
+                state = it.usingShow ? tr("Only in the show") : tr("Only in the show (cannot be read)");
+            else if (it.state == ShowEmbedding::Identical)
+                state = tr("Same as this computer's");
+            else
+                state = tr("This computer's is in use");
+            row->setText(ColNewer, state);
+            row->setData(ColWhat, CompatibleRole, false);
+            row->setSelected(was.contains(it.key()));
+            continue;
+        }
+        const ShowEmbedding::Compatibility c = e->compatibility(it.key());
+        QString newer = ShowEmbedding::newerText(e->newer(it));
+        if (it.keptAgainst == it.computerSha && !it.keptAgainst.isEmpty())
+            newer += tr(" (kept)");
+        row->setText(ColNewer, newer);
+        row->setText(ColSafe, c.compatible ? tr("Compatible") : tr("Not compatible"));
         row->setToolTip(ColSafe, c.compatible
                                      ? tr("Everything the show uses works the same with this computer's")
                                      : c.problems.join(QLatin1Char('\n')));
         if (!c.compatible)
             row->setForeground(ColSafe, QColor(0xe0, 0x40, 0x30));
-        row->setData(ColWhat, KeyRole, it.key());
         row->setData(ColWhat, CompatibleRole, c.compatible);
         row->setSelected(was.contains(it.key()));
     }
@@ -113,32 +171,74 @@ void ShowDifferencesDialog::rebuild()
     m_tree->resizeColumnToContents(ColSafe);
     m_tree->blockSignals(false);
     updateButtons();
-    if (m_tree->topLevelItemCount() == 0 && isVisible())
+    if (!m_everything && m_tree->topLevelItemCount() == 0 && isVisible() && !e->canUndo())
         accept();                   // nothing left to choose
 }
 
 void ShowDifferencesDialog::updateButtons()
 {
+    ShowEmbedding *e = m_doc->showEmbedding();
     const QStringList keys = selectedKeys();
-    m_use->setEnabled(!keys.isEmpty());
-    m_keep->setEnabled(!keys.isEmpty());
-    m_install->setEnabled(!keys.isEmpty());
+    bool anyDifferent = false, anyShows = false;
+    foreach (const QString &key, keys)
+    {
+        const ShowEmbedding::Item it = e->item(key);
+        anyDifferent = anyDifferent || (it.state == ShowEmbedding::Different && it.usingShow);
+        anyShows = anyShows || it.usingShow;
+    }
+    m_use->setEnabled(anyDifferent);
+    m_keep->setEnabled(anyDifferent);
+    m_install->setEnabled(anyShows);
+    m_undo->setEnabled(e->canUndo());
     int compatible = 0;
     for (int i = 0; i < m_tree->topLevelItemCount(); ++i)
         if (m_tree->topLevelItem(i)->data(ColWhat, CompatibleRole).toBool())
             ++compatible;
     m_useAll->setEnabled(compatible > 0);
 
-    if (keys.size() == 1)
+    if (keys.size() != 1)
     {
-        const ShowEmbedding::Compatibility c = m_doc->showEmbedding()->compatibility(keys.first());
-        m_detail->setText(c.compatible
+        m_detail->clear();
+        return;
+    }
+    const ShowEmbedding::Item it = e->item(keys.first());
+    QStringList lines;
+    if (it.state == ShowEmbedding::Different && it.usingShow)
+    {
+        const ShowEmbedding::Compatibility c = e->compatibility(it.key());
+        lines << (c.compatible
             ? tr("Switching is safe: every mode, channel and setting the show uses is the same "
                  "in this computer's copy.")
             : tr("Switching would change what the show does:\n%1").arg(c.problems.join(QLatin1Char('\n'))));
+        if (e->newer(it) == ShowEmbedding::ShowNewer)
+            lines << tr("The show's copy is newer: Install the Show's puts it on this computer.");
     }
-    else
-        m_detail->clear();
+    else if (it.state == ShowEmbedding::ShowOnly && it.usingShow)
+        lines << tr("This computer has no copy: Install the Show's adds it to your folder.");
+    /* A definition: what this computer's would change, channel by channel. */
+    if (it.kind == ShowEmbedding::FixtureDefinition && it.state == ShowEmbedding::Different
+        && !it.computerPath.isEmpty())
+    {
+        QFile f(it.computerPath);
+        if (f.open(QIODevice::ReadOnly))
+        {
+            const FixtureDefUpdates::Info show = FixtureDefUpdates::infoFromBytes(it.bytes);
+            const FixtureDefUpdates::Info here = FixtureDefUpdates::infoFromBytes(f.readAll());
+            lines << tr("Show's: %1 · this computer's: %2")
+                         .arg(show.creatorVersion.isEmpty() ? tr("unknown version") : show.creatorVersion,
+                              here.creatorVersion.isEmpty() ? tr("unknown version") : here.creatorVersion);
+            const QList<FixtureDefUpdates::Change> changes = FixtureDefUpdates::diff(show.bytes, here.bytes);
+            if (changes.isEmpty())
+                lines << tr("No difference in channels or modes.");
+            else
+            {
+                lines << tr("This computer's copy, compared with the show's:");
+                foreach (const FixtureDefUpdates::Change &ch, changes)
+                    lines << QStringLiteral("  • %1").arg(ch.text());
+            }
+        }
+    }
+    m_detail->setText(lines.join(QLatin1Char('\n')));
 }
 
 QStringList ShowDifferencesDialog::selectedKeys() const
@@ -170,38 +270,50 @@ void ShowDifferencesDialog::useComputers()
 {
     ShowEmbedding *e = m_doc->showEmbedding();
     QStringList failed;
+    e->clearUndo();
     foreach (const QString &key, selectedKeys())
     {
         const ShowEmbedding::Item it = e->item(key);
+        if (it.state != ShowEmbedding::Different || !it.usingShow)
+            continue;
         const ShowEmbedding::Compatibility c = e->compatibility(key);
         if (!c.compatible
-            && QMessageBox::warning(this, tr("Use This Computer's"),
-                   tr("This computer's copy of %1 is not compatible with how the show uses it:\n\n%2"
-                      "\n\nSwitch anyway?").arg(it.displayName(), c.problems.join(QLatin1Char('\n'))),
-                   QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel) != QMessageBox::Yes)
+            && !ask(tr("Use This Computer's"),
+                    tr("This computer's copy of %1 is not compatible with how the show uses it:\n\n%2"
+                       "\n\nSwitch anyway? (Undo switches back.)").arg(it.displayName(), c.problems.join(QLatin1Char('\n')))))
             continue;
         QString error;
         if (!e->useComputers(key, &error))
             failed << error;
     }
+    updateButtons();
     if (!failed.isEmpty())
-        QMessageBox::warning(this, tr("Use This Computer's"), failed.join(QStringLiteral("\n\n")));
+        tell(tr("Use This Computer's"), failed.join(QStringLiteral("\n\n")));
 }
 
 void ShowDifferencesDialog::useComputersForAllCompatible()
 {
     ShowEmbedding *e = m_doc->showEmbedding();
     QStringList failed;
+    e->clearUndo();
     foreach (const QString &key, keys())
     {
-        if (!e->compatibility(key).compatible)
+        const ShowEmbedding::Item it = e->item(key);
+        if (it.state != ShowEmbedding::Different || !it.usingShow || !e->compatibility(key).compatible)
             continue;
         QString error;
         if (!e->useComputers(key, &error))
             failed << error;
     }
+    updateButtons();
     if (!failed.isEmpty())
-        QMessageBox::warning(this, tr("Use This Computer's"), failed.join(QStringLiteral("\n\n")));
+        tell(tr("Use This Computer's"), failed.join(QStringLiteral("\n\n")));
+}
+
+void ShowDifferencesDialog::undoChoices()
+{
+    m_doc->showEmbedding()->undoChoices();
+    updateButtons();
 }
 
 void ShowDifferencesDialog::keepShows()
@@ -218,20 +330,23 @@ void ShowDifferencesDialog::installShows()
     ShowEmbedding *e = m_doc->showEmbedding();
     QStringList names;
     foreach (const QString &key, keys)
-        names << e->item(key).displayName();
-    if (QMessageBox::question(this, tr("Install the Show's"),
-            tr("Write the show's copy over this computer's for:\n\n%1\n\nThis computer's files go "
-               "to the Trash, and every show opened here uses the show's version from now on.")
-                .arg(names.join(QLatin1Char('\n'))),
-            QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel) != QMessageBox::Yes)
+        if (e->item(key).usingShow)
+            names << e->item(key).displayName();
+    if (names.isEmpty()
+        || !ask(tr("Install the Show's"),
+                tr("Write the show's copy over this computer's for:\n\n%1\n\nThis computer's files go "
+                   "to the Trash, and every show opened here uses the show's version from now on.")
+                    .arg(names.join(QLatin1Char('\n')))))
         return;
     QStringList failed;
     foreach (const QString &key, keys)
     {
+        if (!e->item(key).usingShow)
+            continue;
         QString error;
         if (!e->installShows(key, &error))
             failed << error;
     }
     if (!failed.isEmpty())
-        QMessageBox::warning(this, tr("Install the Show's"), failed.join(QStringLiteral("\n\n")));
+        tell(tr("Install the Show's"), failed.join(QStringLiteral("\n\n")));
 }

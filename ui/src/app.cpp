@@ -109,6 +109,7 @@
 #include "showstatusdialog.h"
 #include "showembedding.h"
 #include "showdifferencesdialog.h"
+#include "definitionupdatesdialog.h"
 #include "qlcioplugin.h"
 #include "startupwindow.h"
 #include "mainbar.h"
@@ -968,6 +969,11 @@ void App::initDoc()
     connect(m_doc, &Doc::fixtureRemoved, fixtureReadiness, recheckFixtures);
     connect(m_doc, &Doc::fixtureChanged, fixtureReadiness, recheckFixtures);
     connect(m_doc, &Doc::loaded, fixtureReadiness, recheckFixtures);
+    /* Definitions of the user's older than the current version of the same
+       fixture: checked when a show has loaded (which of them it uses). */
+    connect(m_doc, &Doc::loaded, this, [this]() {
+        QTimer::singleShot(0, this, [this]() { AppUtil::updateDefinitionUpdatesStatus(m_doc); });
+    });
     // An effect look that would not start: the footer, a moment later.
     if (m_doc->effectScriptRunner() != nullptr)
         connect(m_doc->effectScriptRunner(), &EffectScriptRunner::failuresChanged,
@@ -1123,6 +1129,16 @@ void App::initDoc()
             ShowDifferencesDialog dlg(m_doc, parent);
             dlg.exec();
         });
+    ShowStatus::instance()->setAction("definitions.outofdate", tr("Review…"),
+        [this](QWidget *parent, const QVariantList &items) {
+            DefinitionUpdatesDialog dlg(m_doc, parent);
+            QStringList files;
+            foreach (const QVariant &v, items)
+                files << v.toString();
+            dlg.select(files);
+            dlg.exec();
+            AppUtil::updateDefinitionUpdatesStatus(m_doc);
+        });
     ShowStatus::instance()->setAction("fixtures.nodefinition", tr("Fetch Definitions"),
         [this](QWidget *parent, const QVariantList &) { recoverUnavailableDefinitions(parent); });
     ShowStatus::instance()->setAction("storage.onlineonly", tr("Download Now"),
@@ -1207,6 +1223,7 @@ void App::initDoc()
     if (m_startupWindow != NULL)
         m_startupWindow->logDetail(tr("%1 manufacturer(s)")
                                     .arg(m_doc->fixtureDefCache()->manufacturers().count()));
+    QTimer::singleShot(0, this, [this]() { AppUtil::updateDefinitionUpdatesStatus(m_doc); });
 
     /* Load channel modifiers templates */
     if (m_startupWindow != NULL)
@@ -2071,6 +2088,16 @@ void App::initMenuBar()
                                "another computer"));
         connect(collect, &QAction::triggered, this, &App::slotFileCollectForTransfer);
         fileMenu->addAction(collect);
+
+        QAction *showDefs = new QAction(tr("Show &Definitions…"), this);
+        showDefs->setObjectName(QStringLiteral("fileShowDefinitions"));
+        showDefs->setToolTip(tr("The definitions and scripts this show carries, and how each "
+                                "compares with this computer's"));
+        connect(showDefs, &QAction::triggered, this, [this]() {
+            ShowDifferencesDialog dlg(m_doc, this, true);
+            dlg.exec();
+        });
+        fileMenu->addAction(showDefs);
     }
     fileMenu->addSeparator();
     fileMenu->addAction(m_appSettingsAction);      // → app menu (Preferences) on macOS
@@ -2340,6 +2367,15 @@ void App::initMenuBar()
         QAction* editorAction = fixturesMenu->addAction(tr("Fixture Editor..."));
         connect(editorAction, &QAction::triggered, this, [this]() {
             AppUtil::launchFixtureEditor(QString(), this);
+        });
+        QAction* updatesAction = fixturesMenu->addAction(tr("Definition Updates…"));
+        updatesAction->setObjectName(QStringLiteral("fixturesDefinitionUpdates"));
+        updatesAction->setToolTip(tr("Your fixture definitions that are older than the current "
+                                     "version, and updating them"));
+        connect(updatesAction, &QAction::triggered, this, [this]() {
+            DefinitionUpdatesDialog dlg(m_doc, this);
+            dlg.exec();
+            AppUtil::updateDefinitionUpdatesStatus(m_doc);
         });
         fixturesMenu->addSeparator();
 

@@ -51,6 +51,8 @@ QLCFixtureDefCache::QLCFixtureDefCache()
 QLCFixtureDefCache::~QLCFixtureDefCache()
 {
     clear();
+    qDeleteAll(m_retired);
+    m_retired.clear();
 }
 
 QLCFixtureDef* QLCFixtureDefCache::fixtureDef(
@@ -558,6 +560,30 @@ QLCFixtureDef *QLCFixtureDefCache::substitute(QLCFixtureDef *def)
 bool QLCFixtureDefCache::take(QLCFixtureDef *def)
 {
     return m_defs.removeAll(def) > 0;
+}
+
+void QLCFixtureDefCache::retire(QLCFixtureDef *def)
+{
+    if (def == nullptr || m_retired.contains(def))
+        return;
+    m_defs.removeAll(def);
+    m_retired << def;
+}
+
+void QLCFixtureDefCache::noteFileChanged(const QString &path)
+{
+    const QString real = QFileInfo(path).canonicalFilePath();
+    auto same = [&](const QString &p) {
+        return p == path || (!real.isEmpty() && QFileInfo(p).canonicalFilePath() == real);
+    };
+    for (Duplicate &d : m_duplicates)
+    {
+        if (!d.keptIsLocal || !d.ignoredIsLocal || (!same(d.kept) && !same(d.ignored)))
+            continue;
+        QFile a(d.kept), b(d.ignored);
+        d.identical = a.open(QIODevice::ReadOnly) && b.open(QIODevice::ReadOnly)
+                      && a.readAll() == b.readAll();
+    }
 }
 
 bool QLCFixtureDefCache::loadFromShowCache(const QString &manufacturer, const QString &model)
