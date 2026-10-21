@@ -130,6 +130,8 @@ private:
      *  fall back to the keyboard. */
     void refreshController();
     void styleUseButtons();
+    /** The keep-alive's pause, said -- unless the note already says it. */
+    void refreshPaused();
     /** What a key does here; false for a key Focus mode does not use. */
     bool handleKey(int key, Qt::KeyboardModifiers modifiers);
 
@@ -150,6 +152,8 @@ private:
     QToolButton *m_useKeyboard;
     QLabel *m_deviceLabel;
     QLabel *m_noteLabel;
+    /** "Controller paused: <reason>" (ControllerKeepAlive). */
+    QLabel *m_pausedLabel;
     QPushButton *m_backButton;
     FocusControlMap *m_map;
     /** Switched to the keyboard because the controller went: offer it

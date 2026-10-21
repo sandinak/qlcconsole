@@ -22,6 +22,7 @@ add_library(${module_name} SHARED
 target_sources(${module_name} PRIVATE
     ../interfaces/qlcioplugin.cpp ../interfaces/qlcioplugin.h
     configurehid.cpp configurehid.h configurehid.ui
+    gamepadlayout.cpp gamepadlayout.h
     hiddevice.cpp hiddevice.h
     hiddmxdevice.cpp hiddmxdevice.h
     hidjsdevice.cpp hidjsdevice.h
@@ -56,15 +57,24 @@ if(APPLE)
     target_sources(${module_name} PRIVATE
         macx/hidapi.cpp
         macx/hidosxjoystick.cpp macx/hidosxjoystick.h
+        macx/hidgamecontroller.mm macx/hidgamecontroller.h
+        macx/hidosxhotplug.mm macx/hidosxhotplug.h
     )
-    
+    set_source_files_properties(macx/hidgamecontroller.mm macx/hidosxhotplug.mm
+        PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+
     target_include_directories(${module_name} PRIVATE
         macx
     )
 
+    # GameController: Xbox pads by name, and their input while another app
+    # is in front. AppKit: the wake notifications.
     target_link_libraries(${module_name} PRIVATE
         "-framework CoreFoundation"
         "-framework IOKit"
+        "-framework Foundation"
+        "-framework AppKit"
+        "-framework GameController"
     )
 endif()
 

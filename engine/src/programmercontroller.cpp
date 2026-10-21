@@ -33,6 +33,7 @@
 #include <QVariant>
 
 #include "programmercontroller.h"
+#include "controllerkeepalive.h"
 #include "focussession.h"
 #include "gamepadrole.h"
 
@@ -93,10 +94,24 @@ ProgrammerController::ProgrammerController(Doc *doc)
         m_fineNormX = m_fineNormY = 0.5f;
         m_focusSession->setStick(FocusSession::Coarse, m_panNorm, m_tiltNorm);
         emit joystickUpdated(0.5f, 0.5f);
+        m_joyTickClock.invalidate();
+        refreshControllerKeepAlive();
     });
     connect(m_focusSession, &FocusSession::stopped, this, [this]() {
         emit joystickUpdated(m_panNorm, m_tiltNorm);
+        refreshControllerKeepAlive();
     });
+    /* While Focus mode or the follow spot reads a controller, keep the app
+       out of App Nap and say when the controller is paused. */
+    m_keepAlive = new ControllerKeepAlive(this);
+    m_keepAliveTimer = new QTimer(this);
+    m_keepAliveTimer->setInterval(2000);
+    connect(m_keepAliveTimer, &QTimer::timeout,
+            this, &ProgrammerController::refreshControllerKeepAlive);
+    connect(this, &ProgrammerController::focusControllerChanged,
+            this, &ProgrammerController::refreshControllerKeepAlive);
+    connect(this, &ProgrammerController::axisBindingChanged,
+            this, &ProgrammerController::refreshControllerKeepAlive);
     m_markPlanner = new MarkPlanner(m_doc, m_markEffect, this);
     connect(m_markPlanner, &MarkPlanner::enabledChanged,
             this, &ProgrammerController::autoMoveInBlackChanged);
@@ -1663,6 +1678,25 @@ void ProgrammerController::autoBindFromProfile()
                 << "inputConnected=" << m_controllerInputConnected;
 }
 
+void ProgrammerController::refreshControllerKeepAlive()
+{
+    const bool focus = m_focusSession->isActive();
+    const bool followSpot = hasFollowSpotInput();
+    m_keepAlive->setFocusActive(focus);
+    m_keepAlive->setFollowSpotActive(followSpot);
+    if (focus || followSpot)
+    {
+        const FocusController fc = focusController();
+        m_keepAlive->setController(fc.present, fc.problem);
+        if (!m_keepAliveTimer->isActive())
+            m_keepAliveTimer->start();
+    }
+    else
+    {
+        m_keepAliveTimer->stop();
+    }
+}
+
 void ProgrammerController::connectControllerInput()
 {
     if (m_controllerInputConnected || !m_doc->inputOutputMap())
@@ -1742,6 +1776,9 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
         emit functionTriggerChanged(fid, functionTriggerLabel(fid));
         return;
     }
+
+    // Something came in: a controller being found again after a sleep is.
+    m_keepAlive->noteInput();
 
     if (routeFocusInput(universe, channel, value))
         return;
@@ -1962,6 +1999,7 @@ ProgrammerController::FocusController ProgrammerController::focusController() co
             bestScore = score;
             best = c;
             best.present = true;
+            best.problem = plugin->inputProblem(ip->input());
         }
     }
     return best;
@@ -2042,8 +2080,18 @@ void ProgrammerController::applyDesignJoystick()
     if (m_focusSession != nullptr && m_focusSession->isActive())
     {
         m_focusSession->setStickResponse(m_joystickDeadzone, m_joystickSensitivity);
-        m_focusSession->tick(m_designJoyTimer != nullptr
-                             ? m_designJoyTimer->interval() / 1000.0 : 0.02);
+        /* A late tick (a busy main thread, a throttled timer) moves the head
+           as far as the stick was held for, not just the timer's nominal
+           20 ms; never less than that, as before. Capped, so a stall of
+           seconds is not one big jump. */
+        const double nominal = m_designJoyTimer != nullptr
+                               ? m_designJoyTimer->interval() / 1000.0 : 0.02;
+        double dt = nominal;
+        if (m_joyTickClock.isValid())
+            dt = qBound(nominal, m_joyTickClock.restart() / 1000.0, qMax(nominal, 0.1));
+        else
+            m_joyTickClock.start();
+        m_focusSession->tick(dt);
         return;
     }
 

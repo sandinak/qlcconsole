@@ -96,6 +96,23 @@ public:
     QString inputChannelName(quint32 input, quint32 channel) const override
     { Q_UNUSED(input) return m_channelNames.value(channel); }
 
+    /** @reimp m_connectionInfo for @p input */
+    QString inputConnectionInfo(quint32 input) const override
+    { return m_connectionInfo.value(input); }
+
+    /** @reimp m_inputProblems for @p input */
+    QString inputProblem(quint32 input) const override
+    { return m_inputProblems.value(input); }
+
+    /** @reimp Counted, like a real plugin's. */
+    bool setInputDiagnostics(bool enable) override
+    { m_diagnostics += enable ? 1 : -1; return true; }
+
+    /** Report a raw input, as a plugin with diagnostics on would. */
+    void emitDiagnostic(quint32 input, const QString &device, const QString &connection,
+                        const QString &element, int raw, int channel, int value)
+    { emit inputDiagnostic(input, device, connection, element, raw, channel, value); }
+
 public:
     /** What outputProblems() reports, by universe */
     QMap<quint32, QStringList> m_outputProblems;
@@ -103,6 +120,11 @@ public:
     QMap<quint32, QString> m_channelRoles;
     /** What inputChannelName() reports, by channel ("Cross", "L1"...) */
     QMap<quint32, QString> m_channelNames;
+    /** What inputConnectionInfo() / inputProblem() report, by input line */
+    QMap<quint32, QString> m_connectionInfo;
+    QMap<quint32, QString> m_inputProblems;
+    /** setInputDiagnostics() calls: +1 on, -1 off */
+    int m_diagnostics = 0;
     QList<Device> m_devices;
     QMap<int, QString> m_lineDescriptions;
     bool m_linesAreHardware;

@@ -51,6 +51,12 @@ private slots:
     /** The controller unplugged mid-session: the keyboard takes over, and
      *  it is offered back when it returns. */
     void aDisconnectFallsBackToTheKeyboard();
+    /** A paused controller is said, with why -- not silence -- and the
+     *  panel stays up when another app is in front. */
+    void aPausedControllerSaysWhy();
+    /** The setup's Controller test lists each raw input once, with what it
+     *  maps to, and the log has it all. */
+    void theControllerTestListsEachInput();
     /** With FOCUSUI_SHOTS set: the panel, both maps, in each theme, saved
      *  there (for the docs and a look). */
     void shots();

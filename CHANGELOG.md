@@ -12,6 +12,60 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 
 ## [Unreleased]
 
+### Added
+- **Controller test** (Focus mode's setup, next to **Use**; Settings →
+  Advanced → Game controllers). Lists every raw input each game controller
+  sends, patched or not, as it arrives: the device, its connection (USB /
+  Bluetooth / Bluetooth LE, model, product ID, and how it is read), the
+  element (GameController name, HID usage, or USB report byte/bit), the raw
+  value and range seen, the channel and value it feeds, and what that maps
+  to (profile name, gamepad role, action, Focus mode control). **Copy** and
+  **Save…** give the whole log. Plugin interface:
+  `QLCIOPlugin::setInputDiagnostics()` / `inputDiagnostic()`,
+  `inputConnectionInfo()`, `inputProblem()`.
+- **Focus mode says when the controller is paused**, and why --
+  "Controller paused: the Mac is asleep / no controller is connected /
+  finding the controller again after the Mac slept / macOS is not letting
+  qlcconsole read the controller…" -- instead of going quiet
+  (`ControllerKeepAlive`, `ProgrammerController::controllerKeepAlive()`).
+
+### Fixed
+- **The controller kept working only while qlcconsole was in front.**
+  While Focus mode or the follow spot has a controller, the app now holds
+  an `NSProcessInfo` activity (user-initiated, latency-critical): App Nap
+  had been slowing the 50 Hz joystick tick to seconds apart whenever the
+  app was behind another window or the display slept. The Focus mode panel
+  (a tool window) no longer hides when another app is in front. The Xbox
+  controller is read through Apple's GameController framework with
+  `shouldMonitorBackgroundEvents`. Focus mode's stick integrates the real
+  time since the last tick (capped at 0.1 s).
+- **A controller switched off and on again, or back after the Mac slept,
+  was never picked up again** until a restart: the app's hotplug monitor
+  sees USB only, and the HID plugin kept reading the device that had gone.
+  The plugin now watches IOKit game controllers on any transport, the
+  GameController framework and the Mac waking, rescans, and replaces a
+  device that went and came back under the same path in place (so its patch
+  is reopened).
+- **HID input lines could send their input under a number no patch listens
+  to.** A device skipped while scanning (Apple's internal HID nodes) still
+  used up a line number, and a rescan numbered new devices from 0 again; a
+  device's line is now always its place in the plugin's list.
+- **Xbox controller mappings on macOS.** The USB report's buttons were read
+  from the wrong bytes and bits (A/B/X/Y came through as View/Menu/stick
+  clicks, the D-pad as A/B/X/Y), and its sticks' Y axes were upside down
+  for the profile; Bluetooth controllers were read in whatever order their
+  elements came, without their triggers (Brake/Accelerator) or D-pad (the
+  hat switch), and the Xbox profile did not list any wireless product ID.
+  Every Xbox One, Series X|S, Elite and Adaptive model is now identified
+  by product ID and connection and read into the Xbox profile's layout --
+  through the GameController framework when it has the pad, else the USB
+  report (GIP) or the Bluetooth HID usages per firmware (`GamepadLayout`).
+  The profile lists the Bluetooth / Bluetooth LE IDs and Share (button 15).
+- The HID plugin no longer opens every HID device on the Mac to find its
+  joysticks (that included the keyboards, which is what macOS asks Input
+  Monitoring permission for) or Apple's internal HID nodes, and no longer
+  writes `/tmp/qlc_hid_debug.txt` on every scan.
+
 ## [0.2.1] - 2026-10-21
 
 A point release of the Show Tree beta: one top bar, auto-open shutters,

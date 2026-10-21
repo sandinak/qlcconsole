@@ -33,6 +33,8 @@
 #include <QSettings>
 #include <QLabel>
 
+#include "controllertestdialog.h"
+#include "controllerkeepalive.h"
 #include "focuscontrolmap.h"
 #include "focusmodepanel.h"
 #include "programmercontroller.h"
@@ -146,7 +148,20 @@ FocusModeSetupDialog::FocusModeSetupDialog(Doc *doc, quint32 sceneId,
         m_inputCombo->findData(int(FocusModePanel::defaultInput(m_doc))));
     m_inputCombo->setToolTip(tr("Which device nudges the heads. The keyboard shortcuts work "
                                 "with either; on the keyboard the controller is ignored."));
-    form->addRow(tr("Use:"), m_inputCombo);
+    QHBoxLayout *useRow = new QHBoxLayout;
+    useRow->addWidget(m_inputCombo, 1);
+    /* What the controller actually sends, and what each input does here:
+       press everything once and send the log. */
+    QPushButton *testBtn = new QPushButton(tr("Controller test\342\200\246"), this);
+    testBtn->setObjectName(QStringLiteral("focusControllerTest"));
+    testBtn->setAutoDefault(false);
+    testBtn->setToolTip(tr("List every input the controller sends as you press it, with what "
+                           "it maps to \342\200\224 to check the mapping, or send it to be fixed"));
+    connect(testBtn, &QPushButton::clicked, this, [this]() {
+        ControllerTestDialog::open(m_doc, this);
+    });
+    useRow->addWidget(testBtn);
+    form->addRow(tr("Use:"), useRow);
 
     /* Perform is refused by the session itself; in Design, say what is
        running -- Focus mode overrides the heads it uses, nothing else. */
@@ -305,6 +320,10 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
     , m_session(doc->programmer()->focusSession())
 {
     setAttribute(Qt::WA_DeleteOnClose);
+    /* A tool window on a Mac hides whenever the app is not the frontmost
+       one: switch to another app and the panel vanished, though Focus mode
+       -- and the controller -- were still on. Keep it on screen. */
+    setAttribute(Qt::WA_MacAlwaysShowToolWindow);
     setObjectName(QStringLiteral("focusModePanel"));
     setWindowTitle(tr("Focus Mode"));
     setProperty("helpTopic", QStringLiteral("lighting-studio.md#focus-mode"));
@@ -378,6 +397,13 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
     use->addWidget(m_deviceLabel, 1);
     vl->addLayout(use);
 
+    m_pausedLabel = new QLabel(this);
+    m_pausedLabel->setObjectName(QStringLiteral("focusPausedNote"));
+    m_pausedLabel->setWordWrap(true);
+    m_pausedLabel->setStyleSheet(QStringLiteral("color: #d08a1c; font-weight: bold;"));
+    m_pausedLabel->hide();
+    vl->addWidget(m_pausedLabel);
+
     QHBoxLayout *note = new QHBoxLayout;
     m_noteLabel = new QLabel(this);
     m_noteLabel->setObjectName(QStringLiteral("focusInputNote"));
@@ -419,6 +445,8 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
     ProgrammerController *pc = m_doc->programmer();
     connect(pc, &ProgrammerController::focusControllerChanged,
             this, &FocusModePanel::refreshController);
+    connect(pc->controllerKeepAlive(), &ControllerKeepAlive::pausedChanged,
+            this, &FocusModePanel::refreshPaused);
     connect(pc, &ProgrammerController::focusControllerInput, this, [this](int role, float value) {
         if (m_session->inputDevice() == FocusSession::ControllerInput)
             m_map->setControlValue(role, value);
@@ -506,6 +534,7 @@ void FocusModePanel::setInputDevice(FocusSession::InputDevice device, bool remem
     }
     m_useController->setChecked(device == FocusSession::ControllerInput);
     m_useKeyboard->setChecked(device == FocusSession::KeyboardInput);
+    refreshPaused();
     m_map->clearInput();
     const FocusControlMap::Mode mode = device == FocusSession::KeyboardInput
                                        ? FocusControlMap::KeyboardMap : FocusControlMap::ControllerMap;
@@ -532,7 +561,8 @@ void FocusModePanel::refreshController()
         // Gone mid-session: the keyboard has it now, and nothing drifts.
         m_fellBack = true;
         setInputDevice(FocusSession::KeyboardInput, false);
-        m_noteLabel->setText(tr("The controller disconnected: switched to the keyboard."));
+        m_noteLabel->setText(tr("Controller paused: the controller disconnected. "
+                                "Switched to the keyboard."));
         m_noteLabel->show();
         m_backButton->hide();
     }
@@ -544,9 +574,23 @@ void FocusModePanel::refreshController()
     }
     else if (!pad.present && m_fellBack)
     {
-        m_noteLabel->setText(tr("The controller disconnected: switched to the keyboard."));
+        m_noteLabel->setText(tr("Controller paused: the controller disconnected. "
+                                "Switched to the keyboard."));
         m_backButton->hide();
     }
+    refreshPaused();
+}
+
+void FocusModePanel::refreshPaused()
+{
+    ControllerKeepAlive *keep = m_doc->programmer()->controllerKeepAlive();
+    /* On the keyboard the controller is not being used, so it is not
+       paused; and a disconnect is already said by the note. */
+    const bool show = keep->isPaused() && !m_fellBack
+                      && m_session->inputDevice() == FocusSession::ControllerInput;
+    if (show)
+        m_pausedLabel->setText(tr("Controller paused: %1").arg(keep->pauseReason()));
+    m_pausedLabel->setVisible(show);
 }
 
 void FocusModePanel::showHighlight(quint32 fid)

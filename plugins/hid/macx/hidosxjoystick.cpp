@@ -16,31 +16,49 @@
   See the License for the specific language governing permissions and
   limitations under the License.
 */
+#include <QElapsedTimer>
 #include <QDebug>
 #include <QtGlobal>
 #include <cstdlib>
 #include <cstring>
-#include <cstdio>
+
+#include <IOKit/IOKitLib.h>
 
 #include "hidosxjoystick.h"
+#include "hidgamecontroller.h"
+
+using namespace GamepadLayout;
 
 HIDOSXJoystick::HIDOSXJoystick(HIDPlugin *parent, quint32 line, struct hid_device_info *info)
     : HIDJsDevice(parent, line, info)
 {
+    centre(&m_state);
+    centre(&m_sent);
     init();
 }
 
 HIDOSXJoystick::~HIDOSXJoystick()
 {
-    if (m_vendorXboxElem)
+    /* Stop the reader before what it reads goes: the base class would only
+       stop it after these members are gone. */
+    if (isRunning())
     {
-        CFRelease(m_vendorXboxElem);
-        m_vendorXboxElem = nullptr;
+        m_running = false;
+        wait();
     }
-    if (m_hidHandle)
+    if (m_gcHandle.loadRelaxed() != 0)
+        HIDGameController::release(m_gcHandle.fetchAndStoreRelaxed(0));
+    if (m_IOKitDevice != nullptr)
     {
-        hid_close(m_hidHandle);
-        m_hidHandle = nullptr;
+        if (m_opened)
+            IOHIDDeviceClose(m_IOKitDevice, kIOHIDOptionsTypeNone);
+        CFRelease(m_IOKitDevice);
+        m_IOKitDevice = nullptr;
+    }
+    if (m_HIDManager != nullptr)
+    {
+        CFRelease(m_HIDManager);
+        m_HIDManager = nullptr;
     }
 }
 
@@ -68,22 +86,41 @@ static int32_t get_int_property(IOHIDDeviceRef device, CFStringRef key)
     return 0;
 }
 
+static QString get_string_property(IOHIDDeviceRef device, CFStringRef key)
+{
+    CFTypeRef ref = IOHIDDeviceGetProperty(device, key);
+    if (ref == nullptr || CFGetTypeID(ref) != CFStringGetTypeID())
+        return QString();
+    return QString::fromCFString((CFStringRef)ref);
+}
+
 void HIDOSXJoystick::init()
 {
-    m_HIDManager = IOHIDManagerCreate(kCFAllocatorDefault, kIOHIDOptionsTypeNone);
-    IOHIDManagerOpen(m_HIDManager, kIOHIDOptionsTypeNone);
-    /* Get a list of the Devices */
-    IOHIDManagerSetDeviceMatching(m_HIDManager, NULL);
-    CFSetRef device_set = IOHIDManagerCopyDevices(m_HIDManager);
-
-    /* Convert the list into a C array so we can iterate easily. */
-    CFIndex num_devices = CFSetGetCount(device_set);
-    IOHIDDeviceRef *device_array = (IOHIDDeviceRef *)calloc(num_devices, sizeof(IOHIDDeviceRef));
-    CFSetGetValues(device_set, (const void **) device_array);
-
-    m_IOKitDevice = 0;
     m_axesNumber = 0;
     m_buttonsNumber = 0;
+    m_IOKitDevice = nullptr;
+
+    const unsigned short vid = m_dev_info->vendor_id;
+    const unsigned short pid = m_dev_info->product_id;
+    /* hid_device_info's strings belong to the enumeration, which is freed
+       once the plugin has made its devices: keep what is needed now. */
+    m_productName = m_dev_info->product_string ? QString::fromWCharArray(m_dev_info->product_string)
+                                               : QString();
+    const QString path = m_dev_info->path ? QString::fromUtf8(m_dev_info->path) : QString();
+    m_transport = transportFromPath(path);
+    if (m_transport == UnknownTransport)
+        m_transport = transportOfProduct(vid, pid);
+
+    /* Look the device up -- only look: opening a manager that matches every
+       HID device opened the keyboards too, which is what macOS asks Input
+       Monitoring permission for. Just this device is opened, below. */
+    m_HIDManager = IOHIDManagerCreate(kCFAllocatorDefault, kIOHIDOptionsTypeNone);
+    IOHIDManagerSetDeviceMatching(m_HIDManager, NULL);
+    CFSetRef device_set = IOHIDManagerCopyDevices(m_HIDManager);
+    CFIndex num_devices = device_set ? CFSetGetCount(device_set) : 0;
+    IOHIDDeviceRef *device_array = (IOHIDDeviceRef *)calloc(qMax<CFIndex>(num_devices, 1), sizeof(IOHIDDeviceRef));
+    if (device_set)
+        CFSetGetValues(device_set, (const void **) device_array);
 
     // Parse the location ID from the hidapi path (format: "transport_vid_pid_location" hex).
     // The location ID uniquely identifies the physical USB port / BT session — it avoids
@@ -96,97 +133,72 @@ void HIDOSXJoystick::init()
         if (last)
             targetLocation = (int32_t)strtoul(last + 1, nullptr, 16);
     }
-    FILE *dbg = fopen("/tmp/qlc_hid_debug.txt", "a");
-    if (dbg) {
-        fprintf(dbg, "HIDOSXJoystick::init path=%s targetLoc=0x%x VID=0x%x PID=0x%x numDevices=%d\n",
-                m_dev_info->path ? m_dev_info->path : "(null)",
-                (unsigned)targetLocation, m_dev_info->vendor_id, m_dev_info->product_id, (int)num_devices);
-        fflush(dbg);
-    }
-    qDebug() << Q_FUNC_INFO << "path:" << m_dev_info->path
-             << "targetLocation:" << QString::number(targetLocation, 16)
-             << "VID:" << QString::number(m_dev_info->vendor_id, 16)
-             << "PID:" << QString::number(m_dev_info->product_id, 16)
-             << "numIOKitDevices:" << num_devices;
 
     for (int d = 0; d < num_devices; d++)
     {
-        unsigned short vid = get_int_property(device_array[d], CFSTR(kIOHIDVendorIDKey));
-        unsigned short pid = get_int_property(device_array[d], CFSTR(kIOHIDProductIDKey));
+        unsigned short dvid = get_int_property(device_array[d], CFSTR(kIOHIDVendorIDKey));
+        unsigned short dpid = get_int_property(device_array[d], CFSTR(kIOHIDProductIDKey));
         int32_t location  = get_int_property(device_array[d], CFSTR(kIOHIDLocationIDKey));
-        if (dbg) fprintf(dbg, "  iokit[%d] VID=0x%x PID=0x%x Loc=0x%x\n", d, vid, pid, (unsigned)location);
-        qDebug() << Q_FUNC_INFO << "  IOKit device" << d
-                 << "VID:" << QString::number(vid, 16)
-                 << "PID:" << QString::number(pid, 16)
-                 << "Loc:" << QString::number(location, 16);
 
         // Prefer location-ID match (precise); fall back to VID+PID when location is absent.
         bool match = (targetLocation != 0 && location == targetLocation) ||
-                     (targetLocation == 0 && m_dev_info->vendor_id == vid &&
-                      m_dev_info->product_id == pid);
+                     (targetLocation == 0 && vid == dvid && pid == dpid);
         if (match)
         {
-            if (dbg) fprintf(dbg, "  -> MATCHED device %d\n", d);
-            qDebug() << Q_FUNC_INFO << "  -> matched device" << d;
             m_IOKitDevice = device_array[d];
+            CFRetain(m_IOKitDevice);
             break;
         }
     }
-
-    if (m_IOKitDevice == 0)
-    {
-        if (dbg) { fprintf(dbg, "  NO MATCH FOUND\n"); fclose(dbg); }
-        qWarning() << Q_FUNC_INFO << "no IOKit HID device found for path" << m_dev_info->path
-                   << "(VID" << QString::number(m_dev_info->vendor_id, 16)
-                   << "PID" << QString::number(m_dev_info->product_id, 16) << ")";
-        free(device_array);
+    free(device_array);
+    if (device_set)
         CFRelease(device_set);
-        return;
-    }
 
-    // to return all elements for a device
-    CFArrayRef elementsArray = IOHIDDeviceCopyMatchingElements(m_IOKitDevice, NULL, kIOHIDOptionsTypeNone);
-    if (elementsArray)
+    bool hasStandard = false;
+    bool hasSimulation = false;
+    int maxButtonUsage = 0;
+
+    if (m_IOKitDevice != nullptr)
     {
-        CFIndex count = CFArrayGetCount(elementsArray);
-        if (dbg) fprintf(dbg, "  device found! %ld elements\n", (long)count);
-        qDebug() << Q_FUNC_INFO << "device has" << count << "elements total";
+        if (m_transport == UnknownTransport)
+            m_transport = transportFromString(get_string_property(m_IOKitDevice, CFSTR(kIOHIDTransportKey)));
 
-        for (int i = 0; i < count; i++)
+        io_service_t service = IOHIDDeviceGetService(m_IOKitDevice);
+        uint64_t entryID = 0;
+        if (service != IO_OBJECT_NULL && IORegistryEntryGetRegistryEntryID(service, &entryID) == KERN_SUCCESS)
+            m_registryID = entryID;
+
+        CFArrayRef elementsArray = IOHIDDeviceCopyMatchingElements(m_IOKitDevice, NULL, kIOHIDOptionsTypeNone);
+        if (elementsArray)
         {
-            IOHIDElementRef elem = (IOHIDElementRef)CFArrayGetValueAtIndex(elementsArray, i);
-            IOHIDElementType elemType = IOHIDElementGetType(elem);
-            unsigned int usage = IOHIDElementGetUsage(elem);
-            unsigned int usagePage = IOHIDElementGetUsagePage(elem);
-            if (dbg && i < 40) {
-                fprintf(dbg, "    elem[%d] type=%d page=0x%x usage=0x%x rptSize=%u rptCnt=%u\n",
-                        i, (int)elemType, usagePage, usage,
-                        (unsigned)IOHIDElementGetReportSize(elem),
-                        (unsigned)IOHIDElementGetReportCount(elem));
-            }
-            qDebug() << Q_FUNC_INFO << "  elem" << i
-                     << "type:" << elemType
-                     << "page:" << QString::number(usagePage, 16)
-                     << "usage:" << QString::number(usage, 16);
-
-            // Capture vendor-page Misc Input elements exposed by Apple's AppleUserHIDDevice
-            // kext.  usage=0x20 (Report ID 32) carries the Xbox Series X main controller state.
-            if (elemType == kIOHIDElementTypeInput_Misc && usagePage == 0xff00 && usage == 0x20)
+            CFIndex count = CFArrayGetCount(elementsArray);
+            for (int i = 0; i < count; i++)
             {
-                m_vendorXboxElem = elem;
-                CFRetain(m_vendorXboxElem);
-                if (dbg) fprintf(dbg, "    -> saved vendorXboxElem\n");
-            }
+                IOHIDElementRef elem = (IOHIDElementRef)CFArrayGetValueAtIndex(elementsArray, i);
+                IOHIDElementType elemType = IOHIDElementGetType(elem);
+                const quint32 usage = IOHIDElementGetUsage(elem);
+                const quint32 usagePage = IOHIDElementGetUsagePage(elem);
+                if (elemType != kIOHIDElementTypeInput_Misc &&
+                    elemType != kIOHIDElementTypeInput_Button &&
+                    elemType != kIOHIDElementTypeInput_Axis &&
+                    elemType != kIOHIDElementTypeInput_ScanCodes)
+                    continue;
 
-            if (elemType == kIOHIDElementTypeInput_Misc ||
-               elemType == kIOHIDElementTypeInput_Button ||
-               elemType == kIOHIDElementTypeInput_Axis ||
-               elemType == kIOHIDElementTypeInput_ScanCodes)
-            {
-                switch(usagePage)
+                Element e;
+                e.page = usagePage;
+                e.usage = usage;
+                e.logicalMin = (int)IOHIDElementGetLogicalMin(elem);
+                e.logicalMax = (int)IOHIDElementGetLogicalMax(elem);
+                m_elements.insert(quint32(IOHIDElementGetCookie(elem)), e);
+
+                if (usagePage == kHIDPage_Simulation &&
+                    (usage == kHIDUsage_Sim_Brake || usage == kHIDUsage_Sim_Accelerator))
+                    hasSimulation = true;
+
+                switch (usagePage)
                 {
                     case kHIDPage_GenericDesktop:
-                        switch(usage)
+                        switch (usage)
                         {
                             case kHIDUsage_GD_X:
                             case kHIDUsage_GD_Y:
@@ -201,8 +213,8 @@ void HIDOSXJoystick::init()
                                 HIDInfo axis;
                                 axis.IOHIDRef = elem;
                                 axis.value    = 0;
-                                axis.logicalMin = (int)IOHIDElementGetLogicalMin(elem);
-                                axis.logicalMax = (int)IOHIDElementGetLogicalMax(elem);
+                                axis.logicalMin = e.logicalMin;
+                                axis.logicalMax = e.logicalMax;
                                 // Clamp sanity: treat degenerate range as 0-255
                                 if (axis.logicalMax <= axis.logicalMin)
                                 {
@@ -210,7 +222,7 @@ void HIDOSXJoystick::init()
                                     axis.logicalMax = 255;
                                 }
                                 m_axesValues.append(axis);
-                                m_axesNumber++;
+                                hasStandard = true;
                             }
                             break;
                             default:
@@ -222,292 +234,205 @@ void HIDOSXJoystick::init()
                         HIDInfo button;
                         button.IOHIDRef = elem;
                         button.value = 0;
+                        button.logicalMin = 0;
+                        button.logicalMax = 1;
                         m_buttonsValues.append(button);
-                        m_buttonsNumber++;
+                        maxButtonUsage = qMax(maxButtonUsage, int(usage));
+                        hasStandard = true;
                     }
                     break;
                     default:
                     break;
                 }
             }
+            CFRelease(elementsArray);
         }
-        CFRelease(elementsArray);
     }
-    // If the IOKit element API yielded no standard axes/buttons (e.g. Apple's
-    // AppleUserHIDDevice kext virtualised the controller), switch to vendor-element
-    // polling mode.  The element at page=0xff00, usage=0x20 is Apple's wrapper for
-    // the Xbox Series X main controller state; we read its raw bytes via
-    // IOHIDValueGetBytePtr and parse them as an Xbox input report.
-    if (m_axesNumber == 0 && m_buttonsNumber == 0)
+
+    m_family = GamepadLayout::family(vid, pid, m_transport, hasStandard, maxButtonUsage, hasSimulation);
+
+    if (isXbox())
     {
-        if (m_vendorXboxElem && m_dev_info->vendor_id == 0x045E)
+        /* The layout the Xbox profile names, whatever this one reports:
+           axes LX LY LT RX RY RT, then the buttons. */
+        m_axesNumber = AxisCount;
+        m_buttonsNumber = ButtonCount;
+        QMutableHashIterator<quint32, Element> it(m_elements);
+        while (it.hasNext())
         {
-            // Axes 0-5:  LX, LY, LT, RX, RY, RT (the Xbox profile's order)
-            // Buttons 0-9: A, B, X, Y, LB, RB, View, Menu, LS, RS;
-            // 10 (Xbox) is not in the report; 11-14: D-pad up/down/left/right
-            m_axesNumber    = 6;
-            m_buttonsNumber = 15;
-            m_rawMode       = true;
-            if (dbg) fprintf(dbg, "  vendor-element mode (Xbox): axes=%d buttons=%d\n",
-                             m_axesNumber, m_buttonsNumber);
+            it.next();
+            it.value().mapping = mapElement(m_family, it.value().page, it.value().usage);
         }
-        else if (m_dev_info->path)
-        {
-            // Last resort: hidapi raw read (may return 0 if kext seizes reports)
-            m_hidHandle = hid_open_path(m_dev_info->path);
-            if (m_hidHandle)
-            {
-                hid_set_nonblocking(m_hidHandle, 1);
-                m_rawMode = true;
-                if (m_dev_info->vendor_id == 0x045E)
-                {
-                    m_axesNumber    = 6;
-                    m_buttonsNumber = 15;
-                }
-                if (dbg) fprintf(dbg, "  hidapi raw mode fallback (axes=%d buttons=%d)\n",
-                                 m_axesNumber, m_buttonsNumber);
-            }
-            else
-            {
-                if (dbg) fprintf(dbg, "  raw mode: hid_open_path failed\n");
-            }
-        }
-
-        // Populate placeholder HIDInfo entries for change tracking in readEvent()
-        // (IOHIDRef left null — we don't poll them via standard element API in raw mode)
-        for (int i = 0; i < m_axesNumber; i++)
-        {
-            HIDInfo a; a.IOHIDRef = nullptr; a.value = -1; a.logicalMin = 0; a.logicalMax = 255;
-            m_axesValues.append(a);
-        }
-        for (int i = 0; i < m_buttonsNumber; i++)
-        {
-            HIDInfo b; b.IOHIDRef = nullptr; b.value = -1; b.logicalMin = 0; b.logicalMax = 1;
-            m_buttonsValues.append(b);
-        }
+        // The elements' own lists are the other devices' reader's.
+        m_axesValues.clear();
+        m_buttonsValues.clear();
+    }
+    else
+    {
+        m_axesNumber = (unsigned char)qMin(m_axesValues.size(), 255);
+        m_buttonsNumber = (unsigned char)qMin(m_buttonsValues.size(), 255);
     }
 
-    if (dbg) {
-        fprintf(dbg, "  final: axes=%d buttons=%d rawMode=%d\n",
-                m_axesNumber, m_buttonsNumber, (int)m_rawMode);
-        fclose(dbg);
+    /* Open just this device. macOS refuses (kIOReturnNotPermitted) when it
+       wants Input Monitoring permission for it: inputProblem() says so
+       instead of the controller silently doing nothing. */
+    if (m_IOKitDevice != nullptr && (m_axesNumber > 0 || m_buttonsNumber > 0))
+    {
+        m_openResult = IOHIDDeviceOpen(m_IOKitDevice, kIOHIDOptionsTypeNone);
+        m_opened = m_openResult == kIOReturnSuccess;
+        if (!m_opened)
+            qWarning() << Q_FUNC_INFO << m_name << "could not be opened, IOReturn"
+                       << QString::number(uint(m_openResult), 16);
     }
-    free(device_array);
-    CFRelease(device_set);
+
+    qDebug() << Q_FUNC_INFO << m_name << "path" << path
+             << "transport" << transportName(m_transport)
+             << "family" << familyName(m_family)
+             << "axes" << m_axesNumber << "buttons" << m_buttonsNumber;
 }
 
-// ---------------------------------------------------------------------------
-// Raw report parser — Xbox Series X / One (USB, vendor 0x045E)
-// Report ID 0x20, 17 bytes total (including the report-ID byte).
-//
-// [0]    Report ID  (0x20)
-// [1]    Buttons A: bit2=Menu  bit3=View  bit4=A  bit5=B  bit6=X  bit7=Y
-// [2]    Buttons B: bit2=LS    bit3=RS    bit4=LB bit5=RB bit6=LT-d bit7=RT-d
-// [3]    D-pad nibble (0=up … 7=up-left, 8=centre)
-// [4-5]  LT  uint16 LE  0-1023
-// [6-7]  RT  uint16 LE  0-1023
-// [8-9]  LX  int16  LE  –32768..32767
-// [10-11]LY  int16  LE
-// [12-13]RX  int16  LE
-// [14-15]RY  int16  LE
-// [16]   reserved
-//
-// QLC+ axis indices: 0=LX 1=LY 2=LT 3=RX 4=RY 5=RT (xbox.qxhid's order)
-// QLC+ button indices (offset by axesNumber=6): 0=A 1=B 2=X 3=Y 4=LB 5=RB
-//                                                6=View 7=Menu 8=LS 9=RS
-//                                                11-14=D-pad up/down/left/right
+/*****************************************************************************
+ * State
+ *****************************************************************************/
 
-static uchar xboxAxisNorm(int raw)
+bool HIDOSXJoystick::isStale() const
 {
-    // raw is int16 -32768..32767 → 0..255
-    const int clamped = qBound(-32768, raw, 32767);
-    return (uchar)(((clamped + 32768) * 255) / 65535);
+    if (m_registryID == 0)
+        return false;
+    /* The registry entry goes when the device does; a pad that came back
+       (switched on again, reconnected after sleep) is a new entry. */
+    io_service_t service = IOServiceGetMatchingService(MACH_PORT_NULL,
+                                                       IORegistryEntryIDMatching(m_registryID));
+    if (service == IO_OBJECT_NULL)
+        return true;
+    IOObjectRelease(service);
+    return false;
 }
 
-static uchar xboxTriggerNorm(int raw)
+QString HIDOSXJoystick::connectionInfo() const
 {
-    // raw is uint16 0..1023 → 0..255
-    const int clamped = qBound(0, raw, 1023);
-    return (uchar)((clamped * 255) / 1023);
+    const unsigned short vid = vendorId();
+    const unsigned short pid = productId();
+    QString model = modelName(vid, pid);
+    if (model.isEmpty())
+        model = m_productName.isEmpty() ? m_name : m_productName;
+    const QString ids = QStringLiteral("%1:%2").arg(vid, 4, 16, QLatin1Char('0'))
+                                               .arg(pid, 4, 16, QLatin1Char('0')).toUpper();
+    QString via;
+    const int gc = m_gcHandle.loadRelaxed();
+    if (gc != 0)
+        via = QStringLiteral("GameController framework (%1)").arg(HIDGameController::describe(gc));
+    else if (isXbox())
+        via = familyName(m_family);
+    else
+        via = QStringLiteral("HID elements, polled");
+    return QStringLiteral("%1 \u00B7 %2 (%3) \u00B7 read via %4")
+        .arg(transportName(m_transport), model, ids, via);
+}
+
+QString HIDOSXJoystick::inputProblem() const
+{
+    if (m_gcHandle.loadRelaxed() != 0)
+        return QString();
+    if (m_IOKitDevice == nullptr)
+        return isXbox() && HIDGameController::available()
+               ? QString() // the GameController framework may still have it
+               : tr("macOS does not list this controller any more");
+    if (!m_opened && m_openResult == kIOReturnNotPermitted)
+        return tr("macOS is not letting qlcconsole read the controller. Allow qlcconsole in "
+                  "System Settings \342\206\222 Privacy & Security \342\206\222 Input Monitoring, "
+                  "then quit and reopen it.");
+    if (!m_opened && (m_axesNumber > 0 || m_buttonsNumber > 0))
+        return tr("macOS could not open the controller (IOKit error 0x%1)")
+               .arg(uint(m_openResult), 0, 16);
+    return QString();
+}
+
+/*****************************************************************************
+ * Reading
+ *****************************************************************************/
+
+int HIDOSXJoystick::channelValue(int channel) const
+{
+    if (channel >= 0 && channel < AxisCount)
+        return m_state.axes[channel];
+    if (channel >= AxisCount && channel < AxisCount + ButtonCount)
+        return m_state.buttons[channel - AxisCount] ? 255 : 0;
+    return -1;
+}
+
+void HIDOSXJoystick::emitRaw(const QString &element, int raw, int channel)
+{
+    emit rawInput(m_line, element, raw, channel, channelValue(channel));
+}
+
+void HIDOSXJoystick::emitChanges()
+{
+    for (int a = 0; a < AxisCount; ++a)
+    {
+        if (m_sentValid && m_sent.axes[a] == m_state.axes[a])
+            continue;
+        emit valueChanged(UINT_MAX, m_line, quint32(a), m_state.axes[a]);
+    }
+    for (int b = 0; b < ButtonCount; ++b)
+    {
+        if (m_sentValid && m_sent.buttons[b] == m_state.buttons[b])
+            continue;
+        emit valueChanged(UINT_MAX, m_line, quint32(m_axesNumber + b),
+                          m_state.buttons[b] ? UCHAR_MAX : 0);
+    }
+    m_sent = m_state;
+    m_sentValid = true;
 }
 
 bool HIDOSXJoystick::readEvent()
 {
-    IOHIDValueRef valueRef;
-    int value;
-
-    if (m_rawMode)
-    {
-        // In raw mode, data is delivered via s_inputReportCallback registered in run().
-        // readEvent() is not called from run() in this mode, so this branch is only
-        // reached if somehow the base class run() is used (shouldn't happen).
-        return true;
-
-        // ---------------------------------------------------------------------------
-        // (Dead code below — kept for reference during debugging; remove later)
-        // Primary path: Apple's AppleUserHIDDevice exposes the Xbox controller state
-        // as a vendor-page IOKit element (page=0xff00, usage=0x20).  We poll it via
-        // IOHIDDeviceGetValue and read the raw bytes with IOHIDValueGetBytePtr.
-        if (m_vendorXboxElem && m_IOKitDevice)
-        {
-            IOHIDValueRef valueRef = nullptr;
-            IOReturn ret = IOHIDDeviceGetValue(m_IOKitDevice, m_vendorXboxElem, &valueRef);
-
-            if (ret == kIOReturnSuccess && valueRef)
-            {
-                CFIndex len = IOHIDValueGetLength(valueRef);
-                const uint8_t *bytes = IOHIDValueGetBytePtr(valueRef);
-
-                // Diagnostic: log first poll + any poll where bytes changed (up to 500 events)
-                bool changed = (m_rawDumpCount == 0);
-                if (!changed && bytes && len <= (CFIndex)sizeof(m_rawPrevBytes))
-                {
-                    for (CFIndex i = 0; i < len; i++)
-                        if (bytes[i] != m_rawPrevBytes[i]) { changed = true; break; }
-                }
-                if ((m_rawDumpCount < 500) && changed && bytes)
-                {
-                    FILE *dbg = fopen("/tmp/qlc_hid_debug.txt", "a");
-                    if (dbg)
-                    {
-                        if (m_rawDumpCount == 0)
-                            fprintf(dbg, "--- vendor-element dump (logs on change) ---\n");
-                        fprintf(dbg, "e[%d] len=%ld:", m_rawDumpCount, (long)len);
-                        for (CFIndex i = 0; i < len && i < 32; i++)
-                            fprintf(dbg, " %02x", bytes[i]);
-                        fprintf(dbg, "\n");
-                        fclose(dbg);
-                    }
-                    if (len <= (CFIndex)sizeof(m_rawPrevBytes))
-                        memcpy(m_rawPrevBytes, bytes, len);
-                    m_rawDumpCount++;
-                }
-
-                // Parse Xbox Series X input: the vendor element carries the controller
-                // state WITHOUT a leading report-ID byte (Apple strips it).
-                // Layout (based on Xbox One/Series X USB HID, 16 bytes):
-                //   [0-1] buttons, [2] d-pad, [3-4] LT, [5-6] RT,
-                //   [7-8] LX, [9-10] LY, [11-12] RX, [13-14] RY
-                // BUT we don't know Apple's exact layout until we see the bytes.
-                // Log first 10 polls above; implement parser once layout is confirmed.
-                if (bytes && len >= 14 && m_dev_info->vendor_id == 0x045E)
-                {
-                    auto emitAxis = [&](int idx, uchar norm) {
-                        if (idx < m_axesValues.size() && (uchar)m_axesValues[idx].value != norm)
-                        {
-                            m_axesValues[idx].value = norm;
-                            emit valueChanged(UINT_MAX, m_line, idx, norm);
-                        }
-                    };
-                    auto emitBtn = [&](int idx, bool pressed) {
-                        uchar val = pressed ? UCHAR_MAX : 0;
-                        if (idx < m_buttonsValues.size() && (uchar)m_buttonsValues[idx].value != val)
-                        {
-                            m_buttonsValues[idx].value = val;
-                            emit valueChanged(UINT_MAX, m_line, m_axesNumber + idx, val);
-                        }
-                    };
-
-                    // Tentative layout (NO report-ID prefix):
-                    // [0-1] buttons A/B, [2] d-pad, [3-4] LT u16, [5-6] RT u16
-                    // [7-8] LX i16, [9-10] LY i16, [11-12] RX i16, [13-14] RY i16
-                    if (len >= 15)
-                    {
-                        const uint8_t b1 = bytes[0];
-                        const uint8_t b2 = bytes[1];
-                        const uint16_t lt = (uint16_t)(bytes[3]  | (bytes[4]  << 8));
-                        const uint16_t rt = (uint16_t)(bytes[5]  | (bytes[6]  << 8));
-                        const int16_t  lx = (int16_t)(bytes[7]  | (bytes[8]  << 8));
-                        const int16_t  ly = (int16_t)(bytes[9]  | (bytes[10] << 8));
-                        const int16_t  rx = (int16_t)(bytes[11] | (bytes[12] << 8));
-                        const int16_t  ry = (int16_t)(bytes[13] | (bytes[14] << 8));
-
-                        emitAxis(0, xboxAxisNorm(lx));
-                        emitAxis(1, xboxAxisNorm(ly));
-                        emitAxis(2, xboxAxisNorm(rx));
-                        emitAxis(3, xboxAxisNorm(ry));
-                        emitAxis(4, xboxTriggerNorm(lt));
-                        emitAxis(5, xboxTriggerNorm(rt));
-
-                        emitBtn(0, b1 & 0x10); // A
-                        emitBtn(1, b1 & 0x20); // B
-                        emitBtn(2, b1 & 0x40); // X
-                        emitBtn(3, b1 & 0x80); // Y
-                        emitBtn(4, b2 & 0x10); // LB
-                        emitBtn(5, b2 & 0x20); // RB
-                        emitBtn(6, b1 & 0x08); // View
-                        emitBtn(7, b1 & 0x04); // Menu
-                        emitBtn(8, b2 & 0x04); // LS
-                        emitBtn(9, b2 & 0x08); // RS
-                    }
-                }
-            }
-            else if (m_rawDumpCount < 10)
-            {
-                FILE *dbg = fopen("/tmp/qlc_hid_debug.txt", "a");
-                if (dbg) { fprintf(dbg, "vpoll[%d] ret=0x%x (fail)\n", m_rawDumpCount, ret); fclose(dbg); }
-                m_rawDumpCount++;
-            }
-            return true;
-        }
-
-        // ---------------------------------------------------------------------------
-        // Fallback: hidapi raw read (may return 0 if Apple's kext consumed reports)
-        if (m_hidHandle)
-        {
-            unsigned char buf[64] = {};
-            int n = hid_read(m_hidHandle, buf, sizeof(buf));
-            if (m_rawDumpCount < 10)
-            {
-                FILE *dbg = fopen("/tmp/qlc_hid_debug.txt", "a");
-                if (dbg) {
-                    fprintf(dbg, "hpoll[%d] n=%d\n", m_rawDumpCount, n);
-                    fclose(dbg);
-                }
-                m_rawDumpCount++;
-            }
-            // hid_read parser would go here once we confirm we get data
-        }
-        return true;
-    }
-
-    if (m_IOKitDevice == 0)
+    // Any other device: its elements, polled, in its own order.
+    if (isXbox() || m_IOKitDevice == nullptr || !m_opened)
         return false;
 
-    for (int b = 0; b < m_buttonsNumber; b++)
+    const bool diag = diagnostics();
+    for (int b = 0; b < m_buttonsValues.size(); b++)
     {
-        IOHIDDeviceGetValue(m_IOKitDevice, m_buttonsValues[b].IOHIDRef, &valueRef);
-        value = IOHIDValueGetIntegerValue(valueRef);
+        IOHIDValueRef valueRef = nullptr;
+        if (IOHIDDeviceGetValue(m_IOKitDevice, m_buttonsValues[b].IOHIDRef, &valueRef) != kIOReturnSuccess
+            || valueRef == nullptr)
+            continue;
+        const int value = (int)IOHIDValueGetIntegerValue(valueRef);
 
         if (value != m_buttonsValues[b].value)
         {
-            uchar val;
-            if (value != 0)
-                val = UCHAR_MAX;
-            else
-                val = 0;
-
+            const uchar val = value != 0 ? UCHAR_MAX : 0;
             emit valueChanged(UINT_MAX, m_line, m_axesNumber + b, val);
             m_buttonsValues[b].value = value;
+            if (diag)
+            {
+                IOHIDElementRef e = m_buttonsValues[b].IOHIDRef;
+                emit rawInput(m_line, elementName(IOHIDElementGetUsagePage(e), IOHIDElementGetUsage(e)),
+                              value, m_axesNumber + b, val);
+            }
         }
     }
-    for (int a = 0; a < m_axesNumber; a++)
+    for (int a = 0; a < m_axesValues.size(); a++)
     {
-        IOHIDDeviceGetValue(m_IOKitDevice, m_axesValues[a].IOHIDRef, &valueRef);
-        value = IOHIDValueGetIntegerValue(valueRef);
+        IOHIDValueRef valueRef = nullptr;
+        if (IOHIDDeviceGetValue(m_IOKitDevice, m_axesValues[a].IOHIDRef, &valueRef) != kIOReturnSuccess
+            || valueRef == nullptr)
+            continue;
+        const int value = (int)IOHIDValueGetIntegerValue(valueRef);
 
         if (value != m_axesValues[a].value)
         {
-            // Normalize raw axis value to 0–255 using the element's logical
-            // range.  Xbox/Microsoft controllers use -32768..32767, so a plain
-            // uchar() truncation produces garbage; this mapping is correct for
-            // any device range.
-            const int lo  = m_axesValues[a].logicalMin;
-            const int hi  = m_axesValues[a].logicalMax;
-            const int clamped = qBound(lo, value, hi);
-            const uchar norm = (uchar)(((clamped - lo) * 255) / (hi - lo));
+            // Normalize raw axis value to 0–255 using the element's logical range.
+            const uchar norm = scaleToByte(value, m_axesValues[a].logicalMin, m_axesValues[a].logicalMax);
             emit valueChanged(UINT_MAX, m_line, a, norm);
             m_axesValues[a].value = value;
+            if (diag)
+            {
+                IOHIDElementRef e = m_axesValues[a].IOHIDRef;
+                emit rawInput(m_line, elementName(IOHIDElementGetUsagePage(e), IOHIDElementGetUsage(e)),
+                              value, a, norm);
+            }
         }
     }
 
@@ -515,9 +440,7 @@ bool HIDOSXJoystick::readEvent()
 }
 
 // ---------------------------------------------------------------------------
-// Static C callback — IOHIDDevice fires this for every incoming input report.
-// The report bytes do NOT include the leading report-ID byte; it is passed
-// separately as reportID.
+// IOKit callbacks: they fire on the reader thread's run loop (run()).
 
 static void s_inputReportCallback(void *ctx,
                                   IOReturn /*result*/,
@@ -532,144 +455,250 @@ static void s_inputReportCallback(void *ctx,
     reinterpret_cast<HIDOSXJoystick *>(ctx)->processRawReport(reportID, report, reportLength);
 }
 
+static void s_inputValueCallback(void *ctx, IOReturn result, void * /*sender*/, IOHIDValueRef value)
+{
+    if (result != kIOReturnSuccess || value == nullptr)
+        return;
+    reinterpret_cast<HIDOSXJoystick *>(ctx)->processValue(value);
+}
+
 void HIDOSXJoystick::processRawReport(uint32_t reportID, const uint8_t *report, CFIndex len)
 {
-    // Diagnostic: log up to 500 changes
-    bool changed = (m_rawDumpCount == 0);
-    if (!changed && report && len <= (CFIndex)sizeof(m_rawPrevBytes))
-    {
-        for (CFIndex i = 0; i < len; i++)
-            if (report[i] != m_rawPrevBytes[i]) { changed = true; break; }
-    }
-    if (m_rawDumpCount < 500 && changed && report)
-    {
-        FILE *dbg = fopen("/tmp/qlc_hid_debug.txt", "a");
-        if (dbg)
-        {
-            if (m_rawDumpCount == 0)
-                fprintf(dbg, "--- input-report callback dump ---\n");
-            fprintf(dbg, "rpt[%d] id=0x%02x len=%ld:", m_rawDumpCount, reportID, (long)len);
-            for (CFIndex i = 0; i < len && i < 32; i++)
-                fprintf(dbg, " %02x", report[i]);
-            fprintf(dbg, "\n");
-            fclose(dbg);
-        }
-        if (len <= (CFIndex)sizeof(m_rawPrevBytes))
-            memcpy(m_rawPrevBytes, report, len);
-        m_rawDumpCount++;
-    }
-
-    // Parse Xbox Series X / One USB report 0x20 via Apple's AppleUserHIDDevice wrapper.
-    // Apple includes the report-ID byte at report[0], verified from live dump data.
-    //
-    //   [0]     0x20  report ID (duplicated; also passed as reportID param)
-    //   [1]     sequence counter (skips 0; wraps 255→1)
-    //   [2-3]   timestamp uint16 LE (ms, wraps ~65 s)
-    //   [4]     buttons 1: d0=DpadUp d1=DpadDn d2=DpadL d3=DpadR
-    //                      d4=View   d5=Menu   d6=LS    d7=RS
-    //   [5]     buttons 2: d0=A d1=B d2=X d3=Y d4=LB d5=RB
-    //   [6-7]   LT  uint16 LE  0-1023
-    //   [8-9]   RT  uint16 LE  0-1023
-    //   [10-11] LX  int16 LE  -32768..32767
-    //   [12-13] LY  int16 LE
-    //   [14-15] RX  int16 LE
-    //   [16-17] RY  int16 LE
-    //   [18]    0x00 padding
-    if (reportID != 0x20 || !report || len < 18 || m_dev_info->vendor_id != 0x045E)
+    if (report == nullptr || len <= 0 || len > CFIndex(sizeof(m_reportBuf)))
         return;
 
-    auto emitAxis = [&](int idx, uchar norm) {
-        if (idx < m_axesValues.size() && (uchar)m_axesValues[idx].value != norm)
+    /* Apple's driver passes the report with its ID at [0]; should it ever
+       not, put it back so the GIP offsets hold. */
+    uint8_t buf[sizeof(m_reportBuf) + 1];
+    int length = int(len);
+    if (report[0] != reportID && length < int(sizeof(buf)))
+    {
+        buf[0] = uint8_t(reportID);
+        memcpy(buf + 1, report, size_t(length));
+        ++length;
+    }
+    else
+    {
+        memcpy(buf, report, size_t(length));
+    }
+
+    if (!parseGipReport(buf, length, &m_state))
+        return;
+
+    if (!diagnostics())
+        m_prevReportLength = 0;    // so turning them on starts from a clean slate
+    else
+    {
+        const bool guide = buf[0] == 0x07;
+        const bool first = m_prevReportLength == 0 || m_prevReport[0] != buf[0];
+        auto bitChannel = [](int byte, int bit) -> int {
+            static const int b4[8] = { -1, -1, Menu, View, A, B, X, Y };
+            static const int b5[8] = { DpadUp, DpadDown, DpadLeft, DpadRight, LB, RB, LS, RS };
+            const int b = byte == 4 ? b4[bit] : b5[bit];
+            return b < 0 ? -1 : AxisCount + b;
+        };
+        if (guide)
         {
-            m_axesValues[idx].value = norm;
-            emit valueChanged(UINT_MAX, m_line, idx, norm);
+            emitRaw(QStringLiteral("USB report 0x07 byte 4 bit 0"), buf[4] & 0x01, AxisCount + Guide);
         }
-    };
-    auto emitBtn = [&](int idx, bool pressed) {
-        uchar val = pressed ? UCHAR_MAX : 0;
-        if (idx < m_buttonsValues.size() && (uchar)m_buttonsValues[idx].value != val)
+        else
         {
-            m_buttonsValues[idx].value = val;
-            emit valueChanged(UINT_MAX, m_line, m_axesNumber + idx, val);
+            for (int byte = 4; byte <= 5; ++byte)
+                for (int bit = 0; bit < 8; ++bit)
+                {
+                    const int now = (buf[byte] >> bit) & 1;
+                    if (!first && now == ((m_prevReport[byte] >> bit) & 1))
+                        continue;
+                    if (first && now == 0)
+                        continue;
+                    emitRaw(QStringLiteral("USB report byte %1 bit %2").arg(byte).arg(bit), now,
+                            bitChannel(byte, bit));
+                }
+            static const int fields[6][2] = { { 6, LeftTrigger }, { 8, RightTrigger }, { 10, LeftX },
+                                              { 12, LeftY }, { 14, RightX }, { 16, RightY } };
+            for (const auto &f : fields)
+            {
+                const int at = f[0];
+                if (!first && buf[at] == m_prevReport[at] && buf[at + 1] == m_prevReport[at + 1])
+                    continue;
+                const int word = buf[at] | (buf[at + 1] << 8);
+                const int raw = at >= 10 ? int(qint16(quint16(word))) : word;
+                emitRaw(QStringLiteral("USB report bytes %1-%2").arg(at).arg(at + 1), raw, f[1]);
+            }
+            // Anything past the standard state (Share, an Elite's paddles...).
+            for (int at = 18; at < length; ++at)
+            {
+                if (!first && at < m_prevReportLength && buf[at] == m_prevReport[at])
+                    continue;
+                if (first && buf[at] == 0)
+                    continue;
+                emitRaw(QStringLiteral("USB report byte %1").arg(at), buf[at], -1);
+            }
         }
-    };
+        if (!guide)
+        {
+            memcpy(m_prevReport, buf, size_t(qMin(length, int(sizeof(m_prevReport)))));
+            m_prevReportLength = length;
+        }
+    }
 
-    const uint8_t  b1 = report[4];                                       // d-pad/LS/RS/View/Menu
-    const uint8_t  b2 = report[5];                                       // A/B/X/Y/LB/RB
-    const uint16_t lt = (uint16_t)(report[6]  | (report[7]  << 8));     // Left trigger
-    const uint16_t rt = (uint16_t)(report[8]  | (report[9]  << 8));     // Right trigger
-    const int16_t  lx = (int16_t)(report[10] | (report[11] << 8));      // Left stick X
-    const int16_t  ly = (int16_t)(report[12] | (report[13] << 8));      // Left stick Y
-    const int16_t  rx = (int16_t)(report[14] | (report[15] << 8));      // Right stick X
-    const int16_t  ry = (int16_t)(report[16] | (report[17] << 8));      // Right stick Y
+    emitChanges();
+}
 
-    /* In the order the Xbox profile (xbox.qxhid) names them -- LX, LY, LT,
-       RX, RY, RT -- so its names and gamepad roles are right for this reader
-       too. It used to send RX/RY as 2/3, which the profile calls the left
-       trigger and the right stick X. */
-    emitAxis(0, xboxAxisNorm(lx));
-    emitAxis(1, xboxAxisNorm(ly));
-    emitAxis(2, xboxTriggerNorm(lt));
-    emitAxis(3, xboxAxisNorm(rx));
-    emitAxis(4, xboxAxisNorm(ry));
-    emitAxis(5, xboxTriggerNorm(rt));
+void HIDOSXJoystick::processValue(IOHIDValueRef value)
+{
+    IOHIDElementRef elem = IOHIDValueGetElement(value);
+    if (elem == nullptr)
+        return;
+    const quint32 cookie = quint32(IOHIDElementGetCookie(elem));
+    const auto it = m_elements.constFind(cookie);
+    if (it == m_elements.constEnd())
+        return;
+    const Element &e = it.value();
+    const int raw = (int)IOHIDValueGetIntegerValue(value);
 
-    // The D-pad, as the profile's buttons 11-14 (10 is the Xbox button,
-    // which this report does not carry).
-    emitBtn(11, b1 & 0x01); // D-pad up
-    emitBtn(12, b1 & 0x02); // D-pad down
-    emitBtn(13, b1 & 0x04); // D-pad left
-    emitBtn(14, b1 & 0x08); // D-pad right
+    int channel = -1;
+    switch (e.mapping.kind)
+    {
+        case AxisElement:
+            m_state.axes[e.mapping.index] = scaleToByte(raw, e.logicalMin, e.logicalMax);
+            channel = e.mapping.index;
+            break;
+        case ButtonElement:
+            m_state.buttons[e.mapping.index] = raw != 0;
+            channel = AxisCount + e.mapping.index;
+            break;
+        case HatElement:
+        {
+            bool dpad[4];
+            hatToDpad(raw, e.logicalMin, e.logicalMax, dpad);
+            m_state.buttons[DpadUp] = dpad[0];
+            m_state.buttons[DpadDown] = dpad[1];
+            m_state.buttons[DpadLeft] = dpad[2];
+            m_state.buttons[DpadRight] = dpad[3];
+            for (int d = 0; d < 4; ++d)
+                if (dpad[d])
+                    channel = AxisCount + DpadUp + d;
+            break;
+        }
+        case Unmapped:
+            break;
+    }
 
-    emitBtn(0, b2 & 0x01); // A
-    emitBtn(1, b2 & 0x02); // B
-    emitBtn(2, b2 & 0x04); // X
-    emitBtn(3, b2 & 0x08); // Y
-    emitBtn(4, b2 & 0x10); // LB
-    emitBtn(5, b2 & 0x20); // RB
-    emitBtn(6, b1 & 0x10); // View
-    emitBtn(7, b1 & 0x20); // Menu
-    emitBtn(8, b1 & 0x40); // LS
-    emitBtn(9, b1 & 0x80); // RS
+    if (diagnostics())
+        emitRaw(elementName(e.page, e.usage), raw, channel);
+    if (e.mapping.kind != Unmapped)
+        emitChanges();
+}
+
+bool HIDOSXJoystick::pollGameController()
+{
+    const int handle = m_gcHandle.loadRelaxed();
+    QList<HIDGameController::Event> events;
+    const bool diag = diagnostics();
+    const bool alive = HIDGameController::read(handle, &m_state, diag ? &events : nullptr);
+    for (const HIDGameController::Event &e : events)
+        emitRaw(QStringLiteral("GameController ") + e.element, qRound(e.value * 1000.0f), e.channel);
+    if (alive)
+        emitChanges();
+    return alive;
+}
+
+void HIDOSXJoystick::scheduleIOKit()
+{
+    if (m_IOKitDevice == nullptr || !m_opened)
+        return;
+    if (m_family == XboxGip)
+        IOHIDDeviceRegisterInputReportCallback(m_IOKitDevice, m_reportBuf, sizeof(m_reportBuf),
+                                               s_inputReportCallback, this);
+    else
+        IOHIDDeviceRegisterInputValueCallback(m_IOKitDevice, s_inputValueCallback, this);
+    IOHIDDeviceScheduleWithRunLoop(m_IOKitDevice, CFRunLoopGetCurrent(), kCFRunLoopDefaultMode);
+}
+
+void HIDOSXJoystick::unscheduleIOKit()
+{
+    if (m_IOKitDevice == nullptr || !m_opened)
+        return;
+    IOHIDDeviceUnscheduleFromRunLoop(m_IOKitDevice, CFRunLoopGetCurrent(), kCFRunLoopDefaultMode);
+    if (m_family == XboxGip)
+        IOHIDDeviceRegisterInputReportCallback(m_IOKitDevice, m_reportBuf, sizeof(m_reportBuf),
+                                               nullptr, nullptr);
+    else
+        IOHIDDeviceRegisterInputValueCallback(m_IOKitDevice, nullptr, nullptr);
 }
 
 void HIDOSXJoystick::run()
 {
-    if (m_rawMode && m_IOKitDevice)
+    if (!isXbox())
     {
-        // Register the raw input-report callback BEFORE scheduling.
-        // Apple's AppleUserHIDDevice kext delivers Xbox controller data as raw
-        // input reports — element value callbacks don't fire for vendor-page
-        // elements. The input-report callback fires on the run loop below.
-        IOHIDDeviceRegisterInputReportCallback(m_IOKitDevice,
-                                              m_reportBuf, sizeof(m_reportBuf),
-                                              s_inputReportCallback, this);
-
-        IOHIDDeviceScheduleWithRunLoop(m_IOKitDevice, CFRunLoopGetCurrent(),
-                                       kCFRunLoopDefaultMode);
-
-        FILE *dbg = fopen("/tmp/qlc_hid_debug.txt", "a");
-        if (dbg) { fprintf(dbg, "run: registered inputReportCallback + scheduled CFRunLoop\n"); fclose(dbg); }
-
+        // Any other device, as it always was: polled.
         while (m_running)
         {
-            // 40ms slice — lets IOKit deliver pending input reports to our callback.
-            CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.04, FALSE);
+            readEvent();
+            msleep(50);
         }
-
-        IOHIDDeviceUnscheduleFromRunLoop(m_IOKitDevice, CFRunLoopGetCurrent(),
-                                         kCFRunLoopDefaultMode);
-        IOHIDDeviceRegisterInputReportCallback(m_IOKitDevice,
-                                              m_reportBuf, sizeof(m_reportBuf),
-                                              nullptr, nullptr);
         return;
     }
 
-    // Standard (non-raw) path: delegate to base-class polling loop.
+    /* An Xbox pad: through the GameController framework when it has it (it
+       may only report the pad a moment after the app starts, so keep
+       asking), else through IOKit, event by event. */
+    centre(&m_state);
+    m_sentValid = false;
+    m_prevReportLength = 0;
+    bool scheduled = false;
+    QElapsedTimer sinceAsked;
+    bool asked = false;
+
     while (m_running)
     {
-        readEvent();
-        msleep(50);
-    }
-}
+        if (m_gcHandle.loadRelaxed() == 0 && HIDGameController::available()
+            && (!asked || sinceAsked.elapsed() >= 500))
+        {
+            asked = true;
+            sinceAsked.restart();
+            const int handle = HIDGameController::claim(m_productName);
+            if (handle != 0)
+            {
+                if (scheduled)
+                {
+                    unscheduleIOKit();
+                    scheduled = false;
+                }
+                m_gcHandle.storeRelaxed(handle);
+                m_sentValid = false;
+                qDebug() << Q_FUNC_INFO << m_name << "reading through the GameController framework:"
+                         << HIDGameController::describe(handle);
+            }
+        }
 
+        if (m_gcHandle.loadRelaxed() != 0)
+        {
+            if (!pollGameController())
+            {
+                // Gone from the framework: back to IOKit until it returns.
+                HIDGameController::release(m_gcHandle.fetchAndStoreRelaxed(0));
+                asked = false;
+                m_sentValid = false;
+            }
+            msleep(8);
+            continue;
+        }
+
+        if (!scheduled && m_IOKitDevice != nullptr && m_opened)
+        {
+            scheduleIOKit();
+            scheduled = true;
+        }
+        if (scheduled)
+            CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.05, FALSE);
+        else
+            msleep(50);
+    }
+
+    if (scheduled)
+        unscheduleIOKit();
+    if (m_gcHandle.loadRelaxed() != 0)
+        HIDGameController::release(m_gcHandle.fetchAndStoreRelaxed(0));
+}

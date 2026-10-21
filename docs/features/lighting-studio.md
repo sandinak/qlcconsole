@@ -852,6 +852,86 @@ usual names. The Xbox profile has roles, and the D-pad as buttons 11–14.
 While Focus mode is on it has the controller to itself: chaser stepping
 and the follow spot wait.
 
+**Xbox controllers on a Mac.** Every Xbox One, Series X|S and Elite
+controller is read into the Xbox profile's layout, however it is connected:
+
+- through Apple's **GameController** framework when it has the controller
+  — it names every button itself (A, LB, the D-pad, the sticks…) on every
+  model and firmware, USB, Bluetooth or Bluetooth LE;
+- otherwise from the controller's own reports, by its model and connection:
+  over USB the controller's input report, over Bluetooth its HID buttons
+  and axes — the first Bluetooth firmware (Xbox One S, 02E0) numbers them
+  one way, every later firmware (One S, Series, Elite 2, Adaptive) another,
+  with the triggers on Brake/Accelerator and the right stick on Z/Rz.
+
+The **Controller test** below shows which way your controller is read.
+
+### Working in the background
+
+Focus mode — and the follow spot — keep reading the controller whatever is
+in front: another app, the screen saver, a locked screen.
+
+- **No App Nap.** While Focus mode or the follow spot has a controller,
+  qlcconsole tells macOS it is doing user-initiated, latency-critical work.
+  Without that, a Mac slows an app it thinks nobody is looking at (behind
+  other windows, or with the display asleep) to a timer every few seconds,
+  and a held stick all but stops. While it is on, the Mac also does not
+  idle itself to sleep (the display still can). It lets go when Focus mode
+  ends and the follow spot has no stick.
+- **The panel stays up** when you switch to another app; it used to vanish
+  until you came back.
+- **Switched off and on again.** An Xbox controller switches itself off
+  after 15 idle minutes, and a Bluetooth one reconnects after the Mac
+  sleeps. Either way qlcconsole now finds it again by itself — press the
+  Xbox button to switch it on — and Focus mode carries on with it.
+- **Paused, said.** If the controller cannot be read, the panel says
+  **Controller paused:** and why — the Mac is asleep, no controller is
+  connected, it is being found again after a sleep (press a button on it),
+  or macOS is refusing access (see **Permissions** below) — rather than
+  just going quiet. On the keyboard nothing is said: the controller is not
+  in use.
+
+### Controller test
+
+**Controller test…**, next to **Use** in Focus mode's setup (and in
+**Settings → Advanced → Game controllers**), opens a window listing every
+input your controllers send, as it arrives, whether or not they are patched:
+
+- the **device**, and its **connection** — USB, Bluetooth or Bluetooth LE,
+  the model and its product ID, and how it is read (the GameController
+  framework, or which report layout);
+- the **element**: the raw input — a GameController name (`buttonA`,
+  `leftThumbstick x`), a HID usage (`Button 4`, `Rz`, `Brake`, `Hat
+  switch`) or a byte and bit of the USB report;
+- its **raw** value, and the lowest and highest seen;
+- the **channel** it feeds and that channel's value (0–255), and what it
+  **maps to**: the profile's name, its gamepad role, its action, and what
+  it does in Focus mode. *nothing* means the input is not in the layout.
+
+Press every button once and move each stick and trigger all the way round;
+each input is one row. **Copy** puts the whole log — the devices, a row per
+input and every event in order — on the clipboard, **Save…** writes it to a
+text file. That is everything needed to check, or fix, a controller's
+mapping without the controller in hand.
+
+### Permissions
+
+A game controller does not normally need any permission on a Mac.
+qlcconsole only opens the controllers themselves (it no longer opens every
+HID device, keyboards included, which is what makes macOS ask).
+
+macOS does have one, **Input Monitoring**, for apps that read input while
+another app is in front. If macOS refuses to let qlcconsole open the
+controller, Focus mode says **Controller paused: macOS is not letting
+qlcconsole read the controller** instead of failing silently. The
+Controller test shows whether Input Monitoring is allowed, and offers
+**Ask macOS for Input Monitoring** (once, when it has not been asked) or
+**Open Privacy Settings** (when it was refused). To allow it by hand:
+**System Settings → Privacy & Security → Input Monitoring**, turn on
+**qlcconsole** (or **Terminal**, if you start qlcconsole from a terminal),
+then quit and reopen qlcconsole. (There is no entitlement or
+usage-description text for it: the prompt is macOS's own.)
+
 ## Lanterns
 
 A **lantern** — such as the bundled WLED Lantern — is drawn as a lantern,

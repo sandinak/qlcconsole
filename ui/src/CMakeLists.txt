@@ -27,6 +27,7 @@ add_library(${module_name}
     addrgbpanel.cpp addrgbpanel.h addrgbpanel.ui
     app.cpp app.h
     appsettings.cpp appsettings.h
+    controllertestdialog.cpp controllertestdialog.h
     apputil.cpp apputil.h
     assignhotkey.cpp assignhotkey.h assignhotkey.ui
     audiobar.cpp audiobar.h

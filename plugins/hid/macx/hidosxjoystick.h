@@ -21,8 +21,12 @@
 #ifndef HIDOSXJOYSTICK_H
 #define HIDOSXJOYSTICK_H
 
+#include <QAtomicInt>
+#include <QHash>
+
 #include "hidjsdevice.h"
 #include "hidapi.h"
+#include "gamepadlayout.h"
 
 #include <IOKit/hid/IOHIDManager.h>
 #include <IOKit/hid/IOHIDKeys.h>
@@ -36,6 +40,17 @@ typedef struct
     int logicalMax;  // device-reported axis maximum (e.g.  32767 for Xbox)
 } HIDInfo;
 
+/**
+ * A joystick or gamepad on a Mac.
+ *
+ * An Xbox pad (Microsoft's vendor ID) is read into ONE layout whatever its
+ * model and connection -- the one the Xbox profile names (GamepadLayout):
+ * through Apple's GameController framework when it has the pad, else
+ * through IOKit, by the report layout its model and firmware use (the USB
+ * GIP report, or the Bluetooth HID elements, mapped by usage). Any other
+ * device is read as before: its axes and buttons in the order it lists them,
+ * polled.
+ */
 class HIDOSXJoystick final : public HIDJsDevice
 {
     Q_OBJECT
@@ -51,31 +66,68 @@ public:
     /** @reimp */
     bool readEvent() override;
 
-    /** @reimp — raw mode schedules the IOKit device on the thread run loop. */
+    /** @reimp */
     void run() override;
 
-    /** Called from the IOHIDDevice input-report callback with raw report bytes. */
+    /** @reimp */
+    bool isStale() const override;
+    /** @reimp */
+    QString connectionInfo() const override;
+    /** @reimp */
+    QString inputProblem() const override;
+
+    /** From the IOHIDDevice input-report callback (the USB GIP report). */
     void processRawReport(uint32_t reportID, const uint8_t *report, CFIndex len);
+    /** From the IOHIDDevice input-value callback (the Bluetooth elements). */
+    void processValue(IOHIDValueRef value);
 
 private:
-    IOHIDManagerRef m_HIDManager;
-    IOHIDDeviceRef m_IOKitDevice;
+    /** An input element as the Bluetooth reader maps it. */
+    struct Element
+    {
+        quint32 page;
+        quint32 usage;
+        int logicalMin;
+        int logicalMax;
+        GamepadLayout::Mapping mapping;
+    };
 
+    bool isXbox() const { return m_family != GamepadLayout::NotXbox; }
+    void scheduleIOKit();
+    void unscheduleIOKit();
+    /** Read the claimed GameController pad once; false when it has gone. */
+    bool pollGameController();
+    /** Emit what changed in m_state since it was last sent. */
+    void emitChanges();
+    void emitRaw(const QString &element, int raw, int channel);
+    int channelValue(int channel) const;
+
+private:
+    IOHIDManagerRef m_HIDManager = nullptr;
+    IOHIDDeviceRef m_IOKitDevice = nullptr;    ///< retained
+    quint64 m_registryID = 0;                  ///< for isStale()
+    IOReturn m_openResult = kIOReturnSuccess;
+    bool m_opened = false;
+
+    QString m_productName;
+    GamepadLayout::Transport m_transport = GamepadLayout::UnknownTransport;
+    GamepadLayout::Family m_family = GamepadLayout::NotXbox;
+
+    // Any other device: its elements in its own order, polled.
     QList<HIDInfo> m_axesValues;
     QList<HIDInfo> m_buttonsValues;
 
-    // Vendor-element mode: used when Apple's driver (AppleUserHIDDevice) virtualises
-    // the controller and exposes only vendor-page (0xff00) elements instead of standard
-    // Generic Desktop axes/buttons.  We poll the element directly via IOHIDDeviceGetValue
-    // and parse the raw Xbox input report bytes from IOHIDValueGetBytePtr.
-    IOHIDElementRef m_vendorXboxElem = nullptr;  // page=0xff00, usage=0x20 (main state)
-    bool            m_rawMode        = false;
-    int             m_rawDumpCount   = 0;
-    uint8_t         m_rawPrevBytes[32] = {};
-    uint8_t         m_reportBuf[64]    = {};  // scratch buffer for input-report callback
+    // An Xbox pad: its state in the layout, and what was last sent.
+    GamepadLayout::PadState m_state;
+    GamepadLayout::PadState m_sent;
+    bool m_sentValid = false;
+    QHash<quint32, Element> m_elements;        ///< by element cookie
+    uint8_t m_reportBuf[64] = {};              ///< for the input-report callback
+    uint8_t m_prevReport[64] = {};             ///< for diagnostics
+    int m_prevReportLength = 0;
 
-    // hidapi fallback (less preferred — Apple kext consumes reports before hidapi sees them)
-    hid_device *m_hidHandle = nullptr;
+    /** The GameController claim (HIDGameController), 0 for none. */
+    QAtomicInt m_gcHandle { 0 };
 };
 
 #endif // HIDOSXJOYSTICK_H

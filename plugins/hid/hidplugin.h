@@ -23,12 +23,15 @@
 #include <QEvent>
 #include <QList>
 #include <QDir>
+#include <QSet>
 
 #include "qlcioplugin.h"
 
 class HIDPoller;
 class HIDDevice;
 class HIDProfile;
+class HIDOSXHotplug;
+class QTimer;
 
 /*****************************************************************************
  * HIDPlugin
@@ -101,6 +104,15 @@ public:
 
     /** @reimp — returns deadzone from the device's matched HID profile, or 0.05. */
     float inputProfileDeadzone(quint32 input) const override;
+
+    /** @reimp */
+    QString inputConnectionInfo(quint32 input) const override;
+
+    /** @reimp */
+    QString inputProblem(quint32 input) const override;
+
+    /** @reimp — starts every joystick (patched or not) reporting raw input. */
+    bool setInputDiagnostics(bool enable) override;
 
     /*********************************************************************
      * Outputs
@@ -181,6 +193,23 @@ protected:
 public slots:
     void slotDeviceAdded(uint vid, uint pid);
     void slotDeviceRemoved(uint vid, uint pid);
+
+private slots:
+    void slotRawInput(quint32 line, const QString &element, int raw, int channel, int value);
+
+private:
+    /** Rescan a moment from now, once however often it is asked. */
+    void scheduleRescan(int ms = 400);
+    /** Wire @p dev up for diagnostics, starting it if they are on. */
+    void setupDiagnostics(HIDDevice *dev);
+    /** True if @p line is patched as an input. */
+    bool isPatchedInput(quint32 line) const;
+
+    QTimer *m_rescanTimer = nullptr;
+    HIDOSXHotplug *m_osxHotplug = nullptr;
+    int m_diagnostics = 0;
+    /** Devices started only for diagnostics. */
+    QSet<HIDDevice *> m_diagnosticsStarted;
 };
 
 #endif
