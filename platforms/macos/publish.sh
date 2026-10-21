@@ -143,9 +143,9 @@ platforms_line() { # <asset names...>
     case "$a" in *-win64-setup.exe) win=1 ;; *.AppImage) lin=1 ;; esac
   done
   if [ -n "$win" ] && [ -n "$lin" ]; then
-    echo "Windows and Linux builds: attached below -- the Windows installer is not code-signed (SmartScreen warns on first run); the Linux AppImage is x86_64. Raspberry Pi users can build from source (tag $TAG)."
+    echo "Windows and Linux builds: attached below — the Windows installer is not code-signed (SmartScreen warns on first run); the Linux AppImage is x86_64. Raspberry Pi users can build from source (tag $TAG)."
   elif [ -n "$win" ]; then
-    echo "Windows and Linux builds: the Windows installer is attached below (not code-signed: SmartScreen warns on first run); Linux not attached yet -- Linux / Raspberry Pi users can build from source (tag $TAG)."
+    echo "Windows and Linux builds: the Windows installer is attached below (not code-signed: SmartScreen warns on first run); Linux not attached yet — Linux / Raspberry Pi users can build from source (tag $TAG)."
   elif [ -n "$lin" ]; then
     echo "Windows and Linux builds: the Linux AppImage (x86_64) is attached below; Windows not attached yet. Raspberry Pi users can build from source (tag $TAG)."
   else
@@ -215,7 +215,7 @@ fi
 KIND="${1:-}"
 case "$KIND" in
   beta)    PRERELEASE=true;  TITLE="${TITLE:-Show Tree $VERSION (beta)}"
-           INTRO="${INTRO-**Pre-release** -- please report problems.}" ;;
+           INTRO="${INTRO-**Pre-release** — please report problems.}" ;;
   release) PRERELEASE=false; TITLE="${TITLE:-qlcconsole $VERSION}"
            INTRO="${INTRO-}" ;;
   *) die "usage: $0 beta|release|attach FILE..." ;;
