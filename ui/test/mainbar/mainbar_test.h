@@ -32,6 +32,7 @@ class MainBar_Test : public QObject
 private slots:
     void initTestCase();
     void cleanupTestCase();
+    void cleanup();
 
     /** Each tab with tools of its own lends them to the one top bar while it
      *  is on show, all of them, and gets them back after */
@@ -46,7 +47,8 @@ private slots:
     /** Blackout lit red, Blind blue, the switch on its mode: readable in
      *  all six themes */
     void blackoutAndBlindLightUpInEveryTheme();
-    /** The point of it all: at least 50 px more for the tab's content */
+    /** The point of it all: the show-control row's height (about 50 px)
+     *  more for the tab's content */
     void theTopChromeIsAtLeast50PxSmaller();
     /** A narrow window folds the tab's tools into », never the show
      *  controls */

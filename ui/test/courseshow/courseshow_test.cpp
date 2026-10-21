@@ -1614,7 +1614,7 @@ void CourseShow_Test::lessonZeroTwoTheVirtualStage()
 
     CueRunner *run = runTab(m_app);
     QVERIFY(run != nullptr);
-    for (const QString &cue : { "1.0.0", "1.0.1", "1.0.2" })
+    for (const QString cue : { "1.0.0", "1.0.1", "1.0.2" })
     {
         press(run, "crGo");
         settle(400);

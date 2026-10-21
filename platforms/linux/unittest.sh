@@ -44,14 +44,14 @@ if [ -n "${QT_QPA_PLATFORM:-}" ]; then
   echo "Using the caller's QT_QPA_PLATFORM='$QT_QPA_PLATFORM'"
   TESTPREFIX=""
 elif [[ "$OSTYPE" == "linux-gnu"* ]] && [ "$IS_CI" -eq 1 ]; then
-  # CI: the suite has always run under Xvfb with the minimal platform there.
-  if [ -z "$(command -v xvfb-run)" ]; then
-    echo >&2 "xvfb-run not found in this system. Please install with: sudo apt-get install xvfb"
-    exit 1
-  fi
-  TESTPREFIX="QT_QPA_PLATFORM=minimal xvfb-run --auto-servernum"
-  # if we're running as build slave, set a sleep time to start/stop xvfb between tests
-  SLEEPCMD="sleep 1"
+  # CI: offscreen, as macOS, Windows and headless Linux run. It used to be
+  # the minimal platform under Xvfb, which has no real fonts: every width
+  # taken from text is wrong there (a 1280 px window's top bar asked for
+  # 1133 px, a label for 768), so tests of what folds or fits, and clicks
+  # aimed at a row's rectangle, failed with nothing wrong -- MainBar_Test,
+  # ShowTreeView_Test, ProgrammingManager_Test. The whole suite passes on
+  # offscreen on Linux (Debian 13, Qt 6.8.2, 2026-10-21).
+  TESTPREFIX="QT_QPA_PLATFORM=offscreen"
 elif [[ "$OSTYPE" == "linux-gnu"* ]] && [ -n "${DISPLAY:-}" ] \
     && command -v xdpyinfo >/dev/null 2>&1 && xdpyinfo >/dev/null 2>&1; then
   # A real, reachable X session: use it, as headed runs always have.

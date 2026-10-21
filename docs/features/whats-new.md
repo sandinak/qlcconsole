@@ -2,7 +2,7 @@
 
 The latest changes, newest first. Each links to the guide with the detail.
 
-## 0.2.0 — Show Tree (October 2026)
+## 0.2.1 (October 2026)
 
 ### Focus mode: the controller on screen
 
@@ -41,6 +41,26 @@ The latest changes, newest first. Each links to the guide with the detail.
   About 57 px more for the tab on every tab. **Settings → Show Controls**
   can move the show controls to the status bar instead; it changes at
   once. See [Finding your way around](getting-started.md#finding-your-way-around).
+
+### Effects
+
+- **Confetti on a two-arm beam, and two new look warnings.** A dimmer
+  effect on a fixture whose one master dimmer serves several heads takes
+  its brightest head, so a beam with one lit arm lights (it went black).
+  The Looks list now marks a Colour look that is all zero (**Black**), and
+  a position look on fixtures that can't move because their definition
+  marks every Pan or Tilt channel Fine (**Can't move**). See
+  [The stack checker](effects.md#the-stack-checker).
+
+### Show control
+
+- **Sub-cues from QLab.** `/cue/4.2/go`, `/go 4.2` and MSC GO 4.2 play a
+  sub-cue (its cue first); OSC `/subgo` and `/subback` step the cue
+  playing; LOAD 4.2 puts one on standby and **Next:** shows it. A GO by
+  number on a paused list now plays that cue (it used to resume where it
+  was). See [Sub-cues from QLab](show-control.md#sub-cues-from-qlab).
+
+## 0.2.0 — Show Tree (October 2026)
 
 ### Software updates
 
@@ -210,13 +230,6 @@ The latest changes, newest first. Each links to the guide with the detail.
   plus accents, follow brightness, accents only, RGB only or white only.
   A pixel box in a look with no group is now drawn on as its own grid.
   See [Matrix effects](effects.md#matrix-effects).
-- **Confetti on a two-arm beam, and two new look warnings.** A dimmer
-  effect on a fixture whose one master dimmer serves several heads takes
-  its brightest head, so a beam with one lit arm lights (it went black).
-  The Looks list now marks a Colour look that is all zero (**Black**), and
-  a position look on fixtures that can't move because their definition
-  marks every Pan or Tilt channel Fine (**Can't move**). See
-  [The stack checker](effects.md#the-stack-checker).
 
 ### Lighting Studio
 
@@ -268,14 +281,6 @@ The latest changes, newest first. Each links to the guide with the detail.
   **Group by type** (right-click) for type first with the same folders under
   each. Older shows' per-type folders merge on open. See
   [Filing into folders](programming-tab.md#filing-into-folders).
-
-### Show control
-
-- **Sub-cues from QLab.** `/cue/4.2/go`, `/go 4.2` and MSC GO 4.2 play a
-  sub-cue (its cue first); OSC `/subgo` and `/subback` step the cue
-  playing; LOAD 4.2 puts one on standby and **Next:** shows it. A GO by
-  number on a paused list now plays that cue (it used to resume where it
-  was). See [Sub-cues from QLab](show-control.md#sub-cues-from-qlab).
 
 ### Outputs
 

@@ -408,18 +408,31 @@ void Wled_Test::aDeadDeviceDoesNotHoldUpTheOthers()
     plugin.setParameter(4, 0, QLCIOPlugin::Output, "outputIP2", backup.ip());
 
     // A fade while the primary hangs: the backup follows it to the end.
+    /* Timed to the backup's FIRST post, not to the end of the fade: the
+       fade's 30 waits of 15 ms took well over a second on a loaded CI
+       runner, which failed a whole-run limit with nothing wrong. A backup
+       held up by the primary would get nothing until its 2 s timeout. */
     QElapsedTimer t;
     t.start();
+    qint64 firstBackupPost = -1;
     for (int v = 1; v <= 30; ++v)
     {
         plugin.writeUniverse(4, 0, universe({ 255, 0, 128, 128, 0, 0, v * 8, 0, 0 }), true);
         QTest::qWait(15);
+        if (firstBackupPost < 0 && !backup.posts.isEmpty())
+            firstBackupPost = t.elapsed();
     }
+    if (firstBackupPost < 0)
+    {
+        QTRY_VERIFY_WITH_TIMEOUT(!backup.posts.isEmpty(), 1500);
+        firstBackupPost = t.elapsed();
+    }
+    QVERIFY2(firstBackupPost < 1500, qPrintable(QString("the backup waited on the primary's timeout "
+                                                        "(first post after %1 ms)").arg(firstBackupPost)));
     QTRY_VERIFY_WITH_TIMEOUT(!backup.posts.isEmpty()
                              && backup.posts.last().value("seg").toArray().first().toObject()
                                     .value("col").toArray().first().toArray() == (QJsonArray{ 240, 0, 0 }),
                              1500);
-    QVERIFY2(t.elapsed() < 1900, "the backup waited on the primary's timeout");
     QVERIFY(backup.posts.size() >= 3);      // it kept up, not one state at the end
     QVERIFY(primary.posts.size() <= 1);
 

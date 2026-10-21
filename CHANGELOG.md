@@ -12,14 +12,11 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 
 ## [Unreleased]
 
-## [0.2.0] - Unreleased
+## [0.2.1] - 2026-10-21
 
-The Show Tree release. A show is written as one tree — productions → cue
-lists → cues → layers → looks — with tracking, sub-cues and a cue runner
-for playback; line targets, line of sight and Focus mode for aiming;
-curtains a fixture opens and flies; colour rings on movers; Matrix effects
-for pixel boxes; backup WLED lanterns; and output held off the rig
-network. Everything in 0.1.0 is in it too.
+A point release of the Show Tree beta: one top bar, auto-open shutters,
+a controller map in Focus mode, sub-cues from QLab, and fixes to Import
+chaser, confetti on two-arm beams and the update installer.
 
 ### Added
 - **Focus mode controller map and device choice.** The Focus mode panel
@@ -56,6 +53,105 @@ network. Everything in 0.1.0 is in it too.
   when off). The AT-Spots (Focus Spot Three Z, shutter resting at Off) now
   light from White, Full alone. The Programming tab stops warning "no look
   for: shutter" while it is on.
+- **Sub-cues from QLab.** OSC `/cue/4.2/go`, `/go 4.2` and MSC GO 4.2 play
+  a sub-cue (its cue first); `/subgo` and `/subback` say why when they
+  can't; LOAD 4.2 puts a sub-cue on standby and **Next:** in the footer
+  and the cue list shows it ("Next: 4.2 — Wash"); STOP 4.2 stops the list
+  only while 4.2 is the one playing. ⌥⌘↩ / ⌥⌘⇧↩ go through show control, so their result is
+  reported with the rest.
+- **Two new look warnings.** The Looks list marks a Colour look that is all
+  zero (**Black**), and a position look on fixtures whose definition marks
+  every Pan or Tilt channel Fine (**Can't move**: the head stays at 0).
+
+### Changed
+- **Settings has General and Advanced tabs.** Advanced holds the show's
+  output behaviour (auto-open shutters) and two settings for experienced
+  users moved off the one page: the effect script editor, and the Show
+  control (QLab) pointer to Connections. Everything else stays on General.
+- **One top bar instead of two.** The show controls and the open tab's
+  own tools share one row: the tab's tools on the left, **Stop all**,
+  **Blackout**, **Blind** and a **Design | Operate** switch (the mode you
+  are in lit) on the right, as small icon-and-word buttons. About 57 px
+  more for content on every tab (94 px of bars above it before, 37 px
+  now). Blackout lights red and Blind blue while on, readable in all six
+  themes. A narrow window folds the tab's tools into **»**; the show
+  controls never fold. **Settings → Show Controls** can put them in the
+  status bar instead, at its right end, leaving the top to the tab's own
+  tools; it switches at once, no restart. Same actions and shortcuts
+  either way; a tab in a window of its own keeps its tools at its top;
+  kiosk mode still has neither. The Show Tree header and the Programming
+  tab's row are toolbars now (they fold into » rather than being cut off
+  or scrolled), and the Lighting Studio's toolbar uses the same 20 px
+  icons as the others.
+
+### Fixed
+- **The Show Tree's drop hint stays in sight in the shared top bar.** The
+  note that says where a drag will land (and, after a change, what it
+  changed) sat at the end of the Show Tree's toolbar, so once the toolbar
+  shared the top bar with the show controls it folded into **»** at any
+  window narrower than about 1900 px — every laptop. It now stands beside
+  the toolbar, just left of **Stop all**, and keeps up to 420 px; the
+  buttons fold first.
+- **Import chaser keeps an include brighter than the cue's own level.** A
+  cue that includes another at full and sets the same fixtures lower itself
+  (DanceHysteria's Full Show 0.0.5: 0.0.4's StepTops at full, its own at
+  45%) played the 45% after import; the chaser had run both and the full
+  level won. The importer now makes such a cue **mix** (Overlap: Mix, *≈
+  mix* in the tree) — only where the tree's rule would change its output,
+  checked channel by channel — and in a cue that mixes an include plays
+  beside the cue's own layers on the same group instead of giving way to
+  them, so it plays as the chaser did. The report says which cues and how
+  many channels; Convert to tracking keeps them mixing. On DanceHysteria-0.6
+  the import dry run is 0 channels different in every cue (Full Show 0.0.5
+  marked; 0.0.6 and 0.0.7 already mixed and now match too). The dry run
+  (`showtree_test importARealShow`) reads the show's embedded fixture
+  definitions, as opening it does, with the user folder kept out, so it
+  compares the same on a machine without the author's fixture files, starts
+  each playback from the idle rig with channel defaults put back, and fails
+  unless 0 channels differ.
+- **A dimmer effect on a two-arm beam went black.** One master dimmer
+  serving several heads got one scaled write per head, multiplied together:
+  confetti's lit arm times its dark one was 0. The brightest head now sets
+  it.
+- **GO by number on a paused list resumed it and stayed put.** It now plays
+  that cue.
+- **An OSC float cue number matched nothing.** 2.2 sent as a float read as
+  2.200000048; floats now read to the digits they hold.
+- **The update installer copes with a stale disk image.** Something
+  scanning a fresh download can leave the DMG attached with nothing
+  mounted, and every later attach then failed ("the disk image would not
+  open"). The macOS update helper now detaches such leftovers first,
+  retries a transient attach failure (not a bad image), waits until the
+  old mount is really gone, and cleans up if it is stopped part-way; the
+  app asks it to stop before killing it, so that cleanup runs. Its error
+  says what hdiutil said.
+- **Two flaky tests steadied** (Updates_Test's disk images, built now
+  without attaching anything; ShowControlUi_Test's OSC port, now checked
+  and retried), and the course and office show tests build with GCC's
+  -Werror.
+
+### Tooling
+- **`make dmg`, `make beta`, `make release` and `make attach`** build the
+  signed universal DMG and publish to GitHub Releases through the REST API
+  only (`platforms/macos/publish.sh`; RELEASE.md). `make test` builds the
+  dev app.
+- **Show Tree course** (docs/course): Levels 0 and 1, lessons 0.1-1.5 with
+  the Level 1 check, in the course voice, the teaching show-choir rig and
+  its shows, a browser practice version of Lesson 1.1, and a test that
+  drives every lesson by the mouse.
+- **Office show**: a generator for `Office.qlcc` (the office rig test
+  show) and its test, run by the gate.
+
+## [0.2.0] - 2026-10-21
+
+The Show Tree release. A show is written as one tree — productions → cue
+lists → cues → layers → looks — with tracking, sub-cues and a cue runner
+for playback; line targets, line of sight and Focus mode for aiming;
+curtains a fixture opens and flies; colour rings on movers; Matrix effects
+for pixel boxes; backup WLED lanterns; and output held off the rig
+network. Everything in 0.1.0 is in it too.
+
+### Added
 - **Software update check and install** (GitHub Releases). A background
   check after start-up and at most once a day, plus **Help → Check for
   Updates…**. It sends one unauthenticated GET of the releases list, with
@@ -158,37 +254,8 @@ network. Everything in 0.1.0 is in it too.
   `blockedKind` / `blockedAt` / `clearance` (also on `aimAt` slots). A
   line target checks each head's own point on the line; a curtain driven by
   a fixture blocks where that fixture has it now.
-- **Sub-cues from QLab.** OSC `/cue/4.2/go`, `/go 4.2` and MSC GO 4.2 play
-  a sub-cue (its cue first); `/subgo` and `/subback` say why when they
-  can't; LOAD 4.2 puts a sub-cue on standby and **Next:** in the footer
-  and the cue list shows it ("Next: 4.2 — Wash"); STOP 4.2 stops the list
-  only while 4.2 is the one playing. ⌥⌘↩ / ⌥⌘⇧↩ go through show control, so their result is
-  reported with the rest.
-- **Two new look warnings.** The Looks list marks a Colour look that is all
-  zero (**Black**), and a position look on fixtures whose definition marks
-  every Pan or Tilt channel Fine (**Can't move**: the head stays at 0).
 
 ### Changed
-- **Settings has General and Advanced tabs.** Advanced holds the show's
-  output behaviour (auto-open shutters) and two settings for experienced
-  users moved off the one page: the effect script editor, and the Show
-  control (QLab) pointer to Connections. Everything else stays on General.
-
-- **One top bar instead of two.** The show controls and the open tab's
-  own tools share one row: the tab's tools on the left, **Stop all**,
-  **Blackout**, **Blind** and a **Design | Operate** switch (the mode you
-  are in lit) on the right, as small icon-and-word buttons. About 57 px
-  more for content on every tab (94 px of bars above it before, 37 px
-  now). Blackout lights red and Blind blue while on, readable in all six
-  themes. A narrow window folds the tab's tools into **»**; the show
-  controls never fold. **Settings → Show Controls** can put them in the
-  status bar instead, at its right end, leaving the top to the tab's own
-  tools; it switches at once, no restart. Same actions and shortcuts
-  either way; a tab in a window of its own keeps its tools at its top;
-  kiosk mode still has neither. The Show Tree header and the Programming
-  tab's row are toolbars now (they fold into » rather than being cut off
-  or scrolled), and the Lighting Studio's toolbar uses the same 20 px
-  icons as the others.
 - **A new production is current when nothing else has GO.** In the Show
   Tree, a production made while no production is current and the main cue
   list isn't some other chaser becomes the current one, so a first
@@ -201,30 +268,6 @@ network. Everything in 0.1.0 is in it too.
   strips, drapes) keep their own colour.
 
 ### Fixed
-- **The Show Tree's drop hint stays in sight in the shared top bar.** The
-  note that says where a drag will land (and, after a change, what it
-  changed) sat at the end of the Show Tree's toolbar, so once the toolbar
-  shared the top bar with the show controls it folded into **»** at any
-  window narrower than about 1900 px — every laptop. It now stands beside
-  the toolbar, just left of **Stop all**, and keeps up to 420 px; the
-  buttons fold first.
-- **Import chaser keeps an include brighter than the cue's own level.** A
-  cue that includes another at full and sets the same fixtures lower itself
-  (DanceHysteria's Full Show 0.0.5: 0.0.4's StepTops at full, its own at
-  45%) played the 45% after import; the chaser had run both and the full
-  level won. The importer now makes such a cue **mix** (Overlap: Mix, *≈
-  mix* in the tree) — only where the tree's rule would change its output,
-  checked channel by channel — and in a cue that mixes an include plays
-  beside the cue's own layers on the same group instead of giving way to
-  them, so it plays as the chaser did. The report says which cues and how
-  many channels; Convert to tracking keeps them mixing. On DanceHysteria-0.6
-  the import dry run is 0 channels different in every cue (Full Show 0.0.5
-  marked; 0.0.6 and 0.0.7 already mixed and now match too). The dry run
-  (`showtree_test importARealShow`) reads the show's embedded fixture
-  definitions, as opening it does, with the user folder kept out, so it
-  compares the same on a machine without the author's fixture files, starts
-  each playback from the idle rig with channel defaults put back, and fails
-  unless 0 channels differ.
 - **Beams stop at risers and the floor in the rig views.** A wash thrown
   across a riser went through it, lighting the air behind it, and its cone
   carried on below the stage floor (the cone's edge was followed to the
@@ -248,14 +291,6 @@ network. Everything in 0.1.0 is in it too.
 - **Chaser teardown use-after-free.** Deleting a chaser while its runner was
   still running freed the steps the runner reads (an intermittent "double
   free" on Linux).
-- **A dimmer effect on a two-arm beam went black.** One master dimmer
-  serving several heads got one scaled write per head, multiplied together:
-  confetti's lit arm times its dark one was 0. The brightest head now sets
-  it.
-- **GO by number on a paused list resumed it and stayed put.** It now plays
-  that cue.
-- **An OSC float cue number matched nothing.** 2.2 sent as a float read as
-  2.200000048; floats now read to the digits they hold.
 
 ## [0.1.0] - Unreleased
 
@@ -674,5 +709,6 @@ a shorter Windows re-soak is planned.
   end, Art-Net trouble reporting on a failing node, and opening a show's
   carried definitions on a machine without them.
 
+[0.2.1]: https://github.com/sandinak/qlcconsole/releases/tag/v0.2.1
 [0.2.0]: https://github.com/sandinak/qlcconsole/releases/tag/v0.2.0
 [0.1.0]: https://github.com/sandinak/qlcconsole/releases/tag/v0.1.0
