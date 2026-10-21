@@ -406,6 +406,63 @@ each, one under the other, in their order on the 2D plot (a panel keeps
 its own grid); fixtures of one head each fill a near-square instead.
 Click a group in the list to see its layout.
 
+### LED Layout
+
+A pixel fixture's definition says how big its LED grid is (an XL-450:
+15 × 5) but not which head sits in which cell. Many number their heads by
+kind instead: the XL-450's 165-channel mode numbers its 45 RGB heads first
+and its 30 white ones after, while the bar is built **RGB / W / RGB / W /
+RGB**, a row of 15 each. The **LED layout** says where each head really is,
+once per model and mode, and everything that draws or groups heads uses it.
+
+**Where to find it.** Right-click a fixture — in the Fixture Manager, on the
+Lighting Studio plot or its Layers tree, or in the Rig Overview — and choose
+**LED Layout…**; or press **LED Layout…** at the top of **Fixture
+Properties**. It is offered for fixtures with more than one head (greyed
+for a single-head one), and it makes no group: it is the fixture's map, and
+nothing else.
+
+**What it shows.** The fixture as it is built: every cell of the grid, each
+head in its cell with its number, coloured by its kind — a colour kind
+(RGB, RGBW…) runs red to violet in head-number order, white heads are
+white, amber amber, UV purple — so an RGB row reads as a rainbow and a
+wrong order shows as a broken one. Empty cells are drawn too.
+
+- **Rows, top to bottom** — type the kind of each row, `RGB, W, RGB, W, RGB`
+  (or `RGB/W/RGB/W/RGB`, any case, "White" for W), then **Apply Rows**
+  (or Return): each row fills with the next heads of its kind, in head
+  order. A pattern that can't hold the heads says why ("RGB rows hold 60
+  heads, it has 45"). A strip with no declared grid is one row; typing
+  `RGB, W` makes it two rows of half the heads each.
+- **Click a head, then another** to swap them, or **an empty cell** to move
+  the head there. Click it again to let go.
+- **Grid** — columns × rows; grow it to leave gaps (heads keep their
+  cells; one that no longer fits takes the first free cell). Too small for
+  the heads, the other side grows to fit.
+- **Flip ↔ / Flip ↕** — mirror it (a bar seen from behind, or hung upside
+  down). **Head Order** puts the heads back in number order, row by row.
+- **▶ Preview Order** walks the heads 1, 2, 3… with a fading trail, on the
+  grid and on the strip beside it (the heads in number order; click one to
+  light it). Tick **Light the fixture too** to light each head on the real
+  fixture as well, full and one at a time, to check the map against it; it
+  goes back as it was when the preview stops or the dialog closes.
+
+**Where it's kept.** **Save to Show** keeps it in the show (one layout per
+make, model and mode, so every XL-450 in that mode shares it, and it
+travels with the file). **Save as Default for This Model** also keeps it on
+this computer, in the **HeadLayouts** folder of your user data folder
+(beside **Fixtures**), one small file per model and mode: new shows, and
+shows with no layout of their own for the model, use it. A show's own
+layout always comes first; **Use Default** loads the default (or head
+order) into the editor. Collect for Transfer copies a show's layouts out
+as **HeadLayouts/**.
+
+**What uses it.** Matrix effects' canvas (a loose XL-450 is a 15 × 5 grid
+with white rows 2 and 4 — see [The white pixels](effects.md#the-white-pixels)), groups
+made by head type, the Lighting Studio plot, the Rig Overview and Angled
+views (pixel by pixel, and where each beam starts), and the light
+footprints. An edit shows at once in all of them.
+
 ### Split by Head Type
 
 Some fixtures mix head kinds — an XL-450 bar is rows of RGB and white
@@ -416,8 +473,10 @@ laid out as a block turned the way it's rigged (a bar hanging down is a
 column) and placed as on stage. The wizard shows the fixture's grid
 coloured by kind with head numbers, lets you correct the head order (a row
 pattern, or click two heads to swap), name each kind's group, and pick the
-same From the front / From above / Close up the gaps choices. The head map
-you fix is remembered per model and mode, and copied into the show.
+same From the front / From above / Close up the gaps choices. The grid is
+the same editor as [LED Layout](#led-layout); the map you fix is kept in
+the show, and — with **Also save as the default for this model**, ticked
+to start with — as your default for the model.
 
 It's offered when making a group from mixed fixtures on the Lighting
 Studio plot's fixture menu, and on a fixture group's row in the Studio's
@@ -463,9 +522,10 @@ drop-in for the new one).
 Right-click is laid out by what it is about, in the same order whatever is
 selected, and only offers what applies:
 
-1. **The fixture itself** — Fixture Properties…, Definition & Mode… and
-   Edit Fixture Definition… (one fixture), Change Definition… (fixtures of
-   one definition, when another is a drop-in for it).
+1. **The fixture itself** — Fixture Properties…, Definition & Mode…,
+   Edit Fixture Definition… and [LED Layout…](#led-layout) (one fixture),
+   Change Definition… (fixtures of one definition, when another is a
+   drop-in for it).
 2. **Its address** — **Patch…** (the one name for giving an address and
    moving one, here, on the plot and in the studio; "Patch N Fixtures…" for
    several) and Return to Inventory….
@@ -692,6 +752,7 @@ comes first, then this computer's, then the show's folder.)
 | **Path / folder** | A group's `/`-separated organizational string; the folder UI is entirely derived from it. |
 | **Sub-group** | A per-head tag recording which group a pasted block of heads came from — lets it be color-coded, moved as a unit, and rebuilt from its live sources later. |
 | **Add group as block** | Pasting one group's whole layout into another, preserving relative positions. |
+| **LED layout** | Where each head of a model and mode sits in its LED grid, and so which rows are RGB and which white. Kept in the show; optionally also as your default for the model. |
 | **Inventory / staged fixture** | A fixture in the show with no universe or address yet. It can be placed, grouped and programmed; it sends no DMX until patched. |
 | **Connection** | Per fixture: DMX (fed by a node or wireless receiver), or Network — Art-Net/sACN or WLED — at its own IP. |
 | **Address clash** | A fixture the show file puts on channels another already uses; loaded unpatched and kept until re-patched. |

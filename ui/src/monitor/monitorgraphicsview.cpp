@@ -53,6 +53,7 @@
 #include "righeads.h"
 #include "patchinventorydialog.h"
 #include "headtypesdialog.h"
+#include "ledlayouteditor.h"
 #include "monitorfixtureitem.h"
 #include "trussitem.h"
 #include "studiogroupeditor.h"
@@ -204,6 +205,14 @@ MonitorGraphicsView::MonitorGraphicsView(Doc *doc, QWidget *parent)
         }
         rebuildProjectionOverlay();
     });
+    // A model's LED layout edited: its fixtures' heads move to their cells.
+    if (m_doc->monitorProperties() != nullptr)
+        connect(m_doc->monitorProperties(), &MonitorProperties::headLayoutChanged, this,
+                [this](const QString &key) {
+            for (auto it = m_fixtures.constBegin(); it != m_fixtures.constEnd(); ++it)
+                if (HeadLayout::keyFor(m_doc->fixture(it.key())) == key)
+                    it.value()->relayoutHeads();
+        });
     if (m_doc->monitorProperties() != nullptr)
         connect(m_doc->monitorProperties(), &MonitorProperties::rigPropsChanged, this,
                 [this](quint32) {
@@ -7637,6 +7646,14 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
     menu->addAction(tr("Fixture Properties…"), this, [this, fid]() {
         emit fixtureDoubleClicked(fid);
     });
+    // Where each of its heads really is: the model's LED layout.
+    if (LedLayoutDialog::canEdit(m_doc, fid))
+    {
+        QAction *led = menu->addAction(tr("LED Layout…"), this, [this, fid]() {
+            LedLayoutDialog::edit(m_doc, fid, this);
+        });
+        led->setObjectName(QStringLiteral("ledLayoutAction"));
+    }
     /* What it is mounted on: its editor, here -- double-clicking a fixture
        opens the fixture, wherever it is (a covered riser used to open
        instead). */

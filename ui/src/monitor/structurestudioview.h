@@ -204,6 +204,12 @@ public:
      *  one of that size (an XL-450 built RGB/W/RGB/W/RGB), else head order. */
     QVector<int> headsByCell(class Fixture *fx, int cols, int rows, int headCount) const;
 
+    /** The LED grid @p fx is drawn on: its LED map's when the show or the
+     *  library has one (the LED Layout editor -- a strip laid out by hand
+     *  in rows has no declared grid), else the definition's declared grid,
+     *  else one row of its heads. */
+    QSize headGrid(class Fixture *fx, const struct FixtureVisualTraits &traits) const;
+
     /** Ring-highlight a set of fixtures (driven by the tree selection). */
     void setHighlight(const QList<quint32> &ids);
     /** Ring-highlight a single bar (or clear it with UINT_MAX == Truss::invalidId()). */

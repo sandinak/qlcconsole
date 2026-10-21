@@ -305,7 +305,10 @@ void MonitorProperties::reset()
     m_stageTargets.clear();
     m_rigProps.clear();
     m_goboSwaps.clear();
-    m_headLayouts.clear();
+    {
+        QMutexLocker lock(&m_headLayoutMutex);
+        m_headLayouts.clear();
+    }
     m_layers.clear();
     m_activeLayerId = defaultLayerId;
     ensureDefaultLayer();
@@ -3040,8 +3043,11 @@ HeadLayout MonitorProperties::headLayoutFor(const Fixture *fx) const
     const QString key = HeadLayout::keyFor(fx);
     if (key.isEmpty())
         return HeadLayout();
-    if (m_headLayouts.contains(key))
-        return m_headLayouts.value(key);
+    {
+        QMutexLocker lock(&m_headLayoutMutex);
+        if (m_headLayouts.contains(key))
+            return m_headLayouts.value(key);
+    }
     const HeadLayout lib = HeadLayoutLibrary::load(key);
     if (lib.isValid())
         return lib;
@@ -3051,13 +3057,33 @@ HeadLayout MonitorProperties::headLayoutFor(const Fixture *fx) const
 bool MonitorProperties::hasHeadLayout(const Fixture *fx) const
 {
     const QString key = HeadLayout::keyFor(fx);
-    return !key.isEmpty() && (m_headLayouts.contains(key) || HeadLayoutLibrary::load(key).isValid());
+    return !key.isEmpty() && (hasShowHeadLayout(key) || HeadLayoutLibrary::load(key).isValid());
+}
+
+bool MonitorProperties::hasShowHeadLayout(const QString &key) const
+{
+    QMutexLocker lock(&m_headLayoutMutex);
+    return m_headLayouts.contains(key);
 }
 
 void MonitorProperties::setHeadLayout(const HeadLayout &layout)
 {
-    if (layout.isValid())
+    if (!layout.isValid())
+        return;
+    {
+        QMutexLocker lock(&m_headLayoutMutex);
+        auto it = m_headLayouts.constFind(layout.key);
+        if (it != m_headLayouts.constEnd() && it.value() == layout)
+            return;
         m_headLayouts.insert(layout.key, layout);
+    }
+    emit headLayoutChanged(layout.key);
+}
+
+QList<HeadLayout> MonitorProperties::headLayouts() const
+{
+    QMutexLocker lock(&m_headLayoutMutex);
+    return m_headLayouts.values();
 }
 
 void MonitorProperties::setFixtureFace(FixtureRigProps &rp, FixtureRigProps::Face face) const
@@ -3534,11 +3560,12 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument) 
 
     // LED maps the show uses (see HeadLayout), by key for a stable file.
     {
+        QMutexLocker lock(&m_headLayoutMutex);
         QStringList keys = m_headLayouts.keys();
         keys.sort();
         foreach (const QString &k, keys)
         {
-            const HeadLayout &l = m_headLayouts[k];
+            const HeadLayout l = m_headLayouts.value(k);
             QStringList cells;
             foreach (const QPoint &p, l.cells)
                 cells << QStringLiteral("%1,%2").arg(p.x()).arg(p.y());

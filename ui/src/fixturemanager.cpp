@@ -65,6 +65,7 @@
 #include "addchannelsgroup.h"
 #include <functional>
 #include "fixturemanager.h"
+#include "ledlayouteditor.h"
 #include "measurementunits.h"
 #include <QShortcut>
 #include "fixtureremap.h"
@@ -2791,6 +2792,21 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
             if (fxi != NULL && fxi->fixtureDef() != NULL &&
                 fxi->fixtureDef()->definitionSourceFile().isEmpty() == false)
                 editDefinition = menu.addAction(tr("Edit Fixture Definition…"));
+        }
+        /* Where each head of its model really is (an XL-450's rows of RGB
+           and white): the LED Layout editor, for one fixture of more than
+           one head. */
+        if (selFixtures.size() == 1 && selGroups.isEmpty())
+        {
+            const quint32 fid = selFixtures.first();
+            QAction *led = menu.addAction(tr("LED Layout…"), this, [this, fid]() {
+                if (LedLayoutDialog::edit(m_doc, fid, this))
+                    slotSelectionChanged();
+            });
+            led->setObjectName(QStringLiteral("ledLayoutAction"));
+            led->setEnabled(LedLayoutDialog::canEdit(m_doc, fid));
+            if (!led->isEnabled())
+                led->setToolTip(tr("Only for a fixture with more than one head"));
         }
     }
 

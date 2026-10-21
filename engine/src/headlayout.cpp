@@ -15,6 +15,7 @@
 #include <QFile>
 #include <QHash>
 #include <QMutex>
+#include <QRegularExpression>
 
 #include "qlcfixturemode.h"
 #include "qlcfixturehead.h"
@@ -112,11 +113,17 @@ HeadLayout HeadLayout::headOrder(const Fixture *fx)
 
 HeadLayout HeadLayout::fromRowPattern(const Fixture *fx, const QStringList &rowKinds)
 {
+    return fromRowPattern(fx, rowKinds, 0);
+}
+
+HeadLayout HeadLayout::fromRowPattern(const Fixture *fx, const QStringList &rowKinds, int cols)
+{
     HeadLayout base = headOrder(fx);
     if (!base.isValid() || rowKinds.isEmpty())
         return HeadLayout();
     const QLCFixtureMode *mode = fx->fixtureMode();
-    const int cols = base.size.width();
+    if (cols <= 0)
+        cols = base.size.width();
     const int n = mode->heads().size();
 
     // Every row of a kind is filled by that kind's heads, in head order.
@@ -140,6 +147,80 @@ HeadLayout HeadLayout::fromRowPattern(const Fixture *fx, const QStringList &rowK
         const QList<int> &pool = headsOf[rowKinds.at(r)];
         for (int c = 0; c < cols; ++c)
             l.cells[pool.at(used[rowKinds.at(r)]++)] = QPoint(c, r);
+    }
+    return l;
+}
+
+QStringList HeadLayout::parseRowKinds(const QString &text, const QStringList &known)
+{
+    QStringList out;
+    const QStringList words = text.split(QRegularExpression(QStringLiteral("[,;/|\\s]+")),
+                                         Qt::SkipEmptyParts);
+    for (QString w : words)
+    {
+        if (w.compare(QLatin1String("White"), Qt::CaseInsensitive) == 0)
+            w = QStringLiteral("W");
+        else if (w.compare(QLatin1String("Amber"), Qt::CaseInsensitive) == 0)
+            w = QStringLiteral("A");
+        else if (w.compare(QLatin1String("Dimmer"), Qt::CaseInsensitive) == 0)
+            w = QStringLiteral("I");
+        QString match;
+        for (const QString &k : known)
+            if (k.compare(w, Qt::CaseInsensitive) == 0)
+                match = k;
+        out << (match.isEmpty() ? w.toUpper() : match);
+    }
+    return out;
+}
+
+HeadLayout HeadLayout::flippedHorizontally() const
+{
+    HeadLayout l = *this;
+    for (QPoint &p : l.cells)
+        if (p.x() >= 0)
+            p.setX(size.width() - 1 - p.x());
+    return l;
+}
+
+HeadLayout HeadLayout::flippedVertically() const
+{
+    HeadLayout l = *this;
+    for (QPoint &p : l.cells)
+        if (p.y() >= 0)
+            p.setY(size.height() - 1 - p.y());
+    return l;
+}
+
+HeadLayout HeadLayout::resized(const QSize &sz) const
+{
+    if (sz.width() <= 0 || sz.height() <= 0 || sz.width() * sz.height() < cells.size())
+        return HeadLayout();
+    HeadLayout l;
+    l.key = key;
+    l.size = sz;
+    l.cells.fill(QPoint(-1, -1), cells.size());
+    QVector<bool> taken(sz.width() * sz.height(), false);
+    // Those that still fit stay where they are...
+    for (int h = 0; h < cells.size(); ++h)
+    {
+        const QPoint p = cells.at(h);
+        if (p.x() >= 0 && p.y() >= 0 && p.x() < sz.width() && p.y() < sz.height()
+            && !taken[p.y() * sz.width() + p.x()])
+        {
+            l.cells[h] = p;
+            taken[p.y() * sz.width() + p.x()] = true;
+        }
+    }
+    // ... and the rest take the first free cells, in head order.
+    int next = 0;
+    for (int h = 0; h < cells.size(); ++h)
+    {
+        if (l.cells.at(h).x() >= 0)
+            continue;
+        while (taken[next])
+            ++next;
+        taken[next] = true;
+        l.cells[h] = QPoint(next % sz.width(), next / sz.width());
     }
     return l;
 }

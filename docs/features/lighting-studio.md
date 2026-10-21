@@ -110,6 +110,13 @@ Studio (and saved with the show), so the two always agree. Showing, hiding
 and labels work in Operate mode too; locking a layer stays a Design-mode
 change.
 
+**A fixture's LED layout.** Right-click a fixture in the Rig Overview (or
+on the plot, or in the Layers tree) for **Fixture Properties…** and **LED
+Layout…**: where each head of a pixel fixture really is — an XL-450's rows
+of RGB and white. The plot, the Rig Overview and the Angled views draw its
+pixels in those cells, and redraw as soon as it is saved. See
+[LED Layout](fixture-manager.md#led-layout).
+
 **Keeping it quick.** The Rig Overview draws on
 the graphics card (Metal on a Mac, OpenGL elsewhere) when the machine has
 one; its **GPU** box turns that off, back to drawing on the processor —

@@ -21,6 +21,7 @@
 #define MONITORPROPERTIES_H
 
 #include <QObject>
+#include <QMutex>
 #include "qlcengine_export.h"
 #include <functional>
 #include <QVector3D>
@@ -924,11 +925,23 @@ public:
     /** True when the show or the library has a map for @p fx -- i.e. head
      *  order is not merely assumed. */
     bool hasHeadLayout(const Fixture *fx) const;
-    /** Keep @p layout in the show (replacing any for its key). */
+    /** True when the show itself holds a map for @p key (not only the
+     *  library or head order). */
+    bool hasShowHeadLayout(const QString &key) const;
+    /** Keep @p layout in the show (replacing any for its key). Emits
+     *  headLayoutChanged() when that changes it. */
     void setHeadLayout(const HeadLayout &layout);
-    QList<HeadLayout> headLayouts() const { return m_headLayouts.values(); }
+    QList<HeadLayout> headLayouts() const;
+
+signals:
+    /** A model's LED map changed in the show (the LED Layout editor, Split
+     *  by Head Type): views that draw its heads redraw them. */
+    void headLayoutChanged(const QString &key);
 
 private:
+    /* Read from the DMX thread (a matrix effect's canvas) while the editor
+       writes it. */
+    mutable QMutex m_headLayoutMutex;
     QHash<QString, HeadLayout> m_headLayouts;
 
     /********************************************************************
