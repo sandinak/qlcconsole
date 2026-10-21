@@ -243,6 +243,23 @@ bool fixtureHeadBeamState(Fixture *fx, const QByteArray &values, int head,
 bool fixtureAimDirection(Fixture *fx, const struct FixtureRigProps &rp, QVector3D &dir,
                          int head = 0);
 
+/** Focus mode: while a session is aiming @p fid, where it is MEANT to point --
+ *  at its reference, with no calibration and no nudge in it -- as a world
+ *  direction (FocusSession::intendedDirection()). Every rig view draws this for
+ *  the head being focused, in place of reading its DMX back, so the beam stays
+ *  on its mark while the real head is nudged. fixtureAimDirection() answers it
+ *  itself; the views that would otherwise draw a selected scene's aim ask
+ *  first. False when no session is aiming @p fid. */
+bool focusIntentDirection(Doc *doc, quint32 fid, QVector3D &dir);
+
+/** The same as the plot's gauges read it: pan and tilt relative to home, as
+ *  AimSolver::intendedAngles() gives them (FocusSession::intendedAngles()). */
+bool focusIntentAngles(Doc *doc, quint32 fid, double &panRelDeg, double &tiltRelDeg);
+
+/** Where the running focus session is aiming @p fid -- its reference point --
+ *  for the aim trace. False when no session is aiming @p fid. */
+bool focusIntentPoint(Doc *doc, quint32 fid, QVector3D &point);
+
 // ---------------------------------------------------------------------------
 // Shared Mover silhouettes -- pure geometry (a rect in, a path out), so
 // StructureStudioView's elevation editor and MonitorFixtureItem's 2D canvas

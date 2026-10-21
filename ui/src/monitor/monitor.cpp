@@ -158,6 +158,7 @@
 #include "apputil.h"
 #include "doc.h"
 #include "programmercontroller.h"
+#include "focussession.h"
 
 #include <QTimer>
 #include "qlcfile.h"
@@ -2429,6 +2430,11 @@ void Monitor::showStageOverview()
     view->setLocked(true);
     m_overviewView = view;
     view->setActiveScene(m_activeSceneId);
+    /* Opened in the middle of Focus mode: ring the head being focused, as the
+       Studio already does -- it was only ever told when the head CHANGED. */
+    if (m_doc->programmer() != NULL && m_doc->programmer()->focusSession() != NULL
+        && m_doc->programmer()->focusSession()->isActive())
+        view->setHighlight({ m_doc->programmer()->focusSession()->currentFixture() });
 
     QHBoxLayout *bar = new QHBoxLayout;
     bar->addWidget(new QLabel(tr("View:"), &dlg));

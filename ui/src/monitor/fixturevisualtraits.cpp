@@ -34,6 +34,8 @@
 #include "qlccapability.h"
 #include "qlcpalette.h"
 #include "monitorproperties.h"
+#include "programmercontroller.h"
+#include "focussession.h"
 #include "doc.h"
 #include <QVector3D>
 #include "qlcphysical.h"
@@ -658,6 +660,13 @@ bool fixtureAimDirection(Fixture *fx, const FixtureRigProps &rp, QVector3D &dir,
     if (panCh == QLCChannel::invalid() && tiltCh == QLCChannel::invalid())
         return false;                       // not a mover: nothing to point
 
+    /* The head Focus mode is aiming: where it is MEANT to point, not its DMX
+       read back -- that carries the unsaved nudge, rounded to DMX steps, and
+       the beam crept and jumped with every nudge while the real head moved. */
+    if (Doc *doc = qobject_cast<Doc *>(fx->parent()))
+        if (focusIntentDirection(doc, fx->id(), dir))
+            return true;
+
     const QByteArray v = fx->channelValues();
 
     /* Same mapping MonitorFixtureItem uses, so the plot and the rig view agree
@@ -679,6 +688,32 @@ bool fixtureAimDirection(Fixture *fx, const FixtureRigProps &rp, QVector3D &dir,
        offset corrects a yoke bolted a few degrees round still draws its beam
        on its mark. */
     return AimSolver::beamDirection(rp, degrees(panCh, panMax), degrees(tiltCh, tiltMax), dir);
+}
+
+static FocusSession *aimingSession(Doc *doc)
+{
+    if (doc == nullptr || doc->programmer() == nullptr)
+        return nullptr;
+    FocusSession *s = doc->programmer()->focusSession();
+    return (s != nullptr && s->isActive()) ? s : nullptr;
+}
+
+bool focusIntentDirection(Doc *doc, quint32 fid, QVector3D &dir)
+{
+    FocusSession *s = aimingSession(doc);
+    return s != nullptr && s->intendedDirection(fid, dir);
+}
+
+bool focusIntentAngles(Doc *doc, quint32 fid, double &panRelDeg, double &tiltRelDeg)
+{
+    FocusSession *s = aimingSession(doc);
+    return s != nullptr && s->intendedAngles(fid, panRelDeg, tiltRelDeg);
+}
+
+bool focusIntentPoint(Doc *doc, quint32 fid, QVector3D &point)
+{
+    FocusSession *s = aimingSession(doc);
+    return s != nullptr && s->currentFixture() == fid && s->referencePoint(fid, point);
 }
 
 double fixtureBeamAngle(Fixture *fx, const QByteArray &v,

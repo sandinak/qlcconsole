@@ -4128,6 +4128,11 @@ QVector3D StructureStudioView::moverAim(quint32 fid, int unit) const
     Fixture *fx = m_doc != nullptr ? m_doc->fixture(fid) : nullptr;
     if (fx == nullptr)
         return QVector3D();
+    /* Focus mode's head first: where it is meant to point, which the session
+       is driving it at whatever scene is selected -- and not its nudged DMX. */
+    QVector3D dir;
+    if (m_liveValues && focusIntentDirection(m_doc, fid, dir))
+        return dir;
     // The scene's target while it is only selected; the DMX once it runs.
     const bool sceneDriving = m_liveValues && activeSceneRunning();
     QVector3D aimPt;
@@ -4137,7 +4142,6 @@ QVector3D StructureStudioView::moverAim(quint32 fid, int unit) const
         if (toTarget.length() > 1e-3f)
             return toTarget.normalized();
     }
-    QVector3D dir;
     if (m_liveValues && fixtureAimDirection(fx, m_doc->monitorProperties()->fixtureRigProps(fid), dir, unit))
         return dir;
     return QVector3D();
@@ -6980,7 +6984,9 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                 looks[u].aim = moverAim(fid, u);
             // The target, for the dashed trace below -- not once it runs.
             QVector3D aimPt;
-            const bool aimed = !(m_liveValues && activeSceneRunning()) && aimPointFor(fid, aimPt);
+            // Focus mode's head traces to its reference, where its beam goes.
+            const bool aimed = (m_liveValues && focusIntentPoint(m_doc, fid, aimPt))
+                || (!(m_liveValues && activeSceneRunning()) && aimPointFor(fid, aimPt));
 
             /* The beam's strength and colour are the fixture's own OUTPUT, not
                the shaded body colour.
