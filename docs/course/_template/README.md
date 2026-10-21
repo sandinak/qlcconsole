@@ -12,9 +12,12 @@ Copy this whole folder to start a new lesson, then fill in each file.
    website's sidebar finds it. Copy them from a finished lesson, like
    `level-1/lesson-02/`.
 4. Add the lesson to its level's `index.md` table.
-5. New words go in the handout's word table **and** in `../GLOSSARY.md`
+5. Write student pages in the course voice: respectful, peer-to-peer,
+   real theatre vocabulary, no talking down, and no notes about the
+   writing itself (see "Style rules" in `../VOLUNTEER.md`).
+6. New words go in the handout's word table **and** in `../GLOSSARY.md`
    with the lesson number.
-6. Pictures: write `<!-- PICTURE: what it shows -->` where one goes, and
+7. Pictures: write `<!-- PICTURE: what it shows -->` where one goes, and
    ask Branson; the course test takes app pictures (see `../VOLUNTEER.md`).
 
 This folder starts with `_`, so the website leaves it out.

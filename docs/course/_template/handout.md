@@ -18,7 +18,7 @@ nav_order: 2
 
 | Word | Means |
 |---|---|
-| **Word** | Plain meaning, one or two short sentences. |
+| **Word** | A short, exact definition, as a designer would say it. |
 
 ## Part 1 — Design it (on paper, everyone)
 

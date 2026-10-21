@@ -9,7 +9,7 @@ nav_order: 4
 
 Name: ______________________
 
-1. TODO (a word in their own words)
+1. TODO (explain a new word, as you would to a new crew member)
 
    ____________________________________________________________
 

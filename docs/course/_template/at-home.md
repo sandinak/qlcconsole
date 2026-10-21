@@ -18,9 +18,6 @@ Do **one** of these.
 4. Save it as `LessonN-N-Home-yourname.qlcc` and bring it (USB stick or the
    class folder), or hand in a screenshot.
 
-Nothing you do can harm real lights: the course show isn't connected to
-any.
-
 ## B. On paper (no computer, or a Chromebook without Linux)
 
 1. TODO: the same design task on paper (a cue sheet, a sketch of the

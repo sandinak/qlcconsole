@@ -106,9 +106,24 @@ Copy the [`_template/`](https://github.com/sandinak/qlcconsole/tree/docs/show-tr
 
 ### Style rules
 
-- **Plain words for high-school students.** Short sentences. One idea per
-  step. If you need a new word, put it in the lesson's word table **and**
-  in the [Glossary](GLOSSARY.md), with the lesson number.
+- **Voice: talk to students as crew.** Write the way an experienced
+  designer talks to a new member of the lighting crew: respectful,
+  peer-to-peer, and assuming they're capable. Use real theatre
+  vocabulary (cyc, wash, board op, block cue), not stand-in words for
+  it. Don't over-explain the obvious, don't cheerlead ("Great job!",
+  "Just enjoy it"), and don't reassure students about things they
+  weren't worried about.
+- **Clear, with a normal rhythm.** Plain and precise, but in full
+  sentences that connect, not strings of three-word fragments. One
+  action per numbered step.
+- **Define a word once.** A new word goes in the lesson's word table,
+  with a short, exact definition, **and** in the
+  [Glossary](GLOSSARY.md) with the lesson number. After that, just use
+  it.
+- **Keep style talk out of student pages.** Notes about tone, sentence
+  length or "keeping it simple" belong on this page, in `_template/` and
+  in teacher guides, never in a handout, at-home page, exit ticket or
+  the glossary.
 - **Design first, then the tool.** Every lesson starts from a decision a
   designer makes ("the verse should feel close and warm"), and every cue
   has a reason.
@@ -116,7 +131,9 @@ Copy the [`_template/`](https://github.com/sandinak/qlcconsole/tree/docs/show-tr
   **Rig Overview**, **Warm White**. Menus with arrows: **View → Rig
   Overview**.
 - **A "You should see" line after each step** that changes something, so
-  the navigator can check it: *You should see: the cyc turns blue.*
+  the navigator can check it. Write it as a normal sentence about the
+  stage or the screen: *You should see: the cyc turns blue, brightest at
+  the top.*
 - **Mac keys** (⌘), with one line saying "on Windows or Linux, Ctrl".
 - **Every step must really work in the app.** Branson's course test does
   each step on the real app (see §6). If a step doesn't work the way you'd
