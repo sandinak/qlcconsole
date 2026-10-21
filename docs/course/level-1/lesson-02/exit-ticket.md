@@ -9,17 +9,17 @@ nav_order: 4
 
 Name: ______________________
 
-1. You changed the verse to **Lavender at 40%**. How does it feel now, and
-   why?
+1. You changed the verse to **Lavender at 40%**. How does it feel now,
+   and what makes it feel that way?
 
    ____________________________________________________________
 
-2. How do you change the colour of a layer you already made?
+2. How do you change the colour of a layer you've already programmed?
 
    ____________________________________________________________
 
-3. After **Level… 40**, the row said *40% · 1.0.1 Verse StepTops*. What
-   does that mean? What does **Make reusable** do?
+3. After **Level… 40**, the row read *40% · 1.0.1 Verse StepTops*. What
+   does that mean, and what does **Make reusable** do?
 
    ____________________________________________________________
 

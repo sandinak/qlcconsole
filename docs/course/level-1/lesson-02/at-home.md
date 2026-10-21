@@ -11,28 +11,26 @@ Do **one** of these.
 
 ## A. On your computer (Mac, Windows, or Linux)
 
-1. Install qlcconsole if you haven't: [Install](../../install.md).
+1. Install qlcconsole if you haven't yet (see [Install](../../install.md)).
 2. Download [`lesson-1-2-finish.qlcc`](../../shows/lesson-1-2-finish.qlcc)
-   (on GitHub: open it, then **Download raw file**).
-3. Imagine the director now says: *"Actually, make the whole song feel
-   **happy and warm**, like a party."* Change **every** cue's colours and
-   levels to say that, with **⋯ → Set to**, **⋯ → Level…** and cue looks.
+   (on GitHub, open it and click **Download raw file**).
+3. The director has a new note: *"Actually, make the whole song feel
+   **happy and warm**, like a party."* Rework **every** cue's colours and
+   levels to match, using **⋯ → Set to**, **⋯ → Level…** and cue looks.
 4. Click through the cues. Is there still **contrast** between the verse
    and the chorus?
-5. Save it as `Lesson1-2-Home-yourname.qlcc` and bring it (USB stick or the
-   class folder), or hand in a screenshot of each cue in the Rig Overview.
-
-Nothing you do can harm real lights: the course show isn't connected to
-any.
+5. Save it as `Lesson1-2-Home-yourname.qlcc` and bring it in (on a USB
+   stick or in the class folder), or hand in a screenshot of each cue in
+   the Rig Overview.
 
 ## B. On paper (no computer, or a Chromebook without Linux)
 
-1. Pick **two** moods for the same moment, the verse of "Everybody
-   Scream": one *eerie*, one *happy*.
-2. For each, fill in a line: which **group**, which **colour**
-   (White, Warm White, Red, Amber, Yellow, Green, Cyan, Blue, Lavender,
-   Magenta) and which **level** (Full, 75%, Half, 40%, 25%, 10%, Out), and
-   one sentence saying why.
+1. Design the same moment, the verse of "Everybody Scream", in **two**
+   moods: one *eerie* and one *happy*.
+2. For each mood, choose a **group**, a **colour** (White, Warm White,
+   Red, Amber, Yellow, Green, Cyan, Blue, Lavender, Magenta) and a
+   **level** (Full, 75%, Half, 40%, 25%, 10%, Out), and give your reason
+   in a sentence.
 
    | Mood | Group | Colour | Level | Why |
    |---|---|---|---|---|
