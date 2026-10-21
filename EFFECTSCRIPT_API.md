@@ -83,7 +83,7 @@ how it shows up in the look editor and how the host knows what to inject.
 | `notes` | string | Long help shown in the editor panel. |
 | `author` | string | Credit. |
 | `fixtureTypes` | string[] | Capability tags the effect targets: `"moving"`/`"mover"`/`"pantilt"`, `"rgb"`/`"rgbw"`/`"color"`, `"dimmer"`, `"shutter"`, `"colorwheel"`. The host **filters** the scene's fixtures to those matching at least one tag. Empty/omitted = all fixtures. `"matrix"` matches no fixture by itself: it files the effect under the browser's **Matrix** tab (give it beside the real tags, `["matrix", "rgb", "dimmer"]`). |
-| `requires` | string[] | Helper libraries from `effectscripts/lib/` evaluated before the script: `"wled"` (the WLED ports' segment and maths) and `"matrix"` (`lib/matrix.js`: the canvas, each head's place on it or in its own box, the shared white-pixel setting, repeatable hash/noise and the beat clock — the matrix effects are built on it). |
+| `requires` | string[] | Helper libraries from `effectscripts/lib/` evaluated before the script: `"wled"` (the WLED ports' segment and maths) and `"matrix"` (`lib/matrix.js`: the canvas, each head's place on it or in its own box, the shared white-pixel setting, repeatable hash/noise and the beat clock — the matrix effects are built on it; `MATRIX.scoped(cv, fixtures, inputs, params, state, MATRIX.cycle(...), draw)` gives an effect the three scopes, Whole canvas / Each box / Each box staggered, from `MATRIX.SCOPES` and `MATRIX.staggerParams()`). |
 | `dataChannels` | string[] | Real-time host data channels to subscribe to (e.g. `["joystick"]`). Arrive as `data.<name>` each tick. |
 | `inputs` | InputDef[] | Named 0..1 control slots (joystick axis, MIDI CC, OSC…). |
 | `palettes` | PaletteDef[] | Named palette references the host resolves and injects as `palettes.<name>`. |
@@ -119,6 +119,10 @@ effect.parameters = [
     // type:"text" → a text box in the look editor; the value is a string, and
     // a string defaultValue is what the box (and params.<name>) start with:
     { name: "text", description: "The words to show", type: "text", defaultValue: "HELLO" },
+    // type:"image" → Choose…/Clear in the look editor; the picture (a still or an
+    // animated GIF, up to 2 MB) is kept IN the look as a data URI and arrives
+    // decoded (see params below):
+    { name: "image", description: "The picture or GIF", type: "image" },
     // 'aliases' = former names for this param. A stored value under an old name
     // maps to this one, so renaming a param doesn't break saved looks/Effects:
     { name: "rate", description: "Cycles/sec", aliases: ["speed"], min: 0, max: 20, defaultValue: 1 }
@@ -252,7 +256,13 @@ colours than they declare slots for (e.g. an N-way spread):
 `params.<name>` — scalar number for normal/dropdown params (dropdowns give the
 **integer index**). `type:"path"` params arrive as a JS array of `[x,y]` pairs
 (0..1). `type:"text"` params arrive as a **string** — what was typed in the
-look editor, else the parameter's string `defaultValue`.
+look editor, else the parameter's string `defaultValue`. `type:"image"`
+params arrive as `null` (no picture yet) or an object decoded once by the
+host: `{ name, width, height, frames, delays, totalMs, key }` — `frames` an
+array of ArrayBuffers of `width × height × 4` RGBA bytes (premultiplied, so
+transparent is black; wrap one in `new Uint8Array(...)`), `delays` each
+frame's ms (0 for a still), `key` the same for the same picture (cache by
+it). The object is the same from tick to tick until the picture changes.
 
 ### `state` — persistence
 

@@ -53,6 +53,7 @@
 #include <QMimeData>
 #include <QLabel>
 #include <QTimer>
+#include <QtMath>
 #include <QMenu>
 #include <QCursor>
 #include <QDrag>
@@ -1016,6 +1017,22 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     }
     // In-place rename (Return / F2): committed, or Esc and back as it was.
     connect(m_tree, &QTreeWidget::itemChanged, this, &ShowTreeView::slotTreeItemRenamed);
+    // A cue row's tick: unticked, the cue is skipped (GO passes over it).
+    // On a selected row it acts on every selected cue. After the click is
+    // done with the row: the edit rebuilds the tree.
+    connect(m_tree, &QTreeWidget::itemChanged, this, [this](QTreeWidgetItem *item, int column) {
+        if (m_reloading || m_renaming || column != 0 || item == nullptr
+            || item->data(0, KindRole).toInt() != CueNode || !item->data(0, Qt::CheckStateRole).isValid())
+            return;
+        const quint32 cueId = item->data(0, IdRole).toUInt();
+        const bool skip = item->checkState(0) == Qt::Unchecked;
+        if (skip == m_st->isCueSkipped(cueId))
+            return;
+        QList<quint32> cues = item->isSelected() ? selectedCues() : QList<quint32>();
+        if (!cues.contains(cueId))
+            cues = { cueId };
+        QTimer::singleShot(0, this, [this, cues, skip]() { setCuesSkipped(cues, skip); });
+    });
     connect(m_tree->itemDelegate(), &QAbstractItemDelegate::closeEditor, this, [this]() {
         if (!m_renaming)
             return;
@@ -1234,6 +1251,14 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                                 "played. Convert to tracking turns it off wherever that plays the same."));
         f->addRow(QString(), m_cueMix);
         connect(m_cueMix, &QCheckBox::toggled, this, &ShowTreeView::slotCueMixToggled);
+        m_cueSkip = new QCheckBox(tr("Skip: GO passes over it"), inner);
+        m_cueSkip->setObjectName("stCueSkip");
+        m_cueSkip->setToolTip(tr("Skipped: GO, auto-follow and Back pass over it, and it tracks as if it "
+                                 "weren't in the list (the next cue starts from the cue before it). A jump "
+                                 "straight to it still plays it. The tick on its row in the tree, or ⌘/, "
+                                 "does the same."));
+        f->addRow(QString(), m_cueSkip);
+        connect(m_cueSkip, &QCheckBox::toggled, this, &ShowTreeView::slotCueSkipToggled);
         {
             // Includes (D8): this cue plays their output under its own,
             // in order -- the later wins.
@@ -1970,6 +1995,30 @@ QTreeWidgetItem *ShowTreeView::findItem(quint32 id, quint32 cueId) const
     return nullptr;
 }
 
+/* A skipped cue's grey: between the theme's text and its background, as
+   far toward the background as still reads (3:1, WCAG's floor for greyed
+   text) -- the Disabled text colour all but vanishes on some themes. */
+static QColor readableGrey(const QPalette &pal)
+{
+    auto lum = [](const QColor &c) {
+        auto lin = [](double v) { return v <= 0.03928 ? v / 12.92 : qPow((v + 0.055) / 1.055, 2.4); };
+        return 0.2126 * lin(c.redF()) + 0.7152 * lin(c.greenF()) + 0.0722 * lin(c.blueF());
+    };
+    const QColor text = pal.color(QPalette::Active, QPalette::Text);
+    const QColor base = pal.color(QPalette::Active, QPalette::Base);
+    const double lb = lum(base);
+    for (double t = 0.45; t < 1.0; t += 0.05)
+    {
+        const QColor c = QColor::fromRgbF(text.redF() * t + base.redF() * (1 - t),
+                                          text.greenF() * t + base.greenF() * (1 - t),
+                                          text.blueF() * t + base.blueF() * (1 - t));
+        const double l = lum(c);
+        if ((qMax(l, lb) + 0.05) / (qMin(l, lb) + 0.05) >= 3.3)
+            return c;
+    }
+    return text;
+}
+
 void ShowTreeView::buildTree()
 {
     m_reloading = true;
@@ -1994,6 +2043,7 @@ void ShowTreeView::buildTree()
     QFont boldFont = m_tree->font();
     boldFont.setBold(true);
     const QBrush grey = palette().brush(QPalette::Disabled, QPalette::Text);
+    const QBrush skipGrey(readableGrey(m_tree->palette()));
 
     for (const Production &prod : m_st->productions())
     {
@@ -2249,6 +2299,44 @@ void ShowTreeView::buildTree()
                                                           m_st->listOfCue(list.subOf)->indexOf(list.subOf)),
                                            cue.note).trimmed());
                 }
+                // Skip (a cue of a list, or a sub-cue): the tick, unticked
+                // when skipped -- then greyed and struck through, ⦸ in the
+                // badges, and everything under it greyed (its layers, what
+                // tracks in, its sub-cues: none of it plays from GO).
+                if (!list.looks)
+                {
+                    ci->setFlags(ci->flags() | Qt::ItemIsUserCheckable);
+                    ci->setCheckState(0, cue.skip ? Qt::Unchecked : Qt::Checked);
+                }
+                if (!list.looks && cue.skip)
+                {
+                    const QString why = tr("Skipped: GO passes over it. It tracks as if it weren't in the list; "
+                                           "a jump straight to it still plays it. Tick it (or ⌘/) to put it back.");
+                    ci->setText(1, (tr("⦸ skip") + QStringLiteral("  ") + ci->text(1)).trimmed());
+                    for (int c = 0; c < 2; ++c)
+                    {
+                        ci->setToolTip(c, (why + QStringLiteral("\n\n") + ci->toolTip(c)).trimmed());
+                        if (c == 0)
+                        {
+                            // The name struck through; the ⦸ badge plain.
+                            QFont f = ci->font(c);
+                            f.setStrikeOut(true);
+                            ci->setFont(c, f);
+                        }
+                        ci->setForeground(c, skipGrey);
+                    }
+                    QList<QTreeWidgetItem *> todo;
+                    for (int k = 0; k < ci->childCount(); ++k)
+                        todo << ci->child(k);
+                    while (!todo.isEmpty())
+                    {
+                        QTreeWidgetItem *under = todo.takeFirst();
+                        under->setForeground(0, skipGrey);
+                        under->setForeground(1, skipGrey);
+                        for (int k = 0; k < under->childCount(); ++k)
+                            todo << under->child(k);
+                    }
+                }
             };
             for (int i = 0; i < list.cues.count(); ++i)
                 addCue(list, i, resolved, nullptr);
@@ -2404,7 +2492,15 @@ void ShowTreeView::changeEvent(QEvent *ev)
 {
     QWidget::changeEvent(ev);
     if (ev->type() == QEvent::PaletteChange || ev->type() == QEvent::StyleChange)
+    {
         styleCueDropZone();
+        // The tree's greys (skipped cues, carried-in layers) are the
+        // theme's: taken again, once the change is through.
+        QTimer::singleShot(0, this, [this]() {
+            if (m_st != nullptr && m_tree != nullptr && !m_renaming && !m_reloading)
+                buildTree();
+        });
+    }
 }
 
 void ShowTreeView::styleCueDropZone()
@@ -2447,7 +2543,10 @@ QString ShowTreeView::previewText() const
 {
     const quint32 cueId = m_st->previewedCue();
     const CueList *list = cueId == invalidId() ? nullptr : m_st->listOfCue(cueId);
-    const QString cue = list == nullptr ? QString() : m_st->cueLabel(*list, list->indexOf(cueId));
+    QString cue = list == nullptr ? QString() : m_st->cueLabel(*list, list->indexOf(cueId));
+    // A skipped cue plays when picked, as a jump to it does (GO passes over it).
+    if (m_st->isCueSkipped(cueId))
+        cue = tr("%1 (skipped: GO passes over it; played as picked)").arg(cue);
     switch (m_st->previewState())
     {
         case ShowTreeController::PreviewState::Playing:
@@ -2740,7 +2839,7 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
                             static_cast<QWidget *>(m_cueBase), m_cueIncludes->parentWidget(),
                             static_cast<QWidget *>(m_cueFadeIn), static_cast<QWidget *>(m_cueFadeOut),
                             static_cast<QWidget *>(m_cueHold), static_cast<QWidget *>(m_cueNext),
-                            static_cast<QWidget *>(m_cueTracked) })
+                            static_cast<QWidget *>(m_cueTracked), static_cast<QWidget *>(m_cueSkip) })
             m_cueForm->setRowVisible(w, cueRows);
         m_cueForm->setRowVisible(m_lookFiredBy, list.looks);
         // A sub-cue (P6): its advance, not a mode, base, includes or hold
@@ -2803,6 +2902,10 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
     {
         QSignalBlocker block(m_cueMix);
         m_cueMix->setChecked(cue.mixOverlap);
+    }
+    {
+        QSignalBlocker block(m_cueSkip);
+        m_cueSkip->setChecked(cue.skip);
     }
     m_cueReuse->setText(reuseLine(cue.id, invalidId()));
 
@@ -2917,12 +3020,26 @@ QString ShowTreeView::nextCueText(quint32 cueId) const
     if (list == nullptr)
         return QString();
     const int index = list->indexOf(cueId);
-    if (index + 1 >= list->cues.count())
-        return tr("— (the last cue)");
-    const Cue &next = list->cues.at(index + 1);
-    const QString nextLabel = m_st->cueLabel(*list, index + 1);
+    // The next cue GO plays: skipped ones are passed over.
+    const int nextAt = playedAfter(*list, index);
+    if (nextAt < 0)
+        return index + 1 >= list->cues.count() ? tr("— (the last cue)")
+                                               : tr("— (every cue after it is skipped)");
+    const Cue &next = list->cues.at(nextAt);
+    const QString nextLabel = m_st->cueLabel(*list, nextAt);
+    const QString via = nextAt == index + 1 ? QString() : tr("(%1, past the skipped) ").arg(nextLabel);
     if (effectiveMode(*list, next) == CueMode::Block)
-        return tr("nothing: %1 is a Block cue, it starts from nothing").arg(nextLabel);
+        return tr("nothing: %1%2 is a Block cue, it starts from nothing")
+               .arg(nextLabel, via.isEmpty() ? QString() : tr(" (past the skipped)"));
+    if (list->cues.at(index).skip)
+    {
+        // Skipped: it passes on nothing of its own -- the next cue starts
+        // from the cue played before it.
+        const int before = playedBefore(*list, index);
+        if (before < 0)
+            return tr("%1nothing of this cue (skipped): it starts as the first cue played").arg(via);
+        return tr("%1nothing of this cue (skipped): what %2 passes on").arg(via, m_st->cueLabel(*list, before));
+    }
 
     const QList<ResolvedCue> resolved = m_st->resolved(*list);
     QStringList parts;
@@ -2954,7 +3071,7 @@ QString ShowTreeView::nextCueText(quint32 cueId) const
     QString text = parts.isEmpty() ? tr("nothing") : parts.join(QStringLiteral("; "));
     if (effectiveMode(*list, cue) == CueMode::CueOnly)
         text = tr("what this cue started from (it is cue-only): %1").arg(text);
-    return text;
+    return via + text;
 }
 
 QString ShowTreeView::carriedOrigin(Origin origin, quint32 fromCue) const
@@ -3023,6 +3140,8 @@ QString ShowTreeView::cueTrackingTip(quint32 cueId) const
     QStringList out;
     if (effectiveMode(*list, cue) == CueMode::Block && list->mode == ListMode::Tracking)
         out << tr("⊘ Block: it starts from nothing; nothing tracks in.");
+    if (cue.skip)
+        out << tr("⦸ Skipped: below is what a jump to it plays; nothing of it passes on.");
 
     // What tracks in, at most a dozen layers (the cue page has them all).
     QStringList carried, own;
@@ -3875,6 +3994,49 @@ void ShowTreeView::slotCueMixToggled(bool on)
     if (m_inspectorUpdating || m_pageCue == invalidId())
         return;
     m_st->setCueMixOverlap(m_pageCue, on);
+}
+
+void ShowTreeView::slotCueSkipToggled(bool on)
+{
+    if (m_inspectorUpdating || m_pageCue == invalidId())
+        return;
+    setCuesSkipped({ m_pageCue }, on);
+}
+
+QList<quint32> ShowTreeView::selectedCues() const
+{
+    QList<quint32> out;
+    for (QTreeWidgetItemIterator it(m_tree); *it; ++it)
+        if ((*it)->isSelected() && (*it)->data(0, KindRole).toInt() == CueNode)
+        {
+            const quint32 id = (*it)->data(0, IdRole).toUInt();
+            const CueList *l = m_st->listOfCue(id);
+            if (l != nullptr && !l->looks)
+                out << id;
+        }
+    return out;
+}
+
+bool ShowTreeView::setCuesSkipped(const QList<quint32> &cueIds, bool skip)
+{
+    if (cueIds.isEmpty() || !m_st->setCuesSkipped(cueIds, skip))
+        return false;
+    m_hint->setText(skip ? tr("Skipped %1: GO passes over it (⌘/ or the tick puts it back; a jump still plays it)")
+                           .arg(cueIds.count() == 1 ? tr("1 cue") : tr("%1 cues").arg(cueIds.count()))
+                         : tr("Unskipped %1: GO plays it again")
+                           .arg(cueIds.count() == 1 ? tr("1 cue") : tr("%1 cues").arg(cueIds.count())));
+    return true;
+}
+
+bool ShowTreeView::toggleSkipSelected()
+{
+    const QList<quint32> cues = selectedCues();
+    if (cues.isEmpty())
+        return false;
+    bool all = true;
+    for (quint32 id : cues)
+        all = all && m_st->isCueSkipped(id);
+    return setCuesSkipped(cues, !all);
 }
 
 void ShowTreeView::slotRecordCue()
@@ -5270,6 +5432,20 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
                     });
                     a->setCheckable(true);
                     a->setChecked(now == m);
+                }
+                // Skip cue / Unskip cue: the selected cues, when this is one.
+                {
+                    QList<quint32> cues = item->isSelected() ? selectedCues() : QList<quint32>();
+                    if (!cues.contains(cueId))
+                        cues = { cueId };
+                    const bool skipped = list->cue(cueId)->skip;
+                    const QString what = cues.count() == 1 ? QString() : tr(" (%1 cues)").arg(cues.count());
+                    QAction *sk = menu.addAction((skipped ? tr("Unskip cue") : tr("Skip cue")) + what, this,
+                                                 [this, cues, skipped]() { setCuesSkipped(cues, !skipped); });
+                    sk->setObjectName("stSkipCue");
+                    sk->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Slash));
+                    sk->setToolTip(skipped ? tr("GO plays it again")
+                                           : tr("GO, auto-follow and Back pass over it; a jump still plays it"));
                 }
                 menu.addSeparator();
                 menu.addAction(tr("Record as new cue"), this, [this, cueId]() {
@@ -7576,6 +7752,14 @@ bool ShowTreeView::eventFilter(QObject *obj, QEvent *ev)
         if ((key == Qt::Key_Return || key == Qt::Key_Enter || key == Qt::Key_F2)
             && startRename())
             return true;
+    }
+    if (obj == m_tree && ev->type() == QEvent::KeyPress
+        && static_cast<QKeyEvent *>(ev)->key() == Qt::Key_Slash
+        && (static_cast<QKeyEvent *>(ev)->modifiers() & Qt::ControlModifier))
+    {
+        // ⌘/: skip the selected cues, or put them back.
+        toggleSkipSelected();
+        return true;
     }
     if (obj == m_tree && ev->type() == QEvent::KeyPress
         && static_cast<QKeyEvent *>(ev)->text() == QLatin1String("/"))

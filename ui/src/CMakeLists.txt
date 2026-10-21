@@ -219,6 +219,7 @@ add_library(${module_name}
     virtualconsole/vcclockproperties.cpp virtualconsole/vcclockproperties.h virtualconsole/vcclockproperties.ui
     virtualconsole/vcshowcontrol.cpp virtualconsole/vcshowcontrol.h
     virtualconsole/vccuerunner.cpp virtualconsole/vccuerunner.h
+    virtualconsole/vccuerunnerproperties.cpp virtualconsole/vccuerunnerproperties.h
     virtualconsole/vcshowcontrolproperties.cpp virtualconsole/vcshowcontrolproperties.h
     virtualconsole/vccuelist.cpp virtualconsole/vccuelist.h
     virtualconsole/vccuelistproperties.cpp virtualconsole/vccuelistproperties.h virtualconsole/vccuelistproperties.ui

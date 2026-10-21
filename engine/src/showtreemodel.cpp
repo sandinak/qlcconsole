@@ -369,8 +369,8 @@ namespace
 bool releasesToBase(const CueList &list, int k)
 {
     const Cue &cue = list.cues.at(k);
-    if (effectiveMode(list, cue) == CueMode::CueOnly)
-        return false;               // a Cue-only cue's changes, its releases too, don't pass on
+    if (effectiveMode(list, cue) == CueMode::CueOnly || cue.skip)
+        return false;               // a Cue-only (or skipped) cue's changes, its releases too, don't pass on
     for (const Layer &l : cue.layers)
         if (l.release && !l.target.isEmpty())
             return true;
@@ -383,8 +383,9 @@ QList<int> needs(const CueList &list, int k)
     QList<int> out;
     const Cue &cue = list.cues.at(k);
     const CueMode mode = effectiveMode(list, cue);
-    if (k > 0 && (mode == CueMode::Track || mode == CueMode::CueOnly))
-        out << k - 1;
+    const int before = playedBefore(list, k);
+    if (before >= 0 && (mode == CueMode::Track || mode == CueMode::CueOnly))
+        out << before;
     for (quint32 inc : cue.includes)
     {
         const int j = list.indexOf(inc);
@@ -508,14 +509,17 @@ struct Resolver
 
         const CueMode mode = effectiveMode(list, cue);
         QList<ResolvedLayer> start;
-        if (i > 0 && (mode == CueMode::Track || mode == CueMode::CueOnly))
+        // From the cue before -- the nearest not skipped: a skipped cue
+        // passes on nothing of its own.
+        const int before = playedBefore(list, i);
+        if (before >= 0 && (mode == CueMode::Track || mode == CueMode::CueOnly))
         {
-            resolveAt(i - 1);
-            start = carried(out.at(i - 1).passOn);
+            resolveAt(before);
+            start = carried(out.at(before).passOn);
         }
-        else if (i == 0 && startState != nullptr && mode == CueMode::Track)
+        else if (before < 0 && startState != nullptr && mode == CueMode::Track)
         {
-            // The first sub-cue: from what its cue puts on stage.
+            // The first sub-cue played: from what its cue puts on stage.
             start = carried(settled(*startState));
         }
 
@@ -700,7 +704,7 @@ struct Resolver
         // in this cue is plain tracked from here on.
         QList<ResolvedLayer> pass = settled((mode == CueMode::CueOnly) ? start
                                             : mix ? mergedByTarget(layers) : layers);
-        if (mode != CueMode::CueOnly)
+        if (mode != CueMode::CueOnly && !cue.skip)
         {
             const int baseIdx = list.indexOf(list.baseCue);
             for (int k = pass.count() - 1; k >= 0; --k)
@@ -799,10 +803,19 @@ QList<quint32> rebakeChain(const CueList &list, quint32 cueId)
             if (!start.at(k) && !content.at(k))
                 continue;
             const Cue &cue = list.cues.at(k);
-            // What it passes on: a Cue-only cue passes on what it started from.
-            const bool passes = effectiveMode(list, cue) != CueMode::CueOnly || start.at(k);
-            if (passes && k + 1 < n && effectiveMode(list, list.cues.at(k + 1)) != CueMode::Block)
-                mark(start, k + 1);
+            // What it passes on: a Cue-only cue passes on what it started
+            // from; a skipped one nothing of its own. It reaches the cues
+            // after it up to the next one played (the skipped ones between
+            // start from it too).
+            const bool passes = !cue.skip && (effectiveMode(list, cue) != CueMode::CueOnly || start.at(k));
+            if (passes)
+                for (int m = k + 1; m < n; ++m)
+                {
+                    if (effectiveMode(list, list.cues.at(m)) != CueMode::Block)
+                        mark(start, m);
+                    if (!list.cues.at(m).skip)
+                        break;
+                }
             // Every cue that includes it plays its output.
             for (int m = 0; m < n; ++m)
                 if (m != k && list.cues.at(m).includes.contains(cue.id))
@@ -811,9 +824,17 @@ QList<quint32> rebakeChain(const CueList &list, quint32 cueId)
             // the base's values on.
             if (k == base)
                 for (int m = 0; m < n; ++m)
-                    if (m != k && m + 1 < n && releasesToBase(list, m)
-                        && effectiveMode(list, list.cues.at(m + 1)) != CueMode::Block)
-                        mark(start, m + 1);
+                {
+                    if (m == k || !releasesToBase(list, m))
+                        continue;
+                    for (int j = m + 1; j < n; ++j)
+                    {
+                        if (effectiveMode(list, list.cues.at(j)) != CueMode::Block)
+                            mark(start, j);
+                        if (!list.cues.at(j).skip)
+                            break;
+                    }
+                }
         }
     }
 
@@ -829,7 +850,33 @@ QList<ResolvedCue> resolve(const CueList &list, const LineAimTest &isLineAim, co
     Resolver r(list, isLineAim, start);
     for (int i = 0; i < list.cues.count(); ++i)
         r.resolveAt(i);
+    // A skipped cue passes on what it was handed: what the cue played
+    // before it passes on (the first played: what the list starts from).
+    for (int i = 0; i < list.cues.count(); ++i)
+    {
+        if (!list.cues.at(i).skip)
+            continue;
+        const int before = playedBefore(list, i);
+        r.out[i].passOn = before >= 0 ? r.out.at(before).passOn
+                          : start != nullptr ? settled(*start) : QList<ResolvedLayer>();
+    }
     return QList<ResolvedCue>(r.out.begin(), r.out.end());
+}
+
+int playedBefore(const CueList &list, int index)
+{
+    int k = qMin(index, int(list.cues.count())) - 1;
+    while (k >= 0 && list.cues.at(k).skip)
+        --k;
+    return k;
+}
+
+int playedAfter(const CueList &list, int index)
+{
+    for (int k = qMax(index + 1, 0); k < list.cues.count(); ++k)
+        if (!list.cues.at(k).skip)
+            return k;
+    return -1;
 }
 
 Stage stageOf(const ResolvedCue &cue)
@@ -1229,6 +1276,8 @@ void saveXML(QXmlStreamWriter *doc, const Production &production)
             writeId(doc, QStringLiteral("Collection"), cue.collection);
             if (list.looks && !cue.folder.isEmpty())
                 doc->writeAttribute(QStringLiteral("Folder"), cue.folder);
+            if (cue.skip && !list.looks)
+                doc->writeAttribute(QStringLiteral("Skip"), QStringLiteral("1"));
             if (list.isSubCues() && cue.follow)
             {
                 doc->writeAttribute(QStringLiteral("Follow"), QStringLiteral("Auto"));
@@ -1392,6 +1441,7 @@ bool loadXML(QXmlStreamReader &root, Production &production)
             cue.reusable = readId(a, QStringLiteral("Reusable"));
             cue.unlinkedFrom = a.value(QStringLiteral("UnlinkedFrom")).toString();
             cue.collection = readId(a, QStringLiteral("Collection"));
+            cue.skip = !looks && a.value(QStringLiteral("Skip")).toString() == QLatin1String("1");
             if (looks)
             {
                 cue.folder = a.value(QStringLiteral("Folder")).toString();

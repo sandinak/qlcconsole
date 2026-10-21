@@ -7,6 +7,15 @@ The latest changes, newest first. Each links to the guide with the detail.
 - **The version on the boot window.** While qlcconsole starts, its window
   shows the release — "qlcconsole 0.2.2" — and below it the build and
   commit, so you can tell which version is starting.
+- **The Cue Runner widget, mapped and less crowded.** Each of its actions
+  (GO, Sub GO, Back, Sub Back, Pause, Stop, Load next / previous) takes a
+  controller input and a key in its properties' new **External Input**
+  tab, with feedback that lights GO while there's a cue to GO to and Sub
+  GO while a sub-cue waits. The info now gets the room: made bigger, the
+  cue name grows and more of the cues to come show, while GO and Sub GO
+  keep their height. In Design mode, handles inside it set the buttons'
+  height and the GO / Sub GO split. See
+  [The cue runner](show-tree.md#the-cue-runner).
 - **No false warning for a curtain.** A show with a stage curtain no longer
   lists it under "fixture types declare no light output": a curtain is not
   a light. Hazers, smoke machines and fans with no light of their own are
@@ -21,6 +30,36 @@ The latest changes, newest first. Each links to the guide with the detail.
   copies it), open everything with ⊞, and ⌘Z / ⇧⌘Z undo and redo scene
   edits with everything else. See
   [The outline](programming-tab.md#the-outline).
+
+### More Matrix effects, and staggered boxes
+
+- **Twelve more Matrix effects** for pixel boxes, in the effect browser's
+  **Matrix** tab: **Fire** (flames from the bottom, classic, blue or the
+  look's colours), **Starfield** (warp speed out of a point), **Spiral**,
+  **Lissajous** (a figure-8 with a fading trail), **Kaleidoscope** (2 to
+  8-fold, from clouds or bars), **Bouncing Balls** (with or without
+  gravity), **Fireworks** (bursting on the beat), **Scanner** (KITT),
+  **Dissolve**, **Gradient Sweep**, **Box VU** (each box a VU meter from
+  the audio input) and **Image** — a picture or animated GIF, kept inside
+  the show. Each takes the look's colours in order (its own when the look
+  has none), and keeps the white rows of a box like the XL-450 lit as they
+  should be. See [Matrix effects](effects.md#matrix-effects) and
+  [Pictures and GIFs](effects.md#pictures-and-gifs).
+- **Each box, staggered.** A new scope for every Matrix effect that has
+  one: the same picture in every box, each a little behind the last — left
+  to right, right to left, out from the middle or at random — so a ripple
+  rolls from box to box. **stagger** sets how far, as a part of the
+  effect's cycle.
+
+### Show Tree: skip a cue
+
+- **Skip a cue without deleting it.** Untick the box on a cue's row (or
+  right-click → **Skip cue**, or **⌘/**, or type `skip 0.0.3` or
+  `skip 0.0.3 thru 0.0.5`) and GO, auto-follow and Back pass over it. It
+  turns grey and struck through; untick it again, or `unskip`, to put it
+  back. Its changes don't track on: the next cue plays as if it weren't in
+  the list. A jump straight to it still plays it. See
+  [Skipping cues](show-tree.md#skipping-cues).
 
 ### Definition updates
 

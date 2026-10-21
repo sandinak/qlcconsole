@@ -24,6 +24,8 @@
 #include <QTemporaryDir>
 #include <QTabWidget>
 #include <QTabBar>
+#include <QTreeWidget>
+#include <QTreeWidgetItemIterator>
 #include <QDialog>
 #include <QComboBox>
 #include <QLabel>
@@ -866,6 +868,73 @@ void AppViews_Test::theDropAreaReadsInEveryTheme()
         QVERIFY2(best >= 4.5, qPrintable(QString("theme %1: text contrast %2").arg(theme).arg(best)));
     }
     m_app->setTheme(was);
+    QVERIFY(st->removeProduction(st->productions().first().id));
+}
+
+void AppViews_Test::aSkippedCueReadsInEveryTheme()
+{
+    ShowTreeController *st = m_app->doc()->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "Skips", ShowTree::ListMode::Tracking);
+    QList<quint32> cues;
+    for (int i = 0; i < 4; ++i)
+        cues << st->addCue(list, i - 1, QStringLiteral("Cue number %1").arg(i + 1));
+    QVERIFY(st->setCuesSkipped({ cues[1], cues[2] }, true));
+    ShowTreeView *view = ShowTreeView::instance();
+    QVERIFY(view != nullptr);
+    QTabWidget *tabs = m_app->m_tab;
+    for (int i = 0; i < tabs->count(); ++i)
+        if (tabs->widget(i) == view || tabs->widget(i)->isAncestorOf(view))
+            tabs->setCurrentIndex(i);
+    m_app->resize(1400, 800);
+    m_app->showNormal();
+    QVERIFY(QTest::qWaitForWindowExposed(m_app));
+    const QString dir = qEnvironmentVariable("QLC_SKIPCUE_THEMES");
+
+    const int was = m_app->theme();
+    const int themes[] = { App::ThemeDefault, App::ThemeTan, App::ThemeBlue,
+                           App::ThemeQLCOriginal, App::ThemeRedShift, App::ThemeVSCodeDark };
+    for (int theme : themes)
+    {
+        m_app->setTheme(theme);
+        QCoreApplication::processEvents();
+        QTest::qWait(30);           // the tree takes the theme's greys again
+        QTreeWidget *tree = view->tree();
+        tree->expandAll();
+        tree->clearSelection();
+        QCoreApplication::processEvents();
+        QTreeWidgetItem *row = nullptr;
+        for (QTreeWidgetItemIterator it(tree); *it; ++it)
+            if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::CueNode
+                && (*it)->data(0, ShowTreeView::IdRole).toUInt() == cues[1])
+                row = *it;
+        QVERIFY(row != nullptr);
+        QVERIFY(row->font(0).strikeOut());
+        // The words of the row against what is behind them, as for the drop
+        // area: the commonest colour is the row, the one furthest from it
+        // the text -- the struck name and the ⦸ badge.
+        const QRect rect = tree->visualItemRect(row);
+        const QImage img = tree->viewport()->grab(rect).toImage();
+        QHash<QRgb, int> counts;
+        for (int y = 0; y < img.height(); ++y)
+            for (int x = 0; x < img.width(); ++x)
+                ++counts[img.pixel(x, y) | 0xff000000];
+        QRgb bg = 0;
+        int most = -1;
+        for (auto it = counts.cbegin(); it != counts.cend(); ++it)
+            if (it.value() > most)
+            {
+                most = it.value();
+                bg = it.key();
+            }
+        // Greyed reads as greyed (WCAG's 3:1 for large or incidental text),
+        // never gone.
+        const double text = contrast(row->foreground(0).color().rgb(), bg);
+        QVERIFY2(text >= 3.0, qPrintable(QString("theme %1: skipped text contrast %2").arg(theme).arg(text)));
+        if (!dir.isEmpty())
+            QVERIFY(view->grab().save(QStringLiteral("%1/skipped-theme-%2.png").arg(dir).arg(theme)));
+    }
+    m_app->setTheme(was);
+    m_app->hide();
     QVERIFY(st->removeProduction(st->productions().first().id));
 }
 

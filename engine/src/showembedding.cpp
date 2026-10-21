@@ -155,6 +155,8 @@ namespace
             return QObject::tr("drawn path");
         if (d.type == QLatin1String("text"))
             return QObject::tr("text");
+        if (d.type == QLatin1String("image"))
+            return QObject::tr("picture");
         if (!d.enumValues.isEmpty())
             return QObject::tr("list");
         return QObject::tr("number");

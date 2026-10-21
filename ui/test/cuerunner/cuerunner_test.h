@@ -45,6 +45,12 @@ private slots:
     void spaceIsGoInTheRunTab();
     void theVcWidgetSavesLoadsAndCopies();
     void swapWidgetOnAPage();
+    void vcActionsFromInputsAndKeys();
+    void vcFeedbackFollowsTheCue();
+    void vcResizeGrowsTheInfo();
+    void vcHandlesSizeAndPersist();
+    void vcPropertiesRoundTrip();
+    void screenshots();
 
 private:
     /** Production "Dance" (current) with "Song": cue 1 (A Half), cue 2

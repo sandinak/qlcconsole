@@ -15,7 +15,7 @@
     effect.author      = "qlcconsole";
     effect.requires    = ["matrix"];
     effect.fixtureTypes = ["matrix", "rgb", "dimmer"];
-    effect.notes = "Snakes run along a path through the pixels: back and forth along the rows, up and down the columns, spiralling into the middle, or round the edge. Snakes: how many follow each other round; Length: each one's length in pixels, its tail fading. Colours: one of the look's colours each, or a rainbow along the body. Speed: pixels a second (per beat on a speed master). Scope: a path in each box, or one through the whole canvas. The accent is each snake's head.";
+    effect.notes = "Snakes run along a path through the pixels: back and forth along the rows, up and down the columns, spiralling into the middle, or round the edge. Snakes: how many follow each other round; Length: each one's length in pixels, its tail fading. Colours: one of the look's colours each, or a rainbow along the body. Speed: pixels a second (per beat on a speed master). Scope: a path in each box, or one through the whole canvas. The accent is each snake's head. Each box, staggered: the same in every box, each a little behind the last, so it rolls across the rig -- Stagger order: left to right, right to left, out from the middle or random; Stagger: how far behind, as a fraction of a lap of a box.";
 
     effect.parameters = [
         { name: "speed",   description: "Pixels a second (per beat on a speed master)", min: 1, max: 80, defaultValue: 20 },
@@ -25,7 +25,7 @@
         { name: "length",  description: "Each snake's length (pixels)", min: 1, max: 40, defaultValue: 8 },
         { name: "colours", description: "Colouring", defaultValue: 0, values: ["A look colour each", "Rainbow along the body"] },
         { name: "scope",   description: "A path in each box, or through the whole canvas", defaultValue: 1, values: MATRIX.SCOPES }
-    ].concat(MATRIX.whiteParams(0));
+    ].concat(MATRIX.staggerParams(), MATRIX.whiteParams(0));
 
     // Each pixel's place along the path through a w x h area, -1 when the
     // path misses it (the edge path's middle). { order: [], length: n }
@@ -57,42 +57,46 @@
         return { order: order, length: Math.max(1, n) };
     }
 
-    effect.tick = function(fixtures, inputs, palettes, params, state) {
+    effect.tick = function(fixtures, inputs, palettes, params, state, data) {
         if (fixtures.length === 0) return [];
         var cv = MATRIX.canvas(fixtures);
-        var num = MATRIX.num;
-        var kind = Math.round(num(params.path, 0));
-        var snakes = Math.max(1, Math.round(num(params.snakes, 2)));
-        var len = Math.max(1, num(params.length, 8));
-        var rainbow = Math.round(num(params.colours, 0)) === 1;
-        var perBox = Math.round(num(params.scope, 1)) === 1;
-        var C = MATRIX.colours(palettes, [{ r: 0, g: 255, b: 120 }, { r: 255, g: 0, b: 140 }]);
-        var travelled = num(inputs._time, 0) * num(params.speed, 20);
-        if (state.paths === undefined) state.paths = {};
+        return MATRIX.scoped(cv, fixtures, inputs, params, state,
+                             MATRIX.cycle(cv.boxes.length && cv.boxes[0].w > 1 && cv.boxes[0].h > 1 ? cv.boxes[0].w * cv.boxes[0].h : cv.cols * cv.rows, MATRIX.num(params.speed, 20)),
+                             function(fixtures, inputs, state, root) {
+            var num = MATRIX.num;
+            var kind = Math.round(num(params.path, 0));
+            var snakes = Math.max(1, Math.round(num(params.snakes, 2)));
+            var len = Math.max(1, num(params.length, 8));
+            var rainbow = Math.round(num(params.colours, 0)) === 1;
+            var perBox = MATRIX.perBox(params, 1);
+            var C = MATRIX.colours(palettes, [{ r: 0, g: 255, b: 120 }, { r: 255, g: 0, b: 140 }]);
+            var travelled = num(inputs._time, 0) * num(params.speed, 20);
+            if (state.paths === undefined) state.paths = {};
 
-        return fixtures.map(function(f) {
-            var p = MATRIX.point(f, cv, perBox);
-            var key = p.w + "x" + p.h + ":" + kind;
-            var path = state.paths[key];
-            if (path === undefined) path = state.paths[key] = buildPath(p.w, p.h, kind);
-            var at = path.order[p.y * p.w + p.x];
-            if (at === undefined || at < 0) return MATRIX.out(f, cv, C[0], 0, 0, params);
-            var L = path.length;
-            var gapEach = L / snakes;
-            var best = 0, acc = 0, which = 0, along = 0;
-            for (var s = 0; s < snakes; s++) {
-                var head = travelled + s * gapEach;
-                var behind = head - at;
-                behind -= Math.floor(behind / L) * L;           // 0..L
-                if (behind < len) {
-                    var lvl = 1 - behind / len;
-                    lvl = 0.15 + 0.85 * lvl;
-                    if (lvl > best) { best = lvl; which = s; along = behind / len; }
-                    if (behind < 1) acc = Math.max(acc, 1 - behind);
+            return fixtures.map(function(f) {
+                var p = MATRIX.point(f, cv, perBox);
+                var key = p.w + "x" + p.h + ":" + kind;
+                var path = state.paths[key];
+                if (path === undefined) path = state.paths[key] = buildPath(p.w, p.h, kind);
+                var at = path.order[p.y * p.w + p.x];
+                if (at === undefined || at < 0) return MATRIX.out(f, cv, C[0], 0, 0, params);
+                var L = path.length;
+                var gapEach = L / snakes;
+                var best = 0, acc = 0, which = 0, along = 0;
+                for (var s = 0; s < snakes; s++) {
+                    var head = travelled + s * gapEach;
+                    var behind = head - at;
+                    behind -= Math.floor(behind / L) * L;           // 0..L
+                    if (behind < len) {
+                        var lvl = 1 - behind / len;
+                        lvl = 0.15 + 0.85 * lvl;
+                        if (lvl > best) { best = lvl; which = s; along = behind / len; }
+                        if (behind < 1) acc = Math.max(acc, 1 - behind);
+                    }
                 }
-            }
-            var colour = rainbow ? MATRIX.hue(along * 0.85 + which / snakes) : MATRIX.pick(C, which);
-            return MATRIX.out(f, cv, colour, best, acc, params);
+                var colour = rainbow ? MATRIX.hue(along * 0.85 + which / snakes) : MATRIX.pick(C, which);
+                return MATRIX.out(f, cv, colour, best, acc, params);
+            });
         });
     };
 

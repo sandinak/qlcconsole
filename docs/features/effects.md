@@ -100,17 +100,29 @@ effect browser, and work on any RGB matrix, strip or row of pars as well.
 | Effect | What it does | Main settings |
 |---|---|---|
 | **Matrix Bars** | Bars of colour scan across, up or down, or bounce between the edges | Direction, Bars, Width, Tail |
+| **Matrix Bouncing Balls** | Balls bounce round inside the canvas — floating free off every edge, or dropping and bouncing on the floor — with a soft trail and a flash as they hit | Count, Size, Trail, Gravity (off / on) |
 | **Matrix Box Chase** | Whole boxes light in turn round the rig, a white hit as each comes on; on one box, its fifths take turns | Order (left to right, bounce, out from the middle, odd/even, random…), Lit, Fade, Flash |
+| **Matrix Box VU** | Each box is a VU meter filling with the live audio — the whole level, low to high across the boxes, the bass or the highs — a peak dot holding the top; simulated on the beat while there's no audio | Source, Band, Gain, Release, Peaks, From (bottom, middle, left, middle across), Colours |
 | **Matrix Checker** | A checkerboard that swaps on the beat — colours trade squares, squares go on and off, or crossfade | Swap, Square, Fade, Flash |
 | **Matrix Chevrons** | Arrows march the way they point: right, left, up, down, out from or in to the middle | Direction, Spacing, Thickness, Angle |
+| **Matrix Dissolve** | Pixel by random pixel from one look colour to the next, or to black and back, with a glint as each piece turns | Timing, Mode, Grain, Fade, Glint |
 | **Matrix EQ** | Equaliser bars with falling peak dots, from the live audio input — simulated on the beat while there's none | Source, Bar width, Gain, Peaks, From (bottom / middle), Colours |
+| **Matrix Fire** | Flames rise from the bottom and flicker, white-hot at the heart (the white pixels) | Height, Intensity, Cooling, Palette (look colours, classic fire, blue fire) |
+| **Matrix Fireworks** | Rockets climb and burst into sparks that spread, fall and crackle out — bursting on the beat (the rocket goes up just before), or at random | Timing, Rise, Sparks, Size, Fade |
+| **Matrix Gradient Sweep** | The look's colours as a gradient laid at any angle, sweeping along it, smooth or in bands, a line of white riding it | Angle, Width, Speed (minus = backwards), Blend, Sheen |
+| **Matrix Image** | A picture or animated GIF on the pixels — see [Pictures and GIFs](#pictures-and-gifs) | Image, Fit (fit, fill, stretch), Timing, Speed, Tint, Highlights |
 | **Matrix Iris** | An eye opens and closes in the middle — breathing, blinking, or snapping open on the beat | Motion, Shape (eye, circle, box, slit), Edge, Background |
+| **Matrix Kaleidoscope** | A shifting pattern of the look's colours mirrored round the middle, turning slowly | Mirrors (2, 4, 6, 8-fold), Pattern (noise, bars), Scale, Spin |
+| **Matrix Lissajous** | A bright line traces a figure-8 — or any Lissajous figure — its trail fading through the look's colours | X and Y frequency, Phase, Line width, Trail |
 | **Matrix Noise** | Drifting clouds of colour sized for big pixels, with white glints at the peaks | Scale, Drift, Contrast, Palette (look, rainbow, fire, ocean), Glints |
 | **Matrix Radar** | A line (or two, three, four blades) turns round the middle with a fading wake | Blades, Width, Wake, Direction |
 | **Matrix Rain** | Drops fall down the columns with fading trails, each column at its own pace | Density, Trail, Direction |
 | **Matrix Ripple** | Rings spread out from the middle, an edge, or anywhere — free running or one a beat | Timing, Spacing, Width, Fade, Origin |
+| **Matrix Scanner** | KITT's scanner: a bar sweeps back and forth, easing at the ends, a tail fading behind | Direction (across, up and down), Count, Width, Tail, Motion |
 | **Matrix Snake** | Snakes wind along a path: along the rows, up and down the columns, spiralling in, round the edge | Path, Snakes, Length, Colours |
 | **Matrix Sparkle** | Colour twinkles that fade, with quick white flashes | Density, Decay, Flashes, Background |
+| **Matrix Spiral** | Spiral arms wind round the middle and turn, a pinwheel of the look's colours | Arms, Tightness, Width, Direction |
+| **Matrix Starfield** | Stars stream out from a point, faster and brighter as they come: warp speed | Density, Trails, Centre (middle, an edge, wandering) |
 | **Matrix Strobe** | Strobe hits on the beat: the whole canvas, alternate boxes, a random box, random blocks, halves or rows | Pattern, Colour, Flash length, Decay |
 | **Matrix Wipe** | Colour fills and empties — across, from the middle, diagonally, as a circle — or wipes each look colour over the last | Direction, Cycle, Edge |
 
@@ -126,13 +138,55 @@ show. With no beat running they fall back to their speed.
 
 **Scope.** **Whole canvas** draws one picture across every box; **Each
 box** draws the same picture in each — a ripple from the middle of every
-box, a radar in each. Only a fixture that is itself a grid counts as a
-box: a strip in a matrix built of strips, or a par in a row of them, is
-just a place on the canvas.
+box, a radar in each. **Each box, staggered** draws the same picture in
+each box too, but each box a little behind the last, so the picture rolls
+across the rig: a ripple starts in the first box and follows on box by
+box, a scanner sweeps a moment later in each. Two settings go with it:
+
+| Setting | What it does |
+|---|---|
+| **staggerOrder** | the order the boxes go in: **Left to right** (as they stand on stage), **Right to left**, **Out from the middle** (the middle pair first, then outwards, mirror boxes together), or **Random** (a fixed shuffle) |
+| **stagger** | how far behind each box is, as a fraction of the effect's cycle — a sweep, a ring, a turn, a dissolve, a beat. 0.125 on eight boxes spreads one cycle across the rig; 0 is plain Each box |
+
+Every matrix effect with a scope has all three (all but Box Chase, Noise,
+Rain, Sparkle and Strobe, which work on the rig as a whole). On the beat,
+the stagger is in steps of the beat clock, so the boxes still land on the
+show's beat, one after another. Matrix EQ and Box VU keep the last few
+seconds of the live audio, so a staggered box shows what was playing at its
+moment. Only a fixture that is itself a grid counts as a box: a strip in a
+matrix built of strips, or a par in a row of them, is just a place on the
+canvas (staggered or not, it draws with the whole canvas).
 
 **Spread.** Matrix Noise and Matrix Box Chase take the look's
 [Spread](#spread) row: with it on, the spread decides where each head
 sits in the clouds (Noise) or which box goes when (Box Chase, in place of its Order).
+
+### Pictures and GIFs
+
+**Matrix Image** plays a still picture or an animated GIF on the canvas.
+In the look editor, **Choose…** picks the file (PNG, JPEG, GIF, BMP and
+the rest this desk can read), and the line above it says what is
+there: its name, size and frames. **Clear** lets it go; until there is a
+picture, a heart beats in the look's first colour.
+
+- **Kept in the show.** The picture is stored inside the look itself — the
+  file as it was, encoded as text in the show file — so it travels with the
+  show (another desk, a backup, a .qlcc) with nothing to relink or lose.
+  Files up to **2 MB** are taken; a box rig is a few hundred pixels, so a
+  small GIF is plenty. Decoded, frames are kept to 160 × 160 and the first
+  240 of an animation.
+- **Fit** shows the whole picture, letterboxed on black; **Fill** fills the
+  canvas and crops what falls outside; **Stretch** fits it to the canvas
+  exactly. On eight boxes side by side (120 × 5) Fill shows a band across
+  the middle of a picture; Each box puts the whole picture in every box.
+- **Timing.** A GIF plays at its own pace (**speed** 2 is twice as fast),
+  or steps a frame **on the beat** (division as above).
+- **Tint** blends the picture towards the look's first colour, keeping its
+  light and shade; **Highlights** sends its near-white parts to the white
+  pixels as accents.
+- Each pixel is the average of the part of the picture it covers, so detail
+  comes down to big pixels without sparkling. The frames are decoded once,
+  ahead of the show, and shared by every look using the same picture.
 
 ### The white pixels
 

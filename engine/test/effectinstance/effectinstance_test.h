@@ -33,6 +33,20 @@ private slots:
      *  heads): moving, repeatable, in range, white pixels doing what the
      *  white setting says; and still frames that must not drift. */
     void matrixEffectsAreRepeatableAndKeepTheirWhites();
+    /** The second set of matrix effects: the look's colours, speed scaling
+     *  their time, the beat clock deciding where they are. */
+    void matrixEffectsTakeTheLooksColoursAndKeepTime();
+    /** Each box, staggered: the same picture in each box, each a set part
+     *  of a cycle behind the last, in the order chosen. */
+    void matrixEffectsStaggerBoxToBox();
+    /** Matrix Image: a GIF kept in the show as a data URI, decoded once,
+     *  played at its own pace or on the beat, fitted, filled or stretched,
+     *  and through a look's save and load to DMX. */
+    void matrixImagePlaysAGifKeptInTheShow();
+    /** Every matrix effect in each scope on eight XL-450s, within budget. */
+    void matrixEffectsKeepTimeOnEightBoxes();
+    /** Not a check: frames of each new effect to look at, when asked. */
+    void matrixEffectPreviews();
     /** A loose pixel box with no group is drawn on as its grid, not a
      *  strip of its heads. */
     void aLooseBoxIsItsOwnGrid();

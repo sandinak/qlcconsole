@@ -300,6 +300,17 @@ private:
     QHash<QString, QString>    m_stringParamValues;
     QHash<QString, QVariantMap> m_dataChannels;
 
+    /** An "image" setting as the script sees it (MatrixImage): its frames,
+     *  decoded once and handed over as ArrayBuffers, kept until the
+     *  setting changes -- not rebuilt every tick. */
+    struct ImageParam
+    {
+        QString value;
+        QJSValue js;
+    };
+    mutable QHash<QString, ImageParam> m_imageParams;
+    QJSValue imageParamObject(const QString &name, const QString &value) const;
+
     // Followspot position handoff (pan/tilt degrees, keyed by fixture id):
     //   m_lastSpotIn   — injected by the runner before runTick() (resume source)
     //   m_lastIntentDeg — captured during parseIntents() (what the script wrote)

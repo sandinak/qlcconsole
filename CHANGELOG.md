@@ -32,6 +32,65 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
   and the page's (timing, a fader drag as one step, a look's fade, a Bundle
   stamp, a Snapshot) — is a step on the one history the Show Tree shares,
   with redo. No file format change.
+- **Twelve more Matrix effects** (`resources/effectscripts/matrix-*.js`):
+  Fire, Starfield, Spiral, Lissajous, Kaleidoscope, Bouncing Balls,
+  Fireworks, Scanner, Dissolve, Gradient Sweep, Box VU and Image. Pure
+  functions of the clock (randomness from a hash), anti-aliased for big
+  pixels, the look's colours in order or their own palette, speed in units
+  a second or on the beat with divisions; each obeys the white-pixel
+  settings. Matrix Image plays a still or animated GIF: a new `image`
+  effect setting type holds the file as a data URI in the look
+  (`EffectStringParam`, so it travels with the show and its .qlcc), up to
+  2 MB; `MatrixImage` (engine) decodes it once into frames of at most
+  160 × 160 (240 frames), premultiplied on black, shared and thread-safe,
+  and `EffectInstance` hands them to the script as ArrayBuffers, cached
+  until the setting changes. The look editor shows the picture's name,
+  size and frames with **Choose…** / **Clear**.
+- **Each box, staggered** scope for every scoped Matrix effect (the nine
+  existing and the new ones): the same picture in each box, each box's
+  clock moved back by `stagger` × the effect's cycle, in `staggerOrder`
+  (left to right, right to left, out from the middle, random).
+  `MATRIX.scoped()` draws once per place in the run with the shifted
+  inputs and a state of its own per place; Matrix EQ and Box VU keep a few
+  seconds of the live audio (`MATRIX.record()` / `recalled()`) so a
+  staggered box hears its own moment.
+- **Matrix timing check**: every matrix effect, in each scope, on eight
+  XL-450s through the host (`matrixEffectsKeepTimeOnEightBoxes`, 12 ms
+  budget a tick, `QLC_MATRIX_BUDGET_MS`); `QLC_MATRIX_PREVIEW_DIR` writes
+  frames of each new effect for a look.
+- **Cue Runner VC widget: external input and a calmer layout.** Its
+  properties gain an **External Input** tab (as the VC Cue List's): GO,
+  Sub GO, Back, Sub Back, Pause / Resume, Stop, Load next and Load
+  previous each take an input source (auto-detect, profiles, custom
+  feedback) and a key, saved with the workspace, acting in Operate only.
+  Feedback lights each mapped control while its action can do something
+  (GO: a cue to GO to; Sub GO: a sub-cue waiting; Pause: paused). The
+  widget is now an info area over a button area: the info takes the room
+  as it grows (a larger cue name, NEXT on up to three lines, the next cues
+  listed), the buttons keep their height, small chips for LIVE / DESIGN
+  and the timecode, Back and Stop as small buttons, and a minimum size.
+  In Design mode two handles inside it set the buttons' height and the
+  GO / Sub GO split (saved; hidden and locked in Operate). The properties
+  choose the number of upcoming cues and whether to show the timecode,
+  Sub GO and Back / Stop.
+- **Skip cues in the Show Tree.** A cue can be skipped without deleting it
+  and put back later: untick the box on its row, right-click → **Skip cue**
+  / **Unskip cue**, **⌘/** on the selected cues, **Skip** on the cue page,
+  or type `skip 0.0.3`, `skip 0.0.3 thru 0.0.5`, `skip 0.0.3, 0.0.7`,
+  `unskip …`. Several selected cues change together; each change is one
+  undo step and is saved with the show (`Skip="1"` on the cue, and on its
+  chaser step). A skipped cue is grey and struck through with a ⦸ badge,
+  its layers greyed. GO, auto-follow and Back pass over it, and NEXT (Run
+  tab, footer, Cue Runner) names the next cue that plays. It tracks as if
+  it weren't in the list: nothing of it passes on, so the cue after starts
+  from the cue before (a skipped Block cue blocks nothing). A jump to it
+  (a double-click, show control, picking it in Design) still plays it,
+  from the cue before it; GO from there restacks to what the list played
+  from the top shows. Import keeps a chaser step's skip flag (it used to be
+  dropped with a note), and Convert to tracking keeps it. Engine:
+  `ShowTree::Cue::skip`, `playedBefore()` / `playedAfter()`,
+  `ShowTreeController::setCuesSkipped()`; `ChaserRunner` restacks when
+  leaving a skipped step.
 - **Definition updates.** Fixtures → **Definition Updates…** lists the
   user folder's fixture definitions that are older than the current version
   of the same Manufacturer/Model (the shipped one, or a newer user copy,

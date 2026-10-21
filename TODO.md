@@ -217,7 +217,9 @@ help (DONE.md 2026-10-16). Handoff: SHOW_TREE_OVERNIGHT.md.
   ⇧⌘0, Cue Runner VC widget, Swap widget, "what changes", OSC
   `/subgo` `/subback`). **Open (§10, 27–35):** switching production while a
   list runs; no current production by default; a sub-cue's wait from fade-in
-  or start; the cue's own fade with sub-cues; Run-tab keys; VC widget inputs;
+  or start; the cue's own fade with sub-cues; Run-tab keys; ~~VC widget inputs~~
+  (done 2026-10-21, feat/vc-cuerunner-layout: External Input per action, info-first
+  layout, Design-mode handles);
   Swap's follow rule; Convert/Detach/import with sub-cues; the tracking
   sheet. **Mac:** `./check-all.sh` legs not run yet (Linux only). **Try:**
   two productions, switch, ⌘↩; + Sub-cue, Sub GO, auto-follow; the Run tab;
@@ -338,7 +340,12 @@ help (DONE.md 2026-10-16). Handoff: SHOW_TREE_OVERNIGHT.md.
   the 135ch and 30ch modes, and the white setting's five choices; that the
   head map's RGB/W/RGB/W/RGB rows are the box as built (Grid Probe); and
   how a look on the split TrussC-RGB + TrussC-W groups lays out against
-  one group of all 75 heads per box.
+  one group of all 75 heads per box. The second twelve (built 2026-10-21,
+  feat/matrix-effects-2: Fire, Starfield, Spiral, Lissajous, Kaleidoscope,
+  Bouncing Balls, Fireworks, Scanner, Dissolve, Gradient Sweep, Box VU,
+  Image) and the **Each box, staggered** scope too: a GIF on the eight
+  boxes (Fit / Fill / Each box), Box VU from the real audio input, and a
+  staggered ripple across the rig.
 
 - **Re-check the Oppsk wall-washer readings (2026-10-16)** — the 24 bars in
   DanceHysteria-0.4 carry Full 12.3 A / Half 2.7 / Standby 0.4 (White 6.6,

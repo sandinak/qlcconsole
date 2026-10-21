@@ -131,6 +131,7 @@ add_library(${module_name} SHARED
     qlcbundle.cpp qlcbundle.h
     bundlecache.cpp bundlecache.h
     effectinstance.cpp effectinstance.h
+    matriximage.cpp matriximage.h
     effectscriptrunner.cpp effectscriptrunner.h
     showembedding.cpp showembedding.h
     fixturedefupdates.cpp fixturedefupdates.h

@@ -40,6 +40,10 @@
 #include <QTextBrowser>
 #include <QDialog>
 #include <QGridLayout>
+#include <QFileDialog>
+#include <QMessageBox>
+#include <QImageReader>
+#include <QPushButton>
 #include <QSignalBlocker>
 #include <cmath>
 #include "lookeditor.h"
@@ -50,6 +54,7 @@
 #include "wledfixture.h"
 #include "pathdrawwidget.h"
 #include "gradientdirectionwidget.h"
+#include "matriximage.h"
 #include "virtualconsole/vcxypadarea.h"
 #include "capabilitybar.h"
 #include "qlcpalette.h"
@@ -2565,6 +2570,8 @@ void LookEditor::rebuildEffectDynWidget()
                 range = pd.enumValues.join(QStringLiteral(" / "));
             else if (pd.type == QLatin1String("text"))
                 range = tr("words (\"%1\")").arg(pd.defaultText);
+            else if (pd.type == QLatin1String("image"))
+                range = tr("a picture or animated GIF, kept in the show");
             else if (pd.type == QLatin1String("path"))
                 range = tr("a drawn path");
             else
@@ -2752,6 +2759,71 @@ void LookEditor::rebuildEffectDynWidget()
                     emit paletteValueChanged(m_paletteId);
                 });
                 form->addRow(pd.name, le);
+            }
+            else if (pd.type == QLatin1String("image"))
+            {
+                // A picture or GIF, kept in the show (MatrixImage): what it
+                // is, and buttons to choose one or let it go.
+                QWidget *row = new QWidget(m_effectDynWidget);
+                row->setObjectName(QStringLiteral("effectImage_") + pd.name);
+                QVBoxLayout *rv = new QVBoxLayout(row);
+                rv->setContentsMargins(0, 0, 0, 0);
+                rv->setSpacing(2);
+                QLabel *what = new QLabel(row);
+                what->setObjectName(QStringLiteral("effectImageLabel_") + pd.name);
+                what->setWordWrap(true);
+                what->setToolTip(pd.description);
+                QHBoxLayout *bh = new QHBoxLayout();
+                bh->setContentsMargins(0, 0, 0, 0);
+                QPushButton *choose = new QPushButton(tr("Choose…"), row);
+                choose->setObjectName(QStringLiteral("effectImageChoose_") + pd.name);
+                choose->setToolTip(tr("A picture or animated GIF, up to %1 KB; it is kept in the show")
+                                       .arg(MatrixImage::kMaxFileBytes / 1024));
+                QPushButton *clear = new QPushButton(tr("Clear"), row);
+                clear->setObjectName(QStringLiteral("effectImageClear_") + pd.name);
+                bh->addWidget(choose);
+                bh->addWidget(clear);
+                bh->addStretch(1);
+                rv->addWidget(what);
+                rv->addLayout(bh);
+
+                const QString paramName = pd.name;
+                auto show = [what, clear](const QString &value) {
+                    const QString line = MatrixImage::describe(value);
+                    what->setText(line.isEmpty()
+                                  ? tr("No picture yet: it shows a beating heart in the look's colour.")
+                                  : line);
+                    clear->setEnabled(!line.isEmpty());
+                };
+                show(p->effectStringParam(pd.name));
+                auto store = [this, paramName, show](const QString &value) {
+                    QLCPalette *pp = m_doc->palette(m_paletteId);
+                    if (!pp) return;
+                    pp->setEffectStringParam(paramName, value);
+                    m_doc->setModified();
+                    emit paletteValueChanged(m_paletteId);
+                    show(value);
+                };
+                connect(clear, &QPushButton::clicked, this, [store]() { store(QString()); });
+                connect(choose, &QPushButton::clicked, this, [this, store]() {
+                    QStringList globs;
+                    for (const QByteArray &fmt : QImageReader::supportedImageFormats())
+                        globs << QStringLiteral("*.") + QString::fromLatin1(fmt);
+                    const QString path = QFileDialog::getOpenFileName(
+                        this, tr("Choose a picture or GIF"), QString(),
+                        tr("Pictures (%1);;All files (*)").arg(globs.join(QLatin1Char(' '))));
+                    if (path.isEmpty())
+                        return;
+                    QString why;
+                    const QString value = MatrixImage::fromFile(path, &why);
+                    if (value.isEmpty())
+                    {
+                        QMessageBox::warning(this, tr("Choose a picture"), why);
+                        return;
+                    }
+                    store(value);
+                });
+                form->addRow(pd.name, row);
             }
             else if (pd.type == QLatin1String("direction"))
             {
