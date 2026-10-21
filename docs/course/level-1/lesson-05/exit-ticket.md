@@ -22,6 +22,6 @@ Name: ______________________
 
    ____________________________________________________________
 
-4. The Run tab says **LIVE**. What does that mean?
+4. The Run tab says **LIVE**. What does that mean for the board op?
 
    ____________________________________________________________
