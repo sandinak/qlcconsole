@@ -89,7 +89,9 @@ handout up so they can read ahead):
    (⇧⌘Z).
 6. **+ Cue** → `Verse`. Point at the grey row: **⤳ TrussC-RGB … tracked
    from 1.0.0 Pose**. "Lights stay on until you change them. That's
-   **tracking**. We'll learn much more about it in Level 2."
+   **tracking**. We'll learn much more about it in Level 2." In the tree
+   the same row is grey with only **1.0.0** beside it, and the cue's row
+   reads **⤳ 1**; hovering either shows what it carries.
 
 Stop there; the students build the rest.
 

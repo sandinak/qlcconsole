@@ -94,6 +94,7 @@ using namespace ShowTree;
 // "2": the columns were reordered (Library | Tree | Editor, 2026-10-17), so
 // sizes saved for the old order are not read back.
 #define SETTINGS_SPLITTER QStringLiteral("showtree/splitter2")
+#define SETTINGS_BADGE_COLUMN QStringLiteral("showtree/badgeColumn")
 #define SETTINGS_EDITOR_SPLITTER QStringLiteral("showtree/editorSplitter")
 
 static const int kRecentMax = 10;
@@ -1023,9 +1024,28 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     });
     m_tree->setObjectName("stTree");
     m_tree->setHeaderLabels({ tr("Show"), tr("") });
+    // The names get the room (Branson, 2026-10-21: the "tracked from …"
+    // column grew to its text and covered the layer names). The badge
+    // column is narrow and fixed as the pane is resized; dragging the line
+    // between the columns sets it, remembered. Text too long for either
+    // column ends in "…", never over the other.
+    m_tree->setTextElideMode(Qt::ElideRight);
     m_tree->header()->setStretchLastSection(false);
-    m_tree->header()->setSectionResizeMode(0, QHeaderView::Stretch);
-    m_tree->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    m_tree->header()->setSectionResizeMode(QHeaderView::Interactive);
+    m_tree->header()->setMinimumSectionSize(24);
+    m_badgeWidth = QSettings().value(SETTINGS_BADGE_COLUMN,
+                                     m_tree->fontMetrics().horizontalAdvance(QStringLiteral("● 99  ⤳ 99  ⊘ block"))
+                                     + 12).toInt();
+    m_tree->viewport()->installEventFilter(this);
+    connect(m_tree->header(), &QHeaderView::sectionResized, this, [this](int section, int, int size) {
+        if (m_fittingColumns)
+            return;
+        // Dragged by hand: the line between the columns (the badges get
+        // what is left of the pane) or the badge column's own edge.
+        m_badgeWidth = qMax(24, section == 0 ? m_tree->viewport()->width() - size : size);
+        QSettings().setValue(SETTINGS_BADGE_COLUMN, m_badgeWidth);
+        fitTreeColumns();
+    });
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(m_tree, &QTreeWidget::itemSelectionChanged, this, &ShowTreeView::slotTreeSelectionChanged);
     connect(m_tree, &QTreeWidget::customContextMenuRequested, this, &ShowTreeView::slotTreeContextMenu);
@@ -1377,6 +1397,13 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                     selectTracked(m_pageCue, item->data(TargetRole).toString());
             });
         }
+        // What tracks in, value by value: the details the tree keeps to a
+        // count (⤳ 3) and a tooltip.
+        m_cueTracked = new QLabel(inner);
+        m_cueTracked->setObjectName("stCueTracked");
+        m_cueTracked->setWordWrap(true);
+        m_cueTracked->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        f->addRow(tr("Tracked in"), m_cueTracked);
         m_cueNext = new QLabel(inner);
         m_cueNext->setWordWrap(true);
         f->addRow(tr("Next cue receives"), m_cueNext);
@@ -2064,7 +2091,7 @@ void ShowTreeView::buildTree()
                         badges << tr("◐ cue-only");
                 }
                 if (!cue.includes.isEmpty())
-                    badges << tr("includes %1").arg(cue.includes.count());
+                    badges << tr("⊕ %1").arg(cue.includes.count());
                 if (cue.reusable != invalidId())
                 {
                     // A use of a reusable cue (P4): ⟲, and how many there are.
@@ -2075,22 +2102,45 @@ void ShowTreeView::buildTree()
                     badges << tr("VC ×%1").arg(firedBy.value(cue.collection));
                 // A cue that still mixes (open 13): the one exception to
                 // the one rule, kept only where the rule would change it.
+                QString badgeTip;
                 if (cue.mixOverlap)
                 {
                     badges << tr("≈ mix");
-                    ci->setToolTip(1, tr("Overlapping layers mix here as the imported chaser did (the highest "
+                    badgeTip = (tr("Overlapping layers mix here as the imported chaser did (the highest "
                                          "intensity wins, the last started sets the rest) instead of the one "
                                          "rule (the most specific source, then the deeper, then the lower "
                                          "layer wins). Convert to tracking keeps a cue mixing only where the "
                                          "rule would change what it plays; untick Overlapping layers mix on "
                                          "the cue page to put it on the rule anyway."));
                 }
-                ci->setText(1, badges.join(QStringLiteral(" ")));
-                ci->setToolTip(0, cue.reusable == invalidId()
+                // Tracking at a glance (Branson, 2026-10-21): how many
+                // layers it sets (●), releases (○) and how many track in
+                // (⤳); what they
+                // are is in the tooltip and on the cue page.
+                if (list.mode == ListMode::Tracking && !list.looks && i < resolved.count())
+                {
+                    int own = 0, released = 0, carried = 0;
+                    for (const ResolvedLayer &rl : resolved.at(i).layers)
+                        (rl.own ? (rl.release ? released : own) : carried)++;
+                    QStringList counts;
+                    if (own > 0)
+                        counts << tr("● %1").arg(own);
+                    if (released > 0)
+                        counts << tr("○ %1").arg(released);
+                    if (carried > 0)
+                        counts << tr("⤳ %1").arg(carried);
+                    badges = counts + badges;
+                }
+                ci->setText(1, badges.join(QStringLiteral("  ")));
+                ci->setForeground(1, grey);
+                const QString trackingTip = list.looks ? QString() : cueTrackingTip(cue.id);
+                ci->setToolTip(1, QStringList({ trackingTip, badgeTip }).join(QStringLiteral("\n\n")).trimmed());
+                const QString nameTip = cue.reusable == invalidId()
                                ? (cue.unlinkedFrom.isEmpty() ? cue.note
                                   : tr("Unlinked from %1. %2").arg(cue.unlinkedFrom, cue.note).trimmed())
                                : tr("A use of the reusable cue %1: an edit here is an edit to every use. %2")
-                                 .arg(m_st->reusableName(cue.reusable), cue.note).trimmed());
+                                 .arg(m_st->reusableName(cue.reusable), cue.note).trimmed();
+                ci->setToolTip(0, QStringList({ nameTip, trackingTip }).join(QStringLiteral("\n\n")).trimmed());
                 ci->setData(0, KindRole, CueNode);
                 ci->setData(0, IdRole, cue.id);
 
@@ -2112,9 +2162,13 @@ void ShowTreeView::buildTree()
                     QStringList looks;
                     for (const Look &l : layer.looks)
                         looks << lookText(l);
+                    // ● sets values here (a tracking list: the rest track
+                    // in); ○ lets them go.
                     QStringList col1;
                     if (layer.release)
-                        col1 << tr("release");
+                        col1 << tr("○ release");
+                    else if (list.mode == ListMode::Tracking && !list.looks)
+                        col1 << tr("●");
                     if (layer.reusable != invalidId())
                         col1 << tr("×%1").arg(m_st->reusableUses(layer.reusable).count());
                     yi->setText(1, col1.join(QStringLiteral(" ")));
@@ -2143,15 +2197,21 @@ void ShowTreeView::buildTree()
                             tname = tr("%1 (in %2)").arg(tname, m_st->targetLabel(rl.parent));
                         ti->setText(0, QStringLiteral("⤳ %1").arg(tname));
                         // From a cue of this list, or (P6) a sub-cue, or a
-                        // sub-cue's own cue.
+                        // sub-cue's own cue: by its number only (⤳ tracked,
+                        // ⊕ included, ↳ a sub-cue, ■ the base); the rest,
+                        // value by value, in the tooltip.
                         const CueList *fromList = m_st->listOfCue(rl.fromCue);
                         const int from = fromList == nullptr ? -1 : fromList->indexOf(rl.fromCue);
-                        const QString src = from < 0 ? QString() : m_st->cueLabel(*fromList, from);
-                        ti->setText(1, rl.origin == Origin::Included ? tr("included from %1").arg(src)
-                                       : rl.origin == Origin::Base ? tr("base")
+                        const QString num = from < 0 ? QString() : m_st->cueNumber(*fromList, from);
+                        ti->setText(1, rl.origin == Origin::Included ? tr("⊕ %1").arg(num)
+                                       : rl.origin == Origin::Base ? tr("■ base")
                                        : fromList != nullptr && fromList->isSubCues()
-                                         ? tr("from sub-cue %1").arg(src)
-                                       : tr("tracked from %1").arg(src));
+                                         ? tr("↳ %1").arg(num)
+                                       : num);
+                        const QString tip = carriedDetail(rl) + QStringLiteral("\n")
+                                            + tr("Select it and set a value to make it this cue's own.");
+                        ti->setToolTip(0, tip);
+                        ti->setToolTip(1, tip);
                         ti->setForeground(0, grey);
                         ti->setForeground(1, grey);
                         ti->setData(0, KindRole, TrackedLayerNode);
@@ -2679,7 +2739,8 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
         for (QWidget *w : { static_cast<QWidget *>(m_cueNumber), static_cast<QWidget *>(m_cueMode),
                             static_cast<QWidget *>(m_cueBase), m_cueIncludes->parentWidget(),
                             static_cast<QWidget *>(m_cueFadeIn), static_cast<QWidget *>(m_cueFadeOut),
-                            static_cast<QWidget *>(m_cueHold), static_cast<QWidget *>(m_cueNext) })
+                            static_cast<QWidget *>(m_cueHold), static_cast<QWidget *>(m_cueNext),
+                            static_cast<QWidget *>(m_cueTracked) })
             m_cueForm->setRowVisible(w, cueRows);
         m_cueForm->setRowVisible(m_lookFiredBy, list.looks);
         // A sub-cue (P6): its advance, not a mode, base, includes or hold
@@ -2833,15 +2894,29 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
         m_cueDropZone->setMinimumHeight(0);
     }
     m_cueNext->setText(nextCueText());
+    {
+        QString tracked = cueTrackedText();
+        if (m_st->lastBakeChanged().contains(cue.id))
+            tracked = (tracked.isEmpty() ? QString() : tracked + QStringLiteral("\n"))
+                      + tr("Changed by the last edit (re-baked).");
+        m_cueTracked->setText(tracked.isEmpty() ? tr("— (nothing: every layer is set here)") : tracked);
+        if (!list.looks)
+            m_cueForm->setRowVisible(m_cueTracked, list.mode == ListMode::Tracking || !tracked.isEmpty());
+    }
     m_pages->setCurrentWidget(m_cuePage);
 }
 
 QString ShowTreeView::nextCueText() const
 {
-    const CueList *list = m_pageCue == invalidId() ? nullptr : m_st->listOfCue(m_pageCue);
+    return nextCueText(m_pageCue);
+}
+
+QString ShowTreeView::nextCueText(quint32 cueId) const
+{
+    const CueList *list = cueId == invalidId() ? nullptr : m_st->listOfCue(cueId);
     if (list == nullptr)
         return QString();
-    const int index = list->indexOf(m_pageCue);
+    const int index = list->indexOf(cueId);
     if (index + 1 >= list->cues.count())
         return tr("— (the last cue)");
     const Cue &next = list->cues.at(index + 1);
@@ -2880,6 +2955,119 @@ QString ShowTreeView::nextCueText() const
     if (effectiveMode(*list, cue) == CueMode::CueOnly)
         text = tr("what this cue started from (it is cue-only): %1").arg(text);
     return text;
+}
+
+QString ShowTreeView::carriedOrigin(Origin origin, quint32 fromCue) const
+{
+    const CueList *list = m_st->listOfCue(fromCue);
+    const int from = list == nullptr ? -1 : list->indexOf(fromCue);
+    const QString cue = from < 0 ? QString() : m_st->cueLabel(*list, from);
+    switch (origin)
+    {
+        case Origin::Own: return QString();
+        case Origin::CueLook: return tr("from cue %1").arg(cue);
+        case Origin::Tracked:
+            return list != nullptr && list->isSubCues() ? tr("from sub-cue %1").arg(cue)
+                                                        : tr("tracked from %1").arg(cue);
+        case Origin::Included: return tr("included from %1").arg(cue);
+        case Origin::Base: return tr("base, from %1").arg(cue);
+    }
+    return QString();
+}
+
+QString ShowTreeView::carriedDetail(const ResolvedLayer &rl) const
+{
+    QString name = rl.name.isEmpty() ? m_st->targetLabel(rl.target) : rl.name;
+    if (rl.depth > 0)
+        name = tr("%1 (in %2)").arg(name, m_st->targetLabel(rl.parent));
+    QStringList lines;
+    lines << tr("⤳ %1 — %2").arg(name, carriedOrigin(rl.origin, rl.fromCue));
+    for (auto it = rl.values.cbegin(); it != rl.values.cend(); ++it)
+    {
+        const ResolvedValue &v = it.value();
+        QString line = QStringLiteral("    %1: %2").arg(keyLabel(it.key()),
+                                                      v.look.none ? tr("none") : lookText(v.look));
+        if (v.fromCue != rl.fromCue || v.origin != rl.origin)
+            line += QStringLiteral(" — ") + carriedOrigin(v.origin, v.fromCue);
+        lines << line;
+    }
+    return lines.join(QStringLiteral("\n"));
+}
+
+QString ShowTreeView::cueTrackedText() const
+{
+    const CueList *list = m_pageCue == invalidId() ? nullptr : m_st->listOfCue(m_pageCue);
+    if (list == nullptr)
+        return QString();
+    const int index = list->indexOf(m_pageCue);
+    const QList<ResolvedCue> resolved = m_st->resolved(*list);
+    if (index < 0 || index >= resolved.count())
+        return QString();
+    QStringList out;
+    for (const ResolvedLayer &rl : resolved.at(index).layers)
+        if (!rl.own)
+            out << carriedDetail(rl);
+    return out.join(QStringLiteral("\n"));
+}
+
+QString ShowTreeView::cueTrackingTip(quint32 cueId) const
+{
+    const CueList *list = m_st->listOfCue(cueId);
+    if (list == nullptr || list->looks)
+        return QString();
+    const int index = list->indexOf(cueId);
+    const QList<ResolvedCue> resolved = m_st->resolved(*list);
+    if (index < 0 || index >= resolved.count())
+        return QString();
+    const Cue &cue = list->cues.at(index);
+    QStringList out;
+    if (effectiveMode(*list, cue) == CueMode::Block && list->mode == ListMode::Tracking)
+        out << tr("⊘ Block: it starts from nothing; nothing tracks in.");
+
+    // What tracks in, at most a dozen layers (the cue page has them all).
+    QStringList carried, own;
+    for (const ResolvedLayer &rl : resolved.at(index).layers)
+    {
+        const QString name = rl.name.isEmpty() ? m_st->targetLabel(rl.target) : rl.name;
+        if (rl.own)
+            own << (rl.release ? tr("○ %1 (released)").arg(name) : tr("● %1").arg(name));
+        else
+            carried << carriedDetail(rl);
+    }
+    const int kShown = 12;
+    if (!carried.isEmpty())
+    {
+        out << tr("Tracked in (%1):").arg(carried.count());
+        out << carried.mid(0, kShown);
+        if (carried.count() > kShown)
+            out << tr("    … and %1 more: see the cue page").arg(carried.count() - kShown);
+    }
+    if (!own.isEmpty() && list->mode == ListMode::Tracking)
+        out << tr("Set here (%1): %2").arg(own.count()).arg(own.join(QStringLiteral(", ")));
+    if (!list->isSubCues())
+    {
+        // One layer a line: a tooltip doesn't wrap.
+        const QString next = nextCueText(cueId);
+        if (!next.isEmpty())
+            out << tr("Next cue receives:") + QStringLiteral("\n    ")
+                   + next.split(QStringLiteral("; ")).join(QStringLiteral("\n    "));
+    }
+    if (m_st->lastBakeChanged().contains(cueId))
+        out << tr("Changed by the last edit (re-baked).");
+    return out.join(QStringLiteral("\n"));
+}
+
+void ShowTreeView::fitTreeColumns()
+{
+    if (m_tree == nullptr)
+        return;
+    const int room = m_tree->viewport()->width();
+    // The names keep at least 60% of the pane, however wide the badges were set.
+    const int badges = qBound(24, m_badgeWidth, qMax(24, room * 2 / 5));
+    m_fittingColumns = true;
+    m_tree->header()->resizeSection(0, qMax(40, room - badges));
+    m_tree->header()->resizeSection(1, badges);
+    m_fittingColumns = false;
 }
 
 QStringList ShowTreeView::includeItems() const
@@ -7332,6 +7520,8 @@ void ShowTreeView::slotCommandEntered()
 
 bool ShowTreeView::eventFilter(QObject *obj, QEvent *ev)
 {
+    if (m_tree != nullptr && obj == m_tree->viewport() && ev->type() == QEvent::Resize)
+        fitTreeColumns();
     if (obj == m_command && ev->type() == QEvent::KeyPress)
     {
         QKeyEvent *ke = static_cast<QKeyEvent *>(ev);

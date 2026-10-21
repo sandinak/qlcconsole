@@ -68,6 +68,7 @@ private slots:
     void severalGroupsOneLayerOrEach();
     void aPickedValueReusesAPalette();
     void pictureOfARealShow();
+    void pictureOfTrackingInTheTree();
     void aDimmedColourOnPixelBarsReachesTheUniverse();
     // Drop on the page (2026-10-17)
     void dropsOnTheCuePage();
@@ -108,6 +109,10 @@ private slots:
 
     // P6: sub-cues in the tree
     void subCuesInTheTree();
+
+    // Tracking in the tree: a badge, details on hover (2026-10-21)
+    void trackingIsABadgeWithDetailsOnHover();
+    void theTreeColumnsResizeAndAreRemembered();
 
 private:
     quint32 dimmer(int level, const QString &name);
